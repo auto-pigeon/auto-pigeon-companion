@@ -1,0 +1,6 @@
+{
+  "repository": "auto-pigeon-launcher",
+  "alias": "AUL",
+  "prompt_directory": "auto-pigeon-launcher",
+  "handoff_directory": "auto-pigeon-launcher"
+}

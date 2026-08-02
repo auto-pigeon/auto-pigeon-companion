@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Info.plist template for the macOS app bundle.
+
+  Placeholders are substituted by build/macos/make-app-bundle.sh:
+    @VERSION@   the release version, e.g. 0.1.0
+    @ARCH@      the Go architecture the bundled binary was built for
+
+  No GUI toolkit generates this bundle: AUL has no GUI dependency, so the .app
+  is assembled by hand around a plain cross-compiled binary. That is the whole
+  reason this file exists.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>Auto-Pigeon Launcher</string>
+	<key>CFBundleDisplayName</key>
+	<string>Auto-Pigeon Launcher</string>
+	<key>CFBundleIdentifier</key>
+	<string>io.github.andrea-dintino.auto-pigeon-launcher</string>
+	<key>CFBundleVersion</key>
+	<string>@VERSION@</string>
+	<key>CFBundleShortVersionString</key>
+	<string>@VERSION@</string>
+	<key>CFBundleExecutable</key>
+	<string>auto-pigeon-launcher</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>11.0</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<!--
+	  LSUIElement: the process has no windows and no menu bar of its own — it
+	  starts a local server and hands the user's browser a URL. Without this it
+	  would sit in the Dock as a windowless application, which looks like a
+	  hung app. The architecture the bundle was built for is recorded for
+	  support purposes: @ARCH@.
+	-->
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>MIT licensed. External map-building tools are separate GPL-2.0 programs; see THIRD_PARTY_NOTICES.md.</string>
+</dict>
+</plist>

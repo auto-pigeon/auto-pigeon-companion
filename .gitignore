@@ -1,0 +1,34 @@
+# Built binaries
+/auto-pigeon-launcher
+/auto-pigeon-launcher.exe
+/bin/
+/dist/
+
+# Go test and build artifacts
+*.test
+*.out
+*.exe
+*.so
+*.dylib
+go.work
+go.work.sum
+vendor/
+
+# Downloaded external tool cache.
+#
+# The default cache is in the OS cache directory, not here, but a local
+# override (config.json's tool_cache_dir) commonly points at the working tree.
+# These are third-party GPL-2.0 binaries and must never be committed — see
+# THIRD_PARTY_NOTICES.md.
+/tools-cache/
+/external-tools/
+
+# Local config written by the app when its config path is overridden.
+/config.json
+
+# macOS bundles produced by build/macos/make-app-bundle.sh
+*.app/
+
+# Editor and OS noise
+.DS_Store
+*.swp

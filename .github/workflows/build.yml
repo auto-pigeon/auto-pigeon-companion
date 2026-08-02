@@ -1,0 +1,99 @@
+# Verification build: every push and pull request compiles all six targets and
+# runs the tests.
+#
+# No Docker and no CGO toolchain, because there is nothing to link against — the
+# binary is pure Go with an embedded frontend, so one ubuntu runner
+# cross-compiles every target with plain `go build`. The Windows and macOS
+# runners exist only to run the tests natively, where the platform-specific
+# paths (%AppData%, ~/Library, the .exe suffix) are actually exercised.
+#
+# This does not publish anything: no release, no artifacts uploaded to a
+# registry, no signing. Packaging skeletons live under build/ and are run by
+# hand — see README.md.
+
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: "1.23"
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: go vet
+        run: go vet ./...
+      - name: go test
+        run: go test ./...
+
+  gofmt:
+    name: gofmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      # gofmt -l prints unformatted files and exits 0, so the output has to be
+      # turned into the failure itself.
+      - name: check formatting
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "${unformatted}" ]; then
+            echo "these files are not gofmt-formatted:"
+            echo "${unformatted}"
+            exit 1
+          fi
+
+  cross-build:
+    name: build ${{ matrix.goos }}/${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: windows, goarch: amd64, ext: ".exe" }
+          - { goos: windows, goarch: arm64, ext: ".exe" }
+          - { goos: linux, goarch: amd64, ext: "" }
+          - { goos: linux, goarch: arm64, ext: "" }
+          - { goos: darwin, goarch: amd64, ext: "" }
+          - { goos: darwin, goarch: arm64, ext: "" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: go build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          # Explicit, not incidental: CGO is what would make any of these six
+          # targets need a cross toolchain. If a change ever requires it, this
+          # job fails, which is the point.
+          CGO_ENABLED: "0"
+        run: |
+          go build -ldflags "-X main.version=0.1.0-ci" \
+            -o "dist/${GOOS}-${GOARCH}/auto-pigeon-launcher${{ matrix.ext }}" \
+            ./cmd/launcher
+      - name: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: auto-pigeon-launcher-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/${{ matrix.goos }}-${{ matrix.goarch }}/
+          if-no-files-found: error

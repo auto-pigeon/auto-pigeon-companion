@@ -1,0 +1,62 @@
+# nfpm configuration for auto-pigeon-launcher's .deb and .rpm packages.
+#
+# Build with, from the repository root:
+#
+#   GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build \
+#     -ldflags "-X main.version=${VERSION}" \
+#     -o dist/linux-amd64/auto-pigeon-launcher ./cmd/launcher
+#   VERSION=${VERSION} ARCH=amd64 nfpm package \
+#     --config build/linux/nfpm.yaml --packager deb --target dist/
+#   VERSION=${VERSION} ARCH=amd64 nfpm package \
+#     --config build/linux/nfpm.yaml --packager rpm --target dist/
+#
+# A plain .tar.gz is the fallback for every other distribution, built directly
+# from the same binary — see README.md. Skeleton, not wired into a release
+# workflow yet.
+
+name: auto-pigeon-launcher
+arch: ${ARCH}
+platform: linux
+version: ${VERSION}
+section: games
+priority: optional
+maintainer: Andrea D'Intino <noreply@example.com> # TODO(andrea): real maintainer address
+description: |
+  Auto-Pigeon Launcher builds Quake maps and launches games.
+  Runs a local web GUI in the default browser, or headless from the CLI.
+vendor: Andrea D'Intino
+homepage: https://github.com/andrea-dintino/auto-pigeon-launcher
+license: MIT
+
+# No dependencies: the binary is a static, CGO-free Go build, and it embeds its
+# own frontend. The external map-building tools are deliberately NOT packaged
+# dependencies — they are GPL-2.0 programs downloaded at runtime and run as
+# separate processes, which is what keeps this MIT package free of them. See
+# THIRD_PARTY_NOTICES.md before adding anything here.
+depends: []
+
+contents:
+  - src: ./dist/linux-${ARCH}/auto-pigeon-launcher
+    dst: /usr/bin/auto-pigeon-launcher
+    file_info:
+      mode: 0755
+
+  - src: ./LICENSE
+    dst: /usr/share/doc/auto-pigeon-launcher/LICENSE
+    type: config|noreplace
+
+  - src: ./THIRD_PARTY_NOTICES.md
+    dst: /usr/share/doc/auto-pigeon-launcher/THIRD_PARTY_NOTICES.md
+    type: config|noreplace
+
+  - src: ./README.md
+    dst: /usr/share/doc/auto-pigeon-launcher/README.md
+    type: config|noreplace
+
+  - src: ./build/linux/auto-pigeon-launcher.desktop
+    dst: /usr/share/applications/auto-pigeon-launcher.desktop
+
+rpm:
+  # TODO(andrea): unsigned. Package signing needs a GPG key that does not exist
+  # yet; see the release notes in README.md.
+  group: Amusements/Games

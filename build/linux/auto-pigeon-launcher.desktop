@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Auto-Pigeon Launcher
+Comment=Build Quake maps and launch games
+# No arguments is GUI mode: the app starts its local server and opens the page
+# in the default browser. There is no GUI toolkit to launch — the browser is
+# the window.
+Exec=auto-pigeon-launcher
+Terminal=false
+Categories=Game;
+Keywords=quake;map;launcher;
+# TODO(andrea): no icon is shipped yet; add one here and to nfpm.yaml's contents
+# once artwork exists.

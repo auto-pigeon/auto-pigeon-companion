@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Auto-Pigeon Launcher</title>
+    <link rel="stylesheet" href="app.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Auto-Pigeon Launcher</h1>
+      <p id="status-line" class="muted">loading…</p>
+    </header>
+
+    <main>
+      <section id="auth-section">
+        <h2>auto-pigeon-backend</h2>
+        <form id="login-form" autocomplete="on">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" required autocomplete="username" />
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" required autocomplete="current-password" />
+          <div class="row">
+            <button type="submit">Sign in</button>
+            <button type="button" id="logout-button" hidden>Sign out</button>
+          </div>
+        </form>
+        <p id="auth-message" class="message" role="status"></p>
+      </section>
+
+      <section id="build-section">
+        <h2>Build</h2>
+        <p class="muted">
+          No real map-building tool is wired up yet. This runs the fake tool so the
+          resolve → download → verify → run pipeline can be exercised end to end.
+        </p>
+        <div class="row">
+          <button type="button" id="build-button">Run build</button>
+        </div>
+        <pre id="build-output" class="output" aria-live="polite"></pre>
+      </section>
+
+      <section id="launch-section">
+        <h2>Launch</h2>
+        <p class="muted">
+          Launch configs are stubbed locally until AUB's schema is confirmed.
+          "Preview" resolves the command without starting anything.
+        </p>
+        <div class="row">
+          <label for="game">Game</label>
+          <select id="game"></select>
+          <label for="map">Map</label>
+          <input id="map" type="text" placeholder="e1m1" />
+        </div>
+        <div class="row">
+          <label for="game-root">Game directory</label>
+          <input id="game-root" type="text" placeholder="/path/to/quake" />
+        </div>
+        <div class="row">
+          <button type="button" id="preview-button">Preview command</button>
+          <button type="button" id="launch-button">Launch</button>
+        </div>
+        <pre id="launch-output" class="output" aria-live="polite"></pre>
+      </section>
+    </main>
+
+    <footer>
+      <p class="muted">
+        External map-building tools are separate GPL-2.0 programs, downloaded and
+        run as their own processes. See THIRD_PARTY_NOTICES.md.
+      </p>
+    </footer>
+
+    <script src="app.js"></script>
+  </body>
+</html>
