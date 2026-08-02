@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Auto-Pigeon Companion
+Comment=Local Quake map geometry operations with an Auto-Pigeon account
+# No arguments: GUI mode. The binary starts its local server and opens the
+# default browser itself, so Terminal=false is correct — there is nothing for
+# the user to read in a terminal.
+Exec=companion
+Terminal=false
+Categories=Development;Graphics;
+Keywords=quake;map;level;

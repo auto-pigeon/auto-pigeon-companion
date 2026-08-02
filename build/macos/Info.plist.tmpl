@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Info.plist template for the Auto-Pigeon Companion .app bundle.
+  @PLACEHOLDER@ tokens are substituted by build/macos/make-app-bundle.sh.
+
+  LSUIElement is true: launching the bundle starts a local server and opens the
+  user's browser, so there is no Cocoa window to own and a bouncing Dock icon
+  for a process with no windows would be misleading.
+-->
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>Auto-Pigeon Companion</string>
+    <key>CFBundleDisplayName</key>
+    <string>Auto-Pigeon Companion</string>
+    <key>CFBundleIdentifier</key>
+    <string>@BUNDLE_ID@</string>
+    <key>CFBundleVersion</key>
+    <string>@VERSION@</string>
+    <key>CFBundleShortVersionString</key>
+    <string>@VERSION@</string>
+    <key>CFBundleExecutable</key>
+    <string>@EXECUTABLE@</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>11.0</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSHumanReadableCopyright</key>
+    <string>@COPYRIGHT@</string>
+</dict>
+</plist>

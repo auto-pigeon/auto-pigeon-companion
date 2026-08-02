@@ -1,0 +1,109 @@
+name: build
+
+# Verification only: this workflow proves all six targets compile and the tests
+# pass. It does not publish releases, build installers, or upload artifacts —
+# that comes once the AUE sourcing question below is settled.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.4'
+          cache: true
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "these files are not gofmt-clean:" >&2
+            echo "$unformatted" >&2
+            exit 1
+          fi
+      - run: go vet ./...
+      - run: go test ./...
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - { goos: windows, goarch: amd64, ext: .exe }
+          - { goos: windows, goarch: arm64, ext: .exe }
+          - { goos: linux,   goarch: amd64, ext: '' }
+          - { goos: linux,   goarch: arm64, ext: '' }
+          - { goos: darwin,  goarch: amd64, ext: '' }
+          - { goos: darwin,  goarch: arm64, ext: '' }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.4'
+          cache: true
+
+      # TODO(confirm-aue-build-source): the AUE binary matching this matrix
+      # entry's GOOS/GOARCH must be staged into internal/aue/embedded/ HERE —
+      # after checkout, before `go build` — because //go:embed resolves at
+      # compile time. Two options, undecided:
+      #
+      #   (a) check out github.com/andrea-dintino/auto-pigeon-extractor and
+      #       cross-compile it as a prior step in this job, or
+      #   (b) download a tagged release artifact for this GOOS/GOARCH.
+      #
+      # (a) needs no release process but rebuilds AUE on every push; (b) is
+      # faster and pins an exact version but requires AUE to publish artifacts,
+      # which it does not yet. Andrea to decide.
+      #
+      # Until then this job builds companion WITHOUT an embedded extractor,
+      # which compiles fine (the embedded/ directory holds only .gitkeep) and
+      # is enough to verify the six targets. Such a binary reports the
+      # extractor as unavailable at runtime.
+      #
+      # Whatever the answer, the staged file must be removed after the build so
+      # a later matrix entry cannot pick up the previous platform's binary. On
+      # a fresh runner per matrix entry that cannot happen, but the same
+      # sequence run locally in a loop absolutely can.
+
+      - name: build ${{ matrix.target.goos }}/${{ matrix.target.goarch }}
+        env:
+          GOOS: ${{ matrix.target.goos }}
+          GOARCH: ${{ matrix.target.goarch }}
+          # Every target is CGO-free, which is what makes six-platform
+          # cross-compilation a matrix of env vars rather than a toolchain
+          # problem. Setting this explicitly keeps it that way: an accidental
+          # cgo dependency fails the build instead of silently producing a
+          # host-only binary.
+          CGO_ENABLED: '0'
+        run: |
+          go build -trimpath \
+            -ldflags "-s -w -X main.version=${GITHUB_SHA::7}" \
+            -o "dist/${GOOS}-${GOARCH}/companion${{ matrix.target.ext }}" \
+            ./cmd/companion
+
+      - name: macOS app bundle
+        if: matrix.target.goos == 'darwin'
+        run: |
+          ./build/macos/make-app-bundle.sh \
+            --binary "dist/darwin-${{ matrix.target.goarch }}/companion" \
+            --version "${GITHUB_SHA::7}" \
+            --out "dist/darwin-${{ matrix.target.goarch }}"
+
+      # TODO: Windows installer (iscc on a windows-latest runner with
+      # build/windows/installer.iss) and Linux .deb/.rpm (nfpm with
+      # build/linux/nfpm.yaml) are skeletons in this repository but are not
+      # wired into CI yet — they belong in a release workflow, not this
+      # per-push verification one.
+      #
+      # TODO: code signing and notarization. No certificates or credentials
+      # exist; see build/macos/make-app-bundle.sh and README.md.

@@ -1,0 +1,44 @@
+# nfpm configuration for Auto-Pigeon Companion .deb / .rpm packages.
+#
+# Build the binary first (plain cross-compile, no CGO, no Docker), then package:
+#
+#   GOOS=linux GOARCH=amd64 go build -o dist/linux-amd64/companion ./cmd/companion
+#   VERSION=0.1.0 ARCH=amd64 BINARY=dist/linux-amd64/companion \
+#     nfpm package -f build/linux/nfpm.yaml -p deb -t dist/
+#   VERSION=0.1.0 ARCH=amd64 BINARY=dist/linux-amd64/companion \
+#     nfpm package -f build/linux/nfpm.yaml -p rpm -t dist/
+#
+# The arm64 packages are the same two commands with ARCH=arm64 and the arm64
+# binary. A plain .tar.gz of the same binary is the fallback for distributions
+# neither format covers:
+#
+#   tar -C dist/linux-amd64 -czf dist/auto-pigeon-companion-0.1.0-linux-amd64.tar.gz companion
+
+name: auto-pigeon-companion
+arch: ${ARCH}
+platform: linux
+version: ${VERSION}
+section: utils
+priority: optional
+maintainer: Andrea D'Intino <andrea@example.invalid>
+description: |
+  Auto-Pigeon Companion — local Quake map geometry operations with an
+  Auto-Pigeon account. Runs a local web UI in your default browser.
+vendor: Andrea D'Intino
+homepage: https://github.com/andrea-dintino/auto-pigeon-companion
+license: Proprietary
+
+# No runtime dependencies are declared: the binary is statically linked Go with
+# no CGO, and the bundled extractor is embedded in it. xdg-open (xdg-utils) is
+# used to launch the browser but is intentionally not a hard dependency —
+# without it the app still runs and prints its URL.
+
+contents:
+  - src: ${BINARY}
+    dst: /usr/bin/companion
+    file_info:
+      mode: 0755
+  - src: ./build/linux/auto-pigeon-companion.desktop
+    dst: /usr/share/applications/auto-pigeon-companion.desktop
+    file_info:
+      mode: 0644

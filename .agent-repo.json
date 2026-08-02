@@ -1,0 +1,6 @@
+{
+  "repository": "auto-pigeon-companion",
+  "alias": "AUC",
+  "prompt_directory": "auto-pigeon-companion",
+  "handoff_directory": "auto-pigeon-companion"
+}

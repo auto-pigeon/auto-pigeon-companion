@@ -1,0 +1,26 @@
+# Build output. These are anchored with a leading slash on purpose: a bare
+# `companion` pattern also matches the cmd/companion source directory and would
+# silently untrack the entrypoint.
+/dist/
+/bin/
+/companion
+/companion.exe
+
+# Staged AUE binary. The build script copies the platform-matching
+# auto-pigeon-extractor binary into internal/aue/embedded/ immediately before
+# `go build` and clears it afterwards — it must never be committed. .gitkeep is
+# the only tracked file in that directory.
+/internal/aue/embedded/*
+!/internal/aue/embedded/.gitkeep
+
+# Go
+*.test
+*.out
+/vendor/
+
+# Editors and OS
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/

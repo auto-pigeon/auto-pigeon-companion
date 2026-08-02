@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Auto-Pigeon Companion</title>
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <h1>Auto-Pigeon Companion</h1>
+      <span id="version" class="version"></span>
+    </header>
+
+    <main>
+      <section id="banner" class="banner" hidden></section>
+
+      <section class="card" id="account-card">
+        <h2>Account</h2>
+        <p class="muted">
+          Signed in against <code id="aub-url">…</code>
+        </p>
+
+        <form id="login-form" hidden>
+          <label for="identity">Email</label>
+          <input id="identity" name="identity" type="email" autocomplete="username" required />
+
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required />
+
+          <button type="submit" id="login-button">Sign in</button>
+        </form>
+
+        <div id="signed-in" hidden>
+          <p>Signed in as <strong id="account-email"></strong>.</p>
+          <button type="button" id="logout-button" class="secondary">Sign out</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Extractor</h2>
+        <p class="muted" id="aue-state">Checking the bundled extractor…</p>
+        <button type="button" id="aue-version-button">Read extractor version</button>
+        <pre id="aue-output" hidden></pre>
+      </section>
+
+      <section class="card">
+        <h2>Map operations</h2>
+        <!-- Placeholder: real operations land in later prompts. Each one gets
+             its own JSON route on the server rather than a generic
+             run-any-subcommand endpoint. -->
+        <p class="muted">No operations are wired up yet in this bootstrap build.</p>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
