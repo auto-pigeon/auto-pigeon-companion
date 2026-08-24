@@ -32,3 +32,6 @@ vendor/
 # Editor and OS noise
 .DS_Store
 *.swp
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
