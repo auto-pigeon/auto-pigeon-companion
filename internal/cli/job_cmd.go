@@ -158,7 +158,7 @@ func (f *jobFlags) request() job.Request {
 // started decides whether workers run. A read-only command opens the same
 // store without them, so `companion job list` cannot start anything and cannot
 // take a job away from a running server's recovery pass.
-func openJobs(ctx context.Context, env *Env, started bool) (*job.Service, config.Config, error) {
+func openJobs(ctx context.Context, env *Env, started bool, logf func(string, ...any)) (*job.Service, config.Config, error) {
 	settings, err := loadSettings(env)
 	if err != nil {
 		return nil, settings, err
@@ -183,7 +183,10 @@ func openJobs(ctx context.Context, env *Env, started bool) (*job.Service, config
 		// not put it in a log. Read through a function: the service never holds
 		// a credential of its own.
 		Secrets: func() []string { return []string{settings.Session.Token} },
-		Logf:    func(format string, args ...any) { fmt.Fprintf(env.Stderr, format+"\n", args...) },
+		// Nil for a one-shot command, which reports its own progress in its own
+		// words; `serve` passes a real one, because there the operator has no
+		// other view of what the executor is doing.
+		Logf: logf,
 	})
 	if err != nil {
 		return nil, settings, err
@@ -240,7 +243,7 @@ func jobRun(env *Env, args []string, previewOnly bool) int {
 	ctx, stop := signalContext()
 	defer stop()
 
-	service, _, err := openJobs(ctx, env, !previewOnly)
+	service, _, err := openJobs(ctx, env, !previewOnly, nil)
 	if err != nil {
 		return fail(env, err)
 	}
@@ -306,7 +309,7 @@ func jobList(env *Env, args []string) int {
 		return code
 	}
 
-	service, _, err := openJobs(context.Background(), env, false)
+	service, _, err := openJobs(context.Background(), env, false, nil)
 	if err != nil {
 		return fail(env, err)
 	}
@@ -355,7 +358,7 @@ func jobShow(env *Env, args []string) int {
 		return code
 	}
 
-	service, _, err := openJobs(context.Background(), env, false)
+	service, _, err := openJobs(context.Background(), env, false, nil)
 	if err != nil {
 		return fail(env, err)
 	}
@@ -385,7 +388,7 @@ func jobLogs(env *Env, args []string) int {
 		return code
 	}
 
-	service, _, err := openJobs(context.Background(), env, false)
+	service, _, err := openJobs(context.Background(), env, false, nil)
 	if err != nil {
 		return fail(env, err)
 	}
@@ -413,7 +416,7 @@ func jobCancel(env *Env, args []string) int {
 	// Deliberately without workers: cancelling is a marker in the job's own
 	// directory, and whichever process owns the job notices it. Starting an
 	// executor here would be this command offering to run things.
-	service, _, err := openJobs(context.Background(), env, false)
+	service, _, err := openJobs(context.Background(), env, false, nil)
 	if err != nil {
 		return fail(env, err)
 	}
@@ -441,7 +444,7 @@ func jobRetry(env *Env, args []string) int {
 
 	ctx, stop := signalContext()
 	defer stop()
-	service, _, err := openJobs(ctx, env, true)
+	service, _, err := openJobs(ctx, env, true, nil)
 	if err != nil {
 		return fail(env, err)
 	}
@@ -478,7 +481,7 @@ func jobArtifacts(env *Env, args []string) int {
 		return code
 	}
 
-	service, _, err := openJobs(context.Background(), env, false)
+	service, _, err := openJobs(context.Background(), env, false, nil)
 	if err != nil {
 		return fail(env, err)
 	}
@@ -516,7 +519,7 @@ func jobProfiles(env *Env, args []string) int {
 		return code
 	}
 
-	service, _, err := openJobs(context.Background(), env, false)
+	service, _, err := openJobs(context.Background(), env, false, nil)
 	if err != nil {
 		return fail(env, err)
 	}

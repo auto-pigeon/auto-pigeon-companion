@@ -8,12 +8,16 @@ Quake maps with external map-building tools, inspects them by driving **AUE**
 It runs as a local web app in the browser you already have, or headless from
 the command line. Both surfaces are the same binary.
 
-> **Status: structural bootstrap.** The architecture, package boundaries, build
-> tooling and packaging are real and tested. The map operations themselves are
-> not implemented yet: `build` drives a fake tool because no external tool has
-> been chosen, and launch configurations come from a local stub because AUB's
-> schema is not confirmed. Every such placeholder is marked in the source at
-> the point it will be replaced.
+> **Status: the runtime is real; the tools are not chosen yet.** The profile
+> model, the job executor, the local API and the CLI are implemented and
+> tested — a profile action becomes a supervised process with a workspace,
+> bounded logs, collected artifacts and a record that survives a crash. What is
+> still missing is upstream: no external map-building toolchain has been
+> qualified, so there is nothing to acquire automatically, and launch
+> configurations come from a local stub because AUB's schema is not confirmed.
+> Point `--executable` at a copy you already have and the whole path works
+> today. Every placeholder is marked in the source at the point it will be
+> replaced.
 
 This repository absorbed **auto-pigeon-launcher** (AUL) in September 2026;
 that repository is retired and points here. Its history is reachable from this
@@ -26,7 +30,9 @@ There is no GUI toolkit and no embedded browser engine. The binary:
 - serves a `net/http` server bound to `127.0.0.1` and nothing else;
 - serves a frontend of plain HTML/CSS/JS compiled in with `//go:embed` — no
   npm, no bundler, no build step;
-- opens that URL in whatever browser the user already has installed.
+- opens that URL in whatever browser the user already has installed;
+- runs every external program through one supervised job runtime, which the
+  page and the command line both drive — see [Jobs](#jobs).
 
 The result is a single CGO-free executable that cross-compiles to all six
 supported targets with nothing but `GOOS`/`GOARCH` and `go build`:
@@ -78,10 +84,26 @@ It is written 0600, because it holds an AUB session token.
   "aub_base_url": "https://aub.example",
   "port": 8789,
   "tool_cache_dir": "",
+  "jobs_dir": "",
+  "profiles_dir": "",
+  "job_concurrency": 0,
   "game_roots": { "quake": "/games/quake" },
   "session": { "token": "…", "email": "you@example", "expires": "…" }
 }
 ```
+
+Three more files sit beside it, and each is somewhere different for a reason:
+
+| What | Where | Why there |
+| --- | --- | --- |
+| `bindings.json` | the config directory | it records what you installed and what you approved — a cache clean must not silently withdraw a grant |
+| `profiles/` | the config directory | an imported profile is something you chose and reviewed |
+| `jobs/` | the *cache* directory | job records, logs and published artifacts are reproducible; clearing caches loses build history, not work |
+| `api-token` | the config directory, while a server runs | mode 0600, deleted on shutdown — see [HTTP API](#http-api) |
+
+`jobs_dir` and `profiles_dir` override the first two paths, as do
+`AUCOM_JOBS_DIR` and `AUCOM_PROFILES_DIR`. `job_concurrency` is how many jobs
+run at once; `0` lets the executor pick from the machine.
 
 ### AUB's address is configured, never compiled in
 
@@ -107,6 +129,8 @@ signed in: no
 | `AUCOM_AUB_BASE_URL` | `internal/config` | where auto-pigeon-backend lives |
 | `AUCOM_PASSWORD` | `companion auth login` | password for a scripted login |
 | `AUCOM_AUE_BINARY` | `internal/aue` | an on-disk AUE to use instead of the embedded one |
+| `AUCOM_JOBS_DIR` | `internal/config` | where job records, logs and artifacts live |
+| `AUCOM_PROFILES_DIR` | `internal/config` | where imported profile documents are read from |
 
 `AUL_PASSWORD` and `AUC_AUE_BINARY`, the retired names, are still read.
 `AUL_PASSWORD` warns when it is used.
@@ -154,14 +178,14 @@ usage:
   companion <command> [arguments]
 
 commands:
-  serve [--port <n>] [--open]                                             run the local GUI server without opening a browser
-  auth login [--email <address>] | status | logout                        authenticate against auto-pigeon-backend
-  build [--tool <name>] [--tool-version <v>] [-- <tool args>...]          run an external map-building tool
-  profile validate | show | canonicalize | digest | diff | list | schema  read, check and compare tool, engine and pipeline profiles
-  launch <game> [--map <name>] [--game-root <dir>] [--dry-run]            launch a game using its AUB launch config
-  extractor version                                                       run the bundled auto-pigeon-extractor (AUE)
-  migrate                                                                 fold Launcher and older Companion configuration into the current one
-  version                                                                 print the build version
+  serve [--port <n>] [--open]                                                     run the local GUI server without opening a browser
+  auth login [--email <address>] | status | logout                                authenticate against auto-pigeon-backend
+  job run | preview | list | show | logs | cancel | retry | artifacts | profiles  run a profile action as a supervised job, and inspect what ran
+  profile validate | show | canonicalize | digest | diff | list | schema          read, check and compare tool, engine and pipeline profiles
+  launch <game> [--map <name>] [--game-root <dir>] [--dry-run]                    launch a game as a supervised job, using its AUB launch config
+  extractor version                                                               run the bundled auto-pigeon-extractor (AUE)
+  migrate                                                                         fold Launcher and older Companion configuration into the current one
+  version                                                                         print the build version
 ```
 
 Exit codes: `0` success, `1` the operation failed, `2` the invocation was wrong.
@@ -197,23 +221,131 @@ signed out locally (the token stays valid at AUB until it expires)
 suppression: that needs cgo or `golang.org/x/term`, and both are excluded, so a
 password typed at the prompt is visible and the prompt says so.
 
-### Build
+### Jobs
+
+Every program the Companion runs is a **job**. A compile, a game, a version
+probe: same queue, same supervision, same record afterwards. There is one
+executor and nothing goes round it.
+
+`companion job profiles` is what can be run on this machine — the documents
+compiled into the build, plus any you have imported, plus an engine profile
+generated from each of your launch configs:
 
 ```console
-$ companion build --tool noop
-resolved noop@0.0.0-fake (linux/amd64)
-verified ~/.cache/auto-pigeon-companion/tools/noop/0.0.0-fake/linux-amd64/noop
-[noop] fake tool 0.0.0-fake
-[noop] executable: ~/.cache/auto-pigeon-companion/tools/noop/0.0.0-fake/linux-amd64/noop
-[noop] args:
-[noop] no real map-building tool is wired up yet
-[noop] done
+$ companion job profiles
+auto-pigeon.sample.q1-engine             engine  builtin   play_map, play_package, join_server, host_listen, host_dedicated
+auto-pigeon.sample.q1-normal             pipeline builtin
+auto-pigeon.sample.q1-toolchain          tool    builtin   compile, vis, light
+auto-pigeon.launch.quake                 engine  builtin   play_map
+auto-pigeon.launch.quake2                engine  builtin   play_map
 ```
 
-`noop` is a fake tool, and it exists so the whole pipeline — resolve, cache,
-SHA-256 verify, run, stream output — is exercised today. The cache layout and
-the verification are real; a download that fails its checksum is discarded
-rather than executed.
+**Preview first.** `job preview` resolves an action into the exact command and
+starts nothing. It is the same resolution the run does, against the same
+workspace layout, so what you approve is what starts — the argument array is
+printed one element per line, because where each argument begins and ends is the
+whole point of not having a shell:
+
+```console
+$ companion job preview \
+    --profile auto-pigeon.sample.q1-toolchain --action compile \
+    --executable qbsp=/usr/local/bin/qbsp \
+    --input source_map=./level.map --option basename=level
+profile:  auto-pigeon.sample.q1-toolchain 1.0.0 (builtin)
+action:   compile
+digest:   sha256:7b2d92f7352a56090602c3ce41621198884c60e7a51adb7d14416e8cf37f3d27
+workdir:  ~/.cache/auto-pigeon-companion/jobs/20260906T235142Z-ab2db2e1f694/workspace
+command:  /usr/local/bin/qbsp -threads 4 …/workspace/input/source_map/level.map …/workspace/compile/level.bsp
+argv:
+  [0] /usr/local/bin/qbsp
+  [1] -threads
+  [2] 4
+  [3] …/jobs/20260906T235142Z-ab2db2e1f694/workspace/input/source_map/level.map
+  [4] …/jobs/20260906T235142Z-ab2db2e1f694/workspace/compile/level.bsp
+environment:
+  HOME=…/jobs/20260906T235142Z-ab2db2e1f694/home
+  LANG=C
+  LC_ALL=C
+  PWD=…/jobs/20260906T235142Z-ab2db2e1f694/workspace
+  TEMP=…/jobs/20260906T235142Z-ab2db2e1f694/tmp
+  TMP=…/jobs/20260906T235142Z-ab2db2e1f694/tmp
+  TMPDIR=…/jobs/20260906T235142Z-ab2db2e1f694/tmp
+  USERPROFILE=…/jobs/20260906T235142Z-ab2db2e1f694/home
+```
+
+**Then run it.** The program's output reaches your terminal as it is produced
+*and* goes into the job's bounded log; that is one execution with two readers,
+not a streaming mode beside a recording one.
+
+```console
+$ companion job run \
+    --profile auto-pigeon.sample.q1-engine --action play_map \
+    --executable engine=/bin/echo --root game_root=/games/quake \
+    --root content_root=/games/quake --runtime map_name=e1m1
+job 20260906T235206Z-6d2022e01cd7 queued
+-basedir /games/quake +map e1m1
+job 20260906T235206Z-6d2022e01cd7: succeeded — finished, and every required output was produced
+  auto-pigeon.sample.q1-engine play_map, 1ms
+  exit status 0
+```
+
+(`/bin/echo` stands in for a real engine above, so the example runs on a machine
+with no game installed and prints the argument array the engine would have got.)
+
+**Everything a job did is still there afterwards.**
+
+```console
+$ companion job list
+20260906T235206Z-6d2022e01cd7  succeeded    1ms        auto-pigeon.sample.q1-engine play_map
+
+$ companion job logs 20260906T235206Z-6d2022e01cd7
+-basedir /games/quake +map e1m1
+
+$ companion job artifacts 20260906T235206Z-6d2022e01cd7
+no artifacts
+```
+
+`job cancel <id>` stops a job — including one the GUI started, because a stop is
+a marker in the job's own directory and whichever process owns the job notices
+it within a second. `job retry <id>` runs a finished job's request again as a
+**new** job, which is the only way anything here re-runs: the record of what
+happened the first time is never overwritten, and an interrupted job — one whose
+outcome nobody knows — is never repeated without being asked.
+
+Exit status: `0` the job succeeded, `1` it did not, `2` the command was typed
+wrong. `--json` prints the whole record for a script.
+
+#### What the executor guarantees
+
+- **There is no shell.** A command is an executable path and a `[]string`, all
+  the way down to `execve`. An argument containing `; rm -rf ~` is one argument
+  whose value is `; rm -rf ~`. There is no parser between the document and the
+  kernel for a payload to be interesting to.
+- **Nothing is inherited.** The environment is constructed, not passed through:
+  `HOME` and the temporary directory point inside the job's own workspace, the
+  locale is fixed so a tool's output does not change with your settings, and
+  what a profile asked to inherit is inherited by name and nothing else. `PATH`
+  is absent, and a profile that asks for it is refused.
+- **Inputs are copied in, outputs are copied out.** Your source file is read
+  once at staging time and never written to, which is why cleaning up a job
+  cannot lose it. Containment is rechecked *after* the tool has run, because a
+  file can become a symlink between resolution and collection.
+- **Output is bounded but never blocked.** Both streams are drained
+  continuously; what is *kept* is the first and last 256 KiB with a count of
+  what fell out of the middle. A noisy compiler cannot exhaust memory, and the
+  Companion is never the reason a build stops making progress.
+- **Two logs.** The raw one is the exact bytes the program wrote, invalid UTF-8
+  and all — that is the evidence. The user view is what you read: valid UTF-8,
+  no terminal control sequences, credentials redacted. `--raw` asks for the
+  first.
+- **A crash is admitted, not repaired.** A job whose supervisor went away comes
+  back as `interrupted`, which means *nobody knows how this ended*. Running it
+  again is `job retry`, and it is your decision.
+
+It is not a sandbox, and the Companion will not pretend otherwise: nothing here
+can stop a program you authorised from writing wherever you can write. What the
+containment checks stop is a *document* directing a program outside its declared
+roots, and the Companion reading or publishing anything outside them.
 
 ### Launch
 
@@ -224,6 +356,19 @@ $ companion launch quake --map e1m1 --game-root /games/quake --dry-run
 
 Drop `--dry-run` to start it. With a game root in `config.json` the flag is
 unnecessary.
+
+Starting a game is a job. The launch config becomes a generated engine profile
+— `auto-pigeon.launch.quake` in `companion job profiles` above — and the start
+is a submission to the same executor a compile goes through, so a game you
+launched is listed, cancellable and recorded like anything else. `companion
+launch` is the short way to say it; `companion job run --profile
+auto-pigeon.launch.quake --action play_map --runtime map_name=e1m1` is the same
+thing spelled out.
+
+The generated profile is a bridge, not the model: it has one action, no content
+layouts and no version probe, because a stubbed launch config does not know
+enough to claim more. A curated engine profile replaces it by existing — the
+catalog prefers a document to a generated stand-in.
 
 ### Extractor
 
@@ -548,61 +693,105 @@ separate process, and what a release redistributes.
 
 ## HTTP API
 
-The server is loopback-only and same-origin guarded: a request carrying a
-cross-origin `Origin` header is refused, and every mutating route is POST-only.
-A request with no `Origin` — a plain navigation, or the `curl` calls below — is
-allowed.
+The server is loopback-only, and four checks stand between it and anything that
+is not you. It can start processes on your machine; loopback alone is not a
+boundary, because a page you have open on some other origin can script requests
+at a guessable local port.
+
+1. **A token, in a header.** Minted per run, published beside `config.json` at
+   mode 0600, removed when the server stops. It is a header rather than a cookie
+   on purpose: a cross-origin page cannot set a custom header without a CORS
+   preflight, this server answers none, and nothing is ever authenticated by
+   something the browser attaches on its own. There is no CSRF surface because
+   there is no ambient credential.
+2. **`Host` must name a loopback address.** That is the DNS-rebinding defence:
+   `http://rebound.example/` resolving to `127.0.0.1` still arrives with
+   `Host: rebound.example`, and is refused before anything reads it.
+3. **`Origin`, when present, must match `Host`.**
+4. **`Sec-Fetch-Site`, when the browser sends it,** must say the request came
+   from this origin or from no page at all.
+
+Requests with no `Origin` — a plain navigation, or the `curl` calls below — are
+allowed, so scripting works.
 
 ```console
 $ companion serve --port 8791 &
+companion 0.1.0-dev listening on http://127.0.0.1:8791/
+API token written to ~/.config/auto-pigeon-companion/api-token
 
-$ curl -s http://127.0.0.1:8791/api/status
-{"version":"0.1.0-dev","aub_base_url":"https://aub.example","authenticated":true,
- "email":"you@example","platform":"linux/amd64",
- "tool_cache_dir":"/home/you/.cache/auto-pigeon-companion/tools","aue_available":false}
+$ TOKEN=$(cat ~/.config/auto-pigeon-companion/api-token)
 
-$ curl -s http://127.0.0.1:8791/api/launch-configs
-{"items":[{"game":"quake","executable_pattern":"{game_root}/quakespasm{exe}",
- "args":["-basedir","{game_root}","+map","{map}"]}, …]}
+$ curl -s -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/status
+{"version":"0.1.0-dev","aub_base_url":"","authenticated":false,
+ "platform":"linux/amd64","tool_cache_dir":"/home/you/.cache/auto-pigeon-companion/tools",
+ "jobs_dir":"/home/you/.cache/auto-pigeon-companion/jobs","aue_available":false}
 
-$ curl -s -X POST http://127.0.0.1:8791/api/auth/login \
-    -d '{"email":"you@example","password":"…"}'
-{"email":"you@example"}
+$ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8791/api/status
+401
 
-$ curl -s -X POST http://127.0.0.1:8791/api/build -d '{"tool":"noop"}'
-{"output":"resolved noop@0.0.0-fake (linux/amd64)\n…"}
-
-$ curl -s -X POST http://127.0.0.1:8791/api/launch \
-    -d '{"game":"quake","map":"e1m1","dry_run":true}'
-{"command":"/games/quake/quakespasm -basedir /games/quake +map e1m1",
- "plan":{"executable":"/games/quake/quakespasm","args":[…],"working_dir":"/games/quake"},
- "started":false}
-
-$ curl -s http://127.0.0.1:8791/api/aue/version
-{"version":"auto-pigeon-extractor 0.4.1"}
-
-$ curl -s -o /dev/null -w '%{http_code}\n' \
+$ curl -s -o /dev/null -w '%{http_code}\n' -H "X-AUCOM-Token: $TOKEN" \
     -H 'Origin: http://evil.example' http://127.0.0.1:8791/api/status
 403
 
-$ curl -s -X POST http://127.0.0.1:8791/api/auth/logout
+$ curl -s -o /dev/null -w '%{http_code}\n' -H "X-AUCOM-Token: $TOKEN" \
+    -H 'Host: rebound.example' http://127.0.0.1:8791/api/status
+403
+
+$ curl -s -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/profiles | head -c 120
+{"items":[{"actions":[{"capability":"q1.bsp.compile","id":"compile", …
+
+$ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/jobs \
+    -d '{"profile":"auto-pigeon.sample.q1-engine","action":"play_map",
+         "executables":{"engine":"/bin/echo"},
+         "roots":{"game_root":"/games/quake","content_root":"/games/quake"},
+         "runtime":{"map_name":"e1m1"}}'
+{"schema_version":"aucom.job/1.0","id":"20260906T235240Z-a8b4d547bf25","state":"queued", …
+
+$ curl -s -H "X-AUCOM-Token: $TOKEN" \
+    http://127.0.0.1:8791/api/v1/jobs/20260906T235240Z-a8b4d547bf25 | head -c 80
+{"schema_version":"aucom.job/1.0","id":"20260906T235240Z-a8b4d547bf25","state":"succeeded", …
+
+$ curl -s -H "X-AUCOM-Token: $TOKEN" \
+    'http://127.0.0.1:8791/api/v1/jobs/20260906T235240Z-a8b4d547bf25/logs'
+{"job":"20260906T235240Z-a8b4d547bf25","stream":"stdout","raw":false,
+ "summary":{"bytes":38,"stored":38,"dropped":0,"lines":1,"truncated":false,"file":"stdout.log"},
+ "text":"-basedir /games/quake +map e1m1\n"}
+
+$ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/auth/logout
 {"authenticated":false}
 ```
 
 | Route | Method | Purpose |
 | --- | --- | --- |
-| `/` | GET | the embedded frontend |
+| `/` | GET | the embedded frontend, carrying this run's API token |
 | `/api/status` | GET | version, platform, AUB address, sign-in state, extractor availability |
 | `/api/auth/login` | POST | sign in and persist the session |
 | `/api/auth/logout` | POST | forget the session locally |
 | `/api/launch-configs` | GET | available launch configurations |
-| `/api/build` | POST | run one external tool and return its output |
-| `/api/launch` | POST | resolve a launch plan, and run it unless `dry_run` |
+| `/api/launch` | POST | resolve a launch, and submit it as a job unless `dry_run` |
 | `/api/aue/version` | GET | the bundled extractor's version |
+| `/api/v1/jobs` | GET, POST | list jobs; submit one |
+| `/api/v1/jobs/preview` | POST | resolve a request into its exact command, start nothing |
+| `/api/v1/jobs/{id}` | GET | one job's whole record |
+| `/api/v1/jobs/{id}/cancel` | POST | ask it to stop |
+| `/api/v1/jobs/{id}/retry` | POST | run its request again, as a new job |
+| `/api/v1/jobs/{id}/logs` | GET | `?stream=stdout\|stderr`, `?raw=1` for the bytes the program wrote |
+| `/api/v1/jobs/{id}/artifacts` | GET | what it produced |
+| `/api/v1/jobs/{id}/artifacts/{name}` | GET | download one |
+| `/api/v1/profiles` | GET | what can be run on this machine |
+| `/api/v1/profiles/{id}` | GET | one profile, with its permissions |
+| `/api/v1/profiles/validate` | POST | check a document without importing it |
 
-A local server has no per-request authentication: any process running as the
-same user can drive it while it is up. A startup token in the opened URL is the
-usual remedy and is noted in `internal/web` as work to do before any release.
+The `/api/v1` routes are versioned because `companion job` and your own scripts
+drive them; the unversioned `/api` routes are the page's own and are not a
+contract.
+
+**What the token does not cover, said plainly.** The page has to be able to
+load, so `GET /` is unauthenticated and carries the token — which means a
+process running as you can read it. That process can already read `config.json`,
+which holds your AUB session token, so this is the boundary that was there
+anyway. What the token closes is the case that boundary never covered: a web
+page, on some other origin, driving the executor.
 
 ## Development
 

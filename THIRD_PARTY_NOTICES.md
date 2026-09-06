@@ -105,10 +105,14 @@ They are never:
 - or reached through any in-process calling convention.
 
 No Go dependency may pull a GPL-2.0 tool's source or object code into this
-module. This is an architectural constraint, enforced in
-[`internal/tools`](internal/tools/manager.go), whose package documentation
-restates it, and asserted by a test that fails if the tool registry gains an
-entry without this document being updated.
+module. This is an architectural constraint, split across two packages that
+each restate it in their own documentation:
+[`internal/tools`](internal/tools/manager.go) obtains a tool and verifies it,
+and [`internal/job`](internal/job/exec.go) runs it — as an executable path and
+an argument array handed to `os/exec`, never through a shell and never through
+an in-process call. A test fails if the tool registry gains an entry without
+this document being updated, and another fails if `internal/tools` grows a way
+to execute anything.
 
 Each tool keeps its own copyright and its own licence. Downloading and running a
 GPL-2.0 program from an MIT-licensed program is ordinary use of that program; it

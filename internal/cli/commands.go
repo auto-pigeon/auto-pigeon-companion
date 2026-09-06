@@ -147,7 +147,8 @@ func runServe(env *Env, args []string) int {
 	// The executor. Started here, so the server's recovery pass runs before it
 	// accepts a request and a job left running by a previous crash is marked
 	// interrupted rather than reported as still going.
-	service, settings, err := openJobs(ctx, env, true)
+	service, settings, err := openJobs(ctx, env, true,
+		func(format string, args ...any) { fmt.Fprintf(env.Stderr, format+"\n", args...) })
 	if err != nil {
 		return fail(env, err)
 	}
@@ -391,7 +392,7 @@ func runLaunch(env *Env, args []string) int {
 	ctx, stop := signalContext()
 	defer stop()
 
-	service, settings, err := openJobs(ctx, env, !*dryRun)
+	service, settings, err := openJobs(ctx, env, !*dryRun, nil)
 	if err != nil {
 		return fail(env, err)
 	}
