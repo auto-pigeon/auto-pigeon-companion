@@ -103,6 +103,11 @@ var commands = []Command{
 		Run:     runBuild,
 	},
 	{
+		Name: "profile", Usage: "validate | show | canonicalize | digest | diff | list | schema",
+		Summary: "read, check and compare tool, engine and pipeline profiles",
+		Run:     runProfile,
+	},
+	{
 		Name: "launch", Usage: "<game> [--map <name>] [--game-root <dir>] [--dry-run]",
 		Summary: "launch a game using its AUB launch config",
 		Run:     runLaunch,

@@ -1,0 +1,895 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://auto-pigeon.invalid/schema/aucom.profile/1.0/common",
+  "title": "Auto-Pigeon Companion profile \u2014 shared definitions",
+  "description": "Definitions shared by the tool, engine and pipeline profile schemas. This document is normative for anything outside the Companion that reads or writes profiles; inside the Companion the Go types in internal/profile are the enforcement point, and a test asserts that the two describe the same members.",
+  "$defs": {
+    "version": {
+      "type": "string",
+      "description": "A semantic version. Build metadata is not permitted: two versions differing only there compare equal and could not both be published.",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$"
+    },
+    "profileId": {
+      "type": "string",
+      "description": "A stable, namespaced, immutable identity: at least two dot-separated lower-case segments.",
+      "maxLength": 128,
+      "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"
+    },
+    "token": {
+      "type": "string",
+      "description": "A short internal name that a template placeholder can spell.",
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "artifactRole": {
+      "type": "string",
+      "description": "A dot-separated identifier for a kind of file or unit of work, e.g. q1.map.source.",
+      "maxLength": 64,
+      "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$"
+    },
+    "httpsUrl": {
+      "type": "string",
+      "maxLength": 512,
+      "pattern": "^https://[^\\s]+$"
+    },
+    "relativePath": {
+      "type": "string",
+      "description": "A relative POSIX path with no `..`, no backslash, no drive letter and no empty segment.",
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*(^|/)\\.\\.(/|$))[^\\u0000]+$"
+    },
+    "rootRole": {
+      "enum": [
+        "workspace",
+        "project_root",
+        "game_root",
+        "content_root",
+        "tool_root",
+        "tool_cache"
+      ]
+    },
+    "versionRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "at_least": {
+          "$ref": "#/$defs/version"
+        },
+        "below": {
+          "$ref": "#/$defs/version"
+        }
+      }
+    },
+    "platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "os",
+        "arch"
+      ],
+      "properties": {
+        "os": {
+          "enum": [
+            "darwin",
+            "freebsd",
+            "linux",
+            "windows"
+          ]
+        },
+        "arch": {
+          "enum": [
+            "386",
+            "amd64",
+            "arm",
+            "arm64"
+          ]
+        }
+      }
+    },
+    "platformSupport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "platform",
+        "status"
+      ],
+      "properties": {
+        "platform": {
+          "$ref": "#/$defs/platform"
+        },
+        "status": {
+          "enum": [
+            "supported",
+            "unverified",
+            "unsupported"
+          ]
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 200
+        }
+      }
+    },
+    "publisher": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "url": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "key_id": {
+          "type": "string",
+          "maxLength": 64
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "homepage": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "repository": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "release_notes": {
+          "$ref": "#/$defs/httpsUrl"
+        }
+      }
+    },
+    "license": {
+      "type": "object",
+      "description": "The licence of the program the profile describes. It says nothing about the licence of this document or of the Companion.",
+      "additionalProperties": false,
+      "required": [
+        "spdx"
+      ],
+      "properties": {
+        "spdx": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "url": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "corresponding_source": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "notice": {
+          "type": "string",
+          "maxLength": 4000
+        }
+      }
+    },
+    "compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "companion": {
+          "$ref": "#/$defs/versionRange"
+        },
+        "replaces": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/profileId"
+          }
+        }
+      }
+    },
+    "gameProfileRef": {
+      "type": "object",
+      "description": "A reference to a Game Profile that AUB owns. By slug, never by record id: a record id identifies a row in one AUB deployment and would resolve to nothing, or to something else, anywhere the document travelled.",
+      "additionalProperties": false,
+      "required": [
+        "slug",
+        "engine_family"
+      ],
+      "properties": {
+        "slug": {
+          "type": "string",
+          "maxLength": 96,
+          "pattern": "^[a-z0-9_-]+$"
+        },
+        "engine_family": {
+          "enum": [
+            "quake1",
+            "quake2",
+            "quake3"
+          ]
+        },
+        "qualified_revision": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "meta": {
+      "type": "object",
+      "description": "The identity block every profile document carries. Referenced rather than composed, so the three profile schemas can list its members alongside their own.",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "id",
+        "version",
+        "name",
+        "summary",
+        "publisher",
+        "license"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "aucom.profile/1.0"
+        },
+        "kind": {
+          "enum": [
+            "tool",
+            "engine",
+            "pipeline"
+          ]
+        },
+        "id": {
+          "$ref": "#/$defs/profileId"
+        },
+        "version": {
+          "$ref": "#/$defs/version"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "publisher": {
+          "$ref": "#/$defs/publisher"
+        },
+        "source": {
+          "$ref": "#/$defs/source"
+        },
+        "license": {
+          "$ref": "#/$defs/license"
+        },
+        "compatibility": {
+          "$ref": "#/$defs/compatibility"
+        }
+      }
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/artifactRole"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "consumes": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/artifactRole"
+          }
+        },
+        "produces": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/artifactRole"
+          }
+        }
+      }
+    },
+    "contentLayout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "kind",
+        "root"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/token"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "kind": {
+          "enum": [
+            "loose_files",
+            "mod_directory",
+            "pak",
+            "pk3",
+            "wad"
+          ]
+        },
+        "root": {
+          "$ref": "#/$defs/rootRole"
+        },
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 4000
+        }
+      }
+    },
+    "acquisitionOption": {
+      "type": "object",
+      "description": "One route to obtaining the described program. No URL, size or digest appears here: those belong to the signed acquisition catalogue, which is versioned and revocable independently of any profile that points at it.",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "title"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "user_path",
+            "system_path",
+            "managed_download",
+            "already_installed"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "platforms": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/platform"
+          }
+        },
+        "catalog_package": {
+          "$ref": "#/$defs/profileId"
+        },
+        "commands": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "maxLength": 64
+          }
+        },
+        "relative_to": {
+          "$ref": "#/$defs/rootRole"
+        },
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "hint": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 4000
+        }
+      }
+    },
+    "versionParse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "first_line",
+            "line_containing",
+            "after_marker"
+          ]
+        },
+        "marker": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "stream": {
+          "enum": [
+            "stdout",
+            "stderr"
+          ]
+        }
+      }
+    },
+    "versionProbe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "executable",
+        "parse"
+      ],
+      "properties": {
+        "executable": {
+          "$ref": "#/$defs/token"
+        },
+        "args": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/arg"
+          }
+        },
+        "parse": {
+          "$ref": "#/$defs/versionParse"
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 300
+        }
+      }
+    },
+    "executable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "file"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/token"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "file": {
+          "type": "string",
+          "description": "Relative to this profile's own install directory. `{platform.exe_suffix}` is the only placeholder permitted.",
+          "maxLength": 512
+        }
+      }
+    },
+    "argWhen": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "option": {
+          "$ref": "#/$defs/token"
+        },
+        "input": {
+          "$ref": "#/$defs/token"
+        },
+        "equals": {
+          "type": "string",
+          "maxLength": 256
+        }
+      }
+    },
+    "arg": {
+      "description": "One element of an argument array: a template string, or an object when the argument is conditional. The two spellings of an unconditional argument canonicalize to the string form, so they share a digest.",
+      "oneOf": [
+        {
+          "type": "string",
+          "maxLength": 1024
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value"
+          ],
+          "properties": {
+            "value": {
+              "type": "string",
+              "maxLength": 1024
+            },
+            "when": {
+              "$ref": "#/$defs/argWhen"
+            }
+          }
+        }
+      ]
+    },
+    "inputSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "role"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/token"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "role": {
+          "$ref": "#/$defs/artifactRole"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "extensions": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "string",
+            "maxLength": 16,
+            "pattern": "^\\.[^./\\\\ ]+$"
+          }
+        }
+      }
+    },
+    "outputSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "role",
+        "path"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/token"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "role": {
+          "$ref": "#/$defs/artifactRole"
+        },
+        "path": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "optional": {
+          "type": "boolean"
+        }
+      }
+    },
+    "enumValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value"
+      ],
+      "properties": {
+        "value": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 120
+        }
+      }
+    },
+    "optionSpec": {
+      "type": "object",
+      "description": "A declared, typed knob. There is deliberately no free-text `extra arguments` member anywhere in this schema: one would make every declared root, network and environment statement decorative.",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "type"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/token"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "type": {
+          "enum": [
+            "bool",
+            "integer",
+            "enum",
+            "text"
+          ]
+        },
+        "default": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "values": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/enumValue"
+          }
+        },
+        "minimum": {
+          "type": "integer"
+        },
+        "maximum": {
+          "type": "integer"
+        },
+        "max_length": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1024
+        },
+        "advanced": {
+          "type": "boolean"
+        }
+      }
+    },
+    "diagnosticRule": {
+      "type": "object",
+      "description": "Literal matching only. A regular expression supplied by a document somebody else wrote is a denial-of-service primitive, and no compiler diagnostic needs one.",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "match",
+        "severity"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/token"
+        },
+        "stream": {
+          "enum": [
+            "stdout",
+            "stderr",
+            "both"
+          ]
+        },
+        "match": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "kind": {
+          "enum": [
+            "contains",
+            "prefix",
+            "suffix"
+          ]
+        },
+        "severity": {
+          "enum": [
+            "error",
+            "warning",
+            "info",
+            "progress"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "hint": {
+          "type": "string",
+          "maxLength": 4000
+        }
+      }
+    },
+    "workingDir": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "root"
+      ],
+      "properties": {
+        "root": {
+          "$ref": "#/$defs/rootRole"
+        },
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        }
+      }
+    },
+    "rootRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "access"
+      ],
+      "properties": {
+        "role": {
+          "$ref": "#/$defs/rootRole"
+        },
+        "access": {
+          "enum": [
+            "read",
+            "read_write"
+          ]
+        },
+        "purpose": {
+          "type": "string",
+          "maxLength": 200
+        }
+      }
+    },
+    "networkNeed": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "required": {
+          "type": "boolean"
+        },
+        "purpose": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "hosts": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "maxLength": 253
+          }
+        }
+      }
+    },
+    "environmentPolicy": {
+      "type": "object",
+      "description": "Nothing is inherited unless it is named here. `PATH`, the loader variables and anything that reads like a credential are refused outright.",
+      "additionalProperties": false,
+      "properties": {
+        "inherit": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9_]+$"
+          }
+        },
+        "set": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "propertyNames": {
+            "pattern": "^[A-Za-z0-9_]+$"
+          }
+        }
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "executable"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/token"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "capability": {
+          "$ref": "#/$defs/artifactRole"
+        },
+        "platforms": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/platform"
+          }
+        },
+        "executable": {
+          "$ref": "#/$defs/token"
+        },
+        "args": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/arg"
+          }
+        },
+        "working_dir": {
+          "$ref": "#/$defs/workingDir"
+        },
+        "inputs": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/inputSpec"
+          }
+        },
+        "outputs": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/outputSpec"
+          }
+        },
+        "options": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/optionSpec"
+          }
+        },
+        "diagnostics": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/diagnosticRule"
+          }
+        },
+        "roots": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/rootRef"
+          }
+        },
+        "network": {
+          "$ref": "#/$defs/networkNeed"
+        },
+        "environment": {
+          "$ref": "#/$defs/environmentPolicy"
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 86400
+        },
+        "success_exit_codes": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 255
+          }
+        },
+        "session_role": {
+          "enum": [
+            "client",
+            "listen_server",
+            "dedicated_server"
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,167 @@
+{
+  "schema_version": "aucom.profile/1.0",
+  "kind": "tool",
+  "id": "auto-pigeon.sample.q1-toolchain",
+  "version": "1.0.0",
+  "name": "Sample Q1 toolchain",
+  "summary": "A worked example of the tool profile format: a three-stage Quake 1 map compile.",
+  "description": "This profile is a sample, not a qualified toolchain. It exists so the format has a complete, valid, readable example that ships in the build and is exercised by the tests, and so that the claim that built-in and user-authored profiles take the same path can be tested against something real. The production EricW profiles replace it; they do not extend it.\n\nThe three stages are modelled the way the tools actually behave: qbsp reads a .map and writes a .bsp, and vis and light then rewrite that .bsp in place. The executor stages each stage's input into its own directory inside the job workspace, which is why every stage declares an output at the path it was handed.",
+  "publisher": {
+    "name": "Auto-Pigeon",
+    "url": "https://github.com/andrea-dintino/auto-pigeon-companion"
+  },
+  "source": {
+    "homepage": "https://ericwa.github.io/ericw-tools/",
+    "repository": "https://github.com/ericwa/ericw-tools"
+  },
+  "license": {
+    "spdx": "GPL-2.0-or-later",
+    "name": "GNU General Public License v2.0 or later",
+    "url": "https://www.gnu.org/licenses/old-licenses/gpl-2.0.html",
+    "notice": "The map-building tools this profile describes are separate programs under the GNU GPL. Nothing about this profile, or about the Companion that reads it, changes that: describing a program is not distributing it, and the Companion's own MIT licence covers the Companion's own code only."
+  },
+  "compatibility": {
+    "companion": { "at_least": "0.1.0" }
+  },
+  "game_profile": {
+    "slug": "quake1",
+    "engine_family": "quake1"
+  },
+  "tool_version": "0.0.0-sample",
+  "platforms": [
+    { "platform": { "os": "linux", "arch": "amd64" }, "status": "supported" },
+    { "platform": { "os": "linux", "arch": "arm64" }, "status": "unverified", "note": "no arm64 build has been run by the authors" },
+    { "platform": { "os": "windows", "arch": "amd64" }, "status": "supported" },
+    { "platform": { "os": "darwin", "arch": "arm64" }, "status": "unverified", "note": "expected to work; not exercised in CI" }
+  ],
+  "acquisition": [
+    {
+      "mode": "user_path",
+      "title": "Use a copy you already have",
+      "hint": "choose the folder containing qbsp, vis and light"
+    },
+    {
+      "mode": "system_path",
+      "title": "Find them on PATH",
+      "commands": ["qbsp", "vis", "light"]
+    }
+  ],
+  "version_probe": {
+    "executable": "qbsp",
+    "args": ["--version"],
+    "parse": { "kind": "line_containing", "marker": "qbsp", "stream": "stdout" },
+    "timeout_seconds": 10
+  },
+  "capabilities": [
+    {
+      "id": "q1.bsp.compile",
+      "title": "Compile a Quake 1 map into a BSP",
+      "consumes": ["q1.map.source"],
+      "produces": ["q1.bsp", "q1.prt"]
+    },
+    {
+      "id": "q1.bsp.vis",
+      "title": "Compute visibility for a Quake 1 BSP",
+      "consumes": ["q1.bsp"],
+      "produces": ["q1.bsp.vised"]
+    },
+    {
+      "id": "q1.bsp.light",
+      "title": "Compute lighting for a Quake 1 BSP",
+      "consumes": ["q1.bsp.vised"],
+      "produces": ["q1.bsp.lit", "q1.lit"]
+    }
+  ],
+  "executables": [
+    { "name": "qbsp", "title": "Map compiler", "file": "qbsp{platform.exe_suffix}" },
+    { "name": "vis", "title": "Visibility", "file": "vis{platform.exe_suffix}" },
+    { "name": "light", "title": "Lighting", "file": "light{platform.exe_suffix}" }
+  ],
+  "actions": [
+    {
+      "id": "compile",
+      "title": "Compile the map",
+      "capability": "q1.bsp.compile",
+      "executable": "qbsp",
+      "working_dir": { "root": "workspace" },
+      "args": [
+        "-threads",
+        "{option.threads}",
+        { "value": "-nopercent", "when": { "option": "quiet" } },
+        "{input.source_map}",
+        "{output.bsp}"
+      ],
+      "inputs": [
+        { "name": "source_map", "title": "Map source", "role": "q1.map.source", "required": true, "extensions": [".map"] }
+      ],
+      "outputs": [
+        { "name": "bsp", "title": "Compiled BSP", "role": "q1.bsp", "path": "compile/{option.basename}.bsp" },
+        { "name": "prt", "title": "Portal file", "role": "q1.prt", "path": "compile/{option.basename}.prt", "optional": true }
+      ],
+      "options": [
+        { "name": "basename", "title": "Output name", "type": "text", "default": "level", "max_length": 64 },
+        { "name": "threads", "title": "Threads", "type": "integer", "default": "4", "minimum": 1, "maximum": 64 },
+        { "name": "quiet", "title": "Less output", "type": "bool", "default": "false", "advanced": true }
+      ],
+      "diagnostics": [
+        { "id": "leak", "match": "leaked", "severity": "error", "message": "The map leaks: there is a gap between the inside and the void.", "hint": "Load the point file the compiler wrote next to the BSP and follow it to the hole." },
+        { "id": "brush", "match": "Entity with no valid brushes", "severity": "warning", "message": "An entity has no usable brushes and was dropped." }
+      ],
+      "roots": [
+        { "role": "workspace", "access": "read_write", "purpose": "read the staged map source and write the compiled BSP" }
+      ],
+      "timeout_seconds": 3600
+    },
+    {
+      "id": "vis",
+      "title": "Compute visibility",
+      "capability": "q1.bsp.vis",
+      "executable": "vis",
+      "working_dir": { "root": "workspace" },
+      "args": ["-threads", "{option.threads}", "{input.bsp}"],
+      "inputs": [
+        { "name": "bsp", "title": "Compiled BSP", "role": "q1.bsp", "required": true, "extensions": [".bsp"] }
+      ],
+      "outputs": [
+        { "name": "bsp", "title": "BSP with visibility", "role": "q1.bsp.vised", "path": "vis/{option.basename}.bsp" }
+      ],
+      "options": [
+        { "name": "basename", "title": "Output name", "type": "text", "default": "level", "max_length": 64 },
+        { "name": "threads", "title": "Threads", "type": "integer", "default": "4", "minimum": 1, "maximum": 64 }
+      ],
+      "roots": [
+        { "role": "workspace", "access": "read_write", "purpose": "rewrite the staged BSP with its visibility data" }
+      ],
+      "timeout_seconds": 21600
+    },
+    {
+      "id": "light",
+      "title": "Compute lighting",
+      "capability": "q1.bsp.light",
+      "executable": "light",
+      "working_dir": { "root": "workspace" },
+      "args": [
+        "-threads",
+        "{option.threads}",
+        { "value": "-fast", "when": { "option": "fast" } },
+        "{input.bsp}"
+      ],
+      "inputs": [
+        { "name": "bsp", "title": "BSP with visibility", "role": "q1.bsp.vised", "required": true, "extensions": [".bsp"] }
+      ],
+      "outputs": [
+        { "name": "bsp", "title": "Lit BSP", "role": "q1.bsp.lit", "path": "light/{option.basename}.bsp" },
+        { "name": "lit", "title": "Coloured lighting", "role": "q1.lit", "path": "light/{option.basename}.lit", "optional": true }
+      ],
+      "options": [
+        { "name": "basename", "title": "Output name", "type": "text", "default": "level", "max_length": 64 },
+        { "name": "threads", "title": "Threads", "type": "integer", "default": "4", "minimum": 1, "maximum": 64 },
+        { "name": "fast", "title": "Fast, low-quality lighting", "type": "bool", "default": "false" }
+      ],
+      "roots": [
+        { "role": "workspace", "access": "read_write", "purpose": "rewrite the staged BSP with its lighting data" }
+      ],
+      "timeout_seconds": 21600
+    }
+  ]
+}

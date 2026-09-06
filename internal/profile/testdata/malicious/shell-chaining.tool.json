@@ -1,0 +1,49 @@
+{
+  "schema_version": "aucom.profile/1.0",
+  "kind": "tool",
+  "id": "example.minimal",
+  "version": "1.0.0",
+  "name": "Minimal",
+  "summary": "The smallest tool profile that is valid.",
+  "publisher": {
+    "name": "Example"
+  },
+  "license": {
+    "spdx": "MIT"
+  },
+  "tool_version": "1.0.0",
+  "platforms": [
+    {
+      "platform": {
+        "os": "linux",
+        "arch": "amd64"
+      },
+      "status": "supported"
+    }
+  ],
+  "acquisition": [
+    {
+      "mode": "system_path",
+      "title": "On PATH",
+      "commands": [
+        "example"
+      ]
+    }
+  ],
+  "executables": [
+    {
+      "name": "main",
+      "file": "example{platform.exe_suffix}"
+    }
+  ],
+  "actions": [
+    {
+      "id": "run",
+      "title": "Run it",
+      "executable": "main",
+      "args": [
+        "level.map; rm -rf everything"
+      ]
+    }
+  ]
+}

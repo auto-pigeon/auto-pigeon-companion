@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://auto-pigeon.invalid/schema/aucom.profile/1.0/pipeline",
+  "title": "Auto-Pigeon Companion pipeline profile 1.0",
+  "description": "An ordered list of capabilities and the artifacts that flow between them. A pipeline names capabilities, never profiles and never commands: which tool provides a stage is answered on the machine, by what the user has installed and granted.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "id",
+    "version",
+    "name",
+    "summary",
+    "publisher",
+    "license",
+    "inputs",
+    "steps"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "aucom.profile/1.0"
+    },
+    "kind": {
+      "const": "pipeline"
+    },
+    "id": {
+      "$ref": "profile-common-1.0.schema.json#/$defs/profileId"
+    },
+    "version": {
+      "$ref": "profile-common-1.0.schema.json#/$defs/version"
+    },
+    "name": {
+      "type": "string",
+      "maxLength": 120
+    },
+    "summary": {
+      "type": "string",
+      "maxLength": 200
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 4000
+    },
+    "publisher": {
+      "$ref": "profile-common-1.0.schema.json#/$defs/publisher"
+    },
+    "source": {
+      "$ref": "profile-common-1.0.schema.json#/$defs/source"
+    },
+    "license": {
+      "$ref": "profile-common-1.0.schema.json#/$defs/license"
+    },
+    "compatibility": {
+      "$ref": "profile-common-1.0.schema.json#/$defs/compatibility"
+    },
+    "game_profile": {
+      "$ref": "profile-common-1.0.schema.json#/$defs/gameProfileRef"
+    },
+    "inputs": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {
+        "$ref": "profile-common-1.0.schema.json#/$defs/inputSpec"
+      }
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {
+        "$ref": "#/$defs/pipelineStep"
+      }
+    },
+    "outputs": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "$ref": "#/$defs/pipelineOutput"
+      }
+    }
+  },
+  "$defs": {
+    "pipelineWire": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "from"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "profile-common-1.0.schema.json#/$defs/token"
+        },
+        "from": {
+          "type": "string",
+          "maxLength": 130,
+          "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$",
+          "description": "`pipeline.<input>` or `<step>.<output>`. Two spellings, both unambiguous, nothing to evaluate."
+        }
+      }
+    },
+    "pipelineStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "capability"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "profile-common-1.0.schema.json#/$defs/token"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "capability": {
+          "$ref": "profile-common-1.0.schema.json#/$defs/artifactRole"
+        },
+        "inputs": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/pipelineWire"
+          }
+        },
+        "options": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 1024
+          },
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]*$"
+          }
+        },
+        "optional": {
+          "type": "boolean"
+        }
+      }
+    },
+    "pipelineOutput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "role",
+        "from"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "profile-common-1.0.schema.json#/$defs/token"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "role": {
+          "$ref": "profile-common-1.0.schema.json#/$defs/artifactRole"
+        },
+        "from": {
+          "type": "string",
+          "maxLength": 130,
+          "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
+        },
+        "optional": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

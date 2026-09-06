@@ -115,6 +115,35 @@ GPL-2.0 program from an MIT-licensed program is ordinary use of that program; it
 does not create a combined work, and it places no GPL obligations on this
 repository's code.
 
+### Profiles describe these tools; they do not contain or relicense them
+
+A **profile** ([README](README.md#profiles)) is a JSON document in this
+repository's own format that says which programs a tool provides, what arguments
+they take and where to obtain them. It contains no third-party code: no source,
+no object code, no binary, no vendored fragment. Describing a program is not
+distributing it, and a profile is data the Companion reads, not the program it
+describes.
+
+Consequently:
+
+- **The profile documents embedded in this binary are this repository's own
+  work**, under its MIT licence, whatever the licence of the programs they
+  describe. They are compiled in with `//go:embed`; the programs are not.
+- **A profile's `license` block states the described program's licence**, not
+  this one, and carries that program's notice and — where a copyleft licence
+  requires it for a binary offered for download — the corresponding-source link.
+  It is carried in the document so that no code path can handle a tool without
+  the licence being visible, and so the acquisition path can show it before
+  anything is fetched.
+- **A user approving a profile is not receiving a licence grant** and their
+  obligations under the described program's licence are unchanged. Approval is
+  a decision to let this program run that one.
+- **No profile carries a download URL.** Managed downloads name an entry in a
+  signed acquisition catalogue, which holds the URL, size, digest, upstream
+  source, licence and corresponding-source offer. That keeps the redistribution
+  question in one place rather than scattered across every document that points
+  at a build.
+
 ### Per-tool notices — not yet written
 
 **TODO(andrea): which GPL-2.0 tool(s), and which versions, is not decided.**

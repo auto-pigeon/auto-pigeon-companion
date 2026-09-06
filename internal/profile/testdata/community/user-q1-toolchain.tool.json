@@ -1,0 +1,60 @@
+{
+  "kind": "tool",
+  "schema_version": "aucom.profile/1.0",
+  "name": "Andrea's Q1 compile",
+  "id": "example.andrea.q1-compile",
+  "version": "0.3.0",
+  "summary": "A hand-written tool profile that drives the same three programs as the built-in sample.",
+  "description": "This document exists to be the other half of a test. It is written the way a person writes JSON — members in a different order, some arguments in the object form and some in the string form, the options listed the other way round — and it describes the same commands as the built-in sample profile. Resolving both produces the same Command, and `Command.Digest` says so.\n\nThat equality is the whole extension model in one assertion. If a built-in profile ever gains a privileged path, this is the test that stops compiling.",
+  "publisher": { "name": "A Companion user" },
+  "license": {
+    "spdx": "GPL-2.0-or-later",
+    "name": "GNU General Public License v2.0 or later"
+  },
+  "tool_version": "0.0.0-sample",
+  "game_profile": { "engine_family": "quake1", "slug": "quake1" },
+  "platforms": [
+    { "platform": { "os": "linux", "arch": "amd64" }, "status": "supported" }
+  ],
+  "acquisition": [
+    { "mode": "user_path", "title": "The copy I already have", "hint": "choose the folder with qbsp, vis and light in it" }
+  ],
+  "capabilities": [
+    { "id": "q1.bsp.compile", "title": "Compile a Quake 1 map into a BSP", "consumes": ["q1.map.source"], "produces": ["q1.bsp", "q1.prt"] }
+  ],
+  "executables": [
+    { "name": "qbsp", "file": "qbsp{platform.exe_suffix}" }
+  ],
+  "actions": [
+    {
+      "id": "compile",
+      "title": "Compile the map",
+      "capability": "q1.bsp.compile",
+      "executable": "qbsp",
+      "working_dir": { "root": "workspace" },
+      "options": [
+        { "name": "quiet", "type": "bool", "default": "false", "title": "Less output", "advanced": true },
+        { "name": "threads", "type": "integer", "title": "Threads", "default": "4", "minimum": 1, "maximum": 64 },
+        { "name": "basename", "type": "text", "title": "Output name", "default": "level", "max_length": 64 }
+      ],
+      "args": [
+        { "value": "-threads" },
+        { "value": "{option.threads}" },
+        { "value": "-nopercent", "when": { "option": "quiet" } },
+        "{input.source_map}",
+        "{output.bsp}"
+      ],
+      "inputs": [
+        { "name": "source_map", "role": "q1.map.source", "required": true, "title": "Map source", "extensions": [".map"] }
+      ],
+      "outputs": [
+        { "name": "bsp", "role": "q1.bsp", "title": "Compiled BSP", "path": "compile/{option.basename}.bsp" },
+        { "name": "prt", "role": "q1.prt", "title": "Portal file", "path": "compile/{option.basename}.prt", "optional": true }
+      ],
+      "roots": [
+        { "role": "workspace", "access": "read_write", "purpose": "read the staged map source and write the compiled BSP" }
+      ],
+      "timeout_seconds": 3600
+    }
+  ]
+}

@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://auto-pigeon.invalid/schema/aucom.profile/1.0/engine",
+  "title": "Auto-Pigeon Companion engine profile 1.0",
+  "description": "One game engine the Companion can start. Action ids are a closed vocabulary \u2014 play_map, play_package, join_server, host_listen, host_dedicated \u2014 so that an engine which does not support one omits it rather than declaring one that does something else.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "id",
+    "version",
+    "name",
+    "summary",
+    "publisher",
+    "license",
+    "game_profile",
+    "runtime",
+    "engine_version",
+    "platforms",
+    "acquisition",
+    "executables",
+    "actions"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "aucom.profile/1.0"
+    },
+    "kind": {
+      "const": "engine"
+    },
+    "id": {
+      "$ref": "profile-common-1.0.schema.json#/$defs/profileId"
+    },
+    "version": {
+      "$ref": "profile-common-1.0.schema.json#/$defs/version"
+    },
+    "name": {
+      "type": "string",
+      "maxLength": 120
+    },
+    "summary": {
+      "type": "string",
+      "maxLength": 200
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 4000
+    },
+    "publisher": {
+      "$ref": "profile-common-1.0.schema.json#/$defs/publisher"
+    },
+    "source": {
+      "$ref": "profile-common-1.0.schema.json#/$defs/source"
+    },
+    "license": {
+      "$ref": "profile-common-1.0.schema.json#/$defs/license"
+    },
+    "compatibility": {
+      "$ref": "profile-common-1.0.schema.json#/$defs/compatibility"
+    },
+    "game_profile": {
+      "$ref": "profile-common-1.0.schema.json#/$defs/gameProfileRef"
+    },
+    "runtime": {
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^[a-z0-9._-]+$",
+      "description": "AUB's engine_runtime identifier for this engine."
+    },
+    "engine_version": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "last_qualified": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "platforms": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {
+        "$ref": "profile-common-1.0.schema.json#/$defs/platformSupport"
+      }
+    },
+    "acquisition": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {
+        "$ref": "profile-common-1.0.schema.json#/$defs/acquisitionOption"
+      }
+    },
+    "version_probe": {
+      "$ref": "profile-common-1.0.schema.json#/$defs/versionProbe"
+    },
+    "content_layouts": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "$ref": "profile-common-1.0.schema.json#/$defs/contentLayout"
+      }
+    },
+    "executables": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {
+        "$ref": "profile-common-1.0.schema.json#/$defs/executable"
+      }
+    },
+    "actions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {
+        "allOf": [
+          {
+            "$ref": "profile-common-1.0.schema.json#/$defs/action"
+          },
+          {
+            "properties": {
+              "id": {
+                "enum": [
+                  "play_map",
+                  "play_package",
+                  "join_server",
+                  "host_listen",
+                  "host_dedicated"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "session_role"
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "schema_version": "aucom.profile/1.0",
+  "kind": "pipeline",
+  "id": "example.forward-wire",
+  "version": "1.0.0",
+  "name": "Forward wire",
+  "summary": "A pipeline whose first step reads the last step's output.",
+  "description": "A cycle, written the only way the format allows one to be attempted. Steps are ordered and a wire may only reach backwards, so this is refused at the step that reaches forward rather than detected later by a cycle search.",
+  "publisher": { "name": "Example" },
+  "license": { "spdx": "MIT" },
+  "inputs": [{ "name": "source_map", "role": "q1.map.source", "required": true }],
+  "steps": [
+    {
+      "id": "compile",
+      "title": "Compile",
+      "capability": "q1.bsp.compile",
+      "inputs": [{ "name": "bsp", "from": "light.bsp" }]
+    },
+    {
+      "id": "light",
+      "title": "Light",
+      "capability": "q1.bsp.light",
+      "inputs": [{ "name": "bsp", "from": "compile.bsp" }]
+    }
+  ]
+}

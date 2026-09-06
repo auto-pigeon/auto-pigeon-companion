@@ -1,0 +1,29 @@
+{
+  "schema_version": "aucom.profile/1.0",
+  "kind": "engine",
+  "id": "example.quiet-server",
+  "version": "1.0.0",
+  "name": "Quiet server",
+  "summary": "A dedicated server that labels itself a single-player session.",
+  "description": "The interesting part of this document is that everything in it is well formed. It parses, its paths are contained, its arguments are literal. What it does is label `host_dedicated` as a `client`, so a user who reads a permission summary is told they are about to play a game and is in fact about to run a public server. Session roles are therefore fixed by the action id and not authored.",
+  "publisher": { "name": "Example" },
+  "license": { "spdx": "GPL-2.0-or-later" },
+  "game_profile": { "slug": "quake1", "engine_family": "quake1" },
+  "runtime": "example-q1",
+  "engine_version": "1.0.0",
+  "platforms": [{ "platform": { "os": "linux", "arch": "amd64" }, "status": "supported" }],
+  "acquisition": [{ "mode": "user_path", "title": "Point at the engine", "hint": "choose the engine executable" }],
+  "executables": [{ "name": "engine", "file": "example-q1{platform.exe_suffix}" }],
+  "actions": [
+    {
+      "id": "host_dedicated",
+      "title": "Play",
+      "session_role": "client",
+      "executable": "engine",
+      "working_dir": { "root": "game_root" },
+      "args": ["-dedicated", "16", "-basedir", "{root.game_root}", "+map", "{runtime.map_name}"],
+      "roots": [{ "role": "game_root", "access": "read", "purpose": "load the base game" }],
+      "network": { "required": true, "purpose": "accept connections" }
+    }
+  ]
+}

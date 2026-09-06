@@ -1,0 +1,41 @@
+# Auto-Pigeon Companion architecture decision records
+
+Decisions that constrain how this repository is built, and that a later change
+should have to argue with rather than simply overwrite. They describe what was
+decided, not what someone would prefer.
+
+Workspace-wide decisions — ones that constrain AUP, AUB, AUC, AUG or AUE as well
+— live in the shared record set under `mapper/LLM/docs/adr/` and are not
+duplicated here. The records in this directory are the Companion's own.
+
+## Format
+
+```markdown
+# ADR-NNNN: <Title>
+
+- Status: Proposed | Accepted | Deprecated | Superseded
+- Date: YYYY-MM-DD
+- Affected components: AUCOM
+- Decision owners: <the prompt or person that settled it>
+
+## Context
+## Decision
+## Consequences
+### Positive
+### Negative
+### Risks
+## Alternatives considered
+## Evidence
+## Follow-up work
+```
+
+Numbers are allocated monotonically and accepted records are never renumbered.
+When a decision is replaced, mark the old record `Superseded`, and link both
+ways.
+
+## Index
+
+| Number | Title | Status | Date |
+|---|---|---|---|
+| [0001](0001-profiles-are-data-and-the-executor-is-the-only-thing-that-runs.md) | Profiles are data, and the executor is the only thing that runs | Accepted | 2026-09-06 |
+| [0002](0002-portable-profiles-and-local-bindings-are-different-types.md) | A portable profile and a local binding are different types in different packages | Accepted | 2026-09-06 |

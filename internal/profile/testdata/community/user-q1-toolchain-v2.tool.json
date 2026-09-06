@@ -1,0 +1,66 @@
+{
+  "kind": "tool",
+  "schema_version": "aucom.profile/1.0",
+  "name": "Andrea's Q1 compile",
+  "id": "example.andrea.q1-compile",
+  "version": "0.4.0",
+  "summary": "The same profile, one version later, asking for two things it did not ask for before.",
+  "description": "An update that adds a network permission and write access to the installed game folder. Neither is visible in a version number, and both are ordinary-looking members buried in a document nobody re-reads. This is what the normalized diff and the grant-by-digest rule exist for: the update is refused until the user has seen the two new sentences and approved them.",
+  "publisher": { "name": "A Companion user" },
+  "license": {
+    "spdx": "GPL-2.0-or-later",
+    "name": "GNU General Public License v2.0 or later"
+  },
+  "tool_version": "0.0.0-sample",
+  "game_profile": { "engine_family": "quake1", "slug": "quake1" },
+  "platforms": [
+    { "platform": { "os": "linux", "arch": "amd64" }, "status": "supported" }
+  ],
+  "acquisition": [
+    { "mode": "user_path", "title": "The copy I already have", "hint": "choose the folder with qbsp, vis and light in it" }
+  ],
+  "capabilities": [
+    { "id": "q1.bsp.compile", "title": "Compile a Quake 1 map into a BSP", "consumes": ["q1.map.source"], "produces": ["q1.bsp", "q1.prt"] }
+  ],
+  "executables": [
+    { "name": "qbsp", "file": "qbsp{platform.exe_suffix}" }
+  ],
+  "actions": [
+    {
+      "id": "compile",
+      "title": "Compile the map",
+      "capability": "q1.bsp.compile",
+      "executable": "qbsp",
+      "working_dir": { "root": "workspace" },
+      "options": [
+        { "name": "quiet", "type": "bool", "default": "false", "title": "Less output", "advanced": true },
+        { "name": "threads", "type": "integer", "title": "Threads", "default": "4", "minimum": 1, "maximum": 64 },
+        { "name": "basename", "type": "text", "title": "Output name", "default": "level", "max_length": 64 }
+      ],
+      "args": [
+        { "value": "-threads" },
+        { "value": "{option.threads}" },
+        { "value": "-nopercent", "when": { "option": "quiet" } },
+        "{input.source_map}",
+        "{output.bsp}"
+      ],
+      "inputs": [
+        { "name": "source_map", "role": "q1.map.source", "required": true, "title": "Map source", "extensions": [".map"] }
+      ],
+      "outputs": [
+        { "name": "bsp", "role": "q1.bsp", "title": "Compiled BSP", "path": "compile/{option.basename}.bsp" },
+        { "name": "prt", "role": "q1.prt", "title": "Portal file", "path": "compile/{option.basename}.prt", "optional": true }
+      ],
+      "roots": [
+        { "role": "workspace", "access": "read_write", "purpose": "read the staged map source and write the compiled BSP" },
+        { "role": "game_root", "access": "read_write", "purpose": "copy the finished map into the game folder" }
+      ],
+      "network": {
+        "required": true,
+        "purpose": "check for tool updates",
+        "hosts": ["updates.example.com"]
+      },
+      "timeout_seconds": 3600
+    }
+  ]
+}

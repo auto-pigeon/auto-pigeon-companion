@@ -154,13 +154,14 @@ usage:
   companion <command> [arguments]
 
 commands:
-  serve [--port <n>] [--open]                                     run the local GUI server without opening a browser
-  auth login [--email <address>] | status | logout                authenticate against auto-pigeon-backend
-  build [--tool <name>] [--tool-version <v>] [-- <tool args>...]  run an external map-building tool
-  launch <game> [--map <name>] [--game-root <dir>] [--dry-run]    launch a game using its AUB launch config
-  extractor version                                               run the bundled auto-pigeon-extractor (AUE)
-  migrate                                                         fold Launcher and older Companion configuration into the current one
-  version                                                         print the build version
+  serve [--port <n>] [--open]                                             run the local GUI server without opening a browser
+  auth login [--email <address>] | status | logout                        authenticate against auto-pigeon-backend
+  build [--tool <name>] [--tool-version <v>] [-- <tool args>...]          run an external map-building tool
+  profile validate | show | canonicalize | digest | diff | list | schema  read, check and compare tool, engine and pipeline profiles
+  launch <game> [--map <name>] [--game-root <dir>] [--dry-run]            launch a game using its AUB launch config
+  extractor version                                                       run the bundled auto-pigeon-extractor (AUE)
+  migrate                                                                 fold Launcher and older Companion configuration into the current one
+  version                                                                 print the build version
 ```
 
 Exit codes: `0` success, `1` the operation failed, `2` the invocation was wrong.
@@ -238,6 +239,312 @@ instead:
 $ companion extractor version
 error: no AUE binary is embedded in this build and AUCOM_AUE_BINARY is not set
 ```
+
+## Profiles
+
+A **profile** is a small JSON document that describes an external program the
+Companion can drive: which programs it provides, what arguments they take, what
+files they read and write, whether they go online, and how to get them. There
+are three kinds.
+
+| Kind | What it describes |
+| --- | --- |
+| `tool` | one program, or one family shipped together — a compiler, a visibility stage, a light stage |
+| `engine` | a game engine, and the five things it can be asked to do |
+| `pipeline` | an ordered list of *capabilities* and the files that flow between them |
+
+The point of the format is that there is **one execution model**. The profiles
+that ship inside the binary go through the same decoder, the same validation,
+the same canonical encoding and the same resolution as a file you write by hand.
+Adding a tool is a document, not a release — and the built-in ones cannot take a
+shortcut that a user-authored one cannot, because there is no shortcut.
+
+```console
+$ companion profile list
+engine   auto-pigeon.sample.q1-engine       1.0.0    builtin
+         A worked example of the engine profile format, covering all five session actions.
+pipeline auto-pigeon.sample.q1-normal       1.0.0    builtin
+         Compile, compute visibility, compute lighting — the ordinary Quake 1 build.
+tool     auto-pigeon.sample.q1-toolchain    1.0.0    builtin
+         A worked example of the tool profile format: a three-stage Quake 1 map compile.
+```
+
+Those three are **samples**. They are complete, valid and exercised by the
+tests, and they are not a qualified toolchain: the real EricW profiles and the
+curated engine profiles arrive with the tasks that qualify them against upstream
+releases.
+
+### A profile is data, not a program
+
+This is the whole security model, and it is worth stating as a list of things
+the format **cannot express**:
+
+- no shell string, anywhere — a command is an executable and an argument array,
+  and the array is passed to the operating system directly;
+- no script, hook, installer or `postinstall`;
+- no embedded executable or library to load;
+- no regular expression — output matching is by literal substring, because an
+  untrusted regex is a denial-of-service primitive and no compiler diagnostic
+  needs one;
+- no absolute path, home directory, host address or credential — those describe
+  one computer, and a profile is a file that travels;
+- no free-text "extra arguments" box. Overrides are declared, typed options with
+  ranges, because a free-text argument would make every other statement in the
+  document decorative.
+
+What it *can* express is an argument array written in a template language with
+placeholders and nothing else:
+
+```json
+"args": [
+  "-threads", "{option.threads}",
+  { "value": "-nopercent", "when": { "option": "quiet" } },
+  "{input.source_map}",
+  "{output.bsp}"
+]
+```
+
+Filesystem reach is declared by **role**, never by path, so the profile says
+*what kind of place* it needs and your machine says where that is:
+
+```json
+"roots": [
+  { "role": "workspace", "access": "read_write", "purpose": "read the staged map source and write the compiled BSP" }
+]
+```
+
+### A complete, minimal profile
+
+```json
+{
+  "schema_version": "aucom.profile/1.0",
+  "kind": "tool",
+  "id": "example.minimal",
+  "version": "1.0.0",
+  "name": "Minimal",
+  "summary": "The smallest tool profile that is valid.",
+  "publisher": { "name": "Example" },
+  "license": { "spdx": "MIT" },
+  "tool_version": "1.0.0",
+  "platforms": [{ "platform": { "os": "linux", "arch": "amd64" }, "status": "supported" }],
+  "acquisition": [{ "mode": "system_path", "title": "On PATH", "commands": ["example"] }],
+  "executables": [{ "name": "main", "file": "example{platform.exe_suffix}" }],
+  "actions": [{ "id": "run", "title": "Run it", "executable": "main", "args": ["--help"] }]
+}
+```
+
+```console
+$ companion profile validate minimal.tool.json
+minimal.tool.json: valid tool profile example.minimal 1.0.0
+  sha256:200c222ed007a86002f59cab9c5e210c9bd7952c2a390b7c8c7751567cba25f6
+```
+
+A document that is wrong is refused with every fault located, because the person
+repairing it wants the list and not the first item on it:
+
+```console
+$ companion profile validate broken.tool.json
+broken.tool.json is not a valid profile:
+  actions[0].args[0].value: contains "$(", which is command substitution — commands are an executable and an argument array; there is no shell, so write the value literally
+$ echo $?
+1
+```
+
+Exit codes follow the rest of the CLI: `0` valid, `1` the document is not, `2`
+the command was typed wrong.
+
+### Trust, and why importing is inert
+
+Every profile is in one of four states, and the state answers exactly one
+question: *who vouches for this?*
+
+| State | Who vouches |
+| --- | --- |
+| `builtin` | it arrived with the program you installed |
+| `verified` | an Auto-Pigeon catalogue signature covers these exact bytes |
+| `community` | nobody |
+| `local` | nobody |
+
+`local` is not the friendly state. "Local" describes where a file *is*, and a
+file's location is the easiest thing in the system for something else to
+arrange — an installer, a sync client, an extracted archive. So `local` and
+`community` are treated the same: both need your approval, recorded against the
+document's digest.
+
+Importing does nothing on its own. A profile can be read, checked,
+canonicalized, digested and displayed before you have decided anything, and none
+of that fetches or runs a thing:
+
+```console
+$ companion profile show community-toolchain.tool.json
+Andrea's Q1 compile 0.3.0 (example.andrea.q1-compile)
+  published by A Companion user, under GPL-2.0-or-later
+  Community — imported from elsewhere; nobody has checked it for you.
+
+  If you approve it, it may:
+    - Run Andrea's Q1 compile (qbsp) as a program on your computer. [high]
+    - Read files in a scratch folder created for this job. [low]
+    - Create and change files in a scratch folder created for this job. [low]
+
+  digest: sha256:27ef7df7c8bb5bcc596824868f6eafedd3a08f885664bbf444d946d3ab8fe5c9
+
+  Nothing here has been granted. Importing a profile does not let it do any of the above.
+```
+
+Approval is recorded against the **digest**, not the version number, so an
+update that asks for more is refused until you have seen what changed:
+
+```console
+$ companion profile diff installed.tool.json incoming.tool.json
+Changes (5):
+  + actions[0].network = {"hosts":["updates.example.com"],"purpose":"check for tool updates","required":true}
+  + actions[0].roots[1] = {"access":"read_write","purpose":"copy the finished map into the game folder","role":"game_root"}
+  ~ description: "This document exists to be the other half of a test. It is written the way a person writ…" -> "An update that adds a network permission and write access to the installed game folder. N…"
+  ~ summary: "A hand-written tool profile that drives the same three programs as the built-in sample." -> "The same profile, one version later, asking for two things it did not ask for before."
+  ~ version: "0.3.0" -> "0.4.0"
+
+It now asks to:
+  - Create and change files in your installed game folder. [high]
+  - Connect to updates.example.com. [medium]
+  - Read files in your installed game folder. [medium]
+
+This update asks for more than the installed version did, so it needs your decision again.
+```
+
+Editing a profile drops it to `local`, whatever it was before, because a
+signature covers bytes and changing the bytes does not produce a
+differently-signed document. Nothing is ever promoted to `builtin`: that is a
+fact about the release, not a status a file can earn.
+
+### Where the profile stops and your machine starts
+
+A profile says *what kind of place* it needs. Where those places are on your
+computer is a **local binding** — absolute paths, the version the tool reported
+when it was last asked, the AUB record the Game Profile slug resolves to on your
+account, and what you approved. A binding is never published, and it is a
+different type in a different package for exactly that reason
+([ADR-0002](docs/adr/0002-portable-profiles-and-local-bindings-are-different-types.md)).
+
+The same rule as `.env` addresses, applied to documents: **a file that travels
+must not carry a location.** A profile containing `/home/you/quake` would be
+wrong on every other machine, and a profile containing `127.0.0.1` would name
+the reader's own computer. Both are refused, by name:
+
+```console
+$ companion profile validate leaky.tool.json
+leaky.tool.json is not a valid profile:
+  actions[0].roots[0].purpose: contains the absolute path "/home/andrea/quake/id1/maps", which is a path on one machine and wrong on every other — name a root role — workspace, project_root, game_root, content_root, tool_root, tool_cache — and let the local binding say where it is on this machine
+```
+
+### Game Profiles belong to AUB
+
+A profile does **not** describe what a game is. Which engine family a project
+uses, its map dialect, its texture model and its entity vocabulary are a *Game
+Profile* — a document AUB owns and the AUP editor already reads. Profiles here
+reference one by **slug**, and stop:
+
+```json
+"game_profile": { "slug": "quake1", "engine_family": "quake1" }
+```
+
+By slug rather than by AUB record id, because a record id identifies a row in
+one AUB deployment and would mean nothing — or something else — anywhere the
+document travelled. Resolving the slug against your account is a binding's job.
+
+### The published schemas
+
+Four JSON Schema (2020-12) documents are embedded in the binary and are the
+contract for anything outside the Companion — an editor, a CI check, a second
+implementation:
+
+```console
+$ companion profile schema
+engine-profile-1.0.schema.json
+local-binding-1.0.schema.json
+pipeline-profile-1.0.schema.json
+profile-common-1.0.schema.json
+tool-profile-1.0.schema.json
+
+$ companion profile schema tool-profile-1.0.schema.json > tool.schema.json
+```
+
+The Go types in `internal/profile` are the enforcement point — they check things
+a schema cannot express, such as whether a placeholder names a declared input.
+A test derives each type's member set by reflection and asserts the schema lists
+exactly those members with exactly the same ones required, so the two
+descriptions cannot drift.
+
+### Versions, compatibility and migration
+
+Three version numbers do three different jobs, and confusing them is the usual
+forward-compatibility bug:
+
+| Field | Changes when |
+| --- | --- |
+| `schema_version` | the *document format* changes — currently `aucom.profile/1.0` |
+| `version` | the *profile document* changes; immutable once published |
+| `tool_version` / `engine_version` | the *upstream program* changes |
+
+The policy:
+
+- **A published version is immutable.** Changing what `1.2.0` says, rather than
+  publishing `1.2.1`, is how a reviewed and approved profile silently becomes a
+  different program — and the version number, which is what a catalogue, a
+  changelog and a person all point at, would then mean two things. Canonical
+  encoding and digests make it detectable; a grant recorded against a digest
+  makes it refused; and a diff says so in words rather than showing it as an
+  ordinary update:
+
+  ```console
+  $ companion profile diff installed.tool.json republished.tool.json
+  This document has the same id and version as the one installed, and says something different. A published version is immutable: whatever changed should have been a new version.
+  …
+  ```
+- **A document naming an unknown `schema_version` is refused by name**, never
+  read hopefully. A format this build has never seen is exactly the case where a
+  partial read is worse than no read:
+
+  ```console
+  $ companion profile validate from-the-future.tool.json
+  from-the-future.tool.json is not a valid profile:
+    schema_version: is "aucom.profile/9.9", which this build of the Companion cannot read — this build reads: aucom.profile/1.0
+  ```
+
+- **Unknown members are refused, with their path.** Ignoring one silently is how
+  a `network` member a reviewer read stops being enforced.
+- **A new format version is a new schema file and a new entry in the supported
+  list.** A build reads every version it lists; documents are not rewritten on
+  disk, and a profile's own `compatibility.companion` range is what an author
+  uses to say which Companion versions a document was written for.
+- **The local binding format is versioned separately** (`aucom.local-binding/1.0`)
+  because local state and published documents have different compatibility
+  obligations. Tying them together would force a migration of your settings
+  every time the published format moved.
+
+### Profiles configure independent programs; they do not relicense them
+
+A profile is configuration for software the Auto-Pigeon project did not write
+and does not distribute. Describing a program is not distributing it.
+
+- The map-building tools and game engines these profiles drive are **separate
+  programs under their own licences**, usually GPL-2.0. They are run as separate
+  operating-system processes, exactly as `internal/tools` requires — never
+  linked, never vendored, never compiled in.
+- **This repository's MIT licence covers this repository's own code.** It does
+  not extend to a tool a profile describes, and it is not extended by one. A
+  profile's `license` block states the described program's licence, carries its
+  notice, and carries the corresponding-source link a copyleft licence needs
+  when a binary is offered for download — so the acquisition path can show all
+  of it before anything is fetched.
+- **Approving a profile is not a licence grant and does not change your
+  obligations** under the described program's licence. It is your decision to
+  let this program run that one.
+- Commercial game data — PAK files, maps and textures that came with a game you
+  bought — is not covered by any of those licences and is never copied, uploaded
+  or redistributed by the Companion.
+
+See [THIRD_PARTY_NOTICES.md][notices] for what is compiled in, what is run as a
+separate process, and what a release redistributes.
 
 ## HTTP API
 

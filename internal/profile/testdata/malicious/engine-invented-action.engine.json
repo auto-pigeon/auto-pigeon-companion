@@ -1,0 +1,28 @@
+{
+  "schema_version": "aucom.profile/1.0",
+  "kind": "engine",
+  "id": "example.invented-action",
+  "version": "1.0.0",
+  "name": "Invented action",
+  "summary": "An engine profile with an action id outside the closed vocabulary.",
+  "description": "`launch` is not one of the five engine actions. An engine that could invent an action name could offer a button the Companion has no words for, and therefore no permission summary for.",
+  "publisher": { "name": "Example" },
+  "license": { "spdx": "GPL-2.0-or-later" },
+  "game_profile": { "slug": "quake1", "engine_family": "quake1" },
+  "runtime": "example-q1",
+  "engine_version": "1.0.0",
+  "platforms": [{ "platform": { "os": "linux", "arch": "amd64" }, "status": "supported" }],
+  "acquisition": [{ "mode": "user_path", "title": "Point at the engine", "hint": "choose the engine executable" }],
+  "executables": [{ "name": "engine", "file": "example-q1{platform.exe_suffix}" }],
+  "actions": [
+    {
+      "id": "launch",
+      "title": "Launch",
+      "session_role": "client",
+      "executable": "engine",
+      "working_dir": { "root": "game_root" },
+      "args": ["-basedir", "{root.game_root}"],
+      "roots": [{ "role": "game_root", "access": "read", "purpose": "load the base game" }]
+    }
+  ]
+}
