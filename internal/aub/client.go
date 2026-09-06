@@ -1,10 +1,20 @@
-// Package aub is a small REST client for AUB (auto-pigeon-backend), a
-// Pocketbase instance.
+// Package aub is AUL's HTTP client for auto-pigeon-backend (AUB), a PocketBase
+// instance.
 //
-// There is no official Pocketbase Go SDK, and the handful of endpoints AUC
-// needs do not justify a third-party one, so this is stdlib net/http with a
-// thin request helper. Only what AUC actually calls is modelled; this is not a
-// general Pocketbase client.
+// # Deliberately duplicated, not shared
+//
+// auto-pigeon-companion has a client of the same shape. That duplication is a
+// decision, not an oversight: a shared module for this much code would add a
+// versioned dependency between two independently released desktop apps in
+// exchange for saving a few hundred lines. If this file grows a real protocol —
+// pagination, filters, realtime subscriptions used by both apps — revisit it
+// then, with the sizes on the table.
+//
+// # Stdlib only
+//
+// net/http and encoding/json. There is no PocketBase Go SDK dependency, for the
+// same reason there is no CLI framework: the surface AUL needs is two auth
+// endpoints and one collection listing.
 package aub
 
 import (
@@ -19,125 +29,165 @@ import (
 	"time"
 )
 
-// DefaultTimeout bounds a single AUB request. GUI mode makes these calls from
-// an HTTP handler, so an unbounded request would hang the page with no
-// feedback.
+// DefaultTimeout bounds a single AUB request. The GUI runs these on a user
+// gesture, so a request that hangs has to fail visibly rather than leave a
+// spinner running forever.
 const DefaultTimeout = 30 * time.Second
 
 // Client talks to one AUB instance.
 //
-// A Client is safe for concurrent use once constructed; Token is the one
-// mutable field, so it is guarded by the caller (the server sets it at login
-// and on logout, both under its own lock).
+// The zero value is not usable; construct with New.
 type Client struct {
-	BaseURL string
-	HTTP    *http.Client
-	// Token is the Pocketbase auth token sent as the Authorization header.
-	// Empty means unauthenticated.
-	Token string
+	baseURL    *url.URL
+	httpClient *http.Client
+
+	// token is the current auth token, sent as the Authorization header. It is
+	// held in memory here; persisting it across runs is internal/config's job,
+	// which is what keeps this package free of any file access.
+	token string
 }
 
-// New returns a Client for baseURL with AUC's default timeout.
-func New(baseURL string) *Client {
-	return &Client{
-		BaseURL: strings.TrimRight(baseURL, "/"),
-		HTTP:    &http.Client{Timeout: DefaultTimeout},
+// New builds a client for baseURL. A nil httpClient means a fresh one with
+// DefaultTimeout.
+func New(baseURL string, httpClient *http.Client) (*Client, error) {
+	trimmed := strings.TrimSpace(baseURL)
+	if trimmed == "" {
+		return nil, fmt.Errorf("aub: base URL is empty")
 	}
-}
-
-// APIError is a non-2xx response from AUB. Pocketbase returns a JSON body with
-// `code`, `message`, and per-field `data`; the message is what a user should
-// see, and the status is what a caller should branch on.
-type APIError struct {
-	Status  int
-	Message string
-	Body    string
-}
-
-func (err *APIError) Error() string {
-	if err.Message != "" {
-		return fmt.Sprintf("AUB request failed (%d): %s", err.Status, err.Message)
-	}
-	return fmt.Sprintf("AUB request failed (%d)", err.Status)
-}
-
-// do performs one request against path (e.g. "/api/health"), encoding body as
-// JSON when non-nil and decoding a JSON response into result when non-nil.
-func (client *Client) do(ctx context.Context, method, path string, body, result any) error {
-	if client.BaseURL == "" {
-		return fmt.Errorf("AUB base URL is not configured")
-	}
-	endpoint, err := url.JoinPath(client.BaseURL, path)
+	parsed, err := url.Parse(strings.TrimRight(trimmed, "/"))
 	if err != nil {
-		return fmt.Errorf("cannot build AUB URL for %s: %w", path, err)
+		return nil, fmt.Errorf("aub: parsing base URL %q: %w", baseURL, err)
 	}
-
-	var payload io.Reader
-	if body != nil {
-		encoded, err := json.Marshal(body)
-		if err != nil {
-			return fmt.Errorf("cannot encode request body: %w", err)
-		}
-		payload = bytes.NewReader(encoded)
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return nil, fmt.Errorf("aub: base URL %q must be http or https", baseURL)
 	}
-
-	request, err := http.NewRequestWithContext(ctx, method, endpoint, payload)
-	if err != nil {
-		return fmt.Errorf("cannot build AUB request: %w", err)
-	}
-	if body != nil {
-		request.Header.Set("Content-Type", "application/json")
-	}
-	request.Header.Set("Accept", "application/json")
-	if client.Token != "" {
-		request.Header.Set("Authorization", client.Token)
-	}
-
-	httpClient := client.HTTP
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: DefaultTimeout}
 	}
-	response, err := httpClient.Do(request)
+	return &Client{baseURL: parsed, httpClient: httpClient}, nil
+}
+
+// BaseURL is the instance this client talks to.
+func (c *Client) BaseURL() string { return c.baseURL.String() }
+
+// Token returns the current auth token, empty when unauthenticated.
+func (c *Client) Token() string { return c.token }
+
+// SetToken installs a token obtained elsewhere — typically one loaded from
+// local config at startup, so a returning user is not asked to log in again.
+func (c *Client) SetToken(token string) { c.token = token }
+
+// Authenticated reports whether a token is set. It says nothing about whether
+// AUB still accepts it; only a request can establish that.
+func (c *Client) Authenticated() bool { return c.token != "" }
+
+// APIError is a non-2xx response from AUB, carrying enough to tell the user
+// what went wrong without dumping a raw body into the UI.
+type APIError struct {
+	StatusCode int
+	// Message is PocketBase's "message" field when the body parsed as its
+	// standard error envelope, otherwise a truncated raw body.
+	Message string
+	Path    string
+}
+
+func (e *APIError) Error() string {
+	if e.Message == "" {
+		return fmt.Sprintf("aub: %s: HTTP %d", e.Path, e.StatusCode)
+	}
+	return fmt.Sprintf("aub: %s: HTTP %d: %s", e.Path, e.StatusCode, e.Message)
+}
+
+// Unauthorized reports whether the error is AUB rejecting the credentials or
+// token, which is the one case callers act on differently — by clearing the
+// stored session and asking for a login.
+func (e *APIError) Unauthorized() bool {
+	return e.StatusCode == http.StatusUnauthorized || e.StatusCode == http.StatusForbidden
+}
+
+// maxErrorBody caps how much of a failed response is read. A misconfigured base
+// URL pointing at some unrelated server can return megabytes of HTML, and none
+// of it belongs in an error string.
+const maxErrorBody = 8 << 10
+
+// do issues one request against path (rooted at the base URL), encoding body as
+// JSON when non-nil and decoding a 2xx response into out when non-nil.
+func (c *Client) do(ctx context.Context, method, path string, query url.Values, body, out any) error {
+	endpoint := *c.baseURL
+	endpoint.Path = strings.TrimRight(endpoint.Path, "/") + path
+	if len(query) > 0 {
+		endpoint.RawQuery = query.Encode()
+	}
+
+	var reader io.Reader
+	if body != nil {
+		encoded, err := json.Marshal(body)
+		if err != nil {
+			return fmt.Errorf("aub: encoding the %s %s request: %w", method, path, err)
+		}
+		reader = bytes.NewReader(encoded)
+	}
+
+	request, err := http.NewRequestWithContext(ctx, method, endpoint.String(), reader)
 	if err != nil {
-		return fmt.Errorf("cannot reach AUB at %s: %w", client.BaseURL, err)
+		return fmt.Errorf("aub: building the %s %s request: %w", method, path, err)
+	}
+	request.Header.Set("Accept", "application/json")
+	if body != nil {
+		request.Header.Set("Content-Type", "application/json")
+	}
+	if c.token != "" {
+		request.Header.Set("Authorization", c.token)
+	}
+
+	response, err := c.httpClient.Do(request)
+	if err != nil {
+		return fmt.Errorf("aub: %s %s: %w", method, path, err)
 	}
 	defer response.Body.Close()
 
-	// 1 MiB is far above anything these endpoints return; the cap is only
-	// there so a misconfigured base URL pointing at something huge cannot
-	// exhaust memory.
-	raw, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
-	if err != nil {
-		return fmt.Errorf("cannot read AUB response: %w", err)
-	}
-
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return &APIError{Status: response.StatusCode, Message: errorMessage(raw), Body: string(raw)}
+		return newAPIError(path, response)
 	}
-	if result == nil || len(bytes.TrimSpace(raw)) == 0 {
+	if out == nil {
+		// Drain so the connection can be reused rather than closed mid-body.
+		io.Copy(io.Discard, io.LimitReader(response.Body, maxErrorBody))
 		return nil
 	}
-	if err := json.Unmarshal(raw, result); err != nil {
-		return fmt.Errorf("cannot parse AUB response: %w", err)
+	if err := json.NewDecoder(response.Body).Decode(out); err != nil {
+		return fmt.Errorf("aub: decoding the %s %s response: %w", method, path, err)
 	}
 	return nil
 }
 
-// errorMessage pulls Pocketbase's human-readable message out of an error body,
-// falling back to nothing when the body is not the expected shape.
-func errorMessage(raw []byte) string {
+func newAPIError(path string, response *http.Response) error {
+	raw, _ := io.ReadAll(io.LimitReader(response.Body, maxErrorBody))
+
+	// PocketBase's error envelope: {"code":400,"message":"...","data":{...}}.
 	var envelope struct {
 		Message string `json:"message"`
 	}
-	if err := json.Unmarshal(raw, &envelope); err != nil {
-		return ""
+	message := ""
+	if err := json.Unmarshal(raw, &envelope); err == nil && envelope.Message != "" {
+		message = envelope.Message
+	} else {
+		message = strings.TrimSpace(string(raw))
+		if len(message) > 200 {
+			message = message[:200] + "…"
+		}
 	}
-	return envelope.Message
+	return &APIError{StatusCode: response.StatusCode, Message: message, Path: path}
 }
 
-// Health checks that the configured base URL is reachable and is a Pocketbase
-// instance. `/api/health` is stable across Pocketbase versions and needs no
-// auth, which makes it the right probe for "is this URL right".
-func (client *Client) Health(ctx context.Context) error {
-	return client.do(ctx, http.MethodGet, "/api/health", nil, nil)
+// ListRecords fetches one page of a PocketBase collection into out, which must
+// point at a struct with an "items" field of the record type.
+//
+// TODO(andrea): the collection names and schemas AUL reads are not confirmed —
+// see internal/launch/config.go. This is the transport those calls will use;
+// it is not itself schema-specific.
+func (c *Client) ListRecords(ctx context.Context, collection string, query url.Values, out any) error {
+	if collection == "" {
+		return fmt.Errorf("aub: collection name is empty")
+	}
+	return c.do(ctx, http.MethodGet, "/api/collections/"+url.PathEscape(collection)+"/records", query, nil, out)
 }

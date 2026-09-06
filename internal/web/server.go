@@ -1,223 +1,187 @@
-// Package web is AUC's local GUI: a net/http server bound to loopback,
-// serving an embedded plain HTML/CSS/JS frontend plus a small JSON API that
-// the page calls.
+// Package web is the Companion's local GUI: an HTTP server on loopback serving
+// an embedded static frontend plus a small JSON API.
 //
-// # Why a local server instead of a GUI toolkit
+// # Why this instead of a GUI toolkit
 //
-// There is no native toolkit and no webview here. The frontend is static files
-// compiled into the binary with //go:embed, and it runs in whatever browser
-// the user already has. That keeps the build CGO-free — all six targets are
-// plain `GOOS`/`GOARCH` + `go build` — and keeps the dependency list empty.
+// There is no GUI dependency at all — no Fyne, no Wails, no Gio, no embedded
+// browser engine. The "window" is the user's own browser, pointed at a
+// loopback address. That is what keeps the binary CGO-free and cross-compilable
+// to all six targets with plain `go build`, and it is why this package is
+// net/http and //go:embed rather than a widget tree.
 //
-// # Security posture
+// # Loopback only
 //
-// The server binds 127.0.0.1 only. Because any local process can reach a
-// loopback port, and because a page in the user's browser on some other origin
-// could otherwise script requests at it, two guards apply to every API route:
+// Listen binds 127.0.0.1 explicitly, never :port. This server exposes a user's
+// AUB session and can start processes on their machine; it must not be
+// reachable from the network, and binding the loopback address is the control
+// that guarantees it rather than hoping a firewall does.
 //
-//   - a same-origin/no-origin check on the Origin header, rejecting
-//     cross-origin calls;
-//   - mutating routes must be POST, so a plain cross-site form or <img> cannot
-//     trigger them.
+// # Same-origin guard
 //
-// These are cheap and stdlib-only. They are not a substitute for treating
-// anything reachable on loopback as semi-trusted.
+// Loopback is not by itself a boundary: a page the user has open on some other
+// origin can script requests at a known local port. So every API route goes
+// through guard, which rejects a request carrying a cross-origin Origin header,
+// and every mutating route is POST-only so a plain cross-site form or <img>
+// cannot reach it. Both are cheap and stdlib-only.
+//
+// TODO(andrea): neither guard authenticates the *caller*. Any process running
+// as the user can still drive this server while it is up. The usual remedy is a
+// random token minted at startup, put in the URL that gets opened, and required
+// on every API call. Worth doing before any release; noted rather than
+// half-built.
 package web
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"net/url"
+	"runtime"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/aub"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/aue"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/launch"
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/tools"
 )
 
-// Options configures a Server.
-type Options struct {
-	// Addr is the listen address. It must be a loopback address; Listen
-	// rejects anything else.
-	Addr string
-	// Config is the loaded user config, used for the AUB base URL and any
-	// stored session.
-	Config config.Config
-	// AUE runs extractor subcommands. Injected so tests and a future
-	// HTTP-backed runner need no changes here.
-	AUE aue.Runner
-	// Version is the build-time version string, surfaced by /api/status.
-	Version string
-	// Logf receives one line per server lifecycle event. nil discards them.
-	Logf func(format string, args ...any)
-}
+// DrainTimeout is how long a shutdown waits for in-flight requests.
+const DrainTimeout = 10 * time.Second
 
-// Server owns the listener, the router, and the mutable session state.
+// Server is the local GUI server.
 type Server struct {
-	options  Options
-	listener net.Listener
-	http     *http.Server
+	version  string
+	client   *aub.Client
+	provider launch.Provider
+	manager  tools.Manager
+	runner   aue.Runner
+	settings config.Config
 
-	mu      sync.RWMutex
-	client  *aub.Client
-	session config.Session
+	// saveConfig persists a changed config. Held as a field so tests can point
+	// it at a temporary file instead of the user's real config directory.
+	saveConfig func(config.Config) error
+
+	handler http.Handler
 }
 
-// ErrNotLoopback is returned when Listen is asked to bind a non-loopback
-// address. Binding 0.0.0.0 would put an authenticated user's session on the
-// local network, so it is refused rather than warned about.
-var ErrNotLoopback = errors.New("the GUI server may only bind a loopback address")
+// Options configures a Server. Every field except Config has a working default,
+// so a caller that only has a version string still gets a functioning GUI.
+type Options struct {
+	Version  string
+	Client   *aub.Client
+	Provider launch.Provider
+	Manager  tools.Manager
+	// AUE runs extractor subcommands. Injected so tests, and a future
+	// HTTP-backed runner, need no change here.
+	AUE    aue.Runner
+	Config config.Config
+	// SaveConfig persists configuration changes; nil means config.Save.
+	SaveConfig func(config.Config) error
+}
 
-// Listen binds the address and returns a Server ready to Serve. Binding
-// separately from serving is what lets GUI mode learn the actual port when
-// Addr uses port 0.
-func Listen(options Options) (*Server, error) {
-	if options.Addr == "" {
-		options.Addr = config.DefaultServerAddr
-	}
-	if err := requireLoopback(options.Addr); err != nil {
-		return nil, err
-	}
-	listener, err := net.Listen("tcp", options.Addr)
-	if err != nil {
-		return nil, fmt.Errorf("cannot listen on %s: %w", options.Addr, err)
+// NewServer builds the server and its routes.
+func NewServer(options Options) (*Server, error) {
+	settings := options.Config
+
+	client := options.Client
+	if client == nil {
+		var err error
+		// An unconfigured AUB address is an error the user must act on, not
+		// something to paper over with a guessed default — see
+		// config.ErrAUBNotConfigured. The server still starts, so the page can
+		// say so; only the AUB-backed routes fail.
+		if settings.AUBBaseURL != "" {
+			client, err = aub.New(settings.AUBBaseURL, nil)
+			if err != nil {
+				return nil, err
+			}
+			client.SetToken(settings.Session.Token)
+		}
 	}
 
-	client := aub.New(options.Config.AUBBaseURL)
-	client.Token = options.Config.Session.Token
+	manager := options.Manager
+	if manager == nil {
+		cache, err := settings.ToolCache()
+		if err != nil {
+			return nil, err
+		}
+		// The fake tool until real ones are chosen — see internal/tools.
+		manager = tools.NewNoop(cache)
+	}
+
+	provider := options.Provider
+	if provider == nil {
+		provider = launch.ExampleProvider()
+	}
+
+	save := options.SaveConfig
+	if save == nil {
+		save = config.Save
+	}
 
 	server := &Server{
-		options:  options,
-		listener: listener,
-		client:   client,
-		session:  options.Config.Session,
+		version:    options.Version,
+		client:     client,
+		provider:   provider,
+		manager:    manager,
+		runner:     options.AUE,
+		settings:   settings,
+		saveConfig: save,
 	}
-	server.http = &http.Server{
-		Handler: server.routes(),
-		// The frontend is local and tiny; these bounds exist to keep a stuck
-		// or hostile local client from pinning a connection forever.
-		ReadHeaderTimeout: 10 * time.Second,
-		IdleTimeout:       120 * time.Second,
-	}
+	server.handler = server.routes()
 	return server, nil
 }
 
-func requireLoopback(addr string) error {
-	host, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		return fmt.Errorf("cannot parse listen address %q: %w", addr, err)
-	}
-	if host == "localhost" {
-		return nil
-	}
-	ip := net.ParseIP(host)
-	if ip == nil || !ip.IsLoopback() {
-		return fmt.Errorf("%w: %s", ErrNotLoopback, addr)
-	}
-	return nil
-}
+// ServeHTTP makes the Server an http.Handler, which is what lets tests drive it
+// with httptest.NewServer and no port of its own.
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.handler.ServeHTTP(w, r) }
 
-// Addr is the address actually bound, with the real port when port 0 was
-// requested.
-func (server *Server) Addr() string { return server.listener.Addr().String() }
-
-// URL is the address to open in a browser.
-func (server *Server) URL() string { return "http://" + server.Addr() + "/" }
-
-// Serve runs until ctx is cancelled, then shuts down gracefully.
-func (server *Server) Serve(ctx context.Context) error {
-	errs := make(chan error, 1)
-	go func() {
-		err := server.http.Serve(server.listener)
-		if errors.Is(err, http.ErrServerClosed) {
-			err = nil
-		}
-		errs <- err
-	}()
-
-	select {
-	case err := <-errs:
-		return err
-	case <-ctx.Done():
-		server.logf("shutting down")
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := server.http.Shutdown(shutdownCtx); err != nil {
-			return fmt.Errorf("shutdown failed: %w", err)
-		}
-		return nil
-	}
-}
-
-func (server *Server) logf(format string, args ...any) {
-	if server.options.Logf != nil {
-		server.options.Logf(format, args...)
-	}
-}
-
-func (server *Server) routes() http.Handler {
+func (s *Server) routes() http.Handler {
 	mux := http.NewServeMux()
 
-	// Static frontend. Assets are embedded, so this never touches the disk.
+	// http.ServeMux, not a router dependency: fixed paths, no path parameters,
+	// no middleware stack. Same reasoning as the no-CLI-framework decision.
 	mux.Handle("GET /", http.FileServerFS(assetsFS()))
-
-	mux.Handle("GET /api/status", server.guard(server.handleStatus))
-	mux.Handle("POST /api/auth/login", server.guard(server.handleLogin))
-	mux.Handle("POST /api/auth/logout", server.guard(server.handleLogout))
-
-	// TODO: real map operations. This route exists to prove the AUE path end
-	// to end (extract embedded binary, exec, return stdout) and is
-	// deliberately not a general "run any subcommand" escape hatch — each
-	// operation gets its own route with its own validated inputs as features
-	// land.
-	mux.Handle("GET /api/aue/version", server.guard(server.handleAUEVersion))
+	mux.Handle("GET /api/status", guard(s.handleStatus))
+	mux.Handle("POST /api/auth/login", guard(s.handleLogin))
+	mux.Handle("POST /api/auth/logout", guard(s.handleLogout))
+	mux.Handle("GET /api/launch-configs", guard(s.handleLaunchConfigs))
+	mux.Handle("POST /api/build", guard(s.handleBuild))
+	mux.Handle("POST /api/launch", guard(s.handleLaunch))
+	// Deliberately not a general "run any AUE subcommand" escape hatch: each
+	// extractor operation gets its own route with its own validated inputs as
+	// features land. This one proves the subprocess path end to end.
+	mux.Handle("GET /api/aue/version", guard(s.handleAUEVersion))
 
 	return mux
 }
 
-// guard wraps an API handler with the same-origin check described in the
-// package comment.
-func (server *Server) guard(handler func(http.ResponseWriter, *http.Request) (any, error)) http.Handler {
-	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if !server.sameOrigin(request) {
-			writeError(writer, http.StatusForbidden, "cross-origin requests are not allowed")
+// guard rejects cross-origin API calls. See the package comment.
+func guard(handler http.HandlerFunc) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !sameOrigin(r) {
+			writeError(w, http.StatusForbidden, errors.New("cross-origin requests are not allowed"))
 			return
 		}
-		payload, err := handler(writer, request)
-		if err != nil {
-			status := http.StatusInternalServerError
-			var apiErr *aub.APIError
-			if errors.As(err, &apiErr) {
-				// A rejected login is the user's problem to fix, not a server
-				// fault, so AUB's status is passed through.
-				status = apiErr.Status
-			}
-			var badRequest *badRequestError
-			if errors.As(err, &badRequest) {
-				status = http.StatusBadRequest
-			}
-			writeError(writer, status, err.Error())
-			return
-		}
-		if payload == nil {
-			writer.WriteHeader(http.StatusNoContent)
-			return
-		}
-		writeJSON(writer, http.StatusOK, payload)
+		handler(w, r)
 	})
 }
 
-// sameOrigin accepts requests with no Origin header (a plain navigation or a
-// CLI curl) and requests whose Origin matches the address we are bound to.
-func (server *Server) sameOrigin(request *http.Request) bool {
-	origin := request.Header.Get("Origin")
+// sameOrigin accepts a request with no Origin header — a plain navigation, or a
+// curl from the CLI examples in README.md — and one whose Origin host matches
+// the Host it was sent to. Comparing against r.Host rather than a remembered
+// listener address is what keeps this correct whichever loopback spelling the
+// user's browser resolved.
+func sameOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
 	if origin == "" {
 		return true
 	}
@@ -225,124 +189,313 @@ func (server *Server) sameOrigin(request *http.Request) bool {
 	if err != nil {
 		return false
 	}
-	return strings.EqualFold(parsed.Host, server.Addr()) || strings.EqualFold(parsed.Host, request.Host)
+	return strings.EqualFold(parsed.Host, r.Host)
 }
 
-type badRequestError struct{ message string }
+// writeJSON is the single response encoder, so no handler invents its own
+// content type or status handling.
+func writeJSON(w http.ResponseWriter, status int, body any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	// The frontend is same-origin and served from this binary; none of these
+	// responses — several of which carry account state — should be cached by
+	// the browser across runs.
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(status)
+	if body == nil {
+		return
+	}
+	if err := json.NewEncoder(w).Encode(body); err != nil {
+		// The status line is already sent; there is nothing to report to the
+		// client, and the connection will be closed under it.
+		return
+	}
+}
 
-func (err *badRequestError) Error() string { return err.message }
+type errorBody struct {
+	Error string `json:"error"`
+}
 
-// StatusPayload is what the frontend renders on load.
-type StatusPayload struct {
+func writeError(w http.ResponseWriter, status int, err error) {
+	writeJSON(w, status, errorBody{Error: err.Error()})
+}
+
+// maxRequestBody caps a request body. Every request this API takes is a small
+// JSON object; the cap stops a malformed or hostile local client from making
+// the server allocate without bound.
+const maxRequestBody = 1 << 20
+
+func decodeJSON(w http.ResponseWriter, r *http.Request, out any) bool {
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequestBody))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(out); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request body: %w", err))
+		return false
+	}
+	return true
+}
+
+// requireClient reports the AUB client, or writes the "not configured" error
+// and returns false. Every AUB-backed route goes through it so an unconfigured
+// address produces one accurate message instead of a nil dereference.
+func (s *Server) requireClient(w http.ResponseWriter) (*aub.Client, bool) {
+	if s.client == nil {
+		writeError(w, http.StatusServiceUnavailable, config.ErrAUBNotConfigured)
+		return nil, false
+	}
+	return s.client, true
+}
+
+type statusBody struct {
 	Version       string `json:"version"`
 	AUBBaseURL    string `json:"aub_base_url"`
 	Authenticated bool   `json:"authenticated"`
 	Email         string `json:"email,omitempty"`
+	Platform      string `json:"platform"`
+	ToolCacheDir  string `json:"tool_cache_dir"`
 	AUEAvailable  bool   `json:"aue_available"`
 }
 
-func (server *Server) handleStatus(_ http.ResponseWriter, _ *http.Request) (any, error) {
-	server.mu.RLock()
-	session := server.session
-	server.mu.RUnlock()
-
-	available := false
-	if checker, ok := server.options.AUE.(interface{ Available() bool }); ok {
-		available = checker.Available()
+func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
+	cache, err := s.settings.ToolCache()
+	if err != nil {
+		cache = ""
 	}
-	return StatusPayload{
-		Version:       server.options.Version,
-		AUBBaseURL:    server.options.Config.AUBBaseURL,
-		Authenticated: session.Valid(),
-		Email:         session.Email,
-		AUEAvailable:  available,
-	}, nil
+	baseURL := ""
+	authenticated := false
+	if s.client != nil {
+		baseURL = s.client.BaseURL()
+		authenticated = s.client.Authenticated()
+	}
+	writeJSON(w, http.StatusOK, statusBody{
+		Version:       s.version,
+		AUBBaseURL:    baseURL,
+		Authenticated: authenticated,
+		Email:         s.settings.Session.Email,
+		Platform:      runtime.GOOS + "/" + runtime.GOARCH,
+		ToolCacheDir:  cache,
+		AUEAvailable:  aue.Available(s.runner),
+	})
 }
 
-func (server *Server) handleLogin(_ http.ResponseWriter, request *http.Request) (any, error) {
-	var body struct {
-		Identity string `json:"identity"`
+func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
-	// 64 KiB is generous for two short strings and keeps a runaway local
-	// client from streaming an unbounded body into memory.
-	if err := json.NewDecoder(io.LimitReader(request.Body, 64<<10)).Decode(&body); err != nil {
-		return nil, &badRequestError{message: "the request body is not valid JSON"}
+	if !decodeJSON(w, r, &request) {
+		return
 	}
-	if body.Identity == "" || body.Password == "" {
-		return nil, &badRequestError{message: "an identity and a password are required"}
+	client, ok := s.requireClient(w)
+	if !ok {
+		return
 	}
 
-	server.mu.Lock()
-	client := server.client
-	server.mu.Unlock()
-
-	session, err := client.Login(request.Context(), body.Identity, body.Password)
+	session, err := client.Login(r.Context(), request.Email, request.Password)
 	if err != nil {
-		return nil, err
+		var apiErr *aub.APIError
+		if errors.As(err, &apiErr) && apiErr.Unauthorized() {
+			writeError(w, http.StatusUnauthorized, err)
+			return
+		}
+		writeError(w, http.StatusBadGateway, err)
+		return
 	}
 
-	stored := config.Session{
-		Token:      session.Token,
-		UserID:     session.UserID,
-		Email:      session.Email,
-		ObtainedAt: session.ObtainedAt,
+	s.settings.Session = config.Session{
+		Token:   session.Token,
+		UserID:  session.UserID,
+		Email:   session.Email,
+		Expires: session.Expires,
 	}
-	server.mu.Lock()
-	server.session = stored
-	server.mu.Unlock()
-
-	// Persisting the token means the next launch starts signed in. A failure
-	// to persist is reported but does not undo the successful login — the
-	// in-memory session is still usable for this run.
-	updated := server.options.Config
-	updated.Session = stored
-	if err := config.Save(updated); err != nil {
-		server.logf("warning: could not save session: %v", err)
+	if err := s.saveConfig(s.settings); err != nil {
+		// The login itself succeeded and the in-memory client is usable; only
+		// persistence failed, so this is reported without failing the request.
+		writeJSON(w, http.StatusOK, map[string]any{
+			"email":   session.Email,
+			"warning": "signed in, but the session could not be saved: " + err.Error(),
+		})
+		return
 	}
-
-	return StatusPayload{
-		Version:       server.options.Version,
-		AUBBaseURL:    server.options.Config.AUBBaseURL,
-		Authenticated: true,
-		Email:         stored.Email,
-	}, nil
+	writeJSON(w, http.StatusOK, map[string]any{"email": session.Email})
 }
 
-func (server *Server) handleLogout(_ http.ResponseWriter, _ *http.Request) (any, error) {
-	server.mu.Lock()
-	server.client.Logout()
-	server.session = config.Session{}
-	server.mu.Unlock()
-
-	updated := server.options.Config
-	updated.Session = config.Session{}
-	if err := config.Save(updated); err != nil {
-		server.logf("warning: could not clear saved session: %v", err)
+func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
+	if s.client != nil {
+		s.client.Logout()
 	}
-	return map[string]bool{"authenticated": false}, nil
+	s.settings.Session = config.Session{}
+	if err := s.saveConfig(s.settings); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"authenticated": false})
 }
 
-func (server *Server) handleAUEVersion(_ http.ResponseWriter, request *http.Request) (any, error) {
-	if server.options.AUE == nil {
-		return nil, fmt.Errorf("no AUE runner is configured")
-	}
-	stdout, err := server.options.AUE.Run(request.Context(), "version")
+func (s *Server) handleLaunchConfigs(w http.ResponseWriter, r *http.Request) {
+	configs, err := s.provider.Configs(r.Context())
 	if err != nil {
-		return nil, err
+		writeError(w, http.StatusBadGateway, err)
+		return
 	}
-	return map[string]string{"version": strings.TrimSpace(string(stdout))}, nil
+	writeJSON(w, http.StatusOK, map[string]any{"items": configs})
 }
 
-func writeJSON(writer http.ResponseWriter, status int, payload any) {
-	writer.Header().Set("Content-Type", "application/json; charset=utf-8")
-	// The frontend is same-origin and served from this binary; nothing here
-	// should ever be cached by the browser across runs.
-	writer.Header().Set("Cache-Control", "no-store")
-	writer.WriteHeader(status)
-	_ = json.NewEncoder(writer).Encode(payload)
+func (s *Server) handleBuild(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Tool    string   `json:"tool"`
+		Version string   `json:"version"`
+		Args    []string `json:"args"`
+	}
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	if request.Tool == "" {
+		request.Tool = tools.NoopToolName
+	}
+
+	// Buffered rather than streamed: the fake tool produces five lines. When a
+	// real tool is wired in, this endpoint becomes a streaming one
+	// (text/event-stream or chunked), which is a change to this handler alone —
+	// tools.Build already takes writers and already streams into them.
+	var output bytes.Buffer
+	err := tools.Build(r.Context(), s.manager, tools.BuildRequest{
+		Tool:    request.Tool,
+		Version: request.Version,
+		Args:    request.Args,
+	}, &output, &output)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]any{"error": err.Error(), "output": output.String()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"output": output.String()})
 }
 
-func writeError(writer http.ResponseWriter, status int, message string) {
-	writeJSON(writer, status, map[string]string{"error": message})
+func (s *Server) handleLaunch(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Game     string `json:"game"`
+		Map      string `json:"map"`
+		GameRoot string `json:"game_root"`
+		// DryRun resolves the plan and returns it without starting anything.
+		// The GUI defaults to this until a user has a real game installed.
+		DryRun bool `json:"dry_run"`
+	}
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+
+	configs, err := s.provider.Configs(r.Context())
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err)
+		return
+	}
+	selected, err := launch.Find(configs, request.Game)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err)
+		return
+	}
+
+	gameRoot := request.GameRoot
+	if gameRoot == "" {
+		gameRoot = s.settings.GameRoots[selected.Game]
+	}
+	plan, err := launch.Resolve(launch.Request{Config: selected, GameRoot: gameRoot, Map: request.Map})
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if request.DryRun {
+		writeJSON(w, http.StatusOK, map[string]any{"plan": plan, "command": plan.String(), "started": false})
+		return
+	}
+	if err := launch.Run(r.Context(), plan, io.Discard, io.Discard); err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]any{"error": err.Error(), "command": plan.String()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"plan": plan, "command": plan.String(), "started": true})
+}
+
+func (s *Server) handleAUEVersion(w http.ResponseWriter, r *http.Request) {
+	if s.runner == nil {
+		writeError(w, http.StatusServiceUnavailable, aue.ErrNoEmbeddedBinary)
+		return
+	}
+	stdout, err := s.runner.Run(r.Context(), "version")
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"version": strings.TrimSpace(string(stdout))})
+}
+
+// Listen binds the loopback listener the server runs on. Port 0 asks the OS for
+// an ephemeral port; a port already in use falls back to one, because a stale
+// instance or an unrelated service holding the configured port should not stop
+// the Companion from starting.
+//
+// The address is 127.0.0.1 by construction rather than by validation: there is
+// no argument that can make this bind a routable interface.
+func Listen(port int) (net.Listener, error) {
+	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	if err == nil {
+		return listener, nil
+	}
+	if port == 0 {
+		return nil, fmt.Errorf("web: binding a loopback port: %w", err)
+	}
+	fallback, fallbackErr := net.Listen("tcp", "127.0.0.1:0")
+	if fallbackErr != nil {
+		return nil, fmt.Errorf("web: binding 127.0.0.1:%d (%v) and any free port: %w", port, err, fallbackErr)
+	}
+	return fallback, nil
+}
+
+// URL is the address a listener is reachable at.
+func URL(listener net.Listener) string {
+	return "http://" + listener.Addr().String() + "/"
+}
+
+// Serve runs the server on listener until ctx is cancelled, then drains
+// in-flight requests and returns.
+func Serve(ctx context.Context, listener net.Listener, handler http.Handler) error {
+	server := &http.Server{
+		Handler:           handler,
+		ReadHeaderTimeout: 20 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+
+	errs := make(chan error, 1)
+	go func() {
+		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errs <- err
+			return
+		}
+		errs <- nil
+	}()
+
+	select {
+	case err := <-errs:
+		return err
+	case <-ctx.Done():
+	}
+
+	// A fresh context: ctx is already cancelled, and Shutdown would abandon
+	// exactly the requests it is meant to drain.
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), DrainTimeout)
+	defer cancel()
+	shutdownErr := server.Shutdown(shutdownCtx)
+	if err := <-errs; err != nil {
+		return err
+	}
+	return shutdownErr
+}
+
+// assetsFS is the embedded frontend, rooted so "/" serves index.html.
+func assetsFS() fs.FS {
+	sub, err := fs.Sub(assets, "assets")
+	if err != nil {
+		// Unreachable: the directory is embedded at compile time, so a failure
+		// here would mean the binary was built without its own assets.
+		panic("web: embedded assets are missing: " + err.Error())
+	}
+	return sub
 }

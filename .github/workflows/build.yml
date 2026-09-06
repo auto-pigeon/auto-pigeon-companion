@@ -1,8 +1,17 @@
-name: build
+# Verification build: every push and pull request compiles all six targets and
+# runs the tests.
+#
+# No Docker and no CGO toolchain, because there is nothing to link against — the
+# binary is pure Go with an embedded frontend, so one ubuntu runner
+# cross-compiles every target with plain `go build`. The Windows and macOS
+# runners exist only to run the tests natively, where the platform-specific
+# paths (%AppData%, ~/Library, the .exe suffix) are actually exercised.
+#
+# This does not publish anything: no release, no artifacts uploaded anywhere
+# durable, no signing. Packaging skeletons live under build/ and are run by
+# hand — see README.md.
 
-# Verification only: this workflow proves all six targets compile and the tests
-# pass. It does not publish releases, build installers, or upload artifacts —
-# that comes once the AUE sourcing question below is settled.
+name: build
 
 on:
   push:
@@ -12,45 +21,65 @@ on:
 permissions:
   contents: read
 
+env:
+  GO_VERSION: "1.23.4"
+
 jobs:
   test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: go vet
+        run: go vet ./...
+      - name: go test
+        run: go test ./...
+
+  gofmt:
+    name: gofmt
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.23.4'
-          cache: true
-      - name: gofmt
+          go-version: ${{ env.GO_VERSION }}
+      # gofmt -l prints unformatted files and exits 0, so the output has to be
+      # turned into the failure itself.
+      - name: check formatting
         run: |
           unformatted="$(gofmt -l .)"
-          if [ -n "$unformatted" ]; then
-            echo "these files are not gofmt-clean:" >&2
-            echo "$unformatted" >&2
+          if [ -n "${unformatted}" ]; then
+            echo "these files are not gofmt-formatted:"
+            echo "${unformatted}"
             exit 1
           fi
-      - run: go vet ./...
-      - run: go test ./...
 
-  build:
-    needs: test
+  cross-build:
+    name: build ${{ matrix.goos }}/${{ matrix.goarch }}
+    needs: [test, gofmt]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        target:
-          - { goos: windows, goarch: amd64, ext: .exe }
-          - { goos: windows, goarch: arm64, ext: .exe }
-          - { goos: linux,   goarch: amd64, ext: '' }
-          - { goos: linux,   goarch: arm64, ext: '' }
-          - { goos: darwin,  goarch: amd64, ext: '' }
-          - { goos: darwin,  goarch: arm64, ext: '' }
+        include:
+          - { goos: windows, goarch: amd64, ext: ".exe" }
+          - { goos: windows, goarch: arm64, ext: ".exe" }
+          - { goos: linux, goarch: amd64, ext: "" }
+          - { goos: linux, goarch: arm64, ext: "" }
+          - { goos: darwin, goarch: amd64, ext: "" }
+          - { goos: darwin, goarch: arm64, ext: "" }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.23.4'
-          cache: true
+          go-version: ${{ env.GO_VERSION }}
 
       # TODO(confirm-aue-build-source): the AUE binary matching this matrix
       # entry's GOOS/GOARCH must be staged into internal/aue/embedded/ HERE —
@@ -65,43 +94,49 @@ jobs:
       # faster and pins an exact version but requires AUE to publish artifacts,
       # which it does not yet. Andrea to decide.
       #
-      # Until then this job builds companion WITHOUT an embedded extractor,
-      # which compiles fine (the embedded/ directory holds only .gitkeep) and
-      # is enough to verify the six targets. Such a binary reports the
-      # extractor as unavailable at runtime.
+      # Until then this job builds the Companion WITHOUT an embedded extractor,
+      # which compiles fine (the embedded/ directory holds only .gitkeep) and is
+      # enough to verify the six targets. Such a binary reports the extractor as
+      # unavailable at runtime.
       #
       # Whatever the answer, the staged file must be removed after the build so
-      # a later matrix entry cannot pick up the previous platform's binary. On
-      # a fresh runner per matrix entry that cannot happen, but the same
-      # sequence run locally in a loop absolutely can.
+      # a later matrix entry cannot pick up the previous platform's binary. On a
+      # fresh runner per matrix entry that cannot happen, but the same sequence
+      # run locally in a loop absolutely can.
 
-      - name: build ${{ matrix.target.goos }}/${{ matrix.target.goarch }}
+      - name: go build
         env:
-          GOOS: ${{ matrix.target.goos }}
-          GOARCH: ${{ matrix.target.goarch }}
-          # Every target is CGO-free, which is what makes six-platform
-          # cross-compilation a matrix of env vars rather than a toolchain
-          # problem. Setting this explicitly keeps it that way: an accidental
-          # cgo dependency fails the build instead of silently producing a
-          # host-only binary.
-          CGO_ENABLED: '0'
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          # Explicit, not incidental: CGO is what would make any of these six
+          # targets need a cross toolchain. If a change ever requires it, this
+          # job fails, which is the point.
+          CGO_ENABLED: "0"
         run: |
           go build -trimpath \
             -ldflags "-s -w -X main.version=${GITHUB_SHA::7}" \
-            -o "dist/${GOOS}-${GOARCH}/companion${{ matrix.target.ext }}" \
+            -o "dist/${GOOS}-${GOARCH}/companion${{ matrix.ext }}" \
             ./cmd/companion
 
       - name: macOS app bundle
-        if: matrix.target.goos == 'darwin'
+        if: matrix.goos == 'darwin'
         run: |
           ./build/macos/make-app-bundle.sh \
-            --binary "dist/darwin-${{ matrix.target.goarch }}/companion" \
+            --binary "dist/darwin-${{ matrix.goarch }}/companion" \
+            --arch "${{ matrix.goarch }}" \
             --version "${GITHUB_SHA::7}" \
-            --out "dist/darwin-${{ matrix.target.goarch }}"
+            --out "dist/darwin-${{ matrix.goarch }}"
 
-      # TODO: Windows installer (iscc on a windows-latest runner with
-      # build/windows/installer.iss) and Linux .deb/.rpm (nfpm with
-      # build/linux/nfpm.yaml) are skeletons in this repository but are not
+      - name: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: auto-pigeon-companion-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/${{ matrix.goos }}-${{ matrix.goarch }}/
+          if-no-files-found: error
+
+      # TODO: the Windows installer (iscc on a windows-latest runner with
+      # build/windows/installer.iss) and the Linux .deb/.rpm (nfpm with
+      # build/linux/nfpm.yaml) are skeletons in this repository and are not
       # wired into CI yet — they belong in a release workflow, not this
       # per-push verification one.
       #

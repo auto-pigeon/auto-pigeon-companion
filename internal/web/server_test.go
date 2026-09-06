@@ -3,176 +3,305 @@ package web
 import (
 	"context"
 	"encoding/json"
-	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/aub"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/launch"
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/tools"
 )
 
-// fakeRunner stands in for the embedded AUE binary so these tests never exec
-// anything — the Runner interface exists for exactly this reason.
-type fakeRunner struct {
-	available bool
-	stdout    []byte
-	err       error
-	calls     []string
-}
-
-func (runner *fakeRunner) Run(_ context.Context, subcommand string, args ...string) ([]byte, error) {
-	runner.calls = append(runner.calls, strings.Join(append([]string{subcommand}, args...), " "))
-	return runner.stdout, runner.err
-}
-
-func (runner *fakeRunner) Available() bool { return runner.available }
-
-func newTestServer(t *testing.T, runner *fakeRunner) *Server {
+// newTestServer builds a Server wired to temporary state: a fake tool cache and
+// a config that is saved into memory rather than the developer's home
+// directory.
+func newTestServer(t *testing.T, client *aub.Client) (*Server, *config.Config) {
 	t.Helper()
 	settings := config.Default()
-	settings.ServerAddr = "127.0.0.1:0"
-	server, err := Listen(Options{Addr: settings.ServerAddr, Config: settings, AUE: runner, Version: "0.0.0-test"})
+	settings.ToolCacheDir = t.TempDir()
+
+	saved := settings
+	server, err := NewServer(Options{
+		Version:    "test",
+		Client:     client,
+		Config:     settings,
+		Manager:    tools.NewNoop(settings.ToolCacheDir),
+		Provider:   launch.ExampleProvider(),
+		SaveConfig: func(updated config.Config) error { saved = updated; return nil },
+	})
 	if err != nil {
-		t.Fatalf("Listen: %v", err)
+		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = server.listener.Close() })
-	return server
+	return server, &saved
 }
 
-func TestListenRefusesANonLoopbackAddress(t *testing.T) {
-	// The server hands out an authenticated session; exposing it beyond
-	// loopback is refused rather than warned about.
-	_, err := Listen(Options{Addr: "0.0.0.0:0", Config: config.Default()})
-	if !errors.Is(err, ErrNotLoopback) {
-		t.Fatalf("err = %v, want ErrNotLoopback", err)
+func do(t *testing.T, server *Server, method, path, body string) (*http.Response, map[string]any) {
+	t.Helper()
+	var reader *strings.Reader
+	if body == "" {
+		reader = strings.NewReader("")
+	} else {
+		reader = strings.NewReader(body)
 	}
-}
-
-func TestListenAcceptsLoopbackAndReportsARealPort(t *testing.T) {
-	server := newTestServer(t, &fakeRunner{})
-	if !strings.HasPrefix(server.Addr(), "127.0.0.1:") {
-		t.Fatalf("Addr = %q, want a 127.0.0.1 address", server.Addr())
-	}
-	if strings.HasSuffix(server.Addr(), ":0") {
-		t.Fatalf("Addr = %q, want the OS-assigned port, not 0", server.Addr())
-	}
-	if want := "http://" + server.Addr() + "/"; server.URL() != want {
-		t.Fatalf("URL = %q, want %q", server.URL(), want)
-	}
-}
-
-func TestStatusReportsVersionAndExtractorAvailability(t *testing.T) {
-	server := newTestServer(t, &fakeRunner{available: true})
-
+	request := httptest.NewRequest(method, path, reader)
 	recorder := httptest.NewRecorder()
-	server.routes().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/status", nil))
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200 (%s)", recorder.Code, recorder.Body)
-	}
+	server.ServeHTTP(recorder, request)
 
-	var payload StatusPayload
-	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
-		t.Fatalf("decode: %v", err)
+	response := recorder.Result()
+	decoded := map[string]any{}
+	if strings.HasPrefix(response.Header.Get("Content-Type"), "application/json") {
+		if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+			t.Fatalf("decoding %s %s: %v", method, path, err)
+		}
 	}
-	if payload.Version != "0.0.0-test" || !payload.AUEAvailable || payload.Authenticated {
-		t.Fatalf("payload = %+v", payload)
-	}
+	return response, decoded
 }
 
-func TestCrossOriginRequestsAreRejected(t *testing.T) {
-	// Any page in the user's browser can reach a loopback port; this check is
-	// what stops one from driving the API.
-	server := newTestServer(t, &fakeRunner{})
+func TestServesTheEmbeddedFrontend(t *testing.T) {
+	server, _ := newTestServer(t, nil)
 
-	request := httptest.NewRequest(http.MethodGet, "/api/status", nil)
-	request.Header.Set("Origin", "http://evil.example")
+	for _, path := range []string{"/", "/app.js", "/app.css"} {
+		request := httptest.NewRequest(http.MethodGet, path, nil)
+		recorder := httptest.NewRecorder()
+		server.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusOK {
+			t.Errorf("GET %s = %d, want 200", path, recorder.Code)
+		}
+	}
+
+	// The frontend must be self-contained: no CDN, no npm, nothing fetched from
+	// the network. A local-only GUI that silently depends on the internet is a
+	// GUI that breaks offline.
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
 	recorder := httptest.NewRecorder()
-	server.routes().ServeHTTP(recorder, request)
-
-	if recorder.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want 403", recorder.Code)
+	server.ServeHTTP(recorder, request)
+	if body := recorder.Body.String(); strings.Contains(body, "http://") || strings.Contains(body, "https://") {
+		t.Errorf("index.html references an external URL:\n%s", body)
 	}
 }
 
-func TestSameOriginRequestsAreAllowed(t *testing.T) {
-	server := newTestServer(t, &fakeRunner{})
-
-	request := httptest.NewRequest(http.MethodGet, "/api/status", nil)
-	request.Header.Set("Origin", "http://"+server.Addr())
-	recorder := httptest.NewRecorder()
-	server.routes().ServeHTTP(recorder, request)
-
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200 (%s)", recorder.Code, recorder.Body)
+func TestStatus(t *testing.T) {
+	server, _ := newTestServer(t, nil)
+	response, body := do(t, server, http.MethodGet, "/api/status", "")
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", response.StatusCode)
+	}
+	if body["version"] != "test" {
+		t.Errorf("version = %v", body["version"])
+	}
+	if body["authenticated"] != false {
+		t.Errorf("authenticated = %v, want false", body["authenticated"])
 	}
 }
 
-func TestLoginRejectsAnEmptyBody(t *testing.T) {
-	server := newTestServer(t, &fakeRunner{})
+func TestLoginStoresTheSession(t *testing.T) {
+	aubServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/auth-with-password") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"token":  "token-1",
+			"record": map[string]any{"id": "user-1", "email": "a@example"},
+		})
+	}))
+	defer aubServer.Close()
 
-	request := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(`{}`))
-	recorder := httptest.NewRecorder()
-	server.routes().ServeHTTP(recorder, request)
+	client, err := aub.New(aubServer.URL, aubServer.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, saved := newTestServer(t, client)
 
-	if recorder.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400 (%s)", recorder.Code, recorder.Body)
+	response, body := do(t, server, http.MethodPost, "/api/auth/login", `{"email":"a@example","password":"correct"}`)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, body = %v", response.StatusCode, body)
+	}
+	if body["email"] != "a@example" {
+		t.Errorf("email = %v", body["email"])
+	}
+	if saved.Session.Token != "token-1" {
+		t.Errorf("the session was not persisted: %+v", saved.Session)
+	}
+
+	// And the status endpoint must now agree, since that is what the page reads.
+	_, status := do(t, server, http.MethodGet, "/api/status", "")
+	if status["authenticated"] != true {
+		t.Errorf("authenticated = %v after login", status["authenticated"])
 	}
 }
 
-func TestMutatingRoutesRejectGET(t *testing.T) {
-	server := newTestServer(t, &fakeRunner{})
+func TestLoginRejectionIsReportedAsUnauthorized(t *testing.T) {
+	aubServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]any{"code": 401, "message": "Failed to authenticate."})
+	}))
+	defer aubServer.Close()
 
-	recorder := httptest.NewRecorder()
-	server.routes().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/auth/logout", nil))
+	client, err := aub.New(aubServer.URL, aubServer.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, _ := newTestServer(t, client)
 
-	// The mux has no GET route for this path, so it falls through to the
-	// static file server, which has no such file.
-	if recorder.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404", recorder.Code)
+	response, body := do(t, server, http.MethodPost, "/api/auth/login", `{"email":"a@example","password":"wrong"}`)
+	if response.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, body = %v", response.StatusCode, body)
 	}
 }
 
-func TestExtractorVersionRouteReturnsRunnerOutput(t *testing.T) {
-	runner := &fakeRunner{available: true, stdout: []byte("0.2.0\n")}
-	server := newTestServer(t, runner)
-
-	recorder := httptest.NewRecorder()
-	server.routes().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/aue/version", nil))
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200 (%s)", recorder.Code, recorder.Body)
-	}
-
-	var payload map[string]string
-	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if payload["version"] != "0.2.0" {
-		t.Fatalf("version = %q, want %q", payload["version"], "0.2.0")
-	}
-	if len(runner.calls) != 1 || runner.calls[0] != "version" {
-		t.Fatalf("runner calls = %v, want [version]", runner.calls)
+func TestLaunchConfigs(t *testing.T) {
+	server, _ := newTestServer(t, nil)
+	_, body := do(t, server, http.MethodGet, "/api/launch-configs", "")
+	items, ok := body["items"].([]any)
+	if !ok || len(items) == 0 {
+		t.Fatalf("items = %v", body["items"])
 	}
 }
 
-func TestIndexIsServedFromTheEmbeddedAssets(t *testing.T) {
-	server := newTestServer(t, &fakeRunner{})
-
-	recorder := httptest.NewRecorder()
-	server.routes().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/", nil))
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", recorder.Code)
+func TestBuildRunsTheFakeToolPipeline(t *testing.T) {
+	server, _ := newTestServer(t, nil)
+	response, body := do(t, server, http.MethodPost, "/api/build", `{"tool":"noop","args":["--x"]}`)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, body = %v", response.StatusCode, body)
 	}
-	if !strings.Contains(recorder.Body.String(), "Auto-Pigeon Companion") {
-		t.Fatalf("body does not look like index.html: %q", recorder.Body.String())
+	output, _ := body["output"].(string)
+	for _, want := range []string{"resolved noop", "verified ", "done"} {
+		if !strings.Contains(output, want) {
+			t.Errorf("output is missing %q:\n%s", want, output)
+		}
 	}
 }
 
-func TestServeStopsWhenTheContextIsCancelled(t *testing.T) {
-	server := newTestServer(t, &fakeRunner{})
+func TestLaunchDryRunResolvesWithoutStartingAnything(t *testing.T) {
+	server, _ := newTestServer(t, nil)
+	response, body := do(t, server, http.MethodPost, "/api/launch",
+		`{"game":"quake","map":"e1m1","game_root":"/games/quake","dry_run":true}`)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, body = %v", response.StatusCode, body)
+	}
+	if body["started"] != false {
+		t.Errorf("started = %v, want false for a dry run", body["started"])
+	}
+	command, _ := body["command"].(string)
+	if !strings.Contains(command, "e1m1") {
+		t.Errorf("command = %q", command)
+	}
+}
+
+func TestLaunchUnknownGameIs404(t *testing.T) {
+	server, _ := newTestServer(t, nil)
+	response, _ := do(t, server, http.MethodPost, "/api/launch", `{"game":"doom","dry_run":true}`)
+	if response.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", response.StatusCode)
+	}
+}
+
+func TestUnknownFieldsAreRejected(t *testing.T) {
+	server, _ := newTestServer(t, nil)
+	response, _ := do(t, server, http.MethodPost, "/api/launch", `{"game":"quake","typo":true}`)
+	if response.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", response.StatusCode)
+	}
+}
+
+// The listener must never be reachable from anything but this machine: the
+// server holds an AUB session and can start processes.
+func TestListenBindsLoopbackOnly(t *testing.T) {
+	listener, err := Listen(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+
+	host, _, err := net.SplitHostPort(listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if host != "127.0.0.1" {
+		t.Errorf("bound to %q, want 127.0.0.1", host)
+	}
+	if !strings.HasPrefix(URL(listener), "http://127.0.0.1:") {
+		t.Errorf("URL() = %q", URL(listener))
+	}
+}
+
+// A port already in use must not stop AUL from starting.
+func TestListenFallsBackWhenThePortIsTaken(t *testing.T) {
+	occupied, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer occupied.Close()
+
+	port := occupied.Addr().(*net.TCPAddr).Port
+	listener, err := Listen(port)
+	if err != nil {
+		t.Fatalf("Listen fell over instead of falling back: %v", err)
+	}
+	defer listener.Close()
+	if listener.Addr().(*net.TCPAddr).Port == port {
+		t.Error("Listen returned the occupied port")
+	}
+}
+
+func TestServeShutsDownOnContextCancel(t *testing.T) {
+	server, _ := newTestServer(t, nil)
+	listener, err := Listen(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- Serve(ctx, listener, server) }()
+
+	url := URL(listener)
+	response, err := http.Get(url + "api/status")
+	if err != nil {
+		t.Fatalf("GET %sapi/status: %v", url, err)
+	}
+	response.Body.Close()
+
 	cancel()
-	if err := server.Serve(ctx); err != nil {
-		t.Fatalf("Serve: %v", err)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Serve: %v", err)
+		}
+	case <-time.After(DrainTimeout + 5*time.Second):
+		t.Fatal("Serve did not return after the context was cancelled")
+	}
+}
+
+func TestOpenCommandPerPlatform(t *testing.T) {
+	cases := map[string]struct {
+		name string
+		args []string
+	}{
+		"windows": {"cmd", []string{"/c", "start", "", "http://127.0.0.1:8789/"}},
+		"darwin":  {"open", []string{"http://127.0.0.1:8789/"}},
+		"linux":   {"xdg-open", []string{"http://127.0.0.1:8789/"}},
+	}
+	for goos, want := range cases {
+		name, args, err := openCommand(goos, "http://127.0.0.1:8789/")
+		if err != nil {
+			t.Fatalf("%s: %v", goos, err)
+		}
+		if name != want.name || strings.Join(args, " ") != strings.Join(want.args, " ") {
+			t.Errorf("%s: got %s %v, want %s %v", goos, name, args, want.name, want.args)
+		}
+	}
+
+	// A non-HTTP or empty URL must never reach `start`, where a leading dash
+	// would be read as a flag.
+	for _, bad := range []string{"", "  ", "file:///etc/passwd", "-x"} {
+		if _, _, err := openCommand("windows", bad); err == nil {
+			t.Errorf("openCommand accepted %q", bad)
+		}
 	}
 }

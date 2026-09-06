@@ -1,18 +1,36 @@
-// Package config loads and saves AUC's local configuration.
+// Package config owns AUL's on-disk local state: where it lives per platform,
+// what it holds, and how it is read and written.
 //
-// The file lives in the OS-appropriate per-user config directory
-// (os.UserConfigDir), which is:
+// # What belongs here
 //
-//	Linux    $XDG_CONFIG_HOME/auto-pigeon-companion/config.json (or ~/.config/...)
-//	macOS    ~/Library/Application Support/auto-pigeon-companion/config.json
-//	Windows  %AppData%\auto-pigeon-companion\config.json
+// Only settings the user or a previous run established: which AUB instance to
+// talk to, which port the local GUI server prefers, where downloaded external
+// tools are cached, and the current AUB session. Anything derived at runtime
+// stays in memory.
 //
-// The file holds an AUB session token, so it is written with 0600 and the
-// containing directory with 0700. On Windows those bits are largely advisory,
-// which is a known and accepted limitation of storing a token in a file at
-// all; moving the token into the platform credential stores (Keychain, DPAPI,
-// libsecret) would mean a CGO or third-party dependency and is out of scope
-// for the stdlib-first architecture.
+// # Why the directories come from the standard library
+//
+// os.UserConfigDir and os.UserCacheDir already encode the per-platform
+// conventions AUL needs — %AppData% on Windows, ~/Library/Application Support
+// on macOS, $XDG_CONFIG_HOME (or ~/.config) elsewhere — so this package adds a
+// single "auto-pigeon-launcher" element under each and nothing more. Hand-rolled
+// path logic would be six branches of the same answer with more ways to be
+// wrong on a machine where XDG_CONFIG_HOME is set.
+//
+// The tool cache is deliberately under the *cache* directory rather than the
+// config directory: downloaded GPL-2.0 tool binaries are reproducible content
+// that AUL can re-fetch at any time, and putting them there means a user
+// clearing caches loses nothing but download time. See THIRD_PARTY_NOTICES.md
+// for why those binaries live outside this repository's own license.
+//
+// # Token storage — a known gap
+//
+// The AUB session is written into config.json with 0600 permissions. That is
+// the honest minimum, not a secure secret store: on a shared machine any
+// process running as the same user can read it. Moving the token to the OS
+// keychain (Keychain / DPAPI / Secret Service) needs either cgo or a
+// third-party dependency, and both are ruled out for this session by the
+// CGO-free, stdlib-first constraint. Flagged rather than silently accepted.
 package config
 
 import (
@@ -22,79 +40,150 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
-// AppDirName is the per-user directory AUC owns inside the OS config root.
-const AppDirName = "auto-pigeon-companion"
+// AppDirName is the single path element AUL adds under the OS config and cache
+// directories.
+const AppDirName = "auto-pigeon-launcher"
 
-// FileName is the config file inside AppDirName.
-const FileName = "config.json"
-
-// DefaultServerAddr is the listen address for GUI mode. Binding to the
-// loopback interface — never 0.0.0.0 — is deliberate: the server exposes an
-// authenticated user's session to whatever can reach it. Port 0 asks the OS
-// for a free port, which avoids collisions with anything already listening;
-// the chosen port is printed and used for the browser URL.
-const DefaultServerAddr = "127.0.0.1:0"
-
-// TODO(confirm-aub-base-url): Andrea to confirm the real dev/staging/prod base
-// URLs for AUB (auto-pigeon-backend, a Pocketbase instance). This placeholder
-// is a local Pocketbase default and is certainly not the deployed URL.
-const DefaultAUBBaseURL = "http://127.0.0.1:8090"
-
-// Session is the stored AUB authentication state.
+// DefaultPort is the loopback port the GUI server prefers.
 //
-// TODO(confirm-aub-auth-shape): the field set mirrors a generic Pocketbase
-// auth response (token plus the authenticated record). The real collection
-// name and record fields are unconfirmed, so nothing here should be treated as
-// final.
+// TODO(andrea): no port is registered for AUL. 8789 is simply an unassigned
+// high port unlikely to collide with a dev server; it is not a decision.
+// Server startup falls back to an ephemeral port when this one is taken, so
+// the value only affects whether the URL is stable across runs.
+const DefaultPort = 8789
+
+// ErrNotFound reports that no config file exists yet. Callers treat this as
+// "use defaults", not as a failure — a first run has no config.
+var ErrNotFound = errors.New("config: no config file")
+
+// Session is a stored AUB authentication result.
+//
+// TODO(andrea): confirm AUB's token lifetime and whether it issues a separate
+// refresh token. PocketBase's auth-with-password returns one JWT that is
+// refreshed by presenting it to auth-refresh, which is what internal/aub
+// assumes; Expires is AUL's own local estimate, not a value AUB returns.
 type Session struct {
-	Token      string    `json:"token,omitempty"`
-	UserID     string    `json:"user_id,omitempty"`
-	Email      string    `json:"email,omitempty"`
-	ObtainedAt time.Time `json:"obtained_at"`
+	Token   string    `json:"token"`
+	UserID  string    `json:"user_id,omitempty"`
+	Email   string    `json:"email,omitempty"`
+	Expires time.Time `json:"expires,omitempty"`
 }
 
-// Valid reports whether the session carries a token at all. It deliberately
-// does not check expiry: Pocketbase token lifetimes are configured
-// server-side, so "still accepted" is a question only AUB can answer.
-func (session Session) Valid() bool { return session.Token != "" }
-
-// Config is the whole on-disk document.
-type Config struct {
-	AUBBaseURL string  `json:"aub_base_url"`
-	ServerAddr string  `json:"server_addr"`
-	Session    Session `json:"session"`
-}
-
-// Default is the config used when no file exists yet.
-func Default() Config {
-	return Config{AUBBaseURL: DefaultAUBBaseURL, ServerAddr: DefaultServerAddr}
-}
-
-// Dir returns the directory holding the config file.
-func Dir() (string, error) {
-	root, err := os.UserConfigDir()
-	if err != nil {
-		return "", fmt.Errorf("cannot locate user config directory: %w", err)
+// Valid reports whether the session has a token that has not locally expired.
+// A zero Expires means "unknown", which is treated as still valid — the server
+// is the authority, and refusing to send a token AUB might still accept would
+// log the user out for no reason.
+func (s Session) Valid() bool {
+	if s.Token == "" {
+		return false
 	}
-	return filepath.Join(root, AppDirName), nil
+	return s.Expires.IsZero() || time.Now().Before(s.Expires)
 }
 
-// Path returns the full config file path.
+// Config is the whole of AUL's persisted local state.
+type Config struct {
+	// AUBBaseURL is the auto-pigeon-backend instance to authenticate against.
+	AUBBaseURL string `json:"aub_base_url"`
+	// Port is the preferred loopback port for the GUI server.
+	Port int `json:"port"`
+	// ToolCacheDir overrides the default external-tool cache location. Empty
+	// means DefaultToolCacheDir.
+	ToolCacheDir string `json:"tool_cache_dir,omitempty"`
+	// GameRoots maps a game name to the directory its executable lives under,
+	// filling the {game_root} placeholder in a launch config's executable
+	// pattern. See internal/launch.
+	GameRoots map[string]string `json:"game_roots,omitempty"`
+	// Session is the current AUB login, if any.
+	Session Session `json:"session,omitempty"`
+}
+
+// EnvAUBBaseURL names the environment variable that supplies AUB's address
+// when config.json does not, and overrides it when both are set.
+//
+// # Why there is no default value here
+//
+// Both bootstraps this package was merged from compiled in
+// "http://127.0.0.1:8090" as a fallback. That was wrong twice over. It is a
+// hardcoded location for another component, which the workspace rule in
+// AGENTS.md forbids outright: a compiled-in address turns a misconfiguration
+// into a plausible-looking wrong answer, and a loopback address in particular
+// means "the reader's own machine", which on any other machine can never work.
+// And 8090 is PocketBase's *framework* default, never Auto-Pigeon's — AUB is
+// reached on 9190 — so the fallback would have sent a first run to a port
+// nothing serves while looking deliberate.
+//
+// A missing address is therefore an error the user acts on, reported by name.
+// See ErrAUBNotConfigured.
+const EnvAUBBaseURL = "AUCOM_AUB_BASE_URL"
+
+// ErrAUBNotConfigured reports that no AUB address is configured. It names the
+// two places that supply one so the message is actionable wherever it surfaces
+// — the CLI prints it, and the GUI shows it on the routes that need AUB.
+var ErrAUBNotConfigured = errors.New(
+	"no auto-pigeon-backend address is configured: set " + EnvAUBBaseURL +
+		" or the \"aub_base_url\" field in config.json")
+
+// Default returns the configuration a first run uses. AUBBaseURL is
+// deliberately empty — see EnvAUBBaseURL.
+func Default() Config {
+	return Config{Port: DefaultPort}
+}
+
+// AUB resolves the effective AUB address: the environment variable if set,
+// otherwise the config file's value, otherwise ErrAUBNotConfigured.
+func (c Config) AUB() (string, error) {
+	if fromEnv := strings.TrimSpace(os.Getenv(EnvAUBBaseURL)); fromEnv != "" {
+		return fromEnv, nil
+	}
+	if trimmed := strings.TrimSpace(c.AUBBaseURL); trimmed != "" {
+		return trimmed, nil
+	}
+	return "", ErrAUBNotConfigured
+}
+
+// Dir is the OS-appropriate directory holding config.json.
+func Dir() (string, error) {
+	base, err := os.UserConfigDir()
+	if err != nil {
+		return "", fmt.Errorf("config: locating the user config directory: %w", err)
+	}
+	return filepath.Join(base, AppDirName), nil
+}
+
+// Path is the config file itself.
 func Path() (string, error) {
 	dir, err := Dir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, FileName), nil
+	return filepath.Join(dir, "config.json"), nil
 }
 
-// Load reads the config file, returning Default() when the file does not exist
-// yet. A missing file is the first-run case, not an error; a malformed file is
-// an error, because silently resetting a user's settings is worse than saying
-// the file is broken.
+// DefaultToolCacheDir is where downloaded external tool binaries are kept when
+// Config.ToolCacheDir is empty.
+func DefaultToolCacheDir() (string, error) {
+	base, err := os.UserCacheDir()
+	if err != nil {
+		return "", fmt.Errorf("config: locating the user cache directory: %w", err)
+	}
+	return filepath.Join(base, AppDirName, "tools"), nil
+}
+
+// ToolCache resolves the effective tool cache directory for this config.
+func (c Config) ToolCache() (string, error) {
+	if c.ToolCacheDir != "" {
+		return c.ToolCacheDir, nil
+	}
+	return DefaultToolCacheDir()
+}
+
+// Load reads config.json, filling unset fields from Default. A missing file
+// returns Default and ErrNotFound, so a caller that does not care about the
+// distinction can ignore the error and use the value.
 func Load() (Config, error) {
 	path, err := Path()
 	if err != nil {
@@ -103,72 +192,80 @@ func Load() (Config, error) {
 	return LoadFrom(path)
 }
 
-// LoadFrom reads a config file from an explicit path. Tests use this; Load is
-// the production entry point.
+// LoadFrom is Load against an explicit path. Tests use it; so does any future
+// --config flag.
 func LoadFrom(path string) (Config, error) {
 	raw, err := os.ReadFile(path)
-	if errors.Is(err, fs.ErrNotExist) {
-		return Default(), nil
-	}
 	if err != nil {
-		return Default(), fmt.Errorf("cannot read config %s: %w", path, err)
+		if errors.Is(err, fs.ErrNotExist) {
+			return Default(), ErrNotFound
+		}
+		return Default(), fmt.Errorf("config: reading %s: %w", path, err)
 	}
-	config := Default()
-	if err := json.Unmarshal(raw, &config); err != nil {
-		return Default(), fmt.Errorf("cannot parse config %s: %w", path, err)
+
+	// Unmarshalling onto the defaults rather than a zero value is what makes a
+	// config file written by an older build — one with no "port" key — come
+	// back with a usable port instead of 0.
+	value := Default()
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return Default(), fmt.Errorf("config: parsing %s: %w", path, err)
 	}
-	if config.AUBBaseURL == "" {
-		config.AUBBaseURL = DefaultAUBBaseURL
+	if value.Port == 0 {
+		value.Port = DefaultPort
 	}
-	if config.ServerAddr == "" {
-		config.ServerAddr = DefaultServerAddr
-	}
-	return config, nil
+	return value, nil
 }
 
-// Save writes the config to its standard location.
-func Save(config Config) error {
+// Save writes the config to its OS-appropriate location, creating the
+// directory if needed.
+func Save(value Config) error {
 	path, err := Path()
 	if err != nil {
 		return err
 	}
-	return SaveTo(path, config)
+	return SaveTo(path, value)
 }
 
-// SaveTo writes the config to an explicit path, creating the directory as
-// needed. The write is atomic (temp file plus rename) so an interrupted save
-// cannot leave a truncated config behind.
-func SaveTo(path string, config Config) error {
+// SaveTo is Save against an explicit path.
+//
+// The write is atomic — a temporary file in the destination directory followed
+// by a rename — because a config file truncated by a crash or a full disk
+// would take the stored session with it, and a half-written JSON document is
+// indistinguishable from a corrupt one on the next load.
+func SaveTo(path string, value Config) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("cannot create config directory %s: %w", dir, err)
+		return fmt.Errorf("config: creating %s: %w", dir, err)
 	}
-	encoded, err := json.MarshalIndent(config, "", "  ")
+
+	encoded, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
-		return fmt.Errorf("cannot encode config: %w", err)
+		return fmt.Errorf("config: encoding: %w", err)
 	}
 	encoded = append(encoded, '\n')
 
-	temp, err := os.CreateTemp(dir, FileName+".*.tmp")
+	temp, err := os.CreateTemp(dir, "config-*.json")
 	if err != nil {
-		return fmt.Errorf("cannot create temporary config in %s: %w", dir, err)
+		return fmt.Errorf("config: creating a temporary file in %s: %w", dir, err)
 	}
 	tempName := temp.Name()
-	defer os.Remove(tempName)
+	defer os.Remove(tempName) // No-op once the rename below has succeeded.
 
+	// 0600 before any content is written: the file holds a session token, and
+	// widening then narrowing the mode leaves a window where it is readable.
 	if err := temp.Chmod(0o600); err != nil {
 		temp.Close()
-		return fmt.Errorf("cannot set permissions on %s: %w", tempName, err)
+		return fmt.Errorf("config: securing %s: %w", tempName, err)
 	}
 	if _, err := temp.Write(encoded); err != nil {
 		temp.Close()
-		return fmt.Errorf("cannot write %s: %w", tempName, err)
+		return fmt.Errorf("config: writing %s: %w", tempName, err)
 	}
 	if err := temp.Close(); err != nil {
-		return fmt.Errorf("cannot close %s: %w", tempName, err)
+		return fmt.Errorf("config: closing %s: %w", tempName, err)
 	}
 	if err := os.Rename(tempName, path); err != nil {
-		return fmt.Errorf("cannot replace config %s: %w", path, err)
+		return fmt.Errorf("config: replacing %s: %w", path, err)
 	}
 	return nil
 }

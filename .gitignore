@@ -13,9 +13,29 @@
 /internal/aue/embedded/*
 !/internal/aue/embedded/.gitkeep
 
+# Downloaded external tool cache.
+#
+# The default cache is in the OS cache directory, not here, but a local
+# override (config.json's tool_cache_dir) commonly points at the working tree.
+# These are third-party GPL-2.0 binaries and must never be committed — see
+# THIRD_PARTY_NOTICES.md.
+/tools-cache/
+/external-tools/
+
+# Local config written by the app when its config path is overridden.
+/config.json
+
+# macOS bundles produced by build/macos/make-app-bundle.sh
+*.app/
+
 # Go
 *.test
 *.out
+*.exe
+*.so
+*.dylib
+go.work
+go.work.sum
 /vendor/
 
 # Editors and OS

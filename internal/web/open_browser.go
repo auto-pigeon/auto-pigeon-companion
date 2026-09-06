@@ -4,42 +4,70 @@ import (
 	"fmt"
 	"os/exec"
 	"runtime"
+	"strings"
 )
 
-// OpenBrowser asks the OS to open rawURL in the user's default browser.
+// OpenBrowser asks the OS to open url in the user's default browser.
 //
-// Each platform has exactly one right way to do this and none of them need a
-// dependency:
+// # One file, a runtime switch, no build tags
 //
-//	macOS    open <url>
-//	Windows  cmd /c start "" <url>   — the empty "" is start's title argument;
-//	                                   without it start treats a quoted URL as
-//	                                   the window title and opens nothing
-//	Linux    xdg-open <url>          — provided by xdg-utils, present on
-//	                                   essentially every desktop install but
-//	                                   not guaranteed on a bare server
+// The per-platform difference is one command name, so a runtime.GOOS switch
+// keeps it visible in a single place. Build-tagged files would give each target
+// its own copy of the same three lines and hide from a Linux developer that the
+// Windows branch even exists — and the branch that breaks is always the one on
+// the platform nobody builds on.
 //
-// The command is started, not waited on: `open` and `xdg-open` return
-// immediately, but a browser launched as a direct child can outlive the call,
-// and GUI mode must not block on it. A failure here is not fatal to the
-// caller — the server is already listening and the URL is printed — so the
-// error is returned for reporting rather than treated as a startup failure.
-func OpenBrowser(rawURL string) error {
-	var command *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		command = exec.Command("open", rawURL)
-	case "windows":
-		command = exec.Command("cmd", "/c", "start", "", rawURL)
-	default:
-		command = exec.Command("xdg-open", rawURL)
+// # Not fatal
+//
+// A failure here is reported, never fatal. The server is already listening and
+// the URL is already printed; a machine with no default browser handler — a
+// headless Linux box, a stripped container — should leave the user able to open
+// the page themselves, not exit.
+func OpenBrowser(url string) error {
+	name, args, err := openCommand(runtime.GOOS, url)
+	if err != nil {
+		return err
 	}
+
+	command := exec.Command(name, args...)
 	if err := command.Start(); err != nil {
-		return fmt.Errorf("cannot open %s in the default browser: %w", rawURL, err)
+		return fmt.Errorf("web: opening %s with %s: %w", url, name, err)
 	}
-	// Reap the helper process so it does not linger as a zombie for the life
-	// of a long-running server. The helper exits almost immediately; the
-	// browser it spawned is unaffected.
-	go func() { _ = command.Wait() }()
+	// Deliberately not waited on. `open` and `xdg-open` return immediately, but
+	// `cmd /c start` and some xdg-open implementations outlive the call, and
+	// blocking AUL's startup on the browser's lifetime would be wrong. The
+	// process is left to the OS; releasing it here would need a Wait in a
+	// goroutine whose only effect is reaping, which Go's os/exec already
+	// handles for a Start'd process that is never Wait'ed at exit.
+	go command.Wait()
 	return nil
+}
+
+// openCommand is the platform table, split out so every branch is testable from
+// any host.
+func openCommand(goos, url string) (string, []string, error) {
+	if strings.TrimSpace(url) == "" {
+		return "", nil, fmt.Errorf("web: no URL to open")
+	}
+	// Only the loopback URLs this server produces are ever passed here. Guard
+	// against anything else reaching a shell-adjacent command like `start`: a
+	// URL beginning with "-" would be read as a flag, and a non-http scheme is
+	// not something AUL should be handing to the OS opener.
+	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+		return "", nil, fmt.Errorf("web: refusing to open a non-HTTP URL: %q", url)
+	}
+
+	switch goos {
+	case "windows":
+		// The empty string is `start`'s window-title argument. Without it a
+		// quoted URL is taken as the title and no browser opens — a classic
+		// and silent failure, so it is passed explicitly.
+		return "cmd", []string{"/c", "start", "", url}, nil
+	case "darwin":
+		return "open", []string{url}, nil
+	default:
+		// Linux, and the BSDs if AUL is ever built for one. xdg-open is the
+		// freedesktop standard and is what every desktop environment installs.
+		return "xdg-open", []string{url}, nil
+	}
 }

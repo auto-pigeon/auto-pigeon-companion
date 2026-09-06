@@ -211,6 +211,24 @@ func (runner *EmbeddedRunner) Available() bool {
 	return err == nil
 }
 
+// Available reports whether runner can run AUE at all, without executing it.
+//
+// It is a free function rather than a Runner method because availability is
+// interesting to a caller holding any Runner — including a nil one, which is
+// what a build with no extractor and no override produces — while a Runner
+// implementation that always works (a future HTTPRunner) should not have to
+// carry the method. A runner that does not implement the optional interface is
+// reported available: it exists, so it can be tried.
+func Available(runner Runner) bool {
+	if runner == nil {
+		return false
+	}
+	if checker, ok := runner.(interface{ Available() bool }); ok {
+		return checker.Available()
+	}
+	return true
+}
+
 func trimmed(text string) string {
 	return string(bytes.TrimSpace([]byte(text)))
 }

@@ -4,109 +4,118 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 )
 
-// AuthCollection is the Pocketbase auth collection AUC authenticates against.
+// AuthCollection is the PocketBase auth collection AUL authenticates against.
 //
-// TODO(confirm-aub-auth-shape): "users" is the Pocketbase default and a
-// placeholder. Andrea must confirm the real collection name, whether login is
-// by email or username, and which record fields AUC may rely on. Everything in
-// this file is written against the generic Pocketbase auth-with-password shape
-// and should be treated as a stub until that confirmation lands.
+// TODO(andrea): confirm this is the right collection. "users" is PocketBase's
+// default auth collection name; AUB may authenticate desktop clients against a
+// different one, or against _superusers for admin flows AUL should never use.
 const AuthCollection = "users"
 
-// Session is one authenticated AUB session.
+// assumedTokenLifetime is how long AUL treats a fresh token as good for.
+//
+// PocketBase's auth token is a JWT whose expiry is in its payload, and the
+// honest way to know it is to decode that payload. This deliberately does not:
+// unverified parsing of a token AUL only ever forwards would be reading a
+// claim it cannot check, and the consequence of guessing low is a redundant
+// refresh, while guessing high is one rejected request that already has a
+// handled path (APIError.Unauthorized). Two weeks is PocketBase's own default.
+//
+// TODO(andrea): confirm AUB's configured token duration; if it differs
+// materially, set this to match rather than leaving the estimate.
+const assumedTokenLifetime = 14 * 24 * time.Hour
+
+// Session is a successful authentication against AUB.
 type Session struct {
-	Token      string
-	UserID     string
-	Email      string
-	ObtainedAt time.Time
+	Token   string
+	UserID  string
+	Email   string
+	Expires time.Time
 }
 
-// authResponse is Pocketbase's auth-with-password response envelope.
+// authResponse is PocketBase's auth-with-password / auth-refresh response.
 type authResponse struct {
 	Token  string `json:"token"`
 	Record struct {
-		ID       string `json:"id"`
-		Email    string `json:"email"`
-		Username string `json:"username"`
-		Verified bool   `json:"verified"`
+		ID    string `json:"id"`
+		Email string `json:"email"`
 	} `json:"record"`
 }
 
-// Login exchanges credentials for a session token and stores the token on the
-// client, so subsequent calls on the same Client are authenticated.
-//
-// The identity argument is whatever the collection treats as the login
-// identity — an email address under the default Pocketbase configuration.
-func (client *Client) Login(ctx context.Context, identity, password string) (Session, error) {
-	if identity == "" || password == "" {
-		return Session{}, fmt.Errorf("both an identity and a password are required")
+func (r authResponse) session() Session {
+	return Session{
+		Token:   r.Token,
+		UserID:  r.Record.ID,
+		Email:   r.Record.Email,
+		Expires: time.Now().Add(assumedTokenLifetime),
 	}
-	body := map[string]string{"identity": identity, "password": password}
+}
+
+// Login exchanges an email and password for a session, and installs the
+// resulting token on the client so subsequent calls are authenticated.
+func (c *Client) Login(ctx context.Context, email, password string) (Session, error) {
+	email = strings.TrimSpace(email)
+	if email == "" {
+		return Session{}, fmt.Errorf("aub: email is empty")
+	}
+	if password == "" {
+		return Session{}, fmt.Errorf("aub: password is empty")
+	}
+
+	body := struct {
+		Identity string `json:"identity"`
+		Password string `json:"password"`
+	}{Identity: email, Password: password}
+
+	var response authResponse
 	path := "/api/collections/" + AuthCollection + "/auth-with-password"
-
-	var decoded authResponse
-	if err := client.do(ctx, http.MethodPost, path, body, &decoded); err != nil {
+	if err := c.do(ctx, http.MethodPost, path, nil, body, &response); err != nil {
 		return Session{}, err
 	}
-	if decoded.Token == "" {
-		return Session{}, fmt.Errorf("AUB accepted the login but returned no token")
+	if response.Token == "" {
+		return Session{}, fmt.Errorf("aub: login succeeded but returned no token")
 	}
 
-	client.Token = decoded.Token
-	email := decoded.Record.Email
-	if email == "" {
-		email = decoded.Record.Username
-	}
-	return Session{
-		Token:      decoded.Token,
-		UserID:     decoded.Record.ID,
-		Email:      email,
-		ObtainedAt: time.Now().UTC(),
-	}, nil
+	session := response.session()
+	c.token = session.Token
+	return session, nil
 }
 
-// Refresh exchanges the current token for a fresh one. Pocketbase's
-// auth-refresh endpoint requires the existing token in the Authorization
-// header and issues a new one with a new expiry — that is the whole token
-// lifecycle AUC needs, since there are no separate refresh tokens.
+// Refresh exchanges the current token for a fresh one. It requires an already
+// authenticated client; a caller with no token should call Login instead.
 //
-// TODO(confirm-aub-auth-shape): when the session should be refreshed (on a
-// timer, on 401, at startup) is a product decision that depends on AUB's
-// configured token lifetime, which is not yet known. Nothing calls this yet.
-func (client *Client) Refresh(ctx context.Context) (Session, error) {
-	if client.Token == "" {
-		return Session{}, fmt.Errorf("no session to refresh")
+// On failure the existing token is left in place: a refresh that fails because
+// the network is down must not log the user out of a session that is still
+// good. Clearing the session is reserved for an APIError that reports
+// Unauthorized, and is the caller's decision — see internal/cli.
+func (c *Client) Refresh(ctx context.Context) (Session, error) {
+	if !c.Authenticated() {
+		return Session{}, fmt.Errorf("aub: cannot refresh without a token")
 	}
-	path := "/api/collections/" + AuthCollection + "/auth-refresh"
 
-	var decoded authResponse
-	if err := client.do(ctx, http.MethodPost, path, nil, &decoded); err != nil {
+	var response authResponse
+	path := "/api/collections/" + AuthCollection + "/auth-refresh"
+	if err := c.do(ctx, http.MethodPost, path, nil, nil, &response); err != nil {
 		return Session{}, err
 	}
-	if decoded.Token == "" {
-		return Session{}, fmt.Errorf("AUB refreshed the session but returned no token")
+	if response.Token == "" {
+		return Session{}, fmt.Errorf("aub: refresh succeeded but returned no token")
 	}
 
-	client.Token = decoded.Token
-	email := decoded.Record.Email
-	if email == "" {
-		email = decoded.Record.Username
-	}
-	return Session{
-		Token:      decoded.Token,
-		UserID:     decoded.Record.ID,
-		Email:      email,
-		ObtainedAt: time.Now().UTC(),
-	}, nil
+	session := response.session()
+	c.token = session.Token
+	return session, nil
 }
 
-// Logout forgets the token locally. Pocketbase has no server-side session
-// invalidation endpoint for record auth — tokens are stateless and expire on
-// their own — so this is deliberately client-only, and the name should not be
-// read as a promise that the token stops working elsewhere.
-func (client *Client) Logout() {
-	client.Token = ""
-}
+// Logout forgets the token locally.
+//
+// PocketBase has no server-side token revocation endpoint — its tokens are
+// stateless JWTs valid until they expire — so this is exactly as strong as it
+// sounds: the client stops presenting the token, and anyone who already copied
+// it out of config.json still holds a working one until it expires. Named
+// Logout because that is what it does from the user's side, documented here so
+// nobody mistakes it for revocation.
+func (c *Client) Logout() { c.token = "" }

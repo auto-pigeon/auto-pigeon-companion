@@ -1,25 +1,18 @@
 package web
 
-import (
-	"embed"
-	"io/fs"
-)
+import "embed"
 
-// assets is the frontend: plain HTML, CSS, and JavaScript with no build step,
-// compiled into the binary so the GUI ships as part of the single executable.
-// Editing a file under assets/ and rebuilding is the entire frontend workflow.
+// assets is the frontend, compiled into the binary.
+//
+// //go:embed is the entire "build step" for the GUI: the frontend is plain
+// HTML, CSS and vanilla JS with no bundler, no npm, and no node_modules, so
+// there is nothing to compile and nothing to ship beside the binary. A single
+// self-contained executable is the point — a user downloads one file and it
+// works.
+//
+// Note what is *not* embedded: no external map-building tool binary, ever. Those
+// are GPL-2.0 and are fetched as separate programs at runtime — see
+// internal/tools and THIRD_PARTY_NOTICES.md.
 //
 //go:embed assets
 var assets embed.FS
-
-// assetsFS strips the "assets/" prefix so the file server maps "/" to
-// assets/index.html rather than "/assets/index.html".
-func assetsFS() fs.FS {
-	sub, err := fs.Sub(assets, "assets")
-	if err != nil {
-		// Unreachable: the embed directive above guarantees the directory
-		// exists at compile time.
-		panic(err)
-	}
-	return sub
-}

@@ -2,11 +2,21 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
   Info.plist template for the Auto-Pigeon Companion .app bundle.
-  @PLACEHOLDER@ tokens are substituted by build/macos/make-app-bundle.sh.
+
+  @PLACEHOLDER@ tokens are substituted by build/macos/make-app-bundle.sh:
+    @BUNDLE_ID@   the CFBundleIdentifier
+    @VERSION@     the release version, e.g. 0.1.0
+    @ARCH@        the Go architecture the bundled binary was built for
+    @EXECUTABLE@  the executable name inside Contents/MacOS
+    @COPYRIGHT@   the human-readable copyright and licensing line
+
+  No GUI toolkit generates this bundle: the Companion has no GUI dependency, so
+  the .app is assembled by hand around a plain cross-compiled binary. That is
+  the whole reason this file exists.
 
   LSUIElement is true: launching the bundle starts a local server and opens the
-  user's browser, so there is no Cocoa window to own and a bouncing Dock icon
-  for a process with no windows would be misleading.
+  user's browser, so there is no Cocoa window to own and a windowless process in
+  the Dock reads as a hung app.
 -->
 <plist version="1.0">
 <dict>
@@ -28,6 +38,7 @@
     <string>6.0</string>
     <key>LSMinimumSystemVersion</key>
     <string>11.0</string>
+    <!-- The architecture the bundle was built for, recorded for support: @ARCH@ -->
     <key>LSUIElement</key>
     <true/>
     <key>NSHighResolutionCapable</key>

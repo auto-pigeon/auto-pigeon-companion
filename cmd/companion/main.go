@@ -1,17 +1,16 @@
-// Command companion is the Auto-Pigeon Companion (AUC) desktop application.
+// Command companion is the Auto-Pigeon Companion (AUCOM) desktop application.
 //
 // The binary has two modes, both served by the same executable:
 //
-//   - No subcommand: start the local HTTP server on 127.0.0.1 and open the
-//     embedded frontend in the OS default browser. This is "GUI mode".
+//   - No subcommand: start the local loopback HTTP server and open the
+//     embedded frontend in the OS default browser. This is "GUI mode", and it
+//     is what double-clicking the installed binary does.
 //   - A named subcommand: run headless, for scripting and CLI use.
 //
 // This file is deliberately thin: it owns the build-time version string and
 // the process's streams and exit code, and nothing else. Subcommand
 // registration, dispatch, and the commands themselves live in internal/cli,
-// where they can be tested without spawning a subprocess. This mirrors AUE's
-// cmd/auto-pigeon-extractor/main.go on purpose — the two repositories should
-// read the same way.
+// where they can be tested without spawning a subprocess.
 package main
 
 import (
@@ -26,5 +25,11 @@ import (
 var version = "0.1.0-dev"
 
 func main() {
-	os.Exit(cli.Run(&cli.Env{Stdout: os.Stdout, Stderr: os.Stderr, Version: version}, os.Args[1:]))
+	env := &cli.Env{
+		Stdin:   os.Stdin,
+		Stdout:  os.Stdout,
+		Stderr:  os.Stderr,
+		Version: version,
+	}
+	os.Exit(cli.Run(env, os.Args[1:]))
 }

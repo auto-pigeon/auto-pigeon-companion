@@ -4,55 +4,82 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Auto-Pigeon Companion</title>
-    <link rel="stylesheet" href="/app.css" />
+    <link rel="stylesheet" href="app.css" />
   </head>
   <body>
-    <header class="bar">
+    <header>
       <h1>Auto-Pigeon Companion</h1>
-      <span id="version" class="version"></span>
+      <p id="status-line" class="muted">loading…</p>
     </header>
 
     <main>
-      <section id="banner" class="banner" hidden></section>
-
-      <section class="card" id="account-card">
-        <h2>Account</h2>
-        <p class="muted">
-          Signed in against <code id="aub-url">…</code>
-        </p>
-
-        <form id="login-form" hidden>
-          <label for="identity">Email</label>
-          <input id="identity" name="identity" type="email" autocomplete="username" required />
-
+      <section id="auth-section">
+        <h2>auto-pigeon-backend</h2>
+        <form id="login-form" autocomplete="on">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" required autocomplete="username" />
           <label for="password">Password</label>
-          <input id="password" name="password" type="password" autocomplete="current-password" required />
-
-          <button type="submit" id="login-button">Sign in</button>
+          <input id="password" name="password" type="password" required autocomplete="current-password" />
+          <div class="row">
+            <button type="submit">Sign in</button>
+            <button type="button" id="logout-button" hidden>Sign out</button>
+          </div>
         </form>
-
-        <div id="signed-in" hidden>
-          <p>Signed in as <strong id="account-email"></strong>.</p>
-          <button type="button" id="logout-button" class="secondary">Sign out</button>
-        </div>
+        <p id="auth-message" class="message" role="status"></p>
       </section>
 
-      <section class="card">
+      <section id="extractor-section">
         <h2>Extractor</h2>
-        <p class="muted" id="aue-state">Checking the bundled extractor…</p>
-        <button type="button" id="aue-version-button">Read extractor version</button>
-        <pre id="aue-output" hidden></pre>
+        <p class="muted" id="extractor-state">Checking the bundled extractor…</p>
+        <div class="row">
+          <button type="button" id="extractor-button">Read extractor version</button>
+        </div>
+        <pre id="extractor-output" class="output" aria-live="polite"></pre>
       </section>
 
-      <section class="card">
-        <h2>Map operations</h2>
-        <!-- Placeholder: real operations land in later prompts. Each one gets
-             its own JSON route on the server rather than a generic
-             run-any-subcommand endpoint. -->
-        <p class="muted">No operations are wired up yet in this bootstrap build.</p>
+      <section id="build-section">
+        <h2>Build</h2>
+        <p class="muted">
+          No real map-building tool is wired up yet. This runs the fake tool so the
+          resolve → download → verify → run pipeline can be exercised end to end.
+        </p>
+        <div class="row">
+          <button type="button" id="build-button">Run build</button>
+        </div>
+        <pre id="build-output" class="output" aria-live="polite"></pre>
+      </section>
+
+      <section id="launch-section">
+        <h2>Launch</h2>
+        <p class="muted">
+          Launch configs are stubbed locally until AUB's schema is confirmed.
+          "Preview" resolves the command without starting anything.
+        </p>
+        <div class="row">
+          <label for="game">Game</label>
+          <select id="game"></select>
+          <label for="map">Map</label>
+          <input id="map" type="text" placeholder="e1m1" />
+        </div>
+        <div class="row">
+          <label for="game-root">Game directory</label>
+          <input id="game-root" type="text" placeholder="/path/to/quake" />
+        </div>
+        <div class="row">
+          <button type="button" id="preview-button">Preview command</button>
+          <button type="button" id="launch-button">Launch</button>
+        </div>
+        <pre id="launch-output" class="output" aria-live="polite"></pre>
       </section>
     </main>
 
-    <script src="/app.js"></script>
+    <footer>
+      <p class="muted">
+        External map-building tools are separate GPL-2.0 programs, downloaded and
+        run as their own processes. See THIRD_PARTY_NOTICES.md.
+      </p>
+    </footer>
+
+    <script src="app.js"></script>
   </body>
 </html>

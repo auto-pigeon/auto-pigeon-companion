@@ -1,33 +1,12 @@
-/* Plain CSS, no build step, no framework. The page follows the OS light/dark
-   preference because it opens in the user's own browser next to their other
-   windows. */
+/* Plain CSS, no framework and no build step: the whole frontend is three files
+   embedded into the binary. Kept small enough to read in one sitting. */
 
 :root {
-  --bg: #f6f6f4;
-  --surface: #ffffff;
-  --text: #1b1b1a;
-  --muted: #5f5f5c;
-  --line: #dcdcd6;
-  --accent: #3a5f3a;
-  --error-bg: #fbe9e7;
-  --error-text: #8a2b20;
-  --ok-bg: #e8f2e8;
-  --ok-text: #2c5a2c;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #17181a;
-    --surface: #202225;
-    --text: #ececea;
-    --muted: #a2a29e;
-    --line: #34363a;
-    --accent: #8fc98f;
-    --error-bg: #3a201d;
-    --error-text: #f0b1a8;
-    --ok-bg: #1e2f1e;
-    --ok-text: #a8d6a8;
-  }
+  color-scheme: light dark;
+  --gap: 0.75rem;
+  --border: #8884;
+  --muted: #6b7280;
+  --accent: #b45309;
 }
 
 * {
@@ -35,124 +14,111 @@
 }
 
 body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
-}
-
-.bar {
-  display: flex;
-  align-items: baseline;
-  gap: 0.75rem;
-  padding: 1rem 1.5rem;
-  border-bottom: 1px solid var(--line);
-  background: var(--surface);
-}
-
-.bar h1 {
-  margin: 0;
-  font-size: 1.1rem;
-  font-weight: 600;
-}
-
-.version {
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-main {
-  max-width: 46rem;
   margin: 0 auto;
   padding: 1.5rem;
-  display: grid;
-  gap: 1rem;
+  max-width: 46rem;
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
-.card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 1.25rem;
+h1 {
+  margin: 0;
+  font-size: 1.5rem;
 }
 
-.card h2 {
-  margin: 0 0 0.5rem;
-  font-size: 0.95rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--muted);
+h2 {
+  margin: 0 0 var(--gap);
+  font-size: 1.1rem;
+}
+
+header {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: var(--gap);
+  margin-bottom: 1.5rem;
+}
+
+section {
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin-bottom: 1.25rem;
 }
 
 .muted {
   color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0 0 var(--gap);
 }
 
-form {
-  display: grid;
-  gap: 0.35rem;
-  max-width: 22rem;
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gap);
+  margin-top: var(--gap);
 }
 
 label {
+  display: block;
   font-size: 0.85rem;
   color: var(--muted);
 }
 
-input {
-  padding: 0.5rem 0.6rem;
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  background: var(--bg);
-  color: var(--text);
+input,
+select {
   font: inherit;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  background: transparent;
+  color: inherit;
+  min-width: 12rem;
 }
 
 button {
-  margin-top: 0.6rem;
-  justify-self: start;
-  padding: 0.5rem 1rem;
-  border: 1px solid transparent;
-  border-radius: 5px;
-  background: var(--accent);
-  color: var(--surface);
   font: inherit;
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  background: transparent;
+  color: inherit;
   cursor: pointer;
 }
 
-button.secondary {
-  background: transparent;
-  border-color: var(--line);
-  color: var(--text);
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
-button[disabled] {
-  opacity: 0.55;
+button:disabled {
+  opacity: 0.5;
   cursor: progress;
 }
 
-pre {
-  margin-top: 0.75rem;
-  padding: 0.6rem 0.75rem;
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  background: var(--bg);
+.output {
+  margin: var(--gap) 0 0;
+  padding: 0.75rem;
+  border-radius: 0.35rem;
+  background: #8881;
+  font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
   overflow-x: auto;
-  font-size: 0.85rem;
+  min-height: 1.5rem;
 }
 
-code {
-  font-size: 0.9em;
+.message:empty {
+  display: none;
 }
 
-.banner {
-  padding: 0.7rem 1rem;
-  border-radius: 6px;
-  background: var(--ok-bg);
-  color: var(--ok-text);
+.message {
+  margin: var(--gap) 0 0;
+  font-size: 0.9rem;
 }
 
-.banner.error {
-  background: var(--error-bg);
-  color: var(--error-text);
+.message.error {
+  color: #b91c1c;
+}
+
+footer {
+  border-top: 1px solid var(--border);
+  padding-top: var(--gap);
 }

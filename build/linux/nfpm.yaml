@@ -1,44 +1,70 @@
-# nfpm configuration for Auto-Pigeon Companion .deb / .rpm packages.
+# nfpm configuration for Auto-Pigeon Companion's .deb and .rpm packages.
 #
-# Build the binary first (plain cross-compile, no CGO, no Docker), then package:
+# Build with, from the repository root:
 #
-#   GOOS=linux GOARCH=amd64 go build -o dist/linux-amd64/companion ./cmd/companion
-#   VERSION=0.1.0 ARCH=amd64 BINARY=dist/linux-amd64/companion \
-#     nfpm package -f build/linux/nfpm.yaml -p deb -t dist/
-#   VERSION=0.1.0 ARCH=amd64 BINARY=dist/linux-amd64/companion \
-#     nfpm package -f build/linux/nfpm.yaml -p rpm -t dist/
+#   GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build \
+#     -ldflags "-X main.version=${VERSION}" \
+#     -o dist/linux-amd64/companion ./cmd/companion
+#   VERSION=${VERSION} ARCH=amd64 nfpm package \
+#     --config build/linux/nfpm.yaml --packager deb --target dist/
+#   VERSION=${VERSION} ARCH=amd64 nfpm package \
+#     --config build/linux/nfpm.yaml --packager rpm --target dist/
 #
 # The arm64 packages are the same two commands with ARCH=arm64 and the arm64
-# binary. A plain .tar.gz of the same binary is the fallback for distributions
-# neither format covers:
-#
-#   tar -C dist/linux-amd64 -czf dist/auto-pigeon-companion-0.1.0-linux-amd64.tar.gz companion
+# binary. A plain .tar.gz is the fallback for every other distribution, built
+# directly from the same binary — see README.md. Skeleton, not wired into a
+# release workflow yet.
 
 name: auto-pigeon-companion
 arch: ${ARCH}
 platform: linux
 version: ${VERSION}
-section: utils
+section: games
 priority: optional
-maintainer: Andrea D'Intino <andrea@example.invalid>
+maintainer: Andrea D'Intino <noreply@example.com> # TODO(andrea): real maintainer address
 description: |
-  Auto-Pigeon Companion — local Quake map geometry operations with an
-  Auto-Pigeon account. Runs a local web UI in your default browser.
+  Auto-Pigeon Companion builds Quake maps, inspects them with the bundled
+  extractor, and launches games. Runs a local web GUI in the default browser,
+  or headless from the CLI.
 vendor: Andrea D'Intino
 homepage: https://github.com/andrea-dintino/auto-pigeon-companion
-license: Proprietary
+license: MIT
 
-# No runtime dependencies are declared: the binary is statically linked Go with
-# no CGO, and the bundled extractor is embedded in it. xdg-open (xdg-utils) is
-# used to launch the browser but is intentionally not a hard dependency —
-# without it the app still runs and prints its URL.
+# No dependencies: the binary is a static, CGO-free Go build, and it embeds its
+# own frontend and (in a release build) the extractor. The external
+# map-building tools are deliberately NOT packaged dependencies — they are
+# GPL-2.0 programs downloaded at runtime and run as separate processes, which is
+# what keeps this MIT package free of them. See THIRD_PARTY_NOTICES.md before
+# adding anything here.
+#
+# xdg-open (xdg-utils) opens the browser but is intentionally not a hard
+# dependency: without it the app still runs and prints its URL.
+depends: []
 
 contents:
-  - src: ${BINARY}
+  - src: ./dist/linux-${ARCH}/companion
     dst: /usr/bin/companion
     file_info:
       mode: 0755
+
+  - src: ./LICENSE
+    dst: /usr/share/doc/auto-pigeon-companion/LICENSE
+    type: config|noreplace
+
+  - src: ./THIRD_PARTY_NOTICES.md
+    dst: /usr/share/doc/auto-pigeon-companion/THIRD_PARTY_NOTICES.md
+    type: config|noreplace
+
+  - src: ./README.md
+    dst: /usr/share/doc/auto-pigeon-companion/README.md
+    type: config|noreplace
+
   - src: ./build/linux/auto-pigeon-companion.desktop
     dst: /usr/share/applications/auto-pigeon-companion.desktop
     file_info:
       mode: 0644
+
+rpm:
+  # TODO(andrea): unsigned. Package signing needs a GPG key that does not exist
+  # yet; see the release notes in README.md.
+  group: Amusements/Games
