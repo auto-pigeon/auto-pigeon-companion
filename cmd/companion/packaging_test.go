@@ -204,3 +204,29 @@ func TestNoCompiledInAUBPort(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestNoticesCoverEveryRedistributedComponent guards the two claims in
+// THIRD_PARTY_NOTICES.md that a code change could quietly falsify.
+//
+// The dangerous one is AUE: it is AGPL-3.0, and internal/aue/embed.go is
+// written for a build that puts its binary inside this executable. That is a
+// redistribution with obligations, and the notices are the only place saying
+// so, so a notices file that stopped saying it would be the whole failure.
+func TestNoticesCoverEveryRedistributedComponent(t *testing.T) {
+	notices := repoFile(t, "THIRD_PARTY_NOTICES.md")
+	mustContain(t, "THIRD_PARTY_NOTICES.md", notices,
+		"auto-pigeon-extractor",
+		"AGPL-3.0",
+		"GPL-2.0",
+		"MIT",
+	)
+
+	// The claim "no release embeds AUE yet" rests on this: the staging
+	// directory holds nothing but .gitkeep in a clean checkout, and .gitignore
+	// is what keeps a staged binary from ever being committed.
+	ignore := repoFile(t, ".gitignore")
+	mustContain(t, ".gitignore", ignore,
+		"/internal/aue/embedded/*",
+		"!/internal/aue/embedded/.gitkeep",
+	)
+}
