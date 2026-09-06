@@ -347,6 +347,9 @@ can stop a program you authorised from writing wherever you can write. What the
 containment checks stop is a *document* directing a program outside its declared
 roots, and the Companion reading or publishing anything outside them.
 
+Why there is exactly one executor, and why a crashed job is admitted rather than
+repaired, is [ADR-0003](docs/adr/0003-one-executor-and-the-record-is-what-says-a-job-ran.md).
+
 ### Launch
 
 ```console
