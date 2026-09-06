@@ -1,4 +1,4 @@
-// Package config owns AUL's on-disk local state: where it lives per platform,
+// Package config owns the Companion's on-disk local state: where it lives per platform,
 // what it holds, and how it is read and written.
 //
 // # What belongs here
@@ -11,15 +11,15 @@
 // # Why the directories come from the standard library
 //
 // os.UserConfigDir and os.UserCacheDir already encode the per-platform
-// conventions AUL needs — %AppData% on Windows, ~/Library/Application Support
+// conventions the Companion needs — %AppData% on Windows, ~/Library/Application Support
 // on macOS, $XDG_CONFIG_HOME (or ~/.config) elsewhere — so this package adds a
-// single "auto-pigeon-launcher" element under each and nothing more. Hand-rolled
+// single "auto-pigeon-companion" element under each and nothing more. Hand-rolled
 // path logic would be six branches of the same answer with more ways to be
 // wrong on a machine where XDG_CONFIG_HOME is set.
 //
 // The tool cache is deliberately under the *cache* directory rather than the
 // config directory: downloaded GPL-2.0 tool binaries are reproducible content
-// that AUL can re-fetch at any time, and putting them there means a user
+// that the Companion can re-fetch at any time, and putting them there means a user
 // clearing caches loses nothing but download time. See THIRD_PARTY_NOTICES.md
 // for why those binaries live outside this repository's own license.
 //
@@ -44,14 +44,19 @@ import (
 	"time"
 )
 
-// AppDirName is the single path element AUL adds under the OS config and cache
-// directories.
-const AppDirName = "auto-pigeon-launcher"
+// AppDirName is the single path element the Companion adds under the OS config
+// and cache directories.
+//
+// The retired Launcher used "auto-pigeon-launcher" here. Its file is not
+// abandoned: Migrate reads it and folds it in — see migrate.go and
+// LauncherAppDirName.
+const AppDirName = "auto-pigeon-companion"
 
 // DefaultPort is the loopback port the GUI server prefers.
 //
-// TODO(andrea): no port is registered for AUL. 8789 is simply an unassigned
-// high port unlikely to collide with a dev server; it is not a decision.
+// TODO(andrea): no port is registered for the Companion. 8789 is simply an
+// unassigned high port unlikely to collide with a dev server, inherited from
+// the Launcher bootstrap; it is not a decision.
 // Server startup falls back to an ephemeral port when this one is taken, so
 // the value only affects whether the URL is stable across runs.
 const DefaultPort = 8789
@@ -65,7 +70,7 @@ var ErrNotFound = errors.New("config: no config file")
 // TODO(andrea): confirm AUB's token lifetime and whether it issues a separate
 // refresh token. PocketBase's auth-with-password returns one JWT that is
 // refreshed by presenting it to auth-refresh, which is what internal/aub
-// assumes; Expires is AUL's own local estimate, not a value AUB returns.
+// assumes; Expires is the Companion's own local estimate, not a value AUB returns.
 type Session struct {
 	Token   string    `json:"token"`
 	UserID  string    `json:"user_id,omitempty"`
@@ -84,7 +89,7 @@ func (s Session) Valid() bool {
 	return s.Expires.IsZero() || time.Now().Before(s.Expires)
 }
 
-// Config is the whole of AUL's persisted local state.
+// Config is the whole of the Companion's persisted local state.
 type Config struct {
 	// AUBBaseURL is the auto-pigeon-backend instance to authenticate against.
 	AUBBaseURL string `json:"aub_base_url"`
@@ -99,6 +104,11 @@ type Config struct {
 	GameRoots map[string]string `json:"game_roots,omitempty"`
 	// Session is the current AUB login, if any.
 	Session Session `json:"session,omitempty"`
+	// MigratedFromLauncher records that the retired Auto-Pigeon Launcher's
+	// configuration has already been folded into this file. It is what makes
+	// Migrate idempotent without deleting the Launcher's own file — see
+	// migrate.go.
+	MigratedFromLauncher bool `json:"migrated_from_launcher,omitempty"`
 }
 
 // EnvAUBBaseURL names the environment variable that supplies AUB's address

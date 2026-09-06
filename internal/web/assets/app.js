@@ -1,9 +1,9 @@
 // Vanilla JS, no framework, no bundler, no npm. Loaded as a classic script from
 // the binary's embedded assets — see internal/web/embed.go for why.
 //
-// Every call goes to AUL's own loopback server; there are no external requests
+// Every call goes to the Companion's own loopback server; there are no external requests
 // and no third-party scripts, which is what keeps the GUI usable offline and
-// keeps an AUB session from being exposed to anything but AUL itself.
+// keeps an AUB session from being exposed to anything but the Companion itself.
 
 "use strict";
 

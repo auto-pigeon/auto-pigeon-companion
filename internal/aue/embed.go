@@ -21,7 +21,7 @@ import "embed"
 // The directory is otherwise empty (just .gitkeep), so a plain `go build`
 // during development produces a companion binary with no embedded AUE. That is
 // a supported development state: the runner reports ErrNoEmbeddedBinary, and
-// the AUC_AUE_BINARY override (see runner.go) lets a developer point at a
+// the AUCOM_AUE_BINARY override (see runner.go) lets a developer point at a
 // locally built AUE instead.
 //
 // The `embedded/*` pattern — rather than `embedded` — is what allows the

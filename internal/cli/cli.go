@@ -1,10 +1,10 @@
-// Package cli is AUL's hand-rolled subcommand framework and the commands built
+// Package cli is the Companion's hand-rolled subcommand framework and the commands built
 // on it.
 //
 // # Why hand-rolled
 //
-// No cobra, no CLI framework — matching auto-pigeon-companion's internal/cli and
-// AUE's own style, and the repository-wide preference for the standard library.
+// No cobra, no CLI framework — matching AUE's own style, and the
+// repository-wide preference for the standard library.
 // The whole dispatcher is Run below; a framework would be a dependency and a
 // vendored tree in exchange for code that fits on one screen.
 //
@@ -22,7 +22,7 @@
 //
 // # No subcommand means GUI mode
 //
-// This is the one place AUL's dispatcher differs from a plain CLI: an empty
+// This is the one place the dispatcher differs from a plain CLI: an empty
 // argument list is not an error, it is the GUI. Running the binary with no
 // arguments — which is what double-clicking it does — starts the local server
 // and opens the page in the default browser. Named subcommands run headless for
@@ -113,6 +113,11 @@ var commands = []Command{
 		Run:     runExtractor,
 	},
 	{
+		Name:    "migrate",
+		Summary: "fold Launcher and older Companion configuration into the current one",
+		Run:     runMigrate,
+	},
+	{
 		Name:    "version",
 		Summary: "print the build version",
 		Run:     runVersion,
@@ -164,10 +169,10 @@ func Run(env *Env, args []string) int {
 // cannot be added without appearing here.
 func UsageText() string {
 	var builder strings.Builder
-	builder.WriteString("auto-pigeon-launcher — build Quake maps and launch games\n\n")
+	builder.WriteString("companion — Auto-Pigeon Companion: build Quake maps, inspect them, and launch games\n\n")
 	builder.WriteString("usage:\n")
-	builder.WriteString("  auto-pigeon-launcher                 start the local GUI and open a browser\n")
-	builder.WriteString("  auto-pigeon-launcher <command> [arguments]\n\ncommands:\n")
+	builder.WriteString("  companion                 start the local GUI and open a browser\n")
+	builder.WriteString("  companion <command> [arguments]\n\ncommands:\n")
 
 	width := 0
 	invocations := make([]string, len(commands))
@@ -187,7 +192,7 @@ func UsageText() string {
 	return builder.String()
 }
 
-// newFlagSet builds a subcommand's FlagSet with AUL's shared conventions:
+// newFlagSet builds a subcommand's FlagSet with the Companion's shared conventions:
 // errors go to the command's own stderr, and the flag package's automatic usage
 // dump is suppressed so a bad flag produces one clear line.
 func newFlagSet(env *Env, name string) *flag.FlagSet {
@@ -217,7 +222,7 @@ func parseFlags(env *Env, set *flag.FlagSet, args []string) ([]string, int, bool
 //
 // Not every command wants this. `build --tool x -- --tool-flag` deliberately
 // uses parseFlags instead, because there the arguments after `--` belong to the
-// external tool verbatim and must not be re-parsed as AUL's own.
+// external tool verbatim and must not be re-parsed as the Companion's own.
 func parseInterspersed(env *Env, set *flag.FlagSet, args []string) ([]string, int, bool) {
 	var positionals []string
 	for {

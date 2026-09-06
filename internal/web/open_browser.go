@@ -35,7 +35,7 @@ func OpenBrowser(url string) error {
 	}
 	// Deliberately not waited on. `open` and `xdg-open` return immediately, but
 	// `cmd /c start` and some xdg-open implementations outlive the call, and
-	// blocking AUL's startup on the browser's lifetime would be wrong. The
+	// blocking the Companion's startup on the browser's lifetime would be wrong. The
 	// process is left to the OS; releasing it here would need a Wait in a
 	// goroutine whose only effect is reaping, which Go's os/exec already
 	// handles for a Start'd process that is never Wait'ed at exit.
@@ -52,7 +52,7 @@ func openCommand(goos, url string) (string, []string, error) {
 	// Only the loopback URLs this server produces are ever passed here. Guard
 	// against anything else reaching a shell-adjacent command like `start`: a
 	// URL beginning with "-" would be read as a flag, and a non-http scheme is
-	// not something AUL should be handing to the OS opener.
+	// not something the Companion should be handing to the OS opener.
 	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
 		return "", nil, fmt.Errorf("web: refusing to open a non-HTTP URL: %q", url)
 	}
@@ -66,7 +66,7 @@ func openCommand(goos, url string) (string, []string, error) {
 	case "darwin":
 		return "open", []string{url}, nil
 	default:
-		// Linux, and the BSDs if AUL is ever built for one. xdg-open is the
+		// Linux, and the BSDs if the Companion is ever built for one. xdg-open is the
 		// freedesktop standard and is what every desktop environment installs.
 		return "xdg-open", []string{url}, nil
 	}

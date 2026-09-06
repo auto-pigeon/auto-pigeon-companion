@@ -28,7 +28,7 @@ type BuildRequest struct {
 // output streamed to the given writers.
 //
 // This is the whole pipeline in one place so the CLI and the GUI drive the same
-// sequence — `launcher build` streams into the terminal, POST /api/build
+// sequence — `companion build` streams into the terminal, POST /api/build
 // buffers into a response, and neither one re-implements the steps.
 func Build(ctx context.Context, manager Manager, request BuildRequest, stdout, stderr io.Writer) error {
 	if manager == nil {

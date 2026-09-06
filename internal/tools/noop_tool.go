@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-// NoopToolName is the fake tool's name. `launcher build --tool noop` selects it.
+// NoopToolName is the fake tool's name. `companion build --tool noop` selects it.
 const NoopToolName = "noop"
 
 // NoopToolVersion is the fake tool's only version.
@@ -22,10 +22,10 @@ const NoopToolVersion = "0.0.0-fake"
 //
 // # Why this exists
 //
-// Which GPL-2.0 map-building tools AUL will drive is not decided, so there is
+// Which GPL-2.0 map-building tools the Companion will drive is not decided, so there is
 // no real binary to resolve, download, or run. Without a stand-in, every stage
 // of the pipeline would be untested code that first executes on the day a real
-// tool is wired in. This fake lets `launcher build` run the whole sequence —
+// tool is wired in. This fake lets `companion build` run the whole sequence —
 // resolve, cache, verify, run, stream output — today.
 //
 // # What is real and what is simulated
@@ -44,7 +44,7 @@ const NoopToolVersion = "0.0.0-fake"
 // use and what TestRunProcess covers.
 //
 // Nothing about this file weakens the licensing boundary: the fake tool is
-// AUL's own code, and it exists precisely so that no real GPL-2.0 binary has to
+// this repository's own code, and it exists precisely so that no real GPL-2.0 binary has to
 // be vendored to make the pipeline exercisable.
 type noopManager struct {
 	cacheDir string
@@ -55,7 +55,7 @@ func NewNoop(cacheDir string) Manager { return &noopManager{cacheDir: cacheDir} 
 
 // noopPayload is the fake tool's "binary" content. Fixed bytes, so its digest
 // is fixed, so the cache-hit path is reached on the second call.
-const noopPayload = "auto-pigeon-launcher fake tool: not a real program, not GPL-2.0, no external code\n"
+const noopPayload = "auto-pigeon-companion fake tool: not a real program, not GPL-2.0, no external code\n"
 
 func noopDigest() string {
 	sum := sha256.Sum256([]byte(noopPayload))

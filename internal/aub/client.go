@@ -1,20 +1,18 @@
-// Package aub is AUL's HTTP client for auto-pigeon-backend (AUB), a PocketBase
-// instance.
+// Package aub is the Companion's HTTP client for auto-pigeon-backend (AUB), a
+// PocketBase instance.
 //
-// # Deliberately duplicated, not shared
+// # One client, not two
 //
-// auto-pigeon-companion has a client of the same shape. That duplication is a
-// decision, not an oversight: a shared module for this much code would add a
-// versioned dependency between two independently released desktop apps in
-// exchange for saving a few hundred lines. If this file grows a real protocol —
-// pagination, filters, realtime subscriptions used by both apps — revisit it
-// then, with the sizes on the table.
+// The Launcher and the Companion each carried a client of this shape, and the
+// duplication was defended on the grounds that they were independently released
+// apps. They are now one app, so there is one client: this file, the better
+// covered of the two.
 //
 // # Stdlib only
 //
 // net/http and encoding/json. There is no PocketBase Go SDK dependency, for the
-// same reason there is no CLI framework: the surface AUL needs is two auth
-// endpoints and one collection listing.
+// same reason there is no CLI framework: the surface the Companion needs is two
+// auth endpoints and one collection listing.
 package aub
 
 import (
@@ -182,7 +180,8 @@ func newAPIError(path string, response *http.Response) error {
 // ListRecords fetches one page of a PocketBase collection into out, which must
 // point at a struct with an "items" field of the record type.
 //
-// TODO(andrea): the collection names and schemas AUL reads are not confirmed —
+// TODO(andrea): the collection names and schemas the Companion reads are not
+// confirmed —
 // see internal/launch/config.go. This is the transport those calls will use;
 // it is not itself schema-specific.
 func (c *Client) ListRecords(ctx context.Context, collection string, query url.Values, out any) error {

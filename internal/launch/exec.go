@@ -62,7 +62,7 @@ type Plan struct {
 }
 
 // String renders the plan the way a shell would show it. Quoting is
-// approximate — this is for display, never for re-execution, since AUL runs the
+// approximate — this is for display, never for re-execution, since the Companion runs the
 // argv directly and never through a shell.
 func (p Plan) String() string {
 	parts := make([]string, 0, len(p.Args)+1)
@@ -78,7 +78,7 @@ func (p Plan) String() string {
 // expand substitutes the placeholders a launch config may contain.
 //
 // Only these four (plus {map}) are recognised, and an unknown placeholder is
-// left untouched rather than erroring: a config authored against a future AUL
+// left untouched rather than erroring: a config authored against a future Companion
 // that knows more placeholders should degrade to a visibly wrong path, not to a
 // launch that refuses to start with a message about a placeholder the user
 // cannot remove.
@@ -116,7 +116,7 @@ func Resolve(request Request) (Plan, error) {
 	executable := expand(request.Config.ExecutablePattern, request, platform)
 	// Configs are written with forward slashes because they come from a
 	// server and are read by humans; Windows accepts them, but normalising
-	// means the path AUL reports matches the one a user would type.
+	// means the path the Companion reports matches the one a user would type.
 	executable = filepath.FromSlash(executable)
 	// A pattern may omit {exe} and still need the suffix on Windows.
 	if suffix := platform.ExeSuffix(); suffix != "" && !strings.EqualFold(filepath.Ext(executable), suffix) {

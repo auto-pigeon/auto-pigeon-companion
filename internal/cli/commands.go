@@ -24,17 +24,43 @@ import (
 //
 // TODO(andrea): revisit if a x/term dependency becomes acceptable — it is
 // CGO-free and would fix the echo problem on all six targets.
-const PasswordEnv = "AUL_PASSWORD"
+const PasswordEnv = "AUCOM_PASSWORD"
+
+// LegacyPasswordEnv is the retired Launcher's spelling of PasswordEnv. It is
+// still read, so a script written against the Launcher keeps working, but it
+// warns: a variable name that silently keeps working forever is a rename that
+// never finishes.
+const LegacyPasswordEnv = "AUL_PASSWORD"
 
 // loadSettings reads the local config, tolerating a first run with no file.
+//
+// Every command goes through here, so every command migrates first. That is
+// deliberate: a user who runs `companion auth status` after upgrading from the
+// Launcher should see their session, not an empty config that a later `serve`
+// would have fixed. config.Migrate writes nothing when there is nothing to do,
+// so the cost on an already-current machine is two stat calls.
 func loadSettings(env *Env) (config.Config, error) {
 	if env.ConfigPath != "" {
+		// An explicit path is a test or a --config flag pointing somewhere
+		// deliberate; migrating the real config directory from under it would
+		// be a surprising side effect of asking for a different file.
 		settings, err := config.LoadFrom(env.ConfigPath)
 		if errors.Is(err, config.ErrNotFound) {
 			return settings, nil
 		}
 		return settings, err
 	}
+
+	if report, err := config.Migrate(); err != nil {
+		// A migration failure is not fatal to the command being run: the
+		// existing config is untouched (nothing is overwritten before its
+		// backup succeeds), so the honest response is to say so and carry on
+		// with whatever is on disk.
+		fmt.Fprintf(env.Stderr, "warning: could not migrate local configuration: %v\n", err)
+	} else if report.Performed {
+		fmt.Fprint(env.Stderr, report.Summary())
+	}
+
 	settings, err := config.Load()
 	if errors.Is(err, config.ErrNotFound) {
 		return settings, nil
@@ -123,7 +149,7 @@ func runServe(env *Env, args []string) int {
 		return fail(env, err)
 	}
 	url := web.URL(listener)
-	fmt.Fprintf(env.Stdout, "auto-pigeon-launcher %s listening on %s\n", env.Version, url)
+	fmt.Fprintf(env.Stdout, "companion %s listening on %s\n", env.Version, url)
 
 	if *open {
 		opener := env.OpenBrowser
@@ -217,6 +243,11 @@ func readPassword(env *Env) (string, int, bool) {
 	if value, ok := env.lookenv(PasswordEnv); ok && value != "" {
 		return value, 0, true
 	}
+	if value, ok := env.lookenv(LegacyPasswordEnv); ok && value != "" {
+		fmt.Fprintf(env.Stderr, "warning: %s is the retired Launcher's name for %s; set %s instead\n",
+			LegacyPasswordEnv, PasswordEnv, PasswordEnv)
+		return value, 0, true
+	}
 	if env.Stdin == nil {
 		fmt.Fprintf(env.Stderr, "error: no password: set %s or pipe one on stdin\n", PasswordEnv)
 		return "", 2, false
@@ -226,7 +257,7 @@ func readPassword(env *Env) (string, int, bool) {
 	reader := bufio.NewReader(env.Stdin)
 	line, err := reader.ReadString('\n')
 	// io.EOF with content is a piped password without a trailing newline, which
-	// is the normal shape of `printf %s "$p" | launcher auth login`.
+	// is the normal shape of `printf %s "$p" | companion auth login`.
 	if err != nil && line == "" {
 		fmt.Fprintf(env.Stderr, "error: reading the password: %v\n", err)
 		return "", 2, false
@@ -416,5 +447,32 @@ func runExtractor(env *Env, args []string) int {
 		return fail(env, err)
 	}
 	fmt.Fprintln(env.Stdout, strings.TrimSpace(string(stdout)))
+	return 0
+}
+
+// runMigrate runs the configuration migration on demand and prints its full
+// report.
+//
+// The same migration runs automatically before every other command, so this
+// exists for the two cases where automatic is not enough: checking what would
+// be carried over before trusting it, and seeing the conflict list again after
+// the first run scrolled past.
+func runMigrate(env *Env, args []string) int {
+	set := newFlagSet(env, "migrate")
+	if _, code, ok := parseFlags(env, set, args); !ok {
+		return code
+	}
+	if env.ConfigPath != "" {
+		fmt.Fprintln(env.Stderr, "error: migrate operates on the standard config location, not an explicit path")
+		return 2
+	}
+	report, err := config.Migrate()
+	if err != nil {
+		return fail(env, err)
+	}
+	fmt.Fprint(env.Stdout, report.Summary())
+	if !strings.HasSuffix(report.Summary(), "\n") {
+		fmt.Fprintln(env.Stdout)
+	}
 	return 0
 }

@@ -136,14 +136,23 @@ func TestExtractorVersionRouteReturnsRunnerOutput(t *testing.T) {
 	}
 }
 
-func TestExtractorRouteWithNoRunnerIsUnavailable(t *testing.T) {
-	server := serverWithRunner(t, nil)
-	response, body := do(t, server, http.MethodGet, "/api/aue/version", "")
-	if response.StatusCode != http.StatusServiceUnavailable {
-		t.Fatalf("status = %d, want 503", response.StatusCode)
-	}
-	if !strings.Contains(body["error"].(string), aue.EnvBinaryOverride) {
-		t.Errorf("error %q does not name %s", body["error"], aue.EnvBinaryOverride)
+// TestExtractorRouteWhenUnavailable covers both shapes of "this build cannot
+// run AUE": no runner at all, and a runner that reports itself unavailable
+// because nothing was embedded and no override is set.
+func TestExtractorRouteWhenUnavailable(t *testing.T) {
+	for name, runner := range map[string]aue.Runner{
+		"no runner":            nil,
+		"runner not available": &stubRunner{available: false},
+	} {
+		server := serverWithRunner(t, runner)
+		response, body := do(t, server, http.MethodGet, "/api/aue/version", "")
+		if response.StatusCode != http.StatusServiceUnavailable {
+			t.Errorf("%s: status = %d, want 503", name, response.StatusCode)
+			continue
+		}
+		if !strings.Contains(body["error"].(string), aue.EnvBinaryOverride) {
+			t.Errorf("%s: error %q does not name %s", name, body["error"], aue.EnvBinaryOverride)
+		}
 	}
 }
 

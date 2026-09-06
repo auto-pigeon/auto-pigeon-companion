@@ -8,18 +8,22 @@ import (
 	"time"
 )
 
-// AuthCollection is the PocketBase auth collection AUL authenticates against.
+// AuthCollection is the PocketBase auth collection the Companion authenticates
+// against.
 //
 // TODO(andrea): confirm this is the right collection. "users" is PocketBase's
 // default auth collection name; AUB may authenticate desktop clients against a
-// different one, or against _superusers for admin flows AUL should never use.
+// different one, or against _superusers for admin flows the Companion should
+// never use.
 const AuthCollection = "users"
 
-// assumedTokenLifetime is how long AUL treats a fresh token as good for.
+// assumedTokenLifetime is how long the Companion treats a fresh token as good
+// for.
 //
 // PocketBase's auth token is a JWT whose expiry is in its payload, and the
 // honest way to know it is to decode that payload. This deliberately does not:
-// unverified parsing of a token AUL only ever forwards would be reading a
+// unverified parsing of a token the Companion only ever forwards would be
+// reading a
 // claim it cannot check, and the consequence of guessing low is a redundant
 // refresh, while guessing high is one rejected request that already has a
 // handled path (APIError.Unauthorized). Two weeks is PocketBase's own default.

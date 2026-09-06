@@ -230,7 +230,7 @@ func TestListenBindsLoopbackOnly(t *testing.T) {
 	}
 }
 
-// A port already in use must not stop AUL from starting.
+// A port already in use must not stop the Companion from starting.
 func TestListenFallsBackWhenThePortIsTaken(t *testing.T) {
 	occupied, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

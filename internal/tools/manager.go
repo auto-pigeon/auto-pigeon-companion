@@ -1,5 +1,5 @@
 // Package tools resolves, downloads, verifies, and runs the external map-building
-// tools AUL drives.
+// tools the Companion drives.
 //
 // # The licensing boundary this package exists to enforce
 //
@@ -139,8 +139,8 @@ type cacheManager struct {
 // New returns a Manager caching downloaded tools under cacheDir.
 //
 // The platform is fixed to the running one. A cross-platform Resolve would be
-// meaningless here: AUL runs the tool it downloads on the machine it is
-// running on.
+// meaningless here: the Companion runs the tool it downloads on the machine it
+// is running on.
 func New(cacheDir string) Manager {
 	return &cacheManager{
 		cacheDir:   cacheDir,
@@ -282,8 +282,8 @@ func (m *cacheManager) download(ctx context.Context, ref ToolRef, path string) e
 // Run executes the tool at path as a separate process.
 //
 // This function is the licensing boundary in code: an external tool is reached
-// only through exec.CommandContext, and its interface to AUL is argv plus two
-// output streams. Nothing here loads tool code into this process, and nothing
+// only through exec.CommandContext, and its interface to the Companion is argv
+// plus two output streams. Nothing here loads tool code into this process, and nothing
 // added here ever may.
 func (m *cacheManager) Run(ctx context.Context, path string, args []string, stdout, stderr io.Writer) error {
 	return RunProcess(ctx, path, args, "", stdout, stderr)

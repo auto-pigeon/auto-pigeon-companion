@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// fakeAUB stands in for PocketBase: it answers the two auth endpoints AUL uses
+// fakeAUB stands in for PocketBase: it answers the two auth endpoints the Companion uses
 // and records what it was sent, so the request shape is asserted rather than
 // assumed.
 func fakeAUB(t *testing.T) (*httptest.Server, *[]*http.Request) {

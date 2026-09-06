@@ -415,7 +415,11 @@ func (s *Server) handleLaunch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAUEVersion(w http.ResponseWriter, r *http.Request) {
-	if s.runner == nil {
+	// "this build has no extractor" is a property of the installation, not a
+	// failure of the request, so it is 503 with the message that names the
+	// override — the same thing the page says next to its disabled button.
+	// Only an extractor that exists and then fails is 502.
+	if !aue.Available(s.runner) {
 		writeError(w, http.StatusServiceUnavailable, aue.ErrNoEmbeddedBinary)
 		return
 	}

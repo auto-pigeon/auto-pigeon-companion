@@ -5,7 +5,7 @@
 // AUE's packages all live under internal/, and Go's internal-package rule
 // blocks a different module from importing them. That is not an obstacle to
 // route around: AUE's CLI is its supported public surface, and its subcommands
-// already print JSON. So AUC shells out and reads stdout, and AUE never
+// already print JSON. So the Companion shells out and reads stdout, and AUE never
 // appears in go.mod.
 //
 // # Why an interface
@@ -43,8 +43,12 @@ import (
 // EnvBinaryOverride names an on-disk AUE binary to use instead of the embedded
 // one. It exists for development (a plain `go build` embeds nothing) and for
 // support cases where a user must be moved onto a patched AUE without a new
-// companion release.
-const EnvBinaryOverride = "AUC_AUE_BINARY"
+// Companion release.
+const EnvBinaryOverride = "AUCOM_AUE_BINARY"
+
+// LegacyEnvBinaryOverride is the first Companion bootstrap's spelling of
+// EnvBinaryOverride, still read so an existing development setup keeps working.
+const LegacyEnvBinaryOverride = "AUC_AUE_BINARY"
 
 // ErrNoEmbeddedBinary is returned when the companion binary was built without
 // an AUE binary staged in internal/aue/embedded/ and no override is set.
@@ -94,7 +98,11 @@ type EmbeddedRunner struct {
 // Extraction is deferred to the first Run, so constructing a runner is free
 // and a companion process that never touches AUE never writes to disk.
 func NewEmbeddedRunner() *EmbeddedRunner {
-	return &EmbeddedRunner{override: os.Getenv(EnvBinaryOverride)}
+	override := os.Getenv(EnvBinaryOverride)
+	if override == "" {
+		override = os.Getenv(LegacyEnvBinaryOverride)
+	}
+	return &EmbeddedRunner{override: override}
 }
 
 // binaryPath resolves the executable path, extracting the embedded binary once.
@@ -237,7 +245,7 @@ func trimmed(text string) string {
 // the frontend has something to show before any real feature exists.
 //
 // It is a snapshot, not a contract: AUE's internal/cli/cli.go is authoritative
-// and has been growing. Nothing in AUC validates against this list before
+// and has been growing. Nothing in the Companion validates against this list before
 // spawning — AUE rejects an unknown subcommand with exit code 2 and a clear
 // message, which is a better error than one derived from a stale copy.
 var KnownSubcommands = []string{
