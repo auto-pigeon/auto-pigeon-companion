@@ -1,17 +1,13 @@
 package launch
 
 import (
-	"context"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
-
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/tools"
 )
 
 // Platform is the target a config is resolved for. It is a parameter rather
@@ -172,20 +168,4 @@ func (p Plan) Verify() error {
 		}
 	}
 	return nil
-}
-
-// Run starts the game and waits for it to exit, streaming its output.
-//
-// Waiting rather than detaching is the right default for both callers: the CLI
-// wants the game's exit status, and the GUI wants to know when the session
-// ended. A detached "launch and forget" mode can be added when something asks
-// for it; guessing at it now would mean two code paths with one of them
-// untested.
-func Run(ctx context.Context, plan Plan, stdout, stderr io.Writer) error {
-	if err := plan.Verify(); err != nil {
-		return err
-	}
-	// Same process runner the external tools use, so stream handling and exit
-	// status reporting cannot drift between the two.
-	return tools.RunProcess(ctx, plan.Executable, plan.Args, plan.WorkingDir, stdout, stderr)
 }

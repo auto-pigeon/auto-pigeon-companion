@@ -246,10 +246,17 @@ func (s *Service) worker() {
 // instead of a failed job the user has to open to find out why.
 func (s *Service) Submit(request Request) (*Job, error) {
 	s.mu.Lock()
-	closed := s.closed
+	closed, started := s.closed, s.started
 	s.mu.Unlock()
 	if closed {
 		return nil, errors.New("job: the Companion is shutting down and is not accepting jobs")
+	}
+	if !started {
+		// Without workers a submission would be recorded, queued, and never
+		// looked at again — a job that sits in `queued` forever, which is a
+		// worse answer than a refusal. Reading the store needs no workers, so
+		// list, show, logs and cancel work on a service nobody started.
+		return nil, errors.New("job: this job service was opened for reading only and cannot run anything")
 	}
 
 	entry, action, err := s.resolveAction(request)

@@ -3,6 +3,13 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!--
+      The local API token for this run of the server, substituted when the page
+      is served. It is here rather than in a cookie or in the URL: a header the
+      script sets cannot be attached by a cross-origin page, and nothing the
+      browser sends on its own authenticates anything. See internal/web/auth.go.
+    -->
+    <meta name="aucom-api-token" content="__AUCOM_API_TOKEN__" />
     <title>Auto-Pigeon Companion</title>
     <link rel="stylesheet" href="app.css" />
   </head>
@@ -37,16 +44,25 @@
         <pre id="extractor-output" class="output" aria-live="polite"></pre>
       </section>
 
-      <section id="build-section">
-        <h2>Build</h2>
+      <section id="jobs-section">
+        <h2>Jobs</h2>
         <p class="muted">
-          No real map-building tool is wired up yet. This runs the fake tool so the
-          resolve → download → verify → run pipeline can be exercised end to end.
+          Every program the Companion runs is a job: a compile, a game, anything a
+          profile declares. Choose an action, see exactly what would run, then run it.
         </p>
         <div class="row">
-          <button type="button" id="build-button">Run build</button>
+          <label for="job-profile">Profile</label>
+          <select id="job-profile"></select>
+          <label for="job-action">Action</label>
+          <select id="job-action"></select>
         </div>
-        <pre id="build-output" class="output" aria-live="polite"></pre>
+        <div class="row">
+          <button type="button" id="job-preview-button">Preview command</button>
+          <button type="button" id="job-run-button">Run</button>
+          <button type="button" id="job-refresh-button">Refresh list</button>
+        </div>
+        <pre id="job-output" class="output" aria-live="polite"></pre>
+        <ul id="job-list" class="job-list"></ul>
       </section>
 
       <section id="launch-section">

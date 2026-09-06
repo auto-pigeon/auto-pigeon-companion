@@ -162,3 +162,59 @@ func (c *DirCatalog) readDir() ([]CatalogEntry, error) {
 	sort.Slice(out, func(i, j int) bool { return out[i].Profile.Metadata().ID < out[j].Profile.Metadata().ID })
 	return out, nil
 }
+
+// Chain is several catalogs read as one, first match winning by order.
+//
+// Order is the resolution rule and it is deliberately not "most specific" or
+// "highest trust": the first catalog in the chain is the authority for any id
+// it has. That makes "which document ran" answerable by reading the chain, and
+// [DirCatalog] still refuses two documents with the same id inside itself, so
+// the only shadowing that can happen is between chain members a caller chose.
+type Chain []Catalog
+
+// Lookup returns the first catalog's entry for an id.
+func (c Chain) Lookup(id string) (CatalogEntry, error) {
+	var first error
+	for _, catalog := range c {
+		entry, err := catalog.Lookup(id)
+		if err == nil {
+			return entry, nil
+		}
+		if first == nil || !errors.Is(err, ErrNoProfile) {
+			// A catalog that failed for a reason other than "not here" is
+			// reported rather than skipped: a profile directory that cannot be
+			// read is something the user needs to know about, not a silent
+			// fallthrough to the next source.
+			if !errors.Is(err, ErrNoProfile) {
+				return CatalogEntry{}, err
+			}
+			first = err
+		}
+	}
+	if first == nil {
+		return CatalogEntry{}, fmt.Errorf("%w: %q", ErrNoProfile, id)
+	}
+	return CatalogEntry{}, first
+}
+
+// List returns every entry, in chain order, skipping ids an earlier catalog
+// already claimed.
+func (c Chain) List() ([]CatalogEntry, error) {
+	var out []CatalogEntry
+	seen := map[string]bool{}
+	for _, catalog := range c {
+		entries, err := catalog.List()
+		if err != nil {
+			return nil, err
+		}
+		for _, entry := range entries {
+			id := entry.Profile.Metadata().ID
+			if seen[id] {
+				continue
+			}
+			seen[id] = true
+			out = append(out, entry)
+		}
+	}
+	return out, nil
+}

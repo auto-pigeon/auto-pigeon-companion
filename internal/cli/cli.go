@@ -31,7 +31,7 @@
 // # Exit codes
 //
 //	0  success
-//	1  the operation failed (login rejected, tool run failed, game exited non-zero)
+//	1  the operation failed (login rejected, a job did not succeed)
 //	2  the invocation was wrong (unknown subcommand, bad flags, missing argument)
 package cli
 
@@ -98,9 +98,9 @@ var commands = []Command{
 		Run:     runAuth,
 	},
 	{
-		Name: "build", Usage: "[--tool <name>] [--tool-version <v>] [-- <tool args>...]",
-		Summary: "run an external map-building tool",
-		Run:     runBuild,
+		Name: "job", Usage: "run | preview | list | show | logs | cancel | retry | artifacts | profiles",
+		Summary: "run a profile action as a supervised job, and inspect what ran",
+		Run:     runJob,
 	},
 	{
 		Name: "profile", Usage: "validate | show | canonicalize | digest | diff | list | schema",
@@ -109,7 +109,7 @@ var commands = []Command{
 	},
 	{
 		Name: "launch", Usage: "<game> [--map <name>] [--game-root <dir>] [--dry-run]",
-		Summary: "launch a game using its AUB launch config",
+		Summary: "launch a game as a supervised job, using its AUB launch config",
 		Run:     runLaunch,
 	},
 	{

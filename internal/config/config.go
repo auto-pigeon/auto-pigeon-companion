@@ -98,6 +98,15 @@ type Config struct {
 	// ToolCacheDir overrides the default external-tool cache location. Empty
 	// means DefaultToolCacheDir.
 	ToolCacheDir string `json:"tool_cache_dir,omitempty"`
+	// JobsDir overrides where the job store lives. Empty means
+	// DefaultJobsDir.
+	JobsDir string `json:"jobs_dir,omitempty"`
+	// ProfilesDir overrides where imported profile documents are read from.
+	// Empty means DefaultProfilesDir.
+	ProfilesDir string `json:"profiles_dir,omitempty"`
+	// JobConcurrency is how many jobs run at once. Zero lets the executor
+	// choose from the machine.
+	JobConcurrency int `json:"job_concurrency,omitempty"`
 	// GameRoots maps a game name to the directory its executable lives under,
 	// filling the {game_root} placeholder in a launch config's executable
 	// pattern. See internal/launch.
@@ -189,6 +198,74 @@ func (c Config) ToolCache() (string, error) {
 		return c.ToolCacheDir, nil
 	}
 	return DefaultToolCacheDir()
+}
+
+// EnvJobsDir and EnvProfilesDir override the two directories the executor
+// uses. They exist for two real cases: a machine whose home directory is on a
+// small disk, and a test that must not touch the developer's own state.
+const (
+	EnvJobsDir     = "AUCOM_JOBS_DIR"
+	EnvProfilesDir = "AUCOM_PROFILES_DIR"
+)
+
+// DefaultJobsDir is where job records, logs and published artifacts live.
+//
+// Under the *cache* directory, alongside the tool cache, because everything in
+// it is reproducible: a job's artifacts are files the user asked a tool to
+// produce, and the ones they wanted kept were written where they asked. A user
+// clearing caches loses build history, not work.
+func DefaultJobsDir() (string, error) {
+	base, err := os.UserCacheDir()
+	if err != nil {
+		return "", fmt.Errorf("config: locating the user cache directory: %w", err)
+	}
+	return filepath.Join(base, AppDirName, "jobs"), nil
+}
+
+// Jobs resolves the effective job store directory.
+func (c Config) Jobs() (string, error) {
+	if fromEnv := strings.TrimSpace(os.Getenv(EnvJobsDir)); fromEnv != "" {
+		return fromEnv, nil
+	}
+	if c.JobsDir != "" {
+		return c.JobsDir, nil
+	}
+	return DefaultJobsDir()
+}
+
+// DefaultProfilesDir is where imported profile documents are read from.
+//
+// Under the *config* directory, not the cache: an imported profile is
+// something the user chose and reviewed, and a cache clean must not silently
+// remove the description of the toolchain their projects are built with.
+func DefaultProfilesDir() (string, error) {
+	dir, err := Dir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "profiles"), nil
+}
+
+// Profiles resolves the effective profile directory.
+func (c Config) Profiles() (string, error) {
+	if fromEnv := strings.TrimSpace(os.Getenv(EnvProfilesDir)); fromEnv != "" {
+		return fromEnv, nil
+	}
+	if c.ProfilesDir != "" {
+		return c.ProfilesDir, nil
+	}
+	return DefaultProfilesDir()
+}
+
+// BindingsPath is the file recording what is installed on this machine and
+// what the user granted it. It sits beside config.json, and like it, it is
+// state the user chose rather than something re-derivable.
+func BindingsPath() (string, error) {
+	dir, err := Dir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "bindings.json"), nil
 }
 
 // Load reads config.json, filling unset fields from Default. A missing file

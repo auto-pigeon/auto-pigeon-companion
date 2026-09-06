@@ -16,19 +16,22 @@
 // reachable from the network, and binding the loopback address is the control
 // that guarantees it rather than hoping a firewall does.
 //
-// # Same-origin guard
+// # The guard
 //
 // Loopback is not by itself a boundary: a page the user has open on some other
-// origin can script requests at a known local port. So every API route goes
-// through guard, which rejects a request carrying a cross-origin Origin header,
-// and every mutating route is POST-only so a plain cross-site form or <img>
-// cannot reach it. Both are cheap and stdlib-only.
+// origin can script requests at a known local port, and a name that resolves to
+// 127.0.0.1 makes those requests look local. So every API route goes through
+// [Server.guard]: a per-run token in a request *header*, a Host that must name
+// a loopback address, an Origin that must match it, and Sec-Fetch-Site when the
+// browser sends it. See auth.go, which explains what each check is for and what
+// the token does not cover.
 //
-// TODO(andrea): neither guard authenticates the *caller*. Any process running
-// as the user can still drive this server while it is up. The usual remedy is a
-// random token minted at startup, put in the URL that gets opened, and required
-// on every API call. Worth doing before any release; noted rather than
-// half-built.
+// # Nothing runs here
+//
+// This package starts no processes. Everything that does goes to
+// [job.Service], which the CLI drives too — so a rule the executor enforces is
+// enforced for the browser as well, rather than for whichever caller went
+// through the right function.
 package web
 
 import (
@@ -37,11 +40,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"net"
 	"net/http"
-	"net/url"
 	"runtime"
 	"strings"
 	"time"
@@ -49,8 +50,8 @@ import (
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/aub"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/aue"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/launch"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/tools"
 )
 
 // DrainTimeout is how long a shutdown waits for in-flight requests.
@@ -61,9 +62,14 @@ type Server struct {
 	version  string
 	client   *aub.Client
 	provider launch.Provider
-	manager  tools.Manager
+	jobs     *job.Service
 	runner   aue.Runner
 	settings config.Config
+	token    *Token
+	// index is the frontend page with the API token substituted in. Built once
+	// at construction: the token does not change during a run, and rebuilding
+	// it per request would be a string replacement on every page load.
+	index []byte
 
 	// saveConfig persists a changed config. Held as a field so tests can point
 	// it at a temporary file instead of the user's real config directory.
@@ -78,13 +84,19 @@ type Options struct {
 	Version  string
 	Client   *aub.Client
 	Provider launch.Provider
-	Manager  tools.Manager
+	// Jobs is the process runtime. A server without one still serves the page
+	// and the account routes; the job routes report that this build has none.
+	Jobs *job.Service
 	// AUE runs extractor subcommands. Injected so tests, and a future
 	// HTTP-backed runner, need no change here.
 	AUE    aue.Runner
 	Config config.Config
 	// SaveConfig persists configuration changes; nil means config.Save.
 	SaveConfig func(config.Config) error
+	// Token authenticates every API request. Nil mints one, which is what a
+	// test wants; `companion serve` passes the token it published so another
+	// process can use it.
+	Token *Token
 }
 
 // NewServer builds the server and its routes.
@@ -107,16 +119,6 @@ func NewServer(options Options) (*Server, error) {
 		}
 	}
 
-	manager := options.Manager
-	if manager == nil {
-		cache, err := settings.ToolCache()
-		if err != nil {
-			return nil, err
-		}
-		// The fake tool until real ones are chosen — see internal/tools.
-		manager = tools.NewNoop(cache)
-	}
-
 	provider := options.Provider
 	if provider == nil {
 		provider = launch.ExampleProvider()
@@ -127,18 +129,35 @@ func NewServer(options Options) (*Server, error) {
 		save = config.Save
 	}
 
+	token := options.Token
+	if token == nil {
+		var err error
+		if token, err = NewToken(); err != nil {
+			return nil, err
+		}
+	}
+
 	server := &Server{
 		version:    options.Version,
 		client:     client,
 		provider:   provider,
-		manager:    manager,
+		jobs:       options.Jobs,
 		runner:     options.AUE,
 		settings:   settings,
+		token:      token,
 		saveConfig: save,
 	}
+	index, err := indexPage(token)
+	if err != nil {
+		return nil, err
+	}
+	server.index = index
 	server.handler = server.routes()
 	return server, nil
 }
+
+// Token is the credential this server requires on every API request.
+func (s *Server) Token() *Token { return s.token }
 
 // ServeHTTP makes the Server an http.Handler, which is what lets tests drive it
 // with httptest.NewServer and no port of its own.
@@ -149,47 +168,88 @@ func (s *Server) routes() http.Handler {
 
 	// http.ServeMux, not a router dependency: fixed paths, no path parameters,
 	// no middleware stack. Same reasoning as the no-CLI-framework decision.
-	mux.Handle("GET /", http.FileServerFS(assetsFS()))
-	mux.Handle("GET /api/status", guard(s.handleStatus))
-	mux.Handle("POST /api/auth/login", guard(s.handleLogin))
-	mux.Handle("POST /api/auth/logout", guard(s.handleLogout))
-	mux.Handle("GET /api/launch-configs", guard(s.handleLaunchConfigs))
-	mux.Handle("POST /api/build", guard(s.handleBuild))
-	mux.Handle("POST /api/launch", guard(s.handleLaunch))
+	// The page itself carries the API token, so it is served from memory
+	// rather than straight off the embedded filesystem. Everything else —
+	// the stylesheet, the script — is static.
+	mux.Handle("GET /{$}", http.HandlerFunc(s.handleIndex))
+	mux.Handle("GET /index.html", http.HandlerFunc(s.handleIndex))
+	mux.Handle("GET /", s.hostGuard(http.FileServerFS(assetsFS())))
+
+	mux.Handle("GET /api/status", s.guard(s.handleStatus))
+	mux.Handle("POST /api/auth/login", s.guard(s.handleLogin))
+	mux.Handle("POST /api/auth/logout", s.guard(s.handleLogout))
+	mux.Handle("GET /api/launch-configs", s.guard(s.handleLaunchConfigs))
+	mux.Handle("POST /api/launch", s.guard(s.handleLaunch))
 	// Deliberately not a general "run any AUE subcommand" escape hatch: each
 	// extractor operation gets its own route with its own validated inputs as
 	// features land. This one proves the subprocess path end to end.
-	mux.Handle("GET /api/aue/version", guard(s.handleAUEVersion))
+	mux.Handle("GET /api/aue/version", s.guard(s.handleAUEVersion))
 
+	s.jobRoutes(mux)
 	return mux
 }
 
-// guard rejects cross-origin API calls. See the package comment.
-func guard(handler http.HandlerFunc) http.Handler {
+// guard applies every check in auth.go to an API route.
+func (s *Server) guard(handler http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !sameOrigin(r) {
-			writeError(w, http.StatusForbidden, errors.New("cross-origin requests are not allowed"))
+		if status, err := checkRequest(r, s.token); err != nil {
+			writeError(w, status, err)
 			return
 		}
 		handler(w, r)
 	})
 }
 
-// sameOrigin accepts a request with no Origin header — a plain navigation, or a
-// curl from the CLI examples in README.md — and one whose Origin host matches
-// the Host it was sent to. Comparing against r.Host rather than a remembered
-// listener address is what keeps this correct whichever loopback spelling the
-// user's browser resolved.
-func sameOrigin(r *http.Request) bool {
-	origin := r.Header.Get("Origin")
-	if origin == "" {
-		return true
+// hostGuard is the guard without the token, for the static assets a browser
+// fetches before it has one.
+//
+// The Host check still applies: a page served to a rebound name would be a page
+// on an attacker's origin, holding this server's token.
+func (s *Server) hostGuard(handler http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !loopbackHost(r.Host) {
+			writeError(w, http.StatusForbidden,
+				fmt.Errorf("this server answers only to a loopback address; %q is not one", r.Host))
+			return
+		}
+		handler.ServeHTTP(w, r)
+	})
+}
+
+// handleIndex serves the page with this run's API token in it.
+func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
+	if !loopbackHost(r.Host) {
+		writeError(w, http.StatusForbidden,
+			fmt.Errorf("this server answers only to a loopback address; %q is not one", r.Host))
+		return
 	}
-	parsed, err := url.Parse(origin)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// Never cached: it carries a credential that is only valid for this run.
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	// The page loads nothing from anywhere else and never has: stated as a
+	// policy the browser enforces rather than as a property of the source.
+	w.Header().Set("Content-Security-Policy",
+		"default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.Write(s.index)
+}
+
+// tokenPlaceholder is what indexPage substitutes. It is in the embedded page so
+// the page is a complete, readable file rather than a template with a hole.
+const tokenPlaceholder = "__AUCOM_API_TOKEN__"
+
+func indexPage(token *Token) ([]byte, error) {
+	raw, err := fs.ReadFile(assetsFS(), "index.html")
 	if err != nil {
-		return false
+		return nil, fmt.Errorf("web: reading the embedded page: %w", err)
 	}
-	return strings.EqualFold(parsed.Host, r.Host)
+	if !bytes.Contains(raw, []byte(tokenPlaceholder)) {
+		// A page with no placeholder is a page that would load and then fail
+		// every request, which is a much worse thing to find out at runtime.
+		return nil, fmt.Errorf("web: the embedded page has no %s to put the API token in", tokenPlaceholder)
+	}
+	return bytes.ReplaceAll(raw, []byte(tokenPlaceholder), []byte(token.Value())), nil
 }
 
 // writeJSON is the single response encoder, so no handler invents its own
@@ -252,6 +312,7 @@ type statusBody struct {
 	Email         string `json:"email,omitempty"`
 	Platform      string `json:"platform"`
 	ToolCacheDir  string `json:"tool_cache_dir"`
+	JobsDir       string `json:"jobs_dir"`
 	AUEAvailable  bool   `json:"aue_available"`
 }
 
@@ -259,6 +320,10 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	cache, err := s.settings.ToolCache()
 	if err != nil {
 		cache = ""
+	}
+	jobs, err := s.settings.Jobs()
+	if err != nil {
+		jobs = ""
 	}
 	baseURL := ""
 	authenticated := false
@@ -273,6 +338,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		Email:         s.settings.Session.Email,
 		Platform:      runtime.GOOS + "/" + runtime.GOARCH,
 		ToolCacheDir:  cache,
+		JobsDir:       jobs,
 		AUEAvailable:  aue.Available(s.runner),
 	})
 }
@@ -340,46 +406,26 @@ func (s *Server) handleLaunchConfigs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"items": configs})
 }
 
-func (s *Server) handleBuild(w http.ResponseWriter, r *http.Request) {
-	var request struct {
-		Tool    string   `json:"tool"`
-		Version string   `json:"version"`
-		Args    []string `json:"args"`
-	}
-	if !decodeJSON(w, r, &request) {
-		return
-	}
-	if request.Tool == "" {
-		request.Tool = tools.NoopToolName
-	}
-
-	// Buffered rather than streamed: the fake tool produces five lines. When a
-	// real tool is wired in, this endpoint becomes a streaming one
-	// (text/event-stream or chunked), which is a change to this handler alone —
-	// tools.Build already takes writers and already streams into them.
-	var output bytes.Buffer
-	err := tools.Build(r.Context(), s.manager, tools.BuildRequest{
-		Tool:    request.Tool,
-		Version: request.Version,
-		Args:    request.Args,
-	}, &output, &output)
-	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]any{"error": err.Error(), "output": output.String()})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"output": output.String()})
-}
-
+// handleLaunch resolves a launch config into a command, and starts it as a job.
+//
+// There is no separate "run a game" path any more. The config becomes a
+// generated engine profile (see internal/launch), and starting it is a
+// submission to the same executor a compile goes through — so a launched game
+// is supervised, cancellable, and recorded, exactly like everything else.
 func (s *Server) handleLaunch(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		Game     string `json:"game"`
 		Map      string `json:"map"`
 		GameRoot string `json:"game_root"`
-		// DryRun resolves the plan and returns it without starting anything.
-		// The GUI defaults to this until a user has a real game installed.
+		// DryRun resolves the command and returns it without starting
+		// anything. The page defaults to it until a user has a game installed.
 		DryRun bool `json:"dry_run"`
 	}
 	if !decodeJSON(w, r, &request) {
+		return
+	}
+	service, ok := s.requireJobs(w)
+	if !ok {
 		return
 	}
 
@@ -393,25 +439,35 @@ func (s *Server) handleLaunch(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, err)
 		return
 	}
-
 	gameRoot := request.GameRoot
 	if gameRoot == "" {
 		gameRoot = s.settings.GameRoots[selected.Game]
 	}
-	plan, err := launch.Resolve(launch.Request{Config: selected, GameRoot: gameRoot, Map: request.Map})
+	jobRequest, err := launch.JobRequest(selected, gameRoot, request.Map, nil)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+
 	if request.DryRun {
-		writeJSON(w, http.StatusOK, map[string]any{"plan": plan, "command": plan.String(), "started": false})
+		previewed, err := service.Preview(jobRequest)
+		if err != nil {
+			writeError(w, jobStatus(err), err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"job": previewed, "command": previewed.Command.Shell, "started": false,
+		})
 		return
 	}
-	if err := launch.Run(r.Context(), plan, io.Discard, io.Discard); err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]any{"error": err.Error(), "command": plan.String()})
+
+	submitted, err := service.Submit(jobRequest)
+	if err != nil {
+		writeError(w, jobStatus(err), err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"plan": plan, "command": plan.String(), "started": true})
+	w.Header().Set("Location", "/api/v1/jobs/"+submitted.ID)
+	writeJSON(w, http.StatusAccepted, map[string]any{"job": submitted, "started": true})
 }
 
 func (s *Server) handleAUEVersion(w http.ResponseWriter, r *http.Request) {

@@ -6,15 +6,24 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/aub"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/launch"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/tools"
 )
+
+// testHost is the Host every request in these tests is sent to.
+//
+// httptest.NewRequest defaults to "example.com", which this server refuses
+// outright — see loopbackHost and the rebinding defence it implements. Using a
+// loopback Host here is not a workaround: it is what a real request to this
+// server always carries.
+const testHost = "127.0.0.1:8789"
 
 // newTestServer builds a Server wired to temporary state: a fake tool cache and
 // a config that is saved into memory rather than the developer's home
@@ -29,7 +38,7 @@ func newTestServer(t *testing.T, client *aub.Client) (*Server, *config.Config) {
 		Version:    "test",
 		Client:     client,
 		Config:     settings,
-		Manager:    tools.NewNoop(settings.ToolCacheDir),
+		Jobs:       newTestJobs(t),
 		Provider:   launch.ExampleProvider(),
 		SaveConfig: func(updated config.Config) error { saved = updated; return nil },
 	})
@@ -39,23 +48,60 @@ func newTestServer(t *testing.T, client *aub.Client) (*Server, *config.Config) {
 	return server, &saved
 }
 
+// newTestJobs is a started executor over temporary directories.
+//
+// The real one, not a stub: the API routes are only worth testing against the
+// service the program actually uses, and its own package's fixtures already
+// cover what happens inside it.
+func newTestJobs(t *testing.T) *job.Service {
+	t.Helper()
+	dir := t.TempDir()
+	store, err := job.OpenStore(filepath.Join(dir, "jobs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := job.NewService(job.Options{
+		Store:   store,
+		Catalog: job.Chain{job.NewCatalog(filepath.Join(dir, "profiles")), launch.NewCatalog(launch.ExampleProvider())},
+		Logf:    func(format string, args ...any) { t.Logf("jobs: "+format, args...) },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	if err := service.Start(ctx); err != nil {
+		cancel()
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { service.Close(); cancel() })
+	return service
+}
+
+// request builds a request the guard will accept: a loopback Host and this
+// server's own API token.
+func request(t *testing.T, server *Server, method, path, body string) *http.Request {
+	t.Helper()
+	r := httptest.NewRequest(method, path, strings.NewReader(body))
+	r.Host = testHost
+	r.Header.Set(tokenHeader, server.Token().Value())
+	return r
+}
+
 func do(t *testing.T, server *Server, method, path, body string) (*http.Response, map[string]any) {
 	t.Helper()
-	var reader *strings.Reader
-	if body == "" {
-		reader = strings.NewReader("")
-	} else {
-		reader = strings.NewReader(body)
-	}
-	request := httptest.NewRequest(method, path, reader)
+	return send(t, server, request(t, server, method, path, body))
+}
+
+func send(t *testing.T, server *Server, r *http.Request) (*http.Response, map[string]any) {
+	t.Helper()
 	recorder := httptest.NewRecorder()
-	server.ServeHTTP(recorder, request)
+	server.ServeHTTP(recorder, r)
 
 	response := recorder.Result()
 	decoded := map[string]any{}
 	if strings.HasPrefix(response.Header.Get("Content-Type"), "application/json") {
 		if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
-			t.Fatalf("decoding %s %s: %v", method, path, err)
+			t.Fatalf("decoding %s %s: %v", r.Method, r.URL.Path, err)
 		}
 	}
 	return response, decoded
@@ -64,23 +110,40 @@ func do(t *testing.T, server *Server, method, path, body string) (*http.Response
 func TestServesTheEmbeddedFrontend(t *testing.T) {
 	server, _ := newTestServer(t, nil)
 
+	// The page and the assets are reachable without a token: a browser has none
+	// until it has loaded the page that carries it.
 	for _, path := range []string{"/", "/app.js", "/app.css"} {
-		request := httptest.NewRequest(http.MethodGet, path, nil)
+		r := httptest.NewRequest(http.MethodGet, path, nil)
+		r.Host = testHost
 		recorder := httptest.NewRecorder()
-		server.ServeHTTP(recorder, request)
+		server.ServeHTTP(recorder, r)
 		if recorder.Code != http.StatusOK {
 			t.Errorf("GET %s = %d, want 200", path, recorder.Code)
 		}
 	}
 
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.Host = testHost
+	recorder := httptest.NewRecorder()
+	server.ServeHTTP(recorder, r)
+	page := recorder.Body.String()
+
 	// The frontend must be self-contained: no CDN, no npm, nothing fetched from
 	// the network. A local-only GUI that silently depends on the internet is a
 	// GUI that breaks offline.
-	request := httptest.NewRequest(http.MethodGet, "/", nil)
-	recorder := httptest.NewRecorder()
-	server.ServeHTTP(recorder, request)
-	if body := recorder.Body.String(); strings.Contains(body, "http://") || strings.Contains(body, "https://") {
-		t.Errorf("index.html references an external URL:\n%s", body)
+	if strings.Contains(page, "http://") || strings.Contains(page, "https://") {
+		t.Errorf("index.html references an external URL:\n%s", page)
+	}
+	// And it carries this run's token, with the placeholder gone: a page still
+	// holding the placeholder would load and then fail every request.
+	if strings.Contains(page, tokenPlaceholder) {
+		t.Error("the served page still has the token placeholder in it")
+	}
+	if !strings.Contains(page, server.Token().Value()) {
+		t.Error("the served page does not carry this run's API token")
+	}
+	if got := recorder.Header().Get("Cache-Control"); got != "no-store" {
+		t.Errorf("Cache-Control = %q, want no-store: the page carries a credential", got)
 	}
 }
 
@@ -163,17 +226,122 @@ func TestLaunchConfigs(t *testing.T) {
 	}
 }
 
-func TestBuildRunsTheFakeToolPipeline(t *testing.T) {
+func TestTheProfileCatalogIsServed(t *testing.T) {
 	server, _ := newTestServer(t, nil)
-	response, body := do(t, server, http.MethodPost, "/api/build", `{"tool":"noop","args":["--x"]}`)
+	response, body := do(t, server, http.MethodGet, "/api/v1/profiles", "")
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, body = %v", response.StatusCode, body)
 	}
-	output, _ := body["output"].(string)
-	for _, want := range []string{"resolved noop", "verified ", "done"} {
-		if !strings.Contains(output, want) {
-			t.Errorf("output is missing %q:\n%s", want, output)
+	items, _ := body["items"].([]any)
+	if len(items) == 0 {
+		t.Fatal("the catalog is empty; the built-in samples should be in it")
+	}
+	found := map[string]bool{}
+	for _, item := range items {
+		entry, _ := item.(map[string]any)
+		id, _ := entry["id"].(string)
+		found[id] = true
+		if entry["digest"] == "" || entry["trust"] == "" {
+			t.Errorf("%s has no digest or trust state: %v", id, entry)
 		}
+	}
+	// Both sources of the chain are represented: an embedded document and one
+	// generated from this machine's launch configuration.
+	if !found["auto-pigeon.sample.q1-toolchain"] {
+		t.Errorf("the built-in sample toolchain is missing: %v", found)
+	}
+	if !found["auto-pigeon.launch.quake"] {
+		t.Errorf("the generated launch profile is missing: %v", found)
+	}
+}
+
+func TestAJobIsSubmittedAndReadBack(t *testing.T) {
+	server, _ := newTestServer(t, nil)
+
+	// A profile that exists but whose executable is not installed here. What is
+	// under test is the API, not the tool: the job is accepted, given an id, and
+	// reaches a terminal state that says what went wrong.
+	response, body := do(t, server, http.MethodPost, "/api/v1/jobs",
+		`{"profile":"auto-pigeon.launch.quake","action":"play_map","runtime":{"map_name":"e1m1"},`+
+			`"roots":{"game_root":"/games/quake"},"executables":{"engine":"/games/quake/quakespasm"}}`)
+	if response.StatusCode != http.StatusAccepted {
+		t.Fatalf("status = %d, body = %v", response.StatusCode, body)
+	}
+	id, _ := body["id"].(string)
+	if id == "" {
+		t.Fatal("the submitted job has no id")
+	}
+	if location := response.Header.Get("Location"); location != "/api/v1/jobs/"+id {
+		t.Errorf("Location = %q, want the job's own URL", location)
+	}
+
+	deadline := time.Now().Add(30 * time.Second)
+	var state string
+	for time.Now().Before(deadline) {
+		_, record := do(t, server, http.MethodGet, "/api/v1/jobs/"+id, "")
+		state, _ = record["state"].(string)
+		if state == "failed" || state == "succeeded" || state == "cancelled" || state == "interrupted" {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if state != "failed" {
+		t.Fatalf("state = %q, want failed: the engine is not installed here", state)
+	}
+
+	_, list := do(t, server, http.MethodGet, "/api/v1/jobs", "")
+	items, _ := list["items"].([]any)
+	if len(items) != 1 {
+		t.Fatalf("the list has %d jobs, want 1", len(items))
+	}
+}
+
+func TestAJobIdFromAURLCannotReachOutsideTheStore(t *testing.T) {
+	server, _ := newTestServer(t, nil)
+	// Two refusals, both correct. A `..` is normalised away by the mux before
+	// any handler sees it, which answers 301 to the cleaned path; anything else
+	// reaches the store, which refuses an id it did not mint. What matters is
+	// that neither serves a job.
+	for _, id := range []string{"..", "..%2F..%2Fetc%2Fpasswd", "not-an-id", "20260906T000000Z-zzzzzzzzzzzz", "%2e%2e%2f%2e%2e"} {
+		response, body := do(t, server, http.MethodGet, "/api/v1/jobs/"+id, "")
+		switch response.StatusCode {
+		case http.StatusNotFound, http.StatusMovedPermanently, http.StatusPermanentRedirect:
+		default:
+			t.Errorf("GET /api/v1/jobs/%s = %d, want a refusal", id, response.StatusCode)
+		}
+		if body["id"] != nil {
+			t.Errorf("GET /api/v1/jobs/%s returned a job: %v", id, body)
+		}
+	}
+
+	// The same for an artifact name, which is the other half of a URL that
+	// becomes a path.
+	for _, name := range []string{"result", "..", "not-an-artifact"} {
+		response, _ := do(t, server, http.MethodGet, "/api/v1/jobs/20260906T000000Z-0d13ed8e44d8/artifacts/"+name, "")
+		if response.StatusCode == http.StatusOK {
+			t.Errorf("an artifact was served for a job that does not exist: %s", name)
+		}
+	}
+}
+
+func TestAPastedProfileIsValidatedWithoutBeingImported(t *testing.T) {
+	server, _ := newTestServer(t, nil)
+
+	response, body := do(t, server, http.MethodPost, "/api/v1/profiles/validate", `{"kind":"tool"}`)
+	if response.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, body = %v", response.StatusCode, body)
+	}
+	if body["valid"] != false || body["error"] == "" {
+		t.Errorf("an invalid document was not reported as invalid: %v", body)
+	}
+
+	// The catalog is unchanged: reading somebody's document is inert.
+	_, list := do(t, server, http.MethodGet, "/api/v1/profiles", "")
+	before, _ := list["items"].([]any)
+	_, again := do(t, server, http.MethodGet, "/api/v1/profiles", "")
+	after, _ := again["items"].([]any)
+	if len(before) != len(after) {
+		t.Errorf("the catalog changed across a validate call: %d then %d", len(before), len(after))
 	}
 }
 
@@ -190,6 +358,11 @@ func TestLaunchDryRunResolvesWithoutStartingAnything(t *testing.T) {
 	command, _ := body["command"].(string)
 	if !strings.Contains(command, "e1m1") {
 		t.Errorf("command = %q", command)
+	}
+	// A dry run leaves no job behind.
+	_, list := do(t, server, http.MethodGet, "/api/v1/jobs", "")
+	if items, _ := list["items"].([]any); len(items) != 0 {
+		t.Errorf("a dry run created %d jobs", len(items))
 	}
 }
 

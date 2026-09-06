@@ -11,19 +11,16 @@ import (
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/aue"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/launch"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/tools"
 )
 
-// withOrigin issues a request carrying an explicit Origin header. httptest's
-// NewRequest sets Host to "example.com", so "http://example.com" is the
-// same-origin case and anything else is not.
+// withOrigin issues a request carrying an explicit Origin header, to a
+// loopback Host, with a valid token — so the only thing under test is Origin.
 func withOrigin(t *testing.T, server *Server, method, path, origin string) *http.Response {
 	t.Helper()
-	request := httptest.NewRequest(method, path, strings.NewReader(""))
-	request.Header.Set("Origin", origin)
-	recorder := httptest.NewRecorder()
-	server.ServeHTTP(recorder, request)
-	return recorder.Result()
+	r := request(t, server, method, path, "")
+	r.Header.Set("Origin", origin)
+	response, _ := send(t, server, r)
+	return response
 }
 
 func TestCrossOriginAPIRequestsAreRejected(t *testing.T) {
@@ -37,7 +34,7 @@ func TestCrossOriginAPIRequestsAreRejected(t *testing.T) {
 func TestSameOriginAndOriginlessRequestsAreAllowed(t *testing.T) {
 	server, _ := newTestServer(t, nil)
 
-	response := withOrigin(t, server, http.MethodGet, "/api/status", "http://example.com")
+	response := withOrigin(t, server, http.MethodGet, "/api/status", "http://"+testHost)
 	if response.StatusCode != http.StatusOK {
 		t.Errorf("same-origin status = %d, want 200", response.StatusCode)
 	}
@@ -49,9 +46,141 @@ func TestSameOriginAndOriginlessRequestsAreAllowed(t *testing.T) {
 	}
 }
 
-// TestMutatingRoutesRejectGET pins the second half of the guard: the mutating
+// TestAForgedHostIsRefused is the DNS-rebinding defence.
+//
+// A browser tricked into treating some attacker-controlled name as 127.0.0.1
+// makes requests the *browser* considers same-origin: the Origin and the Host
+// agree, because both are the attacker's name. The only thing that distinguishes
+// them from a real local request is that the Host is not a loopback address.
+func TestAForgedHostIsRefused(t *testing.T) {
+	server, _ := newTestServer(t, nil)
+
+	for _, host := range []string{"rebound.example", "rebound.example:8789", "companion.attacker.test", "192.168.0.33:8789"} {
+		t.Run(host, func(t *testing.T) {
+			r := request(t, server, http.MethodGet, "/api/status", "")
+			r.Host = host
+			// Consistent with the Host, which is exactly what a rebinding
+			// attack produces: the same-origin check alone would pass this.
+			r.Header.Set("Origin", "http://"+host)
+			response, _ := send(t, server, r)
+			if response.StatusCode != http.StatusForbidden {
+				t.Errorf("status = %d, want 403", response.StatusCode)
+			}
+		})
+	}
+
+	// The page itself is refused too, so a rebound name cannot even be handed
+	// the token that the page carries.
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.Host = "rebound.example"
+	recorder := httptest.NewRecorder()
+	server.ServeHTTP(recorder, r)
+	if recorder.Code != http.StatusForbidden {
+		t.Errorf("GET / with a forged Host = %d, want 403", recorder.Code)
+	}
+	if strings.Contains(recorder.Body.String(), server.Token().Value()) {
+		t.Fatal("a request with a forged Host was given this run's API token")
+	}
+
+	// Every loopback spelling a user or a browser might produce still works.
+	for _, host := range []string{"127.0.0.1:8789", "localhost:8789", "[::1]:8789", "127.0.0.1"} {
+		r := request(t, server, http.MethodGet, "/api/status", "")
+		r.Host = host
+		response, _ := send(t, server, r)
+		if response.StatusCode != http.StatusOK {
+			t.Errorf("Host %q = %d, want 200", host, response.StatusCode)
+		}
+	}
+}
+
+// TestTheAPINeedsItsToken: the check that actually stops another page.
+func TestTheAPINeedsItsToken(t *testing.T) {
+	server, _ := newTestServer(t, nil)
+
+	for name, mutate := range map[string]func(*http.Request){
+		"no token at all":       func(r *http.Request) { r.Header.Del(tokenHeader) },
+		"an empty token":        func(r *http.Request) { r.Header.Set(tokenHeader, "") },
+		"somebody else's token": func(r *http.Request) { r.Header.Set(tokenHeader, "not-the-token") },
+		"a token in the query":  func(r *http.Request) { r.Header.Del(tokenHeader); r.URL.RawQuery = "token=" + server.Token().Value() },
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := request(t, server, http.MethodGet, "/api/status", "")
+			mutate(r)
+			response, body := send(t, server, r)
+			if response.StatusCode != http.StatusUnauthorized {
+				t.Fatalf("status = %d, want 401", response.StatusCode)
+			}
+			message, _ := body["error"].(string)
+			if !strings.Contains(message, tokenHeader) {
+				t.Errorf("error = %q, want it to name the header to send", message)
+			}
+		})
+	}
+
+	// Authorization: Bearer works too, for a client that already has one.
+	r := request(t, server, http.MethodGet, "/api/status", "")
+	r.Header.Del(tokenHeader)
+	r.Header.Set("Authorization", "Bearer "+server.Token().Value())
+	if response, _ := send(t, server, r); response.StatusCode != http.StatusOK {
+		t.Errorf("Authorization: Bearer = %d, want 200", response.StatusCode)
+	}
+}
+
+// TestAPageOnAnotherSiteIsRefusedEvenWithAToken covers Sec-Fetch-Site, which is
+// the browser's own account of where a request came from.
+func TestAPageOnAnotherSiteIsRefusedEvenWithAToken(t *testing.T) {
+	server, _ := newTestServer(t, nil)
+	for _, site := range []string{"cross-site", "same-site"} {
+		r := request(t, server, http.MethodGet, "/api/status", "")
+		r.Header.Set("Sec-Fetch-Site", site)
+		if response, _ := send(t, server, r); response.StatusCode != http.StatusForbidden {
+			t.Errorf("Sec-Fetch-Site: %s = %d, want 403", site, response.StatusCode)
+		}
+	}
+	for _, site := range []string{"same-origin", "none"} {
+		r := request(t, server, http.MethodGet, "/api/status", "")
+		r.Header.Set("Sec-Fetch-Site", site)
+		if response, _ := send(t, server, r); response.StatusCode != http.StatusOK {
+			t.Errorf("Sec-Fetch-Site: %s = %d, want 200", site, response.StatusCode)
+		}
+	}
+}
+
+// TestEveryAPIRouteIsGuarded walks the registered surface rather than a list
+// somebody kept up to date by hand.
+func TestEveryAPIRouteIsGuarded(t *testing.T) {
+	server, _ := newTestServer(t, nil)
+	patterns := []string{"GET /api/status", "POST /api/auth/login", "POST /api/auth/logout",
+		"GET /api/launch-configs", "POST /api/launch", "GET /api/aue/version"}
+	for pattern := range server.jobAPI() {
+		patterns = append(patterns, pattern)
+	}
+	for _, pattern := range patterns {
+		method, path, _ := strings.Cut(pattern, " ")
+		// A concrete id, so the route matches; the guard runs before the
+		// handler would find that it does not exist.
+		path = strings.ReplaceAll(path, "{id}", "20260906T000000Z-0d13ed8e44d8")
+		path = strings.ReplaceAll(path, "{name}", "result")
+
+		t.Run(pattern, func(t *testing.T) {
+			r := request(t, server, method, path, "{}")
+			r.Header.Del(tokenHeader)
+			if response, _ := send(t, server, r); response.StatusCode != http.StatusUnauthorized {
+				t.Errorf("untokened %s = %d, want 401", pattern, response.StatusCode)
+			}
+
+			forged := request(t, server, method, path, "{}")
+			forged.Host = "rebound.example"
+			if response, _ := send(t, server, forged); response.StatusCode != http.StatusForbidden {
+				t.Errorf("forged-Host %s = %d, want 403", pattern, response.StatusCode)
+			}
+		})
+	}
+}
+
+// TestMutatingRoutesRejectGET pins the other half of the guard: the mutating
 // routes are registered POST-only, so a cross-site form or <img> cannot reach
-// them even before the Origin check runs.
+// them even before the token check runs.
 //
 // The status is 404 rather than 405 because "GET /" is registered for the
 // static frontend, so an unmatched GET falls through to the file server, which
@@ -61,7 +190,7 @@ func TestSameOriginAndOriginlessRequestsAreAllowed(t *testing.T) {
 func TestMutatingRoutesRejectGET(t *testing.T) {
 	server, saved := newTestServer(t, nil)
 	before := saved.Session
-	for _, path := range []string{"/api/auth/login", "/api/auth/logout", "/api/build", "/api/launch"} {
+	for _, path := range []string{"/api/auth/login", "/api/auth/logout", "/api/launch", "/api/v1/jobs/preview"} {
 		response, _ := do(t, server, http.MethodGet, path, "")
 		if response.StatusCode != http.StatusNotFound {
 			t.Errorf("GET %s = %d, want 404 (no handler reached)", path, response.StatusCode)
@@ -110,7 +239,7 @@ func serverWithRunner(t *testing.T, runner aue.Runner) *Server {
 		Version:    "test",
 		Config:     settings,
 		AUE:        runner,
-		Manager:    tools.NewNoop(settings.ToolCacheDir),
+		Jobs:       newTestJobs(t),
 		Provider:   launch.ExampleProvider(),
 		SaveConfig: func(config.Config) error { return nil },
 	})

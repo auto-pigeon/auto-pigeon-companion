@@ -1,8 +1,11 @@
-// Package launch fetches per-game launch configuration and starts games.
+// Package launch fetches per-game launch configuration and turns it into
+// something the executor can run.
 //
-// config.go owns "what should be launched"; exec.go owns "start it". The split
-// is what lets the execution half be tested against a hardcoded config while
-// the AUB half is still a stub.
+// config.go owns "what should be launched"; exec.go resolves it to an exact
+// command; profile.go and catalog.go turn that into an engine profile and a
+// job. Nothing here starts a process any more — internal/job supervises every
+// program the Companion runs, games included, so a launched game is recorded,
+// cancellable and bounded exactly like a compile.
 //
 // TODO(andrea): AUB's collection name and schema for per-game launch configs is
 // not confirmed. Everything in this file below Config is provisional and marked.

@@ -6,62 +6,15 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
 )
-
-// TestRunProcess covers the real os/exec path — the one a GPL-2.0 tool will
-// take. Re-executing the test binary is the standard way to get a real child
-// process without shipping a fixture executable or assuming a shell exists,
-// which matters because these tests run on all six targets.
-func TestRunProcess(t *testing.T) {
-	if os.Getenv("AUL_TEST_SUBPROCESS") != "" {
-		fmt.Fprintln(os.Stdout, "child stdout: "+strings.Join(os.Args[1:], " "))
-		fmt.Fprintln(os.Stderr, "child stderr")
-		if os.Getenv("AUL_TEST_SUBPROCESS") == "fail" {
-			os.Exit(3)
-		}
-		os.Exit(0)
-	}
-
-	self, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("AUL_TEST_SUBPROCESS", "ok")
-
-	var stdout, stderr bytes.Buffer
-	// -test.run limits the re-executed binary to this one test, which the
-	// environment variable above then short-circuits into the child branch.
-	args := []string{"-test.run=TestRunProcess", "hello"}
-	if err := RunProcess(context.Background(), self, args, "", &stdout, &stderr); err != nil {
-		t.Fatalf("RunProcess: %v (stderr: %s)", err, stderr.String())
-	}
-	if !strings.Contains(stdout.String(), "child stdout: -test.run=TestRunProcess hello") {
-		t.Errorf("stdout did not carry the child's output: %q", stdout.String())
-	}
-	if !strings.Contains(stderr.String(), "child stderr") {
-		t.Errorf("stderr did not carry the child's output: %q", stderr.String())
-	}
-
-	t.Run("non-zero exit is reported with its status", func(t *testing.T) {
-		t.Setenv("AUL_TEST_SUBPROCESS", "fail")
-		var out bytes.Buffer
-		err := RunProcess(context.Background(), self, args, "", &out, &out)
-		if err == nil {
-			t.Fatal("expected an error for a non-zero exit")
-		}
-		if !strings.Contains(err.Error(), "status 3") {
-			t.Errorf("error did not report the exit status: %v", err)
-		}
-	})
-}
 
 func TestEnsureDownloadedVerifiesAndCaches(t *testing.T) {
 	payload := []byte("#!/bin/sh\necho fake\n")
@@ -159,40 +112,68 @@ func TestResolveUnknownTool(t *testing.T) {
 	}
 }
 
-// TestBuildWithNoopTool is the end-to-end pipeline the prompt asks for:
-// resolve, download, verify, run, stream output — with no real binary.
-func TestBuildWithNoopTool(t *testing.T) {
+// TestNoopAcquisitionIsTheWholeDownloadPath: resolve, "download", verify,
+// install, and take the cache-hit path on the second call.
+//
+// It stops at an installed file, which is where this package's responsibility
+// now stops: running one is internal/job's, and its fixtures cover a real
+// process with a real exit status rather than a fake that prints.
+func TestNoopAcquisitionIsTheWholeDownloadPath(t *testing.T) {
 	cache := t.TempDir()
 	manager := NewNoop(cache)
 
-	var stdout, stderr bytes.Buffer
-	request := BuildRequest{Args: []string{"--example", "argument"}}
-	if err := Build(context.Background(), manager, request, &stdout, &stderr); err != nil {
-		t.Fatalf("Build: %v", err)
+	ref, err := manager.Resolve(NoopToolName, "")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	installed, err := manager.EnsureDownloaded(context.Background(), ref)
+	if err != nil {
+		t.Fatalf("EnsureDownloaded: %v", err)
 	}
 
-	output := stdout.String()
-	for _, want := range []string{
-		"resolved " + NoopToolName,
-		"verified ",
-		"fake tool " + NoopToolVersion,
-		"args: --example argument",
-		"done",
-	} {
-		if !strings.Contains(output, want) {
-			t.Errorf("output is missing %q:\n%s", want, output)
-		}
+	want := filepath.Join(cache, ref.Name, ref.Version, ref.GOOS+"-"+ref.GOARCH, ref.ExecutableName())
+	if installed != want {
+		t.Errorf("installed at %s, want %s", installed, want)
+	}
+	verified, err := verifyFile(installed, ref.SHA256)
+	if err != nil || !verified {
+		t.Fatalf("the installed file does not match its digest: %v %v", verified, err)
 	}
 
-	// The "download" must have produced a verified file in the cache, so the
-	// second run takes the cache-hit path rather than writing again.
-	ref := NoopRef()
-	path := filepath.Join(cache, ref.Name, ref.Version, ref.GOOS+"-"+ref.GOARCH, ref.ExecutableName())
-	if _, err := os.Stat(path); err != nil {
-		t.Fatalf("the fake tool was not cached: %v", err)
+	// The second call must take the cache-hit path rather than writing again.
+	info, err := os.Stat(installed)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
 	}
-	if _, err := manager.EnsureDownloaded(context.Background(), ref); err != nil {
+	again, err := manager.EnsureDownloaded(context.Background(), ref)
+	if err != nil {
 		t.Fatalf("second EnsureDownloaded: %v", err)
+	}
+	if again != installed {
+		t.Errorf("second call installed at %s, want %s", again, installed)
+	}
+	after, err := os.Stat(installed)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if !after.ModTime().Equal(info.ModTime()) {
+		t.Error("the cached file was rewritten on a cache hit")
+	}
+}
+
+// TestNothingHereRunsAnything: the Manager interface is acquisition only.
+//
+// Asserted rather than assumed, because "this package does not execute" is a
+// licensing statement as well as a design one — see the package comment — and
+// a Run method growing back here is exactly how a second execution path starts.
+func TestNothingHereRunsAnything(t *testing.T) {
+	managerType := reflect.TypeOf((*Manager)(nil)).Elem()
+	for i := 0; i < managerType.NumMethod(); i++ {
+		switch name := managerType.Method(i).Name; name {
+		case "Resolve", "EnsureDownloaded":
+		default:
+			t.Errorf("Manager has the method %q; acquisition is this package's only job, and running belongs to internal/job", name)
+		}
 	}
 }
 

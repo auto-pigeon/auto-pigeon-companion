@@ -9,10 +9,15 @@
 
 const $ = (id) => document.getElementById(id);
 
+// The API token for this run, put into the page when it was served. Held in a
+// variable and sent as a header: never in localStorage, never in a URL, and
+// never a cookie the browser would attach on its own. See internal/web/auth.go.
+const apiToken = document.querySelector('meta[name="aucom-api-token"]')?.content || "";
+
 // api posts or gets JSON from the local server and always resolves to
 // { ok, status, body } so callers do not have to branch on throw versus reject.
 async function api(path, options = {}) {
-  const init = { headers: { Accept: "application/json" }, ...options };
+  const init = { ...options, headers: { Accept: "application/json", "X-AUCOM-Token": apiToken, ...(options.headers || {}) } };
   if (init.body !== undefined && typeof init.body !== "string") {
     init.headers["Content-Type"] = "application/json";
     init.body = JSON.stringify(init.body);
@@ -111,12 +116,111 @@ $("logout-button").addEventListener("click", async (event) => {
   });
 });
 
-$("build-button").addEventListener("click", async (event) => {
+// --- jobs -------------------------------------------------------------------
+
+let catalog = [];
+
+async function refreshProfiles() {
+  const { ok, body } = await api("/api/v1/profiles");
+  const profiles = $("job-profile");
+  profiles.innerHTML = "";
+  if (!ok) {
+    setMessage($("job-output"), body.error, true);
+    return;
+  }
+  catalog = body.items || [];
+  for (const item of catalog) {
+    const option = document.createElement("option");
+    option.value = item.id;
+    option.textContent = `${item.name} (${item.trust})`;
+    profiles.append(option);
+  }
+  refreshActions();
+}
+
+function refreshActions() {
+  const actions = $("job-action");
+  actions.innerHTML = "";
+  const selected = catalog.find((item) => item.id === $("job-profile").value);
+  for (const action of selected?.actions || []) {
+    const option = document.createElement("option");
+    option.value = action.id;
+    option.textContent = action.title || action.id;
+    actions.append(option);
+  }
+}
+
+function jobBody() {
+  return { profile: $("job-profile").value, action: $("job-action").value };
+}
+
+// describeJob is the one renderer for a job record, so the preview, the run and
+// the list cannot disagree about what a job's state is called.
+function describeJob(job) {
+  const parts = [`${job.id}  ${job.state}`];
+  if (job.command) parts.push(`  ${job.command.shell}`);
+  if (job.exit_code !== undefined) parts.push(`  exit status ${job.exit_code}`);
+  if (job.error) parts.push(`  ${job.error}`);
+  for (const artifact of job.artifacts || []) {
+    if (!artifact.missing) parts.push(`  artifact ${artifact.name}: ${artifact.path}`);
+  }
+  return parts.join("\n");
+}
+
+async function refreshJobs() {
+  const { ok, body } = await api("/api/v1/jobs?limit=10");
+  const list = $("job-list");
+  list.innerHTML = "";
+  if (!ok) {
+    setMessage($("job-output"), body.error, true);
+    return;
+  }
+  for (const job of body.items || []) {
+    const entry = document.createElement("li");
+    entry.textContent = `${job.id}  ${job.state}  ${job.profile_id || ""} ${job.action_id || ""}`;
+    list.append(entry);
+  }
+}
+
+$("job-profile").addEventListener("change", refreshActions);
+$("job-refresh-button").addEventListener("click", (event) => withBusy(event.currentTarget, refreshJobs));
+
+$("job-preview-button").addEventListener("click", async (event) => {
   await withBusy(event.currentTarget, async () => {
-    const output = $("build-output");
-    output.textContent = "running…";
-    const { ok, body } = await api("/api/build", { method: "POST", body: { tool: "noop", args: [] } });
-    output.textContent = ok ? body.output : `${body.output || ""}${body.error}`;
+    const output = $("job-output");
+    output.textContent = "resolving…";
+    const { ok, body } = await api("/api/v1/jobs/preview", { method: "POST", body: jobBody() });
+    output.textContent = ok ? describeJob(body) : body.error;
+  });
+});
+
+$("job-run-button").addEventListener("click", async (event) => {
+  await withBusy(event.currentTarget, async () => {
+    const output = $("job-output");
+    output.textContent = "starting…";
+    const submitted = await api("/api/v1/jobs", { method: "POST", body: jobBody() });
+    if (!submitted.ok) {
+      output.textContent = submitted.body.error;
+      return;
+    }
+    // Polled rather than streamed: the record is the truth about a job, and a
+    // page that read a stream would be reading something else.
+    const id = submitted.body.id;
+    for (;;) {
+      const { ok, body } = await api(`/api/v1/jobs/${id}`);
+      if (!ok) {
+        output.textContent = body.error;
+        return;
+      }
+      output.textContent = describeJob(body);
+      if (["succeeded", "failed", "cancelled", "interrupted"].includes(body.state)) break;
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    }
+    const logs = await api(`/api/v1/jobs/${id}/logs`);
+    if (logs.ok && logs.body.text) {
+      output.textContent += `\n\n${logs.body.text}`;
+    }
+    await refreshJobs();
   });
 });
 
@@ -137,7 +241,9 @@ async function launch(dryRun, button) {
       output.textContent = body.error;
       return;
     }
-    output.textContent = body.started ? `exited: ${body.command}` : `would run: ${body.command}`;
+    output.textContent = body.started
+      ? `started as job ${body.job.id}`
+      : `would run: ${body.command}`;
   });
 }
 
@@ -155,3 +261,5 @@ $("launch-button").addEventListener("click", (event) => launch(false, event.curr
 
 refreshStatus();
 refreshLaunchConfigs();
+refreshProfiles();
+refreshJobs();

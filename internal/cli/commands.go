@@ -4,13 +4,13 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/aub"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/aue"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/launch"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/tools"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/web"
 )
 
@@ -68,6 +68,22 @@ func loadSettings(env *Env) (config.Config, error) {
 	return settings, err
 }
 
+// tokenFilePath is where a running server publishes its API token.
+//
+// Beside the config file, whichever config file this invocation is using, so a
+// `--config` pointing somewhere deliberate does not have its server's token
+// land in the real config directory.
+func tokenFilePath(env *Env) (string, error) {
+	if env.ConfigPath != "" {
+		return web.TokenPath(filepath.Dir(env.ConfigPath)), nil
+	}
+	dir, err := config.Dir()
+	if err != nil {
+		return "", err
+	}
+	return web.TokenPath(dir), nil
+}
+
 func saveSettings(env *Env, settings config.Config) error {
 	if env.ConfigPath != "" {
 		return config.SaveTo(env.ConfigPath, settings)
@@ -119,25 +135,55 @@ func runServe(env *Env, args []string) int {
 		return code
 	}
 
-	settings, err := loadSettings(env)
-	if err != nil {
-		return fail(env, err)
-	}
-	chosen := *port
-	if chosen == 0 {
-		chosen = settings.Port
-	}
-
 	// The extractor runner is built here and closed when serve returns, so a
 	// process that never touches AUE never extracts anything and a process
 	// that does cleans up after itself.
 	runner := aue.NewEmbeddedRunner()
 	defer runner.Close()
 
+	ctx, stop := signalContext()
+	defer stop()
+
+	// The executor. Started here, so the server's recovery pass runs before it
+	// accepts a request and a job left running by a previous crash is marked
+	// interrupted rather than reported as still going.
+	service, settings, err := openJobs(ctx, env, true)
+	if err != nil {
+		return fail(env, err)
+	}
+	defer service.Close()
+
+	chosen := *port
+	if chosen == 0 {
+		chosen = settings.Port
+	}
+
+	token, err := web.NewToken()
+	if err != nil {
+		return fail(env, err)
+	}
+	tokenPath, err := tokenFilePath(env)
+	if err != nil {
+		return fail(env, err)
+	}
+	if err := web.WriteToken(tokenPath, token); err != nil {
+		return fail(env, err)
+	}
+	// Removed on the way out: a token file left behind names a credential for
+	// a server that is not listening, and the next `companion job` would try
+	// to use it.
+	defer func() {
+		if err := web.RemoveToken(tokenPath); err != nil {
+			fmt.Fprintf(env.Stderr, "warning: %v\n", err)
+		}
+	}()
+
 	server, err := web.NewServer(web.Options{
 		Version:    env.Version,
 		Config:     settings,
 		AUE:        runner,
+		Jobs:       service,
+		Token:      token,
 		SaveConfig: func(updated config.Config) error { return saveSettings(env, updated) },
 	})
 	if err != nil {
@@ -150,6 +196,7 @@ func runServe(env *Env, args []string) int {
 	}
 	url := web.URL(listener)
 	fmt.Fprintf(env.Stdout, "companion %s listening on %s\n", env.Version, url)
+	fmt.Fprintf(env.Stderr, "API token written to %s\n", tokenPath)
 
 	if *open {
 		opener := env.OpenBrowser
@@ -164,8 +211,6 @@ func runServe(env *Env, args []string) int {
 		}
 	}
 
-	ctx, stop := signalContext()
-	defer stop()
 	if err := web.Serve(ctx, listener, server); err != nil {
 		return fail(env, err)
 	}
@@ -318,52 +363,18 @@ func runAuthLogout(env *Env, args []string) int {
 	return 0
 }
 
-// runBuild runs one external tool through the full pipeline. Arguments after
-// `--` go to the tool.
-func runBuild(env *Env, args []string) int {
-	set := newFlagSet(env, "build")
-	tool := set.String("tool", tools.NoopToolName, "external tool to run")
-	version := set.String("tool-version", "", "tool version; empty resolves the default")
-	rest, code, ok := parseFlags(env, set, args)
-	if !ok {
-		return code
-	}
-
-	settings, err := loadSettings(env)
-	if err != nil {
-		return fail(env, err)
-	}
-	cache, err := settings.ToolCache()
-	if err != nil {
-		return fail(env, err)
-	}
-
-	// The fake tool until real ones are chosen. `--tool <anything else>` goes
-	// to the real manager, which will report an unknown tool because the
-	// registry is empty — the correct answer today, and the line that starts
-	// working unchanged the moment the registry is populated.
-	var manager tools.Manager
-	if *tool == tools.NoopToolName {
-		manager = tools.NewNoop(cache)
-	} else {
-		manager = tools.New(cache)
-	}
-
-	ctx, stop := signalContext()
-	defer stop()
-
-	request := tools.BuildRequest{Tool: *tool, Version: *version, Args: rest}
-	if err := tools.Build(ctx, manager, request, env.Stdout, env.Stderr); err != nil {
-		return fail(env, err)
-	}
-	return 0
-}
-
+// runLaunch starts a game as a supervised job.
+//
+// The launch config becomes a generated engine profile and the start becomes a
+// job submission — see internal/launch. So a game the Companion started is
+// recorded, cancellable and bounded exactly like a compile, and there is no
+// second execution path to keep in step with the first.
 func runLaunch(env *Env, args []string) int {
 	set := newFlagSet(env, "launch")
 	mapName := set.String("map", "", "map to load")
 	gameRoot := set.String("game-root", "", "directory the game is installed in")
 	dryRun := set.Bool("dry-run", false, "print the resolved command without starting it")
+	wait := set.Bool("wait", true, "wait for the game to exit")
 	rest, code, ok := parseInterspersed(env, set, args)
 	if !ok {
 		return code
@@ -377,13 +388,14 @@ func runLaunch(env *Env, args []string) int {
 		return 2
 	}
 
-	settings, err := loadSettings(env)
+	ctx, stop := signalContext()
+	defer stop()
+
+	service, settings, err := openJobs(ctx, env, !*dryRun)
 	if err != nil {
 		return fail(env, err)
 	}
-
-	ctx, stop := signalContext()
-	defer stop()
+	defer service.Close()
 
 	// The stubbed provider until AUB's schema is confirmed — see
 	// internal/launch/config.go.
@@ -395,24 +407,41 @@ func runLaunch(env *Env, args []string) int {
 	if err != nil {
 		return fail(env, err)
 	}
-
 	root := *gameRoot
 	if root == "" {
 		root = settings.GameRoots[selected.Game]
 	}
-	plan, err := launch.Resolve(launch.Request{Config: selected, GameRoot: root, Map: *mapName})
+	request, err := launch.JobRequest(selected, root, *mapName, nil)
 	if err != nil {
 		return fail(env, err)
 	}
 
 	if *dryRun {
-		fmt.Fprintln(env.Stdout, plan.String())
+		previewed, err := service.Preview(request)
+		if err != nil {
+			return fail(env, err)
+		}
+		fmt.Fprintln(env.Stdout, previewed.Command.Shell)
 		return 0
 	}
-	if err := launch.Run(ctx, plan, env.Stdout, env.Stderr); err != nil {
+
+	submitted, err := service.SubmitWatched(request, env.Stdout)
+	if err != nil {
 		return fail(env, err)
 	}
-	return 0
+	fmt.Fprintf(env.Stderr, "job %s: %s\n", submitted.ID, selected.Game)
+	if !*wait {
+		return 0
+	}
+	finished, err := service.Wait(ctx, submitted.ID)
+	if err != nil {
+		return fail(env, err)
+	}
+	if finished.Succeeded() {
+		return 0
+	}
+	fmt.Fprintf(env.Stderr, "error: %s\n", finished.Error)
+	return 1
 }
 
 // runExtractor reaches the bundled AUE binary from the command line.

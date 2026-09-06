@@ -25,12 +25,21 @@
 // See THIRD_PARTY_NOTICES.md, which is the user-facing statement of the same
 // boundary and the place per-tool license text goes once the tools are chosen.
 //
-// # State of this package
+// # What this package is, and what it is not
 //
-// Scaffolding. The Manager interface, the download-and-verify path, and the
-// process runner are real; the registry of actual tools is empty on purpose.
-// noop_tool.go provides a fake tool so the whole pipeline — resolve, download,
-// verify, run, stream output — is exercised end to end without a real binary.
+// Acquisition: resolve a name and version to a downloadable reference, fetch
+// it, verify its digest, install it atomically. That is all.
+//
+// It used to run tools as well, through a RunProcess of its own that
+// internal/launch also called for game executables. That was the second and
+// third execution path in the program. Both are gone: internal/job supervises
+// every process the Companion starts, and a tool reaches it as a resolved
+// profile action like anything else.
+//
+// The registry of actual tools is still empty on purpose. noop_tool.go provides
+// a fake reference so the download-and-verify path — cache layout, digest
+// check, atomic install, cache hit — is exercised end to end without a real
+// binary.
 //
 // TODO(andrea): which GPL-2.0 tool(s), and which versions. Needed before
 // Registry can be populated and before a real Resolve implementation can exist.
@@ -49,7 +58,6 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -93,9 +101,13 @@ func (r ToolRef) String() string {
 	return fmt.Sprintf("%s@%s (%s/%s)", r.Name, r.Version, r.GOOS, r.GOARCH)
 }
 
-// Manager resolves, downloads, verifies, and runs external GPL-2.0 map-building
-// tools as separate OS processes. It never imports or links tool source/object
-// code into this binary — see the package comment and THIRD_PARTY_NOTICES.md.
+// Manager resolves, downloads and verifies external GPL-2.0 map-building tools.
+// It never imports or links tool source/object code into this binary — see the
+// package comment and THIRD_PARTY_NOTICES.md.
+//
+// It does not run them. Running is internal/job's, for every program the
+// Companion starts, so that acquisition and supervision are two jobs done in
+// two places rather than one interface that grew both.
 type Manager interface {
 	// Resolve maps a tool name and version to a concrete downloadable
 	// reference for the current platform.
@@ -103,8 +115,6 @@ type Manager interface {
 	// EnsureDownloaded returns the local path to the tool's executable,
 	// downloading and checksum-verifying it if it is not already cached.
 	EnsureDownloaded(ctx context.Context, ref ToolRef) (path string, err error)
-	// Run executes the tool as a separate process, streaming its output.
-	Run(ctx context.Context, path string, args []string, stdout, stderr io.Writer) error
 }
 
 // ErrUnknownTool reports that no registry entry matches the requested tool.
@@ -275,43 +285,6 @@ func (m *cacheManager) download(ctx context.Context, ref ToolRef, path string) e
 	}
 	if err := os.Rename(tempName, path); err != nil {
 		return fmt.Errorf("tools: installing %s: %w", path, err)
-	}
-	return nil
-}
-
-// Run executes the tool at path as a separate process.
-//
-// This function is the licensing boundary in code: an external tool is reached
-// only through exec.CommandContext, and its interface to the Companion is argv
-// plus two output streams. Nothing here loads tool code into this process, and nothing
-// added here ever may.
-func (m *cacheManager) Run(ctx context.Context, path string, args []string, stdout, stderr io.Writer) error {
-	return RunProcess(ctx, path, args, "", stdout, stderr)
-}
-
-// RunProcess runs an external program, streaming its output to the given
-// writers. dir is the working directory; empty means the caller's.
-//
-// Exported because internal/launch needs the same process semantics for game
-// executables, and having one implementation means the stream handling and the
-// exit-code reporting cannot drift between "run a tool" and "run a game".
-func RunProcess(ctx context.Context, path string, args []string, dir string, stdout, stderr io.Writer) error {
-	if path == "" {
-		return fmt.Errorf("tools: no executable path")
-	}
-	command := exec.CommandContext(ctx, path, args...)
-	command.Dir = dir
-	command.Stdout = stdout
-	command.Stderr = stderr
-
-	if err := command.Run(); err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			// The exit status is the useful part; the wrapped error adds
-			// nothing a user can act on.
-			return fmt.Errorf("tools: %s exited with status %d", filepath.Base(path), exitErr.ExitCode())
-		}
-		return fmt.Errorf("tools: running %s: %w", path, err)
 	}
 	return nil
 }
