@@ -4,9 +4,14 @@
 
 Claude Code must follow the imported repository instructions above.
 
-This repository has no `SessionStart` hook and is not routable through
-`run-agent.sh`, so **nothing is injected at session start**. Resolve the
-task yourself: read the newest handoff in
+This repository is routable through `run-agent.sh` — discovery reads the
+`AUCOM` alias out of `.agent-repo.json`, and `./run-agent.sh --repos`
+shows it. A session started that way arrives with its task resolved.
+
+A session started any other way does not. The only `SessionStart` hook
+here is graft's, which injects a repository map and no task context at
+all, so **when nothing resolved the task for you, resolve it yourself**:
+read the newest handoff in
 `$MAPPER_ROOT/LLM/handoffs/auto-pigeon-companion/`, then the prompt it
 points at, then the next prompt in
 `$MAPPER_ROOT/LLM/prompts/auto-pigeon-companion/`.
@@ -54,8 +59,7 @@ This is how the user tells which prompt an agent executed and in which
 repo, at a glance, without opening the handoff — so it is required for
 **every** task, whatever the status, and **however the session was
 started**. It is never conditional on a router or a `SessionStart` hook
-having injected context, and in this repo there is never any such context
-to depend on.
+having injected context.
 
 Work the number out: `<ALIAS>` is `alias` in this repo's
 `.agent-repo.json` (`AUCOM`); `<N>` is the `NN` in the prompt's

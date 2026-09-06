@@ -19,6 +19,25 @@ previously had nowhere to record. It deliberately does **not** invent
 engineering rules for this codebase; add those in a task that is actually
 about them.
 
+### It absorbed the Launcher
+
+`auto-pigeon-launcher` (**AUL**) was a second, overlapping bootstrap of the
+same program. In `20260906_203` its history was merged into this
+repository and it was retired: `mapper-code/auto-pigeon-launcher/` still
+exists, still has all its branches, tags and source, and now carries only
+a deprecation notice pointing here. Nothing was deleted or archived
+remotely.
+
+What that means for work here:
+
+- AUL's commits are reachable from this repository's `main` through the
+  merge commit. `git log` covers both.
+- There is one implementation of each thing. If you find yourself adding
+  a second auth, config, CLI or web stack "for the launcher case", the
+  merge is being undone.
+- Do not mutate `auto-pigeon-launcher/` unless a prompt names it as a
+  mutation target, exactly as for any other sibling.
+
 ## Cross-repository boundary
 
 Agents may inspect sibling repositories and run their public CLI/API when
@@ -60,9 +79,19 @@ follows it exactly; the items below are what's specific to working in
   `prompt_path` before finishing; write by hand if it's wrong (see
   WORKFLOW.md for why).
 
-This repo is **not** routable through `run-agent.sh` — it has no entry in
-that script's alias table. Sessions here are started by hand, which makes
-the unconditional marker rule above the only thing that identifies them.
+This repo **is** routable through `run-agent.sh`. That script no longer
+recites an alias table: it discovers one from every checkout's
+`.agent-repo.json`, so `./run-agent.sh claude AUCOM` works, and
+`./run-agent.sh --repos` lists `AUCOM auto-pigeon-companion` alongside its
+siblings. Verify with that command rather than trusting this sentence.
+
+Sessions here are still often started by hand — `run-sequence.sh`, or a
+bare `claude` typed in this directory — and a hand-started session gets no
+task context: the only `SessionStart` hook this repo has is graft's, which
+refreshes the code graph and injects a repository map, not a prompt or a
+handoff. So the unconditional marker rule above holds whichever way the
+session began, and so does resolving the task yourself when nothing
+resolved it for you.
 
 ## Session continuity and context-budget safety
 
