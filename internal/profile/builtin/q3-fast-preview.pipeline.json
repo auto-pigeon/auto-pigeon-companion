@@ -1,0 +1,112 @@
+{
+  "schema_version": "aucom.profile/1.1",
+  "kind": "pipeline",
+  "id": "auto-pigeon.q3.fast-preview",
+  "version": "1.0.0",
+  "name": "Quake III — fast preview (experimental)",
+  "summary": "Experimental: compile, a crude visibility pass and fast lighting on one thread. For looking at what you just built.",
+  "description": "The quickest Quake III build that still produces something an engine will load: the BSP stage, a crude visibility pass and fast lighting, all on one thread.\n\nOne thread is not a performance choice. Measured on Q3Map2 2.5.17n, two eight-thread lighting runs of one map produced two different BSPs and two one-thread runs produced the same one twice, so a preview built this way can be compared byte for byte with the last one. A preview whose output changes when nothing changed cannot answer 'did my edit do anything'.\n\nThe light stage is handed three files rather than one: the BSP, the surface file the compile wrote, and the map source. Measured — it exits 1 without either companion, and the file it names in that error is one nobody thought they had asked for.\n\nThe crude visibility pass is not what you ship. `auto-pigeon.q3.normal` is.\n\nQuake III support in Auto-Pigeon is work in progress. Shader, patch, entity, compilation and engine workflows may be incomplete.",
+  "publisher": {
+    "name": "Auto-Pigeon",
+    "url": "https://github.com/andrea-dintino/auto-pigeon-companion"
+  },
+  "license": {
+    "spdx": "MIT",
+    "name": "MIT"
+  },
+  "compatibility": {
+    "companion": {
+      "at_least": "0.1.0"
+    }
+  },
+  "game_profile": {
+    "slug": "quake3",
+    "engine_family": "quake3"
+  },
+  "inputs": [
+    {
+      "name": "source_map",
+      "title": "Map source",
+      "role": "q3.map.source",
+      "required": true,
+      "extensions": [
+        ".map"
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "id": "compile",
+      "title": "Compile the map",
+      "capability": "q3.bsp.compile",
+      "inputs": [
+        {
+          "name": "source_map",
+          "from": "pipeline.source_map"
+        }
+      ],
+      "options": {
+        "meta": "true",
+        "leaktest": "true",
+        "threads": "1"
+      }
+    },
+    {
+      "id": "vis",
+      "title": "Compute visibility",
+      "capability": "q3.bsp.vis",
+      "inputs": [
+        {
+          "name": "bsp",
+          "from": "compile.bsp"
+        },
+        {
+          "name": "prt",
+          "from": "compile.prt"
+        }
+      ],
+      "options": {
+        "fast": "true",
+        "threads": "1"
+      }
+    },
+    {
+      "id": "light",
+      "title": "Compute lighting",
+      "capability": "q3.bsp.light",
+      "inputs": [
+        {
+          "name": "bsp",
+          "from": "vis.bsp"
+        },
+        {
+          "name": "srf",
+          "from": "compile.srf"
+        },
+        {
+          "name": "source_map",
+          "from": "pipeline.source_map"
+        }
+      ],
+      "options": {
+        "fast": "true",
+        "threads": "1"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "name": "bsp",
+      "title": "The finished BSP",
+      "role": "q3.bsp.lit",
+      "from": "light.bsp"
+    },
+    {
+      "name": "lin",
+      "title": "Leak line file",
+      "role": "q3.lin",
+      "from": "compile.lin",
+      "optional": true
+    }
+  ]
+}

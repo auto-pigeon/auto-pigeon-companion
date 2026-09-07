@@ -16,14 +16,23 @@
 // A document may say which family it is for; it may not say what this program
 // thinks of that family.
 //
-// # One sentence, and it is the same sentence everywhere
+// # One sentence per family, and it is the same sentence everywhere
 //
-// [Quake2Message] is quoted verbatim from the prompt that required it, and
-// AUP carries a byte-identical copy in `frontend/src/services/gameMaturity.ts`.
-// Neither repository can read the other's tree at test time, so both pin
-// [MessageDigest] — the same arrangement `internal/profile`'s portability
+// [Quake2Message] and [Quake3Message] are quoted verbatim from the prompts that
+// required them, and AUP carries byte-identical copies in
+// `frontend/src/services/gameMaturity.ts`. Neither repository can read the
+// other's tree at test time, so both pin [Quake2MessageDigest] and
+// [Quake3MessageDigest] — the same arrangement `internal/profile`'s portability
 // corpus already uses. Changing the wording is a change in two repositories, in
 // one task, or in neither.
+//
+// The two sentences are not the same sentence with a numeral swapped, and they
+// must not be generated from a template. Quake II's names textures, entities,
+// compilation and engine workflows; Quake III's names shader, patch, entity,
+// compilation and engine workflows, because a Quake III map has patches and a
+// shader script and a Quake II map has neither. A shared template would make
+// both of them approximately true and neither of them the sentence a prompt
+// asked for.
 //
 // # What it deliberately does not do
 //
@@ -67,9 +76,23 @@ const (
 const Quake2Message = "Quake II — Work in progress. Core editing is available, " +
 	"but some textures, entities, compilation and engine workflows may be incomplete."
 
-// MessageDigest is the SHA-256 of [Quake2Message], pinned so that AUP's copy
-// and this one cannot drift apart unnoticed. See the package comment.
-const MessageDigest = "9c560b2be9cd7ea0057a67d1d82f57ac7b066f393fc000551bfdf1b60c291ccf"
+// Quake2MessageDigest is the SHA-256 of [Quake2Message], pinned so that AUP's
+// copy and this one cannot drift apart unnoticed. See the package comment.
+const Quake2MessageDigest = "9c560b2be9cd7ea0057a67d1d82f57ac7b066f393fc000551bfdf1b60c291ccf"
+
+// Quake3Message is the exact sentence `AUP/AUCOM 216` requires.
+//
+// It is a different sentence from [Quake2Message] rather than the same one with
+// a different numeral: it names `shader, patch, entity, compilation and engine
+// workflows`, which is the list of things a Quake III map has that this build's
+// support for is unfinished. Quake II has no patches and no shader script, so
+// the Quake II sentence does not mention them and must not be edited to.
+const Quake3Message = "Quake III — Work in progress. Core editing is available, " +
+	"but shader, patch, entity, compilation and engine workflows may be incomplete."
+
+// Quake3MessageDigest is the SHA-256 of [Quake3Message]. AUP pins the same
+// value; see the package comment.
+const Quake3MessageDigest = "123973541f14c1a7122f3a21520dc3141683684dcc821f153933285a0e7c0f6a"
 
 // Badge is the short label a chip shows. The long form is [Statement.Message].
 const workInProgressBadge = "Work in progress"
@@ -97,9 +120,13 @@ type Statement struct {
 func (s Statement) IsWorkInProgress() bool { return s.State == WorkInProgress }
 
 // statements is the closed table. A family absent from it is [Undeclared],
-// which is why `quake3` is not listed: this build ships no Quake III profile,
-// and a "stable" claim about a path with nothing on it would be a claim about
-// nothing.
+// which is the right answer for a family this build ships no profiles for: a
+// claim about a path with nothing on it would be a claim about nothing.
+//
+// `quake3` joined it in `AUP/AUCOM 216`, when this build gained a Quake III
+// toolchain, two Quake III pipelines and two Quake III engine profiles. It is
+// [WorkInProgress] for the reasons its own sentence names, and it did not
+// arrive as [Stable] on the strength of a compile that worked once.
 var statements = map[string]Statement{
 	"quake1": {Family: "quake1", State: Stable},
 	"quake2": {
@@ -107,6 +134,13 @@ var statements = map[string]Statement{
 		State:           WorkInProgress,
 		Badge:           workInProgressBadge,
 		Message:         Quake2Message,
+		FeedbackInvited: true,
+	},
+	"quake3": {
+		Family:          "quake3",
+		State:           WorkInProgress,
+		Badge:           workInProgressBadge,
+		Message:         Quake3Message,
 		FeedbackInvited: true,
 	},
 }

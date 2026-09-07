@@ -43,12 +43,16 @@ func TestThePipelineListingCarriesTheWorkInProgressStatement(t *testing.T) {
 			if state["work_in_progress"] != false || state["message"] != "" {
 				t.Errorf("%v carries a work-in-progress statement", row["id"])
 			}
-		case "quake2":
+		case "quake2", "quake3":
 			seenQ2++
+			want := maturity.Quake2Message
+			if row["engine_family"] == "quake3" {
+				want = maturity.Quake3Message
+			}
 			if state["work_in_progress"] != true {
 				t.Errorf("%v is not marked work in progress", row["id"])
 			}
-			if state["message"] != maturity.Quake2Message {
+			if state["message"] != want {
 				t.Errorf("%v carries %q", row["id"], state["message"])
 			}
 			if state["feedback_invited"] != true {
@@ -59,7 +63,7 @@ func TestThePipelineListingCarriesTheWorkInProgressStatement(t *testing.T) {
 		}
 	}
 	if seenQ1 == 0 || seenQ2 == 0 {
-		t.Errorf("the listing had %d Quake 1 and %d Quake II pipelines", seenQ1, seenQ2)
+		t.Errorf("the listing had %d Quake 1 and %d unfinished-family pipelines", seenQ1, seenQ2)
 	}
 }
 
@@ -172,7 +176,7 @@ func TestTheReportRouteAttachesWhatWasConsentedTo(t *testing.T) {
 // machine for any family would be a general-purpose collector.
 func TestTheReportRouteRefusesAFamilyWithNothingToReport(t *testing.T) {
 	server, _ := newTestServer(t, nil)
-	for _, family := range []string{"quake1", "quake3", ""} {
+	for _, family := range []string{"quake1", "doom", ""} {
 		response, body := postFeedback(t, server, map[string]any{
 			"engine_family": family,
 			"summary":       "something",

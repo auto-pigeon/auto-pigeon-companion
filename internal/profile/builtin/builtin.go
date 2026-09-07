@@ -17,13 +17,21 @@
 //
 // # What "qualified" means here, and it is not one thing
 //
-// Both EricW toolchains and all five pipelines are qualified by *measurement*.
+// All three toolchains and all seven pipelines are qualified by *measurement*.
 // For Q1 the version is the one AUT pinned; for Q2 it is the 2.x pre-release
-// that was unpacked and run here against a synthetic Quake II map. In both
-// cases the archives are pinned by digest in the signed catalogue and what each
-// program does was established by running it rather than read off a manual —
-// which is how the Q2 document came to differ from the Q1 one in seven places
+// that was unpacked and run here against a synthetic Quake II map; for Q3 it is
+// Q3Map2 2.5.17n out of NetRadiant-custom's `20260114` release, run here
+// against a synthetic Quake III map. What each program does was established by
+// running it rather than read off a manual — which is how the Q2 document came
+// to differ from the Q1 one in seven places, and the Q3 one from both in nine,
 // that a copy-and-edit would have got wrong.
+//
+// The EricW archives are pinned by digest in the signed catalogue. Q3Map2's is
+// not, and that is a difference in the *artifact* rather than in the standard:
+// upstream publishes it only inside a bundle of the NetRadiant editor, in a
+// container this program does not unpack, and `AUP/AUCOM 216` says not to
+// install an editor to get at a compiler. So that document declares no managed
+// download and says why, which is the honest version of "unavailable".
 //
 // The ten engine profiles are qualified by *documentation*. Their command lines
 // come from each engine's own published usage and source, and no build of any
@@ -35,13 +43,13 @@
 // profile that claimed `supported` on that evidence would be the
 // plausible-looking wrong answer the rest of this repository is careful about.
 //
-// # Quake II is work in progress, and no document here may say otherwise
+// # Quake II and Quake III are work in progress, and no document here may say otherwise
 //
-// The Q2 documents are shipped and usable. What they are not is finished, and
-// that statement is not theirs to make:
+// The Q2 and Q3 documents are shipped and usable. What they are not is
+// finished, and that statement is not theirs to make:
 // [github.com/andrea-dintino/auto-pigeon-companion/internal/maturity] holds it,
 // keyed on AUB's engine family, so a community profile cannot publish itself as
-// stable Quake II support and switch the warning off.
+// stable Quake II or Quake III support and switch the warning off.
 //
 // The instrument that *is* measured is
 // [github.com/andrea-dintino/auto-pigeon-companion/internal/enginefixture],
@@ -97,6 +105,19 @@ const (
 	Q2FastPreview = "auto-pigeon.q2.fast-preview"
 	Q2Normal      = "auto-pigeon.q2.normal"
 
+	// Q3Map2 is the experimental Quake III toolchain: Q3Map2 2.5.17n, from
+	// NetRadiant-custom's `20260114` release.
+	//
+	// One executable with three stage switches, where the two EricW documents
+	// describe several programs — and the only toolchain here with no managed
+	// download, because upstream ships it inside a map editor and this program
+	// does not install one to get at it. See the document's own acquisition
+	// note.
+	Q3Map2 = "auto-pigeon.q3map2"
+	// The two Q3 pipelines, for the same reason there are two Q2 ones.
+	Q3FastPreview = "auto-pigeon.q3.fast-preview"
+	Q3Normal      = "auto-pigeon.q3.normal"
+
 	// The curated Quake 1 engines. Each is one upstream project, and the id is
 	// the name that project calls itself.
 	Ironwail         = "auto-pigeon.engine.ironwail"
@@ -117,6 +138,15 @@ const (
 	YamagiQuake2 = "auto-pigeon.engine.yamagi-quake2"
 	FTEQWQ2      = "auto-pigeon.engine.fteqw-q2"
 	Q2Generic    = "auto-pigeon.engine.q2-generic"
+
+	// The curated Quake III engines.
+	//
+	// IoQuake3 is the reference this build's Quake III path is written against
+	// — it is the engine upstream's own documentation covers, and the one whose
+	// dedicated server this build's host actions are written from. Q3Generic is
+	// the fallback for any other id Tech 3 engine.
+	IoQuake3  = "auto-pigeon.engine.ioquake3"
+	Q3Generic = "auto-pigeon.engine.q3-generic"
 )
 
 // Q1Engines is every curated Quake 1 engine profile this build ships.
@@ -136,6 +166,15 @@ var Q2Engines = []string{YamagiQuake2, FTEQWQ2, Q2Generic}
 
 // Q2Pipelines is the two built-in Quake II pipelines, quickest first.
 var Q2Pipelines = []string{Q2FastPreview, Q2Normal}
+
+// Q3Engines is every curated Quake III engine profile this build ships, in the
+// order they are listed. ioquake3 first because it is the one the Quake III
+// path is written against; the generic fallback last, as for the other two
+// families.
+var Q3Engines = []string{IoQuake3, Q3Generic}
+
+// Q3Pipelines is the two built-in Quake III pipelines, quickest first.
+var Q3Pipelines = []string{Q3FastPreview, Q3Normal}
 
 // Entry is one built-in document: what it says, what file it came from, and
 // the digest of its canonical form.

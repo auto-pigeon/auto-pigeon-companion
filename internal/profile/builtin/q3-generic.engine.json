@@ -1,0 +1,156 @@
+{
+  "schema_version": "aucom.profile/1.1",
+  "kind": "engine",
+  "id": "auto-pigeon.engine.q3-generic",
+  "version": "1.0.0",
+  "name": "Generic id Tech 3 engine",
+  "summary": "The fallback for a Quake III engine this build has no profile for. It sends only what id's own Quake III documented.",
+  "description": "The answer when the engine you have is not one of the profiles here: a Quake III fork, a total conversion's own build, an engine somebody packaged for your distribution, or ioquake3 on a platform whose executable is named differently from the one that profile declares.\n\nIt sends four things and no more: `fs_basepath`, `fs_game`, `sv_maxclients` and the `map` and `connect` commands. Every one is id Software's own Quake III vocabulary, which every engine descended from that source understands. A fallback that sent an ioquake3 extension would be a fallback that only worked on ioquake3.\n\nWhat it therefore leaves out is as deliberate as what it sends. There is no dedicated-server action, because the name of a dedicated binary is each project's own invention — ioquake3 calls it `ioq3ded` — and this profile has no way to know what yours is called. There is no `sv_pure` or `sv_allowDownload`, which are ioquake3's spelling of behaviour vanilla Quake III has but does not configure the same way. Use the ioquake3 profile if that is what you have.\n\nThis profile was written from id Software's published Quake III documentation and command-line vocabulary. Nothing has been run against it here, because there is no one engine for it to be run against.\n\nQuake III support in Auto-Pigeon is work in progress. Core editing is available, but shader, patch, entity, compilation and engine workflows may be incomplete, and this profile is part of that path.",
+  "publisher": {
+    "name": "Auto-Pigeon",
+    "url": "https://github.com/andrea-dintino/auto-pigeon-companion"
+  },
+  "source": {
+    "homepage": "https://github.com/id-Software/Quake-III-Arena",
+    "repository": "https://github.com/id-Software/Quake-III-Arena"
+  },
+  "license": {
+    "spdx": "GPL-2.0-or-later",
+    "name": "GNU General Public License v2.0 or later",
+    "notice": "id Software released the Quake III Arena engine source under the GPL; the engines descended from it are separate programs under their own licences. This profile configures one and contains none of them. Game data shipped with a commercial release is not covered by that licence, and the Companion never copies, uploads or redistributes it."
+  },
+  "compatibility": {
+    "companion": { "at_least": "0.1.0" }
+  },
+  "game_profile": {
+    "slug": "quake3",
+    "engine_family": "quake3"
+  },
+  "runtime": "quake3-generic",
+  "engine_version": "unknown",
+  "last_qualified": "2026-09-07",
+  "platforms": [
+    { "platform": { "os": "windows", "arch": "amd64" }, "status": "unverified", "note": "This profile stands in for an engine nobody here has seen, so there is nothing to have verified." },
+    { "platform": { "os": "linux", "arch": "amd64" }, "status": "unverified", "note": "This profile stands in for an engine nobody here has seen, so there is nothing to have verified." },
+    { "platform": { "os": "linux", "arch": "arm64" }, "status": "unverified", "note": "This profile stands in for an engine nobody here has seen, so there is nothing to have verified." },
+    { "platform": { "os": "darwin", "arch": "amd64" }, "status": "unverified", "note": "This profile stands in for an engine nobody here has seen, so there is nothing to have verified." },
+    { "platform": { "os": "darwin", "arch": "arm64" }, "status": "unverified", "note": "This profile stands in for an engine nobody here has seen, so there is nothing to have verified." }
+  ],
+  "acquisition": [
+    {
+      "mode": "user_path",
+      "title": "Use the engine you have",
+      "hint": "choose the engine executable, whatever it is called"
+    }
+  ],
+  "content_layouts": [
+    {
+      "id": "baseq3",
+      "title": "The base game",
+      "kind": "loose_files",
+      "root": "game_root",
+      "path": "baseq3",
+      "note": "Where the base game's data lives. A fork of Quake III may call this directory something else; bind the game root to the directory that contains it."
+    },
+    {
+      "id": "pk3",
+      "title": "A PK3 archive in the base game",
+      "kind": "pk3",
+      "root": "game_root",
+      "path": "baseq3"
+    },
+    {
+      "id": "mod",
+      "title": "A mod or project directory",
+      "kind": "mod_directory",
+      "root": "game_root",
+      "note": "A game directory beside the base one, named by the `fs_game` cvar."
+    }
+  ],
+  "executables": [
+    { "name": "engine", "title": "The engine", "file": "quake3{platform.exe_suffix}" }
+  ],
+  "actions": [
+    {
+      "id": "play_map",
+      "title": "Play a map",
+      "session_role": "client",
+      "executable": "engine",
+      "working_dir": { "root": "game_root" },
+      "args": [
+        "+set", "fs_basepath", "{root.game_root}",
+        "+set", "fs_game", "{runtime.mod_name}",
+        "+map", "{runtime.map_name}"
+      ],
+      "roots": [
+        { "role": "game_root", "access": "read", "purpose": "load the base game and the mod being played" },
+        { "role": "content_root", "access": "read", "purpose": "load what you built" }
+      ],
+      "diagnostics": [
+        { "id": "missing_pak", "match": "Couldn't load default.cfg", "severity": "error", "message": "The engine did not find the game's own data.", "hint": "The base game data root has to hold the game directory with its PK3 files in it." },
+        { "id": "error", "match": "ERROR:", "severity": "error", "message": "The engine stopped with a fatal error." }
+      ]
+    },
+    {
+      "id": "play_package",
+      "title": "Play a mod or package",
+      "session_role": "client",
+      "executable": "engine",
+      "working_dir": { "root": "game_root" },
+      "args": [
+        "+set", "fs_basepath", "{root.game_root}",
+        "+set", "fs_game", "{runtime.package_name}"
+      ],
+      "roots": [
+        { "role": "game_root", "access": "read", "purpose": "load the base game and the mod being played" },
+        { "role": "content_root", "access": "read", "purpose": "load what you built" }
+      ],
+      "diagnostics": [
+        { "id": "error", "match": "ERROR:", "severity": "error", "message": "The engine stopped with a fatal error." }
+      ]
+    },
+    {
+      "id": "join_server",
+      "title": "Join a server",
+      "session_role": "client",
+      "executable": "engine",
+      "working_dir": { "root": "game_root" },
+      "args": [
+        "+set", "fs_basepath", "{root.game_root}",
+        "+connect", "{runtime.server_host}:{runtime.server_port}"
+      ],
+      "roots": [
+        { "role": "game_root", "access": "read", "purpose": "load the base game" }
+      ],
+      "network": { "required": true, "purpose": "connect to the server the user names" },
+      "diagnostics": [
+        { "id": "error", "match": "ERROR:", "severity": "error", "message": "The engine stopped with a fatal error." }
+      ]
+    },
+    {
+      "id": "host_listen",
+      "title": "Host a game and play in it",
+      "session_role": "listen_server",
+      "executable": "engine",
+      "working_dir": { "root": "game_root" },
+      "args": [
+        "+set", "fs_basepath", "{root.game_root}",
+        "+set", "fs_game", "{runtime.mod_name}",
+        "+set", "sv_maxclients", "{option.max_players}",
+        "+map", "{runtime.map_name}"
+      ],
+      "description": "A Quake III client with a map loaded is a listen server. Nothing here says otherwise, because the cvar that turns a server into a dedicated one is documented per engine and this profile is for an engine it does not know.",
+      "options": [
+        { "name": "max_players", "title": "Players", "description": "`sv_maxclients`, counting you.", "type": "integer", "default": "8", "minimum": 2, "maximum": 64 }
+      ],
+      "roots": [
+        { "role": "game_root", "access": "read", "purpose": "load the base game and the mod being hosted" },
+        { "role": "content_root", "access": "read", "purpose": "load what you built" }
+      ],
+      "network": { "required": true, "purpose": "accept connections from other players" },
+      "diagnostics": [
+        { "id": "error", "match": "ERROR:", "severity": "error", "message": "The engine stopped with a fatal error." }
+      ]
+    }
+  ]
+}

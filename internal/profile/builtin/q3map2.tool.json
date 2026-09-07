@@ -1,0 +1,283 @@
+{
+  "schema_version": "aucom.profile/1.1",
+  "kind": "tool",
+  "id": "auto-pigeon.q3map2",
+  "version": "1.0.0",
+  "name": "Q3Map2 2.5.17n (Quake III, experimental)",
+  "summary": "Experimental: the Quake III compiler, in the three stages one program runs. Acquired by hand — there is no artifact worth pinning.",
+  "description": "Q3Map2 is one program with three stages, and that is the first thing that makes it different from the two EricW toolchains this build already ships. `qbsp`, `vis` and `light` are three executables; `-bsp`, `-vis` and `-light` are three switches on the same one, so this document declares a single executable and three actions that select a stage.\n\nEverything below was measured by running Q3Map2 2.5.17n-git-68ecbed on Linux against a synthetic Quake III map. Nine things differ from the qualified Quake 1 line and from the experimental Quake II one, and each would have been a plausible-looking wrong answer:\n\n1. **There is no output argument.** `q3map2 -bsp maps/x.map` writes `maps/x.bsp`, `maps/x.prt` and `maps/x.srf` BESIDE THE INPUT. So there is no `basename` option here — the compiled map is named after the map source, which is also what `+map <name>` in an engine expects — and every output is declared as a file sitting beside a staged input rather than as a path in the working directory.\n2. **`-vis` and `-light` take the `.bsp` directly.** They were measured accepting it and finding the companion files of the same stem beside it.\n3. **`-light` refuses to run without `<stem>.srf` AND `<stem>.map` beside the BSP.** Either one missing is `Script file … was not found` and exit 1. `-vis` needs neither: it wants the `.bsp` and the `.prt` and nothing else. That asymmetry is why the two actions declare different staged sidecars.\n4. **`-vis` without `-saveprt` DELETES the portal file it was given.** This document always sends `-saveprt`, because an action handed a file must not be able to destroy it.\n5. **A leak exits 0.** With `-leaktest`, a leaked map prints `--- MAP LEAKED, ABORTING LEAKTEST ---`, writes `<stem>.lin` and writes no BSP — and the process still exits 0. The compile is therefore not saved by its exit status but by its declared outputs: `bsp` is required, so the job fails because the file is not there.\n6. **A missing texture or shader is a warning and exit 0** — `WARNING: Couldn't find image for shader …` — and the BSP is written anyway. With no game data bound at all the compile still succeeds and writes a BSP in which every surface has default surfaceparms. That is the Quake III counterpart of Quake II's `.wal` flags, and it is why the base game data root is required rather than optional.\n7. **A face's shader name in a `.map` carries no `textures/` prefix**; Q3Map2 adds it. A map written with `textures/aucom/wall` produces `Couldn't find image for shader textures/textures/aucom/wall`, which reads like a missing file and is a doubled prefix.\n8. **`-light` is nondeterministic above one thread.** Two eight-thread runs of one map produced two different BSPs; two one-thread runs produced the same one twice. The BSP stage is deterministic at any thread count.\n9. **Q3Map2 always initialises a home VFS** — `~/.q3a/baseq3/` on Linux — before anything it was told about. `-fs_homepath` redirects it, and this document sends the job workspace, so a build reads what was bound to it and not whatever is in the user's home directory.\n\nThree roots, bound separately. `tool_root` holds the executable. `game_root` and `content_root` are both passed as `-fs_basepath`, which upstream documents as repeatable and which was measured resolving a shader out of the first and its image out of the second: each is a directory that CONTAINS `baseq3/`, not a `baseq3/` itself. Q3Map2 takes a path for a basepath and a NAME for a game directory, so a mod is the `mod` option and becomes `-fs_game`, never a path. A map that uses only base game content binds `content_root` to the same directory as `game_root`.\n\nThe version probe reads the identity banner rather than the first line. Q3Map2 prints its bare version first — `2.5.17n-git-68ecbed`, with nothing around it — and a probe that took that line could not tell Q3Map2's output from any other program's.",
+  "publisher": {
+    "name": "Auto-Pigeon",
+    "url": "https://github.com/andrea-dintino/auto-pigeon-companion"
+  },
+  "source": {
+    "homepage": "https://github.com/Garux/netradiant-custom",
+    "repository": "https://github.com/Garux/netradiant-custom",
+    "release_notes": "https://github.com/Garux/netradiant-custom/releases/tag/20260114"
+  },
+  "license": {
+    "spdx": "GPL-2.0-or-later",
+    "name": "GNU General Public License v2.0 or later",
+    "url": "https://www.gnu.org/licenses/old-licenses/gpl-2.0.html",
+    "corresponding_source": "https://github.com/Garux/netradiant-custom/tree/20260114",
+    "notice": "Q3Map2 is somebody else's program under its own licence, and describing it here changes nothing about that. Its own source files carry the GtkRadiant header — 'either version 2 of the License, or (at your option) any later version' — so GPL-2.0-or-later is what it is conveyed under. The surrounding NetRadiant-custom tree carries three licences at once (BSD, LGPL-2.1 and GPL, each file saying which), which is why GitHub's own detector reports the repository as `Other`; the corresponding source for the build measured here is the `20260114` tag named above. Auto-Pigeon Companion is MIT and separate: it runs this program as a separate process and does not contain, link or relicense it — and, unlike the two EricW toolchains, it does not download it either."
+  },
+  "compatibility": {
+    "companion": { "at_least": "0.1.0" }
+  },
+  "game_profile": {
+    "slug": "quake3",
+    "engine_family": "quake3"
+  },
+  "tool_version": "2.5.17n-git-68ecbed",
+  "platforms": [
+    { "platform": { "os": "linux", "arch": "amd64" }, "status": "supported", "note": "the three stages were run here on a synthetic Quake III map: compile, visibility, lighting. A claim about this program on this platform, not that Quake III is finished." },
+    { "platform": { "os": "windows", "arch": "amd64" }, "status": "unverified", "note": "upstream's Windows release carries a `q3map2.exe`; nobody here has run it" },
+    { "platform": { "os": "darwin", "arch": "amd64" }, "status": "unverified", "note": "upstream publishes no macOS build; build it from the tagged source, or use a copy you made" },
+    { "platform": { "os": "darwin", "arch": "arm64" }, "status": "unverified", "note": "upstream publishes no macOS build; build it from the tagged source, or use a copy you made" },
+    { "platform": { "os": "linux", "arch": "arm64" }, "status": "unverified", "note": "upstream publishes no arm64 build; build it from the tagged source, or use a copy you made" },
+    { "platform": { "os": "windows", "arch": "386" }, "status": "unsupported", "note": "upstream published no 32-bit build; there is nothing to point at" }
+  ],
+  "acquisition": [
+    {
+      "mode": "user_path",
+      "title": "Use a copy you already have",
+      "hint": "choose the directory that holds `q3map2` — inside an extracted NetRadiant-custom, that is `usr/bin`",
+      "note": "This is the route, and there is deliberately no managed download beside it. Upstream's Linux release for `20260114` is a `.7z` holding one file — an AppImage of the whole NetRadiant editor — and this program unpacks zip and tar.gz only; the Windows release is a 43 MB zip of the same editor; macOS has no artifact at all. `AUP/AUCOM 216` says not to install a map editor merely because the release bundles one, and there is no smaller artifact to prefer: `q3map2` resolves libassimp, libdraco, libminizip, libpugixml, libicu, libxml2 and libglib out of the bundle's own `../lib`, so it cannot be lifted out on its own. Keep that `lib` directory beside the `bin` you point at. On Linux, `./NetRadiant-Custom-x86_64.AppImage --appimage-extract` unpacks the bundle without installing anything."
+    },
+    {
+      "mode": "system_path",
+      "title": "Find it on PATH",
+      "commands": ["q3map2"],
+      "note": "Several distributions package NetRadiant, which puts `q3map2` on PATH. Whatever version is first there is what runs — the version probe below reports which, and an older 2.5.x may not behave as this document describes."
+    }
+  ],
+  "version_probe": {
+    "executable": "q3map2",
+    "args": [],
+    "parse": { "kind": "after_marker", "marker": "Q3Map (ydnar) - v", "stream": "stdout" },
+    "timeout_seconds": 10
+  },
+  "capabilities": [
+    {
+      "id": "q3.bsp.compile",
+      "title": "Compile a Quake III map into a BSP",
+      "description": "Reads .map source and writes the Quake III BSP, the portal file the vis stage needs, and the surface file the light stage refuses to run without. A leaked map produces a .lin line file instead of a BSP.",
+      "consumes": ["q3.map.source"],
+      "produces": ["q3.bsp", "q3.prt", "q3.srf", "q3.lin"]
+    },
+    {
+      "id": "q3.bsp.vis",
+      "title": "Compute the potentially visible set",
+      "description": "Rewrites the BSP with its visibility data. Quake III has no hearability pass — that is Quake II's.",
+      "consumes": ["q3.bsp", "q3.prt"],
+      "produces": ["q3.bsp.vised"]
+    },
+    {
+      "id": "q3.bsp.light",
+      "title": "Compute lighting",
+      "description": "Writes the lightmaps into the BSP. It needs the surface file and the map source beside it, both measured, and it writes no separate lighting file.",
+      "consumes": ["q3.bsp.vised", "q3.srf", "q3.map.source"],
+      "produces": ["q3.bsp.lit"]
+    }
+  ],
+  "executables": [
+    { "name": "q3map2", "title": "Quake III compiler", "file": "q3map2{platform.exe_suffix}" }
+  ],
+  "actions": [
+    {
+      "id": "compile",
+      "title": "Compile the map",
+      "description": "The BSP stage. `-meta` is on by default because upstream's own help says `ALWAYS USE THIS`: without it adjacent triangles of one texture are never combined and the map is slower everywhere.\n\nThe BSP, the portal file and the surface file all appear beside the staged map source, which is why none of them declares a path.",
+      "capability": "q3.bsp.compile",
+      "executable": "q3map2",
+      "working_dir": { "root": "workspace" },
+      "args": [
+        "-bsp",
+        "-game",
+        "quake3",
+        "-fs_basepath",
+        "{root.game_root}",
+        "-fs_basepath",
+        "{root.content_root}",
+        "-fs_homepath",
+        "{root.workspace}",
+        { "value": "-fs_game", "when": { "option": "mod" } },
+        { "value": "{option.mod}", "when": { "option": "mod" } },
+        "-threads",
+        "{option.threads}",
+        { "value": "-meta", "when": { "option": "meta" } },
+        { "value": "-leaktest", "when": { "option": "leaktest" } },
+        { "value": "-patchmeta", "when": { "option": "patchmeta" } },
+        { "value": "-custinfoparms", "when": { "option": "custinfoparms" } },
+        { "value": "-samplesize", "when": { "option": "samplesize" } },
+        { "value": "{option.samplesize}", "when": { "option": "samplesize" } },
+        { "value": "-v", "when": { "option": "verbosity", "equals": "verbose" } },
+        "{input.source_map}"
+      ],
+      "inputs": [
+        { "name": "source_map", "title": "Map source", "role": "q3.map.source", "required": true, "extensions": [".map"] }
+      ],
+      "outputs": [
+        { "name": "bsp", "title": "Compiled BSP", "role": "q3.bsp", "in_place": "source_map", "extension": ".bsp" },
+        { "name": "prt", "title": "Portal file", "role": "q3.prt", "in_place": "source_map", "extension": ".prt", "optional": true },
+        { "name": "srf", "title": "Surface file", "role": "q3.srf", "in_place": "source_map", "extension": ".srf", "optional": true },
+        { "name": "lin", "title": "Leak line file", "role": "q3.lin", "in_place": "source_map", "extension": ".lin", "optional": true }
+      ],
+      "options": [
+        { "name": "meta", "title": "Combine adjacent surfaces", "description": "Upstream's help says of `-meta`: ALWAYS USE THIS. Turn it off only to reproduce an old build.", "type": "bool", "default": "true" },
+        { "name": "leaktest", "title": "Stop if the map leaks", "description": "Q3Map2 writes the `.lin` line file either way and, with this on, writes no BSP. It still exits 0 — the missing BSP is what fails the job, and the `.lin` is what you load in the editor to find the hole.", "type": "bool", "default": "true" },
+        { "name": "mod", "title": "Mod directory name", "description": "A NAME, not a path: `-fs_game missionpack` looks for `missionpack` inside each basepath. Leave it empty for a plain base game map.", "type": "text", "max_length": 64 },
+        { "name": "threads", "title": "Threads", "description": "The BSP stage was measured to produce the same file at any thread count. The lighting stage was not; see its own option.", "type": "integer", "default": "4", "minimum": 1, "maximum": 64 },
+        { "name": "patchmeta", "title": "Turn patches into triangle meshes", "description": "Patches are curved surfaces, and Auto-Pigeon's own patch support is unfinished. This is Q3Map2's own switch, and what it does to a map with patches in it has not been measured here.", "type": "bool", "default": "false", "advanced": true },
+        { "name": "custinfoparms", "title": "Read scripts/custinfoparms.txt", "description": "Loads custom surface and content flags a mod defines. Off unless your content root has that file.", "type": "bool", "default": "false", "advanced": true },
+        { "name": "samplesize", "title": "Lightmap resolution", "description": "In units per luxel — smaller is finer and slower. Leave unset for Q3Map2's own default.", "type": "integer", "minimum": 1, "maximum": 1024, "advanced": true },
+        { "name": "verbosity", "title": "How much Q3Map2 prints", "type": "enum", "default": "normal", "values": [
+          { "value": "normal", "title": "Normal" },
+          { "value": "verbose", "title": "Verbose" }
+        ] }
+      ],
+      "diagnostics": [
+        { "id": "leaked", "match": "******* leaked *******", "severity": "error", "message": "The map leaks: there is a gap between the inside and the void.", "hint": "A `.lin` line file was written beside the map. Load it in your editor and follow it to the hole." },
+        { "id": "leaktest_abort", "match": "MAP LEAKED, ABORTING LEAKTEST", "severity": "error", "message": "Q3Map2 stopped rather than write a BSP for a map that leaks — and it still exited 0, so the missing BSP is what fails this build.", "hint": "Turn the leak test off if you want the BSP anyway; it will have no usable visibility." },
+        { "id": "entity_leaked", "match": "Entity leaked", "severity": "error", "message": "Q3Map2 named the entity and brush the leak was traced from." },
+        { "id": "missing_image", "match": "Couldn't find image for shader", "severity": "warning", "message": "A shader the map names has no image and no shader script, so it compiles with default surfaceparms.", "hint": "In a .map the face name has no `textures/` prefix; Q3Map2 adds it, so `textures/textures/…` in this line means the prefix was written twice. Otherwise: check what the base game data and content roots are bound to. This is a warning and the BSP is still written." },
+        { "id": "shader_read", "match": "entering scripts/", "severity": "info", "message": "A shader script was read out of the bound content." },
+        { "id": "no_portals", "match": "No portals means no vis", "severity": "warning", "message": "The BSP has no portals, so there is nothing for the visibility stage to compute." },
+        { "id": "error", "match": "************ ERROR ************", "severity": "error", "message": "Q3Map2 stopped with an error; its next line says which." },
+        { "id": "writing", "match": "Writing ", "kind": "prefix", "severity": "progress", "message": "Q3Map2 is writing a file." }
+      ],
+      "roots": [
+        { "role": "workspace", "access": "read_write", "purpose": "read the staged map source, write the BSP beside it, and hold the home directory Q3Map2 would otherwise take from the user" },
+        { "role": "game_root", "access": "read", "purpose": "read the base game's shader scripts and textures, whose surfaceparms are baked into the BSP" },
+        { "role": "content_root", "access": "read", "purpose": "read your own shaders and textures, which overlay the base game's" }
+      ],
+      "timeout_seconds": 3600
+    },
+    {
+      "id": "vis",
+      "title": "Compute visibility",
+      "description": "The VIS stage rewrites the BSP it is given, and opens the `.prt` of the same stem beside it without being told to — which is why the portal file is an input here and is staged with the BSP.\n\n`-saveprt` is not an option. Measured: without it Q3Map2 deletes the portal file when it finishes, and an action must not be able to destroy a file it was handed.",
+      "capability": "q3.bsp.vis",
+      "executable": "q3map2",
+      "working_dir": { "root": "workspace" },
+      "args": [
+        "-vis",
+        "-saveprt",
+        "-game",
+        "quake3",
+        "-fs_basepath",
+        "{root.game_root}",
+        "-fs_basepath",
+        "{root.content_root}",
+        "-fs_homepath",
+        "{root.workspace}",
+        { "value": "-fs_game", "when": { "option": "mod" } },
+        { "value": "{option.mod}", "when": { "option": "mod" } },
+        "-threads",
+        "{option.threads}",
+        { "value": "-fast", "when": { "option": "fast" } },
+        { "value": "-mergeportals", "when": { "option": "mergeportals" } },
+        { "value": "-v", "when": { "option": "verbosity", "equals": "verbose" } },
+        "{input.bsp}"
+      ],
+      "inputs": [
+        { "name": "bsp", "title": "Compiled BSP", "role": "q3.bsp", "required": true, "extensions": [".bsp"] },
+        { "name": "prt", "title": "Portal file", "role": "q3.prt", "required": true, "extensions": [".prt"], "stage_with": "bsp" }
+      ],
+      "outputs": [
+        { "name": "bsp", "title": "BSP with visibility", "role": "q3.bsp.vised", "in_place": "bsp" }
+      ],
+      "options": [
+        { "name": "fast", "title": "Fast, crude visibility", "description": "Upstream calls it very fast and crude. It is for looking at what you just built, not for what you ship.", "type": "bool", "default": "false" },
+        { "name": "mergeportals", "title": "Merge portals", "description": "Upstream: sometimes much faster, and usually does not hurt the frame rate.", "type": "bool", "default": "false", "advanced": true },
+        { "name": "mod", "title": "Mod directory name", "description": "As for the compile stage: a name, not a path.", "type": "text", "max_length": 64 },
+        { "name": "threads", "title": "Threads", "type": "integer", "default": "4", "minimum": 1, "maximum": 64 },
+        { "name": "verbosity", "title": "How much Q3Map2 prints", "type": "enum", "default": "normal", "values": [
+          { "value": "normal", "title": "Normal" },
+          { "value": "verbose", "title": "Verbose" }
+        ] }
+      ],
+      "diagnostics": [
+        { "id": "no_portal_file", "match": "Couldn't open", "severity": "error", "message": "Q3Map2 could not open a file it needs — for this stage that is normally the portal file of the same name as the BSP.", "hint": "The compile stage produces it. A leaked map has none, because the compile stops before writing one." },
+        { "id": "no_portals", "match": "No portals means no vis", "severity": "warning", "message": "The BSP has no portals, so there is nothing to compute.", "hint": "A map that is one open room has one cluster and no portals. That is not an error; it means visibility has nothing to cull." },
+        { "id": "visdata", "match": "visdatasize", "severity": "progress", "message": "Visibility data written." },
+        { "id": "error", "match": "************ ERROR ************", "severity": "error", "message": "Q3Map2 stopped with an error; its next line says which." }
+      ],
+      "roots": [
+        { "role": "workspace", "access": "read_write", "purpose": "rewrite the staged BSP with its visibility data" },
+        { "role": "game_root", "access": "read", "purpose": "read the base game content Q3Map2 loads at startup" },
+        { "role": "content_root", "access": "read", "purpose": "read your own content, which overlays the base game's" }
+      ],
+      "timeout_seconds": 21600
+    },
+    {
+      "id": "light",
+      "title": "Compute lighting",
+      "description": "The LIGHT stage writes the lightmaps into the BSP. There is no separate lighting file: Quake III lightmaps live inside the BSP, or — for a build that asked for external ones, which this document does not — in a directory beside it.\n\nIt needs two companion files beside the BSP and refuses without either: `<stem>.srf`, which the compile stage wrote, and `<stem>.map`, the map source itself. Both are staged with the BSP. A lighting job that staged only the BSP would exit 1 saying a script file was not found, and the file it named would be one nobody thought they had asked for.",
+      "capability": "q3.bsp.light",
+      "executable": "q3map2",
+      "working_dir": { "root": "workspace" },
+      "args": [
+        "-light",
+        "-game",
+        "quake3",
+        "-fs_basepath",
+        "{root.game_root}",
+        "-fs_basepath",
+        "{root.content_root}",
+        "-fs_homepath",
+        "{root.workspace}",
+        { "value": "-fs_game", "when": { "option": "mod" } },
+        { "value": "{option.mod}", "when": { "option": "mod" } },
+        "-threads",
+        "{option.threads}",
+        { "value": "-fast", "when": { "option": "fast" } },
+        { "value": "-filter", "when": { "option": "filter" } },
+        { "value": "-shade", "when": { "option": "shade" } },
+        { "value": "-patchshadows", "when": { "option": "patchshadows" } },
+        { "value": "-samples", "when": { "option": "samples" } },
+        { "value": "{option.samples}", "when": { "option": "samples" } },
+        { "value": "-bounce", "when": { "option": "bounce" } },
+        { "value": "{option.bounce}", "when": { "option": "bounce" } },
+        { "value": "-v", "when": { "option": "verbosity", "equals": "verbose" } },
+        "{input.bsp}"
+      ],
+      "inputs": [
+        { "name": "bsp", "title": "BSP with visibility", "role": "q3.bsp.vised", "required": true, "extensions": [".bsp"] },
+        { "name": "srf", "title": "Surface file", "role": "q3.srf", "required": true, "extensions": [".srf"], "stage_with": "bsp" },
+        { "name": "source_map", "title": "Map source", "role": "q3.map.source", "required": true, "extensions": [".map"], "stage_with": "bsp" }
+      ],
+      "outputs": [
+        { "name": "bsp", "title": "Lit BSP", "role": "q3.bsp.lit", "in_place": "bsp" }
+      ],
+      "options": [
+        { "name": "fast", "title": "Fast lighting", "description": "Ignores tiny light contributions. Quick, and visibly rougher.", "type": "bool", "default": "false" },
+        { "name": "filter", "title": "Filter the lightmaps", "description": "Blurs the lightmap slightly, which hides sampling noise.", "type": "bool", "default": "false" },
+        { "name": "samples", "title": "Adaptive supersampling", "description": "Q3Map2's own `-samples`: how hard it works on the edges of shadows.", "type": "integer", "minimum": 1, "maximum": 16, "advanced": true },
+        { "name": "bounce", "title": "Radiosity bounces", "description": "How many times light bounces off surfaces. Each bounce costs another full pass.", "type": "integer", "minimum": 1, "maximum": 16, "advanced": true },
+        { "name": "shade", "title": "Phong shading", "description": "Smooths lighting across surfaces that meet at a shallow angle.", "type": "bool", "default": "false", "advanced": true },
+        { "name": "patchshadows", "title": "Shadows from patches", "description": "Patches do not cast shadows unless this is on. Auto-Pigeon's own patch support is unfinished, so a map from this editor is unlikely to have any yet.", "type": "bool", "default": "false", "advanced": true },
+        { "name": "mod", "title": "Mod directory name", "description": "As for the compile stage: a name, not a path.", "type": "text", "max_length": 64 },
+        { "name": "threads", "title": "Threads", "description": "Measured: this stage produces a different BSP on different runs above one thread, and the same one every time at one thread. Use one when you need to compare a build with the last one byte for byte.", "type": "integer", "default": "4", "minimum": 1, "maximum": 64 },
+        { "name": "verbosity", "title": "How much Q3Map2 prints", "type": "enum", "default": "normal", "values": [
+          { "value": "normal", "title": "Normal" },
+          { "value": "verbose", "title": "Verbose" }
+        ] }
+      ],
+      "diagnostics": [
+        { "id": "script_missing", "match": "was not found: No such file or directory", "severity": "error", "message": "The lighting stage could not open a file it needs beside the BSP — the surface file the compile wrote, or the map source.", "hint": "Both are staged with the BSP by this profile. Seeing this means one of them was not produced by the compile stage." },
+        { "id": "missing_image", "match": "Couldn't find image for shader", "severity": "warning", "message": "A shader the map names has no image, so its light emission and its surface flags are Q3Map2's defaults." },
+        { "id": "lightmaps", "match": "total lightmaps", "severity": "info", "message": "The lightmaps were packed and stored in the BSP." },
+        { "id": "error", "match": "************ ERROR ************", "severity": "error", "message": "Q3Map2 stopped with an error; its next line says which." },
+        { "id": "writing", "match": "Writing ", "kind": "prefix", "severity": "progress", "message": "Q3Map2 is writing the lit BSP." }
+      ],
+      "roots": [
+        { "role": "workspace", "access": "read_write", "purpose": "rewrite the staged BSP with its lightmaps" },
+        { "role": "game_root", "access": "read", "purpose": "read the base game's shaders, whose light emission this stage uses" },
+        { "role": "content_root", "access": "read", "purpose": "read your own shaders, which overlay the base game's" }
+      ],
+      "timeout_seconds": 21600
+    }
+  ]
+}

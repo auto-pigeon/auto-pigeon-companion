@@ -1,0 +1,231 @@
+{
+  "schema_version": "aucom.profile/1.1",
+  "kind": "engine",
+  "id": "auto-pigeon.engine.ioquake3",
+  "version": "1.0.0",
+  "name": "ioquake3",
+  "summary": "The maintained Quake III Arena engine. It ships its own game logic, so it can host as well as play.",
+  "description": "ioquake3 is the community continuation of id's Quake III Arena engine, and it is the engine this build's Quake III path is written against.\n\nThree things about it were established by looking at what upstream actually publishes rather than by assuming:\n\n1. **The game logic ships with the engine.** `Linux.zip` carries `baseq3/vm/qagame.qvm`, `cgame.qvm` and `ui.qvm` beside the two executables, and the macOS bundle carries the same as `.dylib`s. That is why this profile declares all five actions where FTEQW's Quake II profile declares one: a local ioquake3 server needs no third-party gamecode.\n2. **What it does not carry is the game.** Upstream's own words: *\"The Quake 3 engine is open source. The Quake III: Arena game itself is not free. You must purchase the game to use the data and play Quake 3 with ioquake3.\"* `pak0.pk3` is id's, it is not ours, and the Companion never downloads, copies or redistributes it.\n3. **There is nothing to pin.** ioquake/ioq3 publishes no GitHub release and no tag; the builds are unversioned rolling zips at `files.ioquake3.org`. A signed catalogue entry names a size and a digest, and neither is a property of a URL whose contents change. So this profile is `user_path`, like every other engine profile here.\n\nThe executables are named for the architecture upstream builds — `ioquake3.x86_64` and `ioq3ded.x86_64`, with `.exe` on Windows. macOS is the exception: its download is a zip inside a zip holding `ioquake3.app`, whose binaries are plainly `ioquake3` and `ioq3ded`. A profile declares one file name per executable, so on macOS point the Companion at the binary itself — `companion engine bind` takes a path, and the declared name is only what is looked for under an install root.\n\n`fs_homepath` is deliberately not sent. ioquake3 keeps a player's settings, screenshots and demos under their own home directory — `~/.q3a`, `%APPDATA%\\Quake3`, `~/Library/Application Support/Quake3` — and a launcher that quietly moved them somewhere else would be a launcher that lost somebody's config. The compiler is the opposite case and does redirect it, because a build must read only what was bound to it.\n\nThis profile was written from ioquake3's own published documentation. No build of it has been run here: playing Quake III needs a copy of Quake III, which is not ours to have.\n\nQuake III support in Auto-Pigeon is work in progress. Core editing is available, but shader, patch, entity, compilation and engine workflows may be incomplete, and this profile is part of that path.",
+  "publisher": {
+    "name": "Auto-Pigeon",
+    "url": "https://github.com/andrea-dintino/auto-pigeon-companion"
+  },
+  "source": {
+    "homepage": "https://ioquake3.org/",
+    "repository": "https://github.com/ioquake/ioq3",
+    "release_notes": "https://ioquake3.org/get-it/"
+  },
+  "license": {
+    "spdx": "GPL-2.0-or-later",
+    "name": "GNU General Public License v2.0 or later",
+    "notice": "Quake III engine source ports are separate programs under their own licences. This profile configures one; it does not contain, link or relicense it. Game data — the PK3 files, maps, textures, sounds and game logic shipped with a commercial release — is not covered by that licence, and the Companion never copies, uploads or redistributes it."
+  },
+  "compatibility": {
+    "companion": { "at_least": "0.1.0" }
+  },
+  "game_profile": {
+    "slug": "quake3",
+    "engine_family": "quake3"
+  },
+  "runtime": "ioquake3",
+  "engine_version": "rolling",
+  "last_qualified": "2026-09-07",
+  "platforms": [
+    { "platform": { "os": "windows", "arch": "amd64" }, "status": "unverified", "note": "Upstream's Windows.zip carries ioquake3.x86_64.exe and ioq3ded.x86_64.exe; nobody here has run either." },
+    { "platform": { "os": "linux", "arch": "amd64" }, "status": "unverified", "note": "Upstream's Linux.zip carries ioquake3.x86_64 and ioq3ded.x86_64; nobody here has run either." },
+    { "platform": { "os": "darwin", "arch": "amd64" }, "status": "unverified", "note": "Upstream's macOS download holds ioquake3.app, whose binaries are named `ioquake3` and `ioq3ded` without the architecture suffix. Bind the executable by path there." },
+    { "platform": { "os": "darwin", "arch": "arm64" }, "status": "unverified", "note": "Upstream's macOS build is Intel; on Apple Silicon it runs under Rosetta 2. The binaries inside the bundle are named as above." },
+    { "platform": { "os": "linux", "arch": "arm64" }, "status": "unverified", "note": "Upstream publishes no arm64 binary; build it from source. Its file name will not be the x86_64 one declared here, so bind the executable by path." }
+  ],
+  "acquisition": [
+    {
+      "mode": "user_path",
+      "title": "Use a copy you already have",
+      "hint": "choose the ioquake3 executable — `ioquake3.x86_64` on Linux, `ioquake3.x86_64.exe` on Windows, `ioquake3.app/Contents/MacOS/ioquake3` on macOS",
+      "note": "There is no managed download for any engine here, and for this one there could not be: upstream publishes rolling builds at fixed URLs, with no version and no digest to pin."
+    }
+  ],
+  "content_layouts": [
+    {
+      "id": "baseq3",
+      "title": "The base game",
+      "kind": "loose_files",
+      "root": "game_root",
+      "path": "baseq3",
+      "note": "Where Quake III's own data lives, including the pak0.pk3 you bought. The Companion reads it and never writes to it."
+    },
+    {
+      "id": "pk3",
+      "title": "A PK3 archive in the base game",
+      "kind": "pk3",
+      "root": "game_root",
+      "path": "baseq3",
+      "note": "A PK3 is a zip. Quake III loads every one it finds, in name order, later ones overriding earlier."
+    },
+    {
+      "id": "mod",
+      "title": "A mod or project directory",
+      "kind": "mod_directory",
+      "root": "game_root",
+      "note": "A game directory beside baseq3, named by the `fs_game` cvar. This is where the Companion stages the PK3 you built."
+    }
+  ],
+  "executables": [
+    { "name": "engine", "title": "ioquake3", "file": "ioquake3.x86_64{platform.exe_suffix}" },
+    { "name": "dedicated", "title": "ioquake3 dedicated server", "file": "ioq3ded.x86_64{platform.exe_suffix}" }
+  ],
+  "actions": [
+    {
+      "id": "play_map",
+      "title": "Play a map",
+      "session_role": "client",
+      "executable": "engine",
+      "working_dir": { "root": "game_root" },
+      "args": [
+        "+set", "fs_basepath", "{root.game_root}",
+        "+set", "fs_game", "{runtime.mod_name}",
+        "+map", "{runtime.map_name}"
+      ],
+      "description": "Starts the engine and loads one map. `fs_game` is a directory NAME beside baseq3, which is what upstream documents; the path it is found under is `fs_basepath`.",
+      "roots": [
+        { "role": "game_root", "access": "read", "purpose": "load the base game and the mod being played" },
+        { "role": "content_root", "access": "read", "purpose": "load what you built" }
+      ],
+      "diagnostics": [
+        { "id": "ready", "match": "Com_Init", "severity": "info", "message": "The engine is starting." },
+        { "id": "missing_pak", "match": "Couldn't load default.cfg", "severity": "error", "message": "Quake III's own data was not found.", "hint": "The base game data root has to hold `baseq3` with your `pak0.pk3` in it. That file comes from a copy of the game you bought; Auto-Pigeon does not and cannot supply it." },
+        { "id": "map_not_found", "match": "Can't find map", "severity": "error", "message": "The engine could not find the map it was asked to load.", "hint": "Check that the PK3 you built is in the game directory this action names, and that the map inside it is at `maps/<name>.bsp`." },
+        { "id": "error", "match": "ERROR:", "severity": "error", "message": "The engine stopped with a fatal error.", "hint": "The engine's own last line is usually the whole diagnosis; read the job's log." }
+      ]
+    },
+    {
+      "id": "play_package",
+      "title": "Play a mod or package",
+      "session_role": "client",
+      "executable": "engine",
+      "working_dir": { "root": "game_root" },
+      "args": [
+        "+set", "fs_basepath", "{root.game_root}",
+        "+set", "fs_game", "{runtime.package_name}"
+      ],
+      "description": "Starts the engine in a game directory without loading a map, so its own menu is what chooses one.",
+      "roots": [
+        { "role": "game_root", "access": "read", "purpose": "load the base game and the mod being played" },
+        { "role": "content_root", "access": "read", "purpose": "load what you built" }
+      ],
+      "diagnostics": [
+        { "id": "missing_pak", "match": "Couldn't load default.cfg", "severity": "error", "message": "Quake III's own data was not found.", "hint": "The base game data root has to hold `baseq3` with your `pak0.pk3` in it." },
+        { "id": "error", "match": "ERROR:", "severity": "error", "message": "The engine stopped with a fatal error." }
+      ]
+    },
+    {
+      "id": "join_server",
+      "title": "Join a server",
+      "session_role": "client",
+      "executable": "engine",
+      "working_dir": { "root": "game_root" },
+      "args": [
+        "+set", "fs_basepath", "{root.game_root}",
+        "+connect", "{runtime.server_host}:{runtime.server_port}"
+      ],
+      "description": "Connects to a server somebody else is running. No `fs_game` is sent: a Quake III server tells the client which game directory it is running and the client switches to it.",
+      "roots": [
+        { "role": "game_root", "access": "read", "purpose": "load the base game" }
+      ],
+      "network": { "required": true, "purpose": "connect to the server the user names" },
+      "diagnostics": [
+        { "id": "connecting", "match": "Connecting to", "severity": "info", "message": "The client is connecting." },
+        { "id": "refused", "match": "Server disconnected", "severity": "error", "message": "The server closed the connection." },
+        { "id": "pure", "match": "unpure client", "severity": "error", "message": "The server refused this client because it has files the server does not.", "hint": "A pure server accepts only the PK3s it has itself. Either the server needs your PK3, or it has to run with `sv_pure 0`." },
+        { "id": "error", "match": "ERROR:", "severity": "error", "message": "The engine stopped with a fatal error." }
+      ]
+    },
+    {
+      "id": "host_listen",
+      "title": "Host a game and play in it",
+      "session_role": "listen_server",
+      "executable": "engine",
+      "working_dir": { "root": "game_root" },
+      "args": [
+        "+set", "fs_basepath", "{root.game_root}",
+        "+set", "fs_game", "{runtime.mod_name}",
+        "+set", "sv_maxclients", "{option.max_players}",
+        "+set", "net_port", "{option.port}",
+        "+set", "sv_pure", "{option.pure}",
+        "+set", "sv_allowDownload", "{option.allow_download}",
+        "+map", "{runtime.map_name}"
+      ],
+      "description": "The client binary is a listen server as it stands: upstream documents `dedicated 0` — a server with a local player — as the client binary's own default, so this action does not send it. It sends the player limit, the port, and the two cvars that decide whether somebody who does not have your map can get it.",
+      "options": [
+        { "name": "max_players", "title": "Players", "description": "`sv_maxclients`, counting you.", "type": "integer", "default": "8", "minimum": 2, "maximum": 64 },
+        { "name": "port", "title": "Port", "description": "`net_port`. 27960 is Quake III's own default; change it to run two servers on one machine.", "type": "integer", "default": "27960", "minimum": 1024, "maximum": 65535 },
+        { "name": "pure", "title": "Pure server", "description": "Upstream: `sv_pure 1` restricts clients to the PK3s installed on the server; `sv_pure 0` lets them use their own. The values are the cvar's own.", "type": "enum", "default": "1", "values": [
+          { "value": "1", "title": "Only the files this server has" },
+          { "value": "0", "title": "Allow clients their own files" }
+        ] },
+        { "name": "allow_download", "title": "Send files to clients", "description": "`sv_allowDownload 1` lets a player who does not have your PK3 download it from the server. Without it they are refused and told what they are missing.", "type": "enum", "default": "1", "values": [
+          { "value": "1", "title": "Let clients download what they are missing" },
+          { "value": "0", "title": "Do not send files" }
+        ] }
+      ],
+      "roots": [
+        { "role": "game_root", "access": "read", "purpose": "load the base game and the mod being hosted" },
+        { "role": "content_root", "access": "read", "purpose": "load what you built" }
+      ],
+      "network": { "required": true, "purpose": "accept connections from other players" },
+      "diagnostics": [
+        { "id": "listening", "match": "Opening IP socket", "severity": "info", "message": "The server has its socket." },
+        { "id": "missing_pak", "match": "Couldn't load default.cfg", "severity": "error", "message": "Quake III's own data was not found." },
+        { "id": "error", "match": "ERROR:", "severity": "error", "message": "The engine stopped with a fatal error." }
+      ]
+    },
+    {
+      "id": "host_dedicated",
+      "title": "Host a dedicated server",
+      "session_role": "dedicated_server",
+      "executable": "dedicated",
+      "working_dir": { "root": "game_root" },
+      "args": [
+        "+set", "fs_basepath", "{root.game_root}",
+        "+set", "fs_game", "{runtime.mod_name}",
+        "+set", "dedicated",
+        { "value": "1", "when": { "option": "listing", "equals": "lan" } },
+        { "value": "2", "when": { "option": "listing", "equals": "internet" } },
+        "+set", "sv_maxclients", "{option.max_players}",
+        "+set", "net_port", "{option.port}",
+        "+set", "sv_pure", "{option.pure}",
+        "+set", "sv_allowDownload", "{option.allow_download}",
+        "+set", "com_hunkMegs", "{option.hunk_megs}",
+        "+map", "{runtime.map_name}"
+      ],
+      "description": "A server with no local player, run from ioquake3's own `ioq3ded`. `dedicated` is 1 for a server people reach by address and 2 for one listed on the public master servers — upstream's own two values, and it says the cvar must be set on the command line rather than afterwards.",
+      "options": [
+        { "name": "listing", "title": "Who can find it", "description": "Upstream: 2 is public Internet, 1 is LAN or connect-by-IP.", "type": "enum", "default": "lan", "values": [
+          { "value": "lan", "title": "LAN, or people you give the address to" },
+          { "value": "internet", "title": "Listed on the public master servers" }
+        ] },
+        { "name": "max_players", "title": "Players", "type": "integer", "default": "8", "minimum": 2, "maximum": 64 },
+        { "name": "port", "title": "Port", "type": "integer", "default": "27960", "minimum": 1024, "maximum": 65535 },
+        { "name": "pure", "title": "Pure server", "type": "enum", "default": "1", "values": [
+          { "value": "1", "title": "Only the files this server has" },
+          { "value": "0", "title": "Allow clients their own files" }
+        ] },
+        { "name": "allow_download", "title": "Send files to clients", "type": "enum", "default": "1", "values": [
+          { "value": "1", "title": "Let clients download what they are missing" },
+          { "value": "0", "title": "Do not send files" }
+        ] },
+        { "name": "hunk_megs", "title": "Memory", "description": "`com_hunkMegs`, in megabytes. Upstream's default is 128 and its own server guide raises it for some add-ons; it must be set on the command line.", "type": "integer", "default": "128", "minimum": 32, "maximum": 2048, "advanced": true }
+      ],
+      "roots": [
+        { "role": "game_root", "access": "read", "purpose": "load the base game and the mod being hosted" },
+        { "role": "content_root", "access": "read", "purpose": "load what you built" }
+      ],
+      "network": { "required": true, "purpose": "accept connections from other players" },
+      "diagnostics": [
+        { "id": "listening", "match": "Opening IP socket", "severity": "info", "message": "The server has its socket." },
+        { "id": "missing_pak", "match": "Couldn't load default.cfg", "severity": "error", "message": "Quake III's own data was not found.", "hint": "A dedicated server needs the game data too: `baseq3` with your `pak0.pk3` in it." },
+        { "id": "error", "match": "ERROR:", "severity": "error", "message": "The server stopped with a fatal error." }
+      ]
+    }
+  ]
+}

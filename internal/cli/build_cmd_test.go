@@ -86,10 +86,11 @@ func TestBuildPipelinesAsJSON(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &rows); err != nil {
 		t.Fatalf("the output is not JSON: %v\n%s", err, stdout.String())
 	}
-	if len(rows) != 5 {
-		t.Fatalf("expected the three Quake 1 and two Quake II built-in pipelines, got %d", len(rows))
+	if len(rows) != 7 {
+		t.Fatalf("expected the three Quake 1, two Quake II and two Quake III built-in pipelines, got %d",
+			len(rows))
 	}
-	quake2 := 0
+	unfinished := map[string]int{}
 	for _, row := range rows {
 		if len(row.Steps) != 3 || !row.Runnable {
 			t.Errorf("%s: steps=%v runnable=%t", row.ID, row.Steps, row.Runnable)
@@ -99,17 +100,18 @@ func TestBuildPipelinesAsJSON(t *testing.T) {
 			if row.Maturity != string(maturity.Stable) {
 				t.Errorf("%s is %q; the Quake 1 path is the qualified one", row.ID, row.Maturity)
 			}
-		case "quake2":
-			quake2++
+		case "quake2", "quake3":
+			unfinished[row.Family]++
 			if row.Maturity != string(maturity.WorkInProgress) {
-				t.Errorf("%s is %q; Quake II is work in progress", row.ID, row.Maturity)
+				t.Errorf("%s is %q; %s is work in progress", row.ID, row.Maturity, row.Family)
 			}
 		default:
 			t.Errorf("%s declares the family %q", row.ID, row.Family)
 		}
 	}
-	if quake2 != 2 {
-		t.Errorf("%d Quake II pipelines were listed", quake2)
+	if unfinished["quake2"] != 2 || unfinished["quake3"] != 2 {
+		t.Errorf("%d Quake II and %d Quake III pipelines were listed",
+			unfinished["quake2"], unfinished["quake3"])
 	}
 }
 

@@ -191,12 +191,12 @@ func TestNoTwoBuiltinToolsProvideTheSameCapability(t *testing.T) {
 func TestEveryBuiltinPipelineResolvesAgainstTheBuiltinToolchain(t *testing.T) {
 	// One toolchain per game family, and a pipeline resolves against its own.
 	// Resolving every pipeline against every tool would hide the property this
-	// build depends on: the Q1 toolchain provides `q1.*` and the Q2 one `q2.*`,
-	// so a Quake 1 pipeline can never be satisfied by the experimental Quake II
-	// compiler and a Quake II pipeline can never silently fall back to the
-	// stable Quake 1 one.
+	// build depends on: the Q1 toolchain provides `q1.*`, the Q2 one `q2.*` and
+	// Q3Map2 `q3.*`, so a Quake 1 pipeline can never be satisfied by the
+	// experimental Quake II compiler, a Quake II pipeline can never silently
+	// fall back to the stable Quake 1 one, and neither can reach Q3Map2.
 	toolchains := map[string]*profile.ToolProfile{}
-	for family, id := range map[string]string{"quake1": EricwQ1, "quake2": EricwQ2} {
+	for family, id := range map[string]string{"quake1": EricwQ1, "quake2": EricwQ2, "quake3": Q3Map2} {
 		entry, err := Find(id)
 		if err != nil {
 			t.Fatalf("%v", err)
@@ -240,43 +240,50 @@ func TestEveryBuiltinPipelineResolvesAgainstTheBuiltinToolchain(t *testing.T) {
 			}
 		}
 	}
-	if seen != len(Q1Pipelines)+len(Q2Pipelines) {
-		t.Errorf("this build ships %d pipelines; %d Quake 1 and %d Quake II are what it declares",
-			seen, len(Q1Pipelines), len(Q2Pipelines))
+	if want := len(Q1Pipelines) + len(Q2Pipelines) + len(Q3Pipelines); seen != want {
+		t.Errorf("this build ships %d pipelines; %d Quake 1, %d Quake II and %d Quake III are what it declares",
+			seen, len(Q1Pipelines), len(Q2Pipelines), len(Q3Pipelines))
 	}
 }
 
-// The other half of the same property, stated as its own failure: a Quake II
-// pipeline offered nothing but the stable Quake 1 toolchain must refuse rather
-// than resolve. A shared capability id — `bsp.compile` for both — would have
-// made this pass by accident and produced a Quake 1 BSP for a Quake II project.
-func TestAQuake2PipelineCannotResolveAgainstTheQuake1Toolchain(t *testing.T) {
-	q1, err := Find(EricwQ1)
-	if err != nil {
-		t.Fatalf("%v", err)
+// The other half of the same property, stated as its own failure: a pipeline
+// offered nothing but another game's toolchain must refuse rather than resolve.
+// A shared capability id — `bsp.compile` for all three — would have made this
+// pass by accident and produced a Quake 1 BSP for a Quake III project.
+//
+// Six pairs rather than two, because the third toolchain is where a shared id
+// would have been most tempting: Q3Map2 is one program with three stage
+// switches, and "it is all the same compiler anyway" is exactly the reasoning
+// this test exists to fail.
+func TestAPipelineCannotResolveAgainstAnotherGamesToolchain(t *testing.T) {
+	families := []struct {
+		name      string
+		toolchain string
+		pipelines []string
+	}{
+		{"Quake 1", EricwQ1, Q1Pipelines},
+		{"Quake II", EricwQ2, Q2Pipelines},
+		{"Quake III", Q3Map2, Q3Pipelines},
 	}
-	tool := q1.Profile.(*profile.ToolProfile)
-	for _, id := range Q2Pipelines {
-		entry, err := Find(id)
+	for _, tool := range families {
+		entry, err := Find(tool.toolchain)
 		if err != nil {
 			t.Fatalf("%v", err)
 		}
-		if _, err := entry.Profile.(*profile.PipelineProfile).Resolve(installed{tool}); err == nil {
-			t.Errorf("%s resolved against the Quake 1 toolchain", id)
-		}
-	}
-	q2, err := Find(EricwQ2)
-	if err != nil {
-		t.Fatalf("%v", err)
-	}
-	q2tool := q2.Profile.(*profile.ToolProfile)
-	for _, id := range Q1Pipelines {
-		entry, err := Find(id)
-		if err != nil {
-			t.Fatalf("%v", err)
-		}
-		if _, err := entry.Profile.(*profile.PipelineProfile).Resolve(installed{q2tool}); err == nil {
-			t.Errorf("%s resolved against the experimental Quake II toolchain", id)
+		document := entry.Profile.(*profile.ToolProfile)
+		for _, other := range families {
+			if other.toolchain == tool.toolchain {
+				continue
+			}
+			for _, id := range other.pipelines {
+				pipelineEntry, err := Find(id)
+				if err != nil {
+					t.Fatalf("%v", err)
+				}
+				if _, err := pipelineEntry.Profile.(*profile.PipelineProfile).Resolve(installed{document}); err == nil {
+					t.Errorf("the %s pipeline %s resolved against the %s toolchain", other.name, id, tool.name)
+				}
+			}
 		}
 	}
 }
@@ -433,6 +440,125 @@ func TestCuratedEnginesDeclareOnlyWhatTheirEnginesDo(t *testing.T) {
 	}
 	if _, offers := engines[YamagiQuake2].ActionByID(profile.ActionHostDedicated); !offers {
 		t.Error("Yamagi does not declare host_dedicated; it ships q2ded, which is why it has two executables")
+	}
+
+	for _, id := range Q3Engines {
+		if _, shipped := engines[id]; !shipped {
+			t.Errorf("%s is named as a curated Quake III engine and does not ship", id)
+		}
+	}
+	// ioquake3 declares all five, and that is the difference from FTEQW's
+	// Quake II case rather than an inconsistency with it: upstream's own
+	// download carries `baseq3/vm/qagame.qvm` beside the engine, so a local
+	// server needs nothing this profile cannot see.
+	ioq3 := engines[IoQuake3]
+	for _, wanted := range profile.EngineActions {
+		if _, offers := ioq3.ActionByID(wanted); !offers {
+			t.Errorf("ioquake3 does not declare %q; it ships its own game logic and its own dedicated "+
+				"server, so there is nothing it cannot do", wanted)
+		}
+	}
+	if _, offers := engines[Q3Generic].ActionByID(profile.ActionHostDedicated); offers {
+		t.Error("the generic Quake III profile declares host_dedicated; the name of a dedicated binary " +
+			"is each project's own invention and a generic profile cannot know it")
+	}
+}
+
+// The generic Quake III profile is the fallback for an engine nobody here has
+// seen, so it may send only id Software's own Quake III vocabulary. ioquake3's
+// server cvars are the tempting addition and the wrong one: a fallback that
+// sent `sv_pure` would be a fallback that worked on ioquake3.
+func TestTheGenericQuake3ProfileSendsOnlyTheVanillaVocabulary(t *testing.T) {
+	engine := loadEngines(t)[Q3Generic]
+	allowed := map[string]bool{
+		"+set": true, "fs_basepath": true, "fs_game": true, "sv_maxclients": true,
+		"+map": true, "+connect": true,
+	}
+	for _, action := range engine.Actions {
+		for _, arg := range action.Args {
+			if strings.HasPrefix(arg.Value, "{") {
+				continue // a value, not a switch
+			}
+			if !allowed[arg.Value] {
+				t.Errorf("the generic Quake III profile passes %q in %q; a profile for an unknown engine "+
+					"may only send what id Software's own Quake III documented", arg.Value, action.ID)
+			}
+		}
+	}
+}
+
+// Q3Map2 is the only toolchain here with no managed download, and that is a
+// decision rather than an omission: upstream publishes it inside a bundle of
+// the NetRadiant editor, in a container this program does not unpack, and
+// `AUP/AUCOM 216` says not to install an editor to get at a compiler. A later
+// change that adds a `managed_download` has to add a catalogue entry for a
+// 40 MB editor first, and this is where it is asked to think about that.
+func TestQ3Map2DeclaresNoManagedDownloadAndSaysWhy(t *testing.T) {
+	entry, err := Find(Q3Map2)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	tool := entry.Profile.(*profile.ToolProfile)
+	if len(tool.Acquisition) == 0 {
+		t.Fatal("Q3Map2 declares no way of being acquired at all")
+	}
+	for _, option := range tool.Acquisition {
+		if option.Mode == profile.AcquireManagedDownload {
+			t.Errorf("Q3Map2 declares a managed download of %q; there is no artifact to pin that is not "+
+				"a map editor", option.CatalogPackage)
+		}
+	}
+	first := tool.Acquisition[0]
+	if first.Mode != profile.AcquireUserPath {
+		t.Errorf("Q3Map2's first acquisition route is %q; the one that works is user_path", first.Mode)
+	}
+	if !strings.Contains(first.Note, "editor") {
+		t.Error("Q3Map2's first acquisition route does not say why there is no download; " +
+			"`unavailable` with no reason is the thing a user cannot act on")
+	}
+}
+
+// The two Quake III pipelines differ in what they run, and both wire the two
+// companion files the lighting stage refuses to start without. Measured: with
+// no `<stem>.srf` or no `<stem>.map` beside the BSP, Q3Map2's light stage exits
+// 1 saying a script file was not found — and the file it names is one nobody
+// thought they had asked for.
+func TestTheTwoQuake3PipelinesDifferAndWireTheLightingCompanions(t *testing.T) {
+	want := map[string]struct{ visFast, lightFast, threads string }{
+		"auto-pigeon.q3.fast-preview": {"true", "true", "1"},
+		"auto-pigeon.q3.normal":       {"false", "false", "4"},
+	}
+	for id, expected := range want {
+		entry, err := Find(id)
+		if err != nil {
+			t.Fatalf("%v", err)
+		}
+		pipeline := entry.Profile.(*profile.PipelineProfile)
+		options := map[string]map[string]string{}
+		inputs := map[string]map[string]string{}
+		for _, step := range pipeline.Steps {
+			options[step.ID] = step.Options
+			wired := map[string]string{}
+			for _, in := range step.Inputs {
+				wired[in.Name] = in.From
+			}
+			inputs[step.ID] = wired
+		}
+		if got := options["vis"]["fast"]; got != expected.visFast {
+			t.Errorf("%s: vis fast is %q, want %q", id, got, expected.visFast)
+		}
+		if got := options["light"]["fast"]; got != expected.lightFast {
+			t.Errorf("%s: light fast is %q, want %q", id, got, expected.lightFast)
+		}
+		if got := options["light"]["threads"]; got != expected.threads {
+			t.Errorf("%s: light threads is %q, want %q", id, got, expected.threads)
+		}
+		if got := inputs["light"]["srf"]; got != "compile.srf" {
+			t.Errorf("%s wires the lighting step's surface file from %q, want compile.srf", id, got)
+		}
+		if got := inputs["light"]["source_map"]; got != "pipeline.source_map" {
+			t.Errorf("%s wires the lighting step's map source from %q, want pipeline.source_map", id, got)
+		}
 	}
 }
 
