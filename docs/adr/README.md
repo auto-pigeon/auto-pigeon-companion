@@ -40,3 +40,4 @@ ways.
 | [0001](0001-profiles-are-data-and-the-executor-is-the-only-thing-that-runs.md) | Profiles are data, and the executor is the only thing that runs | Accepted | 2026-09-06 |
 | [0002](0002-portable-profiles-and-local-bindings-are-different-types.md) | A portable profile and a local binding are different types in different packages | Accepted | 2026-09-06 |
 | [0003](0003-one-executor-and-the-record-is-what-says-a-job-ran.md) | One executor, and the record — not a process — is what says a job ran | Accepted | 2026-09-06 |
+| [0004](0004-acquisition-is-verified-or-it-does-not-happen.md) | Acquisition is verified, or it does not happen | Accepted | 2026-09-07 |

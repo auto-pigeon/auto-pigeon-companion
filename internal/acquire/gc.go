@@ -147,7 +147,7 @@ func (c *Collected) Text() string {
 	for _, removed := range c.Removed {
 		verb := "remove "
 		if c.DryRun {
-			verb = "would remove "
+			verb = "would remove"
 		}
 		out += fmt.Sprintf("%s %s %s (%s) — nothing refers to it\n", verb, removed.PackageID, removed.Version, removed.Digest)
 	}

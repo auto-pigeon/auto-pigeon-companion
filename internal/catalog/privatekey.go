@@ -61,7 +61,7 @@ func GenerateKeyFile(role, comment string, now time.Time) (*PrivateKeyFile, erro
 		Role:          role,
 		PrivateKey:    base64.StdEncoding.EncodeToString(private),
 		PublicKey:     base64.StdEncoding.EncodeToString(public),
-		CreatedAt:     now.UTC(),
+		CreatedAt:     now.UTC().Truncate(time.Second),
 		Comment:       comment,
 	}, nil
 }
@@ -93,8 +93,11 @@ func (f *PrivateKeyFile) PublicEntry(notBefore, notAfter time.Time) (Key, error)
 		PublicKey: f.PublicKey,
 		Role:      f.Role,
 		Status:    StatusActive,
-		NotBefore: notBefore.UTC(),
-		NotAfter:  notAfter.UTC(),
+		// Truncated to the second: a validity window is a decision somebody
+		// made, and nanoseconds in a published key entry are noise a reader
+		// has to skip past every time.
+		NotBefore: notBefore.UTC().Truncate(time.Second),
+		NotAfter:  notAfter.UTC().Truncate(time.Second),
 		Comment:   f.Comment,
 	}
 	if err := key.validate(); err != nil {

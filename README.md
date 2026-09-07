@@ -31,6 +31,9 @@ There is no GUI toolkit and no embedded browser engine. The binary:
 - serves a frontend of plain HTML/CSS/JS compiled in with `//go:embed` — no
   npm, no bundler, no build step;
 - opens that URL in whatever browser the user already has installed;
+- obtains those programs by one of four declared routes, of which the only one
+  that downloads anything goes through a signed, revocable catalogue — see
+  [Acquiring tools](#acquiring-tools);
 - runs every external program through one supervised job runtime, which the
   page and the command line both drive — see [Jobs](#jobs).
 
@@ -86,6 +89,8 @@ It is written 0600, because it holds an AUB session token.
   "tool_cache_dir": "",
   "jobs_dir": "",
   "profiles_dir": "",
+  "catalog_url": "https://catalog.example/auto-pigeon/",
+  "catalog_anchors_path": "/etc/auto-pigeon/anchors.json",
   "job_concurrency": 0,
   "game_roots": { "quake": "/games/quake" },
   "session": { "token": "…", "email": "you@example", "expires": "…" }
@@ -100,6 +105,9 @@ Three more files sit beside it, and each is somewhere different for a reason:
 | `profiles/` | the config directory | an imported profile is something you chose and reviewed |
 | `jobs/` | the *cache* directory | job records, logs and published artifacts are reproducible; clearing caches loses build history, not work |
 | `api-token` | the config directory, while a server runs | mode 0600, deleted on shutdown — see [HTTP API](#http-api) |
+| `catalog-state.json` | the config directory | the highest catalogue serial accepted and every revocation ever seen — see [Acquiring tools](#acquiring-tools) |
+| `license-acceptance.json` | the config directory | which licence notices you have been shown |
+| `tools/` | the *cache* directory | downloaded packages, re-fetchable by definition |
 
 `jobs_dir` and `profiles_dir` override the first two paths, as do
 `AUCOM_JOBS_DIR` and `AUCOM_PROFILES_DIR`. `job_concurrency` is how many jobs
@@ -131,6 +139,9 @@ signed in: no
 | `AUCOM_AUE_BINARY` | `internal/aue` | an on-disk AUE to use instead of the embedded one |
 | `AUCOM_JOBS_DIR` | `internal/config` | where job records, logs and artifacts live |
 | `AUCOM_PROFILES_DIR` | `internal/config` | where imported profile documents are read from |
+| `AUCOM_CATALOG_URL` | `internal/config` | where the signed acquisition catalogue is fetched from |
+| `AUCOM_CATALOG_ANCHORS` | `internal/config` | the file holding the catalogue's trust anchors |
+| `AUCOM_OFFLINE` | `internal/config` | forbid every network access; installed packages stay usable |
 
 `AUL_PASSWORD` and `AUC_AUE_BINARY`, the retired names, are still read.
 `AUL_PASSWORD` warns when it is used.
@@ -182,6 +193,8 @@ commands:
   auth login [--email <address>] | status | logout                                authenticate against auto-pigeon-backend
   job run | preview | list | show | logs | cancel | retry | artifacts | profiles  run a profile action as a supervised job, and inspect what ran
   profile validate | show | canonicalize | digest | diff | list | schema          read, check and compare tool, engine and pipeline profiles
+  acquire plan | install | accept | list | verify | use | gc | resolve            obtain a profile's programs from the signed catalogue, and manage the cache
+  catalog keygen | sign | verify | show | status                                  sign, verify and inspect the acquisition catalogue and its keyring
   launch <game> [--map <name>] [--game-root <dir>] [--dry-run]                    launch a game as a supervised job, using its AUB launch config
   extractor version                                                               run the bundled auto-pigeon-extractor (AUE)
   migrate                                                                         fold Launcher and older Companion configuration into the current one
@@ -601,14 +614,14 @@ document travelled. Resolving the slug against your account is a binding's job.
 
 ### The published schemas
 
-Four JSON Schema (2020-12) documents are embedded in the binary and are the
+Five JSON Schema (2020-12) documents are embedded in the binary and are the
 contract for anything outside the Companion — an editor, a CI check, a second
 implementation:
 
 ```console
 $ companion profile schema
 engine-profile-1.0.schema.json
-local-binding-1.0.schema.json
+local-binding-1.1.schema.json
 pipeline-profile-1.0.schema.json
 profile-common-1.0.schema.json
 tool-profile-1.0.schema.json
@@ -664,10 +677,13 @@ The policy:
   list.** A build reads every version it lists; documents are not rewritten on
   disk, and a profile's own `compatibility.companion` range is what an author
   uses to say which Companion versions a document was written for.
-- **The local binding format is versioned separately** (`aucom.local-binding/1.0`)
+- **The local binding format is versioned separately** (`aucom.local-binding/1.1`)
   because local state and published documents have different compatibility
   obligations. Tying them together would force a migration of your settings
-  every time the published format moved.
+  every time the published format moved. A build reads every binding version it
+  lists — 1.0 and 1.1 today, 1.1 having added the record of which downloads a
+  binding depends on — and rewrites a file at the current version the next time
+  it saves one.
 
 ### Profiles configure independent programs; they do not relicense them
 
@@ -693,6 +709,349 @@ and does not distribute. Describing a program is not distributing it.
 
 See [THIRD_PARTY_NOTICES.md][notices] for what is compiled in, what is run as a
 separate process, and what a release redistributes.
+
+## Acquiring tools
+
+A profile says *how* a tool can be obtained — from `PATH`, from a folder you
+point at, from a copy that came with a game, or by a managed download — and
+never *where from*. If the download location were in the document, then
+withdrawing a compromised build would mean republishing every profile that
+pointed at it, and a profile you had already reviewed and granted would keep
+pointing at the old bytes. Withdrawal has to be faster than republication, so
+the two are separate documents.
+
+Where from is the **acquisition catalogue**: a signed, versioned, revocable map
+from a package, a version and a platform to an immutable URL, an exact size, a
+SHA-256 digest, a signer, the upstream project, the licence and the
+corresponding-source offer.
+
+### The four routes
+
+| Mode | What it trusts | What is checked |
+| --- | --- | --- |
+| `user_path` | you | the files are there, are regular files, and are executable |
+| `system_path` | whoever installed it | the same, after a `PATH` lookup of the names the profile declares |
+| `already_installed` | the game or package that shipped it | the same, under a root you configured, with no escaping it |
+| `managed_download` | the signed catalogue | everything below |
+
+The first three are a *resolution*, not an acquisition: nothing is downloaded,
+so there is nothing to verify against, and saying so is better than theatre.
+`managed_download` is the only route where the Companion decides what to put on
+your disk, and it is the only one with a verification chain.
+
+```console
+$ companion acquire resolve qbsp.tool.json --mode system_path
+example.qbsp 1.0.0 via system_path
+  found on PATH; whoever installed it is who this machine already trusts
+  qbsp             /usr/local/bin/qbsp
+
+Nothing was recorded. Add --bind to write this into bindings.json.
+```
+
+`--bind` writes the result into `bindings.json`, which is also what records that
+a profile depends on a downloaded package — see [Cache cleanup](#cache-cleanup).
+
+### Trust anchors, keyring, catalogue
+
+Three documents, and only the first is not itself signed:
+
+1. **Trust anchors** — Ed25519 public keys this installation accepts as the root
+   of the catalogue. They come from a file you install: `AUCOM_CATALOG_ANCHORS`,
+   or `"catalog_anchors_path"` in `config.json`.
+2. **The keyring**, signed by the anchors. It says which keys may sign a
+   catalogue, for how long, and which keys are revoked.
+3. **The catalogue**, signed by keys the keyring names.
+
+Two levels rather than one because the two have different lifetimes. A catalogue
+changes whenever a tool is published; a keyring changes when a key does. Signing
+every catalogue with the anchor would mean the anchor's private key is online,
+and an anchor whose private key is online is not something to fall back to.
+
+**No private key is in this repository and none is compiled into this build.** A
+Companion with no anchors configured refuses every managed download and says so,
+rather than performing one unverified:
+
+```console
+$ companion acquire install example.qbsp
+error: no catalogue trust anchor is configured: set AUCOM_CATALOG_ANCHORS or the "catalog_anchors_path" field in config.json to a keys file, or use an acquisition mode that does not download
+
+Managed downloads are refused until both are configured. Nothing is downloaded
+unverified in the meantime, and the other acquisition modes — a path you choose,
+a command on PATH, a copy that came with a game — do not need either.
+$ echo $?
+1
+```
+
+### What verification checks
+
+In order, and all of them, every time:
+
+1. **The payload is exactly its own canonical re-encoding.** A document two JSON
+   parsers read differently — a duplicated member, say — is one whose signature
+   covers one reading and whose behaviour is the other.
+2. **At least one signature is by a key permitted to sign this kind of
+   document**, inside its validity window, and not revoked.
+3. **The document has not expired.**
+4. **Its serial is not lower than the highest this machine has accepted.** A
+   correctly signed older catalogue is a replay, not an update.
+5. **Nothing it names is revoked** — including by a revocation this machine saw
+   once and has remembered ever since.
+
+There is no path from a failure at any of those to a download that happens
+anyway, and no flag that turns one off.
+
+### Seeing what a download involves, before it happens
+
+```console
+$ companion acquire plan example.qbsp
+Example qbsp 1.0.0 (example.qbsp)
+  A stand-in for a real map compiler.
+  licence:  GPL-2.0-or-later — GNU General Public License v2.0 or later
+  terms:    https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
+  source for this binary: https://example.invalid/qbsp/source/1.0.0.tar.gz
+  project:  https://example.invalid/qbsp
+  download: https://catalog.example/example-qbsp-1.0.0-linux-amd64.tar.gz
+  platform: linux/amd64, 144 bytes, tar.gz
+  digest:   sha256:e2df479f8f3071e5c06d0f75aad4257cee9732279b26aa07fd4dd19c5894677d
+  vouched:  key 8a333faed43ed1b9, catalogue example serial 1
+
+  Downloaded programs are separate works, obtained from their own publishers and run as separate processes. They are not part of Auto-Pigeon Companion, are not covered by its MIT licence, and keep their own licence and copyright.
+```
+
+Planning fetches and verifies the catalogue and downloads nothing. The URL is
+shown with its query string removed: a pre-signed URL's query string *is* a
+credential, and it never reaches a log, an error, or the stored install record.
+
+Where a licence requires that a notice be shown before the program is obtained,
+the plan carries the notice and the install refuses until you have said you read
+it:
+
+```console
+$ companion acquire accept example.qbsp
+recorded that you were shown the GPL-2.0-or-later notice for example.qbsp 1.0.0
+
+This is a local note that the notice was shown. It is not a licence, it grants you
+nothing, and it does not change what the licence requires of anyone.
+```
+
+### Installing
+
+```console
+$ companion acquire install example.qbsp
+installed example.qbsp 1.0.0 for linux/amd64
+  digest    sha256:e2df479f8f3071e5c06d0f75aad4257cee9732279b26aa07fd4dd19c5894677d
+  vouched   key 8a333faed43ed1b9, catalogue example serial 1
+  licence   GPL-2.0-or-later
+  tool root ~/.cache/auto-pigeon-companion/tools/entries/sha256-e2df479f…/files/qbsp-1.0.0
+
+Downloaded programs are separate works, obtained from their own publishers and run as separate processes. They are not part of Auto-Pigeon Companion, are not covered by its MIT licence, and keep their own licence and copyright.
+```
+
+What happens between those two lines:
+
+- the download lands in a private staging directory, on nobody's `PATH`, under a
+  size limit and a ten-minute deadline;
+- the exact length is enforced *while* reading, so an unbounded or over-long
+  response is stopped rather than truncated;
+- the digest is checked before anything is opened;
+- an archive is **refused, not sanitized**, if it carries a path that escapes it,
+  an absolute path, a symbolic or hard link, a device or a pipe, a setuid bit, a
+  duplicated member, or more expansion than it declared. An archive that names
+  `../../../.ssh/authorized_keys` meant it; writing it somewhere else would be
+  acting on it anyway;
+- the whole entry is renamed into place in one operation, so a cache entry never
+  exists half-written. Two processes installing the same bytes race for that
+  rename and both end up correct.
+
+The cache is content-addressed by the artifact's digest, which is what lets two
+pinned versions coexist without colliding and makes a rebuilt release published
+under the same version number a *different* entry.
+
+### Verification does not stop at install
+
+The declared executables are re-hashed against the install record every time an
+entry is used, and `companion acquire verify` re-hashes everything, including
+noticing a file that has *appeared*:
+
+```console
+$ companion acquire verify
+example.qbsp 1.0.0: 1 file, unchanged since installation
+```
+
+A cache lives in a directory your own account can write to, and so does
+everything else running as you:
+
+```console
+$ companion acquire use example.qbsp
+error: acquire: a cached file has changed since it was installed: ~/.cache/…/bin/qbsp is 25 bytes and was installed at 34
+
+The cached copy is not the one that was installed. It has not been replaced
+automatically: re-downloading over it would erase the only evidence of what changed.
+Remove the entry deliberately, or investigate it first.
+```
+
+### Rollback and revocation
+
+The highest serial this machine has accepted, and every revocation it has ever
+seen, are kept in `catalog-state.json` — beside `config.json`, **not** in the
+cache. The cache is re-downloadable by definition and clearing it should lose
+nothing but time; this file is a ratchet, and losing it would restore exactly the
+state a replayed old catalogue needs.
+
+```console
+$ companion catalog status
+trust state ~/.config/auto-pigeon-companion/catalog-state.json
+  keyring   example: highest serial accepted 1
+  catalogue example: highest serial accepted 2
+
+Serials only go up and revocations are never forgotten. Deleting this file
+would restore exactly the state a replayed old catalogue needs.
+
+$ companion acquire plan example.qbsp
+error: catalog: rolled back: catalogue example is serial 1 and this machine has already accepted 2; a correctly signed older document is a replay, not an update
+
+This is what a replay of a withdrawn catalogue looks like. It is worth finding out
+where the answer came from before doing anything about it.
+```
+
+Revocation is **sticky**: a revoked key or a withdrawn artifact is recorded the
+first time it is seen and is never forgotten. A later signed document cannot
+un-revoke either, because a revocation that a newer document could reverse would
+be undone by exactly the party you are revoking against. It is also what makes
+revocation reach a tool that is already on disk, and what makes it work with the
+network unplugged.
+
+### Offline
+
+`--offline`, or `AUCOM_OFFLINE=1`, forbids every network access. It changes what
+is *available*, never what is checked. An install record carries what was
+verified and by whom, so using an installed package needs no catalogue at all —
+the digest and revocation checks run exactly as they do online. What offline
+cannot do is obtain something that is not already there, and it says so.
+
+Catalogue expiry is the one rule that reads differently offline, deliberately: it
+bounds how long *new* content may be accepted on a catalogue's word. It is not a
+licence that runs out on a compiler you already have. Refusing to run an
+already-verified tool because the machine has been off the network for a month
+would cost you an afternoon and buy nothing — revocation, which is the mechanism
+that actually withdraws something, keeps working.
+
+### Cache cleanup
+
+`companion acquire gc` removes cache entries that **nothing refers to**, and
+nothing else. Not "older than", not "over a size budget", not "not the newest
+version": every one of those eventually deletes something you deliberately
+pinned.
+
+References come from two places, and both matter. A **binding** is a live
+dependency — a profile bound to a downloaded toolchain stops working the moment
+it is collected — and every version it pins is a reference, which is what
+"preserve multiple pinned versions" means in practice. A **job record** is
+evidence: it says what ran, and a record whose toolchain has been deleted can no
+longer answer the question it was kept for.
+
+```console
+$ companion acquire gc --dry-run
+Nothing was removed: this was a dry run.
+
+keep    example.qbsp 2.0.0 (sha256:…)
+          held by binding example.qbsp
+keep    example.qbsp 1.0.0 (sha256:…)
+          held by binding example.qbsp
+would remove example.other 1.0.0 (sha256:…) — nothing refers to it
+```
+
+### Publishing a catalogue
+
+`companion catalog` is the publisher's side. It is in the shipped binary rather
+than in a script because a signing procedure that is only a paragraph in a README
+stops being true; every rule the verifier enforces is one a publisher has to
+satisfy, and both halves are this program's problem.
+
+**Creating the keys.** Do this once. The anchor key belongs offline — on a
+machine that does not sign catalogues — and the catalogue key on whatever signs
+a release.
+
+```console
+$ companion catalog keygen --role anchor --out anchor.key.json
+wrote anchor.key.json — anchor key 5d97670e1db855a6, private, mode 0600
+
+the public entry to publish (in an anchor file for an anchor key, in the keyring for a catalogue key):
+
+{
+  "key_id": "5d97670e1db855a6",
+  "algorithm": "ed25519",
+  "public_key": "sl2afg2ZixrvdIxfhq66BcZhGX5gIoTCx2NgDjEBSJo=",
+  "role": "anchor",
+  "status": "active",
+  "not_before": "2026-09-07T00:47:28Z",
+  "not_after": "2028-09-07T00:47:28Z"
+}
+```
+
+A key id is **derived** from the key — the first eight bytes of its SHA-256 — and
+never chosen, so a key cannot be published under two names and an entry that
+claims one can be checked against the key it carries. `keygen` refuses to
+overwrite an existing key file: replacing a signing key is never what anybody
+meant.
+
+**Writing the documents.** `keyring.json` names the catalogue keys; `catalog.json`
+names the packages. Put the anchor's public entry in an `anchors.json`, the
+catalogue key's in the keyring, and each artifact's `signer` to the key id that
+will sign the catalogue — an entry attributed to a key that did not sign the
+document it is in is refused.
+
+**Signing.**
+
+```console
+$ companion catalog sign --key anchor.key.json --out pub/keyring.json keyring.unsigned.json
+wrote pub/keyring.json — a keyring signed by the anchor key, digest sha256:…
+$ companion catalog sign --key catalog.key.json --out pub/catalog.json catalog.unsigned.json
+wrote pub/catalog.json — a catalogue signed by the catalog key, digest sha256:…
+```
+
+The signed payload is canonical bytes carried as base64, because embedded JSON
+does not survive being re-encoded and a signature over a document a proxy
+reformatted covers something else. Signing the wrong kind of document with the
+wrong key is refused here rather than on somebody else's machine:
+
+```console
+$ companion catalog sign --key catalog.key.json keyring.unsigned.json
+error: catalog.key.json holds a catalog key, and this document must be signed by the anchor key
+```
+
+**Checking it before anyone else does.**
+
+```console
+$ companion catalog verify --anchors anchors.json --keyring pub/keyring.json --catalog pub/catalog.json
+keyring   example serial 1, expires 2027-01-01T00:00:00Z
+          signed by bf94be80e19d6d1d
+          keys: 8a333faed43ed1b9
+catalogue example serial 1, expires 2027-01-01T00:00:00Z
+          signed by 8a333faed43ed1b9
+          1 packages, 0 revocations
+  example.qbsp 1.0.0 — Example qbsp [GPL-2.0-or-later] for linux/amd64
+```
+
+Serve both files, plus the artifacts, under one https address, and point clients
+at it with `AUCOM_CATALOG_URL`. The two documents are `keyring.json` and
+`catalog.json` under that address.
+
+**Rotating a key.** Publish a keyring with the old key `retired` and the new one
+`active`, and a higher serial. Retired means superseded, not compromised:
+everything it signed stays signed, it simply stops signing new documents. Keep
+both listed for as long as anything might still be verifying an old catalogue.
+
+**Revoking one.** Publish a keyring with the key `revoked`, a `revoked_at` and a
+`reason`, and a higher serial. Every client that sees it records the revocation
+permanently. To withdraw a *build* rather than a key, add its digest to the
+catalogue's `revocations` with a reason and a date, and raise the serial; that
+reaches machines that already have it installed, because the revocation applies
+on use.
+
+The test keys under `internal/catalog/testdata` are fixtures. They sign nothing
+outside `go test`, and there is no production catalogue key in this repository at
+all.
 
 ## HTTP API
 

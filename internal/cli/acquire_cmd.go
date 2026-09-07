@@ -271,8 +271,8 @@ func acquireVerify(env *Env, args []string) int {
 			failed = true
 			continue
 		}
-		fmt.Fprintf(env.Stdout, "%s %s: %d files, unchanged since they were installed\n",
-			install.PackageID, install.Version, len(install.Files))
+		fmt.Fprintf(env.Stdout, "%s %s: %s, unchanged since installation\n",
+			install.PackageID, install.Version, plural(len(install.Files), "file"))
 	}
 	if checked == 0 {
 		fmt.Fprint(env.Stderr, "error: nothing matched\n")
@@ -554,6 +554,14 @@ func (r *rootFlags) values() map[string]string {
 		out[role] = path
 	}
 	return out
+}
+
+// plural is the difference between "1 files" and "1 file".
+func plural(n int, noun string) string {
+	if n == 1 {
+		return fmt.Sprintf("%d %s", n, noun)
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
 }
 
 func sortedNames(m map[string]string) []string {

@@ -116,7 +116,7 @@ func catalogSign(env *Env, args []string) int {
 		fmt.Fprintf(env.Stderr, "error: %v\n", err)
 		return 1
 	}
-	document, role, err := decodeUnsigned(raw)
+	document, role, kind, err := decodeUnsigned(raw)
 	if err != nil {
 		fmt.Fprintf(env.Stderr, "error: %v\n", err)
 		return 1
@@ -152,34 +152,35 @@ func catalogSign(env *Env, args []string) int {
 		fmt.Fprintf(env.Stderr, "error: %v\n", err)
 		return 1
 	}
-	fmt.Fprintf(env.Stdout, "wrote %s — %s, digest %s\n", *out, role, envelope.Digest())
+	fmt.Fprintf(env.Stdout, "wrote %s — a %s signed by the %s key, digest %s\n", *out, kind, role, envelope.Digest())
 	return 0
 }
 
-// decodeUnsigned reads a document to be signed and reports which kind it is, so
-// that a catalogue key cannot be pointed at a keyring by mistake.
-func decodeUnsigned(raw []byte) (any, string, error) {
+// decodeUnsigned reads a document to be signed and reports what it is and which
+// key role has to sign it, so that a catalogue key cannot be pointed at a
+// keyring by mistake.
+func decodeUnsigned(raw []byte) (document any, role, kind string, err error) {
 	var head struct {
 		SchemaVersion string `json:"schema_version"`
 	}
 	if err := json.Unmarshal(raw, &head); err != nil {
-		return nil, "", fmt.Errorf("the document is not readable JSON: %w", err)
+		return nil, "", "", fmt.Errorf("the document is not readable JSON: %w", err)
 	}
 	switch head.SchemaVersion {
 	case catalog.KeyringSchemaVersion:
 		keyring, err := catalog.DecodeKeyring(raw)
 		if err != nil {
-			return nil, "", err
+			return nil, "", "", err
 		}
-		return keyring, catalog.RoleAnchor, nil
+		return keyring, catalog.RoleAnchor, "keyring", nil
 	case catalog.SchemaVersion:
-		document, err := catalog.DecodeCatalog(raw)
+		decoded, err := catalog.DecodeCatalog(raw)
 		if err != nil {
-			return nil, "", err
+			return nil, "", "", err
 		}
-		return document, catalog.RoleCatalog, nil
+		return decoded, catalog.RoleCatalog, "catalogue", nil
 	}
-	return nil, "", fmt.Errorf("the document is %q; a keyring is %q and a catalogue is %q",
+	return nil, "", "", fmt.Errorf("the document is %q; a keyring is %q and a catalogue is %q",
 		head.SchemaVersion, catalog.KeyringSchemaVersion, catalog.SchemaVersion)
 }
 
@@ -192,7 +193,7 @@ func loadSigningKeys(paths []string, role string) ([]ed25519.PrivateKey, map[str
 			return nil, nil, err
 		}
 		if file.Role != role {
-			return nil, nil, fmt.Errorf("%s holds a %s key, and this document must be signed by a %s key",
+			return nil, nil, fmt.Errorf("%s holds a %s key, and this document must be signed by the %s key",
 				path, file.Role, role)
 		}
 		private, err := file.Private()
