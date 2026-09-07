@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -137,7 +138,8 @@ func buildRun(env *Env, args []string, previewOnly bool) int {
 	label := set.String("label", "", "short name for this build in the list")
 	inputs := pairs{}
 	options := stepOptions{}
-	set.Var(inputs, "input", "a pipeline input, as name=path (repeatable)")
+	set.Var(inputs, "input",
+		"a pipeline input, as name=path or name=aub:<type>/<asset_id>[@<revision>][#<file>] (repeatable)")
 	set.Var(options, "option", "override a step's option, as step.name=value (repeatable)")
 	strict := set.Bool("strict", false, "fail the build when any stage reports an error-severity diagnostic")
 	quiet := set.Bool("quiet", false, "do not mirror the tools' output to the terminal")
@@ -163,9 +165,31 @@ func buildRun(env *Env, args []string, previewOnly bool) int {
 		return fail(env, err)
 	}
 
+	// An `aub:` input is resolved BEFORE the build starts: `@current` becomes the
+	// version it resolved to, the bytes are verified against their recorded
+	// digest, and what the manifest records is that exact revision. A build
+	// retried tomorrow reads the same revision out of the cache rather than
+	// whatever is current then.
+	// The staging directory is temporary and is removed when this command ends:
+	// the runner COPIES every input into the build directory (because `vis` and
+	// `light` rewrite the file they are handed), so what is left here after that
+	// is a second copy nobody reads. The verified originals stay in the asset
+	// cache, which is where a retry finds them.
+	stage, err := os.MkdirTemp("", "aucom-aub-input-")
+	if err != nil {
+		return fail(env, err)
+	}
+	defer os.RemoveAll(stage)
+
+	resolvedInputs, sources, err := resolveAUBInputs(ctx, env, inputs.orNil(), stage)
+	if err != nil {
+		return fail(env, err)
+	}
+
 	request := build.Request{
 		PipelineID: *pipeline,
-		Inputs:     inputs.orNil(),
+		Inputs:     resolvedInputs,
+		Sources:    sources,
 		Options:    options.orNil(),
 		Label:      *label,
 		Strict:     *strict,

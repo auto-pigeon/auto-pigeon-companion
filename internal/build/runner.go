@@ -79,6 +79,17 @@ func (r *Runner) Resolver() *Resolver { return r.resolver }
 type Request struct {
 	// PipelineID names the pipeline profile.
 	PipelineID string
+	// Sources names where an input came from, for the inputs that came from
+	// somewhere with an identity. Keyed by the same declared input name Inputs
+	// is, and entirely optional: an input the user pointed at on their own disk
+	// has no source, and its absence is recorded as absence rather than as an
+	// empty object.
+	//
+	// It is supplied by the caller — internal/cli, which is what resolved the
+	// asset — rather than discovered here, because this package must not learn
+	// how to talk to a backend to record where a file came from.
+	Sources map[string]SourceRef
+
 	// Inputs maps a declared pipeline input to a file on this machine.
 	Inputs map[string]string
 	// Options overrides a step's options: step id -> option name -> value.
@@ -451,9 +462,14 @@ func (r *Runner) stageInputs(pipeline *profile.PipelineProfile, request Request,
 			return nil, err
 		}
 		wires["pipeline."+input.Name] = wire{Path: destination, Role: input.Role, SHA256: digest, Size: size}
-		manifest.Inputs = append(manifest.Inputs, FileRecord{
+		record := FileRecord{
 			Name: input.Name, Role: input.Role, Path: destination, Size: size, SHA256: digest,
-		})
+		}
+		if source, named := request.Sources[input.Name]; named {
+			provenance := source
+			record.Source = &provenance
+		}
+		manifest.Inputs = append(manifest.Inputs, record)
 	}
 	return wires, nil
 }

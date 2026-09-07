@@ -22,7 +22,20 @@ import (
 // what somebody else reads to find out what produced it, and may be read by a
 // build of the Companion older or newer than the one that wrote it. So it is
 // versioned by name and refused rather than half-read.
-const SchemaVersion = "aucom.build-manifest/1.0"
+const SchemaVersion = "aucom.build-manifest/1.1"
+
+// readableSchemas is every version this build can read.
+//
+// A manifest is refused rather than half-read, and that stays true — but a
+// version that only ADDED optional fields is one an older manifest is still a
+// valid instance of, so refusing 1.0 would make this build unable to read the
+// manifests it wrote last week for nothing. What 1.1 adds is
+// [FileRecord.Source]: where an input came from, which a 1.0 manifest simply
+// does not record.
+var readableSchemas = map[string]bool{
+	"aucom.build-manifest/1.0": true,
+	"aucom.build-manifest/1.1": true,
+}
 
 // ManifestFileName is what the manifest is called inside a build directory.
 const ManifestFileName = "manifest.json"
@@ -54,6 +67,53 @@ type FileRecord struct {
 	// a fact; a required one is why the build failed.
 	Missing  bool `json:"missing,omitempty"`
 	Optional bool `json:"optional,omitempty"`
+
+	// Source is where this file came from, when it came from somewhere with an
+	// identity. Absent for a file the user pointed at on their own disk, which
+	// has none.
+	Source *SourceRef `json:"source,omitempty"`
+}
+
+// SourceRef names the exact remote revision an input was taken from.
+//
+// This is what makes a build's inputs traceable rather than merely digested. The
+// digest already says WHAT the bytes were; this says where they came from and
+// which version of it, so somebody reading the manifest afterwards can go and
+// fetch the same thing — or find out that they cannot, which is information too.
+//
+// It is deliberately NOT part of [Manifest.ReproducibleKey]. The key is over the
+// recipe, and the same bytes from a different backend are the same build; a key
+// that included the origin would say "not reproducible" about a build that
+// reproduced exactly.
+type SourceRef struct {
+	// Backend is the AUB instance, as an address. A fact about where this
+	// machine fetched from, which is why it is here and not in the digest.
+	Backend string `json:"backend,omitempty"`
+
+	AssetType   string `json:"asset_type"`
+	AssetID     string `json:"asset_id"`
+	DisplayName string `json:"display_name,omitempty"`
+
+	// RevisionID names exactly one version for ever, and is empty for an asset
+	// type that keeps a counter and no per-version rows.
+	RevisionID string `json:"revision_id,omitempty"`
+	Revision   int    `json:"revision"`
+
+	// Refetchable reports whether RevisionID can be fetched again. FALSE is a
+	// real and useful answer: a Game Profile carries a counter and no per-version
+	// row, so a build that used one can prove afterwards whether it has changed —
+	// by comparing ContentSHA256 — but cannot get the old one back. A manifest
+	// that implied otherwise would be the lie.
+	Refetchable bool `json:"refetchable"`
+
+	// ManifestSHA256 is the backend's digest over the revision's whole ordered
+	// file list, and ContentSHA256 is the asset store's own digest for this
+	// version when it recorded one.
+	ManifestSHA256 string `json:"manifest_sha256,omitempty"`
+	ContentSHA256  string `json:"content_sha256,omitempty"`
+
+	// FetchedAt is when this machine's copy was synced. A fact about the copy.
+	FetchedAt string `json:"fetched_at,omitempty"`
 }
 
 // ExecutableRecord is one program a step actually started.
@@ -327,8 +387,9 @@ func LoadManifest(path string) (*Manifest, error) {
 	if err := json.Unmarshal(raw, &m); err != nil {
 		return nil, fmt.Errorf("build: %s is not a readable manifest: %w", path, err)
 	}
-	if m.SchemaVersion != SchemaVersion {
-		return nil, fmt.Errorf("build: %s is %q; this build reads %q", path, m.SchemaVersion, SchemaVersion)
+	if !readableSchemas[m.SchemaVersion] {
+		return nil, fmt.Errorf("build: %s is %q; this build reads %s",
+			path, m.SchemaVersion, readableSchemaList())
 	}
 	return &m, nil
 }
@@ -340,4 +401,15 @@ func sortedKeys(m map[string]string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// readableSchemaList is the readable versions, sorted, for an error message.
+func readableSchemaList() string {
+	names := make([]string, 0, len(readableSchemas))
+	for name := range readableSchemas {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	return strings.Join(names, " or ")
 }

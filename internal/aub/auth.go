@@ -8,29 +8,15 @@ import (
 	"time"
 )
 
-// AuthCollection is the PocketBase auth collection the Companion authenticates
-// against.
+// DefaultAuthCollection is PocketBase's own default, and is used only until a
+// deployment has been asked.
 //
-// TODO(andrea): confirm this is the right collection. "users" is PocketBase's
-// default auth collection name; AUB may authenticate desktop clients against a
-// different one, or against _superusers for admin flows the Companion should
-// never use.
-const AuthCollection = "users"
-
-// assumedTokenLifetime is how long the Companion treats a fresh token as good
-// for.
-//
-// PocketBase's auth token is a JWT whose expiry is in its payload, and the
-// honest way to know it is to decode that payload. This deliberately does not:
-// unverified parsing of a token the Companion only ever forwards would be
-// reading a
-// claim it cannot check, and the consequence of guessing low is a redundant
-// refresh, while guessing high is one rejected request that already has a
-// handled path (APIError.Unauthorized). Two weeks is PocketBase's own default.
-//
-// TODO(andrea): confirm AUB's configured token duration; if it differs
-// materially, set this to match rather than leaving the estimate.
-const assumedTokenLifetime = 14 * 24 * time.Hour
+// The authority is `GET /api/companion/v1/capabilities`, which names
+// `session.auth_collection` and `session.login_path` for the deployment being
+// talked to. This constant is what a client that has not read that yet — the
+// very first login, before there is a token to read capabilities with — uses to
+// get one, and Client.AdoptSession replaces it the moment the answer arrives.
+const DefaultAuthCollection = "users"
 
 // Session is a successful authentication against AUB.
 type Session struct {
@@ -49,13 +35,23 @@ type authResponse struct {
 	} `json:"record"`
 }
 
-func (r authResponse) session() Session {
-	return Session{
-		Token:   r.Token,
-		UserID:  r.Record.ID,
-		Email:   r.Record.Email,
-		Expires: time.Now().Add(assumedTokenLifetime),
+// session builds the stored session, dating it by the lifetime the DEPLOYMENT
+// declared rather than by an estimate.
+//
+// A zero lifetime — nobody has read capabilities yet, or the server could not
+// resolve one — leaves Expires ZERO, which config.Session.Valid reads as
+// "unknown, treat as valid". That is the honest answer and the right behaviour:
+// the server is the authority on whether a token still works, and refusing to
+// send one AUB might still accept would log somebody out for no reason. An
+// invented expiry would do exactly that, on a deployment whose operator had
+// configured a shorter or longer one.
+func (c *Client) session(r authResponse) Session {
+	session := Session{Token: r.Token, UserID: r.Record.ID, Email: r.Record.Email}
+	if c.tokenLifetime > 0 {
+		session.Expires = time.Now().Add(c.tokenLifetime)
 	}
+
+	return session
 }
 
 // Login exchanges an email and password for a session, and installs the
@@ -75,7 +71,7 @@ func (c *Client) Login(ctx context.Context, email, password string) (Session, er
 	}{Identity: email, Password: password}
 
 	var response authResponse
-	path := "/api/collections/" + AuthCollection + "/auth-with-password"
+	path := "/api/collections/" + c.authCollection() + "/auth-with-password"
 	if err := c.do(ctx, http.MethodPost, path, nil, body, &response); err != nil {
 		return Session{}, err
 	}
@@ -83,8 +79,9 @@ func (c *Client) Login(ctx context.Context, email, password string) (Session, er
 		return Session{}, fmt.Errorf("aub: login succeeded but returned no token")
 	}
 
-	session := response.session()
+	session := c.session(response)
 	c.token = session.Token
+
 	return session, nil
 }
 
@@ -101,7 +98,7 @@ func (c *Client) Refresh(ctx context.Context) (Session, error) {
 	}
 
 	var response authResponse
-	path := "/api/collections/" + AuthCollection + "/auth-refresh"
+	path := "/api/collections/" + c.authCollection() + "/auth-refresh"
 	if err := c.do(ctx, http.MethodPost, path, nil, nil, &response); err != nil {
 		return Session{}, err
 	}
@@ -109,8 +106,9 @@ func (c *Client) Refresh(ctx context.Context) (Session, error) {
 		return Session{}, fmt.Errorf("aub: refresh succeeded but returned no token")
 	}
 
-	session := response.session()
+	session := c.session(response)
 	c.token = session.Token
+
 	return session, nil
 }
 

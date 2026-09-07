@@ -98,6 +98,11 @@ var commands = []Command{
 		Run:     runAuth,
 	},
 	{
+		Name: "aub", Usage: "capabilities | catalog | show | revisions | sync | cached | verify | export | clean",
+		Summary: "browse auto-pigeon-backend's assets and sync exact revisions to this machine",
+		Run:     runAUB,
+	},
+	{
 		Name: "job", Usage: "run | preview | list | show | logs | cancel | retry | artifacts | profiles",
 		Summary: "run a profile action as a supervised job, and inspect what ran",
 		Run:     runJob,

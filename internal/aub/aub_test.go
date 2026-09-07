@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 // fakeAUB stands in for PocketBase: it answers the two auth endpoints the Companion uses
@@ -66,8 +67,14 @@ func TestLogin(t *testing.T) {
 	if session.Token != "token-1" || session.UserID != "user-1" || session.Email != "a@example" {
 		t.Errorf("session = %+v", session)
 	}
-	if session.Expires.IsZero() {
-		t.Error("Expires was not estimated")
+	// Expires is ZERO until a deployment has said how long its tokens last.
+	// That is the honest answer — config.Session.Valid reads it as "unknown,
+	// treat as valid" — and it replaced a two-week estimate copied out of
+	// PocketBase's documentation, which was wrong on every deployment whose
+	// operator had configured anything else.
+	if !session.Expires.IsZero() {
+		t.Errorf("Expires = %v, want zero until the deployment has been asked",
+			session.Expires)
 	}
 	// A successful login must leave the client authenticated; otherwise every
 	// caller has to remember to install the token itself.
@@ -224,5 +231,56 @@ func TestLogoutClearsTheToken(t *testing.T) {
 	client.Logout()
 	if client.Authenticated() || client.Token() != "" {
 		t.Errorf("Logout left token %q", client.Token())
+	}
+}
+
+// The capability document is where the session contract comes from, and adopting
+// one is what makes a stored session carry a real expiry.
+func TestAdoptingCapabilitiesReplacesTheGuessWithTheDeploymentsOwnAnswer(t *testing.T) {
+	server, _ := fakeAUB(t)
+	client, err := New(server.URL, server.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	before, err := client.Login(context.Background(), "a@example", "correct")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !before.Expires.IsZero() {
+		t.Fatalf("Expires = %v before any capability read", before.Expires)
+	}
+
+	client.AdoptCapabilities(Capabilities{
+		APIVersion: CompanionAPIVersion,
+		Session: SessionContract{
+			AuthCollection:       "users",
+			TokenLifetimeSeconds: 3600,
+		},
+	})
+
+	after, err := client.Login(context.Background(), "a@example", "correct")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Expires.IsZero() {
+		t.Fatal("Expires is still zero after the deployment declared a lifetime")
+	}
+	remaining := time.Until(after.Expires)
+	if remaining < 55*time.Minute || remaining > time.Hour {
+		t.Errorf("Expires is %v away; the deployment said one hour", remaining)
+	}
+}
+
+// A deployment that could not resolve a lifetime says zero, and zero must stay
+// "unknown" rather than becoming "already expired".
+func TestALifetimeOfZeroLeavesTheExpiryUnknown(t *testing.T) {
+	contract := SessionContract{TokenLifetimeSeconds: 0}
+	if got := contract.Lifetime(); got != 0 {
+		t.Errorf("Lifetime() = %v, want 0", got)
+	}
+	negative := SessionContract{TokenLifetimeSeconds: -5}
+	if got := negative.Lifetime(); got != 0 {
+		t.Errorf("a negative lifetime became %v", got)
 	}
 }

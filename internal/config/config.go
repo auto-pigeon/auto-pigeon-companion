@@ -69,10 +69,14 @@ var ErrNotFound = errors.New("config: no config file")
 
 // Session is a stored AUB authentication result.
 //
-// TODO(andrea): confirm AUB's token lifetime and whether it issues a separate
-// refresh token. PocketBase's auth-with-password returns one JWT that is
-// refreshed by presenting it to auth-refresh, which is what internal/aub
-// assumes; Expires is the Companion's own local estimate, not a value AUB returns.
+// One JWT, refreshed by presenting it to `auth-refresh`. There is no separate
+// refresh token, and there is no server-side revocation: AUB's capability
+// document says so itself (`session.revocable` is false), which is why signing
+// out is described as local.
+//
+// Expires is derived from the LIFETIME THE DEPLOYMENT DECLARED, read from
+// `GET /api/companion/v1/capabilities`. It is zero when nothing has read one
+// yet, and zero means unknown — see Valid.
 type Session struct {
 	Token   string    `json:"token"`
 	UserID  string    `json:"user_id,omitempty"`
@@ -122,6 +126,10 @@ type Config struct {
 	// filling the {game_root} placeholder in a launch config's executable
 	// pattern. See internal/launch.
 	GameRoots map[string]string `json:"game_roots,omitempty"`
+	// AssetCacheDir overrides where AUB assets are cached. Empty means
+	// DefaultAssetCacheDir.
+	AssetCacheDir string `json:"asset_cache_dir,omitempty"`
+
 	// Session is the current AUB login, if any.
 	Session Session `json:"session,omitempty"`
 	// MigratedFromLauncher records that the retired Auto-Pigeon Launcher's
@@ -432,4 +440,40 @@ func SaveTo(path string, value Config) error {
 		return fmt.Errorf("config: replacing %s: %w", path, err)
 	}
 	return nil
+}
+
+// EnvAssetCacheDir overrides where AUB assets are cached, for the same two real
+// cases EnvJobsDir exists for: a home directory on a small disk, and a test that
+// must not touch the developer's own state.
+const EnvAssetCacheDir = "AUCOM_ASSET_CACHE_DIR"
+
+// DefaultAssetCacheDir is where assets synced from AUB are kept.
+//
+// Under the *cache* directory, beside the tool cache and the job store, because
+// everything in it is re-fetchable: an asset is somebody's map on a backend, and
+// the local copy is a copy. A user clearing caches loses a download, never work —
+// and a build that pinned a revision says so in its manifest, so what was lost is
+// nameable rather than merely gone.
+//
+// This is deliberately NOT where a user's own exported or built files go: those
+// are written where they asked.
+func DefaultAssetCacheDir() (string, error) {
+	base, err := os.UserCacheDir()
+	if err != nil {
+		return "", fmt.Errorf("config: locating the user cache directory: %w", err)
+	}
+
+	return filepath.Join(base, AppDirName, "assets"), nil
+}
+
+// AssetCache resolves the effective asset cache directory.
+func (c Config) AssetCache() (string, error) {
+	if fromEnv := strings.TrimSpace(os.Getenv(EnvAssetCacheDir)); fromEnv != "" {
+		return fromEnv, nil
+	}
+	if c.AssetCacheDir != "" {
+		return c.AssetCacheDir, nil
+	}
+
+	return DefaultAssetCacheDir()
 }

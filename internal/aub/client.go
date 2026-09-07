@@ -43,6 +43,36 @@ type Client struct {
 	// held in memory here; persisting it across runs is internal/config's job,
 	// which is what keeps this package free of any file access.
 	token string
+
+	// collection and tokenLifetime are the DEPLOYMENT's own answers, learned from
+	// its capability document. Empty and zero until something has read one, which
+	// is why both have a documented meaning in that state rather than a default
+	// that pretends to be knowledge.
+	collection    string
+	tokenLifetime time.Duration
+}
+
+// AdoptCapabilities records what a deployment said about its own sessions.
+//
+// Called once a capability document has been read, and it is the whole of how
+// this client stops guessing: the auth collection and the token lifetime come
+// from the server that will validate the token, rather than from PocketBase's
+// documentation.
+func (c *Client) AdoptCapabilities(capabilities Capabilities) {
+	if capabilities.Session.AuthCollection != "" {
+		c.collection = capabilities.Session.AuthCollection
+	}
+	c.tokenLifetime = capabilities.Session.Lifetime()
+}
+
+// authCollection is the collection to authenticate against: the deployment's own
+// when one has been read, PocketBase's default until then.
+func (c *Client) authCollection() string {
+	if c.collection != "" {
+		return c.collection
+	}
+
+	return DefaultAuthCollection
 }
 
 // New builds a client for baseURL. A nil httpClient means a fresh one with
@@ -180,10 +210,14 @@ func newAPIError(path string, response *http.Response) error {
 // ListRecords fetches one page of a PocketBase collection into out, which must
 // point at a struct with an "items" field of the record type.
 //
-// TODO(andrea): the collection names and schemas the Companion reads are not
-// confirmed —
-// see internal/launch/config.go. This is the transport those calls will use;
-// it is not itself schema-specific.
+// **Not the door for asset data.** PocketBase's record API answers with whatever
+// columns a collection happens to have, so anything read through it is read
+// against AUB's schema rather than against a contract — which is exactly the
+// mistake `/api/companion/v1` was built to end. The catalog, an asset, its
+// revisions and its bytes all go through the Companion API above.
+//
+// This stays for the collections that genuinely are plain PocketBase records and
+// have no Companion route, and for a deployment older than that surface.
 func (c *Client) ListRecords(ctx context.Context, collection string, query url.Values, out any) error {
 	if collection == "" {
 		return fmt.Errorf("aub: collection name is empty")

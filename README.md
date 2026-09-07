@@ -90,7 +90,10 @@ Configuration lives in the OS-appropriate per-user config directory:
 | macOS | `~/Library/Application Support/auto-pigeon-companion/config.json` |
 | Windows | `%AppData%\auto-pigeon-companion\config.json` |
 
-It is written 0600, because it holds an AUB session token.
+It is written 0600, because it holds an AUB session token. That token is the
+only credential this program stores; it is never written to the asset cache, to
+a job record, to a build manifest or to any log line, and the GUI's own
+`api-token` is a separate loopback-only secret deleted on shutdown.
 
 ```json
 {
@@ -99,6 +102,7 @@ It is written 0600, because it holds an AUB session token.
   "tool_cache_dir": "",
   "jobs_dir": "",
   "profiles_dir": "",
+  "asset_cache_dir": "",
   "catalog_url": "https://catalog.example/auto-pigeon/",
   "catalog_anchors_path": "/etc/auto-pigeon/anchors.json",
   "job_concurrency": 0,
@@ -118,6 +122,7 @@ Three more files sit beside it, and each is somewhere different for a reason:
 | `catalog-state.json` | the config directory | the highest catalogue serial accepted and every revocation ever seen — see [Acquiring tools](#acquiring-tools) |
 | `license-acceptance.json` | the config directory | which licence notices you have been shown |
 | `tools/` | the *cache* directory | downloaded packages, re-fetchable by definition |
+| `assets/` | the *cache* directory | verified copies of AUB assets — re-fetchable, and a build that pinned one names it in its manifest |
 
 `jobs_dir` and `profiles_dir` override the first two paths, as do
 `AUCOM_JOBS_DIR` and `AUCOM_PROFILES_DIR`. `job_concurrency` is how many jobs
@@ -149,6 +154,7 @@ signed in: no
 | `AUCOM_AUE_BINARY` | `internal/aue` | an on-disk AUE to use instead of the embedded one |
 | `AUCOM_JOBS_DIR` | `internal/config` | where job records, logs and artifacts live |
 | `AUCOM_PROFILES_DIR` | `internal/config` | where imported profile documents are read from |
+| `AUCOM_ASSET_CACHE_DIR` | `internal/config` | where assets synced from AUB are cached |
 | `AUCOM_CATALOG_URL` | `internal/config` | where the signed acquisition catalogue is fetched from |
 | `AUCOM_CATALOG_ANCHORS` | `internal/config` | the file holding the catalogue's trust anchors |
 | `AUCOM_OFFLINE` | `internal/config` | forbid every network access; installed packages stay usable |
@@ -199,19 +205,20 @@ usage:
   companion <command> [arguments]
 
 commands:
-  serve [--port <n>] [--open]                                                     run the local GUI server without opening a browser
-  auth login [--email <address>] | status | logout                                authenticate against auto-pigeon-backend
-  job run | preview | list | show | logs | cancel | retry | artifacts | profiles  run a profile action as a supervised job, and inspect what ran
-  build run | preview | list | show | pipelines                                   build a map through a pipeline: several supervised jobs, wired, with a manifest
-  package targets | preview | create | inspect | verify | extract                 build a PAK or PK3 from what a build produced, and read one somebody else made
-  profile validate | show | canonicalize | digest | diff | list | schema          read, check and compare tool, engine and pipeline profiles
-  acquire plan | install | accept | list | verify | use | gc | resolve            obtain a profile's programs from the signed catalogue, and manage the cache
-  catalog keygen | sign | verify | show | status                                  sign, verify and inspect the acquisition catalogue and its keyring
-  engine list | show | detect | bind | check | preview | run | stage | unstage    set up a Quake engine you already have, and start it as a supervised job
-  launch <game> [--map <name>] [--game-root <dir>] [--dry-run]                    launch a game as a supervised job, using its AUB launch config
-  extractor version                                                               run the bundled auto-pigeon-extractor (AUE)
-  migrate                                                                         fold Launcher and older Companion configuration into the current one
-  version                                                                         print the build version
+  serve [--port <n>] [--open]                                                              run the local GUI server without opening a browser
+  auth login [--email <address>] | status | logout                                         authenticate against auto-pigeon-backend
+  aub capabilities | catalog | show | revisions | sync | cached | verify | export | clean  browse auto-pigeon-backend's assets and sync exact revisions to this machine
+  job run | preview | list | show | logs | cancel | retry | artifacts | profiles           run a profile action as a supervised job, and inspect what ran
+  build run | preview | list | show | pipelines                                            build a map through a pipeline: several supervised jobs, wired, with a manifest
+  package targets | preview | create | inspect | verify | extract                          build a PAK or PK3 from what a build produced, and read one somebody else made
+  profile validate | show | canonicalize | digest | diff | list | schema                   read, check and compare tool, engine and pipeline profiles
+  acquire plan | install | accept | list | verify | use | gc | resolve                     obtain a profile's programs from the signed catalogue, and manage the cache
+  catalog keygen | sign | verify | show | status                                           sign, verify and inspect the acquisition catalogue and its keyring
+  engine list | show | detect | bind | check | preview | run | stage | unstage             set up a Quake engine you already have, and start it as a supervised job
+  launch <game> [--map <name>] [--game-root <dir>] [--dry-run]                             launch a game as a supervised job, using its AUB launch config
+  extractor version                                                                        run the bundled auto-pigeon-extractor (AUE)
+  migrate                                                                                  fold Launcher and older Companion configuration into the current one
+  version                                                                                  print the build version
 ```
 
 Exit codes: `0` success, `1` the operation failed, `2` the invocation was wrong.
@@ -1245,6 +1252,223 @@ instead:
 ```console
 $ companion extractor version
 error: no AUE binary is embedded in this build and AUCOM_AUE_BINARY is not set
+```
+
+## Assets from auto-pigeon-backend
+
+`companion aub` lists and fetches the maps, WADs, entity catalogues, Game
+Profiles and prefab packages your AUB account may build with, and pins an exact
+revision of one so a build can be repeated.
+
+It goes through AUB's versioned **Companion API** (`/api/companion/v1`) rather
+than through PocketBase's collection API. That distinction is the whole point: a
+program written against a collection listing is written against a *schema*, so
+every column added at the backend becomes a compatibility question here. The
+Companion API is a contract — a fixed vocabulary of asset types, a fixed shape
+per answer, a version string in every response, and a capability document that
+states the auth collection and the token lifetime *this* deployment configured
+rather than the ones PocketBase documents.
+
+### Ask what the backend offers
+
+```console
+$ companion aub capabilities
+api version:   aub-companion-api/1.0
+auth:          users
+token lasts:   336h0m0s
+revocable:     false
+resumable:     false (range requests)
+etag:          true
+digests:       sha256
+asset types:
+  TYPE               REVISIONS       HISTORY  SCOPES
+  entity_catalogue   revision_rows   true     owned,public,workspace
+  game_profile       current_only    true     owned,public,workspace
+  map                revision_rows   true     owned,public,member,workspace
+  prefab_package     revision_rows   true     owned,workspace
+  texture_source     revision_rows   true     owned,public,workspace
+```
+
+Three of those lines matter when something goes wrong.
+
+**`revocable: false`** — AUB's token is a stateless JWT valid until it expires.
+`companion auth logout` forgets it locally; it does not revoke it, and this
+program says so rather than implying otherwise.
+
+**`resumable: false`** — AUB keeps assets compressed at rest as one frame, so
+there is no random access inside one to offer. An interrupted download is
+**restarted**, never resumed, and nothing here sends a `Range` header. What is
+proved instead is the `ETag`, which is the file's SHA-256, so re-syncing an
+unchanged asset costs a conditional request and no body.
+
+**`current_only`** — a Game Profile carries a revision counter and no
+per-version rows. Only `current` can be fetched, what it resolves to changes
+when somebody edits the profile, and a build that uses one records a digest it
+can check rather than a version it can get back.
+
+### Browse
+
+```console
+$ companion aub catalog --scope owned --type map
+TYPE  ID               REVISION  NAME  ACCESS
+map   z4k7x2m9p1q3w8e  4         e1m1  owned
+map   b8n5v2c7x1z9q4w  1         dm3   owned
+
+* the current version of this type cannot be re-fetched later
+```
+
+`--scope` is the authorization path being listed, and it is how AUB's catalog is
+organised:
+
+| scope | what it lists |
+| --- | --- |
+| `owned` | your own assets, whatever their visibility |
+| `member` | a map you hold a Real-time collaboration role on |
+| `workspace` | an asset attached to an Offline Shared Workspace you belong to |
+| `public` | somebody else's public asset |
+
+`--all` walks every page; `--type`, `--game` and `--name` narrow it; `--json`
+prints the entries verbatim.
+
+### Pin a revision, and sync it
+
+```console
+$ companion aub revisions map z4k7x2m9p1q3w8e
+REVISION  ID               WHEN                  KIND    DIGEST
+4         r9x2k7m4p1q8w3e  2026-09-06T18:22:10Z  upload  9f86d081884c
+3         r1v5c8n2z7q4x9w  2026-09-05T09:14:02Z  upload  2c26b46b68ff
+
+2 of 2, retention: retain_all
+
+$ companion aub sync map z4k7x2m9p1q3w8e
+synced map z4k7x2m9p1q3w8e at revision 4 (1 fetched, 0 already held, 1483920 bytes)
+pin:      r9x2k7m4p1q8w3e
+manifest: 0a1b2c3d4e5f6071...
+  e1m1.apmap  1483920 bytes  9f86d081884c7d65...
+```
+
+The **pin is the revision id `current` resolved to**, never the word `current`.
+That is what makes a build repeatable: a save at the backend creates a new
+revision beside it, and the pinned one goes on serving the same bytes.
+
+Nothing is published to the cache until its digest **and** its length match what
+the server declared, so a tampered, truncated or interrupted transfer leaves the
+cache exactly as it was. The record that says "this revision is here" is written
+last, after every file has landed — so an interrupted sync leaves objects and no
+record, and the next run finds those objects already present and finishes
+without re-downloading them.
+
+```console
+$ companion aub sync map z4k7x2m9p1q3w8e --revision r1v5c8n2z7q4x9w
+synced map z4k7x2m9p1q3w8e at revision 3 (1 fetched, 0 already held, 1402118 bytes)
+```
+
+### What is on this machine
+
+`cached`, `verify` and `export` need no network and no session. A revoked
+session, an expired token or a flight without wifi takes away new fetches and
+nothing else.
+
+```console
+$ companion aub cached
+TYPE  ID               REVISION  PIN              FILES  BYTES    SYNCED
+map   z4k7x2m9p1q3w8e  4         r9x2k7m4p1q8w3e  1      1483920  2026-09-07 11:04
+map   z4k7x2m9p1q3w8e  3         r1v5c8n2z7q4x9w  1      1402118  2026-09-07 11:06
+
+$ companion aub verify
+ok   map z4k7x2m9p1q3w8e r9x2k7m4p1q8w3e (1 files)
+ok   map z4k7x2m9p1q3w8e r1v5c8n2z7q4x9w (1 files)
+
+$ companion aub export map z4k7x2m9p1q3w8e --revision r9x2k7m4p1q8w3e --into ./work
+/home/you/work/e1m1.apmap
+1 files from map z4k7x2m9p1q3w8e at revision 4 (r9x2k7m4p1q8w3e)
+```
+
+`verify` re-hashes every file against its recorded digest, which turns "the file
+is there" into "the file is what it was when it was published". A disk that lost
+a block is caught here rather than by a compiler producing something strange.
+
+`clean` removes staging files left by interrupted downloads. Nothing else in the
+cache is ever removed automatically: it is all re-fetchable, and a build that
+pinned a revision names it in its manifest, so anything lost is nameable rather
+than merely gone.
+
+The cache lives under your user cache directory, or wherever
+`AUCOM_ASSET_CACHE_DIR` points.
+
+### Building from a pinned revision
+
+A build input may name an asset instead of a path:
+
+```console
+$ companion build run --pipeline aucom.pipeline.ericw-q1 \
+    --input source_map=aub:map/z4k7x2m9p1q3w8e@r9x2k7m4p1q8w3e
+```
+
+The syntax is `aub:<type>/<asset_id>[@<revision>][#<file>]`. `@current` is
+resolved **before the build starts**, and what the manifest records is the
+version it resolved to — never the word `current`. A revision with more than one
+file (a prefab package, a texture source with several WADs) must name which one
+with `#`, because picking the first would make the answer depend on an ordering
+the build did not choose.
+
+The build's `manifest.json` then carries where the input came from, beside the
+digest of what it was:
+
+```jsonc
+"inputs": [{
+  "name": "source_map",
+  "sha256": "9f86d081884c7d65…",
+  "source": {
+    "backend": "http://localhost:9190",
+    "asset_type": "map",
+    "asset_id": "z4k7x2m9p1q3w8e",
+    "revision_id": "r9x2k7m4p1q8w3e",
+    "revision": 4,
+    "refetchable": true,
+    "manifest_sha256": "0a1b2c3d4e5f6071…",
+    "fetched_at": "2026-09-07T11:04:12Z"
+  }
+}]
+```
+
+`refetchable` is a real answer either way: `false` means the backend keeps no
+per-version row for that asset type, so the build can prove afterwards whether
+the source has changed — by comparing the digest — but cannot get the old one
+back.
+
+The provenance is deliberately **not** part of `reproducible_key`. The key is
+over the recipe, and the same bytes from a different backend are the same build;
+a key that included the origin would report "not reproducible" about a build
+that reproduced exactly.
+
+A retried build reads its pinned revision out of the local cache, so a newer
+revision at the backend cannot change what it compiles.
+
+### When something is refused
+
+```console
+$ companion aub sync map z4k7x2m9p1q3w8e
+error: /api/companion/v1/capabilities rejected this session. Run `companion auth login --email <address>` and try again.
+your locally cached assets are untouched and `companion aub cached` still lists them
+```
+
+AUB answers `404` identically for an asset that does not exist and one that is
+no longer available to you — a refusal that told the two apart would let anybody
+enumerate other people's asset ids one guess at a time — so this program says
+both:
+
+```console
+$ companion aub show map z4k7x2m9p1q3w8e
+error: No asset of this type with this id is available to you.
+the asset may have been deleted, or your access to it withdrawn; AUB answers the same way for both
+```
+
+A digest that does not match is its own message, and it names the consequence:
+
+```console
+error: assetsync: the downloaded bytes are not what the server declared: the bytes hash to 3d4e…, 9f86… was declared
+nothing was published to the cache; no build can read these bytes
 ```
 
 ## Profiles
