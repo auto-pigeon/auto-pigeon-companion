@@ -108,6 +108,16 @@ var commands = []Command{
 		Run:     runProfile,
 	},
 	{
+		Name: "acquire", Usage: "plan | install | accept | list | verify | use | gc | resolve",
+		Summary: "obtain a profile's programs from the signed catalogue, and manage the cache",
+		Run:     runAcquire,
+	},
+	{
+		Name: "catalog", Usage: "keygen | sign | verify | show | status",
+		Summary: "sign, verify and inspect the acquisition catalogue and its keyring",
+		Run:     runCatalog,
+	},
+	{
 		Name: "launch", Usage: "<game> [--map <name>] [--game-root <dir>] [--dry-run]",
 		Summary: "launch a game as a supervised job, using its AUB launch config",
 		Run:     runLaunch,
@@ -196,6 +206,11 @@ func UsageText() string {
 	}
 	return builder.String()
 }
+
+// flagSetType is the concrete flag set every subcommand uses. Named so that
+// acquire's per-subcommand flag hooks can take one without this package's
+// callers needing to name the flag package.
+type flagSetType = flag.FlagSet
 
 // newFlagSet builds a subcommand's FlagSet with the Companion's shared conventions:
 // errors go to the command's own stderr, and the flag package's automatic usage

@@ -118,6 +118,22 @@ func DigestBytes(canonical []byte) string {
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
+// CanonicalDocument is the canonical encoding of a document that is *not* a
+// profile — the signed acquisition catalogue and its keyring.
+//
+// It is [Canonical] without [CheckPortable], and the exception is narrow and
+// deliberate. The portability scan refuses absolute paths, home directories and
+// network locations, because none of them may appear in a document that has to
+// mean the same thing on somebody else's machine. A catalogue is the opposite
+// kind of document: its entire job is to carry immutable download URLs, so the
+// scan would refuse every valid one.
+//
+// It is exported rather than reimplemented next to the catalogue because there
+// must be exactly one canonicalizer in this program. Two would be two answers
+// to "what bytes does this signature cover", and the second one to drift would
+// be the one nobody was verifying against.
+func CanonicalDocument(v any) ([]byte, error) { return canonicalUnchecked(v) }
+
 func writeCanonical(buf *bytes.Buffer, value any) error {
 	switch v := value.(type) {
 	case nil:

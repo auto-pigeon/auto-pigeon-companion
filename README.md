@@ -676,7 +676,7 @@ and does not distribute. Describing a program is not distributing it.
 
 - The map-building tools and game engines these profiles drive are **separate
   programs under their own licences**, usually GPL-2.0. They are run as separate
-  operating-system processes, exactly as `internal/tools` requires — never
+  operating-system processes, exactly as `internal/acquire` requires — never
   linked, never vendored, never compiled in.
 - **This repository's MIT licence covers this repository's own code.** It does
   not extend to a tool a profile describes, and it is not extended by one. A

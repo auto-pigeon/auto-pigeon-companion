@@ -12,7 +12,7 @@ import "embed"
 //
 // Note what is *not* embedded: no external map-building tool binary, ever. Those
 // are GPL-2.0 and are fetched as separate programs at runtime — see
-// internal/tools and THIRD_PARTY_NOTICES.md.
+// internal/acquire and THIRD_PARTY_NOTICES.md.
 //
 //go:embed assets
 var assets embed.FS

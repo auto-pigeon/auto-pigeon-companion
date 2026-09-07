@@ -107,12 +107,13 @@ They are never:
 No Go dependency may pull a GPL-2.0 tool's source or object code into this
 module. This is an architectural constraint, split across two packages that
 each restate it in their own documentation:
-[`internal/tools`](internal/tools/manager.go) obtains a tool and verifies it,
-and [`internal/job`](internal/job/exec.go) runs it — as an executable path and
-an argument array handed to `os/exec`, never through a shell and never through
-an in-process call. A test fails if the tool registry gains an entry without
-this document being updated, and another fails if `internal/tools` grows a way
-to execute anything.
+[`internal/catalog`](internal/catalog/doc.go) says which bytes a tool is,
+[`internal/acquire`](internal/acquire/doc.go) obtains and verifies them, and
+[`internal/job`](internal/job/exec.go) runs the result — as an executable path
+and an argument array handed to `os/exec`, never through a shell and never
+through an in-process call. Acquisition and execution are separate packages on
+purpose: neither can grow into the other, and `internal/acquire` has no way to
+start a process.
 
 Each tool keeps its own copyright and its own licence. Downloading and running a
 GPL-2.0 program from an MIT-licensed program is ordinary use of that program; it
@@ -161,10 +162,13 @@ Once the tools are chosen, each one gets a section here containing:
 - a pointer to the corresponding source, since GPL-2.0 section 3 requires that
   anyone redistributing a binary offer the source that produced it.
 
-Until then, [`internal/tools/manager.go`](internal/tools/manager.go) resolves no
-real tools at all: the registry is empty and a fake tool stands in so the
-download-and-run pipeline can be exercised. The fake tool is this repository's
-own code and is not a third-party program.
+Until then no real tool is published in any catalogue this project signs, and
+no catalogue signing key exists. The acquisition path is exercised end to end
+against an in-process HTTPS fixture serving archives the tests build
+themselves — this repository's own bytes, under its own licence, not a
+third-party program. The test signing keys under
+[`internal/catalog/testdata`](internal/catalog/testdata) are generated fixtures
+and sign nothing outside the tests.
 
 ### Requirement to revisit: bundling versus downloading
 
@@ -181,8 +185,8 @@ carry:
 - a written offer of, or accompanying, corresponding source, per GPL-2.0
   section 3.
 
-This affects [`internal/tools/manager.go`](internal/tools/manager.go) and every
-packaging script under [`build/`](build/). **This is flagged as a decision to
+This affects [`internal/acquire`](internal/acquire/doc.go) and every packaging
+script under [`build/`](build/). **This is flagged as a decision to
 make, not one made here.**
 
 ## Games launched by this application

@@ -174,8 +174,9 @@ func readRecord(path string) (*Job, error) {
 	if err := decoder.Decode(&j); err != nil {
 		return nil, fmt.Errorf("job: reading %s: %w", path, err)
 	}
-	if j.SchemaVersion != SchemaVersion {
-		return nil, fmt.Errorf("job: %s is %q; this build reads %q", path, j.SchemaVersion, SchemaVersion)
+	if !SchemaSupported(j.SchemaVersion) {
+		return nil, fmt.Errorf("job: %s is %q; this build reads %s", path, j.SchemaVersion,
+			strings.Join(SupportedSchemaVersions, " and "))
 	}
 	if !j.State.Valid() {
 		return nil, fmt.Errorf("job: %s is in the state %q, which this build does not know", path, j.State)

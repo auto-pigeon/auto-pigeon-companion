@@ -25,7 +25,31 @@ var SupportedSchemaVersions = []string{"aucom.profile/1.0"}
 // separate from SchemaVersion because bindings are never published: the two
 // formats have different compatibility obligations and tying them together
 // would force a migration of local state every time the portable format moved.
-const LocalBindingSchemaVersion = "aucom.local-binding/1.0"
+const LocalBindingSchemaVersion = "aucom.local-binding/1.1"
+
+// SupportedLocalBindingSchemaVersions is every binding format this build reads,
+// oldest first. A stored binding is re-stamped to the current version the next
+// time it is written.
+//
+// The list exists because the alternative is worse in both directions. Refusing
+// an older binding outright would make an additive field — 1.1 added the record
+// of which downloads a binding depends on — cost every user their grants.
+// Reading anything at all, on the other hand, would mean honouring grants from
+// a document this build only half understands. Naming the versions is the
+// middle: an old one is read deliberately, and anything else is refused by
+// name.
+var SupportedLocalBindingSchemaVersions = []string{"aucom.local-binding/1.0", "aucom.local-binding/1.1"}
+
+// LocalBindingSchemaSupported reports whether this build reads a binding
+// format.
+func LocalBindingSchemaSupported(version string) bool {
+	for _, v := range SupportedLocalBindingSchemaVersions {
+		if v == version {
+			return true
+		}
+	}
+	return false
+}
 
 // SchemaSupported reports whether this build can read a document format.
 func SchemaSupported(version string) bool {

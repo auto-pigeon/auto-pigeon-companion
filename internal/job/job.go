@@ -18,7 +18,27 @@ import (
 // this program, not by anybody else's. A record this build does not fully
 // understand is refused rather than half-read, because a job record is what
 // says whether something ran.
-const SchemaVersion = "aucom.job/1.0"
+const SchemaVersion = "aucom.job/1.1"
+
+// SupportedSchemaVersions is every job record format this build reads, oldest
+// first.
+//
+// 1.1 added `installs`: which downloaded packages a job ran. A job record is
+// evidence, and evidence that names a cache entry is what stops the cache's
+// garbage collector from deleting the toolchain a retained build used. An older
+// record names none, which is read as "none" and is true — nothing had been
+// downloaded by a build that predates the download mechanism.
+var SupportedSchemaVersions = []string{"aucom.job/1.0", "aucom.job/1.1"}
+
+// SchemaSupported reports whether this build reads a job record format.
+func SchemaSupported(version string) bool {
+	for _, v := range SupportedSchemaVersions {
+		if v == version {
+			return true
+		}
+	}
+	return false
+}
 
 // Request is a submission: which action of which profile, with which inputs.
 //
@@ -164,6 +184,12 @@ type Job struct {
 	ActionTitle    string        `json:"action_title,omitempty"`
 	Trust          profile.Trust `json:"trust,omitempty"`
 
+	// Installs is every managed download this job ran, by cache digest. It is
+	// recorded so that the record of what ran stays complete after the
+	// catalogue has moved on, and so that cache cleanup can tell a toolchain
+	// nothing refers to from one a retained job is the evidence for.
+	Installs []string `json:"installs,omitempty"`
+
 	Command   *CommandPreview `json:"command,omitempty"`
 	Workspace string          `json:"workspace,omitempty"`
 	// ArtifactDir is where collected outputs were published.
@@ -237,6 +263,7 @@ func (j *Job) Clone() *Job {
 		command.Env = append([]EnvEntry(nil), j.Command.Env...)
 		out.Command = &command
 	}
+	out.Installs = append([]string(nil), j.Installs...)
 	out.Artifacts = append([]Artifact(nil), j.Artifacts...)
 	out.Diagnostics = append([]Diagnostic(nil), j.Diagnostics...)
 	out.History = append([]Event(nil), j.History...)

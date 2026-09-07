@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -183,6 +184,9 @@ func TestArgSchemaUnionMatchesGoType(t *testing.T) {
 	}
 }
 
+// schemaVersionInName matches the MAJOR.MINOR a schema file name carries.
+var schemaVersionInName = regexp.MustCompile(`[0-9]+\.[0-9]+`)
+
 func TestEverySchemaFileIsValidJSONAndVersioned(t *testing.T) {
 	files := SchemaFiles()
 	if len(files) == 0 {
@@ -204,8 +208,17 @@ func TestEverySchemaFileIsValidJSONAndVersioned(t *testing.T) {
 		if _, ok := doc["$id"].(string); !ok {
 			t.Errorf("%s: has no $id", name)
 		}
-		if !strings.Contains(name, "1.0") {
+		// The file name carries the format version, and it is the version the
+		// $id names. A schema file whose name and $id disagree is one a reader
+		// can fetch by URL and get a different document from the one in the
+		// repository.
+		version := schemaVersionInName.FindString(name)
+		if version == "" {
 			t.Errorf("%s: the file name does not carry a schema version", name)
+			continue
+		}
+		if id, _ := doc["$id"].(string); !strings.Contains(id, "/"+version) {
+			t.Errorf("%s: the file name says %s and the $id says %q", name, version, id)
 		}
 	}
 	for _, kind := range Kinds {

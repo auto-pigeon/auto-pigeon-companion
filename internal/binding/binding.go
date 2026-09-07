@@ -36,6 +36,29 @@ type Override struct {
 	SetAt  time.Time `json:"set_at"`
 }
 
+// PinnedInstall is one managed download this binding depends on.
+//
+// It is recorded for two reasons, and the second is the one that is easy to
+// leave out. The first is provenance: which exact bytes, from which catalogue
+// package and version, this profile is currently bound to. The second is that
+// the cache's garbage collector has to know what is still in use, and the only
+// honest source for that is the set of things that say they are using it. A
+// collector that worked out references by looking at which paths happen to be
+// inside the cache directory would be a collector that deleted a pinned
+// toolchain the day somebody moved their cache.
+//
+// Several may be recorded. The first is the one currently bound; the rest are
+// versions the user asked to keep, and they are references too — that is what
+// "preserve multiple pinned versions" means in practice.
+type PinnedInstall struct {
+	PackageID string `json:"package_id"`
+	Version   string `json:"version"`
+	// Digest is the artifact's `sha256:<hex>`, which names the cache entry.
+	Digest   string    `json:"digest"`
+	Platform string    `json:"platform,omitempty"`
+	PinnedAt time.Time `json:"pinned_at"`
+}
+
 // LocalBinding is one profile, as installed on this machine.
 type LocalBinding struct {
 	SchemaVersion string `json:"schema_version"`
@@ -63,6 +86,9 @@ type LocalBinding struct {
 	// by slug. Resolving the slug is an account-and-deployment question, which
 	// is why the answer lives here and the question lives in the document.
 	GameProfileID string `json:"game_profile_id,omitempty"`
+	// Installs is every managed download this binding depends on. See
+	// [PinnedInstall].
+	Installs []PinnedInstall `json:"installs,omitempty"`
 	// Grant is what the user approved, against ProfileDigest.
 	Grant     *profile.Grant `json:"grant,omitempty"`
 	Overrides []Override     `json:"overrides,omitempty"`
@@ -79,8 +105,9 @@ func (b LocalBinding) Validate() error {
 	var problems []string
 	add := func(format string, args ...any) { problems = append(problems, fmt.Sprintf(format, args...)) }
 
-	if b.SchemaVersion != SchemaVersion {
-		add("schema_version is %q; this build writes %q", b.SchemaVersion, SchemaVersion)
+	if !profile.LocalBindingSchemaSupported(b.SchemaVersion) {
+		add("schema_version is %q; this build reads %s", b.SchemaVersion,
+			strings.Join(profile.SupportedLocalBindingSchemaVersions, " and "))
 	}
 	if b.ProfileID == "" {
 		add("profile_id is empty")
@@ -110,6 +137,18 @@ func (b LocalBinding) Validate() error {
 	}
 	if b.ResolvedVersion != "" && b.VersionCheckedAt.IsZero() {
 		add("resolved_version is set but version_checked_at is not; a recorded version with no timestamp never goes stale")
+	}
+	seenInstall := map[string]bool{}
+	for _, install := range b.Installs {
+		switch {
+		case install.PackageID == "":
+			add("an install has no package id")
+		case !strings.HasPrefix(install.Digest, "sha256:") || len(install.Digest) != len("sha256:")+64:
+			add("the install of %q has the digest %q, which is not sha256:<64 hex digits>", install.PackageID, install.Digest)
+		case seenInstall[install.Digest]:
+			add("the install %s is recorded twice", install.Digest)
+		}
+		seenInstall[install.Digest] = true
 	}
 	if b.Grant != nil && b.Grant.Digest != b.ProfileDigest {
 		add("the grant covers digest %q but the binding is for %q; the document changed after it was approved", b.Grant.Digest, b.ProfileDigest)
@@ -181,7 +220,9 @@ func (s *Set) Find(profileID string) (LocalBinding, bool) {
 	return LocalBinding{}, false
 }
 
-// Put inserts or replaces a binding, stamping it.
+// Put inserts or replaces a binding, stamping it with the current format. A
+// binding read at an older version is written back at this one, which is what
+// keeps the supported-version list from growing without bound.
 func (s *Set) Put(b LocalBinding) error {
 	b.SchemaVersion = SchemaVersion
 	if b.UpdatedAt.IsZero() {
@@ -216,7 +257,27 @@ func (s *Set) Remove(profileID string) bool {
 // read and repair a file that records what they approved.
 func (s *Set) Marshal() ([]byte, error) {
 	s.SchemaVersion = SchemaVersion
+	for i := range s.Bindings {
+		s.Bindings[i].SchemaVersion = SchemaVersion
+	}
 	return json.MarshalIndent(s, "", "  ")
+}
+
+// PinnedDigests is every cache entry any binding in this set depends on. It is
+// what the cache's garbage collector asks for.
+func (s *Set) PinnedDigests() []string {
+	var digests []string
+	seen := map[string]bool{}
+	for _, b := range s.Bindings {
+		for _, install := range b.Installs {
+			if !seen[install.Digest] {
+				seen[install.Digest] = true
+				digests = append(digests, install.Digest)
+			}
+		}
+	}
+	sort.Strings(digests)
+	return digests
 }
 
 // Load reads a stored set, refusing unknown members: a binding file this build
@@ -228,8 +289,9 @@ func Load(data []byte) (*Set, error) {
 	if err := decoder.Decode(&s); err != nil {
 		return nil, fmt.Errorf("binding: reading the binding store: %w", err)
 	}
-	if s.SchemaVersion != SchemaVersion {
-		return nil, fmt.Errorf("binding: the binding store is %q; this build reads %q", s.SchemaVersion, SchemaVersion)
+	if !profile.LocalBindingSchemaSupported(s.SchemaVersion) {
+		return nil, fmt.Errorf("binding: the binding store is %q; this build reads %s", s.SchemaVersion,
+			strings.Join(profile.SupportedLocalBindingSchemaVersions, " and "))
 	}
 	for _, b := range s.Bindings {
 		if err := b.Validate(); err != nil {

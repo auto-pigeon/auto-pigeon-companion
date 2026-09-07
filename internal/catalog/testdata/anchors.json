@@ -1,0 +1,14 @@
+{
+  "keys": [
+    {
+      "key_id": "6fd4151927452823",
+      "algorithm": "ed25519",
+      "public_key": "vopRU5H3duBhy3qbeXbqGapEPBX29Vxi/+yxCey0mi0=",
+      "role": "anchor",
+      "status": "active",
+      "not_before": "2026-01-01T00:00:00Z",
+      "not_after": "2046-01-01T00:00:00Z",
+      "comment": "TEST FIXTURE — anchor key, generated for this repository's tests only"
+    }
+  ]
+}

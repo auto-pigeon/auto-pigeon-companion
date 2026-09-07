@@ -42,6 +42,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/catalog"
 )
 
 // AppDirName is the single path element the Companion adds under the OS config
@@ -104,6 +106,15 @@ type Config struct {
 	// ProfilesDir overrides where imported profile documents are read from.
 	// Empty means DefaultProfilesDir.
 	ProfilesDir string `json:"profiles_dir,omitempty"`
+	// CatalogBaseURL is where the signed acquisition catalogue and its keyring
+	// are fetched from. Empty means managed downloads are refused, by name —
+	// see [catalog.ErrNoCatalogURL]. There is no default: no component in this
+	// program compiles in where another one lives.
+	CatalogBaseURL string `json:"catalog_url,omitempty"`
+	// CatalogAnchorsPath is the file holding the catalogue's trust anchors.
+	// Empty means this installation has no trust root, and every managed
+	// download is refused rather than performed unverified.
+	CatalogAnchorsPath string `json:"catalog_anchors_path,omitempty"`
 	// JobConcurrency is how many jobs run at once. Zero lets the executor
 	// choose from the machine.
 	JobConcurrency int `json:"job_concurrency,omitempty"`
@@ -255,6 +266,72 @@ func (c Config) Profiles() (string, error) {
 		return c.ProfilesDir, nil
 	}
 	return DefaultProfilesDir()
+}
+
+// EnvOffline names the environment variable that forbids every network access.
+//
+// Offline changes what is *available*, never what is checked: an installed
+// package still has its digest and its revocation status verified, because
+// both of those are local facts recorded when it was installed. What offline
+// cannot do is install something new, and it says so.
+const EnvOffline = "AUCOM_OFFLINE"
+
+// Catalog resolves the effective catalogue address: the environment variable if
+// set, otherwise config.json, otherwise [catalog.ErrNoCatalogURL].
+func (c Config) Catalog() (string, error) {
+	if fromEnv := strings.TrimSpace(os.Getenv(catalog.EnvCatalogURL)); fromEnv != "" {
+		return fromEnv, nil
+	}
+	if trimmed := strings.TrimSpace(c.CatalogBaseURL); trimmed != "" {
+		return trimmed, nil
+	}
+	return "", catalog.ErrNoCatalogURL
+}
+
+// CatalogAnchors resolves the effective trust anchor file.
+func (c Config) CatalogAnchors() (string, error) {
+	if fromEnv := strings.TrimSpace(os.Getenv(catalog.EnvAnchorsPath)); fromEnv != "" {
+		return fromEnv, nil
+	}
+	if trimmed := strings.TrimSpace(c.CatalogAnchorsPath); trimmed != "" {
+		return trimmed, nil
+	}
+	return "", catalog.ErrNoAnchors
+}
+
+// Offline reports whether the environment forbids network access.
+func Offline() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvOffline))) {
+	case "", "0", "false", "no":
+		return false
+	}
+	return true
+}
+
+// CatalogStatePath is the catalogue trust state: the highest serials this
+// machine has accepted and every revocation it has ever seen.
+//
+// Beside config.json rather than in the cache, and that placement is the whole
+// point. The cache is re-downloadable by definition and a user clearing it
+// loses only time; this file is a ratchet, and losing it silently would restore
+// exactly the state a replay of an old signed catalogue needs.
+func CatalogStatePath() (string, error) {
+	dir, err := Dir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "catalog-state.json"), nil
+}
+
+// LicenseAcceptancePath is the record of which licence notices have been shown
+// and acknowledged on this machine. Configuration, not cache, for the same
+// reason: it records a decision.
+func LicenseAcceptancePath() (string, error) {
+	dir, err := Dir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "license-acceptance.json"), nil
 }
 
 // BindingsPath is the file recording what is installed on this machine and
