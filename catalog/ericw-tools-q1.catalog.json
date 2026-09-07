@@ -1,0 +1,107 @@
+{
+  "schema_version": "aucom.catalog/1.0",
+  "catalog_id": "auto-pigeon.q1",
+  "serial": 1,
+  "issued_at": "2026-09-06T00:00:00Z",
+  "expires_at": "2027-09-06T00:00:00Z",
+  "packages": [
+    {
+      "id": "ericw-tools.q1",
+      "version": "0.18.1",
+      "name": "ericw-tools",
+      "summary": "qbsp, vis, light, bspinfo and bsputil — the Quake 1 map compilers.",
+      "program": "ericw-tools",
+      "source": {
+        "homepage": "https://ericwa.github.io/ericw-tools/",
+        "release_notes": "https://github.com/ericwa/ericw-tools/releases/tag/v0.18.1",
+        "repository": "https://github.com/ericwa/ericw-tools"
+      },
+      "license": {
+        "spdx": "GPL-3.0-or-later",
+        "name": "GNU General Public License v3.0 or later",
+        "url": "https://www.gnu.org/licenses/gpl-3.0.html",
+        "corresponding_source": "https://github.com/ericwa/ericw-tools/tree/v0.18.1",
+        "notice": "ericw-tools is a separate program by Eric Wasylishen, continuing Kevin Shanahan's tyrutils. Its source terms are GPL-2.0-or-later; these official binaries link Embree, and the README shipped inside them states that builds using Embree are licensed under GPLv3+ for compatibility with the Apache licence, so GPL-3.0-or-later is what this download is conveyed under. The corresponding source for exactly this version is the v0.18.1 tag named above. Downloading it obtains somebody else's software under somebody else's licence."
+      },
+      "requires_acceptance": true,
+      "artifacts": [
+        {
+          "platform": {
+            "arch": "amd64",
+            "os": "linux"
+          },
+          "url": "https://github.com/ericwa/ericw-tools/releases/download/v0.18.1/ericw-tools-v0.18.1-Linux.zip",
+          "kind": "zip",
+          "size": 14594502,
+          "sha256": "sha256:986531ff66d692fa732b7f75a6c871dcbd152b98721d1c2475b76d3367f040e2",
+          "unpacked_size": 37754226,
+          "root": "ericw-tools-v0.18.1-Linux",
+          "executables": [
+            "bin/qbsp",
+            "bin/vis",
+            "bin/light",
+            "bin/bspinfo",
+            "bin/bsputil"
+          ]
+        },
+        {
+          "platform": {
+            "arch": "amd64",
+            "os": "windows"
+          },
+          "url": "https://github.com/ericwa/ericw-tools/releases/download/v0.18.1/ericw-tools-v0.18.1-win64.zip",
+          "kind": "zip",
+          "size": 12780109,
+          "sha256": "sha256:a0f39c6faeb29cd08b267880cdcebb310f9938fef4cbbff07d1f6843c36e9cd3",
+          "unpacked_size": 31349415,
+          "root": "ericw-tools-v0.18.1-win64",
+          "executables": [
+            "bin/qbsp.exe",
+            "bin/vis.exe",
+            "bin/light.exe",
+            "bin/bspinfo.exe",
+            "bin/bsputil.exe"
+          ]
+        },
+        {
+          "platform": {
+            "arch": "386",
+            "os": "windows"
+          },
+          "url": "https://github.com/ericwa/ericw-tools/releases/download/v0.18.1/ericw-tools-v0.18.1-win32.zip",
+          "kind": "zip",
+          "size": 6423741,
+          "sha256": "sha256:562aae414b914ffa8d3a208ca74d16ac4ca2b61031773227c7d4bdc8384b13ef",
+          "unpacked_size": 17987751,
+          "root": "ericw-tools-v0.18.1-win32",
+          "executables": [
+            "bin/qbsp.exe",
+            "bin/vis.exe",
+            "bin/light.exe",
+            "bin/bspinfo.exe",
+            "bin/bsputil.exe"
+          ]
+        },
+        {
+          "platform": {
+            "arch": "amd64",
+            "os": "darwin"
+          },
+          "url": "https://github.com/ericwa/ericw-tools/releases/download/v0.18.1/ericw-tools-v0.18.1-Darwin.zip",
+          "kind": "zip",
+          "size": 9469803,
+          "sha256": "sha256:efdba039d731702e0ca6ed65f3eec656daa67c0f9f41674e0e842804173d0771",
+          "unpacked_size": 29098872,
+          "root": "ericw-tools-v0.18.1-Darwin",
+          "executables": [
+            "bin/qbsp",
+            "bin/vis",
+            "bin/light",
+            "bin/bspinfo",
+            "bin/bsputil"
+          ]
+        }
+      ]
+    }
+  ]
+}

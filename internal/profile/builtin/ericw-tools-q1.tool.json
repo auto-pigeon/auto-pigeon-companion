@@ -162,7 +162,8 @@
       ],
       "diagnostics": [
         { "id": "leak", "match": "Reached occupant", "severity": "error", "message": "The map leaks: there is a gap between the inside and the void.", "hint": "Load the .pts point file this build published in your editor and follow it to the hole." },
-        { "id": "leakfile", "match": "Leak file written", "severity": "info", "message": "A point file was written." },
+        { "id": "leakfile", "match": "Leak file written", "severity": "info", "message": "A point file was written; it is the `pts` artifact of this build." },
+        { "id": "leaktest_abort", "match": "Aborting because -leaktest", "severity": "error", "message": "qbsp stopped rather than write a BSP for a map that leaks.", "hint": "Turn the leak test off if you want the BSP anyway; it will have no visibility data." },
         { "id": "brush_faces", "match": "WARNING 09", "severity": "error", "message": "A brush produced no faces, so the compiler dropped it.", "hint": "Its plane triples enclose no volume. Check the winding of the faces the editor wrote." },
         { "id": "no_wad", "match": "WARNING 01", "severity": "error", "message": "The map names no WAD the compiler could open, so every face is untextured.", "hint": "Add the .wad as the pipeline's `wad` input, or fix the `wad` key in worldspawn." },
         { "id": "texture_missing", "match": "WARNING 16", "severity": "error", "message": "A texture the map uses is not in any WAD that was opened.", "hint": "The BSP will build, with a placeholder where that texture should be." },
@@ -244,7 +245,7 @@
         { "name": "log", "title": "light log", "role": "q1.light.log", "path": "light.log", "optional": true }
       ],
       "options": [
-        { "name": "threads", "title": "Threads", "type": "integer", "default": "4", "minimum": 1, "maximum": 64 },
+        { "name": "threads", "title": "Threads", "description": "More than one thread makes light faster and makes its output differ from run to run: measured on 0.18.1, three runs of one map at four threads produced three different lightmaps, and one thread produced the same one three times. Set it to 1 for a build whose BSP is byte-identical to the last one.", "type": "integer", "default": "4", "minimum": 1, "maximum": 64 },
         { "name": "sampling", "title": "Supersampling", "description": "How many samples per lightmap texel. extra4 is the slow one you use for a final build.", "type": "enum", "default": "none", "values": [
           { "value": "none", "title": "None" },
           { "value": "extra", "title": "2x" },
@@ -257,8 +258,9 @@
       ],
       "diagnostics": [
         { "id": "empty_lightmaps", "match": "empty lightmaps", "severity": "info", "message": "light reported how many faces received no light." },
-        { "id": "no_lights", "match": "0 lights", "severity": "warning", "message": "The map has no light entities, so the result will be fullbright or black." },
-        { "id": "written", "match": "Writing", "severity": "progress", "message": "Writing the lit BSP." }
+        { "id": "no_lights", "match": "Final count: 0 lights", "severity": "warning", "message": "The map has no light entities in use, so the result will be fullbright or black." },
+        { "id": "written", "match": "Writing ", "kind": "prefix", "severity": "progress", "message": "light is writing a file." },
+        { "id": "aborted", "match": "Aborting because", "severity": "error", "message": "light stopped before it finished." }
       ],
       "roots": [
         { "role": "workspace", "access": "read_write", "purpose": "rewrite the staged BSP with its lighting data" }

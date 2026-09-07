@@ -103,6 +103,11 @@ var commands = []Command{
 		Run:     runJob,
 	},
 	{
+		Name: "build", Usage: "run | preview | list | show | pipelines",
+		Summary: "build a map through a pipeline: several supervised jobs, wired, with a manifest",
+		Run:     runBuild,
+	},
+	{
 		Name: "profile", Usage: "validate | show | canonicalize | digest | diff | list | schema",
 		Summary: "read, check and compare tool, engine and pipeline profiles",
 		Run:     runProfile,

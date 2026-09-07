@@ -126,6 +126,16 @@ func catalogSign(env *Env, args []string) int {
 		fmt.Fprintf(env.Stderr, "error: %v\n", err)
 		return 1
 	}
+	// An artifact with no signer is attributed to the key that is signing.
+	//
+	// A catalogue kept in a repository cannot name the key id of whoever will
+	// eventually sign it — key ids are derived from the key, and the key is not
+	// in the repository. Leaving `signer` out therefore means "whoever signs
+	// this", which is unambiguous with one key and a question with several.
+	if err := attributeUnsigned(document, keyIDs); err != nil {
+		fmt.Fprintf(env.Stderr, "error: %v\n", err)
+		return 1
+	}
 	// Validated here, against the keys that are about to sign it, because one
 	// of a catalogue's rules — every entry is attributed to a key that signed
 	// the document — cannot be checked without knowing them. A publisher who
@@ -207,6 +217,37 @@ func loadSigningKeys(paths []string, role string) ([]ed25519.PrivateKey, map[str
 }
 
 // validateUnsigned applies the document's own rules before it is signed.
+// attributeUnsigned fills in an artifact's `signer` when the document left it
+// out and exactly one key is signing.
+func attributeUnsigned(document any, keyIDs map[string]bool) error {
+	catalogue, isCatalog := document.(*catalog.Catalog)
+	if !isCatalog {
+		return nil
+	}
+	var only string
+	for id := range keyIDs {
+		if only != "" {
+			only = ""
+			break
+		}
+		only = id
+	}
+	for p := range catalogue.Packages {
+		for a := range catalogue.Packages[p].Artifacts {
+			artifact := &catalogue.Packages[p].Artifacts[a]
+			if strings.TrimSpace(artifact.Signer) != "" {
+				continue
+			}
+			if only == "" {
+				return fmt.Errorf("catalog: %s on %s names no signer, and this document is being signed by several keys; "+
+					"say which one vouches for it", catalogue.Packages[p].ID, artifact.Platform)
+			}
+			artifact.Signer = only
+		}
+	}
+	return nil
+}
+
 func validateUnsigned(document any, keyIDs map[string]bool) error {
 	switch typed := document.(type) {
 	case *catalog.Keyring:
