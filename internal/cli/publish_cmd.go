@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/aub"
@@ -100,7 +101,12 @@ func profilePublish(env *Env, args []string) int {
 		"private, unlisted or public")
 	confirm := set.Bool("confirm", false,
 		"send it; without this the preview is printed and nothing is published")
-	rest, code, ok := parseFlags(env, set, args)
+	// Interspersed: `profile publish`'s own usage line prints the flags AFTER the
+	// positionals, and Go's flag package stops at the first non-flag argument —
+	// so the documented invocation was answered with a usage dump. AUT/AUCOM 219
+	// found all four of these; every other command in this binary already parsed
+	// this way (`game join`, `engine bind`, `acquire plan`).
+	rest, code, ok := parseInterspersed(env, set, args)
 	if !ok {
 		return code
 	}
@@ -272,7 +278,12 @@ func profileInstall(env *Env, args []string) int {
 	approve := set.Bool("approve", false,
 		"install it, granting what the review lists; without this nothing is written")
 	asJSON := set.Bool("json", false, "print the plan as JSON")
-	rest, code, ok := parseFlags(env, set, args)
+	// Interspersed: `profile install`'s own usage line prints the flags AFTER the
+	// positionals, and Go's flag package stops at the first non-flag argument —
+	// so the documented invocation was answered with a usage dump. AUT/AUCOM 219
+	// found all four of these; every other command in this binary already parsed
+	// this way (`game join`, `engine bind`, `acquire plan`).
+	rest, code, ok := parseInterspersed(env, set, args)
 	if !ok {
 		return code
 	}
@@ -323,10 +334,42 @@ func profileInstall(env *Env, args []string) int {
 	}
 	fmt.Fprintf(env.Stdout, "\ninstalled %s %s (%s)\n",
 		local.ProfileID, local.ProfileVersion, local.Trust)
-	fmt.Fprintln(env.Stdout,
-		"run `companion profile bind` to say where the program is on this machine.")
+	fmt.Fprintln(env.Stdout, nextStepAfterInstall(plan.Profile().Metadata().Kind, profilesDir,
+		local.ProfileID))
 
 	return 0
+}
+
+// nextStepAfterInstall names the command that actually exists.
+//
+// It said `companion profile bind`, which is not a command: `profile` has no
+// `bind`, and running it answers `unknown profile command "bind"`. A program
+// that ends a successful operation by naming a command of its own that does not
+// exist is worse than one that says nothing — the reader has no way to tell
+// whether they mistyped it, whether their build is too old, or whether the
+// install left something half-done.
+//
+// The two kinds are bound by two different commands, so the answer depends on
+// which one was installed: an engine by `engine bind`, which records the
+// executable AND the approval together; a tool by `acquire resolve`, which
+// records where the programs are and nothing about approval — the grant for an
+// installed profile was already made by the `--approve` that got here.
+func nextStepAfterInstall(kind profile.Kind, profilesDir, id string) string {
+	switch kind {
+	case profile.KindEngine:
+		return "run `companion engine bind " + id +
+			" --engine <path>` to say where the engine is on this machine."
+	case profile.KindPipeline:
+		// A pipeline binds nothing of its own: it names capabilities, and the
+		// tool profiles that provide them are what get bound.
+		return "run `companion build preview --pipeline " + id +
+			"` to see which of its stages still needs a tool bound."
+	default:
+		return "run `companion acquire resolve " +
+			filepath.Join(profilesDir, id+".tool.json") +
+			" --mode <mode> --bind` to say where the program is on this machine\n" +
+			"(`companion acquire resolve` with no --mode lists the routes this profile offers)."
+	}
 }
 
 func printPlan(env *Env, plan publish.Plan) {
@@ -372,7 +415,12 @@ func profileYank(env *Env, args []string) int {
 	set := newFlagSet(env, "profile yank")
 	reason := set.String("reason", "", "why this version was withdrawn (required)")
 	superseded := set.String("superseded-by", "", "the version that replaces it")
-	rest, code, ok := parseFlags(env, set, args)
+	// Interspersed: `profile yank`'s own usage line prints the flags AFTER the
+	// positionals, and Go's flag package stops at the first non-flag argument —
+	// so the documented invocation was answered with a usage dump. AUT/AUCOM 219
+	// found all four of these; every other command in this binary already parsed
+	// this way (`game join`, `engine bind`, `acquire plan`).
+	rest, code, ok := parseInterspersed(env, set, args)
 	if !ok {
 		return code
 	}
@@ -409,7 +457,12 @@ func profileReport(env *Env, args []string) int {
 		"malicious, broken, licence, impersonates or other")
 	version := set.String("version", "", "the version this is about, if one")
 	detail := set.String("detail", "", "what is wrong, in your own words")
-	rest, code, ok := parseFlags(env, set, args)
+	// Interspersed: `profile report`'s own usage line prints the flags AFTER the
+	// positionals, and Go's flag package stops at the first non-flag argument —
+	// so the documented invocation was answered with a usage dump. AUT/AUCOM 219
+	// found all four of these; every other command in this binary already parsed
+	// this way (`game join`, `engine bind`, `acquire plan`).
+	rest, code, ok := parseInterspersed(env, set, args)
 	if !ok {
 		return code
 	}

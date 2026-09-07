@@ -2,8 +2,10 @@ package pack
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -431,5 +433,36 @@ func TestPreviewShowsEveryPathSourceSizeAndDecision(t *testing.T) {
 	}
 	if !strings.Contains(preview, "reproducibility portable") {
 		t.Fatalf("the preview does not state the reproducibility promise:\n%s", preview)
+	}
+}
+
+// AUT/AUCOM 219: `package preview` over 2100 files reported "2100 to package,
+// 0 awaiting review, 0 refused" and `package create` on the same selection
+// refused with "2100 members, over quake-pak's 2048". The ceiling lived only
+// inside the writers, so the one command whose entire job is to say what the
+// writer will do was the one command that could not say it.
+func TestAPlanRefusesTheCeilingAWriterWouldRefuse(t *testing.T) {
+	target := mustTarget(t, "quake-pak")
+	root := t.TempDir()
+	for i := 0; i <= target.MaxEntries; i++ {
+		writeFile(t, root, fmt.Sprintf("f%05d.txt", i), strconv.Itoa(i))
+	}
+
+	plan := planFrom(t, root, target, Policy{})
+	blocked := plan.Blocked()
+	if blocked == nil {
+		t.Fatalf("a plan of %d members did not refuse %s's ceiling of %d",
+			len(plan.Included()), target.ID, target.MaxEntries)
+	}
+	if !strings.Contains(blocked.Error(), "over quake-pak's") {
+		t.Errorf("the refusal does not name the ceiling: %v", blocked)
+	}
+
+	// And the writer must still refuse it: one rule asked from two places, not
+	// two rules that agree today.
+	if _, err := Create(plan, Options{
+		Output: filepath.Join(t.TempDir(), "over.pak"), Now: fixedTime,
+	}); err == nil {
+		t.Error("the writer accepted what the plan refused")
 	}
 }

@@ -310,6 +310,21 @@ func (p *Plan) Blocked() error {
 	if len(p.Included()) == 0 {
 		return fmt.Errorf("pack: nothing would be packaged")
 	}
+	// The target's own ceilings, so a PREVIEW answers the question a preview is
+	// for. AUT/AUCOM 219: `package preview --target quake-pak` over 2100 files
+	// reported "2100 to package, 0 awaiting review, 0 refused" and `package
+	// create` on the same selection refused with `2100 members, over
+	// quake-pak's 2048`. The check lived only inside the writers, so the one
+	// command whose entire job is to say what the writer will do was the one
+	// command that could not say it.
+	//
+	// It is the SAME rule, not a copy: checkMembers still runs in both writers
+	// and is still what decides, so a preview that passes here and a writer
+	// that refuses would be a bug in one function rather than a disagreement
+	// between two.
+	if err := checkMemberCount(len(p.Included()), p.Target); err != nil {
+		return err
+	}
 	return nil
 }
 

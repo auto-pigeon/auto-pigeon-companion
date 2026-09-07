@@ -51,16 +51,25 @@ func BytesMember(entryPath string, data []byte) Member {
 // would not have been valid" a refusal that happens with nothing written, and
 // what stops the two containers from drifting into two different definitions
 // of an acceptable package.
+// checkMemberCount is the ceiling half of [checkMembers], on its own so a plan
+// can ask it before any writer exists — see [Plan.Blocked].
+func checkMemberCount(count int, target Target) error {
+	if target.MaxEntries > 0 && count > target.MaxEntries {
+		return fmt.Errorf("pack: %d members, over %s's %d — %s",
+			count, target.ID, target.MaxEntries, target.MaxEntriesNote)
+	}
+	if count > MaxEntries {
+		return fmt.Errorf("pack: %d members, over the %d this build writes", count, MaxEntries)
+	}
+	return nil
+}
+
 func checkMembers(members []Member, target Target) error {
 	if len(members) == 0 {
 		return fmt.Errorf("pack: nothing was selected, and an archive with no members is not a package")
 	}
-	if target.MaxEntries > 0 && len(members) > target.MaxEntries {
-		return fmt.Errorf("pack: %d members, over %s's %d — %s",
-			len(members), target.ID, target.MaxEntries, target.MaxEntriesNote)
-	}
-	if len(members) > MaxEntries {
-		return fmt.Errorf("pack: %d members, over the %d this build writes", len(members), MaxEntries)
+	if err := checkMemberCount(len(members), target); err != nil {
+		return err
 	}
 	paths := make([]string, 0, len(members))
 	var sizes []int64

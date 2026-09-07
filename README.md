@@ -9,21 +9,32 @@ process, and launches games.
 It runs as a local web app in the browser you already have, or headless from
 the command line. Both surfaces are the same binary.
 
-> **Status: the runtime is real; the tools are not chosen yet.** The profile
-> model, the job executor, the local API and the CLI are implemented and
-> tested — a profile action becomes a supervised process with a workspace,
-> bounded logs, collected artifacts and a record that survives a crash. What is
-> still missing is upstream: no external map-building toolchain has been
-> qualified, so there is nothing to acquire automatically, and launch
-> configurations come from a local stub because AUB's schema is not confirmed.
-> Point `--executable` at a copy you already have and the whole path works
-> today. Every placeholder is marked in the source at the point it will be
-> replaced.
+> **Status: Quake 1 is the supported path; Quake II and Quake III are Work in
+> progress; no engine has been run by this project.** The profile model, the job
+> executor, the local API and the CLI are implemented and tested — a profile
+> action becomes a supervised process with a workspace, bounded logs, collected
+> artifacts and a record that survives a crash.
 >
-> The seven Quake engine profiles that ship are curated from each engine's own
-> published command line, and every platform in them is marked `unverified`
-> because no build of any of them has been run by this project. That claim is
-> in the documents, not only in this paragraph.
+> **A Quake 1 toolchain is qualified and acquirable.** `catalog/` pins
+> ericw-tools **v0.18.1** — four archives, each by size and SHA-256 — and
+> `companion acquire install ericw-tools.q1` downloads, verifies and installs
+> it against the signed catalogue. The Linux archive's digest is the same one
+> `auto-pigeon-tools` pinned as its own compiler oracle, so what the Companion
+> downloads and what the acceptance gates are measured against are the same
+> bytes. The Quake II package in that document is a **2.0.0-alpha7
+> pre-release**, because Quake II support exists nowhere else.
+>
+> **What is still a stub is the launch configuration**, and only that: the
+> per-game launch config still comes from `internal/launch`'s example provider
+> because AUB's collection and schema for it are not confirmed. Every
+> placeholder is marked in the source at the point it will be replaced.
+>
+> The **twelve** Quake engine profiles that ship are curated from each engine's
+> own published command line, and every platform in them is marked `unverified`
+> because no build of any of them has been run by this project. That claim is in
+> the documents, not only in this paragraph — `companion engine list` prints it,
+> and `companion engine bind <id> --engine <path>` is how you point one at a
+> copy you already have.
 
 This repository absorbed **auto-pigeon-launcher** (AUL) in September 2026;
 that repository is retired and points here. Its history is reachable from this

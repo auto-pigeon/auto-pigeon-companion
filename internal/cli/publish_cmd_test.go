@@ -3,6 +3,8 @@ package cli
 import (
 	"strings"
 	"testing"
+
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
 )
 
 // The publishing half of `companion profile`, exercised through Run.
@@ -107,6 +109,55 @@ func TestTheUsageNamesEveryPublishingSubcommand(t *testing.T) {
 	} {
 		if !strings.Contains(stdout.String(), "companion profile "+command) {
 			t.Errorf("the usage does not name %q:\n%s", command, stdout)
+		}
+	}
+}
+
+// AUT/AUCOM 219: a successful install used to end by naming `companion profile
+// bind`, which is not a command — the `profile` dispatcher answers `unknown
+// profile command "bind"`. A reader following it cannot tell whether they
+// mistyped, whether their build is too old, or whether the install left
+// something undone, so the message is checked against the dispatchers rather
+// than against somebody's memory of what the commands are called.
+func TestTheAdviceAfterAnInstallNamesACommandThisBuildHas(t *testing.T) {
+	for _, kind := range []profile.Kind{profile.KindTool, profile.KindEngine, profile.KindPipeline} {
+		advice := nextStepAfterInstall(kind, t.TempDir(), "example.profile")
+		fields := strings.Fields(strings.TrimPrefix(
+			advice[strings.Index(advice, "`")+1:], "companion "))
+		if len(fields) < 2 {
+			t.Fatalf("%s: the advice names no command: %s", kind, advice)
+		}
+		group, sub := fields[0], fields[1]
+
+		env, _, stderr := testEnv(t)
+		Run(env, []string{group, sub, "--help"})
+		if strings.Contains(stderr.String(), "unknown "+group+" command") {
+			t.Errorf("%s: the advice names `companion %s %s`, which this build does not have:\n%s",
+				kind, group, sub, stderr)
+		}
+	}
+}
+
+// AUT/AUCOM 219: `profile publish`, `install`, `yank` and `report` printed
+// usage lines with the flags AFTER the positionals and then refused exactly
+// that — Go's flag package stops at the first non-flag argument, and these four
+// were the only commands in the binary still using it. A usage line that does
+// not parse is worse than no usage line: the reader concludes the command is
+// broken or that they have the wrong build.
+func TestEveryPublishingUsageLineParses(t *testing.T) {
+	// Each row is the invocation as the usage prints it, with the flags last.
+	// What is asserted is only that it was not REFUSED for its shape: these run
+	// with no session, so a network refusal is the expected ending and is fine.
+	for _, invocation := range [][]string{
+		{"profile", "publish", "some.tool.json", "--confirm"},
+		{"profile", "install", "listing-id", "--approve"},
+		{"profile", "yank", "listing-id", "1.0.0", "--reason=withdrawn"},
+		{"profile", "report", "listing-id", "--category=other"},
+	} {
+		env, _, stderr := testEnv(t)
+		Run(env, invocation)
+		if strings.Contains(stderr.String(), "companion profile preview <file>") {
+			t.Errorf("%v was answered with the usage dump:\n%s", invocation, stderr)
 		}
 	}
 }
