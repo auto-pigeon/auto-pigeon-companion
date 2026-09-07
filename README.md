@@ -18,6 +18,11 @@ the command line. Both surfaces are the same binary.
 > Point `--executable` at a copy you already have and the whole path works
 > today. Every placeholder is marked in the source at the point it will be
 > replaced.
+>
+> The seven Quake engine profiles that ship are curated from each engine's own
+> published command line, and every platform in them is marked `unverified`
+> because no build of any of them has been run by this project. That claim is
+> in the documents, not only in this paragraph.
 
 This repository absorbed **auto-pigeon-launcher** (AUL) in September 2026;
 that repository is retired and points here. Its history is reachable from this
@@ -36,6 +41,8 @@ There is no GUI toolkit and no embedded browser engine. The binary:
   [Acquiring tools](#acquiring-tools);
 - runs every external program through one supervised job runtime, which the
   page and the command line both drive — see [Jobs](#jobs);
+- describes the Quake engines it can start as documents rather than as code, so
+  adding one is a file and not a release — see [Engines](#engines);
 - writes the PAK and PK3 archives itself, natively, because that last step is
   where a build stops being reproducible and where somebody else's content
   accidentally gets published — see [Packaging](#packaging-pak-and-pk3).
@@ -200,6 +207,7 @@ commands:
   profile validate | show | canonicalize | digest | diff | list | schema          read, check and compare tool, engine and pipeline profiles
   acquire plan | install | accept | list | verify | use | gc | resolve            obtain a profile's programs from the signed catalogue, and manage the cache
   catalog keygen | sign | verify | show | status                                  sign, verify and inspect the acquisition catalogue and its keyring
+  engine list | show | detect | bind | check | preview | run | stage | unstage    set up a Quake engine you already have, and start it as a supervised job
   launch <game> [--map <name>] [--game-root <dir>] [--dry-run]                    launch a game as a supervised job, using its AUB launch config
   extractor version                                                               run the bundled auto-pigeon-extractor (AUE)
   migrate                                                                         fold Launcher and older Companion configuration into the current one
@@ -251,11 +259,17 @@ generated from each of your launch configs:
 
 ```console
 $ companion job profiles
+auto-pigeon.engine.darkplaces            engine  builtin   play_map, play_package, join_server, host_listen, host_dedicated
+auto-pigeon.engine.fteqw                 engine  builtin   play_map, play_package, join_server, host_listen, host_dedicated
+auto-pigeon.engine.ironwail              engine  builtin   play_map, play_package, join_server, host_listen
+auto-pigeon.engine.q1-generic            engine  builtin   play_map, play_package, join_server, host_listen
+auto-pigeon.engine.quakespasm            engine  builtin   play_map, play_package, join_server, host_listen
+auto-pigeon.engine.quakespasm-spiked     engine  builtin   play_map, play_package, join_server, host_listen, host_dedicated
+auto-pigeon.engine.vkquake               engine  builtin   play_map, play_package, join_server, host_listen
 auto-pigeon.ericw-tools.q1               tool    builtin   compile, vis, light, inspect, check
 auto-pigeon.q1.fast-preview              pipeline builtin
 auto-pigeon.q1.final                     pipeline builtin
 auto-pigeon.q1.normal                    pipeline builtin
-auto-pigeon.sample.q1-engine             engine  builtin   play_map, play_package, join_server, host_listen, host_dedicated
 auto-pigeon.launch.quake                 engine  builtin   play_map
 auto-pigeon.launch.quake2                engine  builtin   play_map
 ```
@@ -305,27 +319,30 @@ not a streaming mode beside a recording one.
 
 ```console
 $ companion job run \
-    --profile auto-pigeon.sample.q1-engine --action play_map \
+    --profile auto-pigeon.engine.quakespasm --action play_map \
     --executable engine=/bin/echo --root game_root=/games/quake \
-    --root content_root=/games/quake --runtime map_name=e1m1
+    --root content_root=/games/quake \
+    --runtime map_name=level --runtime mod_name=mymap
 job 20260906T235206Z-6d2022e01cd7 queued
--basedir /games/quake +map e1m1
+-basedir /games/quake -game mymap +map level
 job 20260906T235206Z-6d2022e01cd7: succeeded — finished, and every required output was produced
-  auto-pigeon.sample.q1-engine play_map, 1ms
+  auto-pigeon.engine.quakespasm play_map (client), 1ms
   exit status 0
 ```
 
 (`/bin/echo` stands in for a real engine above, so the example runs on a machine
-with no game installed and prints the argument array the engine would have got.)
+with no game installed and prints the argument array the engine would have got.
+`companion engine` — below — is the shorter way to say the same thing once an
+engine is set up.)
 
 **Everything a job did is still there afterwards.**
 
 ```console
 $ companion job list
-20260906T235206Z-6d2022e01cd7  succeeded    1ms        auto-pigeon.sample.q1-engine play_map
+20260906T235206Z-6d2022e01cd7  succeeded    1ms        auto-pigeon.engine.quakespasm play_map (client)
 
 $ companion job logs 20260906T235206Z-6d2022e01cd7
--basedir /games/quake +map e1m1
+-basedir /games/quake -game mymap +map level
 
 $ companion job artifacts 20260906T235206Z-6d2022e01cd7
 no artifacts
@@ -847,6 +864,302 @@ step that produces the same bytes twice, refuses what it cannot vouch for, and
 leaves a manifest saying what it did. Those are different jobs, and there is no
 reason to do only one of them.
 
+### Engines
+
+The Companion starts Quake engines, and it knows nothing about any of them. An
+engine is an **engine profile** — the same document format as a tool profile,
+resolved by the same resolver, run by the same executor — and seven of them
+ship inside the binary:
+
+```console
+$ companion engine list
+auto-pigeon.engine.darkplaces        beta         unverified  not set up here
+  play_map, play_package, join_server, host_listen, host_dedicated
+  linux/amd64: Upstream publishes Linux builds and several distributions package it; nobody here has run one.
+auto-pigeon.engine.fteqw             rolling      unverified  not set up here
+  play_map, play_package, join_server, host_listen, host_dedicated
+  linux/amd64: Upstream publishes Linux autobuilds; nobody here has run one.
+auto-pigeon.engine.ironwail          0.7.x        unverified  not set up here
+  play_map, play_package, join_server, host_listen
+  linux/amd64: Ironwail builds from source on Linux and upstream publishes no Linux binary; nobody here has run one.
+auto-pigeon.engine.q1-generic        unknown      unverified  not set up here
+  play_map, play_package, join_server, host_listen
+  linux/amd64: Nothing is known about the engine this profile is pointed at.
+auto-pigeon.engine.quakespasm        0.94.x       unverified  not set up here
+  play_map, play_package, join_server, host_listen
+  linux/amd64: Upstream publishes source and several distributions package it; nobody here has run one.
+auto-pigeon.engine.quakespasm-spiked 0.94.x-spiked unverified  not set up here
+  play_map, play_package, join_server, host_listen, host_dedicated
+  linux/amd64: Upstream publishes Linux builds; nobody here has run one.
+auto-pigeon.engine.vkquake           1.30.x       unverified  not set up here
+  play_map, play_package, join_server, host_listen
+  linux/amd64: Upstream publishes source and several distributions package it; nobody here has run one.
+```
+
+Two things in that listing are the whole point.
+
+**Nothing says `supported`.** Each profile's command line comes from that
+engine's own published documentation, and no build of any of the six has been
+run by this project — six upstream projects across three operating systems,
+none of which starts without a copy of Quake that is not ours to distribute. So
+every platform is `unverified` with a note saying exactly that. `last_qualified`
+records the date of the last check; what kind of check it was is what the
+platform status beside it says. A profile claiming `supported` on this evidence
+would be the plausible-looking wrong answer this repository keeps not giving.
+
+**The action lists differ, and they differ because the engines do.** QuakeSpasm,
+Ironwail and vkQuake are clients: they have no `host_dedicated`, because they do
+not run a dedicated server, and a profile that offered the action anyway would
+be a button that starts something else. QuakeSpasm-Spiked has one — the FTE
+networking is the reason it exists as a separate project. An engine profile says
+what its engine does by declaring it, and says what it does not by leaving it
+out.
+
+`companion engine show` is the long form, including what a profile will not
+claim:
+
+```console
+$ companion engine show auto-pigeon.engine.ironwail
+Ironwail 0.7.x (auto-pigeon.engine.ironwail)
+  A high-performance QuakeSpasm fork for modern GPUs. Windows and Linux; not macOS.
+  Built in — shipped with this version of the Companion.
+  upstream: https://github.com/andrei-drexler/ironwail
+  licence:  GPL-2.0-or-later
+  checked:  2026-09-07 against Ironwail 0.7.x
+
+platforms:
+    windows/amd64    unverified  Upstream publishes Windows builds; nobody here has run one. The command line is Ironwail's own documented one.
+  * linux/amd64      unverified  Ironwail builds from source on Linux and upstream publishes no Linux binary; nobody here has run one.
+    darwin/amd64     unsupported Upstream ships no macOS build, and Ironwail requires an OpenGL core context newer than the one macOS provides.
+    darwin/arm64     unsupported Upstream ships no macOS build, and Ironwail requires an OpenGL core context newer than the one macOS provides.
+
+actions:
+  play_map         client            Play a map
+  play_package     client            Play a mod or package
+  join_server      client            Join a server
+  host_listen      listen_server     Host a game and play in it
+  not offered: host_dedicated — this engine does not do it
+
+content:
+  id1        loose_files    game_root/id1
+  pak        pak            game_root/id1
+  mod        mod_directory  game_root
+
+on this machine:
+  nothing recorded — `companion engine bind auto-pigeon.engine.ironwail --engine <path>`
+```
+
+#### Three separate things: the engine, the game, and your project
+
+A binding records them separately, because they are separate:
+
+| Root | What it is |
+| --- | --- |
+| the executable | the engine program you installed, wherever that is |
+| `game_root` | the directory containing `id1` — your own copy of Quake |
+| `content_root` | your project, which is not inside the game and should not be |
+
+**The Companion never obtains the middle one.** Quake's data is a commercial
+release; it is not redistributable, and nothing here copies, downloads or
+uploads it. What it will do is guess where you already have it:
+
+```console
+$ companion engine detect
+steam    /home/you/.local/share/Steam/steamapps/common/Quake
+         found Id1/PAK0.PAK
+steam    /home/you/.local/share/Steam/steamapps/common/Quake/rerelease
+         found id1/pak0.pak
+         The re-release's own copy of the game data.
+gog      /home/you/GOG Games/Quake
+         found id1/pak0.pak
+
+Nothing was recorded. These are guesses about your machine, not decisions:
+pass the one you want to `companion engine bind ... --game-root <path>`.
+```
+
+Detection reads directory entries and stops there. It opens no game file, and
+it writes nothing at all — the path becomes a binding when you type it into
+`engine bind`, and not before. It also matches case-insensitively and reports
+the spelling that is really on disk, because Quake's own releases ship both
+`id1/pak0.pak` and `Id1/PAK0.PAK`, and on a case-sensitive filesystem an engine
+handed the wrong one finds no game.
+
+Add `--near <dir>` for a hand-installed copy, which is where most people who
+have owned Quake for twenty years keep it.
+
+```console
+$ companion engine bind auto-pigeon.engine.quakespasm \
+    --engine /usr/games/quakespasm \
+    --game-root ~/games/quake \
+    --content-root ~/maps/mylevel
+recorded for auto-pigeon.engine.quakespasm:
+  engine         /usr/games/quakespasm
+  content_root   /home/you/maps/mylevel
+  game_root      /home/you/games/quake
+```
+
+#### What would stop it, before anything starts
+
+```console
+$ companion engine check auto-pigeon.engine.quakespasm --action play_map
+auto-pigeon.engine.quakespasm play_map would run here.
+
+$ companion engine check auto-pigeon.engine.quakespasm --action host_dedicated
+QuakeSpasm has no "host_dedicated" action.
+  An engine profile leaves out what its engine does not do, so host_dedicated is not
+  something QuakeSpasm does. It offers: host_listen, join_server, play_map, play_package.
+```
+
+`check` names four other things in the same way, each with what to do about it:
+an engine executable that has been moved or uninstalled, a game root with no
+`id1` in it (or an `Id1` where the engine wants `id1`), a platform the profile
+calls `unsupported`, and a binding written against a version of the document
+that has since changed.
+
+#### Previewing, and then playing
+
+The preview is the same resolution the run does, so what you approve is what
+starts. The argument array is printed one element per line, because where each
+argument begins and ends is the whole point of not having a shell:
+
+```console
+$ companion engine preview auto-pigeon.engine.quakespasm \
+    --action play_map --map level --mod mymap
+profile:  auto-pigeon.engine.quakespasm 1.0.0 (builtin)
+action:   play_map (client)
+digest:   sha256:0dda1148f9c2082f3ce15bdd4e906e7917f14df6c3ee26ed7a7d2a23467bc5ca
+workdir:  /home/you/games/quake
+command:  /usr/games/quakespasm -basedir /home/you/games/quake -game mymap +map level
+argv:
+  [0] /usr/games/quakespasm
+  [1] -basedir
+  [2] /home/you/games/quake
+  [3] -game
+  [4] mymap
+  [5] +map
+  [6] level
+environment:
+  HOME=/home/you/.cache/auto-pigeon-companion/jobs/20260907T094345Z-10eccf444670/home
+  LANG=C
+  LC_ALL=C
+  PWD=/home/you/games/quake
+  …
+```
+
+`play_map` names a game directory as well as a map. That is not a Companion
+invention — it is what `-game` is for in every one of these engines — and it
+means the Companion never launches a map into a directory nobody named.
+
+Starting it is a job, so it is queued, supervised, cancellable and recorded like
+a compile:
+
+```console
+$ companion engine run auto-pigeon.engine.quakespasm \
+    --action play_map --map level --mod mymap
+job 20260907T094345Z-15ca5e0e3abb: play_map (client)
+…
+job 20260907T094345Z-15ca5e0e3abb: succeeded — finished, and every required output was produced
+  auto-pigeon.engine.quakespasm play_map (client), 1ms
+  exit status 0
+
+$ companion job list
+20260907T094345Z-15ca5e0e3abb  succeeded    1ms        auto-pigeon.engine.quakespasm play_map (client)
+```
+
+#### Client, listen server, dedicated server
+
+The `(client)` on those lines is a recorded field and not a label. Each engine
+action declares a **session role**, the mapping from action to role is fixed
+rather than authored, and the role is written into the job record:
+
+| Action | Session role |
+| --- | --- |
+| `play_map`, `play_package`, `join_server` | `client` |
+| `host_listen` | `listen_server` |
+| `host_dedicated` | `dedicated_server` |
+
+Hosting is also a separate, high-risk permission from running the engine at all,
+so approving "start this engine" is not approving "accept connections from the
+internet". A job list that showed every running process the same way would be a
+list in which you cannot tell whether your machine is currently reachable — so
+`job list` says `(listen server — other people can join this machine)` when it
+is.
+
+#### Staging: getting what you built where the engine looks
+
+An engine loads content from a directory beside `id1`, and `-game` does not take
+a path outside the game root. Your project is somewhere else entirely, so
+something has to copy it in — and, more importantly, take it away again.
+
+```console
+$ companion engine stage --game-root ~/games/quake --mod mymap --from ~/maps/mylevel/out --dry-run
+maps/level.bsp
+maps/level.lit
+2 file(s) would be copied into /home/you/games/quake/mymap
+
+$ companion engine stage --game-root ~/games/quake --mod mymap --from ~/maps/mylevel/out
+staged 2 file(s) into /home/you/games/quake/mymap
+start the engine with --mod mymap; `companion engine unstage` removes exactly these files
+```
+
+`companion engine run --stage <dir> --mod <name>` does both around one launch,
+and removes the staged copy when the game exits unless you pass `--keep-staged`.
+
+The removal is the part worth being careful about, and it is:
+
+- staging writes a `.auto-pigeon-staged.json` record listing every file it
+  wrote, **with each one's digest**;
+- `unstage` removes exactly those files, and **skips any whose contents have
+  changed** — if you edited a staged file, or dropped one of your own in beside
+  it, you keep it, and the command says which;
+- a directory the Companion did not create is refused outright, with no flag to
+  force it;
+- `id1`, `qw`, `hipnotic`, `rogue`, `dopa` and `rerelease` cannot be staged
+  into at all. Writing your project over the base game and then "cleaning it up"
+  is the single most expensive mistake this feature could make.
+
+#### Adding an engine the Companion has never heard of
+
+An engine profile is a document, so this needs no release and no Go code. The
+repository keeps a worked example of one written by hand:
+
+```console
+$ companion profile validate internal/engine/testdata/user-q1-engine.engine.json
+internal/engine/testdata/user-q1-engine.engine.json: valid engine profile example.engines.quakespasm-of-my-own 0.3.1
+  sha256:b759281c01c70ac572d751e7ffc1520a2a979135f5b47b9737de8f2f93258286
+
+$ companion profile show internal/engine/testdata/user-q1-engine.engine.json
+```
+
+Copy such a file into your profile directory and it appears in `companion engine
+list` beside the built-in ones, at `local` trust — a file that turned up in a
+directory is not a file anybody vouched for, so it runs only once you have read
+what it asks for and approved it:
+
+```console
+$ companion engine bind example.engines.quakespasm-of-my-own \
+    --engine ~/src/myquake/myquake --game-root ~/games/quake \
+    --content-root ~/maps/mylevel --approve
+```
+
+`TestAUserAuthoredEngineProfileLaunchesByTheSameRoute` is the test that keeps
+this honest: it imports that document the ordinary way and launches it, and
+there is no branch anywhere that asks whether a profile is built in.
+
+#### How any of this is tested without a copy of Quake
+
+`internal/enginefixture` is an engine that is not an engine: it records the
+argv, the environment and the working directory it was started with, and then
+becomes ready, crashes, or stays up until it is stopped. The acceptance tests
+run every action of every profile against it and compare the recording, element
+by element, with what the document said — including a game root called
+`Quake — Ünïcode, spaces; $(id) && …`, which arrives as exactly one argument
+because there is no shell anywhere in the path from the document to `execve`.
+
+What that proves is that the Companion builds the command line it says it
+builds. It cannot prove that Ironwail accepts that command line, and nothing
+pretends otherwise — that is what `unverified` means.
+
 ### Launch
 
 ```console
@@ -867,8 +1180,10 @@ thing spelled out.
 
 The generated profile is a bridge, not the model: it has one action, no content
 layouts and no version probe, because a stubbed launch config does not know
-enough to claim more. A curated engine profile replaces it by existing — the
-catalog prefers a document to a generated stand-in.
+enough to claim more. It answers "what does AUB say to run for this game"; the
+curated documents under [Engines](#engines) answer "what does this engine
+actually do", and that is the model. A document with the same id replaces a
+generated stand-in by existing — the catalog prefers one to the other.
 
 ### Extractor
 
@@ -906,6 +1221,20 @@ shortcut that a user-authored one cannot, because there is no shortcut.
 
 ```console
 $ companion profile list
+engine   auto-pigeon.engine.darkplaces      1.0.0    builtin
+         A heavily extended Quake engine with its own renderer, still the base for several standalone games.
+engine   auto-pigeon.engine.fteqw           1.0.0    builtin
+         A QuakeWorld-derived engine that also plays NetQuake, with the widest server feature set of the six.
+engine   auto-pigeon.engine.ironwail        1.0.0    builtin
+         A high-performance QuakeSpasm fork for modern GPUs. Windows and Linux; not macOS.
+engine   auto-pigeon.engine.q1-generic      1.0.0    builtin
+         The command line every id-derived Quake engine documents, for an engine this build has no profile for.
+engine   auto-pigeon.engine.quakespasm      1.0.0    builtin
+         The conservative modern Quake port, and what most single-player releases are tested against.
+engine   auto-pigeon.engine.quakespasm-spiked 1.0.0    builtin
+         QuakeSpasm with FTE's networking bolted on, and the one QuakeSpasm derivative that hosts a dedicated server.
+engine   auto-pigeon.engine.vkquake         1.0.0    builtin
+         A Vulkan port of QuakeSpasm. Windows, Linux, and macOS through MoltenVK.
 tool     auto-pigeon.ericw-tools.q1         1.0.0    builtin
          The qbsp, vis and light map compilers for Quake 1, plus bspinfo and bsputil.
 pipeline auto-pigeon.q1.fast-preview        1.0.0    builtin
@@ -914,23 +1243,24 @@ pipeline auto-pigeon.q1.final               1.0.0    builtin
          Full visibility and 4x supersampled, softened, bounced lighting. Slow on purpose.
 pipeline auto-pigeon.q1.normal              1.0.0    builtin
          Compile, full visibility, ordinary lighting with a .lit file. The everyday build.
-engine   auto-pigeon.sample.q1-engine       1.0.0    builtin
-         A worked example of the engine profile format, covering all five session actions.
 ```
 
-The four Q1 documents are **qualified**: the version is the one this workspace's
-compiler oracle pinned and measured, the download archives are pinned by digest
-in the catalogue, and what each program does was established by running it. The
-engine document still says `sample.` in its id, because no engine build has been
-qualified against an upstream release yet — presenting an unqualified document
-as a curated one is exactly the kind of plausible wrong answer this repository
-is careful about.
+**Qualified means two different things here, and the documents say which.** The
+four Q1 tool and pipeline documents are qualified by *measurement*: the version
+is the one this workspace's compiler oracle pinned, the download archives are
+pinned by digest in the catalogue, and what each program does was established by
+running it. The seven engine documents are qualified by *documentation* — their
+command lines come from each engine's own published usage, and no build of any
+of them has been run by this project. That is not a footnote: every platform in
+every one of them is `unverified` with a note saying so, and where upstream
+ships nothing it is `unsupported` with the reason. See **Engines**, below.
 
-There was a `sample.q1-toolchain` here, and writing the real one retired it
-rather than joining it. Two built-in tool profiles both providing
-`q1.bsp.compile` would make "which compiler built this" depend on iteration
-order; and the sample described a compiler nobody had run, passing `-threads` to
-a `qbsp` that has no such flag and `-fast` to a `light` that has no such flag.
+There was a `sample.q1-toolchain` here, and a `sample.q1-engine`, and writing
+the real ones retired both rather than joining them. Two built-in tool profiles
+both providing `q1.bsp.compile` would make "which compiler built this" depend on
+iteration order; the tool sample described a compiler nobody had run, passing
+`-threads` to a `qbsp` that has no such flag; and the engine sample would now be
+an eighth engine in a list of seven, describing an engine that does not exist.
 
 ### A profile is data, not a program
 
@@ -1619,21 +1949,22 @@ $ curl -s -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/profiles | hea
 {"items":[{"actions":[{"capability":"q1.bsp.compile","id":"compile", …
 
 $ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/jobs \
-    -d '{"profile":"auto-pigeon.sample.q1-engine","action":"play_map",
+    -d '{"profile":"auto-pigeon.engine.quakespasm","action":"play_map",
          "executables":{"engine":"/bin/echo"},
          "roots":{"game_root":"/games/quake","content_root":"/games/quake"},
-         "runtime":{"map_name":"e1m1"}}'
-{"schema_version":"aucom.job/1.0","id":"20260906T235240Z-a8b4d547bf25","state":"queued", …
+         "runtime":{"map_name":"level","mod_name":"mymap"}}'
+{"schema_version":"aucom.job/1.2","id":"20260906T235240Z-a8b4d547bf25","state":"queued", …
 
 $ curl -s -H "X-AUCOM-Token: $TOKEN" \
     http://127.0.0.1:8791/api/v1/jobs/20260906T235240Z-a8b4d547bf25 | head -c 80
-{"schema_version":"aucom.job/1.0","id":"20260906T235240Z-a8b4d547bf25","state":"succeeded", …
+{"schema_version":"aucom.job/1.2","id":"20260906T235240Z-a8b4d547bf25","state":"succeeded",
+ "session_role":"client", …
 
 $ curl -s -H "X-AUCOM-Token: $TOKEN" \
     'http://127.0.0.1:8791/api/v1/jobs/20260906T235240Z-a8b4d547bf25/logs'
 {"job":"20260906T235240Z-a8b4d547bf25","stream":"stdout","raw":false,
- "summary":{"bytes":38,"stored":38,"dropped":0,"lines":1,"truncated":false,"file":"stdout.log"},
- "text":"-basedir /games/quake +map e1m1\n"}
+ "summary":{"bytes":52,"stored":52,"dropped":0,"lines":1,"truncated":false,"file":"stdout.log"},
+ "text":"-basedir /games/quake -game mymap +map level\n"}
 
 $ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/auth/logout
 {"authenticated":false}

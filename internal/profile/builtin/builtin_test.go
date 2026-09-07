@@ -427,6 +427,60 @@ func TestEveryCuratedEngineActionResolvesOnEveryDeclaredPlatform(t *testing.T) {
 	}
 }
 
+// One engine takes one command line, and a platform does not change it. What a
+// platform does change is the file name of the program, and that is the whole
+// of the difference: `.exe` on Windows and nothing anywhere else.
+func TestAnEnginesArgvIsTheSameOnEveryPlatformAndOnlyTheFileNameDiffers(t *testing.T) {
+	base := t.TempDir()
+	tools := filepath.Join(base, "engines")
+	runtimeValues := map[string]string{
+		"map_name": "e1m1", "mod_name": "mymod", "package_name": "ad_sepulcher",
+		"server_host": "quake.example.org", "server_port": "26000",
+	}
+	for id, engine := range loadEngines(t) {
+		for _, action := range engine.Actions {
+			var first []string
+			var firstPlatform profile.Platform
+			for _, support := range engine.Platforms {
+				if support.Status == profile.Unsupported {
+					continue
+				}
+				invocation, err := profile.Resolve(engine, action.ID, profile.Request{
+					Platform: support.Platform,
+					Roots: map[string]string{
+						profile.RootGame:        filepath.Join(base, "quake"),
+						profile.RootContent:     filepath.Join(base, "project"),
+						profile.RootToolInstall: tools,
+					},
+					Runtime: runtimeValues,
+				})
+				if err != nil {
+					t.Errorf("%s/%s on %s: %v", id, action.ID, support.Platform, err)
+					continue
+				}
+				if first == nil {
+					first, firstPlatform = invocation.Command.Args, support.Platform
+				} else if strings.Join(invocation.Command.Args, "\x00") != strings.Join(first, "\x00") {
+					t.Errorf("%s/%s differs between %s and %s:\n  %v\n  %v",
+						id, action.ID, firstPlatform, support.Platform, first, invocation.Command.Args)
+				}
+				wantSuffix := ""
+				if support.Platform.OS == "windows" {
+					wantSuffix = ".exe"
+				}
+				if !strings.HasSuffix(invocation.Command.Executable, wantSuffix) {
+					t.Errorf("%s on %s resolves the program to %q, which does not end in %q",
+						id, support.Platform, invocation.Command.Executable, wantSuffix)
+				}
+				if !strings.HasPrefix(invocation.Command.Executable, tools) {
+					t.Errorf("%s on %s resolves the program to %q, outside the engine's own folder",
+						id, support.Platform, invocation.Command.Executable)
+				}
+			}
+		}
+	}
+}
+
 // The generic profile is the fallback, so it must send nothing an engine could
 // fail to recognise: the four switches id Software's own Quake documented, and
 // no more.

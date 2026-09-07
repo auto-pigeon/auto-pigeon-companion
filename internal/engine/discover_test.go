@@ -3,6 +3,7 @@ package engine_test
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -16,6 +17,34 @@ type fakeFS struct {
 	// dirs maps a directory to the names in it.
 	dirs  map[string][]string
 	files map[string]string
+}
+
+// fsRoot is the top of the fake tree, spelled the way the running platform
+// spells an absolute path — the discovery code joins and cleans real paths, and
+// a POSIX literal would simply not match on Windows.
+func fsRoot() string {
+	if runtime.GOOS == "windows" {
+		return `C:\`
+	}
+	return "/"
+}
+
+// at builds a path in the fake tree from segments.
+func at(parts ...string) string {
+	return filepath.Join(append([]string{fsRoot()}, parts...)...)
+}
+
+// newFakeFS cleans every key, so the map is keyed the way the code under test
+// will ask for it.
+func newFakeFS(dirs map[string][]string, files map[string]string) fakeFS {
+	cleaned := fakeFS{dirs: map[string][]string{}, files: map[string]string{}}
+	for path, names := range dirs {
+		cleaned.dirs[filepath.Clean(path)] = names
+	}
+	for path, body := range files {
+		cleaned.files[filepath.Clean(path)] = body
+	}
+	return cleaned
 }
 
 func (f fakeFS) readDir(path string) ([]os.DirEntry, error) {
@@ -88,29 +117,31 @@ func TestDetectFindsSteamAndGOGAndSaysWhatMadeItThink(t *testing.T) {
 // A user with two drives has their games on the second one, and Steam is the
 // only thing that knows where it is.
 func TestDetectReadsSteamsOwnLibraryIndex(t *testing.T) {
-	home := "/home/mapper"
-	fs := fakeFS{
-		dirs: map[string][]string{
-			"/mnt/games/SteamLibrary/steamapps/common":           {"Quake"},
-			"/mnt/games/SteamLibrary/steamapps/common/Quake":     {"id1"},
-			"/mnt/games/SteamLibrary/steamapps/common/Quake/id1": {"pak0.pak"},
+	home := at("home", "mapper")
+	second := at("mnt", "games", "SteamLibrary")
+	quake := filepath.Join(second, "steamapps", "common", "Quake")
+	fs := newFakeFS(
+		map[string][]string{
+			filepath.Join(second, "steamapps", "common"): {"Quake"},
+			quake:                       {"id1"},
+			filepath.Join(quake, "id1"): {"pak0.pak"},
 		},
-		files: map[string]string{
-			home + "/.steam/steam/steamapps/libraryfolders.vdf": `
+		map[string]string{
+			filepath.Join(home, ".steam", "steam", "steamapps", "libraryfolders.vdf"): `
 "libraryfolders"
 {
 	"0"
 	{
-		"path"		"/home/mapper/.steam/steam"
+		"path"		"` + home + `"
 	}
 	"1"
 	{
-		"path"		"/mnt/games/SteamLibrary"
+		"path"		"` + second + `"
 	}
 }
 `,
 		},
-	}
+	)
 	scanner := engine.Scanner{
 		GOOS:     "linux",
 		Lookenv:  func(name string) (string, bool) { return map[string]string{"HOME": home}[name], name == "HOME" },
@@ -118,19 +149,20 @@ func TestDetectReadsSteamsOwnLibraryIndex(t *testing.T) {
 		ReadFile: fs.readFile,
 	}
 	found := scanner.Detect()
-	if len(found) != 1 || found[0].Path != "/mnt/games/SteamLibrary/steamapps/common/Quake" {
+	if len(found) != 1 || found[0].Path != quake {
 		t.Fatalf("the second library was not searched: %+v", found)
 	}
 }
 
 // A directory that is called id1 and has no game in it is not a game.
 func TestDetectIgnoresADirectoryWithNoArchiveInIt(t *testing.T) {
-	home := "/home/mapper"
-	fs := fakeFS{dirs: map[string][]string{
-		home + "/.steam/steam/steamapps/common":           {"Quake"},
-		home + "/.steam/steam/steamapps/common/Quake":     {"id1"},
-		home + "/.steam/steam/steamapps/common/Quake/id1": {"readme.txt"},
-	}}
+	home := at("home", "mapper")
+	steam := filepath.Join(home, ".steam", "steam", "steamapps", "common")
+	fs := newFakeFS(map[string][]string{
+		steam:                                {"Quake"},
+		filepath.Join(steam, "Quake"):        {"id1"},
+		filepath.Join(steam, "Quake", "id1"): {"readme.txt"},
+	}, nil)
 	scanner := engine.Scanner{
 		GOOS:     "linux",
 		Lookenv:  func(name string) (string, bool) { return map[string]string{"HOME": home}[name], name == "HOME" },

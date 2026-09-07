@@ -75,7 +75,7 @@ func TestEngineShowNamesWhatTheEngineDoesNotDo(t *testing.T) {
 		t.Fatalf("exit code = %d, stderr = %s", code, stderr)
 	}
 	out := stdout.String()
-	for _, want := range []string{"host_dedicated", "this engine does not do them", "GPL-2.0-or-later", "quakespasm"} {
+	for _, want := range []string{"host_dedicated", "this engine does not do it", "GPL-2.0-or-later", "quakespasm"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("`engine show` does not mention %q:\n%s", want, out)
 		}

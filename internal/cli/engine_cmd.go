@@ -257,7 +257,11 @@ func engineShow(env *Env, args []string) int {
 		}
 	}
 	if len(missing) > 0 {
-		fmt.Fprintf(env.Stdout, "  not offered: %s — this engine does not do them\n", strings.Join(missing, ", "))
+		does := "it"
+		if len(missing) > 1 {
+			does = "them"
+		}
+		fmt.Fprintf(env.Stdout, "  not offered: %s — this engine does not do %s\n", strings.Join(missing, ", "), does)
 	}
 
 	if len(document.ContentLayouts) > 0 {
