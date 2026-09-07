@@ -332,6 +332,102 @@ func TestASyntheticQuake3MapTravelsTheWholeExperimentalPath(t *testing.T) {
 	}
 }
 
+// `AUP/AUCOM 216` asks for play, join and host to be *validated with fixtures*,
+// and play is validated by the journey above. These are the other two, and the
+// reason they get their own test is that they are the actions whose command
+// lines nobody here can check against a running engine: the fixture proves the
+// Companion builds the argv the built-in profile describes, and the built-in
+// profile is what carries ioquake3's own documentation.
+func TestQuake3JoinAndHostReachTheEngineWithIoquake3sDocumentedCommandLine(t *testing.T) {
+	env, _, _ := testEnv(t)
+	self := mustExecutable(t)
+	game := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(game, "baseq3"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(game, "baseq3", "aucom-test-placeholder.txt"),
+		[]byte("stands in for the tester's own copy of Quake III\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	profiles := filepath.Join(filepath.Dir(env.ConfigPath), "profiles")
+	if err := os.MkdirAll(profiles, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(profiles, "fixture-q3.engine.json"),
+		enginefixture.ProfileQ3JSON, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, c := range []struct {
+		action  string
+		args    []string
+		runtime map[string]string
+		wants   []string
+	}{
+		{
+			action:  profile.ActionJoinServer,
+			args:    []string{"--server", "198.51.100.7", "--port", "27960"},
+			runtime: map[string]string{"server_host": "198.51.100.7", "server_port": "27960"},
+			// No `fs_game`: a Quake III server tells the client which game
+			// directory it is running, and a client that insisted would be a
+			// client that could not join a mod it had not been told about.
+			wants: []string{"+connect 198.51.100.7:27960"},
+		},
+		{
+			action:  profile.ActionHostDedicated,
+			args:    []string{"--map", "aucomdm1", "--mod", "aucom"},
+			runtime: map[string]string{"map_name": "aucomdm1", "mod_name": "aucom"},
+			// Upstream's own two values for `dedicated`, and the two cvars that
+			// decide whether somebody without your PK3 can play on it.
+			wants: []string{"+set dedicated 1", "+set sv_pure 1", "+set sv_allowDownload 1", "+map aucomdm1"},
+		},
+	} {
+		t.Run(c.action, func(t *testing.T) {
+			content := t.TempDir()
+			env, _, stderr := testEnvAt(t, env.ConfigPath)
+			if code := Run(env, []string{"engine", "bind", enginefixture.ProfileQ3ID,
+				"--engine", self, "--game-root", game, "--content-root", content, "--approve"}); code != 0 {
+				t.Fatalf("binding the fixture engine = %d: %s", code, stderr)
+			}
+			env, stdout, stderr := testEnvAt(t, env.ConfigPath)
+			run := append([]string{"engine", "run", enginefixture.ProfileQ3ID, "--action", c.action}, c.args...)
+			if code := Run(env, run); code != 0 {
+				t.Fatalf("engine run %s = %d\nstdout: %s\nstderr: %s", c.action, code, stdout, stderr)
+			}
+			record, err := enginefixture.ReadRecord(filepath.Join(content, enginefixture.RecordName))
+			if err != nil {
+				t.Fatalf("%v", err)
+			}
+			ioq3, err := builtin.Find(builtin.IoQuake3)
+			if err != nil {
+				t.Fatalf("%v", err)
+			}
+			invocation, err := profile.Resolve(ioq3.Profile, c.action, profile.Request{
+				Platform: profile.Platform{OS: runtime.GOOS, Arch: runtime.GOARCH},
+				Roots: map[string]string{
+					profile.RootGame:        game,
+					profile.RootContent:     content,
+					profile.RootToolInstall: t.TempDir(),
+				},
+				Runtime: c.runtime,
+			})
+			if err != nil {
+				t.Fatalf("resolving ioquake3's %s: %v", c.action, err)
+			}
+			want := strings.Join(invocation.Command.Args, " ")
+			if got := strings.Join(record.Argv, " "); got != want {
+				t.Errorf("%s did not use ioquake3's documented command line:\n  got  %q\n  want %q",
+					c.action, got, want)
+			}
+			for _, fragment := range c.wants {
+				if !strings.Contains(want, fragment) {
+					t.Errorf("ioquake3's %s does not contain %q: %s", c.action, fragment, want)
+				}
+			}
+		})
+	}
+}
+
 // The other half of the acceptance: an unsupported or incomplete Quake III
 // route fails or warns explicitly, and nothing anywhere reports Quake III as
 // plainly supported.
