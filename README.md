@@ -77,14 +77,60 @@ $ ./companion version
 That builds the Companion and nothing else. **The extractor is not part of it**
 and is obtained separately — see [Extractor](#extractor).
 
-Packaging skeletons for `.deb`/`.rpm` (nfpm), a Windows installer (Inno Setup)
-and a macOS `.app` bundle live under [`build/`](build/) and are run by hand.
-None of them is signed; there are no certificates yet.
+Packaging for `.deb`/`.rpm` (nfpm), a Windows installer (Inno Setup) and a macOS
+`.app` bundle lives under [`build/`](build/). `build/release.sh` is the whole
+procedure — six targets, the bundles, an SBOM and a checksum file — and it is run
+by hand, because nothing about it is signed and there are no certificates yet.
+See [Releasing](#releasing).
 
 ```console
-$ ./build/macos/make-app-bundle.sh --binary dist/darwin-arm64/companion \
-    --arch arm64 --version 0.1.0 --out dist/darwin-arm64
+$ ./build/release.sh --version 0.2.0
+== building 0.2.0 into dist ==
+-- windows/amd64
+...
+== checksums ==
+wrote dist/SHA256SUMS (7 files)
+
+Built 0.2.0 in dist. NOTHING HERE IS SIGNED — see the header of this
+script and 'companion security residual' for what that means.
 ```
+
+### The `autopigeon://` handler
+
+A join link from [Games people are hosting](#games-people-are-hosting) is a URL,
+and an operating system needs telling which program opens one. The packages
+declare it — a `NoDisplay` desktop entry on Linux, an `HKCU` key with
+`uninsdeletekey` on Windows, `CFBundleURLTypes` in the macOS bundle — and for a
+tarball install, or to make this the default, there is a command:
+
+```console
+$ ./companion uri status
+scheme:     autopigeon://
+platform:   linux (xdg-desktop-entry)
+registered: no
+locations:  ~/.local/share/applications/auto-pigeon-companion-join.desktop
+            ~/.local/share/applications/mimeapps.list
+
+no desktop entry declares x-scheme-handler/autopigeon for this program
+
+$ ./companion uri register
+registered: yes
+command:    /opt/aucom/companion game join %u
+
+x-scheme-handler/autopigeon now opens /opt/aucom/companion game join %u
+```
+
+**What gets registered is the point.** The command is `game join` with **no
+`--approve`**: opening a link resolves it, prints the command it would run, and
+starts nothing. Approving is a separate act you take after reading a plan. The
+URL arrives as one argument through a field code — `%u`, or a quoted `"%1"` on
+Windows — and no shell is involved on any platform.
+
+`companion uri unregister` removes exactly what registering wrote, and nothing
+else: your `mimeapps.list` holds your choice of PDF viewer, and this program has
+no business rewriting one. On macOS the declaration is the bundle's, so there is
+nothing for a loose binary to register and the command says so rather than
+inventing a mechanism.
 
 ## Configuration
 
@@ -338,8 +384,12 @@ commands:
   engine list | show | detect | bind | check | preview | run | stage | unstage             set up a Quake engine you already have, and start it as a supervised job
   game list | show | join | preview | host | stop                                          find a game somebody is hosting and join it, or advertise one of your own
   launch <game> [--map <name>] [--game-root <dir>] [--dry-run]                             launch a game as a supervised job, using its AUB launch config
-  extractor status | plan | install | version                                               obtain and run the separately licensed auto-pigeon-extractor (AUE)
+  extractor status | plan | install | version                                              obtain and run the separately licensed auto-pigeon-extractor (AUE)
   feedback compatibility --game <family> --summary <text> [--share <what>]                 report that a work-in-progress game did not do what you expected — nothing is attached unless you say so
+  uri status | register | unregister                                                       see, set or remove this machine's handler for autopigeon:// links
+  security matrix | residual | audit                                                       the threat model, the risks accepted with it, and what this build is made of
+  release sbom | checksums                                                                 the documents a release ships beside its binaries
+  uninstall [--purge --confirm]                                                            show what this program keeps on this machine, and delete it
   migrate                                                                                  fold Launcher and older Companion configuration into the current one
   version                                                                                  print the build version
 ```
@@ -3415,14 +3465,257 @@ which holds your AUB session token, so this is the boundary that was there
 anyway. What the token closes is the case that boundary never covered: a web
 page, on some other origin, driving the executor.
 
+## Security, and what it does not solve
+
+This program downloads other people's programs, from a catalogue somebody else
+publishes, and runs them on your machine, against files you point it at,
+described by documents you may have got from a stranger. Then it serves a local
+HTTP API that can start those programs. Every clause there is an attack surface,
+and the threat model is a command rather than a file, because a document nothing
+checks becomes a description of a program that used to exist.
+
+```console
+$ ./companion security matrix --category concurrency
+
+== concurrency ==
+
+T35  Two instances write the same local state and one change disappears
+     at stake:   the catalogue trust state, which is where revocations live
+     vector:     The GUI server and a `companion` invocation in a terminal both read
+                 catalog-state.json, each records a different revocation, both write. Atomic
+                 writes make both succeed and one revocation is gone, with no error anywhere.
+     mitigation: A cross-process lock, and for the trust state a monotone merge under it:
+                 serials take the max, revocations take the union. The window between reading
+                 that file and writing it back spans a network fetch, so a lock alone would not
+                 have been enough.
+     evidence:  internal/lockfile.TestOnlyOneWriterIsEverInsideTheCriticalSection
+                internal/config.TestAChangeByAnotherInstanceIsNotUndoneByThisOne
+                internal/config.TestConcurrentUpdatesAllLand
+                internal/catalog.TestARevocationRecordedByAnotherInstanceIsNotOverwritten
+                internal/catalog.TestConcurrentWritersLoseNoRevocation
+                internal/catalog.TestAnOlderSerialCannotBeWrittenBackOverANewerOne
+```
+
+Every row names the tests that are its evidence, and the build **fails** when a
+named test is not in the tree. Rename a test and the row citing it fails; delete
+one and the row that has lost its proof says so. That is what a row is: not a
+claim that something is impossible, but a claim that a named test would fail if
+the mitigation were removed — which is the only kind of security claim that
+survives a refactor.
+
+`--json` gives the whole matrix; `--category` takes any of `malicious-document`,
+`supply-chain`, `archive`, `execution`, `local-api`, `credential`, `deep-link`,
+`concurrency`, `recovery`, `release`.
+
+### The trust boundaries, in one table
+
+| | |
+| --- | --- |
+| you | trusted. Any process running as you can already read `config.json`. Nothing here defends against that. |
+| auto-pigeon-backend | authenticates and authorises. **Not** trusted to decide what runs: it hands out URLs and asset ids, and every byte is verified against a signature chain this machine anchors. |
+| the catalogue | signed, and only as trustworthy as the anchor. Its serials ratchet and its revocations stick, locally. |
+| a profile document | **untrusted text.** It declares a command; it cannot *be* one. There is no shell anywhere in the executor. |
+| an archive | **untrusted bytes.** Every name and size is checked against the destination before anything is written. |
+| a tool's output | **untrusted bytes.** Bounded, never re-executed, stripped of control characters before you read it. |
+| a web page | hostile by default. The local API answers no preflight and has no ambient credential. |
+
+### What is not solved
+
+A threat model that only lists what is fixed is one nobody learns from. Four
+things are accepted rather than solved, each with somebody's name on it and a
+date it is looked at again:
+
+```console
+$ ./companion security residual
+
+T27  The AUB session token reaches a place a tool or a stranger can read it
+     what: The AUB session token is stored in config.json at 0600, not in the operating system's
+           keychain. Any process running as the same user can read it.
+     why:  Keychain, DPAPI and Secret Service all need cgo or a third-party dependency, and this
+           program has neither — which is also what makes its supply chain checkable at all
+           (see T45). The boundary this does not cross was already there: a process running as
+           the user can read config.json whatever is in it.
+     who:  andrea-dintino (maintainer)
+     next: 2027-03-31
+...
+4 accepted, 0 overdue.
+```
+
+The other three: a join's **endpoint host and port come from AUB** and are not
+independently verified, because there is nothing here to check them against —
+what *is* checked is everything that decides what runs; **no antivirus scanner
+can be driven from CI**, so that row carries a manual procedure with an expected
+observation instead of a fake; and **releases are unsigned**, which the next
+section is about.
+
+A review date that has passed **fails the build**. That is the mechanism, not a
+defect: a risk with an expiry nobody has to look at again is a risk nobody
+accepted.
+
+### What this build is made of
+
+```console
+$ ./companion security audit
+auto-pigeon-companion 0.1.0-dev
+
+Go module dependencies: none.
+Nothing outside the standard library is linked into this program, which is why
+an MIT artifact is an honest description of it.
+
+In this artifact (1)
+  auto-pigeon-companion                    MIT
+
+Downloaded at run time, verified against the signed catalogue, run as its own process (2)
+  auto-pigeon.ericw-tools.q1               GPL-3.0-or-later
+                                           source: https://github.com/ericwa/ericw-tools/tree/v0.18.1
+  auto-pigeon.ericw-tools.q2               GPL-3.0-or-later
+                                           source: https://github.com/ericwa/ericw-tools/tree/2.0.0-alpha7
+
+Programs you already have, which this only configures (13)
+  auto-pigeon.engine.darkplaces            GPL-2.0-or-later
+  ...
+```
+
+The module graph is read out of the **binary**, with `debug.ReadBuildInfo`, not
+out of `go.mod`: what is linked in is what you are running, and a build with a
+`replace` directive or a vendored tree would say so there and nowhere else. The
+component list is derived from the built-in profiles, so a toolchain added
+without a licence and a corresponding-source offer cannot become invisible here.
+
+## Releasing
+
+Two documents ship beside the binaries, and both are generated *from* the
+program rather than written next to it — an SBOM somebody maintains by hand is
+one that is wrong within two changes.
+
+```console
+$ ./companion release sbom --out dist/auto-pigeon-companion-0.2.0.cdx.json
+wrote dist/auto-pigeon-companion-0.2.0.cdx.json
+
+$ ./companion release checksums --dir dist --out -
+wrote dist/SHA256SUMS (7 files)
+
+$ ./companion release checksums --dir dist
+2c8b08da5ce60398e1f19af0e5dccc744df274b826abe585eaba68c525434806  companion-0.2.0-linux-amd64.tar.gz
+27dd8ed44a83ff94d557f9fd0412ed5a8cbca69ea04922d88c01184a07300a5a  companion-0.2.0-windows-amd64.zip
+```
+
+The SBOM carries **no timestamp** unless you pass `--timestamp`, so two runs of
+one build produce the same bytes and the document can be published beside a
+digest of itself. The checksum file never digests itself, because a self-digest
+stops being true the moment it is written.
+
+`build/release.sh` runs the whole thing: six targets with `-trimpath` and
+`CGO_ENABLED=0`, the macOS bundles, the licence files inside every artifact, then
+the SBOM and the checksums.
+
+### Nothing is signed, and that is the current truth
+
+There is no Apple Developer ID and no Authenticode certificate for this project.
+So macOS shows a Gatekeeper warning and Windows shows SmartScreen on first run,
+and the only thing a downloader can check today is `SHA256SUMS` — which is not a
+signature, since anybody who can replace the artifacts can replace the checksum
+file, and is honest about being no more than that.
+
+The procedures are written down so the day a certificate exists is a day of
+running them rather than of inventing them: `codesign`, `notarytool` and
+`stapler` at the end of `build/macos/make-app-bundle.sh`, and a `SignTool`
+directive in `build/windows/installer.iss`. None of them belongs in the
+verification workflow, which runs on every pull request and reads no secrets —
+a job of its own fails the moment one is added.
+
+## Removing it
+
+Uninstalling the **package** removes the program and the `autopigeon://`
+handler, and nothing else. Your configuration and cache are left alone on
+purpose: a package script runs as root, on a machine that may have several
+users, and none of them said anything about deleting their build history.
+
+Removing your own data is a command you run yourself. It shows what it would
+delete before it deletes anything:
+
+```console
+$ ./companion uninstall
+This user's Auto-Pigeon Companion state:
+
+  configuration
+    ~/.config/auto-pigeon-companion
+    holds: config.json and the AUB session, the catalogue trust state and its revocations,
+           bindings and grants, licence acknowledgements, imported profiles
+    41 files, 184.2 kB
+
+  downloaded tools
+    ~/.cache/auto-pigeon-companion/tools
+    holds: external compilers obtained from the signed catalogue
+    62 files, 148.9 MB
+  ...
+
+The program itself is never removed by this command: whatever installed it owns it.
+
+Nothing has been deleted. `companion uninstall --purge --confirm` deletes what is listed above.
+```
+
+What is lost is **decisions as well as content** — granted profiles, the
+catalogue's revocation ratchet, licence acknowledgements — so removing it and
+reinstalling gives you a genuinely fresh machine rather than the same one with a
+cleared cache.
+
+It will not delete a directory it did not create. If you pointed `AUCOM_JOBS_DIR`
+at `~/projects`, purging must not delete `~/projects`, and the honest answer is
+to say so rather than to guess:
+
+```console
+$ ./companion uninstall --purge --confirm
+  build history
+    ~/projects
+    NOT REMOVED: this directory was configured rather than created by this program,
+                 and its name is not auto-pigeon-companion. Remove it yourself if you
+                 want it gone
+
+removed the autopigeon:// handler
+removed ~/.config/auto-pigeon-companion
+removed ~/.cache/auto-pigeon-companion/tools
+
+3 directories removed. The program itself was not touched.
+```
+
 ## Development
 
 ```console
 $ gofmt -l .
 $ go vet ./...
 $ go test ./...
+$ go test -race ./internal/lockfile/ ./internal/config/ ./internal/catalog/ ./internal/job/
 $ GOOS=windows GOARCH=arm64 CGO_ENABLED=0 go build ./cmd/companion
 ```
+
+`go test ./...` includes the threat model: `internal/threat` parses every
+`_test.go` file in the tree and fails when a matrix row names a test that is not
+there, when a row has no evidence at all, or when an accepted residual risk has
+no owner or a review date that has gone by.
+
+auto-pigeon-tools drives the built binary from outside, which is a different
+question — does the shipped program, on a machine whose home directory it has
+never seen, behave the way the model says:
+
+```console
+$ ../auto-pigeon-tools/scripts/aucom-security.sh check
+== supply-chain ==
+  ok   nothing outside the standard library is linked in
+  ok   only the Companion is in the artifact, and it is MIT
+  ok   every downloaded copyleft component offers its source — 2 downloaded
+...
+29 passed, 0 failed, 0 skipped.
+
+$ ../auto-pigeon-tools/scripts/aucom-security.sh targets
+  ok   windows/amd64 builds — 14105088 bytes
+  ...
+```
+
+Every invocation there runs with `HOME` and the XDG variables pointed into a
+temporary directory, so `uri register` writes a real desktop entry into a
+sandbox — and the harness's last assertion is that the operator's own
+`~/.local/share/applications` is unchanged.
 
 CI runs the tests on Linux, Windows and macOS, checks `gofmt`, and
 cross-compiles all six targets. It publishes no releases.

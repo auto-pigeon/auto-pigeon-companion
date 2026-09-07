@@ -32,6 +32,25 @@ travels with every Go binary.
 If a dependency is ever added, its licence goes in this document, and it must be
 compatible with MIT redistribution.
 
+**That claim is checked, and against the binary rather than against `go.mod`.**
+`go.mod` states an intent; the binary states a fact, and the fact is what people
+run. `internal/release` reads the module graph with `debug.ReadBuildInfo`, so a
+build with a `replace` directive, a vendored tree or a toolchain-injected module
+would appear there and nowhere else — and
+`release.TestThisProgramLinksNoExternalModule` fails when it is not empty. The
+same graph is what a user sees:
+
+```console
+$ companion security audit
+Go module dependencies: none.
+```
+
+A release publishes it as a CycloneDX SBOM
+(`companion release sbom`), listing this module, its empty module graph, and
+every external program the Companion can obtain — each with the relationship it
+has to the artifact, because a component somebody downloads later is not a
+component nobody should be told about.
+
 ## auto-pigeon-extractor (AUE) — AGPL-3.0-only, and why no release contains it
 
 AUE is a **separate program under the GNU Affero General Public License,

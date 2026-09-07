@@ -223,6 +223,61 @@ jobs:
             exit 1
           fi
 
+  security-contract:
+    name: the threat model states itself
+    needs: [test, gofmt]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      # `go test ./...` above already fails when a matrix row names a test that
+      # is not in the tree, or when a residual risk's review date has passed.
+      # What this job adds is the other half: that the BUILT program can state
+      # the model, and that the two claims a release rests on are true of the
+      # binary rather than of a test binary.
+      - name: the shipped program states its own threat model
+        run: |
+          go build -o "$RUNNER_TEMP/companion" ./cmd/companion
+          "$RUNNER_TEMP/companion" security matrix --json > "$RUNNER_TEMP/matrix.json"
+          python3 - "$RUNNER_TEMP/matrix.json" <<'PY'
+          import json, sys
+          rows = json.load(open(sys.argv[1]))
+          missing = [r["id"] for r in rows if not r.get("evidence") and not r.get("manual")]
+          assert rows, "the matrix is empty"
+          assert not missing, f"rows with no evidence: {missing}"
+          print(f"{len(rows)} rows, every one with evidence")
+          PY
+
+      # Zero external modules, read out of the binary rather than out of go.mod.
+      # An MIT artifact that quietly contained somebody else's code would be an
+      # artifact whose licence is wrong.
+      - name: nothing outside the standard library is linked in
+        run: |
+          "$RUNNER_TEMP/companion" security audit --json > "$RUNNER_TEMP/audit.json"
+          python3 - "$RUNNER_TEMP/audit.json" <<'PY'
+          import json, sys
+          audit = json.load(open(sys.argv[1]))
+          count = audit["go_module_dep_count"]
+          assert count == 0, f"{count} external module(s): {audit['go_module_deps']}"
+          missing = [c["name"] for c in audit["components"]
+                     if c["distribution"] == "downloaded-at-run-time"
+                     and c["spdx"].startswith(("GPL", "AGPL", "LGPL"))
+                     and not c.get("corresponding_source")]
+          assert not missing, f"copyleft downloads offering no source: {missing}"
+          print("no external modules; every copyleft download offers its source")
+          PY
+
+      # The SBOM has to be the same bytes twice, or it cannot be published
+      # beside a digest of itself.
+      - name: two SBOMs of one build are identical
+        run: |
+          "$RUNNER_TEMP/companion" release sbom > "$RUNNER_TEMP/a.json"
+          "$RUNNER_TEMP/companion" release sbom > "$RUNNER_TEMP/b.json"
+          cmp "$RUNNER_TEMP/a.json" "$RUNNER_TEMP/b.json"
+
   no-credentials:
     name: this workflow holds no credential
     runs-on: ubuntu-latest

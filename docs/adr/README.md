@@ -43,3 +43,4 @@ ways.
 | [0004](0004-acquisition-is-verified-or-it-does-not-happen.md) | Acquisition is verified, or it does not happen | Accepted | 2026-09-07 |
 | [0005](0005-a-pipeline-is-several-jobs-and-a-manifest-is-what-says-so.md) | A pipeline is several jobs, and a manifest is what says so | Accepted | 2026-09-07 |
 | [0006](0006-provenance-decides-what-is-packaged-not-filenames.md) | Provenance decides what is packaged, and filenames decide nothing | Accepted | 2026-09-07 |
+| [0007](0007-the-threat-model-is-code-and-one-writer-owns-mutable-state.md) | The threat model is code, and one writer owns every mutable local file | Accepted | 2026-09-08 |
