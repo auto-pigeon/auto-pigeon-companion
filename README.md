@@ -997,6 +997,17 @@ Both are caught by the same budget, because it sums what the directory declares.
 The archive is staged in the destination directory and renamed into place, so
 the output path never holds a half-written archive.
 
+#### A Quake III package can be checked against the map it is for
+
+A PK3 that is missing a texture the map uses still installs, still loads, and
+renders the surface as the default checkerboard — and the compiler will not have
+stopped you, because a missing shader is a warning and exit 0. `--map` reads the
+map source and checks what it names against the package about to be written, your
+own content and the base game; `create` refuses on it unless
+`--accept-missing --reason "…"`. See
+[The dependency review](#the-dependency-review-which-is-the-third-step-above)
+under *Quake III — work in progress*.
+
 #### q1tools, and what this does not replace
 
 `q1tools` and QPakMan are perfectly good **interactive** PAK tools, and if you
@@ -1713,6 +1724,282 @@ was and nothing to tell you it happened.
 The same thing is in the desktop interface: **Report compatibility issue**,
 beside the work-in-progress note wherever it appears, with a checkbox per
 attachment and the finished document shown before you save it.
+
+## Quake III — work in progress
+
+> **Quake III — Work in progress. Core editing is available, but shader, patch,
+> entity, compilation and engine workflows may be incomplete.**
+
+A different sentence from the Quake II one, and not that sentence renumbered: a
+Quake III map has a shader script and it has patches, and a Quake II map has
+neither. Both live in `internal/maturity`, keyed on the engine family, and both
+appear wherever the thing they are about can be chosen — the pipeline list, the
+engine list, `profile list`, `profile show`, `build preview`, a running build,
+and the Build, Run and Profiles areas of the desktop interface. **No document can
+turn either off**, for the reason the Quake II section gives.
+
+```console
+$ companion build pipelines
+auto-pigeon.q1.fast-preview      1.0.0    builtin   compile -> vis -> light  ready    
+auto-pigeon.q1.final             1.0.0    builtin   compile -> vis -> light  ready    
+auto-pigeon.q1.normal            1.0.0    builtin   compile -> vis -> light  ready    
+auto-pigeon.q2.fast-preview      1.0.0    builtin   compile -> vis -> light  ready    Work in progress
+auto-pigeon.q2.normal            1.0.0    builtin   compile -> vis -> light  ready    Work in progress
+auto-pigeon.q3.fast-preview      1.0.0    builtin   compile -> vis -> light  ready    Work in progress
+auto-pigeon.q3.normal            1.0.0    builtin   compile -> vis -> light  ready    Work in progress
+
+Quake II — Work in progress. Core editing is available, but some textures, entities, compilation and engine workflows may be incomplete.
+Report a compatibility issue with `companion feedback compatibility`.
+
+Quake III — Work in progress. Core editing is available, but shader, patch, entity, compilation and engine workflows may be incomplete.
+Report a compatibility issue with `companion feedback compatibility`.
+```
+
+### What is here
+
+| | |
+| --- | --- |
+| **Compiler** | `auto-pigeon.q3map2` — Q3Map2 **2.5.17n-git-68ecbed**, from NetRadiant-custom's `20260114` release |
+| **Pipelines** | `auto-pigeon.q3.fast-preview`, `auto-pigeon.q3.normal` |
+| **Engines** | `auto-pigeon.engine.ioquake3`, `auto-pigeon.engine.q3-generic` |
+| **Packaging** | the existing `quake3-pk3` target, with a dependency review in front of it |
+| **Feedback** | `companion feedback compatibility --game quake3` |
+
+Q3Map2 is **one program with three stage switches** — `-bsp`, `-vis`, `-light` —
+where the two EricW toolchains are several programs. So the document declares one
+executable and three actions, and its capability ids are `q3.bsp.compile`,
+`q3.bsp.vis` and `q3.bsp.light`: a Quake 1 or Quake II pipeline cannot resolve to
+it, and it cannot satisfy theirs. Tests fail if either becomes possible.
+
+### There is no managed download, and that is the answer rather than a gap
+
+Every other tool here is fetched from the signed catalogue and verified before it
+runs. Q3Map2 is not, and the reason is what upstream publishes:
+
+- the Linux release for `20260114` is a **`.7z` holding exactly one file** — an
+  AppImage of the whole NetRadiant editor;
+- the Windows release is a 43 MB zip of the same editor;
+- macOS has no artifact at all;
+- and `q3map2` resolves libassimp, libdraco, libminizip, libpugixml, libicu,
+  libxml2 and libglib out of the bundle's own `../lib`, so there is no smaller
+  piece to take.
+
+`AUP/AUCOM 216` says not to install a map editor merely because the release
+bundles one, and this program unpacks zip and tar.gz — not 7z. Rather than
+pretend, the document declares no managed download and says why where you read
+it. Point it at a copy instead:
+
+```console
+$ ./NetRadiant-Custom-x86_64.AppImage --appimage-extract      # unpacks; installs nothing
+$ ls squashfs-root/usr/bin/q3map2
+squashfs-root/usr/bin/q3map2
+```
+
+Then point the Companion at `squashfs-root/usr/bin` — in the desktop interface's
+**Profiles** area, or with `companion acquire resolve <document> --user-path
+<dir> --bind`, which is the same `user_path` route every other tool has and is
+described under [Acquiring tools](#acquiring-tools). **Keep the bundle's `lib`
+directory beside the `bin` you point at**: `q3map2` finds its libraries through
+`../lib`, so a `bin` moved on its own will not start.
+
+Several distributions also package NetRadiant, which puts `q3map2` on PATH; the
+document's `system_path` route finds it there. Run the version probe afterwards
+either way, because an older 2.5.x may not behave as this document describes.
+
+### Nine things that are not the same as Quake 1 or Quake II
+
+Every one was measured by running 2.5.17n against a synthetic Quake III map:
+
+1. **There is no output argument.** `q3map2 -bsp maps/x.map` writes `maps/x.bsp`,
+   `maps/x.prt` and `maps/x.srf` **beside the input**. There is no `basename`
+   option here, and the compiled map is named after the map source — which is
+   also what `+map <name>` in an engine expects.
+2. **`-vis` and `-light` take the `.bsp` directly** and find the companion files
+   of the same stem beside it.
+3. **`-light` refuses to run without `<stem>.srf` AND `<stem>.map`.** Either one
+   missing is `Script file … was not found` and exit 1. `-vis` needs neither: it
+   wants the `.bsp` and the `.prt` and nothing else. The two actions therefore
+   stage different sidecars, and the pipeline wires the map source into the
+   lighting step as well as into the compile.
+4. **`-vis` without `-saveprt` deletes the portal file it was given.** This build
+   always sends it: an action handed a file must not be able to destroy it.
+5. **A leak exits 0.** With `-leaktest`, a leaked map prints
+   `--- MAP LEAKED, ABORTING LEAKTEST ---`, writes `<stem>.lin`, writes no BSP —
+   and still exits 0. The build fails because a **required output is not there**,
+   not because of the status.
+6. **A missing texture or shader is a warning and exit 0**, and the BSP is written
+   anyway. A `misc_model` naming a file that is not there prints
+   `ERROR: Unable to open file` and *also* exits 0. This is why packaging has a
+   review of its own.
+7. **A face's shader name carries no `textures/` prefix**; Q3Map2 adds it. A map
+   written with the prefix produces
+   `Couldn't find image for shader textures/textures/…`, which reads like a
+   missing file. Patches are written the same way — measured, not assumed.
+8. **`-light` is nondeterministic above one thread.** Two eight-thread runs of one
+   map produced two different BSPs; two one-thread runs produced the same one
+   twice. The BSP stage is deterministic at any thread count, which is why
+   `auto-pigeon.q3.fast-preview` runs on one thread and `auto-pigeon.q3.normal`
+   says out loud that it does not.
+9. **Q3Map2 always initialises a home VFS** — `~/.q3a/baseq3` — before anything it
+   was told about. This build sends `-fs_homepath` pointing at the job workspace,
+   so a build reads what was bound to it and not what is in your home directory.
+   The engine profiles deliberately do **not** do that: your settings, demos and
+   screenshots belong where the engine puts them.
+
+### Three roots, and why the base game data is required
+
+| Root | What it is | How it is sent |
+| --- | --- | --- |
+| `tool_root` | the directory holding `q3map2` | resolved from the binding |
+| `game_root` | the directory that **contains** `baseq3` | `-fs_basepath` |
+| `content_root` | your own content, laid out the same way | a second `-fs_basepath` |
+
+`-fs_basepath` is repeatable — measured resolving a shader out of one path and
+its image out of another — so both roots are paths. A **mod** is not: Q3Map2
+takes a game directory by NAME, so it is the `mod` option and becomes
+`-fs_game`. A map that uses only base game content binds `content_root` to the
+same directory as `game_root`.
+
+The base game data root is required rather than optional, and for the Quake III
+counterpart of the Quake II reason. A Quake III surface's contents and flags come
+from the **shader script**, so a compile with nothing bound still exits 0 and
+writes a BSP in which every surface has default surfaceparms — no caulk, no sky,
+no clip. That is the worst kind of failure, so it is refused at the binding
+instead.
+
+### The engines
+
+| Profile | What it will do | What it will not |
+| --- | --- | --- |
+| `auto-pigeon.engine.ioquake3` | all five actions: play a map, play a package, join, host a listen server, host a dedicated one | nothing — its own download carries `baseq3/vm/qagame.qvm`, so a local server needs no third-party gamecode |
+| `auto-pigeon.engine.q3-generic` | play, play a package, join, host a listen server | host a **dedicated** server: the name of a dedicated binary is each project's invention, and a generic profile cannot know yours |
+
+The generic profile sends only `fs_basepath`, `fs_game`, `sv_maxclients`, `map`
+and `connect` — id Software's own Quake III vocabulary, which everything
+descended from that source understands. ioquake3's own profile adds what
+ioquake3 documents: `dedicated 1` for a LAN server and `2` for one listed on the
+public master servers, `net_port`, `sv_pure` and `sv_allowDownload` — the last of
+which is how somebody who does not have your PK3 gets it.
+
+Neither has a managed download. ioquake3 publishes no release and no tag; its
+builds are rolling zips at fixed URLs, and a catalogue entry names a size and a
+digest that a changing URL does not have. Both profiles were written from
+published documentation; no build of either has been run here, because playing
+Quake III needs a copy of Quake III. **Auto-Pigeon never ships, downloads or
+fabricates it.**
+
+### Compiling, reviewing and running a Quake III map
+
+Once the compiler is bound, with `game_root` on the directory that contains your
+`baseq3` and `content_root` on your own:
+
+```console
+$ companion build run --pipeline auto-pigeon.q3.normal --input source_map=./aucomdm1.map
+$ companion package create --target quake3-pk3 --build <build-id> \
+    --from ./aucomdm1-pk3 --map ./aucomdm1.map --out aucomdm1.pk3
+$ companion engine bind auto-pigeon.engine.ioquake3 \
+    --engine ~/ioquake3/ioquake3.x86_64 --game-root ~/ioquake3 \
+    --content-root ~/ioquake3/aucom --approve
+$ companion engine run auto-pigeon.engine.ioquake3 --action play_map --map aucomdm1 --mod aucom
+```
+
+### The dependency review, which is the third step above
+
+Q3Map2 will not stop you shipping a map whose textures are missing — measured,
+it warns and exits 0. So `--map` reads your map source and checks every shader,
+patch texture, model and sound it names against the archive that is about to be
+written, your own content, and the base game:
+
+```console
+$ companion package preview --target quake3-pk3 --from ./aucomdm1-pk3 --map ./aucomdm1.map
+target quake3-pk3 — pk3, deflate, reproducibility per_build
+3 file(s) selected, 3.4 KiB to package
+…
+dependencies of aucomdm1.map
+  1 packaged, 0 from the base game, 0 not packaged, 1 missing
+
+  missing      textures/aucom/floor
+               worldspawn face, 12 use(s)
+               image         textures/aucom/floor (not found)
+               review: nothing on this machine has textures/aucom/floor. The extensions tried were .tga, .jpg, .jpeg, .png. Q3Map2 compiles the map anyway — measured: a missing shader is a warning and exit 0 — and the surface renders as the default texture, so nothing else will stop the package going out incomplete.
+
+  packaged     textures/aucom/wall
+               worldspawn face, 43 use(s)
+               shader script scripts/aucom.shader (archive)
+               image         textures/aucom/wall.tga (archive)
+
+  what this scan did not look at:
+    - what a base-game shader pulls in; its own script is read, and anything defined there is reported as the base game's, which is the answer that decides whether you may ship it
+    - anything a mod's gamecode loads by name while the map is running
+
+the dependency review holds this package:
+  1 dependency reference(s) are not accounted for: textures/aucom/floor
+  package it anyway with --accept-missing --reason "…", once you have read why.
+```
+
+`package create` refuses on the same review:
+
+```console
+$ companion package create --target quake3-pk3 --from ./aucomdm1-pk3 --map ./aucomdm1.map --out aucomdm1.pk3
+error: 1 dependency reference(s) are not accounted for: textures/aucom/floor
+  read the review above. Add what is missing, or, if it belongs somewhere else, pass --accept-missing --reason "…".
+```
+
+Four answers, and each is a different fact:
+
+- **packaged** — the archive carries what it needs.
+- **from the base game** — the installed game has it. Not yours to ship, and not a
+  problem. The base game's own shader scripts are read, out of `pak0.pk3` as well
+  as loose, because a review that called every `common/*` shader missing would be
+  one you learn to click past.
+- **not packaged** — your own file, on this machine, and the archive leaves it
+  out. This is the silently incomplete PK3, caught.
+- **missing** — nothing anywhere has it.
+
+**The review states its own limits**, and they are part of the report rather than
+of this README: what a `.md3` names internally is not read, because a model is a
+binary file that declares its own shaders; what a base-game shader pulls in is
+not followed; and nothing can know what a mod's gamecode loads by name. Each of
+those produces a line you read, not a silence.
+
+`--accept-missing --reason "…"` packages anyway and records why. It is not a way
+to switch the check off: the reason is required, it is printed back, and the
+review is printed before it.
+
+### Report a compatibility issue
+
+The same reporter as Quake II — there is one, not one per game — and it sends
+nothing:
+
+```console
+$ companion feedback compatibility --game quake3 --share versions     --summary "A patch mesh loses its shader after the light stage"     --describe "Two rooms, one curved ceiling. The patch renders with the default texture in the engine."
+{
+  "schema": "aucom.compat-report/1.0",
+  "created_on": "2026-09-07",
+  "engine_family": "quake3",
+  "maturity": "work_in_progress",
+  "summary": "A patch mesh loses its shader after the light stage",
+  "description": "Two rooms, one curved ceiling. The patch renders with the default texture in the engine.",
+  "shared": {
+    "versions": true,
+    "profiles": false,
+    "operation": false,
+    "diagnostics": false
+  },
+  "versions": {
+    "companion": "0.1.0-dev",
+    "platform": "linux/amd64"
+  }
+}
+
+Nothing has been sent. This file is yours to read and to share if you choose.
+```
+
+Everything the Quake II section says about that document is true of this one: no
+member of it can hold a map, a log or a path; consent is four boxes that start
+empty; a diagnostic carries this program's own words rather than the compiler's
+line; and a path or a credential is refused and named rather than quietly
+removed.
 
 ## Games people are hosting
 

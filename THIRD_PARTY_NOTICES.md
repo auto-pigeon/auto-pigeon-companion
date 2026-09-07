@@ -17,6 +17,9 @@ kept apart here on purpose.
 | Go module dependencies | — | none exist | — |
 | auto-pigeon-extractor (AUE) | **AGPL-3.0-only** | separate process, downloaded at runtime against a signed catalogue | no |
 | ericw-tools 0.18.1 (qbsp, vis, light, bspinfo, bsputil) | **GPL-3.0-or-later** as distributed (GPL-2.0-or-later source) | separate process, downloaded at runtime | no |
+| ericw-tools 2.0.0-alpha7 (the Quake II line) | **GPL-3.0-or-later** as distributed (GPL-2.0-or-later source) | separate process, downloaded at runtime | no |
+| Q3Map2 2.5.17n (NetRadiant-custom `20260114`) | **GPL-2.0-or-later** | separate process, **found by the user**; nothing is downloaded | no |
+| ioquake3, and any id Tech 3 engine | **GPL-2.0-or-later** | separate process, already installed | no |
 | Games the user launches | the user's own | separate process, already installed | no |
 
 ## Go dependencies
@@ -296,6 +299,69 @@ its own licence — and, for the real chain, against a locally signed copy of th
 payload above. The test signing keys under
 [`internal/catalog/testdata`](internal/catalog/testdata) are generated fixtures
 and sign nothing outside the tests.
+
+### Q3Map2 2.5.17n — described, run, and deliberately not downloaded
+
+The Quake III compiler is `q3map2`, from **NetRadiant-custom**'s `20260114`
+release. Its own source files carry the GtkRadiant header — *"either version 2
+of the License, or (at your option) any later version"* — so it is conveyed
+under **GPL-2.0-or-later**. The surrounding tree carries three licences at once
+(BSD, LGPL-2.1 and GPL, each file saying which), which is why GitHub's own
+detector reports the repository as `Other`; the corresponding source for the
+build described here is
+`https://github.com/Garux/netradiant-custom/tree/20260114`.
+
+**Nothing about it is in the acquisition catalogue, and that is the notable
+part.** Both EricW entries are pinned by digest and downloaded on demand. This
+one is not, and the reason is what upstream publishes rather than a policy
+difference:
+
+| Platform | What upstream publishes for `20260114` |
+| --- | --- |
+| linux/amd64 | `netradiant-custom-20260114-linux-x86_64.7z`, 40181006 bytes, SHA-256 `f48f6f1d0db2b910ef9cb5dc5d8a722852510f3c5c278dc17615c0466b8a7a3d` — one member, `NetRadiant-Custom-x86_64.AppImage` (41036280 bytes), which is the whole map editor |
+| windows/amd64 | `netradiant-custom-20260114-windows-x86_64.zip`, 43618125 bytes — the same editor |
+| darwin | nothing |
+
+`AUP/AUCOM 216` says not to install another map editor merely because a release
+bundles one, and there is no smaller artifact to prefer: `q3map2` resolves
+libassimp, libdraco, libminizip, libpugixml, libicu, libxml2 and libglib out of
+the bundle's own `../lib`, so it cannot be lifted out on its own. This program
+also unpacks zip and tar.gz only, not 7z. So the profile declares `user_path`
+and `system_path`, says all of that where a user reads it, and **this project
+neither downloads nor redistributes any of those bytes.**
+
+Two further facts, both established by looking rather than assuming:
+
+- **The published AppImage carries no licence file at all** — no `LICENSE`, no
+  `COPYING`, no GPL text anywhere inside it. Whoever redistributes that binary
+  has that to answer for; this project does not redistribute it, and the profile
+  names the licence, the terms and the corresponding source itself.
+- **Everything the Quake III profile claims about the program's behaviour was
+  measured** by extracting that AppImage and running `q3map2` — the BSP,
+  visibility and lighting stages — against a synthetic Quake III map. The
+  version it printed, `2.5.17n-git-68ecbed`, is the version the document names.
+
+### ioquake3 and the generic id Tech 3 profile
+
+Both engine profiles describe **GPL-2.0-or-later** programs this repository does
+not contain, download or link against. ioquake3 is `ioquake/ioq3`; the generic
+profile describes whatever id-Tech-3-derived engine a user already has, and id
+Software's own Quake III Arena engine source is where that vocabulary comes
+from.
+
+There is nothing to pin for ioquake3 either, and again for a reason of
+upstream's: it publishes no GitHub release and no tag, and its builds are
+unversioned rolling zips at `files.ioquake3.org`. A catalogue entry names a size
+and a digest, and a URL whose contents change has neither. Both profiles are
+`user_path`.
+
+**Game data is not covered by any of this.** Quake III Arena's `pak0.pk3` and
+the patch `pak1`–`pak8` are id Software's commercial data, not free software,
+and upstream says so on its own download page: *"The Quake 3 engine is open
+source. The Quake III: Arena game itself is not free. You must purchase the game
+to use the data and play Quake 3 with ioquake3."* The Companion never copies,
+downloads, fabricates or redistributes it — including in tests, which stand up a
+game directory out of a placeholder file of this repository's own.
 
 ### Requirement to revisit: bundling versus downloading
 

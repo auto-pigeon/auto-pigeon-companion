@@ -55,6 +55,12 @@ review:
                             requires --reason
   --reason <text>           what you are asserting, recorded verbatim in the manifest
   --label <text>            a short name for this package
+
+dependency review (Quake III):
+  --map <file>              read this map source and check what it needs against the
+                            package, your own content and the base game (repeatable)
+  --accept-missing          package anyway when that review holds something;
+                            requires --reason, and prints the review first
 `
 
 func runPackage(env *Env, args []string) int {
@@ -308,7 +314,11 @@ func packageBuild(env *Env, args []string, previewOnly bool) int {
 					"pass --accept-missing --reason \"…\".\n", err)
 				return 1
 			}
-			fmt.Fprintf(env.Stderr, "note: --accept-missing packaged despite the review: %v\n", err)
+			// Printed even when it is being accepted. A review somebody
+			// waved through without seeing is not one, and the archive that
+			// results is the same archive either way.
+			fmt.Fprint(env.Stderr, dependencies.Describe())
+			fmt.Fprintf(env.Stderr, "\nnote: --accept-missing packaged despite the review: %v\n", err)
 			fmt.Fprintf(env.Stderr, "      reason: %s\n", strings.TrimSpace(*reason))
 		}
 	}
