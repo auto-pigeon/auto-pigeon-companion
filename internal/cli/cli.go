@@ -44,6 +44,8 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/urischeme"
 )
 
 // Env carries the streams a command reads and writes, plus process-level values
@@ -66,6 +68,23 @@ type Env struct {
 	// config — the alternative, mutating HOME for the test process, changes
 	// behaviour for anything else running in it.
 	ConfigPath string
+	// URIRegistrar registers and removes the autopigeon:// handler; nil means
+	// the real one.
+	//
+	// A field for a sharper reason than ConfigPath's. The handler lives in the
+	// user's DESKTOP configuration — a .desktop file and a mimeapps.list on
+	// Linux, a registry key on Windows — and a test that ran the real one would
+	// change which application opens a scheme on the machine running the test.
+	// That is somebody's desktop, not a temporary directory.
+	URIRegistrar *urischeme.Registrar
+}
+
+// uriRegistrar is the handler registrar this invocation uses.
+func (e *Env) uriRegistrar() *urischeme.Registrar {
+	if e.URIRegistrar != nil {
+		return e.URIRegistrar
+	}
+	return &urischeme.Registrar{}
 }
 
 func (e *Env) lookenv(name string) (string, bool) {
@@ -156,6 +175,26 @@ var commands = []Command{
 		Name: "feedback", Usage: "compatibility --game <family> --summary <text> [--share <what>]",
 		Summary: "report that a work-in-progress game did not do what you expected — nothing is attached unless you say so",
 		Run:     runFeedback,
+	},
+	{
+		Name: "uri", Usage: "status | register | unregister",
+		Summary: "see, set or remove this machine's handler for autopigeon:// links",
+		Run:     runURI,
+	},
+	{
+		Name: "security", Usage: "matrix | residual | audit",
+		Summary: "the threat model, the risks accepted with it, and what this build is made of",
+		Run:     runSecurity,
+	},
+	{
+		Name: "release", Usage: "sbom | checksums",
+		Summary: "the documents a release ships beside its binaries",
+		Run:     runRelease,
+	},
+	{
+		Name: "uninstall", Usage: "[--purge --confirm]",
+		Summary: "show what this program keeps on this machine, and delete it",
+		Run:     runUninstall,
 	},
 	{
 		Name:    "migrate",
