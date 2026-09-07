@@ -339,6 +339,7 @@ commands:
   game list | show | join | preview | host | stop                                          find a game somebody is hosting and join it, or advertise one of your own
   launch <game> [--map <name>] [--game-root <dir>] [--dry-run]                             launch a game as a supervised job, using its AUB launch config
   extractor status | plan | install | version                                               obtain and run the separately licensed auto-pigeon-extractor (AUE)
+  feedback compatibility --game <family> --summary <text> [--share <what>]                 report that a work-in-progress game did not do what you expected — nothing is attached unless you say so
   migrate                                                                                  fold Launcher and older Companion configuration into the current one
   version                                                                                  print the build version
 ```
@@ -537,13 +538,19 @@ process it starts is still a job — same queue, same supervision, same logs, an
 `companion job show` finds each one by the id the build printed. The build adds
 ordering, wiring and evidence, and nothing else.
 
-Three pipelines ship, and they are the same three stages with different options:
+Five pipelines ship — three for Quake 1 and two for Quake II — and within each
+game they are the same three stages with different options:
 
 ```console
 $ companion build pipelines
 auto-pigeon.q1.fast-preview      1.0.0    builtin   compile -> vis -> light  ready
 auto-pigeon.q1.final             1.0.0    builtin   compile -> vis -> light  ready
 auto-pigeon.q1.normal            1.0.0    builtin   compile -> vis -> light  ready
+auto-pigeon.q2.fast-preview      1.0.0    builtin   compile -> vis -> light  ready    Work in progress
+auto-pigeon.q2.normal            1.0.0    builtin   compile -> vis -> light  ready    Work in progress
+
+Quake II — Work in progress. Core editing is available, but some textures, entities, compilation and engine workflows may be incomplete.
+Report a compatibility issue with `companion feedback compatibility`.
 ```
 
 `fast-preview` runs a rough visibility pass and unsupersampled lighting, for the
@@ -552,6 +559,11 @@ visibility pass with coloured lightmaps. `final` adds 4x supersampling,
 softening and a bounce, and is measured in hours on a real map rather than
 seconds. `ready` means every capability the pipeline needs is provided by
 something installed; anything else says what is missing.
+
+The two Quake II pipelines are the experimental path, and everything about them
+is in **[Quake II — work in progress](#quake-ii--work-in-progress)** below. They
+are separate documents driving a separate compiler, so a Quake 1 build cannot
+resolve to the Quake II toolchain or the other way round.
 
 **Preview first.** Every stage is resolved, every option is checked against the
 tool's own declaration, and nothing runs:
@@ -1004,8 +1016,8 @@ reason to do only one of them.
 
 The Companion starts Quake engines, and it knows nothing about any of them. An
 engine is an **engine profile** — the same document format as a tool profile,
-resolved by the same resolver, run by the same executor — and seven of them
-ship inside the binary:
+resolved by the same resolver, run by the same executor — and ten of them
+ship inside the binary: seven for Quake 1 and three for Quake II.
 
 ```console
 $ companion engine list
@@ -1015,12 +1027,18 @@ auto-pigeon.engine.darkplaces        beta         unverified  not set up here
 auto-pigeon.engine.fteqw             rolling      unverified  not set up here
   play_map, play_package, join_server, host_listen, host_dedicated
   linux/amd64: Upstream publishes Linux autobuilds; nobody here has run one.
+auto-pigeon.engine.fteqw-q2          rolling      unverified  not set up here  Work in progress
+  join_server
+  linux/amd64: Upstream publishes rolling autobuilds; nobody here has run one.
 auto-pigeon.engine.ironwail          0.7.x        unverified  not set up here
   play_map, play_package, join_server, host_listen
   linux/amd64: Ironwail builds from source on Linux and upstream publishes no Linux binary; nobody here has run one.
 auto-pigeon.engine.q1-generic        unknown      unverified  not set up here
   play_map, play_package, join_server, host_listen
   linux/amd64: Nothing is known about the engine this profile is pointed at.
+auto-pigeon.engine.q2-generic        unknown      unverified  not set up here  Work in progress
+  play_map, play_package, join_server, host_listen
+  linux/amd64: This profile describes a command line, not a build; nothing here has been run.
 auto-pigeon.engine.quakespasm        0.94.x       unverified  not set up here
   play_map, play_package, join_server, host_listen
   linux/amd64: Upstream publishes source and several distributions package it; nobody here has run one.
@@ -1030,14 +1048,22 @@ auto-pigeon.engine.quakespasm-spiked 0.94.x-spiked unverified  not set up here
 auto-pigeon.engine.vkquake           1.30.x       unverified  not set up here
   play_map, play_package, join_server, host_listen
   linux/amd64: Upstream publishes source and several distributions package it; nobody here has run one.
+auto-pigeon.engine.yamagi-quake2     8.70         unverified  not set up here  Work in progress
+  play_map, play_package, join_server, host_listen, host_dedicated
+  linux/amd64: Most distributions package it and upstream publishes source; nobody here has run one.
+
+Quake II — Work in progress. Core editing is available, but some textures, entities, compilation and engine workflows may be incomplete.
+Report a compatibility issue with `companion feedback compatibility`.
 ```
 
 Two things in that listing are the whole point.
 
 **Nothing says `supported`.** Each profile's command line comes from that
-engine's own published documentation, and no build of any of the six has been
-run by this project — six upstream projects across three operating systems,
-none of which starts without a copy of Quake that is not ours to distribute. So
+engine's own published documentation and, where it settles a question the
+documentation leaves open, from its source. No build of any of them has been
+run by this project — eight upstream projects across three operating systems,
+none of which starts without a copy of Quake or Quake II that is not ours to
+distribute. So
 every platform is `unverified` with a note saying exactly that. `last_qualified`
 records the date of the last check; what kind of check it was is what the
 platform status beside it says. A profile claiming `supported` on this evidence
@@ -1473,6 +1499,201 @@ error: catalog: offline: offline, and this machine has no recorded requirement f
 The fallback to the recorded answer happens **only** because you said
 `--offline`. A verification that failed, a rollback attempt, an expired document
 or an unreachable server is a refusal, and never becomes "use the older answer".
+
+## Quake II — work in progress
+
+> **Quake II — Work in progress. Core editing is available, but some textures,
+> entities, compilation and engine workflows may be incomplete.**
+
+That sentence is not a disclaimer bolted onto a README. It is a value this
+program holds, in `internal/maturity`, keyed on the engine family AUB gives a
+project, and every surface that can show you a Quake II thing shows it: the
+pipeline list, the engine list, `profile list`, `profile show`, `build preview`,
+a running build, and the Build, Run and Profiles areas of the desktop interface.
+
+**No document can turn it off.** Maturity is not a member of a profile — if it
+were, the first community Quake II toolchain to declare itself finished would
+switch the warning off for everybody who installed it. It is what *this build*
+says about the family, and a community document is subject to it exactly as a
+built-in one is.
+
+### What is here
+
+| | |
+| --- | --- |
+| **Compiler** | `auto-pigeon.ericw-tools.q2` — ericw-tools **2.0.0-alpha7**, a pre-release, pinned by digest in the signed catalogue |
+| **Pipelines** | `auto-pigeon.q2.fast-preview`, `auto-pigeon.q2.normal` |
+| **Engines** | `auto-pigeon.engine.yamagi-quake2`, `auto-pigeon.engine.q2-generic`, `auto-pigeon.engine.fteqw-q2` |
+| **Packaging** | the existing `quake2-pak` target |
+| **Feedback** | `companion feedback compatibility` |
+
+Quake II support lives in ericw-tools' 2.x line, and upstream marks the whole of
+that line as a pre-release. Moving the qualified Quake 1 profile onto a
+pre-release to gain a Quake II mode would have been a downgrade of a path that
+works; not pinning one would have meant no Quake II path at all. So there are
+two documents, two versions and two sets of capability ids — `q1.bsp.compile`
+and `q2.bsp.compile` — and a Quake 1 pipeline cannot resolve to the experimental
+compiler, or the other way round, in either direction. Tests fail if it can.
+
+### Seven things that are not the same as Quake 1
+
+Every one was measured by running 2.0.0-alpha7 against a synthetic Quake II map,
+and every one would have been a plausible-looking wrong answer if the Quake 1
+document had simply been copied:
+
+1. **The archive has no `bin/` and no root directory.** `qbsp` is at the archive
+   root; v0.18.1 unpacks to `ericw-tools-v0.18.1-Linux/bin/qbsp`.
+2. **`maputil` is new**, and v0.18.1 has no such program.
+3. **The logs are named differently and written somewhere else.** 2.x writes
+   `<stem>.log`, `<stem>-vis.log` and `<stem>-light.log`, and the last two go
+   *beside the BSP it was handed* rather than into the directory it was run in.
+   A staged input lives in a directory of its own, so no workspace-relative path
+   names them — which is why the Quake II pipelines declare no vis or light log.
+   Each step's job holds the same text as its captured output.
+4. **qbsp writes `<stem>.texinfo.json`, and `light` reads it back.** The
+   pipeline wires it from the compile step to the lighting step and stages it
+   beside the BSP. A lighting run without it succeeds — with the wrong surface
+   flags. That is the worst kind of failure, so it is wired rather than left to
+   chance.
+5. **`-lit` does nothing.** Asked for on a Quake II BSP it prints
+   `.lit colored light output requested on command line.` and writes no file,
+   because Quake II lightmaps are already coloured and live inside the BSP.
+   There is no `lit` option in the Quake II documents.
+6. **`bspinfo` writes files** — a JSON dump, a geometry `.obj`, and one PNG per
+   lightmap atlas — where v0.18.1 only printed a report. Its action asks for
+   write access to the workspace for that reason.
+7. **Quake 1's special texture names do not apply.** A brush's contents and
+   surface flags come from the `.wal` the map references, or from a `.wal_json`
+   beside it.
+
+### Three bindings, and why the base game data is required
+
+```text
+tool_root      the executables    qbsp, vis, light, bspinfo, bsputil
+game_root      -basedir           the directory that holds textures/ — usually baseq2
+content_root   -gamedir           the mod that overlays it
+```
+
+The base game data root is **required**, not optional, and that follows directly
+from (7). A Quake II compile with nothing bound there still exits 0 and still
+writes a BSP; it writes one where every surface has default flags, no playerclip
+and no sky. A refusal that names the binding is better than a map that looks
+built and is wrong. Compiling a plain `baseq2` map means binding `game_root` and
+`content_root` to the same directory, which is what upstream's own detection
+does for a map compiled inside `baseq2/maps`.
+
+Nothing here ships, downloads or fabricates Quake II data. What the Companion
+needs is a directory you point it at.
+
+### The engines, and what each of them will and will not do
+
+**Yamagi Quake II** is the reference. It locates data with `-datadir` and
+chooses a mod with `+set game`, which is *not* what every Quake 1 profile here
+does — those pass `-basedir` and `-game`. Yamagi's own filesystem source prints
+`+set basedir is deprecated, use -datadir instead`, so writing the Quake 1
+spelling would have been correct right up to the release that removes it.
+`q2ded` is a second declared executable rather than a flag, because Yamagi ships
+its dedicated server as its own program.
+
+**The generic Quake II profile** sends only what id Software's own Quake II
+documented: the `basedir`, `game` and `maxclients` cvars set with `+set`,
+`+map`, and `+connect`. That is why it uses `+set basedir` where Yamagi uses
+`-datadir` — `-datadir` is Yamagi's own, and a fallback that only worked on the
+engine it was a fallback for would not be one. It declares no `host_dedicated`:
+whether a particular build has a dedicated server in it is exactly what a
+generic profile cannot know.
+
+**FTEQW's Quake II profile declares one action: `join_server`.** Upstream's own
+QuickStart says it — *"If you're running a 64-bit version of FTEQW, then you also
+need 64-bit game-logic for Quake II. We recommend getting the game .dll/.so from
+the Yamagi Quake II project."* Quake II's game logic is server-side, so every
+action that starts a **local** server depends on a third-party binary FTEQW does
+not ship, that Auto-Pigeon must not distribute, and whose presence this profile
+cannot check. A client needs none of it. Use Yamagi, or the generic profile, to
+start a Quake II game locally.
+
+### Compiling and running a Quake II map
+
+```console
+$ companion build pipelines
+auto-pigeon.q2.normal            1.0.0    builtin   compile -> vis -> light  ready    Work in progress
+
+Quake II — Work in progress. Core editing is available, but some textures, entities, compilation and engine workflows may be incomplete.
+Report a compatibility issue with `companion feedback compatibility`.
+
+$ companion build run --pipeline auto-pigeon.q2.normal \
+    --input source_map=aub:map/map0000000000001@rev0000000000002#level.map
+```
+
+The compiler is bound the way any tool is — `companion acquire resolve` for a
+copy you already have, or `companion acquire install` for the pinned
+pre-release — with `game_root` and `content_root` set to your Quake II data and
+your mod. Then package and launch exactly as for Quake 1:
+
+```console
+$ companion package create --target quake2-pak --build <build-id> --out level.pak
+$ companion engine bind auto-pigeon.engine.yamagi-quake2 \
+    --engine /opt/quake2/yquake2 --game-root /opt/quake2 --content-root ~/maps/level --approve
+$ companion engine run auto-pigeon.engine.yamagi-quake2 --action play_map --map level --mod aucom
+```
+
+### Report a compatibility issue
+
+When the Quake II path does not do what you expected, this composes a report —
+and sends nothing.
+
+```console
+$ companion feedback compatibility --game quake2 \
+    --summary "Areaportals do not seal in the compiled map" \
+    --describe "Two rooms joined by a corridor. The areaportal compiles but both rooms stay in one area." \
+    --share versions,profiles,operation,diagnostics --build 20260907T184154Z-88e026aa
+{
+  "schema": "aucom.compat-report/1.0",
+  "created_on": "2026-09-07",
+  "engine_family": "quake2",
+  "maturity": "work_in_progress",
+  "summary": "Areaportals do not seal in the compiled map",
+  "description": "Two rooms joined by a corridor. The areaportal compiles but both rooms stay in one area.",
+  "shared": { "versions": true, "profiles": true, "operation": true, "diagnostics": true },
+  "versions": { "companion": "0.1.0", "platform": "linux/amd64" },
+  "operation": "build",
+  "profiles": [
+    { "role": "pipeline", "id": "auto-pigeon.q2.normal", "version": "1.0.0" },
+    { "role": "tool", "id": "auto-pigeon.ericw-tools.q2", "version": "1.0.0", "tool_version": "2.0.0-alpha7" }
+  ],
+  "diagnostics": [
+    { "id": "texture_missing", "severity": "error", "message": "A texture the map uses was not found under the base game data or the mod, so its contents and surface flags fall back to defaults.", "count": 14 }
+  ]
+}
+
+Nothing has been sent. This file is yours to read and to share if you choose.
+```
+
+Four things about that:
+
+**Nothing is attached unless you name it.** `--share` takes `versions`,
+`profiles`, `operation`, `diagnostics`, or `all`. With no `--share`, the report
+is your own two sentences and nothing else — and it says so, so a reader can
+tell "did not share diagnostics" from "shared diagnostics, and none fired".
+
+**Your map, your logs and your folders are never in it, at any setting.** There
+is no member of the document that could hold one. That is a property of the
+type, not of a filter: nothing is collected and then cleaned up.
+
+**A diagnostic carries the Companion's own words.** The rule that fired, how
+often, and the message the profile *declares* for it — not the line the compiler
+printed, which is where your filenames actually are. `texture_missing fired 14
+times on a Quake II compile with ericw-tools 2.0.0-alpha7` is what a maintainer
+can act on; the names of fourteen textures in an unreleased map are not.
+
+**A path or a credential is refused, not scrubbed.** If you paste one into the
+description, the report is refused and says which field. Quietly redacting would
+hand you a document you believe you wrote, with `[redacted]` where your token
+was and nothing to tell you it happened.
+
+The same thing is in the desktop interface: **Report compatibility issue**,
+beside the work-in-progress note wherever it appears, with a checkbox per
+attachment and the finished document shown before you save it.
 
 ## Games people are hosting
 
@@ -2543,10 +2764,20 @@ refuses instead, because "several keys signed this, and one of them vouches for
 this entry" is a question the publisher has to answer.
 
 This repository's own catalogue lives in [`catalog/`](catalog/) —
-`ericw-tools-q1.catalog.json` pins the four archives upstream published for
-ericw-tools v0.18.1, each size and digest measured by downloading the archive
-from the URL beside it. It is the payload a person reviews in a pull request;
-the signed document is what `catalog sign` makes of it.
+`ericw-tools.catalog.json` pins two packages. `ericw-tools.q1` is the four
+archives upstream published for v0.18.1; `ericw-tools.q2` is the three it
+published for the **2.0.0-alpha7 pre-release**, which is where Quake II support
+lives. Every size and digest was measured by downloading the archive from the
+URL beside it. It is the payload a person reviews in a pull request; the signed
+document is what `catalog sign` makes of it.
+
+The file used to be `ericw-tools-q1.catalog.json` with the id `auto-pigeon.q1`,
+and both were renamed when the Quake II package joined it: the Companion fetches
+**one** catalogue, from one address, so both packages have to live in one
+document, and a document called `q1` that carries a Quake II compiler is a
+document whose name is wrong. The serial ratchet is per id, so the old id's
+history is untouched and an old `auto-pigeon.q1` document is still refused under
+its own name.
 
 **Signing.**
 

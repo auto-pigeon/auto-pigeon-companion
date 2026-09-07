@@ -219,7 +219,7 @@ version tag the corresponding source is at.
 #### The published artifacts
 
 Four archives, pinned by exact size and SHA-256 in
-[`catalog/ericw-tools-q1.catalog.json`](catalog/ericw-tools-q1.catalog.json).
+[`catalog/ericw-tools.catalog.json`](catalog/ericw-tools.catalog.json).
 Each digest was measured by downloading the archive from the URL beside it.
 
 | Platform | Archive | Size | SHA-256 |
@@ -233,16 +233,49 @@ All four are at
 `https://github.com/ericwa/ericw-tools/releases/download/v0.18.1/`. There is no
 arm64 build on any operating system, because upstream published none.
 
-#### Why v0.18.1 and not 2.0
+#### Why v0.18.1 and not 2.0 for Quake 1
 
-At the time this entry was written, v0.18.1 was still the newest release
-upstream had **not** marked a pre-release: the whole 2.0 line, up to
-`2.0.0-alpha11` (2026-06-05), is published as `prerelease: true`. It is also the
-build `auto-pigeon-tools` pinned as its compiler oracle, so what the Companion
+v0.18.1 is the newest release upstream has **not** marked a pre-release: the
+whole 2.0 line is published as `prerelease: true`. It is also the build
+`auto-pigeon-tools` pinned as its compiler oracle, so what the Companion
 downloads and what this workspace's acceptance gates are measured against are
 the same bytes — the Linux archive's digest above is the archive that
-installation was unpacked from. A profile for the 2.0 line is a separate
-document and a separate decision.
+installation was unpacked from.
+
+#### And a second entry, for Quake II: 2.0.0-alpha7
+
+Quake II support exists only in the 2.x line, so there is no non-pre-release to
+pin for it. `AUP/AUCOM 215` made that a separate document and a separate
+decision rather than moving the Quake 1 line onto a pre-release: the two entries
+are two packages in one catalogue, two profiles, and two sets of capability ids.
+
+The pinned version is **2.0.0-alpha7** (2024-03-17) rather than the newest
+alpha, and the reason is the one this repository keeps giving: alpha7 is the
+build that was unpacked and run here — `qbsp`, `vis`, `light`, `bspinfo` and
+`bsputil`, on a synthetic Quake II map — and every claim the Quake II profile
+makes about how those programs behave came from that run. Pinning a build
+nobody had run would have made the claims about nothing.
+
+Three archives, pinned by exact size and SHA-256 in the same catalogue. Each
+digest was computed from the archive downloaded from the URL beside it.
+
+| Platform | Archive | Size | SHA-256 |
+| --- | --- | --- | --- |
+| linux/amd64 | `ericw-tools-2.0.0-alpha7-Linux.zip` | 22898562 | `c87d669c615f92163c21e6e154268c0c2e3de4e78c26b6bd5a2a2e7996a9fe75` |
+| windows/amd64 | `ericw-tools-2.0.0-alpha7-win64.zip` | 29065662 | `fa640ce178aa1eef7ae5fc725312826c0ab682945ac58d06999f4e814a30b816` |
+| darwin/amd64 | `ericw-tools-2.0.0-alpha7-Darwin.zip` | 41839775 | `ae5bd36cc6b4704067bc95f90aec2c9f4a0582be6b815029b068d476318094b3` |
+
+All three are at
+`https://github.com/ericwa/ericw-tools/releases/download/2.0.0-alpha7/`. There
+is no 32-bit and no arm64 build on any operating system, because upstream
+published none for this line.
+
+The licence conclusion is the same and was reached the same way: the archives
+ship `gpl_v3.txt` beside `LICENSE-embree.txt`, and upstream's README says builds
+using Embree are GPLv3+. The notice a user acknowledges before downloading names
+the GPL-2.0-or-later source terms, Embree, the `2.0.0-alpha7` tag the
+corresponding source is at, and — in those words — that this is a
+**PRE-RELEASE**.
 
 #### Licence text is not copied here
 

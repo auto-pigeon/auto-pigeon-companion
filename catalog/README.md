@@ -9,18 +9,42 @@ machine will accept.
 
 ## What is in it
 
-`ericw-tools-q1.catalog.json` pins the four archives upstream published for
-ericw-tools **v0.18.1**, the newest release upstream has not marked a
-pre-release. Every size and digest in it was measured by downloading the
-archive from the URL beside it. The Linux archive's digest is the same
-`986531ff…` as the copy AUT installed and pinned as its compiler oracle in
+`ericw-tools.catalog.json` publishes two packages.
+
+`ericw-tools.q1` pins the four archives upstream published for ericw-tools
+**v0.18.1**, the newest release upstream has not marked a pre-release. Every
+size and digest in it was measured by downloading the archive from the URL
+beside it. The Linux archive's digest is the same `986531ff…` as the copy AUT
+installed and pinned as its compiler oracle in
 `auto-pigeon-tools/ericw-tools-contract.json`, which is what ties what the
 Companion downloads to what the acceptance gates are measured against.
 
-There is no arm64 entry, on any operating system, because upstream published no
-arm64 build. The profile offers `user_path` there instead, which is the honest
-answer: a download nobody published cannot be pinned, and inventing a URL for it
-would be worse than saying so.
+`ericw-tools.q2` pins the three archives upstream published for
+**2.0.0-alpha7**, a pre-release — which is what the Quake II path has, because
+Quake II support exists nowhere else. alpha7 rather than the newest alpha
+because alpha7 is the build that was unpacked and run while `AUP/AUCOM 215` was
+written, and it is where every measured claim in
+`internal/profile/builtin/ericw-tools-q2.tool.json` came from. Its Linux digest
+is pinned a second time in `internal/catalog/published_test.go`, for the same
+reason the Q1 one is.
+
+There is no arm64 entry for either package, on any operating system, and no
+32-bit entry for the 2.x line, because upstream published none. The profiles
+offer `user_path` there instead, which is the honest answer: a download nobody
+published cannot be pinned, and inventing a URL for it would be worse than
+saying so.
+
+## Why the file and the id were renamed
+
+It was `ericw-tools-q1.catalog.json`, with `catalog_id: auto-pigeon.q1`. The
+Companion fetches **one** catalogue — `catalog.json`, at one configured address
+— so a second package cannot live in a second file without making Quake 1 and
+Quake II mutually exclusive on a machine. Both packages therefore live in one
+document, and a document called `q1` that carries a Quake II compiler is a
+document whose name is a lie. The serial ratchet is keyed per id, so the old
+id's history is untouched and an old `auto-pigeon.q1` document is still refused
+under its own name; no `auto-pigeon.ericw-tools` document has ever been
+published, so the new id starts from nothing with nothing to replay.
 
 ## Why `signer` is missing from every artifact
 
@@ -38,7 +62,7 @@ companion catalog keygen --role anchor  --out anchor.key.json
 companion catalog keygen --role catalog --out catalog.key.json
 # put the anchor's public entry in anchors.json and the catalogue key's in keyring.json
 companion catalog sign --key anchor.key.json  keyring.json     --out keyring.signed.json
-companion catalog sign --key catalog.key.json catalog/ericw-tools-q1.catalog.json --out catalog.signed.json
+companion catalog sign --key catalog.key.json catalog/ericw-tools.catalog.json --out catalog.signed.json
 companion catalog verify --anchors anchors.json --keyring keyring.signed.json --catalog catalog.signed.json
 ```
 
