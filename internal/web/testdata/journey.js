@@ -359,6 +359,28 @@
       unreachable.length === 0 ? `${controls.length} controls` : unreachable.map((n) => n && n.id).join(", ")
     );
 
+    // Tab order, in the document order a browser walks. The skip link has to be
+    // first — a keyboard user should not have to walk six area tabs to reach
+    // the page — and the whole build flow has to be inside the walk rather than
+    // only inside the DOM.
+    await go("build");
+    const focusable = [...document.querySelectorAll(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )].filter((node) => node.offsetParent !== null || node.classList.contains("skip-link"));
+    const order = focusable.map((node) => node.id).filter(Boolean);
+    record(
+      "the first thing in the tab order is the skip link",
+      focusable[0] && focusable[0].classList.contains("skip-link"),
+      focusable[0] ? focusable[0].className || focusable[0].tagName : "nothing focusable"
+    );
+    const wanted = ["build-pipeline", "build-preview", "build-start"];
+    const positions = wanted.map((id) => order.indexOf(id));
+    record(
+      "the build flow is reachable by tabbing, in the order it is used",
+      positions.every((index, i) => index >= 0 && (i === 0 || index > positions[i - 1])),
+      wanted.map((id, i) => `${id}@${positions[i]}`).join(", ")
+    );
+
     // Switching area moves focus to the heading, so a keyboard user lands on
     // the content that just changed rather than being left behind in it.
     await go("build");

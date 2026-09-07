@@ -242,11 +242,15 @@ than as a colour:
 | `community` | Came from somewhere else. It may be excellent; nothing here knows. |
 | `local` | Written or edited on this machine, or found in your profile folder. Not a synonym for safe. |
 
-A `builtin` or `verified` profile needs no approval from you. Anything else
-cannot run until you have read what it asks for and approved it, against that
-exact document's digest — importing one grants nothing, and a document that
-changes after you approved it needs approving again. This is enforced in
-`internal/profile`, not in the page: the API has no route that skips it.
+Only a `builtin` profile runs without your approval, because it arrived inside
+the program you installed. **A `verified` one still has to be approved**: a
+signature says who published a document, never that you agreed to what it asks
+for. Everything else — verified, community, local — cannot run until you have
+read what it asks for and approved it, against that exact document's digest.
+Importing grants nothing, and a document that changes after you approved it
+needs approving again. This is `profile.Authorize` in `internal/profile`, not a
+rule the page implements: the API has no route that skips it, and what the page
+shows is that function's own answer.
 
 ### The profile wizard
 

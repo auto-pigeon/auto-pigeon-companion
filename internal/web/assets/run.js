@@ -237,8 +237,8 @@
     approve.append(box);
     approve.append(
       document.createTextNode(
-        engine.vouched
-          ? "Approve what this profile asks for (a built-in or signed profile needs no approval; recording one does no harm)"
+        engine.trust === "builtin"
+          ? "Approve what this profile asks for (a built-in profile arrived inside the Companion and needs no approval; recording one does no harm)"
           : "I have read what this profile asks for and I approve it"
       )
     );

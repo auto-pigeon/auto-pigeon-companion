@@ -119,9 +119,13 @@
     // document on disk.
     const status = el("p", { className: "message", attrs: { role: "status" } });
     const buttons = el("div", { className: "row-actions" });
-    if (body.vouched) {
+    // `authorized` is profile.Authorize's own answer, not a guess assembled
+    // from trust and grant. Only a built-in document runs without one: a
+    // signature says who published something, never that you agreed to it.
+    if (body.authorized && body.trust === "builtin") {
       status.textContent =
-        "This document arrived with the Companion or is signed by the catalogue, so it needs no approval from you.";
+        "This document arrived inside the Companion, so installing the program was the decision. " +
+        "There is nothing else to approve.";
     } else if (body.authorized) {
       status.textContent = `Approved on ${when(body.binding?.granted_at)}, against ${shortDigest(body.binding?.profile_digest)}.`;
       status.className = "message ok";

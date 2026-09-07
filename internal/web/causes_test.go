@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/pathpick"
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
 )
 
 // What the interface says when something is wrong.
@@ -371,5 +372,62 @@ func TestBuildOutputIsServedByItsDeclaredName(t *testing.T) {
 		if response.StatusCode == http.StatusOK {
 			t.Errorf("fetching the output %q succeeded", name)
 		}
+	}
+}
+
+// The trust rule, over every state rather than over the one a fixture happens
+// to produce.
+//
+// Only `builtin` runs without a grant, and that is narrower than "vouched for":
+// a `verified` document is signed by the catalogue and STILL has to be read and
+// approved, because a signature says who published something and not that this
+// user agreed to it. [profile.Trust.Vouched] answers the first question and
+// [profile.Authorize] answers the second, and a page that showed one where the
+// other belonged would tell somebody they had approved something they had not.
+//
+// The API reports Authorize's own answer rather than assembling one out of
+// trust and grant, which is what stops the page and the executor disagreeing.
+func TestReviewCannotBeSkippedForAnythingButABuiltInProfile(t *testing.T) {
+	m := newMachine(t)
+	catalog, err := m.server.catalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, err := catalog.Lookup("aucom.fixture.q1-engine")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, trust := range profile.TrustStates {
+		err := profile.Authorize(entry.Profile, trust, entry.Digest, nil)
+		if trust == profile.TrustBuiltin {
+			if err != nil {
+				t.Errorf("a built-in profile was refused without a grant: %v", err)
+			}
+			continue
+		}
+		if err == nil {
+			t.Errorf("a %s profile ran with nothing approved", trust)
+		}
+	}
+
+	// And the API's answer is that function's answer. A built-in profile needs
+	// no approval; the local one beside it does.
+	status, body := m.call(http.MethodGet, "/api/v1/profiles/auto-pigeon.engine.quakespasm", nil)
+	if status != http.StatusOK {
+		t.Fatalf("reading a built-in profile = %d", status)
+	}
+	if body["trust"] != "builtin" || body["authorized"] != true {
+		t.Fatalf("a built-in profile reported trust=%v authorized=%v", body["trust"], body["authorized"])
+	}
+	if body["vouched"] != true {
+		t.Fatalf("a built-in profile reported vouched=%v", body["vouched"])
+	}
+	status, body = m.call(http.MethodGet, "/api/v1/profiles/aucom.fixture.q1-engine", nil)
+	if body["trust"] != "local" || body["authorized"] != false {
+		t.Fatalf("a local profile reported trust=%v authorized=%v", body["trust"], body["authorized"])
+	}
+	if body["vouched"] != false {
+		t.Fatalf("a local profile reported vouched=%v", body["vouched"])
 	}
 }
