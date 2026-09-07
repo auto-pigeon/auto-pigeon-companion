@@ -31,6 +31,15 @@ const profileUsage = `usage:
   companion profile diff <before> <after>       the normalized difference, and whether it escalates
   companion profile list                        the profiles built into this build
   companion profile schema [name]               list or print the published JSON Schema documents
+
+publishing and installing (these reach a backend):
+  companion profile preview <file>              what publishing it would disclose
+  companion profile publish <file> --confirm    publish it, after the preview
+  companion profile catalog [filters]           what this deployment has published
+  companion profile published <listing-id>      one listing and its versions
+  companion profile install <listing-id>[@ver]  review it; --approve to install
+  companion profile yank <listing-id> <version> --reason=<why>
+  companion profile report <listing-id> --category=<c>
 `
 
 func runProfile(env *Env, args []string) int {
@@ -56,6 +65,20 @@ func runProfile(env *Env, args []string) int {
 		return profileList(env, args[1:])
 	case "schema":
 		return profileSchema(env, args[1:])
+	case "preview":
+		return profilePreview(env, args[1:])
+	case "publish":
+		return profilePublish(env, args[1:])
+	case "catalog":
+		return profileCatalog(env, args[1:])
+	case "published":
+		return profilePublished(env, args[1:])
+	case "install":
+		return profileInstall(env, args[1:])
+	case "yank":
+		return profileYank(env, args[1:])
+	case "report":
+		return profileReport(env, args[1:])
 	}
 	fmt.Fprintf(env.Stderr, "error: unknown profile command %q\n\n", args[0])
 	fmt.Fprint(env.Stderr, profileUsage)

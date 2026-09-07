@@ -1,0 +1,141 @@
+{
+  "corpus": "auto-pigeon/companion-profile-portability/1.0",
+  "note": "The shared statement of what may never appear in a published Companion profile. This file is carried byte-identically by auto-pigeon-backend (internal/companionprofile) and auto-pigeon-companion (internal/profile); each repository asserts its OWN implementation against it and pins this file's SHA-256, so an edit to one copy fails that repository's tests immediately. Each case is a JSON value the scan walks; `portable` is the verdict both implementations must reach.",
+  "cases": [
+    {
+      "name": "an ordinary document says nothing about a machine",
+      "value": {"name": "qbsp", "summary": "Compiles a Quake 1 map", "file": "bin/qbsp"},
+      "portable": true
+    },
+    {
+      "name": "a posix absolute path is somebody's own disk",
+      "value": {"purpose": "reads /home/andrea/quake/id1"},
+      "portable": false,
+      "fault": "absolute_path"
+    },
+    {
+      "name": "a windows drive path is the same mistake spelled differently",
+      "value": {"purpose": "C:\\Games\\Quake"},
+      "portable": false,
+      "fault": "absolute_path"
+    },
+    {
+      "name": "a UNC share is a location as well as a path",
+      "value": {"purpose": "\\\\fileserver\\share\\quake"},
+      "portable": false,
+      "fault": "absolute_path"
+    },
+    {
+      "name": "a protocol-relative URL is a location",
+      "value": {"homepage": "//example.invalid/tools"},
+      "portable": false,
+      "fault": "absolute_path"
+    },
+    {
+      "name": "a home reference differs per user on the same machine",
+      "value": {"hint": "~/quake"},
+      "portable": false,
+      "fault": "home_reference"
+    },
+    {
+      "name": "a loopback name means the reader's own machine",
+      "value": {"note": "http://localhost:9190/api/status"},
+      "portable": false,
+      "fault": "network_location"
+    },
+    {
+      "name": "a loopback address is the same claim as a number",
+      "value": {"note": "http://127.0.0.1:9190/"},
+      "portable": false,
+      "fault": "network_location"
+    },
+    {
+      "name": "a private address is one LAN's answer and nobody else's",
+      "value": {"note": "192.168.0.33:5174"},
+      "portable": false,
+      "fault": "network_location"
+    },
+    {
+      "name": "an addressed public IP literal is still an address",
+      "value": {"note": "https://93.184.216.34/tools"},
+      "portable": false,
+      "fault": "network_location"
+    },
+    {
+      "name": "an authorization header pasted into prose",
+      "value": {"description": "send Authorization: Bearer abcdefghij"},
+      "portable": false,
+      "fault": "credential"
+    },
+    {
+      "name": "a session token pasted into prose",
+      "value": {"description": "eyJhbGciOiJIUzI1NiJ9.eyJpZCI6ImFiY2RlZmdoIn0.c2lnbmF0dXJlX2hlcmU"},
+      "portable": false,
+      "fault": "credential"
+    },
+    {
+      "name": "a PEM private key",
+      "value": {"note": "-----BEGIN OPENSSH PRIVATE KEY-----"},
+      "portable": false,
+      "fault": "credential"
+    },
+    {
+      "name": "a URL carrying credentials",
+      "value": {"url": "https://user:hunter2@example.invalid/tools"},
+      "portable": false,
+      "fault": "credential"
+    },
+    {
+      "name": "a fault inside an array is still a fault",
+      "value": {"commands": ["brew install qbsp", "/opt/local/bin/qbsp"]},
+      "portable": false,
+      "fault": "absolute_path"
+    },
+    {
+      "name": "a fault nested three deep is still a fault",
+      "value": {"actions": [{"roots": [{"purpose": "writes to /var/tmp/build"}]}]},
+      "portable": false,
+      "fault": "absolute_path"
+    },
+    {
+      "name": "an ordinary https homepage is what a profile is for",
+      "value": {"homepage": "https://ericwa.github.io/ericw-tools"},
+      "portable": true
+    },
+    {
+      "name": "a four-component version is not an IP address",
+      "value": {"engine_version": "1.2.3.4"},
+      "portable": true
+    },
+    {
+      "name": "an SPDX identifier is not a path",
+      "value": {"spdx": "GPL-2.0-or-later"},
+      "portable": true
+    },
+    {
+      "name": "a relative executable is exactly what a profile should say",
+      "value": {"file": "bin/qbsp"},
+      "portable": true
+    },
+    {
+      "name": "one slash is punctuation, not a filesystem location",
+      "value": {"summary": "compiles and/or lights a map"},
+      "portable": true
+    },
+    {
+      "name": "an environment variable name is not a secret",
+      "value": {"inherit": ["PATH", "TMPDIR"]},
+      "portable": true
+    },
+    {
+      "name": "a number and a boolean carry nothing to scan",
+      "value": {"timeout_seconds": 600, "advanced": true, "minimum": -1},
+      "portable": true
+    },
+    {
+      "name": "an empty string is not a fault",
+      "value": {"note": ""},
+      "portable": true
+    }
+  ]
+}

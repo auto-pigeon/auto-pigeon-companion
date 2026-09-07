@@ -117,6 +117,13 @@ type APIError struct {
 	// standard error envelope, otherwise a truncated raw body.
 	Message string
 	Path    string
+
+	// Reason is AUB's own machine-readable refusal code, from
+	// `data.reason.code`. Empty when the answer carried none — PocketBase's own
+	// validation errors do not, and neither does a proxy in front of it — so a
+	// caller branches on it only where it is present and falls back to the
+	// status. A code is a fact a program can act on; a sentence is for a person.
+	Reason string
 }
 
 func (e *APIError) Error() string {
@@ -191,9 +198,15 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 func newAPIError(path string, response *http.Response) error {
 	raw, _ := io.ReadAll(io.LimitReader(response.Body, maxErrorBody))
 
-	// PocketBase's error envelope: {"code":400,"message":"...","data":{...}}.
+	// PocketBase's error envelope: {"code":400,"message":"...","data":{...}},
+	// with this service's own reason code nested under `data.reason`.
 	var envelope struct {
 		Message string `json:"message"`
+		Data    struct {
+			Reason struct {
+				Code string `json:"code"`
+			} `json:"reason"`
+		} `json:"data"`
 	}
 	message := ""
 	if err := json.Unmarshal(raw, &envelope); err == nil && envelope.Message != "" {
@@ -204,7 +217,10 @@ func newAPIError(path string, response *http.Response) error {
 			message = message[:200] + "…"
 		}
 	}
-	return &APIError{StatusCode: response.StatusCode, Message: message, Path: path}
+	return &APIError{
+		StatusCode: response.StatusCode, Message: message, Path: path,
+		Reason: envelope.Data.Reason.Code,
+	}
 }
 
 // ListRecords fetches one page of a PocketBase collection into out, which must

@@ -2027,6 +2027,105 @@ and does not distribute. Describing a program is not distributing it.
 See [THIRD_PARTY_NOTICES.md][notices] for what is compiled in, what is run as a
 separate process, and what a release redistributes.
 
+### Publishing a profile, and taking somebody else's
+
+A profile is a document. Auto-Pigeon Backend is where one is **offered to other
+people**, **found**, and **fetched by digest**; this program is what decides what
+happens on your machine.
+
+#### The export gate: see it before it leaves
+
+```console
+$ companion profile preview ./my-toolchain.tool.json
+```
+
+The preview is the whole gate. It validates the document, canonicalizes it — one
+encoder, so a profile written any other way would be a profile whose digest
+depended on who wrote it out — digests it, and then lists **everything it would
+make public**: every free-text value, every URL and host, every environment
+variable name, and the permissions whoever installs it will be asked to allow.
+
+Nothing is sent. Publishing needs a separate, explicit act:
+
+```console
+$ companion profile publish ./my-toolchain.tool.json --visibility=public --confirm
+```
+
+**A document that names one machine cannot be previewed at all**, so it cannot be
+published: an absolute path, a home directory, a loopback or private address, a
+session token, a download credential or an authorization header is a refusal from
+the one function that produces the bytes to publish. That is what makes
+"publishing a local binding is impossible" a property of the code rather than a
+rule somebody has to remember. The backend applies the same rule independently,
+because nothing about an HTTP request establishes that its sender is this
+program; the two implementations are held to one corpus that both repositories
+carry byte-identically.
+
+**Publishing does not change any licence.** A profile is configuration for an
+independent program. `license_spdx` is *that program's* licence, and publishing,
+installing or running a profile changes nothing about it, does not relicense it,
+and grants nothing beyond what its own licence grants.
+
+#### Finding one
+
+```console
+$ companion profile catalog --kind=tool --game=quake1 --capability=compile.bsp
+$ companion profile published <listing-id>
+```
+
+**Compatibility is not endorsement.** A listing reports what its author declared
+about platforms, games and capabilities. It is not a recommendation, not a
+security review, and not a claim that any of it works.
+
+#### Installing one
+
+```console
+$ companion profile install <listing-id>@1.2.0
+```
+
+Five checks, in an order that matters, and **nothing is written until you say
+so**:
+
+1. the digest is recomputed here over the bytes that arrived, never taken from
+   the answer that carried them;
+2. those bytes are the document's **canonical** form — the check the backend
+   deliberately does not make, because RFC 8785 is this program's algorithm;
+3. the document is valid, through the same decoder a pasted file goes through;
+4. what changed since whatever is already installed, normalized, and whether it
+   asks for **more** than what is installed was granted;
+5. what it asks this machine for, in the same words a permission review uses.
+
+Add `--approve` to write the document and record the grant. Without it nothing is
+written at all — not even the document — because a document on disk is one the
+local catalog lists, and listing something nobody agreed to is how a review
+becomes a formality.
+
+**A profile installed from a catalog is `community`, always.** The backend has a
+trust state of its own — `community`, `verified`, `builtin` — awarded by that
+deployment's operator, and it is shown to you because it is real information. It
+never becomes this machine's trust state. `builtin` here means *compiled into this
+build of the Companion*, and it is the one state that runs without a grant;
+`verified` here means *a catalogue signature this build checked*. Neither happened.
+So the badge travels as information, and the authorization stays a grant you made
+against one exact digest.
+
+A **withdrawn** version is still installable — reproducing a build that used one
+is a legitimate reason to want it — and never silently: the reason its publisher
+gave, and any replacement they named, are printed before you approve.
+
+#### Withdrawing one, and reporting one
+
+```console
+$ companion profile yank <listing-id> 1.2.0 --reason="It passes -noskip, which corrupts water brushes." \
+    --superseded-by=1.2.1
+$ companion profile report <listing-id> --category=licence --detail="The source offer is a dead link."
+```
+
+A withdrawal keeps the version readable, with its reason, so anybody already
+using it is told rather than finding it gone. A reason is required. A report
+writes a row the deployment's operator reads and changes nothing about the
+listing.
+
 ## Acquiring tools
 
 A profile says *how* a tool can be obtained — from `PATH`, from a folder you
