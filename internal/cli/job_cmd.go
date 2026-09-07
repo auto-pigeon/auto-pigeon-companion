@@ -224,6 +224,23 @@ func statePaths(env *Env, settings config.Config) (jobsDir, profilesDir, binding
 	return jobsDir, profilesDir, bindingsPath, nil
 }
 
+// warnNotWaiting says what `--wait=false` actually does today.
+//
+// The executor is in this process. A command that submits a job and returns
+// runs its own deferred shutdown, which cancels the job it just queued, and the
+// job is recorded `interrupted` without a process ever having started. That is
+// a defect, not a design — but the flag has shipped, so it is not removed from
+// under a script here; it is made to tell the truth, so nobody reads "queued"
+// and believes something is running.
+//
+// `companion engine run` has no such flag for the same reason.
+func warnNotWaiting(env *Env, id string) {
+	fmt.Fprintf(env.Stderr,
+		"warning: --wait=false returns now, and the executor lives in this process, so job %s will be\n"+
+			"         recorded as interrupted rather than run. Use `companion serve` and the local API to\n"+
+			"         start something that outlives one command.\n", id)
+}
+
 func jobRun(env *Env, args []string, previewOnly bool) int {
 	name := "job run"
 	if previewOnly {
@@ -278,6 +295,7 @@ func jobRun(env *Env, args []string, previewOnly bool) int {
 	}
 	fmt.Fprintf(env.Stderr, "job %s queued\n", submitted.ID)
 	if !*wait {
+		warnNotWaiting(env, submitted.ID)
 		if *asJSON {
 			return printJSON(env, submitted)
 		}
@@ -470,6 +488,7 @@ func jobRetry(env *Env, args []string) int {
 	}
 	fmt.Fprintf(env.Stderr, "job %s queued, repeating %s\n", retried.ID, id)
 	if !*wait {
+		warnNotWaiting(env, retried.ID)
 		return 0
 	}
 	finished, err := service.Wait(ctx, retried.ID)

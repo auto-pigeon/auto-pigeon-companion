@@ -348,6 +348,13 @@ $ companion job artifacts 20260906T235206Z-6d2022e01cd7
 no artifacts
 ```
 
+`--wait=false` on `job run` and `job retry` does not do what it looks like it
+does, and now says so. The executor is in the command's own process, so a
+command that submits a job and returns runs its own shutdown, and the job is
+recorded `interrupted` without a process ever having started. The flag has
+shipped, so it is not removed from under a script here — it warns. `companion
+engine run` has no such flag for the same reason.
+
 `job cancel <id>` stops a job — including one the GUI started, because a stop is
 a marker in the job's own directory and whichever process owns the job notices
 it within a second. `job retry <id>` runs a finished job's request again as a

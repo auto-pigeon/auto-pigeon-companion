@@ -432,6 +432,7 @@ func runLaunch(env *Env, args []string) int {
 	}
 	fmt.Fprintf(env.Stderr, "job %s: %s\n", submitted.ID, selected.Game)
 	if !*wait {
+		warnNotWaiting(env, submitted.ID)
 		return 0
 	}
 	finished, err := service.Wait(ctx, submitted.ID)
