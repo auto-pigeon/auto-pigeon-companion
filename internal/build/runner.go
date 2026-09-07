@@ -256,6 +256,16 @@ func (r *Runner) Preview(request Request) (*Manifest, error) {
 			manifest.Steps = append(manifest.Steps, step)
 			return manifest, nil
 		}
+		// Shown rather than withheld, for the reason [job.Service.Preview]
+		// shows a command a profile has not been granted: reading what a
+		// pipeline would run is what somebody does *before* installing the
+		// tool. The command is a shape, with `<tool-root>` where the
+		// installation would be, and the step says so.
+		if _, bound := r.binding(resolved.Profile.Meta.ID); !bound {
+			step.Error = fmt.Sprintf("%s is not installed on this machine, so the %q root is not configured: "+
+				"`companion acquire resolve --bind` a copy of it first",
+				resolved.Profile.Meta.ID, profile.RootToolInstall)
+		}
 		step.Command = &job.CommandPreview{
 			Executable: invocation.Command.Executable,
 			Args:       invocation.Command.Args,
