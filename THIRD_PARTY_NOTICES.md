@@ -16,7 +16,7 @@ kept apart here on purpose.
 | Go standard library | BSD-3-Clause | compiled in | yes, as part of the binary |
 | Go module dependencies | — | none exist | — |
 | auto-pigeon-extractor (AUE) | **AGPL-3.0** | separate process, **embedded in release builds** | **yes, in a release build** |
-| External map-building tools | GPL-2.0 | separate process, downloaded at runtime | no |
+| ericw-tools 0.18.1 (qbsp, vis, light, bspinfo, bsputil) | **GPL-3.0-or-later** as distributed (GPL-2.0-or-later source) | separate process, downloaded at runtime | no |
 | Games the user launches | the user's own | separate process, already installed | no |
 
 ## Go dependencies
@@ -83,11 +83,14 @@ are:
 
 This is flagged as a decision to make, not one made here.
 
-## External map-building tools (GPL-2.0)
+## External map-building tools (GPL)
 
 The external tools that build Quake maps are licensed under the **GNU General
-Public License, version 2**. They are **not part of this codebase**, and this
-repository's MIT licence does not apply to them.
+Public License**. They are **not part of this codebase**, and this repository's
+MIT licence does not apply to them.
+
+Which version of the GPL is a question with a measured answer rather than an
+assumed one, and the two halves differ — see the per-tool section below.
 
 ### How they are used
 
@@ -104,7 +107,7 @@ They are never:
 - embedded with `//go:embed`,
 - or reached through any in-process calling convention.
 
-No Go dependency may pull a GPL-2.0 tool's source or object code into this
+No Go dependency may pull a GPL tool's source or object code into this
 module. This is an architectural constraint, split across two packages that
 each restate it in their own documentation:
 [`internal/catalog`](internal/catalog/doc.go) says which bytes a tool is,
@@ -116,7 +119,7 @@ purpose: neither can grow into the other, and `internal/acquire` has no way to
 start a process.
 
 Each tool keeps its own copyright and its own licence. Downloading and running a
-GPL-2.0 program from an MIT-licensed program is ordinary use of that program; it
+GPL program from an MIT-licensed program is ordinary use of that program; it
 does not create a combined work, and it places no GPL obligations on this
 repository's code.
 
@@ -149,41 +152,106 @@ Consequently:
   question in one place rather than scattered across every document that points
   at a build.
 
-### Per-tool notices — not yet written
+### ericw-tools 0.18.1
 
-**TODO(andrea): which GPL-2.0 tool(s), and which versions, is not decided.**
+The one tool this project publishes a catalogue entry for.
 
-Once the tools are chosen, each one gets a section here containing:
+| | |
+| --- | --- |
+| Program | **ericw-tools** — `qbsp`, `vis`, `light`, `bspinfo`, `bsputil` |
+| Version | **v0.18.1**, released 2018-04-06 |
+| Author | Eric Wasylishen, continuing Kevin Shanahan's *tyrutils* |
+| Project | <https://ericwa.github.io/ericw-tools/> |
+| Source | <https://github.com/ericwa/ericw-tools> |
+| Corresponding source for this build | <https://github.com/ericwa/ericw-tools/tree/v0.18.1> |
+| Licence of the project's source | **GPL-2.0-or-later** |
+| Licence of the distributed binaries | **GPL-3.0-or-later** — see below |
+| Also inside the archive | Embree and Intel TBB, **Apache-2.0** |
 
-- the tool's name, version, and upstream project URL,
-- its copyright notice, verbatim,
-- its full licence text, or a file in this repository containing it,
-- the URL the binary is downloaded from and its SHA-256 checksum,
-- a pointer to the corresponding source, since GPL-2.0 section 3 requires that
-  anyone redistributing a binary offer the source that produced it.
+#### Why the binary's licence is not the source's
 
-Until then no real tool is published in any catalogue this project signs, and
-no catalogue signing key exists. The acquisition path is exercised end to end
-against an in-process HTTPS fixture serving archives the tests build
-themselves — this repository's own bytes, under its own licence, not a
-third-party program. The test signing keys under
+The `README.md` shipped inside every v0.18.1 archive states the program's terms
+as "either version 2 of the License, or (at your option) any later version", and
+then, four lines further down:
+
+> Builds using Embree are licensed under GPLv3+ for compatibility with the
+> Apache license.
+
+Every official v0.18.1 binary links Embree — `libembree.so.2` on Linux,
+`embree.dll` on Windows, `libembree.2.dylib` on macOS — and every archive ships
+`gpl_v3.txt` beside `LICENSE-embree.txt`. So the **project's source** is
+GPL-2.0-or-later and the **build this catalogue points at** is conveyed under
+GPL-3.0-or-later. `auto-pigeon-tools` recorded the same conclusion
+independently, from the files beside its own installation, as
+`GPL-3.0-or-later (conveyed with Apache-2.0 components)`.
+
+Both facts are carried in the documents rather than in prose here: the profile's
+and the catalogue entry's `license.spdx` is `GPL-3.0-or-later`, and their
+`license.notice` — which a user is shown, and must acknowledge, before anything
+is downloaded — names the GPL-2.0-or-later source terms, Embree, and the exact
+version tag the corresponding source is at.
+
+#### The published artifacts
+
+Four archives, pinned by exact size and SHA-256 in
+[`catalog/ericw-tools-q1.catalog.json`](catalog/ericw-tools-q1.catalog.json).
+Each digest was measured by downloading the archive from the URL beside it.
+
+| Platform | Archive | Size | SHA-256 |
+| --- | --- | --- | --- |
+| linux/amd64 | `ericw-tools-v0.18.1-Linux.zip` | 14594502 | `986531ff66d692fa732b7f75a6c871dcbd152b98721d1c2475b76d3367f040e2` |
+| windows/amd64 | `ericw-tools-v0.18.1-win64.zip` | 12780109 | `a0f39c6faeb29cd08b267880cdcebb310f9938fef4cbbff07d1f6843c36e9cd3` |
+| windows/386 | `ericw-tools-v0.18.1-win32.zip` | 6423741 | `562aae414b914ffa8d3a208ca74d16ac4ca2b61031773227c7d4bdc8384b13ef` |
+| darwin/amd64 | `ericw-tools-v0.18.1-Darwin.zip` | 9469803 | `efdba039d731702e0ca6ed65f3eec656daa67c0f9f41674e0e842804173d0771` |
+
+All four are at
+`https://github.com/ericwa/ericw-tools/releases/download/v0.18.1/`. There is no
+arm64 build on any operating system, because upstream published none.
+
+#### Why v0.18.1 and not 2.0
+
+At the time this entry was written, v0.18.1 was still the newest release
+upstream had **not** marked a pre-release: the whole 2.0 line, up to
+`2.0.0-alpha11` (2026-06-05), is published as `prerelease: true`. It is also the
+build `auto-pigeon-tools` pinned as its compiler oracle, so what the Companion
+downloads and what this workspace's acceptance gates are measured against are
+the same bytes — the Linux archive's digest above is the archive that
+installation was unpacked from. A profile for the 2.0 line is a separate
+document and a separate decision.
+
+#### Licence text is not copied here
+
+No GPL or Apache text is vendored into this repository. `gpl_v3.txt` and
+`LICENSE-embree.txt` ship inside every archive and land in the tool cache with
+the binaries; the catalogue links the canonical text and the corresponding
+source, and the notice a user acknowledges names both. Copying licence text in
+here would be a fourth copy that can go stale, and this repository's habit is to
+name where the authoritative one is.
+
+#### There is still no signing key
+
+The catalogue payload is in the repository; **no catalogue signing key exists
+and no signed catalogue is published**, so nothing downloads by default. The
+acquisition path is exercised end to end against an in-process HTTPS fixture
+serving archives the tests build themselves — this repository's own bytes, under
+its own licence — and, for the real chain, against a locally signed copy of the
+payload above. The test signing keys under
 [`internal/catalog/testdata`](internal/catalog/testdata) are generated fixtures
 and sign nothing outside the tests.
 
 ### Requirement to revisit: bundling versus downloading
 
 Today the design is **download on first run**: no tool binary is shipped in any
-release archive, installer, or package, so no GPL-2.0 material is redistributed
-by this project.
+release archive, installer, or package, so no GPL material is redistributed by
+this project.
 
 **If that decision changes** — if a tool's prebuilt binary is ever bundled
 directly inside a release archive, installer, `.deb`/`.rpm`, or `.app` bundle —
-then that release becomes a redistribution of GPL-2.0 software, and it must
-carry:
+then that release becomes a redistribution of GPL software, and it must carry:
 
 - the tool's full licence text and copyright notice, in the same archive,
-- a written offer of, or accompanying, corresponding source, per GPL-2.0
-  section 3.
+- a written offer of, or accompanying, corresponding source, per GPL-3.0
+  section 6 for the ericw-tools builds above.
 
 This affects [`internal/acquire`](internal/acquire/doc.go) and every packaging
 script under [`build/`](build/). **This is flagged as a decision to

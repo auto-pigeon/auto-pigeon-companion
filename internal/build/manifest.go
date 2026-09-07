@@ -178,7 +178,9 @@ type Manifest struct {
 	// decision rather than a cautious one. Of ericw-tools 0.18.1: `qbsp` and
 	// `vis` are byte-identical run to run, and `light` is not — three runs of
 	// one input at four threads produced three different lightmaps, and one
-	// thread produced the same one three times. The build's own logs are worse
+	// thread produced the same one three times. (`auto-pigeon-tools` measured
+	// the same thing independently on 20260901, for its own acceptance suite;
+	// this build system's digests and the raw tool's agree.) The logs are worse
 	// still: every one of them contains the job directory it ran in and how long
 	// it took. A key over the outputs would therefore say "not reproducible"
 	// about every build ever made, which is a true statement about `light`'s

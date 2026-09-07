@@ -192,6 +192,7 @@ commands:
   serve [--port <n>] [--open]                                                     run the local GUI server without opening a browser
   auth login [--email <address>] | status | logout                                authenticate against auto-pigeon-backend
   job run | preview | list | show | logs | cancel | retry | artifacts | profiles  run a profile action as a supervised job, and inspect what ran
+  build run | preview | list | show | pipelines                                   build a map through a pipeline: several supervised jobs, wired, with a manifest
   profile validate | show | canonicalize | digest | diff | list | schema          read, check and compare tool, engine and pipeline profiles
   acquire plan | install | accept | list | verify | use | gc | resolve            obtain a profile's programs from the signed catalogue, and manage the cache
   catalog keygen | sign | verify | show | status                                  sign, verify and inspect the acquisition catalogue and its keyring
@@ -246,9 +247,11 @@ generated from each of your launch configs:
 
 ```console
 $ companion job profiles
+auto-pigeon.ericw-tools.q1               tool    builtin   compile, vis, light, inspect, check
+auto-pigeon.q1.fast-preview              pipeline builtin
+auto-pigeon.q1.final                     pipeline builtin
+auto-pigeon.q1.normal                    pipeline builtin
 auto-pigeon.sample.q1-engine             engine  builtin   play_map, play_package, join_server, host_listen, host_dedicated
-auto-pigeon.sample.q1-normal             pipeline builtin
-auto-pigeon.sample.q1-toolchain          tool    builtin   compile, vis, light
 auto-pigeon.launch.quake                 engine  builtin   play_map
 auto-pigeon.launch.quake2                engine  builtin   play_map
 ```
@@ -261,30 +264,36 @@ whole point of not having a shell:
 
 ```console
 $ companion job preview \
-    --profile auto-pigeon.sample.q1-toolchain --action compile \
-    --executable qbsp=/usr/local/bin/qbsp \
-    --input source_map=./level.map --option basename=level
-profile:  auto-pigeon.sample.q1-toolchain 1.0.0 (builtin)
+    --profile auto-pigeon.ericw-tools.q1 --action compile \
+    --root project_root=~/maps/level \
+    --input source_map=~/maps/level/level.map --option basename=level
+profile:  auto-pigeon.ericw-tools.q1 1.0.0 (builtin)
 action:   compile
-digest:   sha256:7b2d92f7352a56090602c3ce41621198884c60e7a51adb7d14416e8cf37f3d27
-workdir:  ~/.cache/auto-pigeon-companion/jobs/20260906T235142Z-ab2db2e1f694/workspace
-command:  /usr/local/bin/qbsp -threads 4 …/workspace/input/source_map/level.map …/workspace/compile/level.bsp
+digest:   sha256:0a318124692ae01fb58f9ca132edc64e4a57315bb0b6d86c67b1a04ca82d4ef2
+workdir:  ~/.cache/auto-pigeon-companion/jobs/20260907T020606Z-4aea09437265/workspace
+command:  …/tools/entries/sha256-986531ff…/files/ericw-tools-v0.18.1-Linux/bin/qbsp -leaktest …/workspace/input/source_map/level.map …/workspace/level.bsp
 argv:
-  [0] /usr/local/bin/qbsp
-  [1] -threads
-  [2] 4
-  [3] …/jobs/20260906T235142Z-ab2db2e1f694/workspace/input/source_map/level.map
-  [4] …/jobs/20260906T235142Z-ab2db2e1f694/workspace/compile/level.bsp
+  [0] …/tools/entries/sha256-986531ff…/files/ericw-tools-v0.18.1-Linux/bin/qbsp
+  [1] -leaktest
+  [2] …/jobs/20260907T020606Z-4aea09437265/workspace/input/source_map/level.map
+  [3] …/jobs/20260907T020606Z-4aea09437265/workspace/level.bsp
 environment:
-  HOME=…/jobs/20260906T235142Z-ab2db2e1f694/home
+  HOME=…/jobs/20260907T020606Z-4aea09437265/home
   LANG=C
   LC_ALL=C
-  PWD=…/jobs/20260906T235142Z-ab2db2e1f694/workspace
-  TEMP=…/jobs/20260906T235142Z-ab2db2e1f694/tmp
-  TMP=…/jobs/20260906T235142Z-ab2db2e1f694/tmp
-  TMPDIR=…/jobs/20260906T235142Z-ab2db2e1f694/tmp
-  USERPROFILE=…/jobs/20260906T235142Z-ab2db2e1f694/home
+  PWD=…/jobs/20260907T020606Z-4aea09437265/workspace
+  TEMP=…/jobs/20260907T020606Z-4aea09437265/tmp
+  TMP=…/jobs/20260907T020606Z-4aea09437265/tmp
+  TMPDIR=…/jobs/20260907T020606Z-4aea09437265/tmp
+  USERPROFILE=…/jobs/20260907T020606Z-4aea09437265/home
 ```
+
+`--root project_root=…` is not optional once a tool profile is bound. Declared
+roots are what a job's inputs are allowed to come from, so a map source outside
+every one of them is refused rather than staged — and `qbsp` needs that
+directory anyway, because the WAD a map names in its worldspawn is found beside
+the `.map`. `companion build` supplies its own root and copies your files into
+it, which is why the section below needs no `--root`.
 
 **Then run it.** The program's output reaches your terminal as it is produced
 *and* goes into the job's bounded log; that is one execution with two readers,
@@ -363,6 +372,211 @@ roots, and the Companion reading or publishing anything outside them.
 Why there is exactly one executor, and why a crashed job is admitted rather than
 repaired, is [ADR-0003](docs/adr/0003-one-executor-and-the-record-is-what-says-a-job-ran.md).
 
+### Building a map
+
+`job run` runs one program. `build run` runs a **pipeline**: several programs in
+order, with the files wired between them and a record of what happened. Every
+process it starts is still a job — same queue, same supervision, same logs, and
+`companion job show` finds each one by the id the build printed. The build adds
+ordering, wiring and evidence, and nothing else.
+
+Three pipelines ship, and they are the same three stages with different options:
+
+```console
+$ companion build pipelines
+auto-pigeon.q1.fast-preview      1.0.0    builtin   compile -> vis -> light  ready
+auto-pigeon.q1.final             1.0.0    builtin   compile -> vis -> light  ready
+auto-pigeon.q1.normal            1.0.0    builtin   compile -> vis -> light  ready
+```
+
+`fast-preview` runs a rough visibility pass and unsupersampled lighting, for the
+loop where you are moving a wall and want to see it. `normal` is the full
+visibility pass with coloured lightmaps. `final` adds 4x supersampling,
+softening and a bounce, and is measured in hours on a real map rather than
+seconds. `ready` means every capability the pipeline needs is provided by
+something installed; anything else says what is missing.
+
+**Preview first.** Every stage is resolved, every option is checked against the
+tool's own declaration, and nothing runs:
+
+```console
+$ companion build preview --pipeline auto-pigeon.q1.normal \
+    --input source_map=~/maps/level/level.map --input wad=~/maps/level/level.wad
+pipeline  auto-pigeon.q1.normal 1.0.0 (builtin)
+          sha256:51b2672eb2746f1d77ccc490a3bcfac088f9d1941fd3c9b1e4157965f56c6151
+tool      auto-pigeon.ericw-tools.q1 1.0.0 — ericw-tools 0.18.1 (Quake 1) 0.18.1
+
+step compile — Compile the map
+  capability q1.bsp.compile -> auto-pigeon.ericw-tools.q1/compile
+  in <workspace>
+  …/ericw-tools-v0.18.1-Linux/bin/qbsp -leaktest <workspace>/input/source_map/level.map <workspace>/level.bsp
+  (predicted: resolved against where this build would stage each file, not against files that exist)
+
+step vis — Compute visibility
+  capability q1.bsp.vis -> auto-pigeon.ericw-tools.q1/vis
+  in <workspace>
+  …/ericw-tools-v0.18.1-Linux/bin/vis -threads 4 -level 4 <workspace>/input/bsp/level.bsp
+  (predicted: resolved against where this build would stage each file, not against files that exist)
+
+step light — Compute lighting
+  capability q1.bsp.light -> auto-pigeon.ericw-tools.q1/light
+  in <workspace>
+  …/ericw-tools-v0.18.1-Linux/bin/light -threads 4 -lit <workspace>/input/bsp/level.bsp
+  (predicted: resolved against where this build would stage each file, not against files that exist)
+```
+
+The placeholders are the honest part. Only the first stage's inputs exist yet,
+so the later ones are resolved against the paths this build *would* stage their
+inputs at. That claim is not left as a claim: a real build previews each step
+through the executor with the identical request immediately before submitting
+it, compares the two argvs after substituting the job directory a preview gets
+for the one the run gets, and **fails the build** if they differ. That is what
+`preview matched: true` below is.
+
+**Then build it.**
+
+```console
+$ companion build run --pipeline auto-pigeon.q1.normal \
+    --input source_map=~/maps/level/level.map --input wad=~/maps/level/level.wad
+
+build 20260907T020638Z-6a2b0ee8 — succeeded
+  pipeline  auto-pigeon.q1.normal 1.0.0 (builtin)
+  tool      ericw-tools 0.18.1 (Quake 1) 0.18.1 via managed_download
+            pinned ericw-tools.q1 0.18.1 sha256:986531ff66d692fa732b7f75a6c871dcbd152b98721d1c2475b76d3367f040e2
+            qbsp      sha256:8000b646b0af045974ca3997354227d215bd4ea384603d93545d72a34f15839b
+            vis       sha256:4aef44413b7c6fd63411d8b32e1d4ad6a10944194b972754f69e80cd901a64c3
+            light     sha256:bb150b6a105eff3adf843280676efb8b6341fc743dd8f2ca97656fb9064c3350
+            bspinfo   sha256:b368e9341548897ee30d2573c58cad7873fc3da977645707ef17488e4d85ad7f
+            bsputil   sha256:6a39c9cfeb1c44855d54f217f26c8148a5e834bcb43f923560354737ee7f6c38
+  input     source_map   sha256:fe172908e8ee6cdcdc9330b78de97e4111a5547f6e3a6681676be7a10c95ebe2
+  input     wad          sha256:2b08798bb8d3a19fbba26c2018b61ec527e95b571a921c56566982b5c696c29a
+
+  step compile  succeeded       4ms  job 20260907T020638Z-f6a19e0f9b03
+    …/bin/qbsp -leaktest …/workspace/input/source_map/level.map …/workspace/level.bsp
+    preview matched: true
+    info     A texture WAD was opened.
+    progress Writing the BSP.
+    bsp            2648  sha256:3093db35bc02717afc4ecf8f955f6558c681e7779dda47e99e63ea7245f0bf33
+    prt               9  sha256:b1ac538e53efc28ace2088324b1c0504d0f09b013d30b39ce231d76124bc6c22
+    log            3005  sha256:2964f58670edd05fbe78dab26651c35847ee8ae8621ead60c04195d1722a9283
+
+  step vis      succeeded      72ms  job 20260907T020638Z-5ec98736bb9d
+    …/bin/vis -threads 4 -level 4 …/workspace/input/bsp/level.bsp
+    preview matched: true
+    progress Visibility data written.
+    bsp            2652  sha256:e6a36f45abb1616ff81d891dc3f54cc49c9e141cf4ae5215d407c72c51e7b290
+    log             734  sha256:4bab59d5647b3a8075972455edfac70c7c5d69623403c1492c0c265fe6e52445
+
+  step light    succeeded      76ms  job 20260907T020638Z-200477296d45
+    …/bin/light -threads 4 -lit …/workspace/input/bsp/level.bsp
+    preview matched: true
+    progress light is writing a file.
+    progress light is writing a file.
+    info     light reported how many faces received no light.
+    bsp            3980  sha256:5ed01da38b3fd3dd802d519934495aba1f54d45ce69c7e452ce7af1d988fe49e
+    lit            3983  sha256:d2db934fda5b46dfce1d214de918bc02d25d1fce89cae2be667d5a197cafd7d7
+    log            1530  sha256:ba7dffbb58224a0de8f495ac6ee3e003ceeec43eb244c27f69a2c991ed0ef5b9
+
+  published
+    bsp          ~/.cache/auto-pigeon-companion/builds/20260907T020638Z-6a2b0ee8/output/bsp/level.bsp
+    lit          ~/.cache/auto-pigeon-companion/builds/20260907T020638Z-6a2b0ee8/output/lit/level.lit
+    pts          not produced (optional)
+    compile_log  ~/.cache/auto-pigeon-companion/builds/20260907T020638Z-6a2b0ee8/output/compile_log/level.log
+    vis_log      ~/.cache/auto-pigeon-companion/builds/20260907T020638Z-6a2b0ee8/output/vis_log/vis.log
+    light_log    ~/.cache/auto-pigeon-companion/builds/20260907T020638Z-6a2b0ee8/output/light_log/light.log
+
+  recipe key       sha256:63b44509b884b5319b9ddde2c4f2ee765d97641a105a9f4388f6837e0cac7eee
+  manifest         ~/.cache/auto-pigeon-companion/builds/20260907T020638Z-6a2b0ee8/manifest.json
+```
+
+Options are overridden per stage, because a pipeline has several and an
+unqualified name would be the command guessing which one you meant:
+`--option light.sampling=extra4 --option vis.threads=1`. Every one of them is a
+knob the tool's author declared, with a type and a range; there is no free-text
+argument box, which is why the command you approved above is the command that
+ran.
+
+`companion build list` and `companion build show <id>` read a build afterwards;
+`--json` prints the manifest for a script.
+
+#### When it goes wrong
+
+A build that fails says which stage, keeps everything that stage wrote, and does
+not publish a BSP that nobody should ship. A map with a hole in it:
+
+```console
+$ companion build run --pipeline auto-pigeon.q1.normal --input source_map=~/maps/level/leak.map
+build 20260907T020653Z-7b3f4a6f — failed
+  error     the compile step: job: qbsp exited with status 1
+
+  step compile  failed          2ms  job 20260907T020653Z-da3febcf4d2d
+    preview matched: true
+    error: job: qbsp exited with status 1
+    error    The map leaks: there is a gap between the inside and the void.
+             Load the .pts point file this build published in your editor and follow it to the hole.
+    info     A point file was written; it is the `pts` artifact of this build.
+    error    qbsp stopped rather than write a BSP for a map that leaks.
+             Turn the leak test off if you want the BSP anyway; it will have no visibility data.
+    bsp        not produced
+    pts            8284  sha256:3ada70a7adf202dd460e797fdacc37d6b5021d13c9261c584026b43143f05435
+
+  step vis      skipped         0ms
+  step light    skipped         0ms
+
+  published
+    bsp          not produced
+    pts          ~/.cache/auto-pigeon-companion/builds/20260907T020653Z-7b3f4a6f/output/pts/level.pts
+    compile_log  ~/.cache/auto-pigeon-companion/builds/20260907T020653Z-7b3f4a6f/output/compile_log/level.log
+```
+
+The point file is published *because* the build failed: it is the one artifact
+that says where the hole is. The stages that never ran say so rather than being
+absent from the record. `job logs <id>` on any stage's job id gives the
+compiler's own words, whole and unfiltered — the diagnostics above classify, and
+never suppress.
+
+`--strict` is the other half. `qbsp` builds a BSP for a map whose textures it
+could not find, and says so twice; by its own verdict that is a success, and by
+anybody else's it is a broken map. The default respects the tool's verdict and
+records the finding; `--strict` turns any error-severity diagnostic into a failed
+build, naming the stage and the rule, which is what a gate wants:
+
+```console
+$ companion build run --strict --pipeline auto-pigeon.q1.normal --input source_map=~/maps/level/level.map
+build 20260907T014243Z-82395e03 — failed
+  error     --strict: the compile step reported no_wad: The map names no WAD the compiler could open, so every face is untextured.
+```
+
+#### What a manifest is for, and what "reproducible" means here
+
+`manifest.json` answers *what produced this BSP* without needing the machine
+that produced it: the pipeline document's digest, each stage's exact argv, the
+SHA-256 of every executable that ran, of every input and of every output, and
+every diagnostic the tools emitted. The **recipe key** is a digest over the
+subset of that which determines the result — the documents, the tools, the
+inputs, the options and the argv shape — with the paths, times and job ids that
+differ between two runs of one build deliberately left out. Two builds with the
+same key asked the same tools to do the same thing to the same bytes.
+
+It does not cover the outputs, and that is measured rather than cautious. Of
+ericw-tools 0.18.1 on this workspace's pinned build: `qbsp` and `vis` are
+byte-identical run to run, and **`light` is not, above one thread** — three runs
+of one map at `-threads 4` produced three different lightmaps, and `-threads 1`
+produced the same one three times. (`auto-pigeon-tools` measured the same thing
+independently on `20260901`, for its own acceptance suite.) A key that included
+the outputs would report every ordinary build as irreproducible, which is a true
+statement about a thread pool and a useless one about the build. So:
+`--option light.threads=1` is what a bit-reproducible build costs, and the
+digest of every output is recorded beside it either way.
+
+An offline rebuild needs nothing but the cache: the tools were verified when they
+were installed, the install record says by whom, and `AUCOM_OFFLINE=1` changes
+what is *available*, not what is checked. See [Offline](#offline).
+
+Why a pipeline is several jobs rather than one job with several processes, and
+what that costs, is
+[ADR-0005](docs/adr/0005-a-pipeline-is-several-jobs-and-a-manifest-is-what-says-so.md).
+
 ### Launch
 
 ```console
@@ -422,18 +636,31 @@ shortcut that a user-authored one cannot, because there is no shortcut.
 
 ```console
 $ companion profile list
+tool     auto-pigeon.ericw-tools.q1         1.0.0    builtin
+         The qbsp, vis and light map compilers for Quake 1, plus bspinfo and bsputil.
+pipeline auto-pigeon.q1.fast-preview        1.0.0    builtin
+         The quickest build that is still a playable map: rough visibility, no supersampling.
+pipeline auto-pigeon.q1.final               1.0.0    builtin
+         Full visibility and 4x supersampled, softened, bounced lighting. Slow on purpose.
+pipeline auto-pigeon.q1.normal              1.0.0    builtin
+         Compile, full visibility, ordinary lighting with a .lit file. The everyday build.
 engine   auto-pigeon.sample.q1-engine       1.0.0    builtin
          A worked example of the engine profile format, covering all five session actions.
-pipeline auto-pigeon.sample.q1-normal       1.0.0    builtin
-         Compile, compute visibility, compute lighting — the ordinary Quake 1 build.
-tool     auto-pigeon.sample.q1-toolchain    1.0.0    builtin
-         A worked example of the tool profile format: a three-stage Quake 1 map compile.
 ```
 
-Those three are **samples**. They are complete, valid and exercised by the
-tests, and they are not a qualified toolchain: the real EricW profiles and the
-curated engine profiles arrive with the tasks that qualify them against upstream
-releases.
+The four Q1 documents are **qualified**: the version is the one this workspace's
+compiler oracle pinned and measured, the download archives are pinned by digest
+in the catalogue, and what each program does was established by running it. The
+engine document still says `sample.` in its id, because no engine build has been
+qualified against an upstream release yet — presenting an unqualified document
+as a curated one is exactly the kind of plausible wrong answer this repository
+is careful about.
+
+There was a `sample.q1-toolchain` here, and writing the real one retired it
+rather than joining it. Two built-in tool profiles both providing
+`q1.bsp.compile` would make "which compiler built this" depend on iteration
+order; and the sample described a compiler nobody had run, passing `-threads` to
+a `qbsp` that has no such flag and `-fast` to a `light` that has no such flag.
 
 ### A profile is data, not a program
 
@@ -725,6 +952,13 @@ from a package, a version and a platform to an immutable URL, an exact size, a
 SHA-256 digest, a signer, the upstream project, the licence and the
 corresponding-source offer.
 
+The catalogue this project publishes is in [`catalog/`](catalog/), and today it
+carries one package: `ericw-tools.q1` 0.18.1, for linux/amd64, windows/amd64,
+windows/386 and darwin/amd64. There is no arm64 entry on any operating system,
+because upstream published no arm64 build — the profile offers `user_path` there
+instead, which is the honest answer. Inventing a URL for a download nobody
+published would be worse than saying so.
+
 ### The four routes
 
 | Mode | What it trusts | What is checked |
@@ -996,10 +1230,22 @@ overwrite an existing key file: replacing a signing key is never what anybody
 meant.
 
 **Writing the documents.** `keyring.json` names the catalogue keys; `catalog.json`
-names the packages. Put the anchor's public entry in an `anchors.json`, the
-catalogue key's in the keyring, and each artifact's `signer` to the key id that
-will sign the catalogue — an entry attributed to a key that did not sign the
-document it is in is refused.
+names the packages. Put the anchor's public entry in an `anchors.json` and the
+catalogue key's in the keyring.
+
+Each artifact's `signer` names the key id that vouches for it, and an entry
+attributed to a key that did not sign the document it is in is refused. An
+artifact that leaves `signer` out means *whoever signs this*: a key id is
+derived from the key, so a catalogue kept in a repository cannot know one, and
+`catalog sign` fills it in with the signing key. With more than one `--key` it
+refuses instead, because "several keys signed this, and one of them vouches for
+this entry" is a question the publisher has to answer.
+
+This repository's own catalogue lives in [`catalog/`](catalog/) —
+`ericw-tools-q1.catalog.json` pins the four archives upstream published for
+ericw-tools v0.18.1, each size and digest measured by downloading the archive
+from the URL beside it. It is the payload a person reviews in a pull request;
+the signed document is what `catalog sign` makes of it.
 
 **Signing.**
 
@@ -1178,8 +1424,10 @@ $ AUCOM_AUE_BINARY=../auto-pigeon-extractor/bin/auto-pigeon-extractor \
 
 MIT — see [LICENSE](LICENSE). That covers **this repository's own code only**.
 
-AUE is AGPL-3.0 and the external map-building tools are GPL-2.0; both are
-separate programs, and neither is relicensed by anything here.
+AUE is AGPL-3.0 and the external map-building tools are GPL — ericw-tools
+0.18.1 is GPL-2.0-or-later at the source and GPL-3.0-or-later as the official
+binaries are distributed, because they link Embree. All of them are separate
+programs, and none is relicensed by anything here.
 [THIRD_PARTY_NOTICES.md][notices] sets out what is compiled in, what is run as
 a separate process, and what a release redistributes — including the open
 decision about embedding AUE.
