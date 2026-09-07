@@ -300,3 +300,86 @@ func TestInspectGuessesTheFormatFromTheName(t *testing.T) {
 		t.Fatalf("error is %v", err)
 	}
 }
+
+// A hard link is not a kind of file, it is a second name for one, and Lstat
+// cannot tell you that a destination has another name. So a replacing
+// extraction that opened the destination with O_TRUNC would write the archive's
+// bytes into whatever else that name points at.
+//
+// The replacing path therefore writes a temporary file and renames it, which
+// replaces the directory entry and cannot write through anything.
+func TestReplacingAnExtractedFileDoesNotWriteThroughAHardLink(t *testing.T) {
+	target := mustTarget(t, "quake3-pk3")
+	dir := t.TempDir()
+	archive, _ := writeArchive(t, dir, "content"+target.Extension(), []Member{
+		memberOf("sound/x.wav", "archive bytes"),
+	}, target)
+
+	dest := filepath.Join(t.TempDir(), "out")
+	// Somebody's file, and a second name for it inside the extraction target.
+	secret := filepath.Join(t.TempDir(), "id_rsa")
+	if err := os.WriteFile(secret, []byte("PRIVATE KEY"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dest, "sound"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	planted := filepath.Join(dest, "sound", "x.wav")
+	if err := os.Link(secret, planted); err != nil {
+		t.Skipf("this filesystem does not do hard links: %v", err)
+	}
+
+	if _, err := Extract(archive, target.Format, ExtractOptions{Dest: dest, Replace: true}); err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+	if body, err := os.ReadFile(secret); err != nil || string(body) != "PRIVATE KEY" {
+		t.Errorf("the linked file was written through: %q, %v", body, err)
+	}
+	if body, err := os.ReadFile(planted); err != nil || string(body) != "archive bytes" {
+		t.Errorf("the extracted member is %q, %v", body, err)
+	}
+}
+
+// The replacing path renames into place, so an extraction that fails partway
+// leaves the file that was there rather than half of the new one.
+func TestAFailedReplacementLeavesTheOriginalFileIntact(t *testing.T) {
+	target := mustTarget(t, "quake3-pk3")
+	dir := t.TempDir()
+	archive, _ := writeArchive(t, dir, "content"+target.Extension(), []Member{
+		memberOf("a.txt", "new a"),
+		memberOf("b.txt", strings.Repeat("b", 4096)),
+	}, target)
+
+	dest := filepath.Join(t.TempDir(), "out")
+	if err := os.MkdirAll(dest, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"a.txt", "b.txt"} {
+		if err := os.WriteFile(filepath.Join(dest, name), []byte("original "+name), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A budget that runs out partway through the second member.
+	_, err := Extract(archive, target.Format, ExtractOptions{
+		Dest: dest, Replace: true, Budget: Budget{MaxTotalSize: 100, MaxEntries: 10, MaxEntrySize: 100},
+	})
+	if err == nil {
+		t.Fatal("an extraction past its budget was not refused")
+	}
+	body, readErr := os.ReadFile(filepath.Join(dest, "b.txt"))
+	if readErr != nil {
+		t.Fatalf("the original file is gone: %v", readErr)
+	}
+	if string(body) != "original b.txt" {
+		t.Errorf("the original file was replaced by a failed extraction: %q", body)
+	}
+	entries, err := os.ReadDir(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), ".extracting-") {
+			t.Errorf("a staging file was left behind: %s", entry.Name())
+		}
+	}
+}

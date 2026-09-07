@@ -220,31 +220,77 @@ func writeMember(root, destination string, entry Entry, source io.Reader, remain
 				ErrUnsafePath, destination, entry.Path)
 		}
 	}
-	flags := os.O_CREATE | os.O_EXCL | os.O_WRONLY
-	if replace {
-		flags = os.O_CREATE | os.O_TRUNC | os.O_WRONLY
-	}
 	// 0o644, not 0o600 and not the archive's idea: PAK carries no mode at all,
 	// and a PK3's is the packer's umask, which is not information about the
 	// file. Nothing extracted from a game archive is executable.
-	file, err := os.OpenFile(destination, flags, 0o644)
-	if err != nil {
-		if errors.Is(err, os.ErrExist) {
-			return 0, "", fmt.Errorf("%w: %s appeared while this archive was being extracted", ErrWouldOverwrite, destination)
+	//
+	// The two paths differ in more than a flag.
+	//
+	// A first write is O_EXCL: no implicit overwrite ever, and O_EXCL refuses
+	// an existing symlink on its own.
+	//
+	// A REPLACING write goes through a temporary file and a rename, and never
+	// opens the destination at all. O_TRUNC would follow a HARD link — Lstat
+	// cannot see one, because a hard link is not a kind of file, it is a second
+	// name for the same one — so a member called `sound/x.wav` extracted over a
+	// name somebody had already linked to their SSH key would write through to
+	// the key. A rename replaces the directory entry instead, which is the one
+	// operation that cannot write through anything, and it makes the replacing
+	// path atomic as a side effect: an interrupted extraction leaves the old
+	// file, never half of the new one.
+	var file *os.File
+	staged := ""
+	if replace {
+		var err error
+		file, err = os.CreateTemp(parent, ".extracting-*")
+		if err != nil {
+			return 0, "", fmt.Errorf("pack: creating a temporary file in %s: %w", parent, err)
 		}
-		return 0, "", fmt.Errorf("pack: creating %s: %w", destination, err)
+		staged = file.Name()
+		defer os.Remove(staged) // No-op once the rename below has succeeded.
+		if err := file.Chmod(0o644); err != nil {
+			file.Close()
+			return 0, "", fmt.Errorf("pack: securing %s: %w", staged, err)
+		}
+	} else {
+		opened, err := os.OpenFile(destination, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+		if err != nil {
+			if errors.Is(err, os.ErrExist) {
+				return 0, "", fmt.Errorf("%w: %s appeared while this archive was being extracted", ErrWouldOverwrite, destination)
+			}
+			return 0, "", fmt.Errorf("pack: creating %s: %w", destination, err)
+		}
+		file = opened
 	}
+
+	written, digest, err := writeExtracted(file, source, entry)
+	if err != nil {
+		if staged == "" {
+			os.Remove(destination)
+		}
+		return 0, "", err
+	}
+	if staged != "" {
+		if err := os.Rename(staged, destination); err != nil {
+			return 0, "", fmt.Errorf("pack: replacing %s: %w", destination, err)
+		}
+	}
+	return written, digest, nil
+}
+
+// writeExtracted writes one member's bytes, closes the file, and reports the
+// digest. It removes nothing: the caller knows whether the thing it opened is
+// the destination or a staging file, and only the caller can clean up safely.
+func writeExtracted(file *os.File, source io.Reader, entry Entry) (int64, string, error) {
 	hash := sha256.New()
 	written, copyErr := io.Copy(io.MultiWriter(file, hash), io.LimitReader(source, entry.Size+1))
 	if closeErr := file.Close(); copyErr == nil {
 		copyErr = closeErr
 	}
 	if copyErr != nil {
-		os.Remove(destination)
-		return 0, "", fmt.Errorf("pack: writing %s: %w", destination, copyErr)
+		return 0, "", fmt.Errorf("pack: writing %s: %w", file.Name(), copyErr)
 	}
 	if written != entry.Size {
-		os.Remove(destination)
 		return 0, "", fmt.Errorf("%w: %q declares %d bytes and produced %d",
 			ErrMalformed, entry.Path, entry.Size, written)
 	}
