@@ -344,7 +344,10 @@ func jobList(env *Env, args []string) int {
 		fmt.Fprintf(env.Stdout, "%s  %-11s  %-9s  %s %s%s\n",
 			candidate.ID, candidate.State, candidate.Duration().Round(time.Millisecond),
 			candidate.ProfileID, candidate.ActionID, sessionSuffix(candidate))
-		if candidate.Hosting() && candidate.State.Active() {
+		// Running, not merely active: a queued dedicated server is not
+		// accepting anything yet, and this line's only job is to answer "is
+		// my machine reachable right now".
+		if candidate.Hosting() && candidate.State == job.Running {
 			hosting++
 		}
 	}

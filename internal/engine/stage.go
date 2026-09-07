@@ -73,6 +73,19 @@ type Stamp struct {
 	StagedAt  time.Time `json:"staged_at"`
 }
 
+// StageResult is what one staging pass did.
+//
+// Overwrote is the part worth returning rather than swallowing: those are files
+// that had been edited since they were staged, and re-staging has just replaced
+// them with the build output. [Unstage] preserves such a file; staging over it
+// is the user's own instruction, but it is not something to do silently.
+type StageResult struct {
+	Stamp *Stamp
+	// Overwrote lists the staged files that had changed since the last pass and
+	// have now been replaced, relative and POSIX-spelled.
+	Overwrote []string
+}
+
 // Staging is one request to put content into a game directory.
 type Staging struct {
 	// GameRoot is the directory that contains the base game.
@@ -155,7 +168,7 @@ func (s Staging) Plan() ([]string, error) {
 // old one behind for the engine to load instead. An existing directory the
 // Companion did not stage is refused; there is no flag to force it, because the
 // value of the rule is that it has no exception.
-func (s Staging) Stage() (*Stamp, error) {
+func (s Staging) Stage() (*StageResult, error) {
 	if err := CheckModName(s.ModName); err != nil {
 		return nil, err
 	}
@@ -172,6 +185,7 @@ func (s Staging) Stage() (*Stamp, error) {
 
 	target := s.Dir()
 	created := false
+	var edited []string
 	switch info, err := os.Lstat(target); {
 	case errors.Is(err, fs.ErrNotExist):
 		if err := os.MkdirAll(target, 0o755); err != nil {
@@ -189,7 +203,7 @@ func (s Staging) Stage() (*Stamp, error) {
 		if err != nil {
 			return nil, fmt.Errorf("engine: %s exists. Nothing there says the Companion staged it, and it will not write into a directory whose contents are somebody else's: %w", target, ErrOccupied)
 		}
-		if _, err := removeStamped(target, previous); err != nil {
+		if edited, err = removeStamped(target, previous); err != nil {
 			return nil, err
 		}
 		created = previous.CreatedDir
@@ -206,6 +220,21 @@ func (s Staging) Stage() (*Stamp, error) {
 		ProfileID:     s.ProfileID,
 		StagedAt:      s.now(),
 	}
+	// A copy that fails partway would otherwise leave a directory with files in
+	// it and no record — which the *next* Stage would refuse with "nothing
+	// there says the Companion staged it", a sentence that would not be true.
+	// So a failure undoes what this pass wrote and leaves the filesystem as it
+	// found it.
+	rollback := func(cause error) (*StageResult, error) {
+		if _, err := removeStamped(target, stamp); err != nil {
+			return nil, fmt.Errorf("%w (and cleaning up after it failed too: %v)", cause, err)
+		}
+		if created {
+			_ = os.Remove(target)
+		}
+		return nil, cause
+	}
+
 	madeDirs := map[string]bool{}
 	for _, entry := range entries {
 		destination := filepath.Join(target, filepath.FromSlash(entry.rel))
@@ -216,22 +245,44 @@ func (s Staging) Stage() (*Stamp, error) {
 				}
 				madeDirs[dir] = true
 				if err := os.MkdirAll(filepath.Join(target, filepath.FromSlash(dir)), 0o755); err != nil {
-					return nil, fmt.Errorf("engine: creating %s: %w", dir, err)
+					stamp.Dirs = append(stamp.Dirs, dir)
+					return rollback(fmt.Errorf("engine: creating %s: %w", dir, err))
 				}
 				stamp.Dirs = append(stamp.Dirs, dir)
 			}
 		}
 		digest, size, err := copyFile(entry.path, destination)
 		if err != nil {
-			return nil, err
+			return rollback(err)
 		}
 		stamp.Files = append(stamp.Files, StagedFile{Path: entry.rel, Size: size, SHA256: digest})
 	}
 	sort.Strings(stamp.Dirs)
 	if err := writeStamp(target, stamp); err != nil {
-		return nil, err
+		return rollback(err)
 	}
-	return stamp, nil
+	return &StageResult{Stamp: stamp, Overwrote: overwritten(edited, entries)}, nil
+}
+
+// overwritten narrows the files [removeStamped] preserved to the ones this pass
+// has just replaced. A file the user edited and that the source no longer
+// contains is still sitting there untouched, and reporting it as overwritten
+// would be the wrong half of the truth.
+func overwritten(edited []string, entries []sourceEntry) []string {
+	if len(edited) == 0 {
+		return nil
+	}
+	staged := make(map[string]bool, len(entries))
+	for _, entry := range entries {
+		staged[entry.rel] = true
+	}
+	var out []string
+	for _, name := range edited {
+		if staged[name] {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 // Unstage removes exactly what staging put in a game directory.

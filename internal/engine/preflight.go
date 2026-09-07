@@ -275,7 +275,7 @@ func (c Checker) rootProblems(document profile.Profile, action profile.Action, l
 			problems = append(problems, Problem{
 				Fault:   FaultUnboundRoot,
 				Summary: fmt.Sprintf("%q needs the %s, and nothing on this machine says where that is.", action.Title, phrase(ref.Role)),
-				Fix:     "Set it: `companion engine bind " + document.Metadata().ID + " --" + flagFor(ref.Role) + " <path>`.",
+				Fix:     "Set it: `companion engine bind " + document.Metadata().ID + " " + flagFor(ref.Role) + "`.",
 			})
 			continue
 		}
@@ -306,9 +306,14 @@ func (c Checker) gameDataProblems(document profile.Profile, root string) Problem
 	if !ok {
 		return nil
 	}
+	// Deduplicated: a profile normally declares the same base directory twice —
+	// once for loose files and once for the PAK in it — and "there is no id1 or
+	// id1 directory" is not a sentence anybody should be shown.
 	var wanted []string
+	seen := map[string]bool{}
 	for _, layout := range engine.ContentLayouts {
-		if layout.Root == profile.RootGame && layout.Path != "" {
+		if layout.Root == profile.RootGame && layout.Path != "" && !seen[layout.Path] {
+			seen[layout.Path] = true
 			wanted = append(wanted, layout.Path)
 		}
 	}
@@ -389,17 +394,21 @@ func phrase(role string) string {
 	return role
 }
 
-// flagFor is the `companion engine bind` flag that sets a root.
+// flagFor is how `companion engine bind` is told where a root is.
+//
+// The two roles an engine normally needs have a flag of their own; everything
+// else goes through the general `--root role=path`, which exists so that a
+// user-authored profile declaring a root this build's flags do not name is
+// still bindable. A Fix line naming a flag that does not exist would be worse
+// than no Fix line.
 func flagFor(role string) string {
 	switch role {
 	case profile.RootGame:
-		return "game-root"
+		return "--game-root <path>"
 	case profile.RootContent:
-		return "content-root"
-	case profile.RootProject:
-		return "project-root"
+		return "--content-root <path>"
 	}
-	return "root " + role + "="
+	return "--root " + role + "=<path>"
 }
 
 func short(digest string) string {

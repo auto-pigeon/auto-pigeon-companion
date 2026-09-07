@@ -184,3 +184,46 @@ func TestACommunityProfileWithNoGrantIsRefusedBeforeAnythingStarts(t *testing.T)
 		t.Fatalf("an approved community profile is still refused: %v", problems)
 	}
 }
+
+// Every shipped profile declares the base directory twice — once for loose
+// files and once for the PAK in it — and the message a user with a mis-set
+// game root sees must not read "there is no id1 or id1 directory".
+func TestTheMissingGameDataMessageDoesNotRepeatTheDirectory(t *testing.T) {
+	for _, id := range builtin.Q1Engines {
+		document, digest := builtinEngine(t, id)
+		local, game, _ := workingBinding(t, document, digest)
+		if err := os.RemoveAll(filepath.Join(game, "id1")); err != nil {
+			t.Fatal(err)
+		}
+		problems := linux().Check(document, profile.TrustBuiltin, digest, local, profile.ActionPlayMap)
+		message := problems.Error()
+		if strings.Contains(message, "id1 or id1") {
+			t.Errorf("%s: %s", id, message)
+		}
+		if !strings.Contains(message, "no id1 directory") {
+			t.Errorf("%s does not name the directory it looked for: %s", id, message)
+		}
+	}
+}
+
+// A Fix line that names a flag the command does not accept is worse than no Fix
+// line: it fails with "flag provided but not defined" and leaves the user with
+// nothing.
+func TestEveryFixSuggestsAFlagThatExists(t *testing.T) {
+	document, digest := builtinEngine(t, builtin.QuakeSpasm)
+	local, _, _ := workingBinding(t, document, digest)
+	for _, role := range []string{profile.RootGame, profile.RootContent, profile.RootProject, profile.RootToolInstall} {
+		delete(local.Roots, role)
+	}
+	problems := linux().Check(document, profile.TrustBuiltin, digest, local, profile.ActionPlayMap)
+	if len(problems) == 0 {
+		t.Fatal("removing every root reported nothing")
+	}
+	for _, problem := range problems {
+		for _, flag := range []string{"--project-root", "--root tool_root= ", "--root project_root= "} {
+			if strings.Contains(problem.Fix, flag) {
+				t.Errorf("the fix names %q, which `engine bind` does not accept: %s", flag, problem.Fix)
+			}
+		}
+	}
+}

@@ -295,3 +295,123 @@ func TestEngineRunStagesPlaysAndCleansUp(t *testing.T) {
 		t.Error("cleanup reached the base game")
 	}
 }
+
+// A binding records two different kinds of fact, and only one of them is about
+// the document. Re-approving a changed profile must not forget where the engine
+// and the game are — the alternative is a Companion upgrade quietly dropping
+// paths the user set months ago, and the next launch failing with "nothing on
+// this machine says where the engine is".
+func TestBindingAgainstAChangedDocumentKeepsThePathsAndDropsTheApproval(t *testing.T) {
+	game := gameDir(t)
+	enginePath := programFile(t, "myquake")
+
+	env, _, _ := testEnv(t)
+	profiles := filepath.Join(filepath.Dir(env.ConfigPath), "profiles")
+	if err := os.MkdirAll(profiles, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	document, err := os.ReadFile(filepath.Join("..", "engine", "testdata", "user-q1-engine.engine.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	imported := filepath.Join(profiles, "user.json")
+	if err := os.WriteFile(imported, document, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	const id = "example.engines.quakespasm-of-my-own"
+
+	env, _, stderr := testEnvAt(t, env.ConfigPath)
+	if code := Run(env, []string{"engine", "bind", id,
+		"--engine", enginePath, "--game-root", game, "--content-root", game, "--approve"}); code != 0 {
+		t.Fatalf("bind exit code = %d, stderr = %s", code, stderr)
+	}
+
+	// The author publishes a new version of the same profile.
+	changed := strings.Replace(string(document), `"version": "0.3.1"`, `"version": "0.3.2"`, 1)
+	if changed == string(document) {
+		t.Fatal("the fixture's version string moved; this test edits it")
+	}
+	if err := os.WriteFile(imported, []byte(changed), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	env, stdout, stderr := testEnvAt(t, env.ConfigPath)
+	if code := Run(env, []string{"engine", "show", id}); code != 0 {
+		t.Fatalf("show exit code = %d, stderr = %s", code, stderr)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, enginePath) || !strings.Contains(out, game) {
+		t.Errorf("the recorded paths were lost when the document changed:\n%s", out)
+	}
+	if !strings.Contains(out, "approved       no") {
+		t.Errorf("the approval survived a document change:\n%s", out)
+	}
+	if !strings.Contains(out, "earlier version of this document") {
+		t.Errorf("`engine show` does not say why the approval no longer applies:\n%s", out)
+	}
+
+	// And the preflight says exactly that, rather than "nothing says where the
+	// engine is".
+	env, _, stderr = testEnvAt(t, env.ConfigPath)
+	if code := Run(env, []string{"engine", "check", id, "--action", "play_map"}); code == 0 {
+		t.Fatal("a changed, unapproved document passed the check")
+	}
+	if strings.Contains(stderr.String(), "Nothing on this machine says where") {
+		t.Errorf("the engine path was forgotten:\n%s", stderr)
+	}
+	if !strings.Contains(stderr.String(), "Nothing has been approved") {
+		t.Errorf("the check does not say the approval is gone:\n%s", stderr)
+	}
+
+	// Re-approving is one command, and it does not ask for the paths again.
+	env, stdout, stderr = testEnvAt(t, env.ConfigPath)
+	if code := Run(env, []string{"engine", "bind", id, "--approve"}); code != 0 {
+		t.Fatalf("re-approving exit code = %d, stderr = %s", code, stderr)
+	}
+	out = stdout.String()
+	if !strings.Contains(out, enginePath) || !strings.Contains(out, game) {
+		t.Errorf("re-approving forgot the recorded paths:\n%s", out)
+	}
+	env, _, stderr = testEnvAt(t, env.ConfigPath)
+	if code := Run(env, []string{"engine", "check", id, "--action", "play_map"}); code != 0 {
+		t.Fatalf("check exit code = %d after re-approving, stderr = %s", code, stderr)
+	}
+}
+
+// `engine bind` can set a root this build has no flag of its own for, which is
+// what makes a user-authored profile declaring one bindable at all.
+func TestEngineBindSetsARootByRole(t *testing.T) {
+	game := gameDir(t)
+	project := t.TempDir()
+	env, stdout, stderr := testEnv(t)
+	if code := Run(env, []string{"engine", "bind", builtin.QuakeSpasm,
+		"--engine", programFile(t, "quakespasm"), "--game-root", game,
+		"--root", "project_root=" + project}); code != 0 {
+		t.Fatalf("bind exit code = %d, stderr = %s", code, stderr)
+	}
+	if !strings.Contains(stdout.String(), project) {
+		t.Errorf("the role-named root was not recorded:\n%s", stdout)
+	}
+
+	env, _, stderr = testEnv(t)
+	if code := Run(env, []string{"engine", "bind", builtin.QuakeSpasm, "--root", "workspace=" + project}); code == 0 {
+		t.Fatal("the per-job workspace was accepted as a recorded root")
+	}
+	if !strings.Contains(stderr.String(), "created for each job") {
+		t.Errorf("the refusal does not say why:\n%s", stderr)
+	}
+}
+
+// There is no --wait on `engine run`, and there must not be one: the executor
+// lives in this process, so a mode that submitted a job and returned would have
+// its own deferred shutdown cancel the job it had just queued and report that a
+// game started which never did.
+func TestEngineRunHasNoSubmitAndReturnMode(t *testing.T) {
+	env, _, stderr := testEnv(t)
+	if code := Run(env, []string{"engine", "run", builtin.QuakeSpasm, "--action", "play_map", "--wait=false"}); code != 2 {
+		t.Fatalf("exit code = %d, want 2 for an undefined flag; stderr = %s", code, stderr)
+	}
+	if !strings.Contains(stderr.String(), "flag provided but not defined") {
+		t.Errorf("stderr = %s", stderr)
+	}
+}

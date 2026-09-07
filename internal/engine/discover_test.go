@@ -229,3 +229,31 @@ func treeOf(t *testing.T, dir string) string {
 	}
 	return strings.Join(names, " ")
 }
+
+// The 2021 re-release nests a second copy of the whole layout under
+// `rerelease/`. That is true wherever the install came from, so it has to be
+// looked for wherever a candidate comes from — including a directory the user
+// named, which is the case a Steam-only implementation misses.
+func TestDetectFindsTheReReleaseLayoutUnderADirectoryTheCallerNames(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "rerelease", "id1"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "rerelease", "id1", "pak0.pak"), []byte("PACK"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	found := engine.Scanner{
+		GOOS:    "linux",
+		Lookenv: func(string) (string, bool) { return "", false },
+		Extra:   []string{dir},
+	}.Detect()
+	if len(found) != 1 {
+		t.Fatalf("found %d candidates, want the nested re-release: %+v", len(found), found)
+	}
+	if found[0].Path != filepath.Join(dir, "rerelease") {
+		t.Errorf("the candidate is %q, want the directory that actually holds id1", found[0].Path)
+	}
+	if found[0].Note == "" {
+		t.Error("the re-release candidate does not say what it is")
+	}
+}

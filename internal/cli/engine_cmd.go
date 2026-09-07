@@ -39,7 +39,8 @@ const engineUsage = `usage:
   companion engine list [--json]                    engine profiles, and what each claims on this machine
   companion engine show <profile>                   its platforms, actions, layouts and local setup
   companion engine detect [--near <dir>] [--json]   directories that look like an installed game; records nothing
-  companion engine bind <profile> --engine <path> [--game-root <dir>] [--content-root <dir>] [--approve]
+  companion engine bind <profile> --engine <path> [--game-root <dir>] [--content-root <dir>]
+                                 [--root <role>=<path>]... [--approve]
                                                     record where the engine and the game are on this machine
   companion engine check <profile> --action <id>    what would stop it running here, before anything starts
   companion engine preview <profile> --action <id> [launch flags]   the exact command, starting nothing
@@ -56,6 +57,10 @@ launch flags:
   --option n=v       an option the action declares (repeatable)
   --stage <dir>      stage this directory into the game as --mod first, and remove it afterwards
   --keep-staged      leave the staged copy in place when the game exits
+
+engine run waits for the game, and Ctrl-C stops it and its whole process tree.
+There is no way to submit one and return: the executor lives in this process,
+so a job nothing is waiting for is a job nothing runs.
 `
 
 func runEngine(env *Env, args []string) int {
@@ -287,9 +292,16 @@ func engineShow(env *Env, args []string) int {
 	for _, role := range sortedNames(local.Roots) {
 		fmt.Fprintf(env.Stdout, "  %-14s %s\n", role, local.Roots[role])
 	}
-	if local.Grant != nil {
+	switch {
+	case local.Grant.Covers(document.ID, entry.Digest):
 		fmt.Fprintf(env.Stdout, "  approved       %s\n", local.Grant.GrantedAt.Format(time.RFC3339))
-	} else if entry.Trust != profile.TrustBuiltin {
+	case local.Grant != nil:
+		// A grant is against one exact document. Showing the date of one that
+		// covers a document this is no longer would be reporting an approval
+		// that will not be honoured.
+		fmt.Fprintf(env.Stdout, "  approved       no — the approval covers an earlier version of this document (%s)\n",
+			local.Grant.Digest)
+	case entry.Trust != profile.TrustBuiltin:
 		fmt.Fprintln(env.Stdout, "  approved       no — add --approve to `engine bind`")
 	}
 	return 0
@@ -329,6 +341,11 @@ func engineBind(env *Env, args []string) int {
 	enginePath := set.String("engine", "", "the engine executable on this machine")
 	gameRoot := set.String("game-root", "", "the directory the game is installed in")
 	contentRoot := set.String("content-root", "", "your project directory")
+	// A profile may declare a root this build has no flag for — `project_root`,
+	// or one a user-authored engine profile chose. Without this, a preflight
+	// could name a root that nothing could then set.
+	roots := pairs{}
+	set.Var(roots, "root", "where another declared root is, as role=path (repeatable)")
 	approve := set.Bool("approve", false, "record that you approve everything this profile asks for")
 	rest, code, ok := parseInterspersed(env, set, args)
 	if !ok {
@@ -343,8 +360,8 @@ func engineBind(env *Env, args []string) int {
 		return fail(env, err)
 	}
 	document := entry.Profile.(*profile.EngineProfile)
-	if *enginePath == "" && *gameRoot == "" && *contentRoot == "" && !*approve {
-		fmt.Fprintln(env.Stderr, "error: engine bind needs something to record: --engine, --game-root, --content-root or --approve")
+	if *enginePath == "" && *gameRoot == "" && *contentRoot == "" && len(roots) == 0 && !*approve {
+		fmt.Fprintln(env.Stderr, "error: engine bind needs something to record: --engine, --game-root, --content-root, --root or --approve")
 		return 2
 	}
 
@@ -352,12 +369,15 @@ func engineBind(env *Env, args []string) int {
 	if err != nil && !errors.Is(err, binding.ErrNoFile) {
 		return fail(env, err)
 	}
-	local, existed := set2.Find(document.ID)
-	if !existed || local.ProfileDigest != entry.Digest {
-		// A binding is against one exact document. When the document has
-		// changed, what was recorded against the old one — including the
-		// approval — does not carry over.
-		local = binding.LocalBinding{Trust: entry.Trust}
+	local, _ := set2.Find(document.ID)
+	if local.ProfileDigest != entry.Digest {
+		// The approval is against one exact document, so a changed document
+		// invalidates it. Where the engine and the game are is a fact about
+		// this machine and not about the document, so it survives — dropping
+		// it would mean a Companion upgrade quietly forgetting paths the user
+		// set months ago, and the next launch failing with "nothing on this
+		// machine says where the engine is".
+		local.Grant = nil
 	}
 	local.ProfileID = document.ID
 	local.ProfileVersion = document.Version
@@ -391,9 +411,18 @@ func engineBind(env *Env, args []string) int {
 		}
 		local.Executables[document.Executables[0].Name] = absolute
 	}
-	for _, pair := range []struct {
-		role, value string
-	}{{profile.RootGame, *gameRoot}, {profile.RootContent, *contentRoot}} {
+	named := []struct{ role, value string }{
+		{profile.RootGame, *gameRoot},
+		{profile.RootContent, *contentRoot},
+	}
+	for _, role := range sortedNames(roots) {
+		if role == profile.RootWorkspace {
+			fmt.Fprintf(env.Stderr, "error: the %q root is created for each job and is not something to record\n", profile.RootWorkspace)
+			return 2
+		}
+		named = append(named, struct{ role, value string }{role, roots[role]})
+	}
+	for _, pair := range named {
 		if pair.value == "" {
 			continue
 		}
@@ -445,7 +474,6 @@ type launchFlags struct {
 	options    pairs
 	stage      *string
 	keepStaged *bool
-	wait       *bool
 }
 
 func registerLaunchFlags(set *flag.FlagSet) *launchFlags {
@@ -459,7 +487,6 @@ func registerLaunchFlags(set *flag.FlagSet) *launchFlags {
 		options:    pairs{},
 		stage:      set.String("stage", "", "stage this directory into the game as --mod before starting"),
 		keepStaged: set.Bool("keep-staged", false, "leave the staged copy in place afterwards"),
-		wait:       set.Bool("wait", true, "wait for the game to exit"),
 	}
 	set.Var(f.options, "option", "an option the action declares, as name=value (repeatable)")
 	return f
@@ -574,20 +601,15 @@ func engineRun(env *Env, args []string, mode launchMode) int {
 			Source:    *flags.stage,
 			ProfileID: request.ProfileID,
 		}
-		stamp, err := staging.Stage()
+		staged, err := staging.Stage()
 		if err != nil {
 			return fail(env, err)
 		}
-		fmt.Fprintf(env.Stderr, "staged %d files into %s\n", len(stamp.Files), staging.Dir())
-		// Removing it when the command returns is only right when the command
-		// returns after the game does. With --wait=false it returns while the
-		// engine is still reading those files, so the staged copy stays and the
-		// user is told how to remove it.
-		if !*flags.keepStaged && !*flags.wait {
-			fmt.Fprintf(env.Stderr, "not waiting, so the staged copy stays; remove it with `companion engine unstage --game-root %s --mod %s`\n",
-				staging.GameRoot, staging.ModName)
+		fmt.Fprintf(env.Stderr, "staged %d files into %s\n", len(staged.Stamp.Files), staging.Dir())
+		for _, name := range staged.Overwrote {
+			fmt.Fprintf(env.Stderr, "warning: %s had been edited since it was staged, and has been replaced\n", name)
 		}
-		if !*flags.keepStaged && *flags.wait {
+		if !*flags.keepStaged {
 			defer func() {
 				kept, err := engine.Unstage(staging.GameRoot, staging.ModName)
 				switch {
@@ -603,14 +625,15 @@ func engineRun(env *Env, args []string, mode launchMode) int {
 		}
 	}
 
+	// Started and then waited for, always. The executor lives in this process:
+	// a mode that submitted a job and returned would be a mode whose deferred
+	// shutdown cancels the job it just queued, and reports that a game started
+	// which never did. Ctrl-C stops the game and its whole process tree.
 	submitted, err := service.SubmitWatched(request, env.Stdout)
 	if err != nil {
 		return fail(env, err)
 	}
 	fmt.Fprintf(env.Stderr, "job %s: %s%s\n", submitted.ID, submitted.ActionID, sessionSuffix(submitted))
-	if !*flags.wait {
-		return 0
-	}
 	finished, err := service.Wait(ctx, submitted.ID)
 	if err != nil {
 		return fail(env, err)
@@ -647,11 +670,14 @@ func engineStage(env *Env, args []string) int {
 		fmt.Fprintf(env.Stdout, "%d file(s) would be copied into %s\n", len(planned), staging.Dir())
 		return 0
 	}
-	stamp, err := staging.Stage()
+	staged, err := staging.Stage()
 	if err != nil {
 		return fail(env, err)
 	}
-	fmt.Fprintf(env.Stdout, "staged %d file(s) into %s\n", len(stamp.Files), staging.Dir())
+	fmt.Fprintf(env.Stdout, "staged %d file(s) into %s\n", len(staged.Stamp.Files), staging.Dir())
+	for _, name := range staged.Overwrote {
+		fmt.Fprintf(env.Stdout, "  %s had been edited since it was staged, and has been replaced\n", name)
+	}
 	fmt.Fprintf(env.Stdout, "start the engine with --mod %s; `companion engine unstage` removes exactly these files\n", *mod)
 	return 0
 }

@@ -408,11 +408,11 @@ func TestContentIsStagedPlayedAndRemoved(t *testing.T) {
 	source := project(t)
 
 	staging := stagingFor(h, "mymap", source)
-	stamp, err := staging.Stage()
+	staged, err := staging.Stage()
 	if err != nil {
 		t.Fatalf("staging: %v", err)
 	}
-	if len(stamp.Files) == 0 {
+	if len(staged.Stamp.Files) == 0 {
 		t.Fatal("nothing was staged")
 	}
 

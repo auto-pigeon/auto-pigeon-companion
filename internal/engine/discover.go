@@ -97,10 +97,13 @@ func (s Scanner) readFile(path string) ([]byte, error) {
 }
 
 // baseDirName is the directory a Quake 1 release keeps its own data in. One
-// name, because the 2021 re-release does not rename it — it nests a second copy
-// of the whole layout under `rerelease/`, which [Scanner.Detect] handles by
-// looking inside that directory as well rather than by knowing another name.
+// name, because the 2021 re-release does not rename it — see
+// [rereleaseDirName].
 const baseDirName = "id1"
+
+// rereleaseDirName is where the 2021 re-release keeps its own copy of that
+// layout, nested inside the directory the installer created.
+const rereleaseDirName = "rerelease"
 
 // pakNames are the archives whose presence says a directory really is Quake's
 // and not a directory that happens to be called id1.
@@ -114,7 +117,7 @@ var pakNames = []string{"pak0.pak", "pak1.pak"}
 func (s Scanner) Detect() []Candidate {
 	var out []Candidate
 	seen := map[string]bool{}
-	add := func(dir string, source Source, note string) {
+	one := func(dir string, source Source, note string) {
 		dir = filepath.Clean(dir)
 		if dir == "" || dir == "." || seen[dir] {
 			return
@@ -125,18 +128,24 @@ func (s Scanner) Detect() []Candidate {
 			out = append(out, candidate)
 		}
 	}
+	// add looks at a directory and at the re-release layout nested inside it.
+	//
+	// The 2021 re-release does not rename `id1`; it puts a second copy of the
+	// whole layout under `rerelease/`, so the directory an installer created is
+	// not always the one an engine wants as its base directory. That is true
+	// wherever the install came from, which is why this is here and not in the
+	// Steam branch.
+	add := func(dir string, source Source, note string) {
+		one(dir, source, note)
+		for _, sub := range s.entriesLike(dir, rereleaseDirName) {
+			one(filepath.Join(dir, sub), source, "The re-release's own copy of the game data.")
+		}
+	}
 
 	for _, library := range s.steamLibraries() {
 		common := filepath.Join(library, "steamapps", "common")
 		for _, name := range s.entriesLike(common, "quake") {
-			dir := filepath.Join(common, name)
-			add(dir, SourceSteam, "")
-			// The 2021 re-release keeps the original game in a subdirectory of
-			// its own, so the directory Steam installed is not always the one
-			// an engine wants as its base directory.
-			for _, sub := range s.entriesLike(dir, "rerelease") {
-				add(filepath.Join(dir, sub), SourceSteam, "The re-release's own copy of the game data.")
-			}
+			add(filepath.Join(common, name), SourceSteam, "")
 		}
 	}
 	for _, dir := range s.gogDirs() {

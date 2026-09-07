@@ -62,12 +62,15 @@ func TestStageCopiesAndUnstageRemovesExactlyWhatItWrote(t *testing.T) {
 		t.Fatalf("planned %v, want three files", planned)
 	}
 
-	stamp, err := staging.Stage()
+	staged, err := staging.Stage()
 	if err != nil {
 		t.Fatalf("staging: %v", err)
 	}
-	if len(stamp.Files) != 3 || !stamp.CreatedDir {
-		t.Fatalf("stamp = %+v", stamp)
+	if len(staged.Stamp.Files) != 3 || !staged.Stamp.CreatedDir {
+		t.Fatalf("stamp = %+v", staged.Stamp)
+	}
+	if len(staged.Overwrote) != 0 {
+		t.Errorf("a first pass reported overwriting %v", staged.Overwrote)
 	}
 	if got := readFile(t, filepath.Join(game, "mymap", "maps", "level.bsp")); got != "BSP" {
 		t.Errorf("the staged map is %q", got)
@@ -213,5 +216,71 @@ func TestUnstageOnADirectoryNobodyStagedIsRefused(t *testing.T) {
 	}
 	if !exists(filepath.Join(game, "mymap", "notes.txt")) {
 		t.Error("the refusal removed something anyway")
+	}
+}
+
+// A copy that fails partway must leave nothing behind. The alternative is a
+// directory with files in it and no staging record, which the next Stage would
+// refuse with "nothing there says the Companion staged it" — a sentence that
+// would not be true, and with no flag to get past it.
+func TestAFailedStagingLeavesNothingBehind(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("running as root: an unreadable file is still readable")
+	}
+	game, source := gameRoot(t), project(t)
+	unreadable := filepath.Join(source, "maps", "secret.bsp")
+	writeFile(t, unreadable, "BSP")
+	if err := os.Chmod(unreadable, 0o000); err != nil {
+		t.Skipf("this filesystem does not enforce permissions: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(unreadable, 0o600) })
+
+	if _, err := (engine.Staging{GameRoot: game, ModName: "mymap", Source: source}).Stage(); err == nil {
+		t.Fatal("staging an unreadable file succeeded")
+	}
+	if exists(filepath.Join(game, "mymap")) {
+		t.Error("a failed staging left the game directory behind, with no record of what is in it")
+	}
+	if !exists(filepath.Join(game, "id1", "pak0.pak")) {
+		t.Error("the rollback reached the base game")
+	}
+}
+
+// Re-staging over a file the user edited is what they asked for, and is still
+// not something to do silently.
+func TestReStagingReportsTheEditsItReplaced(t *testing.T) {
+	game, source := gameRoot(t), project(t)
+	staging := engine.Staging{GameRoot: game, ModName: "mymap", Source: source}
+	if _, err := staging.Stage(); err != nil {
+		t.Fatalf("staging: %v", err)
+	}
+	writeFile(t, filepath.Join(game, "mymap", "progs.dat"), "EDITED BY HAND")
+
+	staged, err := staging.Stage()
+	if err != nil {
+		t.Fatalf("re-staging: %v", err)
+	}
+	if len(staged.Overwrote) != 1 || staged.Overwrote[0] != "progs.dat" {
+		t.Errorf("re-staging reported %v as overwritten, want the one file that had been edited", staged.Overwrote)
+	}
+	if got := readFile(t, filepath.Join(game, "mymap", "progs.dat")); got != "PROGS" {
+		t.Errorf("the file was reported as replaced and is %q", got)
+	}
+
+	// A file the user edited that the new source no longer contains is not
+	// overwritten, and saying it was would be the wrong half of the truth.
+	writeFile(t, filepath.Join(game, "mymap", "progs.dat"), "EDITED AGAIN")
+	if err := os.Remove(filepath.Join(source, "progs.dat")); err != nil {
+		t.Fatal(err)
+	}
+	staged, err = staging.Stage()
+	if err != nil {
+		t.Fatalf("re-staging: %v", err)
+	}
+	if len(staged.Overwrote) != 0 {
+		t.Errorf("re-staging reported %v as overwritten, and nothing was", staged.Overwrote)
+	}
+	if got := readFile(t, filepath.Join(game, "mymap", "progs.dat")); got != "EDITED AGAIN" {
+		t.Errorf("a file the new source does not contain was changed: %q", got)
 	}
 }

@@ -998,6 +998,17 @@ recorded for auto-pigeon.engine.quakespasm:
   game_root      /home/you/games/quake
 ```
 
+A binding records two different kinds of fact, and they expire differently.
+Where the engine and the game are is about *this machine*, and it survives the
+document changing. The approval is about *that document*, so a new version of
+the profile needs a new decision — `engine show` then says the approval covers
+an earlier version, and `engine bind <id> --approve` is enough to give it: it
+does not ask for the paths again.
+
+A profile may also declare a root neither `--game-root` nor `--content-root`
+names. `--root <role>=<path>` sets any of them, which is what makes a
+user-authored engine profile bindable without a new flag in this program.
+
 #### What would stop it, before anything starts
 
 ```console
@@ -1105,9 +1116,11 @@ start the engine with --mod mymap; `companion engine unstage` removes exactly th
 ```
 
 `companion engine run --stage <dir> --mod <name>` does both around one launch,
-and removes the staged copy when the game exits — unless you pass
-`--keep-staged`, or `--wait=false`, which returns while the engine is still
-reading those files and says so.
+and removes the staged copy when the game exits unless you pass
+`--keep-staged`. `engine run` always waits for the game — there is no
+submit-and-return mode, because the executor lives in that process and a job
+nothing is waiting for is a job nothing runs. Ctrl-C stops the game and its
+whole process tree.
 
 The removal is the part worth being careful about, and it is:
 
@@ -1116,6 +1129,10 @@ The removal is the part worth being careful about, and it is:
 - `unstage` removes exactly those files, and **skips any whose contents have
   changed** — if you edited a staged file, or dropped one of your own in beside
   it, you keep it, and the command says which;
+- re-staging over a file you had edited is what you asked for and is still said
+  out loud, one warning per file;
+- a copy that fails partway undoes itself, so a half-written directory with no
+  record in it never exists;
 - a directory the Companion did not create is refused outright, with no flag to
   force it;
 - `id1`, `qw`, `hipnotic`, `rogue`, `dopa` and `rerelease` cannot be staged
