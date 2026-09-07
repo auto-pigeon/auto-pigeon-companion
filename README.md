@@ -1010,11 +1010,13 @@ QuakeSpasm has no "host_dedicated" action.
   something QuakeSpasm does. It offers: host_listen, join_server, play_map, play_package.
 ```
 
-`check` names four other things in the same way, each with what to do about it:
-an engine executable that has been moved or uninstalled, a game root with no
-`id1` in it (or an `Id1` where the engine wants `id1`), a platform the profile
-calls `unsupported`, and a binding written against a version of the document
-that has since changed.
+`check` names six other things the same way, each with what to do about it: an
+engine executable that has been moved or uninstalled, a game root with no `id1`
+in it, an `Id1` where the engine wants `id1`, a platform the profile calls
+`unsupported`, a root nothing has ever set, and a binding written against a
+version of the document that has since changed. It is the same list `engine run`
+refuses on and `engine preview` prints beside the command, so the answer to "why
+can I not press play" arrives before the button does anything.
 
 #### Previewing, and then playing
 
@@ -1103,7 +1105,9 @@ start the engine with --mod mymap; `companion engine unstage` removes exactly th
 ```
 
 `companion engine run --stage <dir> --mod <name>` does both around one launch,
-and removes the staged copy when the game exits unless you pass `--keep-staged`.
+and removes the staged copy when the game exits — unless you pass
+`--keep-staged`, or `--wait=false`, which returns while the engine is still
+reading those files and says so.
 
 The removal is the part worth being careful about, and it is:
 
@@ -1129,7 +1133,26 @@ internal/engine/testdata/user-q1-engine.engine.json: valid engine profile exampl
   sha256:b759281c01c70ac572d751e7ffc1520a2a979135f5b47b9737de8f2f93258286
 
 $ companion profile show internal/engine/testdata/user-q1-engine.engine.json
+My own Quake engine 0.3.1 (example.engines.quakespasm-of-my-own)
+  published by A Companion user, under GPL-2.0-or-later
+  Community — imported from elsewhere; nobody has checked it for you.
+
+  If you approve it, it may:
+    - Run a dedicated game server on this computer that other people can connect to. [high]
+    - Connect to hosts on the internet that this profile does not list. [high]
+    - Run My own Quake engine (engine) as a program on your computer. [high]
+    - Create and change files in the folder built content is published into. [high]
+    - Read files in the folder built content is published into. [medium]
+    - Read files in your installed game folder. [medium]
+
+  digest: sha256:b759281c01c70ac572d751e7ffc1520a2a979135f5b47b9737de8f2f93258286
+
+  Nothing here has been granted. Importing a profile does not let it do any of the above.
 ```
+
+Hosting is the first line of that list because it is the most consequential
+thing the document asks for, and it is asked for separately from running the
+engine at all.
 
 Copy such a file into your profile directory and it appears in `companion engine
 list` beside the built-in ones, at `local` trust — a file that turned up in a
