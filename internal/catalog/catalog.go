@@ -41,7 +41,12 @@ var digestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 // at least two dot-separated segments — because a flat name space shared by
 // everyone who publishes a catalogue entry is a name space with a land grab in
 // it.
-var idPattern = regexp.MustCompile(`^[a-z0-9]+(\.[a-z0-9]+(-[a-z0-9]+)*)+$`)
+var idPattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*(\.[a-z0-9]+(-[a-z0-9]+)*)+$`)
+
+// maxPackageIDLength matches internal/profile's limit on an id, for the same
+// reason the pattern does: a package id and a profile's `catalog_package` are
+// the same string.
+const maxPackageIDLength = 128
 
 // maxArtifactSize bounds any single download this program will ever make.
 //
@@ -264,6 +269,8 @@ func (p Package) Platforms() []string {
 
 func (p Package) validate(signers map[string]bool) error {
 	switch {
+	case len(p.ID) > maxPackageIDLength:
+		return fmt.Errorf("catalog: a package id is %d bytes long, over the %d-byte limit", len(p.ID), maxPackageIDLength)
 	case !idPattern.MatchString(p.ID):
 		return fmt.Errorf("catalog: %q is not a package id; ids are namespaced and lower-case, such as `example.qbsp`", p.ID)
 	case strings.TrimSpace(p.Version) == "":

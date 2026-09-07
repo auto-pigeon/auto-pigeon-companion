@@ -143,7 +143,7 @@ func (a *Acquirer) Catalog(ctx context.Context) (*catalog.Verified, error) {
 		// came *after* a document was accepted — a keyring that verified and a
 		// catalogue that did not still advanced the keyring's ratchet, and
 		// forgetting that would let the same replay be tried again.
-		a.saveState(state)
+		_ = a.saveState(state)
 		return nil, err
 	}
 	if err := a.saveState(state); err != nil {
@@ -152,10 +152,6 @@ func (a *Acquirer) Catalog(ctx context.Context) (*catalog.Verified, error) {
 	a.verified = verified
 	return verified, nil
 }
-
-// UseCatalog installs an already-verified catalogue, for a caller that verified
-// it from files rather than over the network.
-func (a *Acquirer) UseCatalog(verified *catalog.Verified) { a.verified = verified }
 
 func (a *Acquirer) saveState(state *catalog.State) error {
 	if strings.TrimSpace(a.options.StatePath) == "" || state == nil {

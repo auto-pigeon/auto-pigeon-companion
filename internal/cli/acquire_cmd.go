@@ -2,6 +2,7 @@ package cli
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -139,9 +140,9 @@ func newAcquirer(env *Env, args []string, name string, extra func(set *flagSet))
 	return acquirer, rest, 0, true
 }
 
-// flagSet is the local alias the option hooks above take, so a subcommand can
-// register its own flags without this file importing the flag package twice.
-type flagSet = flagSetType
+// flagSet is what a subcommand's flag hook is handed. An alias rather than a
+// wrapper, so a hook registers flags exactly as any other command does.
+type flagSet = flag.FlagSet
 
 func acquirePlan(env *Env, args []string) int {
 	var version *string

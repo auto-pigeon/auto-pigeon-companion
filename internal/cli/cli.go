@@ -207,11 +207,6 @@ func UsageText() string {
 	return builder.String()
 }
 
-// flagSetType is the concrete flag set every subcommand uses. Named so that
-// acquire's per-subcommand flag hooks can take one without this package's
-// callers needing to name the flag package.
-type flagSetType = flag.FlagSet
-
 // newFlagSet builds a subcommand's FlagSet with the Companion's shared conventions:
 // errors go to the command's own stderr, and the flag package's automatic usage
 // dump is suppressed so a bad flag produces one clear line.

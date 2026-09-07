@@ -495,15 +495,6 @@ func (c *Cache) CleanStaging(olderThan time.Duration, now time.Time) ([]string, 
 	return removed, nil
 }
 
-func sortedKeys(m map[string]string) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
-}
-
 // runtimeModeMatters reports whether file permission bits are meaningful here.
 // On Windows they are not: Go reports a synthesised mode, and comparing it
 // against what was recorded on another platform, or after a copy, is a false
