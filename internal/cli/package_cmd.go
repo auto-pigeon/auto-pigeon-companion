@@ -9,6 +9,7 @@ import (
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/build"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/pack"
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/q3deps"
 )
 
 // `companion package` — turn what a build produced into something somebody
@@ -131,9 +132,10 @@ func packageBuild(env *Env, args []string, previewOnly bool) int {
 	replace := set.Bool("replace", false, "write over an existing archive")
 	acknowledgeAll := set.Bool("acknowledge-all", false, "accept every file held for review; requires --reason")
 	embed := set.Bool("embed-manifest", false, "write the manifest inside the archive, where the target permits it")
+	acceptMissing := set.Bool("accept-missing", false, "package anyway when the dependency review holds something; requires --reason")
 	asJSON := set.Bool("json", false, "print the plan, or the result, as JSON")
 
-	var from, fromAt, add, sourceRoots, gameRoots, acknowledge, authorize repeatable
+	var from, fromAt, add, sourceRoots, gameRoots, acknowledge, authorize, mapSources repeatable
 	set.Var(&from, "from", "package a directory's contents at the archive root (repeatable)")
 	set.Var(&fromAt, "from-at", "package a directory under a prefix, as prefix=dir (repeatable)")
 	set.Var(&add, "add", "package one file, as memberpath=file (repeatable)")
@@ -141,6 +143,7 @@ func packageBuild(env *Env, args []string, previewOnly bool) int {
 	set.Var(&gameRoots, "game-root", "an installed game's content directory (repeatable)")
 	set.Var(&acknowledge, "acknowledge", "accept one file held for review (repeatable)")
 	set.Var(&authorize, "authorize", "package a file identified as a released asset (repeatable)")
+	set.Var(&mapSources, "map", "review a Quake III map source's dependencies against this package (repeatable)")
 
 	if _, code, ok := parseFlags(env, set, args); !ok {
 		return code
@@ -169,6 +172,15 @@ func packageBuild(env *Env, args []string, previewOnly bool) int {
 	}
 	if *acknowledgeAll && strings.TrimSpace(*reason) == "" {
 		fmt.Fprint(env.Stderr, "error: --acknowledge-all requires --reason\n")
+		return 2
+	}
+	if *acceptMissing && strings.TrimSpace(*reason) == "" {
+		fmt.Fprint(env.Stderr, "error: --accept-missing requires --reason: shipping a package without "+
+			"something it depends on is a decision, and a decision nobody wrote down is one nobody can stand behind\n")
+		return 2
+	}
+	if *acceptMissing && len(mapSources) == 0 {
+		fmt.Fprint(env.Stderr, "error: --accept-missing has nothing to accept; it answers the review --map asks for\n")
 		return 2
 	}
 
@@ -246,15 +258,59 @@ func packageBuild(env *Env, args []string, previewOnly bool) int {
 		}
 	}
 
+	// The dependency review, when a map was named. It runs against the plan
+	// rather than against the finished archive, because the point is to be
+	// read BEFORE anything is written — and because a preview that did not run
+	// it would be a preview of a different package from the one `create`
+	// writes.
+	var dependencies *q3deps.Report
+	if len(mapSources) > 0 {
+		dependencies, err = q3deps.Discover(mapSources, q3deps.Scan{
+			Members:      plannedMembers(plan),
+			ContentRoots: policy.AuthoredRoots,
+			GameRoots:    policy.GameRoots,
+		})
+		if err != nil {
+			return fail(env, err)
+		}
+	}
+
 	if previewOnly {
 		if *asJSON {
-			return printJSON(env, plan)
+			return printJSON(env, previewDocument{Plan: plan, Dependencies: dependencies})
 		}
 		fmt.Fprint(env.Stdout, plan.Preview())
+		if dependencies != nil {
+			fmt.Fprint(env.Stdout, "\n"+dependencies.Describe())
+		}
 		if err := plan.Blocked(); err != nil {
 			fmt.Fprintf(env.Stdout, "\nthis plan will not be written as it stands:\n  %v\n", err)
 		}
+		if dependencies != nil {
+			if err := dependencies.Blocked(); err != nil {
+				fmt.Fprintf(env.Stdout, "\nthe dependency review holds this package:\n  %v\n"+
+					"  package it anyway with --accept-missing --reason \"…\", once you have read why.\n", err)
+			}
+		}
 		return 0
+	}
+
+	// `create` refuses on the review unless somebody said, in writing, that
+	// they had read it. `AUP/AUCOM 216` asks for "an explicit review, not a
+	// silently incomplete PK3", and a review that wrote the archive anyway
+	// would be the second thing wearing the name of the first.
+	if dependencies != nil {
+		if err := dependencies.Blocked(); err != nil {
+			if !*acceptMissing {
+				fmt.Fprint(env.Stderr, dependencies.Describe())
+				fmt.Fprintf(env.Stderr, "\nerror: %v\n"+
+					"  read the review above. Add what is missing, or, if it belongs somewhere else, "+
+					"pass --accept-missing --reason \"…\".\n", err)
+				return 1
+			}
+			fmt.Fprintf(env.Stderr, "note: --accept-missing packaged despite the review: %v\n", err)
+			fmt.Fprintf(env.Stderr, "      reason: %s\n", strings.TrimSpace(*reason))
+		}
 	}
 
 	if len(covered) > 0 {
@@ -287,6 +343,33 @@ func packageBuild(env *Env, args []string, previewOnly bool) int {
 	fmt.Fprintf(env.Stdout, "      %s\n", result.ManifestPath)
 	fmt.Fprint(env.Stdout, result.Manifest.Describe())
 	return 0
+}
+
+// previewDocument is what `package preview --json` prints: the plan, with the
+// dependency review beside it when one ran.
+//
+// The plan is embedded rather than nested, so the document a caller was already
+// parsing keeps its shape and gains a member. A preview that changed shape when
+// a flag was passed would break every reader that had not heard about the flag.
+type previewDocument struct {
+	*pack.Plan
+	Dependencies *q3deps.Report `json:"dependencies,omitempty"`
+}
+
+// plannedMembers is the archive as the review has to see it: member path to the
+// file on this machine it will be made from.
+//
+// [pack.Plan.Included] is every decision that ends with the file in the archive
+// — including the ones a person acknowledged or authorized — which is exactly
+// the set the review must treat as packaged. A file still held for review is
+// not in it, so a dependency that depends on one is reported as not packaged,
+// which is the true answer for a package that will not be written either.
+func plannedMembers(plan *pack.Plan) map[string]string {
+	members := map[string]string{}
+	for _, decision := range plan.Included() {
+		members[decision.Path] = decision.Source
+	}
+	return members
 }
 
 // packageSelection turns the selection flags into what pack.Collect takes.

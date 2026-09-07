@@ -36,3 +36,16 @@ var ProfileQ2JSON []byte
 
 // ProfileQ2ID is the Quake II fixture profile's id.
 const ProfileQ2ID = "aucom.fixture.q2-engine"
+
+// ProfileQ3JSON is the Quake III fixture engine, for the same reason the other
+// two exist.
+//
+// Its command line after the fixture's own flags is byte-for-byte the built-in
+// ioquake3 profile's, and `internal/cli`'s acceptance compares the two rather
+// than trusting this copy.
+//
+//go:embed fixture-q3.engine.json
+var ProfileQ3JSON []byte
+
+// ProfileQ3ID is the Quake III fixture profile's id.
+const ProfileQ3ID = "aucom.fixture.q3-engine"

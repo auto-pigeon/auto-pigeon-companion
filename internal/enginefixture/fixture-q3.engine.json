@@ -1,0 +1,595 @@
+{
+  "schema_version": "aucom.profile/1.1",
+  "kind": "engine",
+  "id": "aucom.fixture.q3-engine",
+  "version": "1.0.0",
+  "name": "Fixture Q3 engine",
+  "summary": "A measuring instrument for the Quake III path: it records the command line it was started with.",
+  "description": "The Quake III fixture, for the same reason the Quake 1 and Quake II ones exist: playing Quake III needs a copy of Quake III, and this repository has none and must not acquire one.\n\nEverything after `--` is copied from the built-in ioquake3 profile, action for action and argument for argument, and `internal/cli`'s acceptance compares the two rather than trusting this copy. A change to one that is not made to the other fails a test instead of drifting.\n\nOne difference is deliberate and is the reason this document is not simply ioquake3's with a different executable: ioquake3's dedicated server is a second program, `ioq3ded`, and the fixture is one binary that records whatever it was started as. What the fixture proves is the command line; nothing here can prove what ioquake3 does with it.",
+  "publisher": {
+    "name": "Auto-Pigeon",
+    "url": "https://github.com/andrea-dintino/auto-pigeon-companion"
+  },
+  "license": {
+    "spdx": "MIT",
+    "name": "MIT License",
+    "notice": "The fixture engine is part of this repository and is under its licence. It is not a Quake engine and contains no id Software code or data."
+  },
+  "compatibility": {
+    "companion": {
+      "at_least": "0.1.0"
+    }
+  },
+  "game_profile": {
+    "slug": "quake3",
+    "engine_family": "quake3"
+  },
+  "runtime": "aucom-fixture-q3",
+  "engine_version": "1.0.0-fixture",
+  "last_qualified": "2026-09-07",
+  "platforms": [
+    {
+      "platform": {
+        "os": "linux",
+        "arch": "amd64"
+      },
+      "status": "supported",
+      "note": "it is this repository's own test binary"
+    },
+    {
+      "platform": {
+        "os": "darwin",
+        "arch": "amd64"
+      },
+      "status": "supported",
+      "note": "it is this repository's own test binary"
+    },
+    {
+      "platform": {
+        "os": "darwin",
+        "arch": "arm64"
+      },
+      "status": "supported",
+      "note": "it is this repository's own test binary"
+    },
+    {
+      "platform": {
+        "os": "linux",
+        "arch": "arm64"
+      },
+      "status": "supported",
+      "note": "it is this repository's own test binary"
+    },
+    {
+      "platform": {
+        "os": "windows",
+        "arch": "amd64"
+      },
+      "status": "supported",
+      "note": "it is this repository's own test binary"
+    }
+  ],
+  "acquisition": [
+    {
+      "mode": "user_path",
+      "title": "Point at the fixture binary",
+      "hint": "choose the test binary that dispatches on -aucom-engine-fixture"
+    }
+  ],
+  "content_layouts": [
+    {
+      "id": "baseq3",
+      "title": "The base game",
+      "kind": "loose_files",
+      "root": "game_root",
+      "path": "baseq3"
+    },
+    {
+      "id": "mod",
+      "title": "A mod or project directory",
+      "kind": "mod_directory",
+      "root": "game_root"
+    }
+  ],
+  "executables": [
+    {
+      "name": "engine",
+      "title": "The fixture engine",
+      "file": "engine{platform.exe_suffix}"
+    }
+  ],
+  "actions": [
+    {
+      "id": "play_map",
+      "title": "Play a map",
+      "session_role": "client",
+      "executable": "engine",
+      "working_dir": {
+        "root": "game_root"
+      },
+      "args": [
+        "-aucom-engine-fixture",
+        "--record",
+        "{root.content_root}/engine-record.json",
+        "--behaviour",
+        "{option.behaviour}",
+        "--children",
+        "{option.children}",
+        "--",
+        "+set",
+        "fs_basepath",
+        "{root.game_root}",
+        "+set",
+        "fs_game",
+        "{runtime.mod_name}",
+        "+map",
+        "{runtime.map_name}"
+      ],
+      "roots": [
+        {
+          "role": "game_root",
+          "access": "read",
+          "purpose": "load the base game and the mod being played"
+        },
+        {
+          "role": "content_root",
+          "access": "read_write",
+          "purpose": "write the record of how the fixture was started"
+        }
+      ],
+      "options": [
+        {
+          "name": "behaviour",
+          "title": "What the fixture does",
+          "type": "enum",
+          "default": "ready",
+          "values": [
+            {
+              "value": "ready",
+              "title": "Start, print the banner and exit"
+            },
+            {
+              "value": "crash",
+              "title": "Fail the way an engine fails"
+            },
+            {
+              "value": "stay",
+              "title": "Stay running until it is stopped"
+            }
+          ]
+        },
+        {
+          "name": "children",
+          "title": "Child processes",
+          "type": "integer",
+          "default": "0",
+          "minimum": 0,
+          "maximum": 8
+        }
+      ]
+    },
+    {
+      "id": "play_package",
+      "title": "Play a mod or package",
+      "session_role": "client",
+      "executable": "engine",
+      "working_dir": {
+        "root": "game_root"
+      },
+      "args": [
+        "-aucom-engine-fixture",
+        "--record",
+        "{root.content_root}/engine-record.json",
+        "--behaviour",
+        "{option.behaviour}",
+        "--",
+        "+set",
+        "fs_basepath",
+        "{root.game_root}",
+        "+set",
+        "fs_game",
+        "{runtime.package_name}"
+      ],
+      "roots": [
+        {
+          "role": "game_root",
+          "access": "read",
+          "purpose": "load the base game and the mod being played"
+        },
+        {
+          "role": "content_root",
+          "access": "read_write",
+          "purpose": "write the record of how the fixture was started"
+        }
+      ],
+      "options": [
+        {
+          "name": "behaviour",
+          "title": "What the fixture does",
+          "type": "enum",
+          "default": "ready",
+          "values": [
+            {
+              "value": "ready",
+              "title": "Start, print the banner and exit"
+            },
+            {
+              "value": "crash",
+              "title": "Fail the way an engine fails"
+            },
+            {
+              "value": "stay",
+              "title": "Stay running until it is stopped"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "join_server",
+      "title": "Join a server",
+      "session_role": "client",
+      "executable": "engine",
+      "working_dir": {
+        "root": "game_root"
+      },
+      "args": [
+        "-aucom-engine-fixture",
+        "--record",
+        "{root.content_root}/engine-record.json",
+        "--behaviour",
+        "{option.behaviour}",
+        "--",
+        "+set",
+        "fs_basepath",
+        "{root.game_root}",
+        "+connect",
+        "{runtime.server_host}:{runtime.server_port}"
+      ],
+      "roots": [
+        {
+          "role": "game_root",
+          "access": "read",
+          "purpose": "load the base game and the mod being played"
+        },
+        {
+          "role": "content_root",
+          "access": "read_write",
+          "purpose": "write the record of how the fixture was started"
+        }
+      ],
+      "network": {
+        "required": true,
+        "purpose": "connect to the server the user names"
+      },
+      "options": [
+        {
+          "name": "behaviour",
+          "title": "What the fixture does",
+          "type": "enum",
+          "default": "ready",
+          "values": [
+            {
+              "value": "ready",
+              "title": "Start, print the banner and exit"
+            },
+            {
+              "value": "crash",
+              "title": "Fail the way an engine fails"
+            },
+            {
+              "value": "stay",
+              "title": "Stay running until it is stopped"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "host_listen",
+      "title": "Host a game and play in it",
+      "session_role": "listen_server",
+      "executable": "engine",
+      "working_dir": {
+        "root": "game_root"
+      },
+      "args": [
+        "-aucom-engine-fixture",
+        "--record",
+        "{root.content_root}/engine-record.json",
+        "--behaviour",
+        "{option.behaviour}",
+        "--",
+        "+set",
+        "fs_basepath",
+        "{root.game_root}",
+        "+set",
+        "fs_game",
+        "{runtime.mod_name}",
+        "+set",
+        "sv_maxclients",
+        "{option.max_players}",
+        "+set",
+        "net_port",
+        "{option.port}",
+        "+set",
+        "sv_pure",
+        "{option.pure}",
+        "+set",
+        "sv_allowDownload",
+        "{option.allow_download}",
+        "+map",
+        "{runtime.map_name}"
+      ],
+      "options": [
+        {
+          "name": "behaviour",
+          "title": "What the fixture does",
+          "type": "enum",
+          "default": "ready",
+          "values": [
+            {
+              "value": "ready",
+              "title": "Start, print the banner and exit"
+            },
+            {
+              "value": "crash",
+              "title": "Fail the way an engine fails"
+            },
+            {
+              "value": "stay",
+              "title": "Stay running until it is stopped"
+            }
+          ]
+        },
+        {
+          "name": "max_players",
+          "title": "Players",
+          "description": "`sv_maxclients`, counting you.",
+          "type": "integer",
+          "default": "8",
+          "minimum": 2,
+          "maximum": 64
+        },
+        {
+          "name": "port",
+          "title": "Port",
+          "description": "`net_port`. 27960 is Quake III's own default; change it to run two servers on one machine.",
+          "type": "integer",
+          "default": "27960",
+          "minimum": 1024,
+          "maximum": 65535
+        },
+        {
+          "name": "pure",
+          "title": "Pure server",
+          "description": "Upstream: `sv_pure 1` restricts clients to the PK3s installed on the server; `sv_pure 0` lets them use their own. The values are the cvar's own.",
+          "type": "enum",
+          "default": "1",
+          "values": [
+            {
+              "value": "1",
+              "title": "Only the files this server has"
+            },
+            {
+              "value": "0",
+              "title": "Allow clients their own files"
+            }
+          ]
+        },
+        {
+          "name": "allow_download",
+          "title": "Send files to clients",
+          "description": "`sv_allowDownload 1` lets a player who does not have your PK3 download it from the server. Without it they are refused and told what they are missing.",
+          "type": "enum",
+          "default": "1",
+          "values": [
+            {
+              "value": "1",
+              "title": "Let clients download what they are missing"
+            },
+            {
+              "value": "0",
+              "title": "Do not send files"
+            }
+          ]
+        }
+      ],
+      "roots": [
+        {
+          "role": "game_root",
+          "access": "read",
+          "purpose": "load the base game and the mod being played"
+        },
+        {
+          "role": "content_root",
+          "access": "read_write",
+          "purpose": "write the record of how the fixture was started"
+        }
+      ],
+      "network": {
+        "required": true,
+        "purpose": "accept connections from other players"
+      }
+    },
+    {
+      "id": "host_dedicated",
+      "title": "Host a dedicated server",
+      "session_role": "dedicated_server",
+      "executable": "engine",
+      "working_dir": {
+        "root": "game_root"
+      },
+      "args": [
+        "-aucom-engine-fixture",
+        "--record",
+        "{root.content_root}/engine-record.json",
+        "--behaviour",
+        "{option.behaviour}",
+        "--children",
+        "{option.children}",
+        "--",
+        "+set",
+        "fs_basepath",
+        "{root.game_root}",
+        "+set",
+        "fs_game",
+        "{runtime.mod_name}",
+        "+set",
+        "dedicated",
+        {
+          "value": "1",
+          "when": {
+            "option": "listing",
+            "equals": "lan"
+          }
+        },
+        {
+          "value": "2",
+          "when": {
+            "option": "listing",
+            "equals": "internet"
+          }
+        },
+        "+set",
+        "sv_maxclients",
+        "{option.max_players}",
+        "+set",
+        "net_port",
+        "{option.port}",
+        "+set",
+        "sv_pure",
+        "{option.pure}",
+        "+set",
+        "sv_allowDownload",
+        "{option.allow_download}",
+        "+set",
+        "com_hunkMegs",
+        "{option.hunk_megs}",
+        "+map",
+        "{runtime.map_name}"
+      ],
+      "options": [
+        {
+          "name": "behaviour",
+          "title": "What the fixture does",
+          "type": "enum",
+          "default": "ready",
+          "values": [
+            {
+              "value": "ready",
+              "title": "Start, print the banner and exit"
+            },
+            {
+              "value": "crash",
+              "title": "Fail the way an engine fails"
+            },
+            {
+              "value": "stay",
+              "title": "Stay running until it is stopped"
+            }
+          ]
+        },
+        {
+          "name": "listing",
+          "title": "Who can find it",
+          "description": "Upstream: 2 is public Internet, 1 is LAN or connect-by-IP.",
+          "type": "enum",
+          "default": "lan",
+          "values": [
+            {
+              "value": "lan",
+              "title": "LAN, or people you give the address to"
+            },
+            {
+              "value": "internet",
+              "title": "Listed on the public master servers"
+            }
+          ]
+        },
+        {
+          "name": "max_players",
+          "title": "Players",
+          "type": "integer",
+          "default": "8",
+          "minimum": 2,
+          "maximum": 64
+        },
+        {
+          "name": "port",
+          "title": "Port",
+          "type": "integer",
+          "default": "27960",
+          "minimum": 1024,
+          "maximum": 65535
+        },
+        {
+          "name": "pure",
+          "title": "Pure server",
+          "type": "enum",
+          "default": "1",
+          "values": [
+            {
+              "value": "1",
+              "title": "Only the files this server has"
+            },
+            {
+              "value": "0",
+              "title": "Allow clients their own files"
+            }
+          ]
+        },
+        {
+          "name": "allow_download",
+          "title": "Send files to clients",
+          "type": "enum",
+          "default": "1",
+          "values": [
+            {
+              "value": "1",
+              "title": "Let clients download what they are missing"
+            },
+            {
+              "value": "0",
+              "title": "Do not send files"
+            }
+          ]
+        },
+        {
+          "name": "hunk_megs",
+          "title": "Memory",
+          "description": "`com_hunkMegs`, in megabytes. Upstream's default is 128 and its own server guide raises it for some add-ons; it must be set on the command line.",
+          "type": "integer",
+          "default": "128",
+          "minimum": 32,
+          "maximum": 2048,
+          "advanced": true
+        },
+        {
+          "name": "children",
+          "title": "Child processes",
+          "type": "integer",
+          "default": "0",
+          "minimum": 0,
+          "maximum": 8
+        }
+      ],
+      "roots": [
+        {
+          "role": "game_root",
+          "access": "read",
+          "purpose": "load the base game and the mod being played"
+        },
+        {
+          "role": "content_root",
+          "access": "read_write",
+          "purpose": "write the record of how the fixture was started"
+        }
+      ],
+      "network": {
+        "required": true,
+        "purpose": "accept connections from other players"
+      }
+    }
+  ]
+}

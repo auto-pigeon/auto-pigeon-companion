@@ -1,0 +1,8 @@
+2.5.17n-git-68ecbed
+8 threads
+Q3Map         - v1.0r (c) 1999 Id Software Inc.
+Q3Map (ydnar) - v2.5.17n-git-68ecbed
+...
+WARNING: Couldn't find image for shader textures/aucom/missing
+WARNING: Couldn't find image for shader textures/aucom/brokenshader
+ERROR: Unable to open file "models/aucom/marker.md3".

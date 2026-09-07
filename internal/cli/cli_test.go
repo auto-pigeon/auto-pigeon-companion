@@ -47,6 +47,13 @@ func TestMain(m *testing.M) {
 	if base := strings.TrimSuffix(filepath.Base(os.Args[0]), ".exe"); isQ2ToolName(base) {
 		os.Exit(q2ToolMain(base, os.Args[1:]))
 	}
+	// The Quake III toolchain fixture, selected the same way and for the same
+	// reason. One name rather than three: Q3Map2 is one program with a stage
+	// switch, which is the shape the profile has to get right. See
+	// q3fixture_test.go.
+	if base := strings.TrimSuffix(filepath.Base(os.Args[0]), ".exe"); base == q3ToolName {
+		os.Exit(q3ToolMain(os.Args[1:]))
+	}
 	os.Exit(m.Run())
 }
 
