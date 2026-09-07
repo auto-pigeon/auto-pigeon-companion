@@ -1,9 +1,9 @@
 {
   "schema_version": "aucom.catalog/1.0",
-  "catalog_id": "auto-pigeon.q1",
-  "serial": 1,
-  "issued_at": "2026-09-06T00:00:00Z",
-  "expires_at": "2027-09-06T00:00:00Z",
+  "catalog_id": "auto-pigeon.ericw-tools",
+  "serial": 2,
+  "issued_at": "2026-09-07T00:00:00Z",
+  "expires_at": "2027-09-07T00:00:00Z",
   "packages": [
     {
       "id": "ericw-tools.q1",
@@ -99,6 +99,82 @@
             "bin/light",
             "bin/bspinfo",
             "bin/bsputil"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ericw-tools.q2",
+      "version": "2.0.0-alpha7",
+      "name": "ericw-tools (Quake II, pre-release)",
+      "summary": "qbsp, vis and light in their Quake II mode — a 2.x pre-release, pinned because Quake II support exists nowhere else.",
+      "program": "ericw-tools",
+      "source": {
+        "homepage": "https://ericwa.github.io/ericw-tools/",
+        "release_notes": "https://github.com/ericwa/ericw-tools/releases/tag/2.0.0-alpha7",
+        "repository": "https://github.com/ericwa/ericw-tools"
+      },
+      "license": {
+        "spdx": "GPL-3.0-or-later",
+        "name": "GNU General Public License v3.0 or later",
+        "url": "https://www.gnu.org/licenses/gpl-3.0.html",
+        "corresponding_source": "https://github.com/ericwa/ericw-tools/tree/2.0.0-alpha7",
+        "notice": "ericw-tools is a separate program by Eric Wasylishen, continuing Kevin Shanahan's tyrutils. Its source terms are GPL-2.0-or-later; these official binaries ship Embree beside them and carry both `gpl_v3.txt` and `LICENSE-embree.txt`, and upstream's README states that builds using Embree are licensed under GPLv3+ for compatibility with the Apache licence, so GPL-3.0-or-later is what this download is conveyed under. The corresponding source for exactly this version is the 2.0.0-alpha7 tag named above. This is a PRE-RELEASE: upstream marks the whole 2.x line as one, and the Companion's Quake II path is work in progress for that reason among others. Downloading it obtains somebody else's software under somebody else's licence."
+      },
+      "requires_acceptance": true,
+      "artifacts": [
+        {
+          "platform": {
+            "arch": "amd64",
+            "os": "linux"
+          },
+          "url": "https://github.com/ericwa/ericw-tools/releases/download/2.0.0-alpha7/ericw-tools-2.0.0-alpha7-Linux.zip",
+          "kind": "zip",
+          "size": 22898562,
+          "sha256": "sha256:c87d669c615f92163c21e6e154268c0c2e3de4e78c26b6bd5a2a2e7996a9fe75",
+          "unpacked_size": 58773056,
+          "executables": [
+            "qbsp",
+            "vis",
+            "light",
+            "bspinfo",
+            "bsputil"
+          ]
+        },
+        {
+          "platform": {
+            "arch": "amd64",
+            "os": "windows"
+          },
+          "url": "https://github.com/ericwa/ericw-tools/releases/download/2.0.0-alpha7/ericw-tools-2.0.0-alpha7-win64.zip",
+          "kind": "zip",
+          "size": 29065662,
+          "sha256": "sha256:fa640ce178aa1eef7ae5fc725312826c0ab682945ac58d06999f4e814a30b816",
+          "unpacked_size": 70470657,
+          "executables": [
+            "qbsp.exe",
+            "vis.exe",
+            "light.exe",
+            "bspinfo.exe",
+            "bsputil.exe"
+          ]
+        },
+        {
+          "platform": {
+            "arch": "amd64",
+            "os": "darwin"
+          },
+          "url": "https://github.com/ericwa/ericw-tools/releases/download/2.0.0-alpha7/ericw-tools-2.0.0-alpha7-Darwin.zip",
+          "kind": "zip",
+          "size": 41839775,
+          "sha256": "sha256:ae5bd36cc6b4704067bc95f90aec2c9f4a0582be6b815029b068d476318094b3",
+          "unpacked_size": 106997472,
+          "executables": [
+            "qbsp",
+            "vis",
+            "light",
+            "bspinfo",
+            "bsputil"
           ]
         }
       ]

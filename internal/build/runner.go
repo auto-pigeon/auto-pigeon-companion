@@ -152,6 +152,7 @@ func (r *Runner) Run(ctx context.Context, request Request) (*Manifest, error) {
 		Platform:      r.options.Platform.String(),
 		Label:         request.Label,
 		Pipeline:      documentRef(entry),
+		EngineFamily:  pipelineFamily(entry),
 		State:         job.Running,
 		Strict:        request.Strict,
 		StartedAt:     r.options.Now(),
@@ -260,6 +261,7 @@ func (r *Runner) Preview(request Request) (*Manifest, error) {
 		Platform:      r.options.Platform.String(),
 		Label:         request.Label,
 		Pipeline:      documentRef(entry),
+		EngineFamily:  pipelineFamily(entry),
 		State:         job.Queued,
 		StartedAt:     r.options.Now(),
 	}
@@ -986,4 +988,19 @@ func digestFile(path string) (string, int64, error) {
 		return "", 0, fmt.Errorf("build: reading %s: %w", path, err)
 	}
 	return "sha256:" + hex.EncodeToString(hash.Sum(nil)), size, nil
+}
+
+// pipelineFamily reads the engine family off a pipeline catalog entry.
+//
+// A separate function rather than an inline type assertion because it is done
+// at both manifest-construction sites, and two spellings of the same assertion
+// is one place for them to diverge.
+func pipelineFamily(entry job.CatalogEntry) string {
+	// A pipeline may legitimately declare no game profile — one that operates on
+	// a file format rather than on a project has none — so the nil is a normal
+	// answer and not a missing case.
+	if pipeline, ok := entry.Profile.(*profile.PipelineProfile); ok && pipeline.GameProfile != nil {
+		return pipeline.GameProfile.EngineFamily
+	}
+	return ""
 }

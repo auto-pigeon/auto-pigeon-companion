@@ -244,6 +244,25 @@ button.link {
 .badge.running, .badge.queued { border-color: var(--accent); color: var(--accent); }
 .badge.failed, .badge.interrupted, .badge.blocked { border-color: var(--bad); color: var(--bad); }
 .badge.cancelled, .badge.skipped { border-color: var(--ink-muted); color: var(--ink-muted); }
+.badge.warning { border-color: var(--warn); color: var(--warn); }
+
+/* The work-in-progress statement. A note, not an error: the path it describes
+   works, and a red box would be telling the user something untrue about it.
+   The left rule and the warning colour carry the same message the words do, so
+   removing the colour leaves the sentence intact. */
+.wip {
+  margin: 0.5rem 0; padding: 0.4rem 0.7rem;
+  border-left: 3px solid var(--warn);
+  background: var(--surface);
+  font-size: 0.85rem; line-height: 1.45;
+}
+.wip .wip__text { display: block; }
+.linklike {
+  display: inline; margin: 0.25rem 0 0; padding: 0;
+  border: 0; background: none; color: var(--accent);
+  font: inherit; text-decoration: underline; cursor: pointer;
+}
+.linklike:hover, .linklike:focus-visible { color: var(--ink); }
 
 .stages { list-style: none; margin: 0.5rem 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
 .stages > li {

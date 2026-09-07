@@ -169,6 +169,12 @@ func profileShow(env *Env, args []string) int {
 	if trust != profile.TrustBuiltin {
 		fmt.Fprint(env.Stdout, "\n  Nothing here has been granted. Importing a profile does not let it do any of the above.\n")
 	}
+	// Shown for an imported document as much as for a built-in one. The
+	// statement is about the game, not about who wrote the profile, so a
+	// community Quake II toolchain gets it too — which is the reason it is not
+	// a member of the document.
+	fmt.Fprintln(env.Stdout)
+	printMaturityNote(env, documentFamily(p), "  ")
 	return 0
 }
 
@@ -254,10 +260,23 @@ func profileList(env *Env, args []string) int {
 	sort.Slice(entries, func(i, j int) bool {
 		return entries[i].Profile.Metadata().ID < entries[j].Profile.Metadata().ID
 	})
+	families := map[string]bool{}
 	for _, entry := range entries {
 		meta := entry.Profile.Metadata()
-		fmt.Fprintf(env.Stdout, "%-8s %-34s %-8s %s\n", meta.Kind, meta.ID, meta.Version, entry.Trust())
+		family := documentFamily(entry.Profile)
+		badge := maturityBadge(family)
+		fmt.Fprintf(env.Stdout, "%-8s %-34s %-8s %-8s %s\n", meta.Kind, meta.ID, meta.Version, entry.Trust(), badge)
 		fmt.Fprintf(env.Stdout, "         %s\n", meta.Summary)
+		if badge != "" {
+			families[family] = true
+		}
+	}
+	// The sentence once, after the listing, rather than under every row: eight
+	// Quake II documents would print it eight times and it would stop being
+	// read on the second.
+	for _, family := range sortedFamilies(families) {
+		fmt.Fprintln(env.Stdout)
+		printMaturityNote(env, family, "")
 	}
 	return 0
 }

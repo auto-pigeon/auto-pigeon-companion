@@ -906,6 +906,7 @@ func describeProfile(entry job.CatalogEntry) map[string]any {
 			"network": action.Network,
 		})
 	}
+	family := documentFamily(entry.Profile)
 	return map[string]any{
 		"id":          meta.ID,
 		"kind":        meta.Kind,
@@ -920,6 +921,12 @@ func describeProfile(entry job.CatalogEntry) map[string]any {
 		"source":      entry.Source,
 		"permissions": entry.Profile.Permissions(),
 		"actions":     actions,
+		// Every description of a profile carries the family it is for and what
+		// this build says about that family. On every route, not only the ones
+		// that happen to draw a badge today: a surface added next year gets the
+		// statement without anybody remembering to plumb it through.
+		"engine_family": family,
+		"maturity":      describeMaturity(family),
 	}
 }
 

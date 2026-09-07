@@ -15,7 +15,11 @@
 "use strict";
 
 (() => {
-  const { $, el, api, setMessage, announce, record } = window.AUCOM;
+  const { $, el, api, setMessage, announce, record, wireCompatibilityReport } = window.AUCOM;
+
+  // The compatibility-report panel is wired once and lives outside the areas,
+  // because every area can open it. See core.js.
+  wireCompatibilityReport();
 
   const areaNames = ["library", "build", "run", "profiles", "jobs", "settings"];
   const titles = {
@@ -36,6 +40,11 @@
       if (tab.dataset.area === area) tab.setAttribute("aria-current", "page");
       else tab.removeAttribute("aria-current");
     }
+    // A report opened from the Build area is about the Build area. Leaving it
+    // on screen after a move to Settings would be a form whose context the user
+    // can no longer see.
+    const feedback = $("feedback-panel");
+    if (feedback) feedback.hidden = true;
     $("area-heading").textContent = titles[area];
     if (focus) $("area-heading").focus();
     if (window.location.hash !== "#" + area) {

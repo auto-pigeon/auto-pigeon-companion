@@ -10,7 +10,8 @@
 "use strict";
 
 (() => {
-  const { $, el, api, setMessage, busy, withBusy, record, badge, shortDigest, when, terminal } = window.AUCOM;
+  const { $, el, api, setMessage, busy, withBusy, record, badge, shortDigest, when, terminal,
+    maturityBadge, maturityNote, openCompatibilityReport } = window.AUCOM;
 
   let pipelines = [];
   let inputFields = new Map();
@@ -32,9 +33,15 @@
     pipelines = body.items || [];
     select.replaceChildren();
     for (const pipeline of pipelines) {
+      // A <select> holds text and not markup, so the badge word goes into the
+      // option itself. It has to be visible *before* the pipeline is chosen:
+      // that is the moment the choice is made.
+      const mark = pipeline.maturity && pipeline.maturity.work_in_progress
+        ? ` [${pipeline.maturity.badge}]`
+        : "";
       select.append(
         el("option", {
-          text: `${pipeline.name} — ${pipeline.summary}`,
+          text: `${pipeline.name}${mark} — ${pipeline.summary}`,
           attrs: { value: pipeline.id },
         })
       );
@@ -64,6 +71,23 @@
         pipeline.missing_capabilities.join(", ") +
         ". Install the tool that does, then approve it in Profiles.";
     $("build-pipeline-note").className = pipeline.runnable ? "muted" : "message error";
+
+    // Above the stages and above the Build button, because this is the surface
+    // where a Quake II map is compiled and exported.
+    //
+    // Removed before it is added: renderPipeline runs on every change of the
+    // selector, and a note appended each time would stack up one warning per
+    // pipeline the user looked at.
+    for (const stale of document.querySelectorAll("#area-build > .panel > .wip")) stale.remove();
+    const note = maturityNote(pipeline.maturity, () =>
+      openCompatibilityReport({
+        family: pipeline.engine_family,
+        operation: "compile",
+        about: `About the ${pipeline.name} pipeline.`,
+        profiles: [{ role: "pipeline", id: pipeline.id, version: pipeline.version }],
+      })
+    );
+    if (note) $("build-pipeline-note").after(note);
 
     for (const step of pipeline.steps) {
       const line = el("li");
@@ -273,6 +297,23 @@
     $("build-cancel").disabled = !body.live;
     $("build-current-title").textContent =
       `${body.live ? "Building" : "Build"} ${manifest.build_id} — ${manifest.state}`;
+
+    // The finished build is the other moment a compatibility report is worth
+    // offering: the user has just seen what happened and has the build id that
+    // fills in the diagnostics. The manifest carries the family (see
+    // internal/build/manifest.go), so this needs no second lookup.
+    for (const stale of document.querySelectorAll("#build-current-panel > .wip")) stale.remove();
+    const buildNote = maturityNote(
+      { work_in_progress: true, badge: "Work in progress", message: body.maturity_message, feedback_invited: true },
+      () =>
+        openCompatibilityReport({
+          family: manifest.engine_family,
+          operation: "compile",
+          build_id: manifest.build_id,
+          about: `About build ${manifest.build_id} with ${manifest.pipeline?.id || "this pipeline"}.`,
+        })
+    );
+    if (body.maturity_message && buildNote) $("build-current-title").after(buildNote);
 
     for (const step of manifest.steps || []) {
       const line = el("li", { className: step.state || (step.skipped ? "skipped" : "") });

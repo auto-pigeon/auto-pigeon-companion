@@ -1,0 +1,345 @@
+{
+  "schema_version": "aucom.profile/1.1",
+  "kind": "tool",
+  "id": "auto-pigeon.ericw-tools.q2",
+  "version": "1.0.0",
+  "name": "ericw-tools 2.0.0-alpha7 (Quake II, experimental)",
+  "summary": "Experimental: the qbsp, vis and light compilers in their Quake II mode, from a 2.x pre-release.",
+  "description": "This is the experimental Quake II toolchain, and it is a separate document from the stable Quake 1 one for a reason that is not organisational: they are different programs. `auto-pigeon.ericw-tools.q1` describes release v0.18.1, the newest release upstream has not marked a pre-release. Quake II support lives in the 2.x line, and the whole of that line — up to and including this one — is published as a pre-release. Pinning a pre-release for Q1 would be a downgrade of a qualified path; not pinning one for Q2 would mean no Q2 path at all. So there are two documents, two versions and two sets of capability ids, and a Q1 pipeline can never resolve to this tool.\n\nEverything below was measured by running 2.0.0-alpha7 on Linux against a synthetic Q2 map, not read across from the Q1 profile. Seven things differ, and each of them would have been a plausible-looking wrong answer:\n\n1. The archive has no `bin/` directory and no root directory: `qbsp` is at the archive root. The v0.18.1 archive unpacks to `ericw-tools-v0.18.1-Linux/bin/qbsp`.\n2. `maputil` is new; v0.18.1 has no such program.\n3. The log files are named differently. v0.18.1 writes `vis.log` and `light.log`; this writes `<stem>.log`, `<stem>-vis.log` and `<stem>-light.log`.\n4. qbsp writes a `<stem>.texinfo.json` beside the BSP, and `light` reads it back — `Loading extended texinfo flags from …`. It is therefore declared as an input to the lighting step and staged with the BSP, exactly as the portal file is for vis. A lighting job that did not stage it would succeed, silently, with the wrong surface flags.\n5. `-lit` does nothing here. Asked for on a Quake II BSP it prints `.lit colored light output requested on command line.` and writes no file, because Quake II lightmaps are already RGB inside the BSP. There is no `lit` option in this document.\n6. `bspinfo` **writes files** in 2.x — `<bsp>.json`, `<bsp>.geometry.obj` and one PNG per lightmap atlas — where v0.18.1 only printed a report. Its action therefore asks for write access to the workspace and declares those outputs.\n7. Quake 1's special texture-name rules do not apply. In Quake II a brush's contents and surface flags come from the `.wal` the map references — or from a `.wal_json` beside it — which is why the base game data root is required rather than optional. A compile with nothing bound there still exits 0 and still writes a BSP; it just writes one where every surface has default flags, no playerclip and no sky. That is the worst kind of failure, so it is refused at the binding instead.\n\nThree roots, bound separately, because they are three separate things a user has and can move independently: the executables (`tool_root`), the base game data (`game_root`, passed as `-basedir`, the directory that holds `textures/`), and the mod (`content_root`, passed as `-gamedir`). Compiling a plain `baseq2` map means binding the last two to the same directory, which is exactly what upstream's own auto-detection does when a map is compiled inside `baseq2/maps`.\n\n`-nodefaultpaths` is deliberately not sent. It looks like the safe choice — confine the search to what the user bound — and it was measured to break texture lookup even with `-basedir` given explicitly. `-nocolor` is sent everywhere, so a captured log is text rather than escape codes.",
+  "publisher": {
+    "name": "Auto-Pigeon",
+    "url": "https://github.com/andrea-dintino/auto-pigeon-companion"
+  },
+  "source": {
+    "homepage": "https://ericwa.github.io/ericw-tools/",
+    "repository": "https://github.com/ericwa/ericw-tools",
+    "release_notes": "https://github.com/ericwa/ericw-tools/releases/tag/2.0.0-alpha7"
+  },
+  "license": {
+    "spdx": "GPL-3.0-or-later",
+    "name": "GNU General Public License v3.0 or later",
+    "url": "https://www.gnu.org/licenses/gpl-3.0.html",
+    "corresponding_source": "https://github.com/ericwa/ericw-tools/tree/2.0.0-alpha7",
+    "notice": "ericw-tools is somebody else's program, under its own licence, and describing it here changes nothing about that. Its own source terms are GPL-2.0-or-later; the official binaries ship Embree beside them and carry both `gpl_v3.txt` and `LICENSE-embree.txt`, and upstream's README states that builds using Embree are licensed under GPLv3+ for compatibility with the Apache licence, so GPL-3.0-or-later is what this download is conveyed under. The corresponding source for exactly this pre-release is the 2.0.0-alpha7 tag named above. Auto-Pigeon Companion is MIT and separate: it runs these programs as separate processes and does not contain, link or relicense them."
+  },
+  "compatibility": {
+    "companion": { "at_least": "0.1.0" }
+  },
+  "game_profile": {
+    "slug": "quake2",
+    "engine_family": "quake2"
+  },
+  "tool_version": "2.0.0-alpha7",
+  "platforms": [
+    { "platform": { "os": "linux", "arch": "amd64" }, "status": "supported", "note": "the five programs were run here on a synthetic Quake II map: compile, areaportals, visibility, hearability, lighting. A claim about these programs on this platform, not that Quake II is finished." },
+    { "platform": { "os": "windows", "arch": "amd64" }, "status": "unverified", "note": "the official win64 pre-release is pinned in the catalogue; nobody here has run it" },
+    { "platform": { "os": "darwin", "arch": "amd64" }, "status": "unverified", "note": "the official Darwin pre-release is pinned in the catalogue; it is unsigned and unnotarized, and recent macOS will refuse it until the user allows it" },
+    { "platform": { "os": "darwin", "arch": "arm64" }, "status": "unverified", "note": "no arm64 build exists upstream; the amd64 build runs under Rosetta 2, or point the Companion at your own" },
+    { "platform": { "os": "linux", "arch": "arm64" }, "status": "unverified", "note": "no arm64 build exists upstream; build it from the tagged source or point the Companion at your own" },
+    { "platform": { "os": "windows", "arch": "386" }, "status": "unsupported", "note": "upstream published no 32-bit build of the 2.x line; there is nothing to pin and nothing to point at" }
+  ],
+  "acquisition": [
+    {
+      "mode": "managed_download",
+      "title": "Download the official 2.0.0-alpha7 pre-release",
+      "catalog_package": "ericw-tools.q2",
+      "platforms": [
+        { "os": "linux", "arch": "amd64" },
+        { "os": "windows", "arch": "amd64" },
+        { "os": "darwin", "arch": "amd64" }
+      ],
+      "note": "The three archives upstream published for 2.0.0-alpha7, each pinned by size and SHA-256 in the signed catalogue. This is a pre-release: upstream marks it as one, and so does this profile."
+    },
+    {
+      "mode": "user_path",
+      "title": "Use a copy you already have",
+      "hint": "choose the unpacked ericw-tools 2.x folder — the one with qbsp directly inside it, not inside bin/",
+      "note": "The route for arm64, for a newer alpha, and for a build you made yourself. Nothing verifies it against the catalogue: you are the authority for what you pointed at, and a different alpha may behave differently from the one this document measured."
+    },
+    {
+      "mode": "system_path",
+      "title": "Find them on PATH",
+      "commands": ["qbsp", "vis", "light", "bspinfo", "bsputil"],
+      "note": "Whatever version is first on PATH — which on most machines is the 0.18.1 line, whose qbsp has no -q2bsp. Run the version probe afterwards."
+    }
+  ],
+  "version_probe": {
+    "executable": "qbsp",
+    "args": [],
+    "parse": { "kind": "after_marker", "marker": "ericw-tools ", "stream": "stdout" },
+    "timeout_seconds": 10
+  },
+  "capabilities": [
+    {
+      "id": "q2.bsp.compile",
+      "title": "Compile a Quake II map into a BSP",
+      "description": "Reads .map source and writes the Quake II BSP, the portal file vis needs, the extended texinfo document light reads, and a point file when the map leaks.",
+      "consumes": ["q2.map.source"],
+      "produces": ["q2.bsp", "q2.prt", "q2.texinfo", "q2.pts"]
+    },
+    {
+      "id": "q2.bsp.vis",
+      "title": "Compute the visible and hearable sets",
+      "description": "Quake II's vis computes a PHS — which clusters can be heard from which — as well as the PVS. That second pass has no Quake 1 equivalent.",
+      "consumes": ["q2.bsp", "q2.prt"],
+      "produces": ["q2.bsp.vised"]
+    },
+    {
+      "id": "q2.bsp.light",
+      "title": "Compute lighting",
+      "description": "Writes the lightmap into the BSP. There is no .lit file: Quake II lightmaps are already coloured.",
+      "consumes": ["q2.bsp.vised", "q2.texinfo"],
+      "produces": ["q2.bsp.lit"]
+    },
+    {
+      "id": "q2.bsp.inspect",
+      "title": "Report what is inside a Quake II BSP",
+      "description": "bspinfo prints its report and, in the 2.x line, also writes a JSON dump, a geometry .obj and the lightmap atlases as PNG.",
+      "consumes": ["q2.bsp"],
+      "produces": ["q2.bsp.report", "q2.bsp.geometry"]
+    },
+    {
+      "id": "q2.bsp.check",
+      "title": "Check a Quake II BSP for internal inconsistencies",
+      "description": "bsputil --check prints what it found and writes no file.",
+      "consumes": ["q2.bsp"]
+    }
+  ],
+  "executables": [
+    { "name": "qbsp", "title": "Map compiler", "file": "qbsp{platform.exe_suffix}" },
+    { "name": "vis", "title": "Visibility and hearability", "file": "vis{platform.exe_suffix}" },
+    { "name": "light", "title": "Lighting", "file": "light{platform.exe_suffix}" },
+    { "name": "bspinfo", "title": "BSP reporter", "file": "bspinfo{platform.exe_suffix}" },
+    { "name": "bsputil", "title": "BSP utility", "file": "bsputil{platform.exe_suffix}" }
+  ],
+  "actions": [
+    {
+      "id": "compile",
+      "title": "Compile the map",
+      "description": "qbsp reads the .map and writes the Quake II .bsp. `-basedir` is the directory holding `textures/`, because qbsp has to open the .wal a face names to read the content and surface flags it bakes into the BSP; `-gamedir` is the mod that overlays it.",
+      "capability": "q2.bsp.compile",
+      "executable": "qbsp",
+      "working_dir": { "root": "workspace" },
+      "args": [
+        "-nocolor",
+        { "value": "-q2bsp", "when": { "option": "format", "equals": "q2bsp" } },
+        { "value": "-qbism", "when": { "option": "format", "equals": "qbism" } },
+        "-basedir",
+        "{root.game_root}",
+        "-gamedir",
+        "{root.content_root}",
+        { "value": "-leaktest", "when": { "option": "leaktest" } },
+        { "value": "-verbose", "when": { "option": "verbosity", "equals": "verbose" } },
+        { "value": "-quiet", "when": { "option": "verbosity", "equals": "quiet" } },
+        { "value": "-notex", "when": { "option": "notex" } },
+        { "value": "-subdivide", "when": { "option": "subdivide" } },
+        { "value": "{option.subdivide}", "when": { "option": "subdivide" } },
+        { "value": "-maxedges", "when": { "option": "maxedges" } },
+        { "value": "{option.maxedges}", "when": { "option": "maxedges" } },
+        { "value": "-filepriority", "when": { "option": "filepriority" } },
+        { "value": "{option.filepriority}", "when": { "option": "filepriority" } },
+        "{input.source_map}",
+        "{output.bsp}"
+      ],
+      "inputs": [
+        { "name": "source_map", "title": "Map source", "role": "q2.map.source", "required": true, "extensions": [".map"] }
+      ],
+      "outputs": [
+        { "name": "bsp", "title": "Compiled BSP", "role": "q2.bsp", "path": "{option.basename}.bsp" },
+        { "name": "prt", "title": "Portal file", "role": "q2.prt", "path": "{option.basename}.prt", "optional": true },
+        { "name": "texinfo", "title": "Extended texinfo flags", "role": "q2.texinfo", "path": "{option.basename}.texinfo.json", "optional": true },
+        { "name": "pts", "title": "Leak point file", "role": "q2.pts", "path": "{option.basename}.pts", "optional": true },
+        { "name": "leak_portals", "title": "Leak portal file", "role": "q2.leak.prt", "path": "{option.basename}.leak.prt", "optional": true },
+        { "name": "log", "title": "Compiler log", "role": "q2.compile.log", "path": "{option.basename}.log", "optional": true }
+      ],
+      "options": [
+        { "name": "basename", "title": "Output name", "description": "The stem of the .bsp and of the files qbsp writes beside it.", "type": "text", "default": "level", "max_length": 64 },
+        { "name": "format", "title": "BSP format", "description": "`Quake II` is the format every Quake II engine reads. `Qbism` is an extended format with higher limits, and was measured to write the ident QBSP:38 instead of IBSP:38 — an engine that has not been built for it will refuse the file.", "type": "enum", "default": "q2bsp", "values": [
+          { "value": "q2bsp", "title": "Quake II (IBSP)" },
+          { "value": "qbism", "title": "Qbism extended (QBSP)" }
+        ] },
+        { "name": "leaktest", "title": "Fail if the map leaks", "description": "qbsp exits non-zero on a leak instead of writing a BSP with no visibility data. The point file and the leak portal file are still written, and are what you load in the editor to find the hole.", "type": "bool", "default": "true" },
+        { "name": "verbosity", "title": "How much qbsp prints", "type": "enum", "default": "normal", "values": [
+          { "value": "normal", "title": "Normal" },
+          { "value": "verbose", "title": "Verbose" },
+          { "value": "quiet", "title": "Almost nothing" }
+        ] },
+        { "name": "notex", "title": "Placeholder textures only", "description": "Writes no texture data into the BSP, for a build that depends on replacements or that must not carry anybody else's texture bytes.", "type": "bool", "default": "false", "advanced": true },
+        { "name": "subdivide", "title": "Texture subdivision", "description": "In luxels. qbsp's Quake II target sets 496 of its own accord; leave this unset to use it. 0 disables subdivision entirely.", "type": "integer", "minimum": 0, "maximum": 4096, "advanced": true },
+        { "name": "maxedges", "title": "Maximum edges per face", "description": "How many edges a single face may have before qbsp splits it. Leave unset for the format's own limit.", "type": "integer", "minimum": 3, "maximum": 4096, "advanced": true },
+        { "name": "filepriority", "title": "Search order", "description": "Whether loose files or packed archives are searched first when a texture is looked up.", "type": "enum", "values": [
+          { "value": "loose", "title": "Loose files first" },
+          { "value": "archive", "title": "Archives first" }
+        ], "advanced": true }
+      ],
+      "diagnostics": [
+        { "id": "leak", "match": "Reached occupant", "severity": "error", "message": "The map leaks: there is a gap between the inside and the void.", "hint": "Load the .pts point file this build published in your editor and follow it to the hole." },
+        { "id": "leakfile", "match": "Leak file written", "severity": "info", "message": "A point file was written; it is the `pts` artifact of this build." },
+        { "id": "leak_portals", "match": "portals written to", "severity": "info", "message": "A leak portal file was written; it is the `leak_portals` artifact of this build." },
+        { "id": "leaktest_abort", "match": "Aborting because -leaktest", "severity": "error", "message": "qbsp stopped rather than write a BSP for a map that leaks.", "hint": "Turn the leak test off if you want the BSP anyway; it will have no visibility data." },
+        { "id": "texture_missing", "match": "Couldn't locate texture for", "severity": "error", "message": "A texture the map uses was not found under the base game data or the mod, so its contents and surface flags fall back to defaults.", "hint": "In Quake II the flags are read from the .wal itself, so a missing texture is a wrong BSP and not just a missing picture. Check what the base game data root is bound to. `skip` has no .wal and always reports this; that one line is expected." },
+        { "id": "builtin_palette", "match": "using built-in palette", "severity": "warning", "message": "The Quake II palette was not found in the bound game data, so the compiler used its own.", "hint": "The palette lives in `pics/colormap.pcx` inside a copy of the game. Lighting colours will be approximate without it." },
+        { "id": "gamedir_guess", "match": "gamedir can't be automatically determined", "severity": "info", "message": "The map was not compiled from inside a `maps/` directory, so qbsp could not guess the game directory. It was told explicitly instead." },
+        { "id": "areaportals", "match": "EmitAreaPortals", "severity": "progress", "message": "Writing the areaportals that divide the map into areas." },
+        { "id": "mixed_contents", "match": "mixed face contents", "severity": "error", "message": "A brush has faces whose textures declare different contents.", "hint": "Every face of one brush must agree about what is inside it." },
+        { "id": "written", "match": "Writing ", "kind": "prefix", "severity": "progress", "message": "qbsp is writing a file." }
+      ],
+      "roots": [
+        { "role": "workspace", "access": "read_write", "purpose": "read the staged map source and write the compiled BSP beside it" },
+        { "role": "game_root", "access": "read", "purpose": "read the Quake II textures whose flags are baked into the BSP" },
+        { "role": "content_root", "access": "read", "purpose": "read the mod's own textures, which override the base game's" }
+      ],
+      "timeout_seconds": 3600
+    },
+    {
+      "id": "vis",
+      "title": "Compute visibility and hearability",
+      "description": "vis rewrites the BSP it is given. It also opens the .prt of the same stem in the same directory without being told to, which is why that file is an input here and is staged beside the BSP.\n\nIt writes a log, and this document does not declare it. Measured: 2.x writes `<stem>-vis.log` BESIDE THE BSP IT WAS GIVEN, not in the directory it was run in — a bsp at `inner/level.bsp` produces `inner/level-vis.log`. An input is staged into a directory of its own, so there is no path relative to the workspace that names it, and declaring one would declare an artifact that is never found. The job's captured output is the same text.",
+      "capability": "q2.bsp.vis",
+      "executable": "vis",
+      "working_dir": { "root": "workspace" },
+      "args": [
+        "-nocolor",
+        "-threads",
+        "{option.threads}",
+        "-basedir",
+        "{root.game_root}",
+        "-gamedir",
+        "{root.content_root}",
+        { "value": "-fast", "when": { "option": "fast" } },
+        { "value": "-level", "when": { "option": "fast", "equals": "false" } },
+        { "value": "{option.level}", "when": { "option": "fast", "equals": "false" } },
+        { "value": "-noambient", "when": { "option": "ambient_sounds", "equals": "false" } },
+        "{input.bsp}"
+      ],
+      "inputs": [
+        { "name": "bsp", "title": "Compiled BSP", "role": "q2.bsp", "required": true, "extensions": [".bsp"] },
+        { "name": "prt", "title": "Portal file", "role": "q2.prt", "required": true, "extensions": [".prt"], "stage_with": "bsp" }
+      ],
+      "outputs": [
+        { "name": "bsp", "title": "BSP with visibility", "role": "q2.bsp.vised", "in_place": "bsp" }
+      ],
+      "options": [
+        { "name": "threads", "title": "Threads", "type": "integer", "default": "4", "minimum": 1, "maximum": 64 },
+        { "name": "fast", "title": "Fast, rough visibility", "description": "A quick pass for previewing. The result is not what you ship.", "type": "bool", "default": "false" },
+        { "name": "level", "title": "Test level", "description": "vis's own 0-4. Ignored when the fast pass is on.", "type": "integer", "default": "4", "minimum": 0, "maximum": 4, "advanced": true },
+        { "name": "ambient_sounds", "title": "Ambient sounds", "description": "Quake II's vis also decides which ambient sounds a cluster hears — water, lava, sky. Turning this off writes none of them.", "type": "bool", "default": "true", "advanced": true }
+      ],
+      "diagnostics": [
+        { "id": "no_portals", "match": "unknown header/empty portal file", "severity": "error", "message": "vis could not read the portal file that belongs to this BSP.", "hint": "The compile stage produces it. A leaked map has none, because qbsp stops before writing one." },
+        { "id": "no_clusters", "match": "0 clusters", "severity": "warning", "message": "The BSP has no visibility clusters, so there is nothing to compute." },
+        { "id": "phs", "match": "clusters hearable", "severity": "info", "message": "The potentially hearable set was computed. Quake II uses it for sound; Quake 1 has no such pass." },
+        { "id": "progress", "match": "visdatasize", "severity": "progress", "message": "Visibility data written." }
+      ],
+      "roots": [
+        { "role": "workspace", "access": "read_write", "purpose": "rewrite the staged BSP with its visibility and hearability data" },
+        { "role": "game_root", "access": "read", "purpose": "read the Quake II palette the compilers load at startup" },
+        { "role": "content_root", "access": "read", "purpose": "read the mod that overlays the base game data" }
+      ],
+      "timeout_seconds": 21600
+    },
+    {
+      "id": "light",
+      "title": "Compute lighting",
+      "description": "light rewrites the BSP it is given. Its log is not declared here for the same reason vis's is not: 2.x writes `<stem>-light.log` beside the BSP it was handed, which is inside the staged input's own directory. It also reads the `.texinfo.json` qbsp wrote beside that BSP — `Loading extended texinfo flags from …` — so that file is an input here and is staged with the BSP. Without it the run still succeeds, with the wrong surface flags, which is why it is wired rather than left to chance.",
+      "capability": "q2.bsp.light",
+      "executable": "light",
+      "working_dir": { "root": "workspace" },
+      "args": [
+        "-nocolor",
+        "-threads",
+        "{option.threads}",
+        "-basedir",
+        "{root.game_root}",
+        "-gamedir",
+        "{root.content_root}",
+        { "value": "-extra", "when": { "option": "sampling", "equals": "extra" } },
+        { "value": "-extra4", "when": { "option": "sampling", "equals": "extra4" } },
+        { "value": "-soft", "when": { "option": "soft" } },
+        { "value": "-gate", "when": { "option": "gate" } },
+        { "value": "{option.gate}", "when": { "option": "gate" } },
+        { "value": "-nolights", "when": { "option": "nolights" } },
+        "{input.bsp}"
+      ],
+      "inputs": [
+        { "name": "bsp", "title": "BSP with visibility", "role": "q2.bsp.vised", "required": true, "extensions": [".bsp"] },
+        { "name": "texinfo", "title": "Extended texinfo flags", "role": "q2.texinfo", "extensions": [".json"], "stage_with": "bsp" }
+      ],
+      "outputs": [
+        { "name": "bsp", "title": "Lit BSP", "role": "q2.bsp.lit", "in_place": "bsp" }
+      ],
+      "options": [
+        { "name": "threads", "title": "Threads", "description": "More than one thread makes light faster and makes its output differ from run to run: measured on 2.0.0-alpha7, three runs of one map at four threads produced three different BSPs, and one thread produced the same one three times. Set it to 1 for a build whose BSP is byte-identical to the last one.", "type": "integer", "default": "4", "minimum": 1, "maximum": 64 },
+        { "name": "sampling", "title": "Supersampling", "description": "How many samples per lightmap texel. extra4 is the slow one you use for a final build.", "type": "enum", "default": "none", "values": [
+          { "value": "none", "title": "None" },
+          { "value": "extra", "title": "2x" },
+          { "value": "extra4", "title": "4x" }
+        ] },
+        { "name": "soft", "title": "Soften the lightmap", "type": "bool", "default": "false" },
+        { "name": "gate", "title": "Light cutoff", "description": "Stop tracing a light below this brightness. Higher is faster and coarser; leave it unset for light's own default.", "type": "integer", "minimum": 1, "maximum": 100, "advanced": true },
+        { "name": "nolights", "title": "Ignore light entities", "description": "Only sunlight, minlight and emissive surfaces. Useful for checking what the textures themselves contribute.", "type": "bool", "default": "false", "advanced": true }
+      ],
+      "diagnostics": [
+        { "id": "texinfo_loaded", "match": "Loading extended texinfo flags", "severity": "info", "message": "The extended texinfo document qbsp wrote was found and read." },
+        { "id": "lit_ignored", "match": ".lit colored light output requested", "severity": "warning", "message": "A .lit file was asked for, and Quake II does not use one: its lightmaps are already coloured and live inside the BSP.", "hint": "Nothing was written. This is a Quake 1 option that has no meaning here." },
+        { "id": "no_lights", "match": "0 lights", "severity": "warning", "message": "The map has no light entities in use, so the result will be fullbright or black." },
+        { "id": "empty_lightmaps", "match": "empty lightmaps", "severity": "info", "message": "light reported how many faces received no light." },
+        { "id": "written", "match": "Writing ", "kind": "prefix", "severity": "progress", "message": "light is writing a file." },
+        { "id": "aborted", "match": "Aborting because", "severity": "error", "message": "light stopped before it finished." }
+      ],
+      "roots": [
+        { "role": "workspace", "access": "read_write", "purpose": "rewrite the staged BSP with its lighting data" },
+        { "role": "game_root", "access": "read", "purpose": "read the Quake II palette and the textures whose colours bounce light" },
+        { "role": "content_root", "access": "read", "purpose": "read the mod that overlays the base game data" }
+      ],
+      "timeout_seconds": 21600
+    },
+    {
+      "id": "inspect",
+      "title": "Report what is inside the BSP",
+      "description": "bspinfo prints its report — and, unlike the 0.18.1 build, also writes a JSON dump of the BSP, a geometry .obj and one PNG per lightmap atlas beside it. That is why this action asks to write to the workspace: a `read` root here would have been correct for Quake 1 and wrong for this.",
+      "capability": "q2.bsp.inspect",
+      "executable": "bspinfo",
+      "working_dir": { "root": "workspace" },
+      "args": ["-nocolor", "{input.bsp}"],
+      "inputs": [
+        { "name": "bsp", "title": "BSP", "role": "q2.bsp", "required": true, "extensions": [".bsp"] }
+      ],
+      "outputs": [
+        { "name": "report", "title": "BSP contents as JSON", "role": "q2.bsp.report", "path": "{option.basename}.bsp.json", "optional": true },
+        { "name": "geometry", "title": "Geometry as OBJ", "role": "q2.bsp.geometry", "path": "{option.basename}.bsp.geometry.obj", "optional": true }
+      ],
+      "options": [
+        { "name": "basename", "title": "BSP name", "description": "The stem of the BSP being inspected. bspinfo names what it writes after the file it read, so this is how those artifacts are found: `<stem>.bsp.json` and `<stem>.bsp.geometry.obj`. The lightmap atlases it also writes are one PNG per atlas, a number nobody can declare in advance, so they are left in the workspace rather than claimed as outputs.", "type": "text", "default": "level", "max_length": 64 }
+      ],
+      "diagnostics": [
+        { "id": "format", "match": "BSP is version", "severity": "info", "message": "bspinfo reported which BSP format this file is in." }
+      ],
+      "roots": [
+        { "role": "workspace", "access": "read_write", "purpose": "read the staged BSP and write the report, geometry and lightmap images it produces beside it" }
+      ],
+      "timeout_seconds": 300
+    },
+    {
+      "id": "check",
+      "title": "Check the BSP for inconsistencies",
+      "capability": "q2.bsp.check",
+      "executable": "bsputil",
+      "working_dir": { "root": "workspace" },
+      "args": ["-nocolor", "--check", "{input.bsp}"],
+      "inputs": [
+        { "name": "bsp", "title": "BSP", "role": "q2.bsp", "required": true, "extensions": [".bsp"] }
+      ],
+      "outputs": [],
+      "options": [],
+      "diagnostics": [
+        { "id": "check_failed", "match": "ERROR", "severity": "error", "message": "bsputil found something wrong inside the BSP." },
+        { "id": "check_warning", "match": "warning:", "severity": "warning", "message": "bsputil reported something questionable inside the BSP." }
+      ],
+      "roots": [
+        { "role": "workspace", "access": "read", "purpose": "read the staged BSP" }
+      ],
+      "timeout_seconds": 300
+    }
+  ]
+}

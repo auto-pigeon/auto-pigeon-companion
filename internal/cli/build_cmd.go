@@ -11,6 +11,7 @@ import (
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/build"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/maturity"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
 )
 
@@ -330,6 +331,8 @@ func buildPipelines(env *Env, args []string) int {
 		Steps        []string `json:"steps"`
 		Missing      []string `json:"missing_capabilities,omitempty"`
 		Runnable     bool     `json:"runnable"`
+		Family       string   `json:"engine_family,omitempty"`
+		Maturity     string   `json:"maturity,omitempty"`
 		Capabilities []string `json:"-"`
 	}
 	var rows []row
@@ -339,7 +342,10 @@ func buildPipelines(env *Env, args []string) int {
 			continue
 		}
 		meta := entry.Profile.Metadata()
-		r := row{ID: meta.ID, Version: meta.Version, Name: meta.Name, Summary: meta.Summary, Trust: string(entry.Trust), Runnable: true}
+		family := documentFamily(pipeline)
+		r := row{ID: meta.ID, Version: meta.Version, Name: meta.Name, Summary: meta.Summary,
+			Trust: string(entry.Trust), Runnable: true,
+			Family: family, Maturity: string(maturity.Of(family).State)}
 		for _, step := range pipeline.Steps {
 			r.Steps = append(r.Steps, step.ID)
 			if _, _, provided := runner.Resolver().Provider(step.Capability); !provided {
@@ -356,12 +362,22 @@ func buildPipelines(env *Env, args []string) int {
 		fmt.Fprint(env.Stdout, "no pipeline profiles are installed.\n")
 		return 0
 	}
+	families := map[string]bool{}
 	for _, r := range rows {
 		status := "ready"
 		if !r.Runnable {
 			status = "needs " + strings.Join(r.Missing, ", ")
 		}
-		fmt.Fprintf(env.Stdout, "%-32s %-8s %-9s %-24s %s\n", r.ID, r.Version, r.Trust, strings.Join(r.Steps, " -> "), status)
+		badge := maturityBadge(r.Family)
+		fmt.Fprintf(env.Stdout, "%-32s %-8s %-9s %-24s %-8s %s\n",
+			r.ID, r.Version, r.Trust, strings.Join(r.Steps, " -> "), status, badge)
+		if badge != "" {
+			families[r.Family] = true
+		}
+	}
+	for _, family := range sortedFamilies(families) {
+		fmt.Fprintln(env.Stdout)
+		printMaturityNote(env, family, "")
 	}
 	return 0
 }
@@ -369,6 +385,8 @@ func buildPipelines(env *Env, args []string) int {
 func printBuildPreview(env *Env, m *build.Manifest) {
 	fmt.Fprintf(env.Stdout, "pipeline  %s %s (%s)\n", m.Pipeline.ID, m.Pipeline.Version, m.Pipeline.Trust)
 	fmt.Fprintf(env.Stdout, "          %s\n", m.Pipeline.Digest)
+	// Before the command a user is about to approve, not after it.
+	printMaturityNote(env, m.EngineFamily, "          ")
 	for _, tool := range m.Tools {
 		fmt.Fprintf(env.Stdout, "tool      %s %s — %s %s\n", tool.Profile.ID, tool.Profile.Version, tool.Profile.Name, tool.ToolVersion)
 	}
@@ -390,6 +408,7 @@ func printBuildPreview(env *Env, m *build.Manifest) {
 func printBuildOutcome(env *Env, m *build.Manifest) {
 	fmt.Fprintf(env.Stdout, "\nbuild %s — %s\n", m.BuildID, m.State)
 	fmt.Fprintf(env.Stdout, "  pipeline  %s %s (%s)\n", m.Pipeline.ID, m.Pipeline.Version, m.Pipeline.Trust)
+	printMaturityNote(env, m.EngineFamily, "  ")
 	if m.Error != "" {
 		fmt.Fprintf(env.Stdout, "  error     %s\n", m.Error)
 	}

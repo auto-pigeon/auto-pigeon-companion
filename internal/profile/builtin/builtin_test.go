@@ -189,14 +189,25 @@ func TestNoTwoBuiltinToolsProvideTheSameCapability(t *testing.T) {
 // that shipped and did not resolve would fail at the point a user pressed the
 // button.
 func TestEveryBuiltinPipelineResolvesAgainstTheBuiltinToolchain(t *testing.T) {
-	toolEntry, err := Find(EricwQ1)
-	if err != nil {
-		t.Fatalf("%v", err)
+	// One toolchain per game family, and a pipeline resolves against its own.
+	// Resolving every pipeline against every tool would hide the property this
+	// build depends on: the Q1 toolchain provides `q1.*` and the Q2 one `q2.*`,
+	// so a Quake 1 pipeline can never be satisfied by the experimental Quake II
+	// compiler and a Quake II pipeline can never silently fall back to the
+	// stable Quake 1 one.
+	toolchains := map[string]*profile.ToolProfile{}
+	for family, id := range map[string]string{"quake1": EricwQ1, "quake2": EricwQ2} {
+		entry, err := Find(id)
+		if err != nil {
+			t.Fatalf("%v", err)
+		}
+		tool, ok := entry.Profile.(*profile.ToolProfile)
+		if !ok {
+			t.Fatalf("%s is not a tool profile", id)
+		}
+		toolchains[family] = tool
 	}
-	tool, ok := toolEntry.Profile.(*profile.ToolProfile)
-	if !ok {
-		t.Fatal("the EricW profile is not a tool profile")
-	}
+
 	entries, err := Load()
 	if err != nil {
 		t.Fatalf("%v", err)
@@ -208,9 +219,15 @@ func TestEveryBuiltinPipelineResolvesAgainstTheBuiltinToolchain(t *testing.T) {
 			continue
 		}
 		seen++
+		family := pipeline.GameProfile.EngineFamily
+		tool, known := toolchains[family]
+		if !known {
+			t.Errorf("%s is for the family %q, which this build ships no toolchain for", e.File, family)
+			continue
+		}
 		steps, err := pipeline.Resolve(installed{tool})
 		if err != nil {
-			t.Errorf("%s does not resolve against the built-in toolchain:\n%v", e.File, err)
+			t.Errorf("%s does not resolve against the %s toolchain:\n%v", e.File, family, err)
 			continue
 		}
 		if len(steps) != 3 {
@@ -223,8 +240,44 @@ func TestEveryBuiltinPipelineResolvesAgainstTheBuiltinToolchain(t *testing.T) {
 			}
 		}
 	}
-	if seen != 3 {
-		t.Errorf("this build ships %d pipelines; fast_preview, normal and final are the three", seen)
+	if seen != len(Q1Pipelines)+len(Q2Pipelines) {
+		t.Errorf("this build ships %d pipelines; %d Quake 1 and %d Quake II are what it declares",
+			seen, len(Q1Pipelines), len(Q2Pipelines))
+	}
+}
+
+// The other half of the same property, stated as its own failure: a Quake II
+// pipeline offered nothing but the stable Quake 1 toolchain must refuse rather
+// than resolve. A shared capability id — `bsp.compile` for both — would have
+// made this pass by accident and produced a Quake 1 BSP for a Quake II project.
+func TestAQuake2PipelineCannotResolveAgainstTheQuake1Toolchain(t *testing.T) {
+	q1, err := Find(EricwQ1)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	tool := q1.Profile.(*profile.ToolProfile)
+	for _, id := range Q2Pipelines {
+		entry, err := Find(id)
+		if err != nil {
+			t.Fatalf("%v", err)
+		}
+		if _, err := entry.Profile.(*profile.PipelineProfile).Resolve(installed{tool}); err == nil {
+			t.Errorf("%s resolved against the Quake 1 toolchain", id)
+		}
+	}
+	q2, err := Find(EricwQ2)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	q2tool := q2.Profile.(*profile.ToolProfile)
+	for _, id := range Q1Pipelines {
+		entry, err := Find(id)
+		if err != nil {
+			t.Fatalf("%v", err)
+		}
+		if _, err := entry.Profile.(*profile.PipelineProfile).Resolve(installed{q2tool}); err == nil {
+			t.Errorf("%s resolved against the experimental Quake II toolchain", id)
+		}
 	}
 }
 
@@ -255,6 +308,58 @@ func TestTheThreePipelinesDifferInWhatTheyRun(t *testing.T) {
 		}
 		if got := options["light"]["lit"]; got != expected.lit {
 			t.Errorf("%s: light lit is %q, want %q", id, got, expected.lit)
+		}
+	}
+}
+
+// The two Quake II pipelines differ in the same way, and in one way the Quake 1
+// ones cannot: neither may set `lit`. `light` accepts the switch on a Quake II
+// BSP, prints a line and writes nothing, because Quake II lightmaps are already
+// coloured — so an option that looks like it does something is exactly the kind
+// of thing that reaches a user as "the coloured lighting file is missing".
+func TestTheTwoQuake2PipelinesDifferInWhatTheyRun(t *testing.T) {
+	want := map[string]struct{ visFast, sampling, threads string }{
+		"auto-pigeon.q2.fast-preview": {"true", "none", "1"},
+		"auto-pigeon.q2.normal":       {"false", "none", "4"},
+	}
+	for id, expected := range want {
+		entry, err := Find(id)
+		if err != nil {
+			t.Fatalf("%v", err)
+		}
+		pipeline := entry.Profile.(*profile.PipelineProfile)
+		options := map[string]map[string]string{}
+		for _, step := range pipeline.Steps {
+			options[step.ID] = step.Options
+		}
+		if got := options["vis"]["fast"]; got != expected.visFast {
+			t.Errorf("%s: vis fast is %q, want %q", id, got, expected.visFast)
+		}
+		if got := options["light"]["sampling"]; got != expected.sampling {
+			t.Errorf("%s: light sampling is %q, want %q", id, got, expected.sampling)
+		}
+		if got := options["light"]["threads"]; got != expected.threads {
+			t.Errorf("%s: light threads is %q, want %q", id, got, expected.threads)
+		}
+		if _, set := options["light"]["lit"]; set {
+			t.Errorf("%s sets `lit` on the lighting step; Quake II has no .lit file", id)
+		}
+		// The texinfo document qbsp writes must be wired to light. Without it
+		// the run succeeds with the wrong surface flags, which is the failure
+		// nobody notices.
+		wired := false
+		for _, step := range pipeline.Steps {
+			if step.ID != "light" {
+				continue
+			}
+			for _, in := range step.Inputs {
+				if in.Name == "texinfo" && in.From == "compile.texinfo" {
+					wired = true
+				}
+			}
+		}
+		if !wired {
+			t.Errorf("%s does not wire compile.texinfo into the lighting step", id)
 		}
 	}
 }
@@ -297,6 +402,37 @@ func TestCuratedEnginesDeclareOnlyWhatTheirEnginesDo(t *testing.T) {
 	if _, offers := engines[Q1Generic].ActionByID(profile.ActionHostDedicated); offers {
 		t.Error("the generic profile declares host_dedicated; whether a build has a dedicated server " +
 			"compiled in is exactly what a generic profile cannot know")
+	}
+
+	for _, id := range Q2Engines {
+		if _, shipped := engines[id]; !shipped {
+			t.Errorf("%s is named as a curated Quake II engine and does not ship", id)
+		}
+	}
+	// FTEQW's Quake II profile declares one action, and the reason is upstream's
+	// own: Quake II's game logic is server-side and FTEQW does not ship it, so
+	// every action that starts a local server would be a button that fails on a
+	// machine that looks correctly configured. A client does not need it.
+	fteqwQ2 := engines[FTEQWQ2]
+	if len(fteqwQ2.Actions) != 1 {
+		t.Errorf("FTEQW's Quake II profile declares %d actions; it declares join_server and nothing else",
+			len(fteqwQ2.Actions))
+	}
+	if _, offers := fteqwQ2.ActionByID(profile.ActionJoinServer); !offers {
+		t.Error("FTEQW's Quake II profile does not declare join_server, which is the one action it has")
+	}
+	for _, starts := range []string{profile.ActionPlayMap, profile.ActionPlayPackage, profile.ActionHostListen, profile.ActionHostDedicated} {
+		if _, offers := fteqwQ2.ActionByID(starts); offers {
+			t.Errorf("FTEQW's Quake II profile declares %q, which starts a local Quake II server and "+
+				"therefore needs gamecode FTEQW does not ship and Auto-Pigeon must not distribute", starts)
+		}
+	}
+	if _, offers := engines[Q2Generic].ActionByID(profile.ActionHostDedicated); offers {
+		t.Error("the generic Quake II profile declares host_dedicated; whether a build has a dedicated " +
+			"server compiled in is exactly what a generic profile cannot know")
+	}
+	if _, offers := engines[YamagiQuake2].ActionByID(profile.ActionHostDedicated); !offers {
+		t.Error("Yamagi does not declare host_dedicated; it ships q2ded, which is why it has two executables")
 	}
 }
 
@@ -495,6 +631,37 @@ func TestTheGenericProfileSendsOnlyTheUniversalSwitches(t *testing.T) {
 			if !allowed[arg.Value] {
 				t.Errorf("the generic profile passes %q in %q; a profile for an unknown engine "+
 					"may only send what every id-derived engine documents", arg.Value, action.ID)
+			}
+		}
+	}
+}
+
+// The generic Quake II profile is the same idea for a different game, and the
+// vocabulary is genuinely different: Quake II's paths and player limit are
+// cvars set with `+set`, and `-datadir` — which Yamagi's own profile uses — is
+// Yamagi's invention. A generic profile that sent it would be a fallback that
+// only worked on the engine it was a fallback for.
+func TestTheGenericQuake2ProfileSendsOnlyTheVanillaVocabulary(t *testing.T) {
+	engine := loadEngines(t)[Q2Generic]
+	allowed := map[string]bool{"+set": true, "basedir": true, "game": true, "maxclients": true, "+map": true, "+connect": true}
+	for _, action := range engine.Actions {
+		for _, arg := range action.Args {
+			if strings.HasPrefix(arg.Value, "{") {
+				continue // a value, not a switch
+			}
+			if !allowed[arg.Value] {
+				t.Errorf("the generic Quake II profile passes %q in %q; a profile for an unknown engine "+
+					"may only send what id Software's own Quake II documented", arg.Value, action.ID)
+			}
+		}
+	}
+	// And the Yamagi profile must not be written in the vanilla spelling, which
+	// its own source calls deprecated.
+	for _, action := range loadEngines(t)[YamagiQuake2].Actions {
+		for _, arg := range action.Args {
+			if arg.Value == "basedir" || arg.Value == "-basedir" {
+				t.Errorf("the Yamagi profile passes %q in %q; Yamagi's filesystem prints "+
+					"`+set basedir is deprecated, use -datadir instead`", arg.Value, action.ID)
 			}
 		}
 	}

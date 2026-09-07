@@ -1,0 +1,430 @@
+{
+  "schema_version": "aucom.profile/1.1",
+  "kind": "engine",
+  "id": "auto-pigeon.engine.yamagi-quake2",
+  "version": "1.0.0",
+  "name": "Yamagi Quake II",
+  "summary": "The maintained Quake II port most single-player releases are tested against.",
+  "description": "Yamagi Quake II is the conservative, maintained continuation of id Software's Quake II. It is the reference the Companion's Quake II path is written against.\n\n**It locates game data with `-datadir`, not `-basedir`, and that is not a stylistic preference.** Every Quake 1 engine profile in this build passes `-basedir <game root>`; Yamagi's own filesystem code prints `+set basedir is deprecated, use -datadir instead` and then treats it as a data directory anyway. Writing `-basedir` here would work and would be the deprecated spelling of it, which is the sort of thing that is correct until the release that removes it. The mod is chosen with the `game` cvar, so `+set game`, not `-game`.\n\n`q2ded` is a second executable rather than a switch: Yamagi ships the dedicated server as its own program, and an action that started the client with a flag would be starting something else.\n\nThis profile was written from Yamagi's own published documentation and source, not from a build running on this machine. That is what every `unverified` platform below means, and it is why there is no version probe: asking a Quake II engine what version it is means starting it, and starting it means opening a window and a game.\n\nQuake II support in Auto-Pigeon is work in progress. Core editing is available, but some textures, entities, compilation and engine workflows may be incomplete, and this profile is part of that path.",
+  "publisher": {
+    "name": "Auto-Pigeon",
+    "url": "https://github.com/andrea-dintino/auto-pigeon-companion"
+  },
+  "source": {
+    "homepage": "https://www.yamagi.org/quake2/",
+    "repository": "https://github.com/yquake2/yquake2"
+  },
+  "license": {
+    "spdx": "GPL-2.0-only",
+    "name": "GNU General Public License v2.0 only",
+    "notice": "Quake II engine source ports are separate programs under their own licences. This profile configures one; it does not contain, link or relicense it. Game data — PAK files, maps, textures and sounds shipped with a commercial release — is not covered by that licence, and the Companion never copies, uploads or redistributes it."
+  },
+  "compatibility": {
+    "companion": {
+      "at_least": "0.1.0"
+    }
+  },
+  "game_profile": {
+    "slug": "quake2",
+    "engine_family": "quake2"
+  },
+  "runtime": "yamagi-quake2",
+  "engine_version": "8.70",
+  "last_qualified": "2026-09-07",
+  "platforms": [
+    {
+      "platform": {
+        "os": "windows",
+        "arch": "amd64"
+      },
+      "status": "unverified",
+      "note": "Upstream publishes Windows builds; nobody here has run one."
+    },
+    {
+      "platform": {
+        "os": "linux",
+        "arch": "amd64"
+      },
+      "status": "unverified",
+      "note": "Most distributions package it and upstream publishes source; nobody here has run one."
+    },
+    {
+      "platform": {
+        "os": "linux",
+        "arch": "arm64"
+      },
+      "status": "unverified",
+      "note": "Upstream supports the platform in source; no binary is published and nobody here has run one."
+    },
+    {
+      "platform": {
+        "os": "darwin",
+        "arch": "amd64"
+      },
+      "status": "unverified",
+      "note": "Upstream supports macOS in source; no signed binary is published and nobody here has run one."
+    },
+    {
+      "platform": {
+        "os": "darwin",
+        "arch": "arm64"
+      },
+      "status": "unverified",
+      "note": "Upstream supports macOS in source; no signed binary is published and nobody here has run one."
+    }
+  ],
+  "acquisition": [
+    {
+      "mode": "user_path",
+      "title": "Use a copy you already have",
+      "hint": "choose the folder holding yquake2 and q2ded, the one beside baseq2"
+    },
+    {
+      "mode": "system_path",
+      "title": "Use the one your system already provides",
+      "commands": [
+        "yquake2",
+        "q2ded"
+      ],
+      "note": "Several Linux distributions package Yamagi Quake II. Upstream's Windows release also ships a `quake2` wrapper for older setups; point at `yquake2` where you have the choice."
+    }
+  ],
+  "content_layouts": [
+    {
+      "id": "baseq2",
+      "title": "The base game",
+      "kind": "loose_files",
+      "root": "game_root",
+      "path": "baseq2",
+      "note": "Where Quake II's own data lives. The Companion reads it and never writes to it."
+    },
+    {
+      "id": "pak",
+      "title": "A PAK archive in the base game",
+      "kind": "pak",
+      "root": "game_root",
+      "path": "baseq2"
+    },
+    {
+      "id": "pk3",
+      "title": "A zip-format archive in a mod directory",
+      "kind": "pk3",
+      "root": "game_root",
+      "note": "Quake II engines read .pak; this one also reads zip archives named .pk3, .pk2, .pkz or .zip."
+    },
+    {
+      "id": "mod",
+      "title": "A mod or project directory",
+      "kind": "mod_directory",
+      "root": "game_root",
+      "note": "A game directory beside baseq2, named by the `game` cvar. This is where the Companion stages what you built."
+    }
+  ],
+  "executables": [
+    {
+      "name": "engine",
+      "title": "Yamagi Quake II",
+      "file": "yquake2{platform.exe_suffix}"
+    },
+    {
+      "name": "dedicated",
+      "title": "Yamagi Quake II dedicated server",
+      "file": "q2ded{platform.exe_suffix}"
+    }
+  ],
+  "actions": [
+    {
+      "id": "play_map",
+      "title": "Play a map",
+      "session_role": "client",
+      "executable": "engine",
+      "working_dir": {
+        "root": "game_root"
+      },
+      "args": [
+        "-datadir",
+        "{root.game_root}",
+        "+set",
+        "game",
+        "{runtime.mod_name}",
+        "+map",
+        "{runtime.map_name}"
+      ],
+      "description": "`+set game` chooses the directory the map is loaded from. Launching a map into a directory nobody named is how you end up watching the wrong map.",
+      "roots": [
+        {
+          "role": "game_root",
+          "access": "read",
+          "purpose": "load the base game and the mod being played"
+        },
+        {
+          "role": "content_root",
+          "access": "read",
+          "purpose": "read the project whose content was staged into the mod directory"
+        }
+      ],
+      "diagnostics": [
+        {
+          "id": "ready",
+          "match": "Console initialized",
+          "severity": "info",
+          "message": "The engine is up."
+        },
+        {
+          "id": "couldnt_load",
+          "match": "Couldn't load",
+          "severity": "error",
+          "message": "The engine could not load something it needs.",
+          "hint": "Quake II needs its own game data. Check that the base game data root holds `baseq2` with the game's PAK files in it."
+        },
+        {
+          "id": "error",
+          "match": "ERROR:",
+          "severity": "error",
+          "message": "The engine stopped with a fatal error.",
+          "hint": "The engine's own last line is usually the whole diagnosis; read the job's log."
+        }
+      ]
+    },
+    {
+      "id": "play_package",
+      "title": "Play a mod or package",
+      "session_role": "client",
+      "executable": "engine",
+      "working_dir": {
+        "root": "game_root"
+      },
+      "args": [
+        "-datadir",
+        "{root.game_root}",
+        "+set",
+        "game",
+        "{runtime.package_name}"
+      ],
+      "roots": [
+        {
+          "role": "game_root",
+          "access": "read",
+          "purpose": "load the base game and the mod being played"
+        },
+        {
+          "role": "content_root",
+          "access": "read",
+          "purpose": "read the project whose content was staged into the mod directory"
+        }
+      ],
+      "diagnostics": [
+        {
+          "id": "ready",
+          "match": "Console initialized",
+          "severity": "info",
+          "message": "The engine is up."
+        },
+        {
+          "id": "couldnt_load",
+          "match": "Couldn't load",
+          "severity": "error",
+          "message": "The engine could not load something it needs.",
+          "hint": "Quake II needs its own game data. Check that the base game data root holds `baseq2` with the game's PAK files in it."
+        },
+        {
+          "id": "error",
+          "match": "ERROR:",
+          "severity": "error",
+          "message": "The engine stopped with a fatal error.",
+          "hint": "The engine's own last line is usually the whole diagnosis; read the job's log."
+        }
+      ]
+    },
+    {
+      "id": "join_server",
+      "title": "Join a server",
+      "session_role": "client",
+      "executable": "engine",
+      "working_dir": {
+        "root": "game_root"
+      },
+      "args": [
+        "-datadir",
+        "{root.game_root}",
+        "+connect",
+        "{runtime.server_host}:{runtime.server_port}"
+      ],
+      "roots": [
+        {
+          "role": "game_root",
+          "access": "read",
+          "purpose": "load the base game and the mod being played"
+        }
+      ],
+      "network": {
+        "required": true,
+        "purpose": "connect to the server the user names"
+      },
+      "diagnostics": [
+        {
+          "id": "ready",
+          "match": "Console initialized",
+          "severity": "info",
+          "message": "The engine is up."
+        },
+        {
+          "id": "couldnt_load",
+          "match": "Couldn't load",
+          "severity": "error",
+          "message": "The engine could not load something it needs.",
+          "hint": "Quake II needs its own game data. Check that the base game data root holds `baseq2` with the game's PAK files in it."
+        },
+        {
+          "id": "error",
+          "match": "ERROR:",
+          "severity": "error",
+          "message": "The engine stopped with a fatal error.",
+          "hint": "The engine's own last line is usually the whole diagnosis; read the job's log."
+        }
+      ]
+    },
+    {
+      "id": "host_listen",
+      "title": "Host a game and play in it",
+      "session_role": "listen_server",
+      "executable": "engine",
+      "working_dir": {
+        "root": "game_root"
+      },
+      "args": [
+        "-datadir",
+        "{root.game_root}",
+        "+set",
+        "game",
+        "{runtime.mod_name}",
+        "+set",
+        "maxclients",
+        "{option.max_players}",
+        "+map",
+        "{runtime.map_name}"
+      ],
+      "description": "Other people can connect to this computer while you play.",
+      "options": [
+        {
+          "name": "max_players",
+          "title": "Maximum players",
+          "description": "Quake II calls this `maxclients`, and it counts you on a listen server.",
+          "type": "integer",
+          "default": "8",
+          "minimum": 2,
+          "maximum": 32
+        }
+      ],
+      "roots": [
+        {
+          "role": "game_root",
+          "access": "read",
+          "purpose": "load the base game and the mod being played"
+        },
+        {
+          "role": "content_root",
+          "access": "read",
+          "purpose": "read the project whose content was staged into the mod directory"
+        }
+      ],
+      "network": {
+        "required": true,
+        "purpose": "accept connections from other players"
+      },
+      "diagnostics": [
+        {
+          "id": "ready",
+          "match": "Console initialized",
+          "severity": "info",
+          "message": "The engine is up."
+        },
+        {
+          "id": "couldnt_load",
+          "match": "Couldn't load",
+          "severity": "error",
+          "message": "The engine could not load something it needs.",
+          "hint": "Quake II needs its own game data. Check that the base game data root holds `baseq2` with the game's PAK files in it."
+        },
+        {
+          "id": "error",
+          "match": "ERROR:",
+          "severity": "error",
+          "message": "The engine stopped with a fatal error.",
+          "hint": "The engine's own last line is usually the whole diagnosis; read the job's log."
+        }
+      ]
+    },
+    {
+      "id": "host_dedicated",
+      "title": "Run a dedicated server",
+      "session_role": "dedicated_server",
+      "executable": "dedicated",
+      "working_dir": {
+        "root": "game_root"
+      },
+      "args": [
+        "-datadir",
+        "{root.game_root}",
+        "+set",
+        "game",
+        "{runtime.mod_name}",
+        "+set",
+        "maxclients",
+        "{option.max_players}",
+        "+map",
+        "{runtime.map_name}"
+      ],
+      "description": "`q2ded` is Yamagi's dedicated server: a separate program with no video output, not the client with a flag.",
+      "options": [
+        {
+          "name": "max_players",
+          "title": "Maximum players",
+          "description": "Quake II calls this `maxclients`, and it counts you on a listen server.",
+          "type": "integer",
+          "default": "8",
+          "minimum": 2,
+          "maximum": 32
+        }
+      ],
+      "roots": [
+        {
+          "role": "game_root",
+          "access": "read",
+          "purpose": "load the base game and the mod being played"
+        },
+        {
+          "role": "content_root",
+          "access": "read",
+          "purpose": "read the project whose content was staged into the mod directory"
+        }
+      ],
+      "network": {
+        "required": true,
+        "purpose": "accept connections from other players"
+      },
+      "diagnostics": [
+        {
+          "id": "ready",
+          "match": "Console initialized",
+          "severity": "info",
+          "message": "The engine is up."
+        },
+        {
+          "id": "couldnt_load",
+          "match": "Couldn't load",
+          "severity": "error",
+          "message": "The engine could not load something it needs.",
+          "hint": "Quake II needs its own game data. Check that the base game data root holds `baseq2` with the game's PAK files in it."
+        },
+        {
+          "id": "error",
+          "match": "ERROR:",
+          "severity": "error",
+          "message": "The engine stopped with a fatal error.",
+          "hint": "The engine's own last line is usually the whole diagnosis; read the job's log."
+        }
+      ]
+    }
+  ]
+}

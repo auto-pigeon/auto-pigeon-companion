@@ -17,20 +17,31 @@
 //
 // # What "qualified" means here, and it is not one thing
 //
-// The EricW Q1 toolchain and the three Q1 pipelines are qualified by
-// *measurement*: the version is the one AUT pinned, the archives are pinned by
-// digest in the signed catalogue, and what each program does was established by
-// running it rather than read off a manual.
+// Both EricW toolchains and all five pipelines are qualified by *measurement*.
+// For Q1 the version is the one AUT pinned; for Q2 it is the 2.x pre-release
+// that was unpacked and run here against a synthetic Quake II map. In both
+// cases the archives are pinned by digest in the signed catalogue and what each
+// program does was established by running it rather than read off a manual —
+// which is how the Q2 document came to differ from the Q1 one in seven places
+// that a copy-and-edit would have got wrong.
 //
-// The seven engine profiles are qualified by *documentation*. Their command
-// lines come from each engine's own published usage, and no build of any of
-// them has been run by anybody here — six upstream projects across three
-// operating systems, none of which can be started without a copy of Quake that
-// is not ours to have. That is not a hedge, it is written into each document:
-// every platform is `unverified` with a note saying so, and where upstream
-// ships nothing the platform is `unsupported` with the reason. A profile that
-// claimed `supported` on that evidence would be the plausible-looking wrong
-// answer the rest of this repository is careful about.
+// The ten engine profiles are qualified by *documentation*. Their command lines
+// come from each engine's own published usage and source, and no build of any
+// of them has been run by anybody here — eight upstream projects across three
+// operating systems, none of which can be started without a copy of Quake or
+// Quake II that is not ours to have. That is not a hedge, it is written into
+// each document: every platform is `unverified` with a note saying so, and
+// where upstream ships nothing the platform is `unsupported` with the reason. A
+// profile that claimed `supported` on that evidence would be the
+// plausible-looking wrong answer the rest of this repository is careful about.
+//
+// # Quake II is work in progress, and no document here may say otherwise
+//
+// The Q2 documents are shipped and usable. What they are not is finished, and
+// that statement is not theirs to make:
+// [github.com/andrea-dintino/auto-pigeon-companion/internal/maturity] holds it,
+// keyed on AUB's engine family, so a community profile cannot publish itself as
+// stable Quake II support and switch the warning off.
 //
 // The instrument that *is* measured is
 // [github.com/andrea-dintino/auto-pigeon-companion/internal/enginefixture],
@@ -68,10 +79,23 @@ var files embed.FS
 const (
 	// EricwQ1 is the qualified Quake 1 toolchain: ericw-tools 0.18.1.
 	EricwQ1 = "auto-pigeon.ericw-tools.q1"
+	// EricwQ2 is the experimental Quake II toolchain: ericw-tools 2.0.0-alpha7.
+	//
+	// A second document rather than a second version of the first, because the
+	// two describe different programs with different archive layouts, different
+	// log names and different outputs, and because the Q1 line must not be
+	// moved onto a pre-release to gain a Q2 mode.
+	EricwQ2 = "auto-pigeon.ericw-tools.q2"
 	// The three Q1 pipelines, which differ only in the options they set.
 	Q1FastPreview = "auto-pigeon.q1.fast-preview"
 	Q1Normal      = "auto-pigeon.q1.normal"
 	Q1Final       = "auto-pigeon.q1.final"
+	// The two Q2 pipelines. Two rather than three: `final` for Quake 1 is
+	// `normal` plus 4x supersampling, and there is no measured reason yet to
+	// claim a third Quake II preset is a different build rather than a
+	// different name for one.
+	Q2FastPreview = "auto-pigeon.q2.fast-preview"
+	Q2Normal      = "auto-pigeon.q2.normal"
 
 	// The curated Quake 1 engines. Each is one upstream project, and the id is
 	// the name that project calls itself.
@@ -84,6 +108,15 @@ const (
 	// Q1Generic sends only the switches every id-derived engine documents, for
 	// an engine this build has no profile for.
 	Q1Generic = "auto-pigeon.engine.q1-generic"
+
+	// The curated Quake II engines.
+	//
+	// YamagiQuake2 is the reference this build's Quake II path is written
+	// against. FTEQWQ2 is FTEQW's Quake II side and declares one action, for
+	// the reason its own document gives. Q2Generic is the fallback.
+	YamagiQuake2 = "auto-pigeon.engine.yamagi-quake2"
+	FTEQWQ2      = "auto-pigeon.engine.fteqw-q2"
+	Q2Generic    = "auto-pigeon.engine.q2-generic"
 )
 
 // Q1Engines is every curated Quake 1 engine profile this build ships.
@@ -95,6 +128,14 @@ var Q1Engines = []string{Ironwail, VkQuake, QuakeSpasm, QuakeSpasmSpiked, DarkPl
 
 // Q1Pipelines is the three built-in Quake 1 pipelines, quickest first.
 var Q1Pipelines = []string{Q1FastPreview, Q1Normal, Q1Final}
+
+// Q2Engines is every curated Quake II engine profile this build ships, in the
+// order they are listed. Yamagi first because it is the one the Quake II path
+// is written against; the generic fallback last, as for Quake 1.
+var Q2Engines = []string{YamagiQuake2, FTEQWQ2, Q2Generic}
+
+// Q2Pipelines is the two built-in Quake II pipelines, quickest first.
+var Q2Pipelines = []string{Q2FastPreview, Q2Normal}
 
 // Entry is one built-in document: what it says, what file it came from, and
 // the digest of its canonical form.

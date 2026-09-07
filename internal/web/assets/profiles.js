@@ -9,7 +9,8 @@
 "use strict";
 
 (() => {
-  const { $, el, api, setMessage, busy, withBusy, record, badge, shortDigest, when } = window.AUCOM;
+  const { $, el, api, setMessage, busy, withBusy, record, badge, shortDigest, when,
+    maturityBadge, maturityNote, openCompatibilityReport } = window.AUCOM;
 
   let installed = [];
   let templates = [];
@@ -40,6 +41,11 @@
     marks.append(badge(profile.kind, "queued"));
     marks.append(document.createTextNode(" "));
     marks.append(badge(profile.authorized ? "approved" : "not approved", profile.authorized ? "ok" : "failed"));
+    const wip = maturityBadge(profile.maturity);
+    if (wip) {
+      marks.append(document.createTextNode(" "));
+      marks.append(wip);
+    }
 
     const summary = el("p", { className: "muted", text: profile.summary || "" });
     const identity = el("p", { className: "mono", text: `${profile.id} ${profile.version} · ${shortDigest(profile.digest)}` });
@@ -73,6 +79,16 @@
     marks.append(badge(body.trust));
     marks.append(document.createTextNode(" " + (body.trust_description || "")));
     detail.append(marks);
+    // Above the summary and above the permission review: a warning that arrives
+    // after the thing it is about is a warning read after the decision.
+    const note = maturityNote(body.maturity, () =>
+      openCompatibilityReport({
+        family: body.engine_family,
+        about: `About ${body.name} (${body.id}).`,
+        profiles: [{ role: body.kind === "engine" ? "engine" : body.kind, id: body.id, version: body.version }],
+      })
+    );
+    if (note) detail.append(note);
     detail.append(el("p", { text: body.summary || "" }));
     if (body.description) detail.append(el("p", { className: "muted", text: body.description }));
     detail.append(

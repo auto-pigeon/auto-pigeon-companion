@@ -318,6 +318,154 @@ function badge(text, kind) {
   return el("span", { className: "badge " + (kind || String(text)), text: String(text) });
 }
 
+// --- the work-in-progress statement ----------------------------------------
+//
+// One renderer, used by every area, because `AUP/AUCOM 215` asks for a
+// *coherent* badge and message wherever an unfinished game can be selected,
+// loaded, edited, exported or compiled. Five areas each writing their own two
+// lines would be five slightly different warnings, and the difference between
+// them is exactly what a reader notices instead of the warning.
+//
+// The object comes from the server on every profile, engine and pipeline — see
+// internal/web/maturity.go — so no area has to know which families are
+// unfinished, and a family that becomes finished stops warning everywhere at
+// once.
+
+function maturityBadge(maturity) {
+  if (!maturity || !maturity.work_in_progress) return null;
+  return badge(maturity.badge, "warning");
+}
+
+// maturityNote is the full sentence, with the report action beside it when the
+// family invites one. `onReport` is the area's own handler; without one the
+// note still renders, because the sentence is the part that must not be
+// conditional.
+function maturityNote(maturity, onReport) {
+  if (!maturity || !maturity.work_in_progress) return null;
+  const children = [el("span", { className: "wip__text", text: maturity.message })];
+  if (maturity.feedback_invited && onReport) {
+    const button = el("button", { className: "linklike", text: "Report compatibility issue" });
+    button.type = "button";
+    button.addEventListener("click", () => onReport(maturity));
+    children.push(button);
+  }
+  return el("p", {
+    className: "wip",
+    attrs: { role: "note", "data-family": maturity.family || "" },
+    children,
+  });
+}
+
+// --- the compatibility report ----------------------------------------------
+//
+// One panel, opened by whichever area the user was on. The area supplies only
+// *context* — which family, what operation, which profiles, which build — and
+// never any content: the words are the user's and the document is composed by
+// the server, by the same `feedback.Build` the command line calls.
+//
+// The page deliberately does not assemble the JSON. A page that did would be a
+// second implementation of what may be shared, and the day the two disagreed
+// would be the day a user sent something the page told them they were not
+// sending.
+
+let feedbackContext = null;
+
+function openCompatibilityReport(context) {
+  feedbackContext = context || {};
+  const panel = $("feedback-panel");
+  if (!panel) return;
+  panel.hidden = false;
+  $("feedback-context").textContent = feedbackContext.about || "";
+  $("feedback-out").hidden = true;
+  $("feedback-document").textContent = "";
+  $("feedback-actions").replaceChildren();
+  setMessage("feedback-message", "");
+  // Cleared on every open. A panel that remembered the last set of ticks would
+  // be a panel that attached something because of a decision made about a
+  // different report.
+  for (const name of ["versions", "profiles", "operation", "diagnostics"]) {
+    $("feedback-share-" + name).checked = false;
+  }
+  $("feedback-summary").value = "";
+  $("feedback-describe").value = "";
+  $("feedback-heading").focus();
+  panel.scrollIntoView({ block: "nearest" });
+}
+
+function feedbackConsent() {
+  return {
+    versions: $("feedback-share-versions").checked,
+    profiles: $("feedback-share-profiles").checked,
+    operation: $("feedback-share-operation").checked,
+    diagnostics: $("feedback-share-diagnostics").checked,
+  };
+}
+
+async function buildCompatibilityReport() {
+  const summary = $("feedback-summary").value.trim();
+  if (!summary) {
+    setMessage("feedback-message", "Write one line saying what went wrong. That line is the report.", "error");
+    return;
+  }
+  const context = feedbackContext || {};
+  const request = {
+    engine_family: context.family || "",
+    summary,
+    description: $("feedback-describe").value,
+    operation: context.operation || "",
+    share: feedbackConsent(),
+    profiles: context.profiles || [],
+    build_id: context.build_id || "",
+  };
+  const { ok, body } = await api("/api/v1/feedback/compatibility", { method: "POST", body: request });
+  if (!ok) {
+    setMessage("feedback-message", body.error || "the report could not be composed", "error");
+    return;
+  }
+  $("feedback-document").textContent = body.document;
+  $("feedback-out").hidden = false;
+
+  const actions = $("feedback-actions");
+  actions.replaceChildren();
+  const save = el("button", { text: "Save it as a file", attrs: { type: "button" } });
+  save.addEventListener("click", () => {
+    const blob = new Blob([body.document], { type: "application/json" });
+    const href = URL.createObjectURL(blob);
+    const anchor = el("a", { attrs: { href, download: body.filename } });
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(href), 0);
+  });
+  actions.append(save);
+
+  const notes = [];
+  if (!Object.values(feedbackConsent()).some(Boolean)) {
+    notes.push("Nothing was attached beyond your own words.");
+  }
+  if (body.messages_withheld > 0) {
+    notes.push(
+      body.messages_withheld +
+        " message(s) were left out because they named a folder on this computer or something " +
+        "shaped like a password. The warning and how often it happened are still there."
+    );
+  }
+  notes.push("Nothing has been sent.");
+  setMessage("feedback-message", notes.join(" "));
+}
+
+function wireCompatibilityReport() {
+  const panel = $("feedback-panel");
+  if (!panel) return;
+  $("feedback-close").addEventListener("click", () => {
+    panel.hidden = true;
+    feedbackContext = null;
+  });
+  $("feedback-build").addEventListener("click", () =>
+    withBusy($("feedback-build"), buildCompatibilityReport)
+  );
+}
+
 function bytes(n) {
   if (n === undefined || n === null) return "";
   const units = ["B", "kB", "MB", "GB"];
@@ -349,5 +497,6 @@ function terminal(state) {
 Object.assign(AUCOM, {
   $, el, api, announce, setMessage, busy, withBusy,
   record, renderActivity, clearActivity, pathField, downloadButton,
-  badge, bytes, shortDigest, when, terminal,
+  badge, maturityBadge, maturityNote, bytes, shortDigest, when, terminal,
+  openCompatibilityReport, wireCompatibilityReport,
 });

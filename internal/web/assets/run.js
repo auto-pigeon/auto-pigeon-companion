@@ -8,7 +8,8 @@
 "use strict";
 
 (() => {
-  const { $, el, api, setMessage, busy, withBusy, record, badge, when } = window.AUCOM;
+  const { $, el, api, setMessage, busy, withBusy, record, badge, when,
+    maturityBadge, maturityNote, openCompatibilityReport } = window.AUCOM;
 
   let engines = [];
   let bindingInputs = new Map();
@@ -28,9 +29,14 @@
     engines = body.items || [];
     select.replaceChildren();
     for (const engine of engines) {
+      // The badge word goes into the option text, because a <select> holds no
+      // markup and the choice is made before the detail panel is drawn.
+      const mark = engine.maturity && engine.maturity.work_in_progress
+        ? ` [${engine.maturity.badge}]`
+        : "";
       select.append(
         el("option", {
-          text: `${engine.name} — ${engine.ready ? "ready" : "needs setup"}`,
+          text: `${engine.name}${mark} — ${engine.ready ? "ready" : "needs setup"}`,
           attrs: { value: engine.id },
         })
       );
@@ -55,7 +61,23 @@
     head.append(el("strong", { text: engine.name + " " + engine.version }));
     head.append(document.createTextNode(" "));
     head.append(badge(engine.trust));
+    const wip = maturityBadge(engine.maturity);
+    if (wip) {
+      head.append(document.createTextNode(" "));
+      head.append(wip);
+    }
     portable.append(head);
+    // Before the binding fields and before the Play button: this is where a
+    // Quake II game is selected and started.
+    const note = maturityNote(engine.maturity, () =>
+      openCompatibilityReport({
+        family: engine.engine_family,
+        operation: "run",
+        about: `About ${engine.name} (${engine.id}).`,
+        profiles: [{ role: "engine", id: engine.id, version: engine.version }],
+      })
+    );
+    if (note) portable.append(note);
     portable.append(el("p", { className: "muted", text: engine.trust_description || "" }));
     portable.append(el("p", { text: engine.summary || "" }));
     portable.append(

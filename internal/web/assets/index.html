@@ -512,6 +512,58 @@
             <pre id="extractor-output" class="output"></pre>
           </div>
         </section>
+        <!--
+          The compatibility report. One panel for the whole page, opened from
+          whichever surface the user was on, because `AUP/AUCOM 215` asks for a
+          coherent action beside a coherent message — and five report forms
+          would be five chances to collect something different.
+
+          A region and not a modal, for the same reason the first-run panel is:
+          what is behind it is worth reading while somebody writes this.
+
+          Every checkbox starts clear, in the markup as well as in the script.
+          A default that attached something would make "opt in" a thing the page
+          says rather than a thing it does.
+        -->
+        <section id="feedback-panel" class="panel feedback" aria-labelledby="feedback-heading" hidden>
+          <div class="panel-head">
+            <h3 id="feedback-heading" tabindex="-1">Report a compatibility issue</h3>
+            <button type="button" id="feedback-close" class="secondary">Close</button>
+          </div>
+          <p id="feedback-context" class="muted"></p>
+          <p class="muted">
+            Nothing is sent from here. What you write becomes a file you read and
+            share yourself, wherever you choose to.
+          </p>
+          <div class="field">
+            <label for="feedback-summary">What went wrong, in one line</label>
+            <input id="feedback-summary" type="text" maxlength="200" />
+          </div>
+          <div class="field">
+            <label for="feedback-describe">More, if it helps</label>
+            <textarea id="feedback-describe" rows="4" maxlength="4000"></textarea>
+          </div>
+          <fieldset class="feedback-share">
+            <legend>What to include. Nothing is included unless you tick it.</legend>
+            <label><input type="checkbox" id="feedback-share-versions" /> The Auto-Pigeon versions and this machine's operating system and processor type</label>
+            <label><input type="checkbox" id="feedback-share-profiles" /> Which game, tool and engine profiles were in use, and their versions</label>
+            <label><input type="checkbox" id="feedback-share-operation" /> What you were doing — compiling, packaging, starting a game</label>
+            <label><input type="checkbox" id="feedback-share-diagnostics" /> Which warnings and errors were reported, and how many times</label>
+          </fieldset>
+          <p class="muted">
+            Your map, your logs and the folders on this computer are never included,
+            and there is no setting that adds them.
+          </p>
+          <div class="row">
+            <button type="button" id="feedback-build" class="primary">Show me the report</button>
+          </div>
+          <p id="feedback-message" class="message" role="alert"></p>
+          <div id="feedback-out" hidden>
+            <h4>This is the whole file</h4>
+            <pre id="feedback-document" class="mono"></pre>
+            <div class="row" id="feedback-actions"></div>
+          </div>
+        </section>
       </main>
     </div>
 

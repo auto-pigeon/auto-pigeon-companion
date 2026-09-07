@@ -332,7 +332,7 @@ func packageFromBuild(manifest *build.Manifest) ([]pack.FileSource, buildRefs, m
 			continue
 		}
 		files = append(files, pack.FileSource{
-			Path:      packageMemberPath(output.Name),
+			Path:      packageMemberPath(output.Name, output.Path),
 			File:      output.Path,
 			FromBuild: fmt.Sprintf("%s (%s)", output.Name, manifest.BuildID),
 		})
@@ -371,10 +371,27 @@ func packageFromBuild(manifest *build.Manifest) ([]pack.FileSource, buildRefs, m
 //
 // A `.bsp` goes under `maps/`, because that is where every engine in this
 // family looks for one and a BSP at the archive root is a package that does not
-// work. Everything else keeps the name the pipeline gave it, at the root, and a
-// user who wants it somewhere else says so with --add.
-func packageMemberPath(name string) string {
+// work. Everything else keeps its file name, at the root, and a user who wants
+// it somewhere else says so with --add.
+//
+// # Why the FILE's name and not the output's
+//
+// A pipeline output is *named* — `bsp`, `lit`, `compile_log` — and that name
+// carries no extension, because it is an identifier a pipeline wires with and
+// not a filename. Deriving the member path from it put `level.bsp` into the
+// archive as a member called `bsp`, at the root, where no engine would ever
+// look for it: the `maps/` rule below could not fire, because `bsp` has no
+// extension to match.
+//
+// It surfaced in `AUP/AUCOM 215`'s Quake II acceptance, and it was never a
+// Quake II fault — every `--build` package this program has written has the
+// same shape. So the member path comes from the file the build actually wrote,
+// and the output's name is the fallback for a record that has no path.
+func packageMemberPath(name, file string) string {
 	base := filepath.Base(filepath.FromSlash(name))
+	if file != "" {
+		base = filepath.Base(file)
+	}
 	switch strings.ToLower(filepath.Ext(base)) {
 	case ".bsp", ".lit", ".ent":
 		return "maps/" + base

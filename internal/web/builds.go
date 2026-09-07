@@ -17,6 +17,7 @@ import (
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/binding"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/build"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/maturity"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
 )
 
@@ -260,11 +261,13 @@ func (s *Server) handleBuildPipelines(w http.ResponseWriter, r *http.Request) {
 			}
 			steps = append(steps, row)
 		}
+		family := documentFamily(pipeline)
 		items = append(items, map[string]any{
 			"id": meta.ID, "name": meta.Name, "summary": meta.Summary,
 			"version": meta.Version, "trust": entry.Trust, "digest": entry.Digest,
 			"inputs": pipeline.Inputs, "outputs": pipeline.Outputs,
 			"steps": steps, "missing_capabilities": missing, "runnable": runnable,
+			"engine_family": family, "maturity": describeMaturity(family),
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
@@ -520,6 +523,11 @@ func (s *Server) handleBuildGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body := map[string]any{"manifest": manifest, "live": false}
+	// The statement about the family this build was for, so the progress panel
+	// can carry it and offer the report without a second request. Empty for a
+	// family this build makes no claim about, and the page draws nothing then.
+	body["maturity"] = describeMaturity(manifest.EngineFamily)
+	body["maturity_message"] = maturity.Of(manifest.EngineFamily).Message
 	if run, running := s.builds.get(id); running {
 		finished, message := run.state()
 		body["live"] = !finished

@@ -22,8 +22,19 @@ import (
 // map with two revisions.
 func fakeCompanionAUB(t *testing.T) *httptest.Server {
 	t.Helper()
+	return fakeCompanionAUBServing(t, "e1m1.apmap", "application/json", `{"schema_version":"1.1","objects":[]}`)
+}
 
-	const document = `{"schema_version":"1.1","objects":[]}`
+// fakeCompanionAUBServing is the same backend with the stored file named and
+// supplied by the caller.
+//
+// Parameterized because `AUP/AUCOM 215`'s acceptance needs the same backend to
+// hand over a Quake II `.map` — the thing an editor would have exported — and a
+// second copy of this fixture is a second set of routes to keep in step with
+// AUB.
+func fakeCompanionAUBServing(t *testing.T, fileName, mediaType, document string) *httptest.Server {
+	t.Helper()
+
 	// sha256 of `document`, computed by the server itself so the fixture cannot
 	// drift from the bytes it serves.
 	digest := sha256Hex(document)
@@ -35,7 +46,7 @@ func fakeCompanionAUB(t *testing.T) *httptest.Server {
 		}
 	}
 	files := []map[string]any{{
-		"path": "e1m1.apmap", "media_type": "application/json",
+		"path": fileName, "media_type": mediaType,
 		"bytes": len(document), "sha256": digest,
 	}}
 
@@ -118,10 +129,10 @@ func fakeCompanionAUB(t *testing.T) *httptest.Server {
 			detail["total_bytes"] = len(document)
 			json.NewEncoder(w).Encode(detail)
 		})
-		mux.HandleFunc(base+"/files/e1m1.apmap", func(w http.ResponseWriter, _ *http.Request) {
+		mux.HandleFunc(base+"/files/"+fileName, func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("ETag", `"`+digest+`"`)
 			w.Header().Set("Accept-Ranges", "none")
-			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Content-Type", mediaType)
 			w.Header().Set("X-Companion-Revision-Id", stored)
 			w.Header().Set("X-Companion-Revision", fmt.Sprint(number))
 			w.Header().Set("X-Companion-Revision-Immutable", "true")

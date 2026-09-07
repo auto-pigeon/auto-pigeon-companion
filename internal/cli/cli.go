@@ -153,6 +153,11 @@ var commands = []Command{
 		Run:     runExtractor,
 	},
 	{
+		Name: "feedback", Usage: "compatibility --game <family> --summary <text> [--share <what>]",
+		Summary: "report that a work-in-progress game did not do what you expected — nothing is attached unless you say so",
+		Run:     runFeedback,
+	},
+	{
 		Name:    "migrate",
 		Summary: "fold Launcher and older Companion configuration into the current one",
 		Run:     runMigrate,

@@ -39,6 +39,14 @@ func TestMain(m *testing.M) {
 	if len(os.Args) > 1 && os.Args[1] == enginefixture.Flag {
 		os.Exit(enginefixture.Main(os.Args[2:]))
 	}
+	// The Quake II toolchain fixture is selected by the NAME the binary was
+	// invoked under, not by a flag: the built-in experimental profile declares
+	// three programs and resolves each of them to its own file, so a fixture
+	// that needed an extra argument could not stand in for the real document.
+	// See q2fixture_test.go.
+	if base := strings.TrimSuffix(filepath.Base(os.Args[0]), ".exe"); isQ2ToolName(base) {
+		os.Exit(q2ToolMain(base, os.Args[1:]))
+	}
 	os.Exit(m.Run())
 }
 

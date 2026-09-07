@@ -1,0 +1,123 @@
+{
+  "schema_version": "aucom.profile/1.1",
+  "kind": "pipeline",
+  "id": "auto-pigeon.q2.normal",
+  "version": "1.0.0",
+  "name": "Quake II — normal build (experimental)",
+  "summary": "Experimental: compile, full visibility and hearability, ordinary lighting. The everyday Quake II build.",
+  "description": "The Quake II counterpart of `auto-pigeon.q1.normal`, and deliberately not the same document with a different name.\n\nThree things are wired here that the Quake 1 pipeline does not wire, each because the Quake II tools were measured rather than assumed. The portal file goes from compile to vis, as it does for Quake 1. The **extended texinfo document** goes from compile to light, because 2.x's `light` reads `<stem>.texinfo.json` back and a run without it succeeds with the wrong surface flags — a silent wrong answer is worse than a missing file. And there is **no `.lit` output**, because Quake II lightmaps are already coloured and live inside the BSP; asking for one prints a line and writes nothing.\n\nThere are no vis or light logs among the outputs, and that is measured rather than an omission: 2.x writes them beside the BSP it was handed, which is inside the staged input's own directory, so no workspace-relative path names them. Each step's job holds the same text as its captured output.\n\nThe steps name capabilities, never programs. On this machine the capabilities `q2.bsp.compile`, `q2.bsp.vis` and `q2.bsp.light` are provided by the experimental ericw-tools 2.x profile, and by nothing else — the stable Quake 1 toolchain provides `q1.*` and can never be resolved for this pipeline.\n\nQuake II support in Auto-Pigeon is work in progress. Some textures, entities, compilation and engine workflows may be incomplete, and this pipeline is the honest state of the compilation half rather than a finished one.",
+  "publisher": {
+    "name": "Auto-Pigeon",
+    "url": "https://github.com/andrea-dintino/auto-pigeon-companion"
+  },
+  "license": {
+    "spdx": "MIT",
+    "name": "MIT"
+  },
+  "compatibility": {
+    "companion": {
+      "at_least": "0.1.0"
+    }
+  },
+  "game_profile": {
+    "slug": "quake2",
+    "engine_family": "quake2"
+  },
+  "inputs": [
+    {
+      "name": "source_map",
+      "title": "Map source",
+      "role": "q2.map.source",
+      "required": true,
+      "extensions": [
+        ".map"
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "id": "compile",
+      "title": "Compile the map",
+      "capability": "q2.bsp.compile",
+      "inputs": [
+        {
+          "name": "source_map",
+          "from": "pipeline.source_map"
+        }
+      ],
+      "options": {
+        "basename": "level",
+        "format": "q2bsp",
+        "leaktest": "true"
+      }
+    },
+    {
+      "id": "vis",
+      "title": "Compute visibility and hearability",
+      "capability": "q2.bsp.vis",
+      "inputs": [
+        {
+          "name": "bsp",
+          "from": "compile.bsp"
+        },
+        {
+          "name": "prt",
+          "from": "compile.prt"
+        }
+      ],
+      "options": {
+        "fast": "false",
+        "level": "4",
+        "threads": "4"
+      }
+    },
+    {
+      "id": "light",
+      "title": "Compute lighting",
+      "capability": "q2.bsp.light",
+      "inputs": [
+        {
+          "name": "bsp",
+          "from": "vis.bsp"
+        },
+        {
+          "name": "texinfo",
+          "from": "compile.texinfo"
+        }
+      ],
+      "options": {
+        "sampling": "none",
+        "threads": "4"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "name": "bsp",
+      "title": "The finished BSP",
+      "role": "q2.bsp.lit",
+      "from": "light.bsp"
+    },
+    {
+      "name": "pts",
+      "title": "Leak point file",
+      "role": "q2.pts",
+      "from": "compile.pts",
+      "optional": true
+    },
+    {
+      "name": "leak_portals",
+      "title": "Leak portal file",
+      "role": "q2.leak.prt",
+      "from": "compile.leak_portals",
+      "optional": true
+    },
+    {
+      "name": "compile_log",
+      "title": "qbsp log",
+      "role": "q2.compile.log",
+      "from": "compile.log",
+      "optional": true
+    }
+  ]
+}

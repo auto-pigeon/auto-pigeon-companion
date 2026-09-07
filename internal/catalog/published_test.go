@@ -23,7 +23,7 @@ import (
 // profile naming `bin/qbsp` and a catalogue publishing `qbsp` would install
 // cleanly and fail at the point a user pressed the button.
 
-const publishedCatalog = "../../catalog/ericw-tools-q1.catalog.json"
+const publishedCatalog = "../../catalog/ericw-tools.catalog.json"
 
 func loadPublished(t *testing.T) *catalog.Catalog {
 	t.Helper()
@@ -143,6 +143,77 @@ func TestTheLinuxArtifactIsTheArchiveAUTQualified(t *testing.T) {
 	}
 	if artifact.URL != wantURL {
 		t.Errorf("the linux artifact comes from %s, not %s", artifact.URL, wantURL)
+	}
+}
+
+// The experimental Quake II toolchain's Linux archive is the copy that was
+// unpacked and run on this machine while `AUP/AUCOM 215` was written — the one
+// every measured claim in `ericw-tools-q2.tool.json` came from. It is pinned
+// here for the same reason the Q1 artifact is: a build the Companion installs
+// that is not the build the claims were measured against makes the claims about
+// nothing.
+func TestTheQuake2LinuxArtifactIsTheArchiveThatWasMeasured(t *testing.T) {
+	const (
+		wantDigest = "sha256:c87d669c615f92163c21e6e154268c0c2e3de4e78c26b6bd5a2a2e7996a9fe75"
+		wantSize   = 22898562
+		wantURL    = "https://github.com/ericwa/ericw-tools/releases/download/2.0.0-alpha7/ericw-tools-2.0.0-alpha7-Linux.zip"
+	)
+	pkg, found := loadPublished(t).Find("ericw-tools.q2", "2.0.0-alpha7")
+	if !found {
+		t.Fatal("the catalogue does not carry ericw-tools.q2 2.0.0-alpha7")
+	}
+	artifact, ok := pkg.ArtifactFor(profile.Platform{OS: "linux", Arch: "amd64"})
+	if !ok {
+		t.Fatal("the catalogue has no linux/amd64 build of the Quake II toolchain")
+	}
+	if artifact.SHA256 != wantDigest {
+		t.Errorf("the linux artifact is %s, and %s was measured", artifact.SHA256, wantDigest)
+	}
+	if artifact.Size != wantSize {
+		t.Errorf("the linux artifact is %d bytes, and %d was measured", artifact.Size, wantSize)
+	}
+	if artifact.URL != wantURL {
+		t.Errorf("the linux artifact comes from %s, not %s", artifact.URL, wantURL)
+	}
+	// The 2.x archives have no directory inside them: `qbsp` is at the top
+	// level, where v0.18.1 puts `ericw-tools-v0.18.1-Linux/bin/qbsp`. A `root`
+	// copied across from the Q1 entry would install cleanly and resolve every
+	// executable to a path that does not exist.
+	if artifact.Root != "" {
+		t.Errorf("the Quake II artifact declares the root %q; the 2.x archives have none", artifact.Root)
+	}
+	for _, want := range []string{"qbsp", "vis", "light"} {
+		found := false
+		for _, path := range artifact.ExecutablePaths() {
+			if path == want {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("the Quake II artifact does not vouch for %q; it vouches for %v", want, artifact.ExecutablePaths())
+		}
+	}
+}
+
+// The Quake II entry is a pre-release, and the notice a user has to accept says
+// so in those words. Every other fact about it is checked structurally; that it
+// is not a finished release is the one a reader has to be told.
+func TestTheQuake2NoticeSaysItIsAPreRelease(t *testing.T) {
+	pkg, found := loadPublished(t).Find("ericw-tools.q2", "")
+	if !found {
+		t.Fatal("the catalogue does not carry ericw-tools.q2")
+	}
+	if !pkg.RequiresAcceptance {
+		t.Error("a GPL download whose notice nobody has to see is a notice nobody sees")
+	}
+	for _, phrase := range []string{"PRE-RELEASE", "2.0.0-alpha7", "GPL-2.0-or-later", "Embree"} {
+		if !strings.Contains(pkg.License.Notice, phrase) {
+			t.Errorf("the Quake II notice does not mention %q:\n%s", phrase, pkg.License.Notice)
+		}
+	}
+	if !strings.Contains(pkg.License.CorrespondingSource, "2.0.0-alpha7") {
+		t.Errorf("the corresponding-source offer is %q, and does not name the exact pre-release",
+			pkg.License.CorrespondingSource)
 	}
 }
 

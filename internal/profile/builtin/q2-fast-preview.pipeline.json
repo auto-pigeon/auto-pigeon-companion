@@ -1,0 +1,122 @@
+{
+  "schema_version": "aucom.profile/1.1",
+  "kind": "pipeline",
+  "id": "auto-pigeon.q2.fast-preview",
+  "version": "1.0.0",
+  "name": "Quake II — fast preview (experimental)",
+  "summary": "Experimental: compile, a rough visibility pass and no supersampling. For looking at what you just built.",
+  "description": "The quickest Quake II build that still produces something an engine will load: qbsp, a fast vis pass and unsupersampled lighting on one thread.\n\nOne thread is not a performance choice. Measured on 2.0.0-alpha7, three runs of one map at four threads produced three different BSPs and one thread produced the same one three times, so a preview built this way can be compared byte-for-byte with the last one. A preview whose output changes when nothing changed is a preview that cannot answer 'did my edit do anything'.\n\nThere are no vis or light logs among the outputs: 2.x writes them beside the BSP it was handed, inside the staged input's own directory, and each step's job holds the same text anyway.\n\nThe fast vis pass is rough on purpose and is not what you ship. `auto-pigeon.q2.normal` is.\n\nQuake II support in Auto-Pigeon is work in progress. Some textures, entities, compilation and engine workflows may be incomplete.",
+  "publisher": {
+    "name": "Auto-Pigeon",
+    "url": "https://github.com/andrea-dintino/auto-pigeon-companion"
+  },
+  "license": {
+    "spdx": "MIT",
+    "name": "MIT"
+  },
+  "compatibility": {
+    "companion": {
+      "at_least": "0.1.0"
+    }
+  },
+  "game_profile": {
+    "slug": "quake2",
+    "engine_family": "quake2"
+  },
+  "inputs": [
+    {
+      "name": "source_map",
+      "title": "Map source",
+      "role": "q2.map.source",
+      "required": true,
+      "extensions": [
+        ".map"
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "id": "compile",
+      "title": "Compile the map",
+      "capability": "q2.bsp.compile",
+      "inputs": [
+        {
+          "name": "source_map",
+          "from": "pipeline.source_map"
+        }
+      ],
+      "options": {
+        "basename": "level",
+        "format": "q2bsp",
+        "leaktest": "true"
+      }
+    },
+    {
+      "id": "vis",
+      "title": "Compute visibility and hearability",
+      "capability": "q2.bsp.vis",
+      "inputs": [
+        {
+          "name": "bsp",
+          "from": "compile.bsp"
+        },
+        {
+          "name": "prt",
+          "from": "compile.prt"
+        }
+      ],
+      "options": {
+        "fast": "true",
+        "threads": "1"
+      }
+    },
+    {
+      "id": "light",
+      "title": "Compute lighting",
+      "capability": "q2.bsp.light",
+      "inputs": [
+        {
+          "name": "bsp",
+          "from": "vis.bsp"
+        },
+        {
+          "name": "texinfo",
+          "from": "compile.texinfo"
+        }
+      ],
+      "options": {
+        "sampling": "none",
+        "threads": "1"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "name": "bsp",
+      "title": "The finished BSP",
+      "role": "q2.bsp.lit",
+      "from": "light.bsp"
+    },
+    {
+      "name": "pts",
+      "title": "Leak point file",
+      "role": "q2.pts",
+      "from": "compile.pts",
+      "optional": true
+    },
+    {
+      "name": "leak_portals",
+      "title": "Leak portal file",
+      "role": "q2.leak.prt",
+      "from": "compile.leak_portals",
+      "optional": true
+    },
+    {
+      "name": "compile_log",
+      "title": "qbsp log",
+      "role": "q2.compile.log",
+      "from": "compile.log",
+      "optional": true
+    }
+  ]
+}

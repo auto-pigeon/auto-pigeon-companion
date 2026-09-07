@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/maturity"
 )
 
 // `companion build`, from the outside.
@@ -36,6 +38,39 @@ func TestBuildPipelinesListsTheBuiltInQ1Pipelines(t *testing.T) {
 	}
 }
 
+// The experimental Quake II pipelines are listed beside the Quake 1 ones, and
+// they are listed as work in progress. A listing that offered them silently
+// would be the generic `supported` badge `AUP/AUCOM 215` says must not survive.
+func TestBuildPipelinesMarksTheQuake2PipelinesAsWorkInProgress(t *testing.T) {
+	env, stdout, stderr := testEnv(t)
+	if code := Run(env, []string{"build", "pipelines"}); code != 0 {
+		t.Fatalf("exit code = %d (stderr: %s)", code, stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{
+		"auto-pigeon.q2.fast-preview",
+		"auto-pigeon.q2.normal",
+		"Work in progress",
+		maturity.Quake2Message,
+		"companion feedback compatibility",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the listing is missing %q:\n%s", want, out)
+		}
+	}
+	// And the sentence appears once, however many Quake II rows there are.
+	if n := strings.Count(out, maturity.Quake2Message); n != 1 {
+		t.Errorf("the work-in-progress sentence appears %d times; a warning printed per row stops being read", n)
+	}
+	// The Quake 1 rows carry no badge: a badge on everything is a badge nobody
+	// reads, and Quake 1 is the qualified path.
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, "auto-pigeon.q1.") && strings.Contains(line, "Work in progress") {
+			t.Errorf("a Quake 1 pipeline is marked work in progress:\n%s", line)
+		}
+	}
+}
+
 func TestBuildPipelinesAsJSON(t *testing.T) {
 	env, stdout, stderr := testEnv(t)
 	if code := Run(env, []string{"build", "pipelines", "--json"}); code != 0 {
@@ -45,17 +80,36 @@ func TestBuildPipelinesAsJSON(t *testing.T) {
 		ID       string   `json:"id"`
 		Steps    []string `json:"steps"`
 		Runnable bool     `json:"runnable"`
+		Family   string   `json:"engine_family"`
+		Maturity string   `json:"maturity"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &rows); err != nil {
 		t.Fatalf("the output is not JSON: %v\n%s", err, stdout.String())
 	}
-	if len(rows) != 3 {
-		t.Fatalf("expected the three built-in pipelines, got %d", len(rows))
+	if len(rows) != 5 {
+		t.Fatalf("expected the three Quake 1 and two Quake II built-in pipelines, got %d", len(rows))
 	}
+	quake2 := 0
 	for _, row := range rows {
 		if len(row.Steps) != 3 || !row.Runnable {
 			t.Errorf("%s: steps=%v runnable=%t", row.ID, row.Steps, row.Runnable)
 		}
+		switch row.Family {
+		case "quake1":
+			if row.Maturity != string(maturity.Stable) {
+				t.Errorf("%s is %q; the Quake 1 path is the qualified one", row.ID, row.Maturity)
+			}
+		case "quake2":
+			quake2++
+			if row.Maturity != string(maturity.WorkInProgress) {
+				t.Errorf("%s is %q; Quake II is work in progress", row.ID, row.Maturity)
+			}
+		default:
+			t.Errorf("%s declares the family %q", row.ID, row.Family)
+		}
+	}
+	if quake2 != 2 {
+		t.Errorf("%d Quake II pipelines were listed", quake2)
 	}
 }
 

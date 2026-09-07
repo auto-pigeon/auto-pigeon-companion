@@ -215,8 +215,14 @@ type Manifest struct {
 	Label     string `json:"label,omitempty"`
 
 	Pipeline DocumentRef `json:"pipeline"`
-	State    job.State   `json:"state"`
-	Error    string      `json:"error,omitempty"`
+	// EngineFamily is AUB's family the pipeline declares, carried so a reader
+	// of the manifest — or a surface printing it — knows which game this build
+	// was for without going back to the document. It is what
+	// [github.com/andrea-dintino/auto-pigeon-companion/internal/maturity] is
+	// keyed on, so a build of a work-in-progress family can say so.
+	EngineFamily string    `json:"engine_family,omitempty"`
+	State        job.State `json:"state"`
+	Error        string    `json:"error,omitempty"`
 	// Strict says whether an error-severity diagnostic was treated as a failure.
 	Strict bool `json:"strict,omitempty"`
 

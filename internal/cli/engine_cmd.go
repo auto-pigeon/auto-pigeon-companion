@@ -14,6 +14,7 @@ import (
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/binding"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/engine"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/maturity"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
 )
 
@@ -168,12 +169,17 @@ func engineList(env *Env, args []string) int {
 	platform := currentPlatform()
 
 	type row struct {
-		ID       string           `json:"id"`
-		Name     string           `json:"name"`
-		Version  string           `json:"engine_version"`
-		Trust    profile.Trust    `json:"trust"`
-		Support  profile.Support  `json:"support"`
-		Note     string           `json:"note,omitempty"`
+		ID      string          `json:"id"`
+		Name    string          `json:"name"`
+		Version string          `json:"engine_version"`
+		Trust   profile.Trust   `json:"trust"`
+		Support profile.Support `json:"support"`
+		Note    string          `json:"note,omitempty"`
+		// Family and Maturity travel with every row, including in JSON. A
+		// caller that renders a list of engines is a caller that has to be able
+		// to render the work-in-progress statement beside the Quake II ones.
+		Family   string           `json:"engine_family,omitempty"`
+		Maturity string           `json:"maturity,omitempty"`
 		Actions  []string         `json:"actions"`
 		Bound    bool             `json:"bound"`
 		Platform profile.Platform `json:"platform"`
@@ -187,9 +193,11 @@ func engineList(env *Env, args []string) int {
 			actions = append(actions, action.ID)
 		}
 		local := localFor(bindingsPath, document.ID)
+		family := document.GameProfile.EngineFamily
 		rows = append(rows, row{
 			ID: document.ID, Name: document.Name, Version: document.EngineVersion,
 			Trust: entry.Trust, Support: status, Note: note, Actions: actions,
+			Family: family, Maturity: string(maturity.Of(family).State),
 			Bound: len(local.Executables) > 0, Platform: platform,
 		})
 	}
@@ -200,16 +208,25 @@ func engineList(env *Env, args []string) int {
 		fmt.Fprintln(env.Stdout, "no engine profiles")
 		return 0
 	}
+	families := map[string]bool{}
 	for _, r := range rows {
 		bound := "not set up here"
 		if r.Bound {
 			bound = "set up here"
 		}
-		fmt.Fprintf(env.Stdout, "%-36s %-12s %-11s %s\n", r.ID, r.Version, r.Support, bound)
+		badge := maturityBadge(r.Family)
+		fmt.Fprintf(env.Stdout, "%-36s %-12s %-11s %-16s %s\n", r.ID, r.Version, r.Support, bound, badge)
 		fmt.Fprintf(env.Stdout, "  %s\n", strings.Join(r.Actions, ", "))
 		if r.Note != "" {
 			fmt.Fprintf(env.Stdout, "  %s: %s\n", r.Platform, r.Note)
 		}
+		if badge != "" {
+			families[r.Family] = true
+		}
+	}
+	for _, family := range sortedFamilies(families) {
+		fmt.Fprintln(env.Stdout)
+		printMaturityNote(env, family, "")
 	}
 	return 0
 }
@@ -241,6 +258,7 @@ func engineShow(env *Env, args []string) int {
 	if document.LastQualified != "" {
 		fmt.Fprintf(env.Stdout, "  checked:  %s against %s %s\n", document.LastQualified, document.Name, document.EngineVersion)
 	}
+	printMaturityNote(env, document.GameProfile.EngineFamily, "  ")
 
 	fmt.Fprintln(env.Stdout, "\nplatforms:")
 	for _, support := range document.Platforms {

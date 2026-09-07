@@ -1,0 +1,143 @@
+{
+  "schema_version": "aucom.profile/1.1",
+  "kind": "engine",
+  "id": "auto-pigeon.engine.fteqw-q2",
+  "version": "1.0.0",
+  "name": "FTEQW (Quake II client)",
+  "summary": "Joins a Quake II server. It does not start one, and the reason is upstream's own.",
+  "description": "FTEQW plays several idTech games, Quake II among them, and this build already ships a profile for its Quake 1 side. This is its Quake II side, and it declares **one action**.\n\nFTEQW's own QuickStart documentation says it: *\"If you're running a 64-bit version of FTEQW, then you also need 64-bit game-logic for Quake II. We recommend getting the game .dll/.so from the Yamagi Quake II project for your respective platform.\"* Quake II's game logic is server-side. Every action that starts a **local** Quake II server — `play_map`, `play_package`, `host_listen`, `host_dedicated` — therefore depends on a third-party binary FTEQW does not ship, that Auto-Pigeon must not distribute, and whose presence this profile has no way to check. Declaring those actions would be declaring buttons that fail on a machine that looks correctly configured.\n\n`join_server` is different: a Quake II client needs no gamecode of its own, because the server runs it. That is the action FTEQW's documentation supports on its own, so that is the action this profile has. Use the Yamagi profile, or the generic one, to start a Quake II game locally.\n\n`-quake2` is sent because upstream documents it as the way to select the game and its data-path finding on an engine that supports several. This profile was written from FTEQW's published documentation, not from a build running on this machine.\n\nQuake II support in Auto-Pigeon is work in progress. Core editing is available, but some textures, entities, compilation and engine workflows may be incomplete, and this profile is part of that path.",
+  "publisher": {
+    "name": "Auto-Pigeon",
+    "url": "https://github.com/andrea-dintino/auto-pigeon-companion"
+  },
+  "source": {
+    "homepage": "https://fteqw.org/",
+    "repository": "https://github.com/fte-team/fteqw"
+  },
+  "license": {
+    "spdx": "GPL-2.0-or-later",
+    "name": "GNU General Public License v2.0 or later",
+    "notice": "Quake II engine source ports are separate programs under their own licences. This profile configures one; it does not contain, link or relicense it. Game data — PAK files, maps, textures and sounds shipped with a commercial release — is not covered by that licence, and the Companion never copies, uploads or redistributes it."
+  },
+  "compatibility": {
+    "companion": {
+      "at_least": "0.1.0"
+    }
+  },
+  "game_profile": {
+    "slug": "quake2",
+    "engine_family": "quake2"
+  },
+  "runtime": "fteqw",
+  "engine_version": "rolling",
+  "last_qualified": "2026-09-07",
+  "platforms": [
+    {
+      "platform": {
+        "os": "windows",
+        "arch": "amd64"
+      },
+      "status": "unverified",
+      "note": "Upstream publishes rolling autobuilds; nobody here has run one."
+    },
+    {
+      "platform": {
+        "os": "linux",
+        "arch": "amd64"
+      },
+      "status": "unverified",
+      "note": "Upstream publishes rolling autobuilds; nobody here has run one."
+    },
+    {
+      "platform": {
+        "os": "darwin",
+        "arch": "amd64"
+      },
+      "status": "unverified",
+      "note": "Upstream publishes rolling autobuilds; nobody here has run one."
+    }
+  ],
+  "acquisition": [
+    {
+      "mode": "user_path",
+      "title": "Use a copy you already have",
+      "hint": "choose the FTEQW executable"
+    }
+  ],
+  "content_layouts": [
+    {
+      "id": "baseq2",
+      "title": "The base game",
+      "kind": "loose_files",
+      "root": "game_root",
+      "path": "baseq2",
+      "note": "Where Quake II's own data lives. The Companion reads it and never writes to it."
+    },
+    {
+      "id": "pak",
+      "title": "A PAK archive in the base game",
+      "kind": "pak",
+      "root": "game_root",
+      "path": "baseq2"
+    }
+  ],
+  "executables": [
+    {
+      "name": "engine",
+      "title": "FTEQW",
+      "file": "fteqw{platform.exe_suffix}"
+    }
+  ],
+  "actions": [
+    {
+      "id": "join_server",
+      "title": "Join a Quake II server",
+      "session_role": "client",
+      "executable": "engine",
+      "working_dir": {
+        "root": "game_root"
+      },
+      "args": [
+        "-quake2",
+        "-basedir",
+        "{root.game_root}",
+        "+connect",
+        "{runtime.server_host}:{runtime.server_port}"
+      ],
+      "description": "The only action this profile declares. A Quake II client needs no gamecode of its own; a Quake II server does, and FTEQW does not ship it.",
+      "roots": [
+        {
+          "role": "game_root",
+          "access": "read",
+          "purpose": "load the base game and the mod being played"
+        }
+      ],
+      "network": {
+        "required": true,
+        "purpose": "connect to the server the user names"
+      },
+      "diagnostics": [
+        {
+          "id": "ready",
+          "match": "Console initialized",
+          "severity": "info",
+          "message": "The engine is up."
+        },
+        {
+          "id": "couldnt_load",
+          "match": "Couldn't load",
+          "severity": "error",
+          "message": "The engine could not load something it needs.",
+          "hint": "Quake II needs its own game data. Check that the base game data root holds `baseq2` with the game's PAK files in it."
+        },
+        {
+          "id": "error",
+          "match": "ERROR:",
+          "severity": "error",
+          "message": "The engine stopped with a fatal error.",
+          "hint": "The engine's own last line is usually the whole diagnosis; read the job's log."
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,456 @@
+{
+  "schema_version": "aucom.profile/1.1",
+  "kind": "engine",
+  "id": "aucom.fixture.q2-engine",
+  "version": "1.0.0",
+  "name": "Fixture Q2 engine",
+  "summary": "A measuring instrument for the Quake II path: it records the command line it was started with.",
+  "description": "The Quake II half of the same instrument. It exists because `AUP/AUCOM 215`'s acceptance ends with a launch, and a launch cannot be tested against a real Quake II engine: the engines are not on the machine, they need `baseq2/pak0.pak` — which is commercial game data the Companion must never carry — and a real engine opens a window and waits for a person.\n\nSo this records the argv it was given, and the acceptance compares that recording against what the built-in Yamagi profile resolves to. The tail of the command line below is Yamagi's documented one — `-datadir`, which its own filesystem source calls the current spelling, and `+set game`, which is how a Quake II mod is chosen — and the test compares rather than trusting it, so a change to either document that is not made to the other is a failure.\n\nIt is not in internal/profile/builtin, for the reason the Quake 1 fixture is not: a built-in profile is one the shipped Companion offers a user, and offering them a fake engine would be offering them something that cannot play Quake II.",
+  "publisher": {
+    "name": "Auto-Pigeon",
+    "url": "https://github.com/andrea-dintino/auto-pigeon-companion"
+  },
+  "license": {
+    "spdx": "MIT",
+    "name": "MIT License",
+    "notice": "The fixture engine is part of this repository and is under its licence. It is not a Quake engine and contains no id Software code or data."
+  },
+  "compatibility": {
+    "companion": {
+      "at_least": "0.1.0"
+    }
+  },
+  "game_profile": {
+    "slug": "quake2",
+    "engine_family": "quake2"
+  },
+  "runtime": "aucom-fixture-q2",
+  "engine_version": "1.0.0-fixture",
+  "last_qualified": "2026-09-07",
+  "platforms": [
+    {
+      "platform": {
+        "os": "linux",
+        "arch": "amd64"
+      },
+      "status": "supported"
+    },
+    {
+      "platform": {
+        "os": "linux",
+        "arch": "arm64"
+      },
+      "status": "supported"
+    },
+    {
+      "platform": {
+        "os": "darwin",
+        "arch": "amd64"
+      },
+      "status": "supported"
+    },
+    {
+      "platform": {
+        "os": "darwin",
+        "arch": "arm64"
+      },
+      "status": "supported"
+    },
+    {
+      "platform": {
+        "os": "windows",
+        "arch": "amd64"
+      },
+      "status": "supported"
+    }
+  ],
+  "acquisition": [
+    {
+      "mode": "user_path",
+      "title": "Point at the fixture binary",
+      "hint": "choose the test binary that dispatches on -aucom-engine-fixture"
+    }
+  ],
+  "content_layouts": [
+    {
+      "id": "baseq2",
+      "title": "The base game",
+      "kind": "loose_files",
+      "root": "game_root",
+      "path": "baseq2"
+    },
+    {
+      "id": "mod",
+      "title": "A staged mod directory",
+      "kind": "mod_directory",
+      "root": "game_root"
+    }
+  ],
+  "executables": [
+    {
+      "name": "engine",
+      "title": "The fixture engine",
+      "file": "engine{platform.exe_suffix}"
+    }
+  ],
+  "actions": [
+    {
+      "id": "play_map",
+      "title": "Play a map",
+      "session_role": "client",
+      "executable": "engine",
+      "working_dir": {
+        "root": "game_root"
+      },
+      "args": [
+        "-aucom-engine-fixture",
+        "--record",
+        "{root.content_root}/engine-record.json",
+        "--behaviour",
+        "{option.behaviour}",
+        "--children",
+        "{option.children}",
+        {
+          "value": "--require-file",
+          "when": {
+            "option": "require_game_data"
+          }
+        },
+        {
+          "value": "{root.game_root}/baseq2/pak0.pak",
+          "when": {
+            "option": "require_game_data"
+          }
+        },
+        "--",
+        "-datadir",
+        "{root.game_root}",
+        "+set",
+        "game",
+        "{runtime.mod_name}",
+        "+map",
+        "{runtime.map_name}"
+      ],
+      "options": [
+        {
+          "name": "behaviour",
+          "title": "What the fixture does",
+          "type": "enum",
+          "default": "ready",
+          "values": [
+            {
+              "value": "ready"
+            },
+            {
+              "value": "crash"
+            },
+            {
+              "value": "stay"
+            }
+          ]
+        },
+        {
+          "name": "children",
+          "title": "Grandchildren to leave behind",
+          "type": "integer",
+          "default": "0",
+          "minimum": 0,
+          "maximum": 4
+        },
+        {
+          "name": "require_game_data",
+          "title": "Refuse to start without id1/pak0.pak",
+          "type": "bool",
+          "default": "false"
+        }
+      ],
+      "roots": [
+        {
+          "role": "game_root",
+          "access": "read",
+          "purpose": "load the base game"
+        },
+        {
+          "role": "content_root",
+          "access": "read_write",
+          "purpose": "write down the command line the fixture was started with"
+        }
+      ],
+      "diagnostics": [
+        {
+          "id": "ready",
+          "match": "Console initialized.",
+          "severity": "info",
+          "message": "The engine is up."
+        },
+        {
+          "id": "host_error",
+          "stream": "stderr",
+          "match": "Host_Error:",
+          "severity": "error",
+          "message": "The engine stopped with a fatal error.",
+          "hint": "Read the log: an engine's own last line is usually the whole diagnosis."
+        }
+      ]
+    },
+    {
+      "id": "play_package",
+      "title": "Play a mod or package",
+      "session_role": "client",
+      "executable": "engine",
+      "working_dir": {
+        "root": "game_root"
+      },
+      "args": [
+        "-aucom-engine-fixture",
+        "--record",
+        "{root.content_root}/engine-record.json",
+        "--behaviour",
+        "{option.behaviour}",
+        "--",
+        "-datadir",
+        "{root.game_root}",
+        "+set",
+        "game",
+        "{runtime.package_name}"
+      ],
+      "options": [
+        {
+          "name": "behaviour",
+          "title": "What the fixture does",
+          "type": "enum",
+          "default": "ready",
+          "values": [
+            {
+              "value": "ready"
+            },
+            {
+              "value": "crash"
+            },
+            {
+              "value": "stay"
+            }
+          ]
+        }
+      ],
+      "roots": [
+        {
+          "role": "game_root",
+          "access": "read",
+          "purpose": "load the base game and the staged mod"
+        },
+        {
+          "role": "content_root",
+          "access": "read_write",
+          "purpose": "write down the command line the fixture was started with"
+        }
+      ]
+    },
+    {
+      "id": "join_server",
+      "title": "Join a server",
+      "session_role": "client",
+      "executable": "engine",
+      "working_dir": {
+        "root": "game_root"
+      },
+      "args": [
+        "-aucom-engine-fixture",
+        "--record",
+        "{root.content_root}/engine-record.json",
+        "--behaviour",
+        "{option.behaviour}",
+        "--",
+        "-datadir",
+        "{root.game_root}",
+        "+connect",
+        "{runtime.server_host}:{runtime.server_port}"
+      ],
+      "options": [
+        {
+          "name": "behaviour",
+          "title": "What the fixture does",
+          "type": "enum",
+          "default": "ready",
+          "values": [
+            {
+              "value": "ready"
+            },
+            {
+              "value": "crash"
+            },
+            {
+              "value": "stay"
+            }
+          ]
+        }
+      ],
+      "roots": [
+        {
+          "role": "game_root",
+          "access": "read",
+          "purpose": "load the base game"
+        },
+        {
+          "role": "content_root",
+          "access": "read_write",
+          "purpose": "write down the command line the fixture was started with"
+        }
+      ],
+      "network": {
+        "required": true,
+        "purpose": "connect to the server the user names"
+      }
+    },
+    {
+      "id": "host_listen",
+      "title": "Host a game and play in it",
+      "session_role": "listen_server",
+      "executable": "engine",
+      "working_dir": {
+        "root": "game_root"
+      },
+      "args": [
+        "-aucom-engine-fixture",
+        "--record",
+        "{root.content_root}/engine-record.json",
+        "--behaviour",
+        "{option.behaviour}",
+        "--",
+        "-datadir",
+        "{root.game_root}",
+        "+set",
+        "game",
+        "{runtime.mod_name}",
+        "+set",
+        "maxclients",
+        "{option.max_players}",
+        "+map",
+        "{runtime.map_name}"
+      ],
+      "options": [
+        {
+          "name": "behaviour",
+          "title": "What the fixture does",
+          "type": "enum",
+          "default": "ready",
+          "values": [
+            {
+              "value": "ready"
+            },
+            {
+              "value": "crash"
+            },
+            {
+              "value": "stay"
+            }
+          ]
+        },
+        {
+          "name": "max_players",
+          "title": "Maximum players",
+          "type": "integer",
+          "default": "8",
+          "minimum": 2,
+          "maximum": 16
+        }
+      ],
+      "roots": [
+        {
+          "role": "game_root",
+          "access": "read",
+          "purpose": "load the base game"
+        },
+        {
+          "role": "content_root",
+          "access": "read_write",
+          "purpose": "write down the command line the fixture was started with"
+        }
+      ],
+      "network": {
+        "required": true,
+        "purpose": "accept connections from other players"
+      }
+    },
+    {
+      "id": "host_dedicated",
+      "title": "Run a dedicated server",
+      "session_role": "dedicated_server",
+      "executable": "engine",
+      "working_dir": {
+        "root": "game_root"
+      },
+      "args": [
+        "-aucom-engine-fixture",
+        "--record",
+        "{root.content_root}/engine-record.json",
+        "--behaviour",
+        "{option.behaviour}",
+        "--children",
+        "{option.children}",
+        "--",
+        "-datadir",
+        "{root.game_root}",
+        "+set",
+        "game",
+        "{runtime.mod_name}",
+        "+set",
+        "maxclients",
+        "{option.max_players}",
+        "+map",
+        "{runtime.map_name}"
+      ],
+      "options": [
+        {
+          "name": "behaviour",
+          "title": "What the fixture does",
+          "type": "enum",
+          "default": "ready",
+          "values": [
+            {
+              "value": "ready"
+            },
+            {
+              "value": "crash"
+            },
+            {
+              "value": "stay"
+            }
+          ]
+        },
+        {
+          "name": "max_players",
+          "title": "Maximum players",
+          "type": "integer",
+          "default": "8",
+          "minimum": 2,
+          "maximum": 16
+        },
+        {
+          "name": "children",
+          "title": "Grandchildren to leave behind",
+          "type": "integer",
+          "default": "0",
+          "minimum": 0,
+          "maximum": 4
+        }
+      ],
+      "roots": [
+        {
+          "role": "game_root",
+          "access": "read",
+          "purpose": "load the base game"
+        },
+        {
+          "role": "content_root",
+          "access": "read_write",
+          "purpose": "write down the command line the fixture was started with"
+        }
+      ],
+      "network": {
+        "required": true,
+        "purpose": "accept connections from other players"
+      }
+    }
+  ]
+}
