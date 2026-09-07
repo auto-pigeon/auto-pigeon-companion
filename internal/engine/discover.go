@@ -96,9 +96,11 @@ func (s Scanner) readFile(path string) ([]byte, error) {
 	return os.ReadFile(path)
 }
 
-// baseDirNames are the game directories a Quake 1 release ships. The first one
-// found decides, so id1 is first.
-var baseDirNames = []string{"id1", "rerelease"}
+// baseDirName is the directory a Quake 1 release keeps its own data in. One
+// name, because the 2021 re-release does not rename it — it nests a second copy
+// of the whole layout under `rerelease/`, which [Scanner.Detect] handles by
+// looking inside that directory as well rather than by knowing another name.
+const baseDirName = "id1"
 
 // pakNames are the archives whose presence says a directory really is Quake's
 // and not a directory that happens to be called id1.
@@ -149,17 +151,15 @@ func (s Scanner) Detect() []Candidate {
 // inspect decides whether a directory is a game root, and how its base game
 // directory is spelled on this filesystem.
 func (s Scanner) inspect(dir string, source Source) (Candidate, bool) {
-	for _, want := range baseDirNames {
-		for _, base := range s.entriesLike(dir, want) {
-			for _, pak := range pakNames {
-				for _, found := range s.entriesLike(filepath.Join(dir, base), pak) {
-					return Candidate{
-						Path:     dir,
-						Source:   source,
-						BaseDir:  base,
-						Evidence: base + "/" + found,
-					}, true
-				}
+	for _, base := range s.entriesLike(dir, baseDirName) {
+		for _, pak := range pakNames {
+			for _, found := range s.entriesLike(filepath.Join(dir, base), pak) {
+				return Candidate{
+					Path:     dir,
+					Source:   source,
+					BaseDir:  base,
+					Evidence: base + "/" + found,
+				}, true
 			}
 		}
 	}

@@ -568,7 +568,15 @@ func engineRun(env *Env, args []string, mode launchMode) int {
 			return fail(env, err)
 		}
 		fmt.Fprintf(env.Stderr, "staged %d files into %s\n", len(stamp.Files), staging.Dir())
-		if !*flags.keepStaged {
+		// Removing it when the command returns is only right when the command
+		// returns after the game does. With --wait=false it returns while the
+		// engine is still reading those files, so the staged copy stays and the
+		// user is told how to remove it.
+		if !*flags.keepStaged && !*flags.wait {
+			fmt.Fprintf(env.Stderr, "not waiting, so the staged copy stays; remove it with `companion engine unstage --game-root %s --mod %s`\n",
+				staging.GameRoot, staging.ModName)
+		}
+		if !*flags.keepStaged && *flags.wait {
 			defer func() {
 				kept, err := engine.Unstage(staging.GameRoot, staging.ModName)
 				switch {

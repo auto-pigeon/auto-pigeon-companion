@@ -339,10 +339,20 @@ func jobList(env *Env, args []string) int {
 		fmt.Fprintln(env.Stdout, "no jobs")
 		return 0
 	}
+	hosting := 0
 	for _, candidate := range jobs {
 		fmt.Fprintf(env.Stdout, "%s  %-11s  %-9s  %s %s%s\n",
 			candidate.ID, candidate.State, candidate.Duration().Round(time.Millisecond),
 			candidate.ProfileID, candidate.ActionID, sessionSuffix(candidate))
+		if candidate.Hosting() && candidate.State.Active() {
+			hosting++
+		}
+	}
+	// Said once, at the end, where somebody scanning a list will see it: the
+	// question "is my machine accepting connections right now" should not
+	// require reading every row.
+	if hosting > 0 {
+		fmt.Fprintf(env.Stdout, "\n%d running job(s) are servers other people can connect to.\n", hosting)
 	}
 	return 0
 }
