@@ -90,7 +90,12 @@ type Service struct {
 	// mirrors carries a live output writer for a job submitted by something
 	// that is watching it. Not persisted, and dropped when the job ends.
 	mirrors map[string]io.Writer
-	closed  bool
+	// owned is the ids this process is responsible for right now. The
+	// heartbeat walks this rather than the store: a store with a thousand
+	// finished jobs would otherwise be re-read from disk every two seconds to
+	// find the two that are running.
+	owned  map[string]bool
+	closed bool
 
 	workers sync.WaitGroup
 	ctx     context.Context
@@ -133,6 +138,7 @@ func NewService(options Options) (*Service, error) {
 		logf:        options.Logf,
 		queue:       make(chan string, depth),
 		mirrors:     map[string]io.Writer{},
+		owned:       map[string]bool{},
 	}
 	if service.lookupEnv == nil {
 		service.lookupEnv = os.LookupEnv
@@ -217,14 +223,14 @@ func (s *Service) heartbeat() {
 		case <-s.ctx.Done():
 			return
 		case <-ticker.C:
-			jobs, err := s.store.List()
-			if err != nil {
-				continue
+			s.mu.Lock()
+			ids := make([]string, 0, len(s.owned))
+			for id := range s.owned {
+				ids = append(ids, id)
 			}
-			for _, j := range jobs {
-				if j.State.Active() && j.Owner.PID == os.Getpid() {
-					_ = s.store.Heartbeat(j.ID, s.now())
-				}
+			s.mu.Unlock()
+			for _, id := range ids {
+				_ = s.store.Heartbeat(id, s.now())
 			}
 		}
 	}
@@ -303,6 +309,9 @@ func (s *Service) Submit(request Request) (*Job, error) {
 	if err := s.store.Heartbeat(id, now); err != nil {
 		return nil, err
 	}
+	s.mu.Lock()
+	s.owned[id] = true
+	s.mu.Unlock()
 
 	select {
 	case s.queue <- id:
@@ -672,11 +681,20 @@ func (s *Service) execute(id string) {
 	defer func() {
 		s.mu.Lock()
 		delete(s.mirrors, id)
+		delete(s.owned, id)
 		s.mu.Unlock()
 	}()
 
 	if s.store.CancelRequested(id) {
 		s.finish(j, Cancelled, "stopped before it started", nil)
+		return
+	}
+	// A job still in the queue when the Companion started shutting down. It is
+	// marked interrupted without being started: beginning a process here would
+	// mean spawning something only to kill it a moment later, and telling the
+	// user it "ran".
+	if err := s.ctxOrBackground().Err(); err != nil {
+		s.finish(j, Interrupted, "the Companion shut down before this job started", nil)
 		return
 	}
 	if err := s.step(j, Resolving, ""); err != nil {

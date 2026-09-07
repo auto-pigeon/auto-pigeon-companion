@@ -543,3 +543,76 @@ func TestContextCancellationInterruptsRatherThanFails(t *testing.T) {
 		t.Errorf("error = %q, want it to say the Companion shut down", after.Error)
 	}
 }
+
+func TestAQueuedJobIsNotStartedByAShutdown(t *testing.T) {
+	// One worker and a job that occupies it, so the second job is still in the
+	// queue when the Companion stops. It must come back interrupted without a
+	// process ever having existed for it — starting one only to kill it, and
+	// then reporting that it ran, is the outcome this guards.
+	h := newHarness(t, fixtureProfile(t, "test.shutdown.queued", modeAction("slow", "sleep", "30")),
+		func(o *Options) { o.Concurrency = 1 })
+
+	first, err := h.service.Submit(h.helperRequest("test.shutdown.queued", "slow"))
+	if err != nil {
+		t.Fatalf("submitting the first job: %v", err)
+	}
+	waitForState(t, h, first.ID, Running)
+
+	second, err := h.service.Submit(h.helperRequest("test.shutdown.queued", "slow"))
+	if err != nil {
+		t.Fatalf("submitting the second job: %v", err)
+	}
+	if queued, err := h.service.Get(second.ID); err != nil || queued.State != Queued {
+		t.Fatalf("the second job is %v (%v), want queued", queued, err)
+	}
+
+	h.cancel()
+	if err := h.service.Close(); err != nil {
+		t.Fatalf("closing: %v", err)
+	}
+
+	after, err := h.store.Load(second.ID)
+	if err != nil {
+		t.Fatalf("loading: %v", err)
+	}
+	if after.State != Interrupted {
+		t.Fatalf("state = %s, want interrupted", after.State)
+	}
+	if after.Command != nil || after.ExitCode != nil || !after.StartedAt.IsZero() {
+		t.Errorf("the queued job looks as though it ran: command=%v exit=%v started=%v",
+			after.Command, after.ExitCode, after.StartedAt)
+	}
+}
+
+func TestTheHeartbeatFollowsThisProcessesOwnJobsOnly(t *testing.T) {
+	h := newHarness(t, fixtureProfile(t, "test.heartbeat", modeAction("slow", "sleep", "10")))
+
+	// A job in the same store that this process does not own — what another
+	// Companion's running job looks like from here.
+	foreign, err := NewID(time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.store.Save(&Job{SchemaVersion: SchemaVersion, ID: foreign, State: Running, CreatedAt: time.Now().UTC()}); err != nil {
+		t.Fatal(err)
+	}
+
+	mine, err := h.service.Submit(h.helperRequest("test.heartbeat", "slow"))
+	if err != nil {
+		t.Fatalf("submitting: %v", err)
+	}
+	waitForState(t, h, mine.ID, Running)
+	time.Sleep(3 * heartbeatInterval)
+
+	if age, found := h.store.heartbeatAge(mine.ID, time.Now()); !found || age > heartbeatStale {
+		t.Errorf("this process is not keeping its own job's heartbeat fresh: %v %v", age, found)
+	}
+	if _, found := h.store.heartbeatAge(foreign, time.Now()); found {
+		t.Error("this process wrote a heartbeat for a job it does not own")
+	}
+
+	if _, err := h.service.Cancel(mine.ID); err != nil {
+		t.Fatalf("cancelling: %v", err)
+	}
+	h.waitFor(mine.ID)
+}
