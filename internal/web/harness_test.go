@@ -369,9 +369,13 @@ func newMachine(t *testing.T) *machine {
 			GOOS: runtime.GOOS,
 			Look: func(string) (string, error) { return "", os.ErrNotExist },
 		},
-		SaveConfig: func(updated config.Config) error {
-			m.settings = updated
-			return nil
+		UpdateConfig: func(mutate func(*config.Config) error) (config.Config, error) {
+			current := m.settings
+			if err := mutate(&current); err != nil {
+				return config.Config{}, err
+			}
+			m.settings = current
+			return current, nil
 		},
 	})
 	if err != nil {
@@ -637,7 +641,10 @@ func (m *machine) restart() *machine {
 			GOOS: runtime.GOOS,
 			Look: func(string) (string, error) { return "", os.ErrNotExist },
 		},
-		SaveConfig: func(config.Config) error { return nil },
+		UpdateConfig: func(mutate func(*config.Config) error) (config.Config, error) {
+			var current config.Config
+			return current, mutate(&current)
+		},
 	})
 	if err != nil {
 		m.t.Fatal(err)

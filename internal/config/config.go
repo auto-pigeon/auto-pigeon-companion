@@ -44,6 +44,7 @@ import (
 	"time"
 
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/catalog"
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/lockfile"
 )
 
 // AppDirName is the single path element the Companion adds under the OS config
@@ -417,10 +418,61 @@ func Save(value Config) error {
 // SaveTo is Save against an explicit path.
 //
 // The write is atomic — a temporary file in the destination directory followed
-// by a rename — because a config file truncated by a crash or a full disk
-// would take the stored session with it, and a half-written JSON document is
+// by a rename — because a config file truncated by a crash or a full disk would
+// take the stored session with it, and a half-written JSON document is
 // indistinguishable from a corrupt one on the next load.
+//
+// It is also serialised against every other writer of this file, through
+// [lockfile]. Atomicity alone stops a torn write and does nothing about a lost
+// one: the GUI server and a `companion` invocation in a terminal are two
+// processes, and two of these calls that read the same file and write different
+// fields end with one field silently gone.
+//
+// A caller that read the file, changed something and is writing it back wants
+// [Update] rather than this, because the read has to be inside the lock too.
 func SaveTo(path string, value Config) error {
+	return lockfile.With(path, lockOptions(), func() error { return saveLocked(path, value) })
+}
+
+// Update is the read-modify-write every caller that changes one field should
+// use.
+//
+// Load, mutate, save, all inside one lock. mutate is handed the configuration
+// as it is on disk *now* — not as the caller read it earlier — which is the
+// whole point: a second instance that changed the port between then and now has
+// its change carried forward instead of overwritten. A first run has no file,
+// and mutate is handed [Default].
+//
+// The mutated value is returned so a caller can report what it wrote.
+func Update(path string, mutate func(*Config) error) (Config, error) {
+	var result Config
+	err := lockfile.With(path, lockOptions(), func() error {
+		current, err := LoadFrom(path)
+		if err != nil && !errors.Is(err, ErrNotFound) {
+			return err
+		}
+		if mutate != nil {
+			if err := mutate(&current); err != nil {
+				return err
+			}
+		}
+		if err := saveLocked(path, current); err != nil {
+			return err
+		}
+		result = current
+		return nil
+	})
+	return result, err
+}
+
+// lockOptions labels this program in the lock file, so a person told the file
+// is busy is told by what.
+func lockOptions() lockfile.Options {
+	return lockfile.Options{Program: "auto-pigeon-companion"}
+}
+
+// saveLocked is the write itself. It assumes the caller holds the lock.
+func saveLocked(path string, value Config) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("config: creating %s: %w", dir, err)

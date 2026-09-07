@@ -37,12 +37,17 @@ func newTestServer(t *testing.T, client *aub.Client) (*Server, *config.Config) {
 
 	saved := settings
 	server, err := NewServer(Options{
-		Version:    "test",
-		Client:     client,
-		Config:     settings,
-		Jobs:       newTestJobs(t),
-		Provider:   launch.ExampleProvider(),
-		SaveConfig: func(updated config.Config) error { saved = updated; return nil },
+		Version:  "test",
+		Client:   client,
+		Config:   settings,
+		Jobs:     newTestJobs(t),
+		Provider: launch.ExampleProvider(),
+		UpdateConfig: func(mutate func(*config.Config) error) (config.Config, error) {
+			if err := mutate(&saved); err != nil {
+				return config.Config{}, err
+			}
+			return saved, nil
+		},
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -255,12 +255,15 @@ func serverWithRunner(t *testing.T, runner aue.Runner) *Server {
 	settings := config.Default()
 	settings.ToolCacheDir = t.TempDir()
 	server, err := NewServer(Options{
-		Version:    "test",
-		Config:     settings,
-		AUE:        runner,
-		Jobs:       newTestJobs(t),
-		Provider:   launch.ExampleProvider(),
-		SaveConfig: func(config.Config) error { return nil },
+		Version:  "test",
+		Config:   settings,
+		AUE:      runner,
+		Jobs:     newTestJobs(t),
+		Provider: launch.ExampleProvider(),
+		UpdateConfig: func(mutate func(*config.Config) error) (config.Config, error) {
+			current := settings
+			return current, mutate(&current)
+		},
 	})
 	if err != nil {
 		t.Fatal(err)

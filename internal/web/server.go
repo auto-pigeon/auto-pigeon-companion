@@ -107,9 +107,15 @@ type Server struct {
 	// it per request would be a string replacement on every page load.
 	index []byte
 
-	// saveConfig persists a changed config. Held as a field so tests can point
-	// it at a temporary file instead of the user's real config directory.
-	saveConfig func(config.Config) error
+	// updateConfig persists a change to the config file. Held as a field so
+	// tests can point it at a temporary file instead of the user's real config
+	// directory.
+	//
+	// A *mutation*, not a value: this server is one of several processes that
+	// write config.json, and a handler that wrote back the whole struct it read
+	// at startup would silently undo whatever another instance changed in
+	// between. See [config.Update].
+	updateConfig func(func(*config.Config) error) (config.Config, error)
 
 	handler http.Handler
 }
@@ -127,8 +133,10 @@ type Options struct {
 	// HTTP-backed runner, need no change here.
 	AUE    aue.Runner
 	Config config.Config
-	// SaveConfig persists configuration changes; nil means config.Save.
-	SaveConfig func(config.Config) error
+	// UpdateConfig applies one change to the config file, under the lock that
+	// makes this program a single writer of it. Nil means the user's own
+	// config.json through [config.Update].
+	UpdateConfig func(func(*config.Config) error) (config.Config, error)
 	// Token authenticates every API request. Nil mints one, which is what a
 	// test wants; `companion serve` passes the token it published so another
 	// process can use it.
@@ -171,9 +179,15 @@ func NewServer(options Options) (*Server, error) {
 		provider = launch.ExampleProvider()
 	}
 
-	save := options.SaveConfig
-	if save == nil {
-		save = config.Save
+	update := options.UpdateConfig
+	if update == nil {
+		update = func(mutate func(*config.Config) error) (config.Config, error) {
+			path, err := config.Path()
+			if err != nil {
+				return config.Config{}, err
+			}
+			return config.Update(path, mutate)
+		}
 	}
 
 	token := options.Token
@@ -195,19 +209,19 @@ func NewServer(options Options) (*Server, error) {
 	}
 
 	server := &Server{
-		version:    options.Version,
-		provider:   provider,
-		jobs:       options.Jobs,
-		runner:     options.AUE,
-		paths:      options.Paths,
-		picker:     picker,
-		scanner:    options.Scanner,
-		builds:     newBuildRuns(),
-		newAUB:     newAUB,
-		token:      token,
-		settings:   settings,
-		client:     client,
-		saveConfig: save,
+		version:      options.Version,
+		provider:     provider,
+		jobs:         options.Jobs,
+		runner:       options.AUE,
+		paths:        options.Paths,
+		picker:       picker,
+		scanner:      options.Scanner,
+		builds:       newBuildRuns(),
+		newAUB:       newAUB,
+		token:        token,
+		settings:     settings,
+		client:       client,
+		updateConfig: update,
 	}
 	index, err := indexPage(token)
 	if err != nil {
@@ -494,16 +508,20 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.mu.Lock()
-	s.settings.Session = config.Session{
-		Token:   session.Token,
-		UserID:  session.UserID,
-		Email:   session.Email,
-		Expires: session.Expires,
-	}
-	updated := s.settings
-	s.mu.Unlock()
-	if err := s.saveConfig(updated); err != nil {
+	updated, err := s.updateConfig(func(current *config.Config) error {
+		current.Session = config.Session{
+			Token:   session.Token,
+			UserID:  session.UserID,
+			Email:   session.Email,
+			Expires: session.Expires,
+		}
+		return nil
+	})
+	if err == nil {
+		s.mu.Lock()
+		s.settings = updated
+		s.mu.Unlock()
+	} else {
 		// The login itself succeeded and the in-memory client is usable; only
 		// persistence failed, so this is reported without failing the request.
 		writeJSON(w, http.StatusOK, map[string]any{
@@ -519,14 +537,17 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if client := s.aubClient(); client != nil {
 		client.Logout()
 	}
-	s.mu.Lock()
-	s.settings.Session = config.Session{}
-	updated := s.settings
-	s.mu.Unlock()
-	if err := s.saveConfig(updated); err != nil {
+	updated, err := s.updateConfig(func(current *config.Config) error {
+		current.Session = config.Session{}
+		return nil
+	})
+	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	s.mu.Lock()
+	s.settings = updated
+	s.mu.Unlock()
 	writeJSON(w, http.StatusOK, map[string]any{"authenticated": false})
 }
 

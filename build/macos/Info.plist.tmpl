@@ -45,5 +45,31 @@
     <true/>
     <key>NSHumanReadableCopyright</key>
     <string>@COPYRIGHT@</string>
+    <!--
+      The autopigeon:// handler. On macOS this is the ONLY declaration there
+      is: LaunchServices reads it out of the bundle when the .app is installed,
+      and there is no supported way to register a scheme for a loose
+      executable. `companion uri register` says so rather than inventing one.
+
+      Opening a link runs the bundle, which runs `companion game join <url>`
+      with no --approve: it resolves the link, prints the command it would run,
+      and starts nothing. A URL is a string somebody else chose.
+
+      Viewer role, not Editor: this application does not own or edit anything
+      the scheme names.
+    -->
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>@BUNDLE_ID@.join</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>autopigeon</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>

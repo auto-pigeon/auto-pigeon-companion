@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"sort"
 	"time"
+
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/lockfile"
 )
 
 // StateSchemaVersion versions the local catalogue trust state.
@@ -59,11 +61,17 @@ type State struct {
 // NewState returns empty state, stamped.
 func NewState() *State {
 	return &State{
-		SchemaVersion:    StateSchemaVersion,
-		KeyringSerial:    map[string]int64{},
-		CatalogSerial:    map[string]int64{},
-		RevokedKeys:      map[string]string{},
-		RevokedArtifacts: map[string]Revocation{},
+		SchemaVersion: StateSchemaVersion,
+		KeyringSerial: map[string]int64{},
+		CatalogSerial: map[string]int64{},
+		// The third ratchet was missing here while fill() created it, so a
+		// fresh state was one map short and writing to it panicked. Nothing
+		// reached it — every production path goes through a method that calls
+		// fill() first — but a constructor that does not construct the value
+		// is a trap for the next caller.
+		CompatibilitySerial: map[string]int64{},
+		RevokedKeys:         map[string]string{},
+		RevokedArtifacts:    map[string]Revocation{},
 	}
 }
 
@@ -230,9 +238,86 @@ func LoadState(path string) (*State, error) {
 	return &state, nil
 }
 
-// SaveState writes the trust state atomically. Atomic because a truncated
+// Merge folds another machine-local view of the trust state into this one,
+// monotonically.
+//
+// Every field here only ever moves one way — a serial goes up and a revocation
+// is never removed — so a merge is not a policy decision, it is the same
+// ratchet applied to two copies of it. That is what makes it the right repair
+// for a lost update: taking the higher serial and the union of the revocations
+// can only ever refuse more than either copy alone.
+//
+// UpdatedAt takes the later of the two, because it describes when the state was
+// last touched and both touches happened.
+func (s *State) Merge(other *State) {
+	if s == nil || other == nil {
+		return
+	}
+	s.fill()
+	other.fill()
+	for _, pair := range []struct{ into, from map[string]int64 }{
+		{s.KeyringSerial, other.KeyringSerial},
+		{s.CatalogSerial, other.CatalogSerial},
+		{s.CompatibilitySerial, other.CompatibilitySerial},
+	} {
+		for id, serial := range pair.from {
+			if highest, ok := pair.into[id]; !ok || serial > highest {
+				pair.into[id] = serial
+			}
+		}
+	}
+	for id, reason := range other.RevokedKeys {
+		if _, known := s.RevokedKeys[id]; !known {
+			s.RevokedKeys[id] = reason
+		}
+	}
+	for digest, revocation := range other.RevokedArtifacts {
+		if _, known := s.RevokedArtifacts[digest]; !known {
+			s.RevokedArtifacts[digest] = revocation
+		}
+	}
+	if other.UpdatedAt.After(s.UpdatedAt) {
+		s.UpdatedAt = other.UpdatedAt
+	}
+}
+
+// SaveState writes the trust state.
+//
+// Three properties, and the file needs all three.
+//
+// **Atomic**, through a temporary file and a rename, because a truncated
 // ratchet is an absent one.
+//
+// **Serialised**, through [lockfile], because the GUI server and a `companion`
+// invocation in a terminal are two processes and this file is the one where a
+// lost update is a security regression rather than an inconvenience.
+//
+// **Merged**, because a lock alone would not be enough. The window between
+// reading this state and writing it back spans a network fetch of the
+// catalogue — see [Acquirer.Catalog] — and holding a lock across that would
+// make one slow server block every other instance. So the write re-reads what
+// is on disk under the lock and folds it in with [State.Merge]. A revocation
+// another instance recorded while this one was fetching survives, which is the
+// whole point: the ratchet is monotone, so merging can only ever end with more
+// refused than either writer knew about.
+//
+// A state file that is on disk and will not parse fails the write rather than
+// replacing it. Silently overwriting an unreadable ratchet with a fresh one is
+// exactly the reset that deleting the file is supposed to be unable to do
+// quietly.
 func SaveState(path string, state *State) error {
+	return lockfile.With(path, lockfile.Options{Program: "auto-pigeon-companion"}, func() error {
+		onDisk, err := LoadState(path)
+		if err != nil {
+			return err
+		}
+		state.Merge(onDisk)
+		return saveStateLocked(path, state)
+	})
+}
+
+// saveStateLocked is the write itself. It assumes the caller holds the lock.
+func saveStateLocked(path string, state *State) error {
 	state.SchemaVersion = StateSchemaVersion
 	state.fill()
 	encoded, err := json.MarshalIndent(state, "", "  ")

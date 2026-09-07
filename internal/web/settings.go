@@ -163,15 +163,18 @@ func (s *Server) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.mu.Lock()
-	updated := s.settings
-	updated.AUBBaseURL = baseURL
-	updated.Port = request.Port
-	updated.JobConcurrency = request.JobConcurrency
-	updated.GameRoots = roots
-	s.mu.Unlock()
-
-	if err := s.saveConfig(updated); err != nil {
+	// Only the four fields this form owns. Everything else in the file is
+	// carried forward from whatever is on disk when the lock is taken, so a
+	// settings save cannot undo a catalogue address or a session another
+	// instance wrote while this page was open.
+	updated, err := s.updateConfig(func(current *config.Config) error {
+		current.AUBBaseURL = baseURL
+		current.Port = request.Port
+		current.JobConcurrency = request.JobConcurrency
+		current.GameRoots = roots
+		return nil
+	})
+	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}

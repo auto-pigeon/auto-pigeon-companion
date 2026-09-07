@@ -64,6 +64,38 @@ contents:
     file_info:
       mode: 0644
 
+  # The autopigeon:// handler. A separate, NoDisplay entry rather than a
+  # MimeType= line on the launcher above: the launcher runs `companion` with no
+  # arguments, which is GUI mode, and a desktop passing it a URL would have the
+  # URL silently dropped. This one runs `companion game join %u`, which prints
+  # the plan and starts nothing.
+  #
+  # The package declares the capability. It does NOT write the user's default
+  # into mimeapps.list — which application opens a scheme is a per-user choice,
+  # and `companion uri register` is how a user makes it.
+  - src: ./build/linux/auto-pigeon-companion-join.desktop
+    dst: /usr/share/applications/auto-pigeon-companion-join.desktop
+    file_info:
+      mode: 0644
+
+# Install and removal, and what happens to the user's own files.
+#
+# The scripts do ONE thing: refresh the desktop database so the new
+# x-scheme-handler/autopigeon entry is seen. They deliberately do not touch
+# anything under the user's home.
+#
+# Uninstalling removes the program and nothing else. `~/.config/auto-pigeon-companion`
+# holds decisions — the catalogue trust state and its sticky revocations, the
+# bindings, the licence acknowledgements — and `~/.cache/auto-pigeon-companion`
+# holds third-party tool binaries under their own licences. A package script
+# runs as root and cannot know which of the machine's users wanted their build
+# history deleted, so it deletes nobody's. `companion uninstall --purge` is the
+# per-user command that does, run by the person whose files they are; README.md
+# lists the directories for anybody who would rather remove them by hand.
+scripts:
+  postinstall: ./build/linux/postinstall.sh
+  postremove: ./build/linux/postremove.sh
+
 rpm:
   # TODO(andrea): unsigned. Package signing needs a GPG key that does not exist
   # yet; see the release notes in README.md.

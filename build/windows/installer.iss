@@ -77,6 +77,28 @@ Source: "..\..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\THIRD_PARTY_NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 
+[Registry]
+; The autopigeon:// handler.
+;
+; HKCU, under {autopf} or not: a per-user class needs no administrator rights,
+; matches PrivilegesRequired=lowest above, and is removed with the user's
+; profile. A machine-wide HKLM class would change the scheme for every account
+; on the computer, which is not what installing an application for oneself asks
+; for.
+;
+; uninsdeletekey on the root key is what makes an uninstall take the handler
+; with it, subkeys included. Without it the scheme would keep pointing at a
+; program that is no longer there.
+;
+; The command is `companion game join "%1"` — no --approve, so opening a link
+; resolves it, prints what it would run, and starts nothing. Both the program
+; path and %1 are quoted: an unquoted path under "C:\Program Files" invites the
+; loader to try "C:\Program.exe", and %1 is a string somebody else chose.
+Root: HKCU; Subkey: "Software\Classes\autopigeon"; ValueType: string; ValueName: ""; ValueData: "URL:Auto-Pigeon Companion join link"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\autopigeon"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\autopigeon\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#AppExeName},0"
+Root: HKCU; Subkey: "Software\Classes\autopigeon\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExeName}"" game join ""%1"""
+
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"
 Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"

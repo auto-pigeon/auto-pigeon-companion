@@ -83,11 +83,28 @@ func tokenFilePath(env *Env) (string, error) {
 	return web.TokenPath(dir), nil
 }
 
-func saveSettings(env *Env, settings config.Config) error {
+// settingsPath is the config file this invocation writes.
+func settingsPath(env *Env) (string, error) {
 	if env.ConfigPath != "" {
-		return config.SaveTo(env.ConfigPath, settings)
+		return env.ConfigPath, nil
 	}
-	return config.Save(settings)
+	return config.Path()
+}
+
+// updateSettings is the only way this package changes config.json.
+//
+// Load, mutate and save happen inside one cross-process lock, and mutate is
+// handed the file as it is on disk now rather than whatever this command read
+// when it started. That is what stops `companion auth login` in one terminal
+// from undoing a `catalog_url` a GUI server wrote a moment earlier — the
+// signature makes each caller declare the field it is changing instead of
+// writing back a whole struct it read minutes ago.
+func updateSettings(env *Env, mutate func(*config.Config) error) (config.Config, error) {
+	path, err := settingsPath(env)
+	if err != nil {
+		return config.Config{}, err
+	}
+	return config.Update(path, mutate)
 }
 
 // newClient builds an AUB client carrying whatever session is stored locally.
@@ -208,7 +225,9 @@ func runServe(env *Env, args []string) int {
 			Builds:     buildsPath,
 			AssetCache: assetCache,
 		},
-		SaveConfig: func(updated config.Config) error { return saveSettings(env, updated) },
+		UpdateConfig: func(mutate func(*config.Config) error) (config.Config, error) {
+			return updateSettings(env, mutate)
+		},
 	})
 	if err != nil {
 		return fail(env, err)
@@ -297,13 +316,15 @@ func runAuthLogin(env *Env, args []string) int {
 		return fail(env, err)
 	}
 
-	settings.Session = config.Session{
-		Token:   session.Token,
-		UserID:  session.UserID,
-		Email:   session.Email,
-		Expires: session.Expires,
-	}
-	if err := saveSettings(env, settings); err != nil {
+	if _, err := updateSettings(env, func(current *config.Config) error {
+		current.Session = config.Session{
+			Token:   session.Token,
+			UserID:  session.UserID,
+			Email:   session.Email,
+			Expires: session.Expires,
+		}
+		return nil
+	}); err != nil {
 		return fail(env, err)
 	}
 	fmt.Fprintf(env.Stdout, "signed in to %s as %s\n", client.BaseURL(), session.Email)
@@ -377,12 +398,10 @@ func runAuthLogout(env *Env, args []string) int {
 	if _, code, ok := parseFlags(env, set, args); !ok {
 		return code
 	}
-	settings, err := loadSettings(env)
-	if err != nil {
-		return fail(env, err)
-	}
-	settings.Session = config.Session{}
-	if err := saveSettings(env, settings); err != nil {
+	if _, err := updateSettings(env, func(current *config.Config) error {
+		current.Session = config.Session{}
+		return nil
+	}); err != nil {
 		return fail(env, err)
 	}
 	// Said explicitly because it is not revocation: AUB's tokens are stateless
