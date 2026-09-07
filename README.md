@@ -1643,10 +1643,10 @@ When the Quake II path does not do what you expected, this composes a report —
 and sends nothing.
 
 ```console
-$ companion feedback compatibility --game quake2 \
+$ companion feedback compatibility --game quake2 --build 20260907T192047Z-44c8065e \
+    --share versions,profiles,operation \
     --summary "Areaportals do not seal in the compiled map" \
-    --describe "Two rooms joined by a corridor. The areaportal compiles but both rooms stay in one area." \
-    --share versions,profiles,operation,diagnostics --build 20260907T184154Z-88e026aa
+    --describe "Two rooms joined by a corridor. The areaportal compiles but both rooms stay in one area."
 {
   "schema": "aucom.compat-report/1.0",
   "created_on": "2026-09-07",
@@ -1654,20 +1654,39 @@ $ companion feedback compatibility --game quake2 \
   "maturity": "work_in_progress",
   "summary": "Areaportals do not seal in the compiled map",
   "description": "Two rooms joined by a corridor. The areaportal compiles but both rooms stay in one area.",
-  "shared": { "versions": true, "profiles": true, "operation": true, "diagnostics": true },
-  "versions": { "companion": "0.1.0", "platform": "linux/amd64" },
+  "shared": {
+    "versions": true,
+    "profiles": true,
+    "operation": true,
+    "diagnostics": false
+  },
+  "versions": {
+    "companion": "0.1.0-dev",
+    "platform": "linux/amd64"
+  },
   "operation": "build",
   "profiles": [
-    { "role": "pipeline", "id": "auto-pigeon.q2.normal", "version": "1.0.0" },
-    { "role": "tool", "id": "auto-pigeon.ericw-tools.q2", "version": "1.0.0", "tool_version": "2.0.0-alpha7" }
-  ],
-  "diagnostics": [
-    { "id": "texture_missing", "severity": "error", "message": "A texture the map uses was not found under the base game data or the mod, so its contents and surface flags fall back to defaults.", "count": 14 }
+    {
+      "role": "pipeline",
+      "id": "auto-pigeon.q2.normal",
+      "version": "1.0.0"
+    },
+    {
+      "role": "tool",
+      "id": "auto-pigeon.ericw-tools.q2",
+      "version": "1.0.0",
+      "tool_version": "2.0.0-alpha7"
+    }
   ]
 }
 
 Nothing has been sent. This file is yours to read and to share if you choose.
 ```
+
+`--share diagnostics` adds the rules that fired, each with a count and with the
+message *this program* declares for it — `texinfo_loaded`, `phs`,
+`builtin_palette`, `texture_missing`. Never the line the compiler printed, which
+is where your filenames are.
 
 Four things about that:
 
