@@ -318,7 +318,7 @@ func gameHost(env *Env, args []string) int {
 func gameStop(env *Env, args []string) int {
 	set := newFlagSet(env, "game stop")
 	reason := set.String("reason", aub.ReasonHostStopped, "why: host_stopped, host_crashed, owner_signed_out, network_lost")
-	rest, code, ok := parseFlags(env, set, args)
+	rest, code, ok := parseInterspersed(env, set, args)
 	if !ok {
 		return code
 	}
@@ -385,7 +385,7 @@ func gameList(env *Env, args []string) int {
 func gameShow(env *Env, args []string) int {
 	set := newFlagSet(env, "game show")
 	asJSON := set.Bool("json", false, "print the game as JSON")
-	rest, code, ok := parseFlags(env, set, args)
+	rest, code, ok := parseInterspersed(env, set, args)
 	if !ok {
 		return code
 	}
@@ -442,7 +442,9 @@ func gameJoin(env *Env, args []string) int {
 	set := newFlagSet(env, "game join")
 	approve := set.Bool("approve", false, "run the command, having read it")
 	asJSON := set.Bool("json", false, "print the plan as JSON")
-	rest, code, ok := parseFlags(env, set, args)
+	// Interspersed, because a link is a positional and `--approve` reads naturally
+	// AFTER it — `engine bind`'s precedent, and the shape a person actually types.
+	rest, code, ok := parseInterspersed(env, set, args)
 	if !ok {
 		return code
 	}
