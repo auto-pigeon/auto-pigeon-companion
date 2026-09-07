@@ -2,6 +2,7 @@ package feedback
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -264,7 +265,21 @@ func Validate(r Report) error {
 	// leaves — so it gets the same rule rather than a second opinion about what
 	// a path is.
 	if err := profile.CheckPortable(r); err != nil {
-		add("%v", err)
+		var problems profile.Problems
+		if errors.As(err, &problems) {
+			// Reported one member at a time, with the *report's* remedy rather
+			// than the profile's. `CheckPortable` tells a profile author to
+			// name a root role, which is the right advice for a document that
+			// runs a program and nonsense in a bug report: what a person
+			// writing one has to do is take the path out of their sentence.
+			for _, problem := range problems {
+				add("%s %s. Take it out: a report goes to somebody else's machine, "+
+					"where it is at best meaningless and at worst yours to have lost",
+					fieldName(problem.Path), problem.Message)
+			}
+		} else {
+			add("%v", err)
+		}
 	}
 	// [job.Redactor] is the other one: the patterns that recognise a credential
 	// a *tool* printed. `CheckPortable` is written for authored, reviewed prose
@@ -456,4 +471,19 @@ func shareable(text string) bool {
 		return false
 	}
 	return job.NewRedactor().Redact(text) == text
+}
+
+// fieldName turns a JSON path from [profile.CheckPortable] into something a
+// person recognises. An empty path is the document itself, which for a report is
+// the thing they just typed.
+func fieldName(path string) string {
+	switch {
+	case path == "":
+		return "this report"
+	case strings.HasPrefix(path, "diagnostics"):
+		return "a diagnostic in this report"
+	case strings.HasPrefix(path, "profiles"):
+		return "a profile reference in this report"
+	}
+	return "the " + strings.ReplaceAll(path, "_", " ")
 }
