@@ -18,7 +18,7 @@ import (
 // this program, not by anybody else's. A record this build does not fully
 // understand is refused rather than half-read, because a job record is what
 // says whether something ran.
-const SchemaVersion = "aucom.job/1.1"
+const SchemaVersion = "aucom.job/1.2"
 
 // SupportedSchemaVersions is every job record format this build reads, oldest
 // first.
@@ -28,7 +28,12 @@ const SchemaVersion = "aucom.job/1.1"
 // garbage collector from deleting the toolchain a retained build used. An older
 // record names none, which is read as "none" and is true — nothing had been
 // downloaded by a build that predates the download mechanism.
-var SupportedSchemaVersions = []string{"aucom.job/1.0", "aucom.job/1.1"}
+// 1.2 added `session_role`: whether the job is a client, a listen server or a
+// dedicated server. A record without it is a record from before engine
+// profiles distinguished them, and reading it as "unknown" is true — but a
+// running server that a job list showed as an ordinary process is exactly the
+// thing the field exists to stop, so the version is named rather than inferred.
+var SupportedSchemaVersions = []string{"aucom.job/1.0", "aucom.job/1.1", "aucom.job/1.2"}
 
 // SchemaSupported reports whether this build reads a job record format.
 func SchemaSupported(version string) bool {
@@ -183,6 +188,14 @@ type Job struct {
 	ActionID       string        `json:"action_id,omitempty"`
 	ActionTitle    string        `json:"action_title,omitempty"`
 	Trust          profile.Trust `json:"trust,omitempty"`
+	// SessionRole says what kind of thing this job is: a client, a game other
+	// people can join, or a server with nobody at the keyboard.
+	//
+	// Recorded on the job because a list of running processes that did not
+	// distinguish them would be a list in which a user cannot tell whether
+	// their machine is currently reachable from the internet. Empty on a tool
+	// job, which is not a session at all.
+	SessionRole profile.SessionRole `json:"session_role,omitempty"`
 
 	// Installs is every managed download this job ran, by cache digest. It is
 	// recorded so that the record of what ran stays complete after the
@@ -224,6 +237,14 @@ type Event struct {
 	State State     `json:"state"`
 	At    time.Time `json:"at"`
 	Note  string    `json:"note,omitempty"`
+}
+
+// Hosting reports a job that is serving other people: a listen server or a
+// dedicated one. It is the question a user actually asks — "is my machine
+// hosting a game right now" — and answering it from one place means no caller
+// has to remember which of the three roles counts.
+func (j *Job) Hosting() bool {
+	return j.SessionRole == profile.SessionListen || j.SessionRole == profile.SessionDedicated
 }
 
 // Duration is how long the job took, or has taken so far.

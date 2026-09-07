@@ -2,6 +2,7 @@ package profile
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -194,6 +195,33 @@ type Grant struct {
 	Trust     Trust     `json:"trust"`
 	Granted   []string  `json:"granted"`
 	GrantedAt time.Time `json:"granted_at"`
+}
+
+// NewGrant records a decision to allow everything a document asks for.
+//
+// Everything, and against one exact digest. There is no partial grant, and that
+// is not a simplification: a profile's permissions are what its actions need to
+// run at all, so approving some of them would produce a profile that is allowed
+// to exist and not to work, and a user would have to discover which half by
+// running it. What makes the decision safe to make in one step is that it is
+// made against a digest — the document the user was shown — so a later version
+// asking for more is a new decision. See [Authorize] and [Diff.Escalates].
+func NewGrant(p Profile, trust Trust, digest string, at time.Time) *Grant {
+	meta := p.Metadata()
+	permissions := p.Permissions()
+	ids := make([]string, 0, len(permissions))
+	for _, permission := range permissions {
+		ids = append(ids, permission.ID)
+	}
+	sort.Strings(ids)
+	return &Grant{
+		ProfileID: meta.ID,
+		Version:   meta.Version,
+		Digest:    digest,
+		Trust:     trust,
+		Granted:   ids,
+		GrantedAt: at.UTC(),
+	}
 }
 
 // Covers reports whether a grant applies to a document.

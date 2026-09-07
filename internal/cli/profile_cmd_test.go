@@ -178,7 +178,8 @@ func TestProfileListShowsWhatShipsWithThisBuild(t *testing.T) {
 		t.Fatalf("exit code = %d, stderr = %s", code, stderr)
 	}
 	out := stdout.String()
-	for _, want := range []string{"tool", "engine", "pipeline", "builtin", "auto-pigeon.sample."} {
+	for _, want := range []string{"tool", "engine", "pipeline", "builtin",
+		"auto-pigeon.ericw-tools.q1", "auto-pigeon.engine.quakespasm", "auto-pigeon.q1.normal"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output does not contain %q:\n%s", want, out)
 		}

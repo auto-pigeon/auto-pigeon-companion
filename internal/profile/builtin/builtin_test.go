@@ -259,52 +259,225 @@ func TestTheThreePipelinesDifferInWhatTheyRun(t *testing.T) {
 	}
 }
 
-// The engine sample exercises all five actions and all three session roles, so
-// that "an engine that does not support one omits it" is a rule with a worked
-// example rather than only a paragraph.
-func TestTheEngineSampleCoversEveryActionAndSessionRole(t *testing.T) {
-	entry, err := Find("auto-pigeon.sample.q1-engine")
-	if err != nil {
-		t.Fatalf("%v", err)
-	}
-	engine, ok := entry.Profile.(*profile.EngineProfile)
-	if !ok {
-		t.Fatalf("the sample is not an engine profile")
-	}
-	for _, id := range profile.EngineActions {
-		if _, found := engine.ActionByID(id); !found {
-			t.Errorf("the sample engine has no %q action", id)
+// An engine profile declares what its engine does and leaves out what it does
+// not, so this checks the leaving-out rather than the declaring: QuakeSpasm is
+// a client and must not offer a dedicated server, QSS is the QuakeSpasm
+// derivative that does, and no profile may declare an action outside the closed
+// vocabulary or give one the wrong session role.
+func TestCuratedEnginesDeclareOnlyWhatTheirEnginesDo(t *testing.T) {
+	engines := loadEngines(t)
+	for _, id := range Q1Engines {
+		if _, shipped := engines[id]; !shipped {
+			t.Errorf("%s is named as a curated engine and does not ship", id)
 		}
 	}
+
 	roles := map[profile.SessionRole]bool{}
-	for _, a := range engine.Actions {
-		roles[a.SessionRole] = true
+	for id, engine := range engines {
+		for _, action := range engine.Actions {
+			if !contains(profile.EngineActions, action.ID) {
+				t.Errorf("%s declares %q, which is not an engine action", id, action.ID)
+			}
+			roles[action.SessionRole] = true
+		}
 	}
 	for _, role := range []profile.SessionRole{profile.SessionClient, profile.SessionListen, profile.SessionDedicated} {
 		if !roles[role] {
-			t.Errorf("no action declares the %q session role", role)
+			t.Errorf("no curated engine action declares the %q session role", role)
 		}
 	}
 
-	permissions := entry.Profile.Permissions()
-	var hosting int
-	for _, p := range permissions {
-		if strings.HasPrefix(p.ID, "host_") {
-			hosting++
-			if p.Risk != profile.RiskHigh {
-				t.Errorf("hosting permission %q is %q risk", p.ID, p.Risk)
-			}
-		}
+	if _, offers := engines[QuakeSpasm].ActionByID(profile.ActionHostDedicated); offers {
+		t.Error("QuakeSpasm declares host_dedicated; it is a client, and a profile that offered it " +
+			"would be a button that starts something else")
 	}
-	if hosting != 2 {
-		t.Errorf("expected separate listen and dedicated hosting permissions, got %d", hosting)
+	if _, offers := engines[QuakeSpasmSpiked].ActionByID(profile.ActionHostDedicated); !offers {
+		t.Error("QuakeSpasm-Spiked does not declare host_dedicated, which is the reason it has a profile of its own")
+	}
+	if _, offers := engines[Q1Generic].ActionByID(profile.ActionHostDedicated); offers {
+		t.Error("the generic profile declares host_dedicated; whether a build has a dedicated server " +
+			"compiled in is exactly what a generic profile cannot know")
 	}
 }
 
-// The engine sample's play_map resolves to the argv the profile describes,
+// Hosting is asked for separately from running, and at high risk, on every
+// engine that can host. A user who pressed something labelled Play is entitled
+// to be asked before their machine starts accepting connections.
+func TestHostingIsItsOwnHighRiskPermission(t *testing.T) {
+	for id, engine := range loadEngines(t) {
+		hosts := false
+		for _, action := range engine.Actions {
+			if action.SessionRole == profile.SessionListen || action.SessionRole == profile.SessionDedicated {
+				hosts = true
+			}
+		}
+		var hosting int
+		for _, permission := range engine.Permissions() {
+			if strings.HasPrefix(permission.ID, "host_") {
+				hosting++
+				if permission.Risk != profile.RiskHigh {
+					t.Errorf("%s: hosting permission %q is %q risk", id, permission.ID, permission.Risk)
+				}
+			}
+		}
+		if hosts && hosting == 0 {
+			t.Errorf("%s hosts and asks for no hosting permission", id)
+		}
+		if !hosts && hosting > 0 {
+			t.Errorf("%s asks for a hosting permission and hosts nothing", id)
+		}
+	}
+}
+
+// A curated engine profile says who publishes the engine, under what licence,
+// which version it was written against and when. None of that is decoration:
+// it is what a user reads before pointing the Companion at a program somebody
+// else wrote, and it is what a copyleft licence requires be reachable.
+func TestCuratedEnginesCarrySourceLicenceAndQualification(t *testing.T) {
+	for id, engine := range loadEngines(t) {
+		if engine.Source == nil || engine.Source.Homepage == "" || engine.Source.Repository == "" {
+			t.Errorf("%s does not say where the engine itself comes from", id)
+		}
+		if engine.License.SPDX == "" || engine.License.Notice == "" {
+			t.Errorf("%s does not carry the engine's licence and its notice", id)
+		}
+		if engine.EngineVersion == "" {
+			t.Errorf("%s does not say which upstream version it was written against", id)
+		}
+		if engine.LastQualified == "" {
+			t.Errorf("%s does not say when it was last checked", id)
+		}
+		if !strings.Contains(engine.License.Notice, "never copies") {
+			t.Errorf("%s's licence notice does not say that game data is never copied or redistributed", id)
+		}
+	}
+}
+
+// The claim each curated profile makes about a platform is checked for the one
+// thing a reader cannot check for themselves: that anything short of
+// `supported` says why.
+func TestCuratedEnginesSayWhyAPlatformIsNotSupported(t *testing.T) {
+	engines := loadEngines(t)
+	for id, engine := range engines {
+		for _, support := range engine.Platforms {
+			if support.Status == profile.Supported {
+				t.Errorf("%s claims %s is `supported`; no build of these engines has been run here, "+
+					"so the honest status is `unverified` with a note", id, support.Platform)
+			}
+			if strings.TrimSpace(support.Note) == "" {
+				t.Errorf("%s says %s is %q and does not say why", id, support.Platform, support.Status)
+			}
+		}
+	}
+
+	// The prompt's own example, kept as a test: Ironwail must not claim macOS.
+	for _, arch := range []string{"amd64", "arm64"} {
+		mac := profile.Platform{OS: "darwin", Arch: arch}
+		status, note := engines[Ironwail].SupportFor(mac)
+		if status != profile.Unsupported {
+			t.Errorf("Ironwail claims %s is %q; upstream ships no macOS build", mac, status)
+		}
+		if !strings.Contains(note, "macOS") {
+			t.Errorf("Ironwail's %s note does not mention macOS: %q", mac, note)
+		}
+	}
+}
+
+// Every curated engine resolves every action it declares, on every platform it
+// does not call unsupported, with the runtime values that action names. A
+// profile that shipped and did not resolve would fail at the point somebody
+// pressed the button.
+func TestEveryCuratedEngineActionResolvesOnEveryDeclaredPlatform(t *testing.T) {
+	base := t.TempDir()
+	runtime := map[string]string{
+		"map_name":     "e1m1",
+		"mod_name":     "mymod",
+		"package_name": "ad_sepulcher",
+		"server_host":  "quake.example.org",
+		"server_port":  "26000",
+	}
+	for id, engine := range loadEngines(t) {
+		for _, support := range engine.Platforms {
+			if support.Status == profile.Unsupported {
+				continue
+			}
+			for _, action := range engine.Actions {
+				request := profile.Request{
+					Platform: support.Platform,
+					Roots: map[string]string{
+						profile.RootGame:        filepath.Join(base, "games", "quake"),
+						profile.RootContent:     filepath.Join(base, "projects", "mymap"),
+						profile.RootToolInstall: filepath.Join(base, "engines"),
+					},
+					Runtime: runtime,
+				}
+				invocation, err := profile.Resolve(engine, action.ID, request)
+				if err != nil {
+					t.Errorf("%s/%s on %s: %v", id, action.ID, support.Platform, err)
+					continue
+				}
+				if invocation.SessionRole == "" {
+					t.Errorf("%s/%s resolved with no session role", id, action.ID)
+				}
+				if invocation.Command.WorkingDir != filepath.Join(base, "games", "quake") {
+					t.Errorf("%s/%s runs in %q, not the game root", id, action.ID, invocation.Command.WorkingDir)
+				}
+			}
+		}
+	}
+}
+
+// The generic profile is the fallback, so it must send nothing an engine could
+// fail to recognise: the four switches id Software's own Quake documented, and
+// no more.
+func TestTheGenericProfileSendsOnlyTheUniversalSwitches(t *testing.T) {
+	engine := loadEngines(t)[Q1Generic]
+	allowed := map[string]bool{"-basedir": true, "-game": true, "+map": true, "+connect": true, "+maxplayers": true}
+	for _, action := range engine.Actions {
+		for _, arg := range action.Args {
+			if strings.HasPrefix(arg.Value, "{") {
+				continue // a value, not a switch
+			}
+			if !allowed[arg.Value] {
+				t.Errorf("the generic profile passes %q in %q; a profile for an unknown engine "+
+					"may only send what every id-derived engine documents", arg.Value, action.ID)
+			}
+		}
+	}
+}
+
+// loadEngines returns every built-in engine profile by id.
+func loadEngines(t *testing.T) map[string]*profile.EngineProfile {
+	t.Helper()
+	entries, err := Load()
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	out := map[string]*profile.EngineProfile{}
+	for _, entry := range entries {
+		if engine, isEngine := entry.Profile.(*profile.EngineProfile); isEngine {
+			out[entry.Profile.Metadata().ID] = engine
+		}
+	}
+	if len(out) == 0 {
+		t.Fatal("this build ships no engine profile")
+	}
+	return out
+}
+
+func contains(list []string, want string) bool {
+	for _, value := range list {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+// The curated engines' play_map resolves to the argv the profile describes,
 // with runtime values substituted and nothing else.
 func TestEngineActionsResolveWithRuntimeValues(t *testing.T) {
-	entry, err := Find("auto-pigeon.sample.q1-engine")
+	entry, err := Find(QuakeSpasm)
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
@@ -316,7 +489,7 @@ func TestEngineActionsResolveWithRuntimeValues(t *testing.T) {
 			profile.RootContent:     filepath.Join(base, "projects", "mymap"),
 			profile.RootToolInstall: filepath.Join(base, "engines"),
 		},
-		Runtime: map[string]string{"map_name": "e1m1"},
+		Runtime: map[string]string{"map_name": "e1m1", "mod_name": "mymod"},
 	}
 	invocation, err := profile.Resolve(entry.Profile, profile.ActionPlayMap, request)
 	if err != nil {
@@ -328,6 +501,9 @@ func TestEngineActionsResolveWithRuntimeValues(t *testing.T) {
 	joined := strings.Join(invocation.Command.Args, " ")
 	if !strings.Contains(joined, "+map e1m1") {
 		t.Errorf("the map name did not reach argv: %v", invocation.Command.Args)
+	}
+	if !strings.Contains(joined, "-game mymod") {
+		t.Errorf("the game directory did not reach argv: %v", invocation.Command.Args)
 	}
 	if !strings.Contains(joined, request.Roots[profile.RootGame]) {
 		t.Errorf("the game root did not reach argv: %v", invocation.Command.Args)

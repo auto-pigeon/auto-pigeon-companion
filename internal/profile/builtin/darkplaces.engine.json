@@ -1,0 +1,372 @@
+{
+  "schema_version": "aucom.profile/1.1",
+  "kind": "engine",
+  "id": "auto-pigeon.engine.darkplaces",
+  "version": "1.0.0",
+  "name": "DarkPlaces",
+  "summary": "A heavily extended Quake engine with its own renderer, still the base for several standalone games.",
+  "description": "DarkPlaces has shipped as “Beta” for many years and has no release version to pin, which is what `engine_version` says. It ships several executables — an OpenGL client, an SDL client and a dedicated server — and this profile names the SDL client, because that is the one build that exists on every platform below.\n\nThis profile was written from DarkPlaces's own published command-line documentation, not from a build running on this machine. That is what every `unverified` platform below means, and it is why there is no version probe: asking a Quake engine what version it is means starting it, and starting it means opening a window and a game.\n\n`play_map` names a game directory as well as a map, because that is what these engines' command lines do: `-game` chooses which directory the map is loaded from. Launching a map into a directory nobody named is how you end up watching the wrong map.",
+  "publisher": {
+    "name": "Auto-Pigeon",
+    "url": "https://github.com/andrea-dintino/auto-pigeon-companion"
+  },
+  "source": {
+    "homepage": "https://icculus.org/twilight/darkplaces/",
+    "repository": "https://gitlab.com/xonotic/darkplaces"
+  },
+  "license": {
+    "spdx": "GPL-2.0-or-later",
+    "name": "GNU General Public License v2.0 or later",
+    "notice": "Quake engine source ports are separate programs under their own licences. This profile configures one; it does not contain, link or relicense it. Game data — PAK files, maps, textures and sounds shipped with a commercial release — is not covered by that licence, and the Companion never copies, uploads or redistributes it."
+  },
+  "compatibility": {
+    "companion": {
+      "at_least": "0.1.0"
+    }
+  },
+  "game_profile": {
+    "slug": "quake1",
+    "engine_family": "quake1"
+  },
+  "runtime": "darkplaces",
+  "engine_version": "beta",
+  "last_qualified": "2026-09-07",
+  "platforms": [
+    {
+      "platform": {
+        "os": "windows",
+        "arch": "amd64"
+      },
+      "status": "unverified",
+      "note": "Upstream publishes Windows builds; nobody here has run one."
+    },
+    {
+      "platform": {
+        "os": "linux",
+        "arch": "amd64"
+      },
+      "status": "unverified",
+      "note": "Upstream publishes Linux builds and several distributions package it; nobody here has run one."
+    },
+    {
+      "platform": {
+        "os": "darwin",
+        "arch": "amd64"
+      },
+      "status": "unverified",
+      "note": "Upstream's macOS build is old and unsigned; nobody here has run one."
+    }
+  ],
+  "acquisition": [
+    {
+      "mode": "user_path",
+      "title": "Use a copy you already have",
+      "hint": "choose the DarkPlaces executable"
+    },
+    {
+      "mode": "system_path",
+      "title": "Use the one your system already provides",
+      "commands": [
+        "darkplaces-sdl",
+        "darkplaces-glx",
+        "darkplaces"
+      ],
+      "note": "Distribution packages spell the client differently; the first one found is used."
+    }
+  ],
+  "content_layouts": [
+    {
+      "id": "id1",
+      "title": "The base game",
+      "kind": "loose_files",
+      "root": "game_root",
+      "path": "id1",
+      "note": "Where Quake's own data lives. The Companion reads it and never writes to it."
+    },
+    {
+      "id": "pak",
+      "title": "A PAK archive in the base game",
+      "kind": "pak",
+      "root": "game_root",
+      "path": "id1"
+    },
+    {
+      "id": "mod",
+      "title": "A mod or project directory",
+      "kind": "mod_directory",
+      "root": "game_root",
+      "note": "A game directory beside id1, named by `-game`. This is where the Companion stages what you built."
+    },
+    {
+      "id": "pk3",
+      "title": "A PK3 archive in a game directory",
+      "kind": "pk3",
+      "root": "game_root",
+      "note": "This engine reads zip-format archives as well as PAK."
+    }
+  ],
+  "executables": [
+    {
+      "name": "engine",
+      "title": "DarkPlaces",
+      "file": "darkplaces-sdl{platform.exe_suffix}"
+    }
+  ],
+  "actions": [
+    {
+      "id": "play_map",
+      "title": "Play a map",
+      "description": "`play_map` names a game directory as well as a map, because that is what these engines' command lines do: `-game` chooses which directory the map is loaded from. Launching a map into a directory nobody named is how you end up watching the wrong map.",
+      "session_role": "client",
+      "executable": "engine",
+      "working_dir": {
+        "root": "game_root"
+      },
+      "args": [
+        "-basedir",
+        "{root.game_root}",
+        "-game",
+        "{runtime.mod_name}",
+        "+map",
+        "{runtime.map_name}"
+      ],
+      "roots": [
+        {
+          "role": "game_root",
+          "access": "read",
+          "purpose": "load the base game and the game directory being played"
+        },
+        {
+          "role": "content_root",
+          "access": "read",
+          "purpose": "read the project whose content was staged into the game directory"
+        }
+      ],
+      "diagnostics": [
+        {
+          "id": "ready",
+          "match": "DarkPlaces",
+          "severity": "info",
+          "message": "The engine is up."
+        },
+        {
+          "id": "host_error",
+          "match": "Host_Error",
+          "severity": "error",
+          "message": "The engine stopped with a fatal error.",
+          "hint": "The engine's own last line is usually the whole diagnosis; read the job's log."
+        }
+      ]
+    },
+    {
+      "id": "play_package",
+      "title": "Play a mod or package",
+      "description": "Starts the engine in a game directory and lets the package choose where it begins.",
+      "session_role": "client",
+      "executable": "engine",
+      "working_dir": {
+        "root": "game_root"
+      },
+      "args": [
+        "-basedir",
+        "{root.game_root}",
+        "-game",
+        "{runtime.package_name}"
+      ],
+      "roots": [
+        {
+          "role": "game_root",
+          "access": "read",
+          "purpose": "load the base game and the game directory being played"
+        },
+        {
+          "role": "content_root",
+          "access": "read",
+          "purpose": "read the project whose content was staged into the game directory"
+        }
+      ],
+      "diagnostics": [
+        {
+          "id": "ready",
+          "match": "DarkPlaces",
+          "severity": "info",
+          "message": "The engine is up."
+        },
+        {
+          "id": "host_error",
+          "match": "Host_Error",
+          "severity": "error",
+          "message": "The engine stopped with a fatal error.",
+          "hint": "The engine's own last line is usually the whole diagnosis; read the job's log."
+        }
+      ]
+    },
+    {
+      "id": "join_server",
+      "title": "Join a server",
+      "session_role": "client",
+      "executable": "engine",
+      "working_dir": {
+        "root": "game_root"
+      },
+      "args": [
+        "-basedir",
+        "{root.game_root}",
+        "+connect",
+        "{runtime.server_host}:{runtime.server_port}"
+      ],
+      "roots": [
+        {
+          "role": "game_root",
+          "access": "read",
+          "purpose": "load the base game and the game directory being played"
+        }
+      ],
+      "network": {
+        "required": true,
+        "purpose": "connect to the server the user names"
+      },
+      "diagnostics": [
+        {
+          "id": "ready",
+          "match": "DarkPlaces",
+          "severity": "info",
+          "message": "The engine is up."
+        },
+        {
+          "id": "host_error",
+          "match": "Host_Error",
+          "severity": "error",
+          "message": "The engine stopped with a fatal error.",
+          "hint": "The engine's own last line is usually the whole diagnosis; read the job's log."
+        }
+      ]
+    },
+    {
+      "id": "host_listen",
+      "title": "Host a game and play in it",
+      "description": "Other people can connect to this computer while you play.",
+      "session_role": "listen_server",
+      "executable": "engine",
+      "working_dir": {
+        "root": "game_root"
+      },
+      "args": [
+        "-basedir",
+        "{root.game_root}",
+        "-game",
+        "{runtime.mod_name}",
+        "+maxplayers",
+        "{option.max_players}",
+        "+map",
+        "{runtime.map_name}"
+      ],
+      "options": [
+        {
+          "name": "max_players",
+          "title": "Maximum players",
+          "description": "How many players the server accepts, including you on a listen server.",
+          "type": "integer",
+          "default": "8",
+          "minimum": 2,
+          "maximum": 32
+        }
+      ],
+      "roots": [
+        {
+          "role": "game_root",
+          "access": "read",
+          "purpose": "load the base game and the game directory being played"
+        },
+        {
+          "role": "content_root",
+          "access": "read",
+          "purpose": "read the project whose content was staged into the game directory"
+        }
+      ],
+      "network": {
+        "required": true,
+        "purpose": "accept connections from other players"
+      },
+      "diagnostics": [
+        {
+          "id": "ready",
+          "match": "DarkPlaces",
+          "severity": "info",
+          "message": "The engine is up."
+        },
+        {
+          "id": "host_error",
+          "match": "Host_Error",
+          "severity": "error",
+          "message": "The engine stopped with a fatal error.",
+          "hint": "The engine's own last line is usually the whole diagnosis; read the job's log."
+        }
+      ]
+    },
+    {
+      "id": "host_dedicated",
+      "title": "Run a dedicated server",
+      "description": "A server with no local player. It keeps running until it is stopped.",
+      "session_role": "dedicated_server",
+      "executable": "engine",
+      "working_dir": {
+        "root": "game_root"
+      },
+      "args": [
+        "-dedicated",
+        "{option.max_players}",
+        "-basedir",
+        "{root.game_root}",
+        "-game",
+        "{runtime.mod_name}",
+        "+maxplayers",
+        "{option.max_players}",
+        "+map",
+        "{runtime.map_name}"
+      ],
+      "options": [
+        {
+          "name": "max_players",
+          "title": "Maximum players",
+          "description": "How many players the server accepts, including you on a listen server.",
+          "type": "integer",
+          "default": "8",
+          "minimum": 2,
+          "maximum": 32
+        }
+      ],
+      "roots": [
+        {
+          "role": "game_root",
+          "access": "read",
+          "purpose": "load the base game and the game directory being played"
+        },
+        {
+          "role": "content_root",
+          "access": "read",
+          "purpose": "read the project whose content was staged into the game directory"
+        }
+      ],
+      "network": {
+        "required": true,
+        "purpose": "accept connections from other players"
+      },
+      "diagnostics": [
+        {
+          "id": "ready",
+          "match": "DarkPlaces",
+          "severity": "info",
+          "message": "The engine is up."
+        },
+        {
+          "id": "host_error",
+          "match": "Host_Error",
+          "severity": "error",
+          "message": "The engine stopped with a fatal error.",
+          "hint": "The engine's own last line is usually the whole diagnosis; read the job's log."
+        }
+      ]
+    }
+  ]
+}

@@ -14,6 +14,7 @@ import (
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/launch"
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
 )
 
 // `companion job` — the same executor the GUI drives, from a terminal.
@@ -339,9 +340,9 @@ func jobList(env *Env, args []string) int {
 		return 0
 	}
 	for _, candidate := range jobs {
-		fmt.Fprintf(env.Stdout, "%s  %-11s  %-9s  %s %s\n",
+		fmt.Fprintf(env.Stdout, "%s  %-11s  %-9s  %s %s%s\n",
 			candidate.ID, candidate.State, candidate.Duration().Round(time.Millisecond),
-			candidate.ProfileID, candidate.ActionID)
+			candidate.ProfileID, candidate.ActionID, sessionSuffix(candidate))
 	}
 	return 0
 }
@@ -579,7 +580,7 @@ func printJSON(env *Env, value any) int {
 
 func printPreview(env *Env, previewed *job.Job) {
 	fmt.Fprintf(env.Stdout, "profile:  %s %s (%s)\n", previewed.ProfileID, previewed.ProfileVersion, previewed.Trust)
-	fmt.Fprintf(env.Stdout, "action:   %s\n", previewed.ActionID)
+	fmt.Fprintf(env.Stdout, "action:   %s%s\n", previewed.ActionID, sessionSuffix(previewed))
 	fmt.Fprintf(env.Stdout, "digest:   %s\n", previewed.ProfileDigest)
 	fmt.Fprintf(env.Stdout, "workdir:  %s\n", previewed.Command.WorkingDir)
 	fmt.Fprintf(env.Stdout, "command:  %s\n", previewed.Command.Shell)
@@ -602,9 +603,27 @@ func printPreview(env *Env, previewed *job.Job) {
 	}
 }
 
+// sessionSuffix labels a job that is a game session rather than a build step.
+//
+// It is appended everywhere a job is named, and it says "listen server" rather
+// than "listen_server" for one reason: whether this machine is currently
+// reachable by other people is not a detail a user should have to look up a
+// vocabulary for.
+func sessionSuffix(candidate *job.Job) string {
+	switch candidate.SessionRole {
+	case profile.SessionClient:
+		return " (client)"
+	case profile.SessionListen:
+		return " (listen server — other people can join this machine)"
+	case profile.SessionDedicated:
+		return " (dedicated server — other people can join this machine)"
+	}
+	return ""
+}
+
 func printOutcome(env *Env, finished *job.Job) {
 	fmt.Fprintf(env.Stdout, "job %s: %s — %s\n", finished.ID, finished.State, finished.State.Describe())
-	fmt.Fprintf(env.Stdout, "  %s %s, %s\n", finished.ProfileID, finished.ActionID, finished.Duration().Round(time.Millisecond))
+	fmt.Fprintf(env.Stdout, "  %s %s%s, %s\n", finished.ProfileID, finished.ActionID, sessionSuffix(finished), finished.Duration().Round(time.Millisecond))
 	if finished.ExitCode != nil {
 		fmt.Fprintf(env.Stdout, "  exit status %d\n", *finished.ExitCode)
 	}

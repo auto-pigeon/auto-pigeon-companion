@@ -1,0 +1,247 @@
+{
+  "schema_version": "aucom.profile/1.1",
+  "kind": "engine",
+  "id": "auto-pigeon.engine.q1-generic",
+  "version": "1.0.0",
+  "name": "Generic Quake 1 engine",
+  "summary": "The command line every id-derived Quake engine documents, for an engine this build has no profile for.",
+  "description": "This profile makes no claim about any particular engine. It sends only the four switches id Software's own Quake documented and every derivative kept: `-basedir`, `-game`, `+map` and `+connect`. Use it to get something running, then say which engine it actually is — a real profile knows what its engine supports, and this one cannot.\n\nIt declares no `host_dedicated` action, because whether a given build has a dedicated server compiled in is exactly the kind of thing a generic profile does not know.\n\nThis profile was written from Generic Quake 1 engine's own published command-line documentation, not from a build running on this machine. That is what every `unverified` platform below means, and it is why there is no version probe: asking a Quake engine what version it is means starting it, and starting it means opening a window and a game.\n\n`play_map` names a game directory as well as a map, because that is what these engines' command lines do: `-game` chooses which directory the map is loaded from. Launching a map into a directory nobody named is how you end up watching the wrong map.",
+  "publisher": {
+    "name": "Auto-Pigeon",
+    "url": "https://github.com/andrea-dintino/auto-pigeon-companion"
+  },
+  "source": {
+    "homepage": "https://github.com/id-Software/Quake",
+    "repository": "https://github.com/id-Software/Quake"
+  },
+  "license": {
+    "spdx": "NOASSERTION",
+    "name": "Not asserted — the licence is whatever your engine's is",
+    "notice": "Quake engine source ports are separate programs under their own licences. This profile configures one; it does not contain, link or relicense it. Game data — PAK files, maps, textures and sounds shipped with a commercial release — is not covered by that licence, and the Companion never copies, uploads or redistributes it."
+  },
+  "compatibility": {
+    "companion": {
+      "at_least": "0.1.0"
+    }
+  },
+  "game_profile": {
+    "slug": "quake1",
+    "engine_family": "quake1"
+  },
+  "runtime": "q1-generic",
+  "engine_version": "unknown",
+  "last_qualified": "2026-09-07",
+  "platforms": [
+    {
+      "platform": {
+        "os": "linux",
+        "arch": "amd64"
+      },
+      "status": "unverified",
+      "note": "Nothing is known about the engine this profile is pointed at."
+    },
+    {
+      "platform": {
+        "os": "linux",
+        "arch": "arm64"
+      },
+      "status": "unverified",
+      "note": "Nothing is known about the engine this profile is pointed at."
+    },
+    {
+      "platform": {
+        "os": "windows",
+        "arch": "amd64"
+      },
+      "status": "unverified",
+      "note": "Nothing is known about the engine this profile is pointed at."
+    },
+    {
+      "platform": {
+        "os": "darwin",
+        "arch": "amd64"
+      },
+      "status": "unverified",
+      "note": "Nothing is known about the engine this profile is pointed at."
+    },
+    {
+      "platform": {
+        "os": "darwin",
+        "arch": "arm64"
+      },
+      "status": "unverified",
+      "note": "Nothing is known about the engine this profile is pointed at."
+    }
+  ],
+  "acquisition": [
+    {
+      "mode": "user_path",
+      "title": "Use a copy you already have",
+      "hint": "choose the engine executable"
+    }
+  ],
+  "content_layouts": [
+    {
+      "id": "id1",
+      "title": "The base game",
+      "kind": "loose_files",
+      "root": "game_root",
+      "path": "id1",
+      "note": "Where Quake's own data lives. The Companion reads it and never writes to it."
+    },
+    {
+      "id": "pak",
+      "title": "A PAK archive in the base game",
+      "kind": "pak",
+      "root": "game_root",
+      "path": "id1"
+    },
+    {
+      "id": "mod",
+      "title": "A mod or project directory",
+      "kind": "mod_directory",
+      "root": "game_root",
+      "note": "A game directory beside id1, named by `-game`. This is where the Companion stages what you built."
+    }
+  ],
+  "executables": [
+    {
+      "name": "engine",
+      "title": "Generic Quake 1 engine",
+      "file": "quake{platform.exe_suffix}"
+    }
+  ],
+  "actions": [
+    {
+      "id": "play_map",
+      "title": "Play a map",
+      "description": "`play_map` names a game directory as well as a map, because that is what these engines' command lines do: `-game` chooses which directory the map is loaded from. Launching a map into a directory nobody named is how you end up watching the wrong map.",
+      "session_role": "client",
+      "executable": "engine",
+      "working_dir": {
+        "root": "game_root"
+      },
+      "args": [
+        "-basedir",
+        "{root.game_root}",
+        "-game",
+        "{runtime.mod_name}",
+        "+map",
+        "{runtime.map_name}"
+      ],
+      "roots": [
+        {
+          "role": "game_root",
+          "access": "read",
+          "purpose": "load the base game and the game directory being played"
+        },
+        {
+          "role": "content_root",
+          "access": "read",
+          "purpose": "read the project whose content was staged into the game directory"
+        }
+      ]
+    },
+    {
+      "id": "play_package",
+      "title": "Play a mod or package",
+      "description": "Starts the engine in a game directory and lets the package choose where it begins.",
+      "session_role": "client",
+      "executable": "engine",
+      "working_dir": {
+        "root": "game_root"
+      },
+      "args": [
+        "-basedir",
+        "{root.game_root}",
+        "-game",
+        "{runtime.package_name}"
+      ],
+      "roots": [
+        {
+          "role": "game_root",
+          "access": "read",
+          "purpose": "load the base game and the game directory being played"
+        },
+        {
+          "role": "content_root",
+          "access": "read",
+          "purpose": "read the project whose content was staged into the game directory"
+        }
+      ]
+    },
+    {
+      "id": "join_server",
+      "title": "Join a server",
+      "session_role": "client",
+      "executable": "engine",
+      "working_dir": {
+        "root": "game_root"
+      },
+      "args": [
+        "-basedir",
+        "{root.game_root}",
+        "+connect",
+        "{runtime.server_host}:{runtime.server_port}"
+      ],
+      "roots": [
+        {
+          "role": "game_root",
+          "access": "read",
+          "purpose": "load the base game and the game directory being played"
+        }
+      ],
+      "network": {
+        "required": true,
+        "purpose": "connect to the server the user names"
+      }
+    },
+    {
+      "id": "host_listen",
+      "title": "Host a game and play in it",
+      "description": "Other people can connect to this computer while you play.",
+      "session_role": "listen_server",
+      "executable": "engine",
+      "working_dir": {
+        "root": "game_root"
+      },
+      "args": [
+        "-basedir",
+        "{root.game_root}",
+        "-game",
+        "{runtime.mod_name}",
+        "+maxplayers",
+        "{option.max_players}",
+        "+map",
+        "{runtime.map_name}"
+      ],
+      "options": [
+        {
+          "name": "max_players",
+          "title": "Maximum players",
+          "description": "How many players the server accepts, including you on a listen server.",
+          "type": "integer",
+          "default": "8",
+          "minimum": 2,
+          "maximum": 32
+        }
+      ],
+      "roots": [
+        {
+          "role": "game_root",
+          "access": "read",
+          "purpose": "load the base game and the game directory being played"
+        },
+        {
+          "role": "content_root",
+          "access": "read",
+          "purpose": "read the project whose content was staged into the game directory"
+        }
+      ],
+      "network": {
+        "required": true,
+        "purpose": "accept connections from other players"
+      }
+    }
+  ]
+}

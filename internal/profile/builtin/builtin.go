@@ -15,25 +15,36 @@
 // compares the resulting commands. If a privileged path ever appears, that test
 // is what fails.
 //
-// # What is qualified and what is still a sample
+// # What "qualified" means here, and it is not one thing
 //
-// The EricW Q1 toolchain and the three Q1 pipelines are qualified: the version
-// is the one AUT pinned and measured, the archives are pinned by digest in the
-// signed catalogue, and what each program does was measured by running it
-// rather than read off a manual.
+// The EricW Q1 toolchain and the three Q1 pipelines are qualified by
+// *measurement*: the version is the one AUT pinned, the archives are pinned by
+// digest in the signed catalogue, and what each program does was established by
+// running it rather than read off a manual.
 //
-// The engine document is still named `sample.…`, and says so, because no engine
-// build has been qualified against an upstream release yet. Presenting an
-// unqualified document as though it were curated would be exactly the kind of
-// plausible-looking wrong answer the rest of this repository is careful about.
+// The seven engine profiles are qualified by *documentation*. Their command
+// lines come from each engine's own published usage, and no build of any of
+// them has been run by anybody here — six upstream projects across three
+// operating systems, none of which can be started without a copy of Quake that
+// is not ours to have. That is not a hedge, it is written into each document:
+// every platform is `unverified` with a note saying so, and where upstream
+// ships nothing the platform is `unsupported` with the reason. A profile that
+// claimed `supported` on that evidence would be the plausible-looking wrong
+// answer the rest of this repository is careful about.
 //
-// There was a `sample.q1-toolchain` here too, and it was retired rather than
-// kept beside the qualified profile. Two built-in tool profiles both providing
-// `q1.bsp.compile` would make "which tool runs this step" a question a pipeline
-// resolves by iteration order, and it also described a compiler nobody had run:
-// it passed `-threads` to a `qbsp` that has no such flag and `-fast` to a
-// `light` that has no such flag. `TestNoTwoBuiltinToolsProvideTheSameCapability`
-// is what keeps the first half from coming back.
+// The instrument that *is* measured is
+// [github.com/andrea-dintino/auto-pigeon-companion/internal/enginefixture],
+// which records the argv it was started with. It proves the Companion builds
+// the command line it says it builds. Nothing can make it prove that Ironwail
+// accepts that command line.
+//
+// There was a `sample.q1-toolchain` here, and a `sample.q1-engine`, and both
+// were retired rather than kept beside the qualified documents. Two built-in
+// tool profiles both providing `q1.bsp.compile` would make "which tool runs
+// this step" a question a pipeline resolves by iteration order; and the engine
+// sample would be an eighth engine in a list of seven, describing an engine
+// that does not exist. `TestNoTwoBuiltinToolsProvideTheSameCapability` is what
+// keeps the first half from coming back.
 package builtin
 
 import (
@@ -61,7 +72,26 @@ const (
 	Q1FastPreview = "auto-pigeon.q1.fast-preview"
 	Q1Normal      = "auto-pigeon.q1.normal"
 	Q1Final       = "auto-pigeon.q1.final"
+
+	// The curated Quake 1 engines. Each is one upstream project, and the id is
+	// the name that project calls itself.
+	Ironwail         = "auto-pigeon.engine.ironwail"
+	VkQuake          = "auto-pigeon.engine.vkquake"
+	QuakeSpasm       = "auto-pigeon.engine.quakespasm"
+	QuakeSpasmSpiked = "auto-pigeon.engine.quakespasm-spiked"
+	DarkPlaces       = "auto-pigeon.engine.darkplaces"
+	FTEQW            = "auto-pigeon.engine.fteqw"
+	// Q1Generic sends only the switches every id-derived engine documents, for
+	// an engine this build has no profile for.
+	Q1Generic = "auto-pigeon.engine.q1-generic"
 )
+
+// Q1Engines is every curated Quake 1 engine profile this build ships.
+//
+// Order is how they are listed, and it is deliberate rather than alphabetical:
+// the generic fallback is last because it is the answer when none of the named
+// ones is what you have.
+var Q1Engines = []string{Ironwail, VkQuake, QuakeSpasm, QuakeSpasmSpiked, DarkPlaces, FTEQW, Q1Generic}
 
 // Q1Pipelines is the three built-in Quake 1 pipelines, quickest first.
 var Q1Pipelines = []string{Q1FastPreview, Q1Normal, Q1Final}

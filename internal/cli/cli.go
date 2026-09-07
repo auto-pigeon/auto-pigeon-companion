@@ -128,6 +128,11 @@ var commands = []Command{
 		Run:     runCatalog,
 	},
 	{
+		Name: "engine", Usage: "list | show | detect | bind | check | preview | run | stage | unstage",
+		Summary: "set up a Quake engine you already have, and start it as a supervised job",
+		Run:     runEngine,
+	},
+	{
 		Name: "launch", Usage: "<game> [--map <name>] [--game-root <dir>] [--dry-run]",
 		Summary: "launch a game as a supervised job, using its AUB launch config",
 		Run:     runLaunch,
