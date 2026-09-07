@@ -15,6 +15,7 @@ import (
 
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/binding"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/enginefixture"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/web"
 )
@@ -31,6 +32,12 @@ func TestMain(m *testing.M) {
 	if len(os.Args) > 2 && os.Args[1] == helperFlag && os.Args[2] == "echo" {
 		fmt.Println(strings.Join(os.Args[3:], " "))
 		os.Exit(0)
+	}
+	// The engine fixture, so `companion engine run` can be tested against a
+	// program that writes down the command line it was given. One
+	// implementation of it, in internal/enginefixture, dispatched to from here.
+	if len(os.Args) > 1 && os.Args[1] == enginefixture.Flag {
+		os.Exit(enginefixture.Main(os.Args[2:]))
 	}
 	os.Exit(m.Run())
 }

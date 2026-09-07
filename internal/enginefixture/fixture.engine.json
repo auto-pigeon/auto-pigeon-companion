@@ -382,6 +382,8 @@
         "{root.content_root}/engine-record.json",
         "--behaviour",
         "{option.behaviour}",
+        "--children",
+        "{option.children}",
         "--",
         "-dedicated",
         "{option.max_players}",
@@ -417,6 +419,14 @@
           "default": "8",
           "minimum": 2,
           "maximum": 16
+        },
+        {
+          "name": "children",
+          "title": "Grandchildren to leave behind",
+          "type": "integer",
+          "default": "0",
+          "minimum": 0,
+          "maximum": 4
         }
       ],
       "roots": [

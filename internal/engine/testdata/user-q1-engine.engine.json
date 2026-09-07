@@ -1,0 +1,118 @@
+{
+  "kind": "engine",
+  "schema_version": "aucom.profile/1.1",
+  "id": "example.engines.quakespasm-of-my-own",
+  "name": "My own Quake engine",
+  "version": "0.3.1",
+  "summary": "An engine profile written by hand, for an engine the Companion ships no profile for.",
+  "description": "This document is here to prove one thing: a profile nobody shipped goes through exactly the same path as one that did. It is written the way a person writes JSON — members in whatever order occurred to the author, arguments in both the string and the object spelling — and it names three actions with three different session roles.\n\nIt drives the repository's fixture engine, so what it proves is that the argv it describes is the argv that arrives. It is not a profile for a real engine and does not claim to be.",
+  "publisher": { "name": "A Companion user" },
+  "license": { "spdx": "GPL-2.0-or-later", "name": "GNU General Public License v2.0 or later" },
+  "game_profile": { "engine_family": "quake1", "slug": "quake1" },
+  "runtime": "my-own-engine",
+  "engine_version": "0.3.1",
+  "platforms": [
+    { "platform": { "os": "linux", "arch": "amd64" }, "status": "supported" },
+    { "platform": { "os": "linux", "arch": "arm64" }, "status": "supported" },
+    { "platform": { "os": "darwin", "arch": "amd64" }, "status": "supported" },
+    { "platform": { "os": "darwin", "arch": "arm64" }, "status": "supported" },
+    { "platform": { "os": "windows", "arch": "amd64" }, "status": "supported" }
+  ],
+  "acquisition": [
+    { "mode": "user_path", "title": "The engine I built myself", "hint": "choose the executable" }
+  ],
+  "executables": [{ "name": "engine", "file": "myquake{platform.exe_suffix}" }],
+  "content_layouts": [
+    { "id": "id1", "title": "The base game", "kind": "loose_files", "root": "game_root", "path": "id1" },
+    { "id": "mod", "title": "A game directory", "kind": "mod_directory", "root": "game_root" }
+  ],
+  "actions": [
+    {
+      "id": "play_map",
+      "title": "Play a map",
+      "executable": "engine",
+      "session_role": "client",
+      "working_dir": { "root": "game_root" },
+      "args": [
+        "-aucom-engine-fixture",
+        "--record",
+        "{root.content_root}/engine-record.json",
+        "--behaviour",
+        "{option.behaviour}",
+        "--",
+        { "value": "-window", "when": { "option": "windowed" } },
+        "-basedir",
+        "{root.game_root}",
+        "-game",
+        "{runtime.mod_name}",
+        "+map",
+        "{runtime.map_name}"
+      ],
+      "options": [
+        { "name": "windowed", "type": "bool", "title": "Start in a window", "default": "true" },
+        {
+          "name": "behaviour",
+          "type": "enum",
+          "title": "What the fixture engine does",
+          "default": "ready",
+          "values": [{ "value": "ready" }, { "value": "crash" }, { "value": "stay" }]
+        }
+      ],
+      "roots": [
+        { "role": "game_root", "purpose": "load the game", "access": "read" },
+        { "role": "content_root", "purpose": "write down what the engine was started with", "access": "read_write" }
+      ]
+    },
+    {
+      "id": "join_server",
+      "title": "Join somebody's server",
+      "executable": "engine",
+      "session_role": "client",
+      "working_dir": { "root": "game_root" },
+      "args": [
+        "-aucom-engine-fixture",
+        "--record",
+        "{root.content_root}/engine-record.json",
+        "--",
+        "-basedir",
+        "{root.game_root}",
+        "+connect",
+        "{runtime.server_host}:{runtime.server_port}"
+      ],
+      "network": { "required": true, "purpose": "connect to the server the user names" },
+      "roots": [
+        { "role": "game_root", "purpose": "load the game", "access": "read" },
+        { "role": "content_root", "purpose": "write down what the engine was started with", "access": "read_write" }
+      ]
+    },
+    {
+      "id": "host_dedicated",
+      "title": "Run a server for other people",
+      "executable": "engine",
+      "session_role": "dedicated_server",
+      "working_dir": { "root": "game_root" },
+      "args": [
+        "-aucom-engine-fixture",
+        "--record",
+        "{root.content_root}/engine-record.json",
+        "--",
+        "-dedicated",
+        "{option.slots}",
+        "-basedir",
+        "{root.game_root}",
+        "-game",
+        "{runtime.mod_name}",
+        "+map",
+        "{runtime.map_name}"
+      ],
+      "options": [
+        { "name": "slots", "type": "integer", "title": "Player slots", "default": "4", "minimum": 2, "maximum": 16 }
+      ],
+      "network": { "required": true, "purpose": "accept connections from other players" },
+      "roots": [
+        { "role": "game_root", "purpose": "load the game", "access": "read" },
+        { "role": "content_root", "purpose": "write down what the engine was started with", "access": "read_write" }
+      ]
+    }
+  ]
+}

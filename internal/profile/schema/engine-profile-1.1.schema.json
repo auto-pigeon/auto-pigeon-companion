@@ -73,6 +73,7 @@
       "maxLength": 64
     },
     "last_qualified": {
+      "description": "The date the author last checked this profile against that engine version. What `checked` means is what each platform's `status` says: `supported` is a run, `unverified` is the engine's own documentation and nothing more.",
       "type": "string",
       "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
     },

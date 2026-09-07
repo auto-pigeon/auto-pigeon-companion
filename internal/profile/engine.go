@@ -59,10 +59,20 @@ type EngineProfile struct {
 	Runtime string `json:"runtime" aucom:"required"`
 	// EngineVersion is the upstream engine's version, not this document's.
 	EngineVersion string `json:"engine_version" aucom:"required"`
-	// LastQualified is the date the author last ran this profile against that
-	// engine version, as `YYYY-MM-DD`. A curated profile that has not been
-	// checked in two years is still useful; a curated profile that pretends it
-	// was checked yesterday is not.
+	// LastQualified is the date the author last checked this profile against
+	// that engine version, as `YYYY-MM-DD`.
+	//
+	// What "checked" means is not this member's to say, and deliberately so —
+	// it is what [PlatformSupport.Status] says, per platform. `supported` means
+	// somebody ran it there; `unverified` means the argument array came from
+	// the engine's own documentation and nothing more. The Companion's own
+	// curated engine profiles are all the second kind, because starting any of
+	// these engines needs a copy of Quake that is not ours to have. Reading
+	// this date as evidence of a run, without reading the status beside it,
+	// is the misreading the two members exist to prevent.
+	//
+	// A curated profile that has not been checked in two years is still useful;
+	// one that pretends it was checked yesterday is not.
 	LastQualified string              `json:"last_qualified,omitempty"`
 	Platforms     []PlatformSupport   `json:"platforms" aucom:"required"`
 	Acquisition   []AcquisitionOption `json:"acquisition" aucom:"required"`
