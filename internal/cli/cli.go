@@ -138,6 +138,11 @@ var commands = []Command{
 		Run:     runEngine,
 	},
 	{
+		Name: "game", Usage: "list | show | join | preview | host | stop",
+		Summary: "find a game somebody is hosting and join it, or advertise one of your own",
+		Run:     runGame,
+	},
+	{
 		Name: "launch", Usage: "<game> [--map <name>] [--game-root <dir>] [--dry-run]",
 		Summary: "launch a game as a supervised job, using its AUB launch config",
 		Run:     runLaunch,

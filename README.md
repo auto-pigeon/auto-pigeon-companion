@@ -336,6 +336,7 @@ commands:
   acquire plan | install | accept | list | verify | use | gc | resolve                     obtain a profile's programs from the signed catalogue, and manage the cache
   catalog keygen | sign | verify | show | status | release                                 sign, verify and inspect the acquisition catalogue, its keyring and its compatibility manifest
   engine list | show | detect | bind | check | preview | run | stage | unstage             set up a Quake engine you already have, and start it as a supervised job
+  game list | show | join | preview | host | stop                                          find a game somebody is hosting and join it, or advertise one of your own
   launch <game> [--map <name>] [--game-root <dir>] [--dry-run]                             launch a game as a supervised job, using its AUB launch config
   extractor status | plan | install | version                                               obtain and run the separately licensed auto-pigeon-extractor (AUE)
   migrate                                                                                  fold Launcher and older Companion configuration into the current one
@@ -1472,6 +1473,117 @@ error: catalog: offline: offline, and this machine has no recorded requirement f
 The fallback to the recorded answer happens **only** because you said
 `--offline`. A verification that failed, a rollback attempt, an expired document
 or an unreachable server is a refusal, and never becomes "use the older answer".
+
+## Games people are hosting
+
+`AUB/AUG/AUCOM 214`. `companion game` is two halves that must not be confused:
+joining somebody else's server, and advertising one of your own.
+
+**This program contacts no address but AUB's.** There is no server browser here,
+no master-server client, and no probe of anybody's machine. The games you can see
+are the ones people deliberately registered, and the reachability a listing
+carries is AUB's — established from a machine that is not behind the host's own
+NAT, which is why a check from here would establish only that this computer can
+reach itself.
+
+### Joining
+
+```console
+$ companion game list
+gme000000000001  Friday deathmatch            public     live      Vera
+gme000000000002  Coop night, bring a torch    unlisted   live      Sam
+
+$ companion game join autopigeon://join/tkt1
+Friday deathmatch
+  hosted by  Vera
+  address    203.0.113.4:26000 (verified)
+  map        Sunken Chapel, revision 7
+  verified   c0ffee1234567890…
+  engine     auto-pigeon.engine.quakespasm (quakespasm)
+
+This is what will run:
+  quakespasm -basedir /games/quake +connect 203.0.113.4:26000
+  in /games/quake
+
+Nothing has been started. Add --approve to run the command above.
+```
+
+A join link is `autopigeon://join/<opaque-id>` and carries no token, no address
+and no map id: everything is behind the id and is fetched over your own session,
+so a link pasted into a chat window is worth nothing to anybody it was not minted
+for. It is redeemable **once** and lasts two minutes.
+
+Four things are checked before a command is offered, in this order:
+
+1. **May this account have the map at all.** AUB answers it in the resolution, so
+   you are told before anything is downloaded rather than half way through.
+2. **Is there an engine for this.** Matched on the RUNTIME the host declared —
+   `quakespasm`, `ironwail` — which is the thing two installations can agree
+   about; the host's own profile id says nothing about what you have installed.
+   Asked before the download, because refusing after fetching nine megabytes is
+   the same refusal arrived at more expensively.
+3. **Are the bytes the ones being played.** The revision is fetched through the
+   asset cache, which verifies every file against AUB's declared digest, and the
+   join link's own `map_content_sha256` is compared as well: two statements by
+   two routes, and a join is where they have to agree.
+4. **Do you approve the command.** The preview is the job service's own argv, not
+   a re-rendering of it, so what you approved is what starts.
+
+### Advertising a game you are hosting
+
+Start the server first — `companion engine run … host_listen` — and advertise the
+job that is serving it:
+
+```console
+$ companion game preview --map=$MAP --title='Friday deathmatch' \
+    --engine=quakespasm --engine-version=0.96.3 \
+    --endpoint=203.0.113.4:26000 --visibility=public
+visibility  public
+audience    Everybody signed in to this deployment can find this game in the listing.
+endpoint    203.0.113.4:26000 (public)
+reachable   unverified
+
+This is everything the listing will say about you:
+    title            Friday deathmatch     seen by everybody signed in
+    host_nickname    your nickname         seen by everybody signed in
+    map_name         Sunken Chapel         seen by everybody signed in
+    …
+
+Run the same command as `game host --job=<id> --confirm` to advertise it.
+
+$ companion game host --job=$JOB --confirm --map=$MAP --title='Friday deathmatch' \
+    --engine=quakespasm --endpoint=203.0.113.4:26000 --visibility=public
+gme000000000001  Friday deathmatch  public  live  Vera
+  beating every 30s while job jb-… runs; Ctrl-C to stop
+```
+
+**Nothing is advertised before the preview has been read.** `--confirm` is a
+confirmation *of* the preview, and the preview is AUB's own computation run
+without writing anything — so the fields you approve are the fields that get
+published rather than a second rendering that could disagree.
+
+**The advertisement ends when the process does.** The beat loop watches the
+supervised job, and every way a job can end maps onto a word AUB has for it:
+cancelling is `host_stopped`, a clean exit is `host_stopped`, a non-zero exit is
+`host_crashed`, and being killed along with the Companion is `host_crashed`.
+Signing out or quitting ends every advertisement with `owner_signed_out`.
+
+What this program never sends is `heartbeat_missed`: that is the conclusion AUB
+draws from its own clock when nothing got the chance to say anything, and a
+client that could send it would be able to write a history that did not happen.
+
+**A restart reclaims rather than re-registering.** The identity presented is a
+digest of this installation's own directory, the map, and the address — stable
+across the restart reclaim exists for, and different for a second server you are
+entitled to run beside it. It is deliberately not a process id: a PID is
+different after exactly the event reclaim exists for, and it is readable by
+anything else on the machine.
+
+**A LAN address is never published.** AUB classifies the endpoint before it
+publishes anything, and an address on your own network can back a `private` game
+only. If you want somebody outside to join, forward a UDP port on your router and
+register the address it presents to the internet; nothing here will change your
+router's configuration, and nothing here has opened a port.
 
 ## Assets from auto-pigeon-backend
 
