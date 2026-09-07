@@ -42,3 +42,4 @@ ways.
 | [0003](0003-one-executor-and-the-record-is-what-says-a-job-ran.md) | One executor, and the record — not a process — is what says a job ran | Accepted | 2026-09-06 |
 | [0004](0004-acquisition-is-verified-or-it-does-not-happen.md) | Acquisition is verified, or it does not happen | Accepted | 2026-09-07 |
 | [0005](0005-a-pipeline-is-several-jobs-and-a-manifest-is-what-says-so.md) | A pipeline is several jobs, and a manifest is what says so | Accepted | 2026-09-07 |
+| [0006](0006-provenance-decides-what-is-packaged-not-filenames.md) | Provenance decides what is packaged, and filenames decide nothing | Accepted | 2026-09-07 |

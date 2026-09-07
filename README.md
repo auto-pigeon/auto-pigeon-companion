@@ -35,7 +35,10 @@ There is no GUI toolkit and no embedded browser engine. The binary:
   that downloads anything goes through a signed, revocable catalogue — see
   [Acquiring tools](#acquiring-tools);
 - runs every external program through one supervised job runtime, which the
-  page and the command line both drive — see [Jobs](#jobs).
+  page and the command line both drive — see [Jobs](#jobs);
+- writes the PAK and PK3 archives itself, natively, because that last step is
+  where a build stops being reproducible and where somebody else's content
+  accidentally gets published — see [Packaging](#packaging-pak-and-pk3).
 
 The result is a single CGO-free executable that cross-compiles to all six
 supported targets with nothing but `GOOS`/`GOARCH` and `go build`:
@@ -193,6 +196,7 @@ commands:
   auth login [--email <address>] | status | logout                                authenticate against auto-pigeon-backend
   job run | preview | list | show | logs | cancel | retry | artifacts | profiles  run a profile action as a supervised job, and inspect what ran
   build run | preview | list | show | pipelines                                   build a map through a pipeline: several supervised jobs, wired, with a manifest
+  package targets | preview | create | inspect | verify | extract                 build a PAK or PK3 from what a build produced, and read one somebody else made
   profile validate | show | canonicalize | digest | diff | list | schema          read, check and compare tool, engine and pipeline profiles
   acquire plan | install | accept | list | verify | use | gc | resolve            obtain a profile's programs from the signed catalogue, and manage the cache
   catalog keygen | sign | verify | show | status                                  sign, verify and inspect the acquisition catalogue and its keyring
@@ -576,6 +580,272 @@ what is *available*, not what is checked. See [Offline](#offline).
 Why a pipeline is several jobs rather than one job with several processes, and
 what that costs, is
 [ADR-0005](docs/adr/0005-a-pipeline-is-several-jobs-and-a-manifest-is-what-says-so.md).
+
+### Packaging: PAK and PK3
+
+A compiled BSP is not yet something anybody can install. `companion package`
+turns it into the archive the engine reads — a **PAK** for Quake and Quake II, a
+**PK3** for Quake III — and writes a manifest beside it saying what went in.
+
+```console
+$ companion package targets
+quake-pak    Quake PAK (id1-compatible)
+  format pak, store by default, reproducibility portable
+  at most 2048 members (MAX_FILES_IN_PACK in the original Quake source; modern engines raise it, id-era ones do not), member paths up to 55 bytes
+  Auto-Pigeon metadata inside the archive: not permitted; the manifest is written beside the archive
+
+quake2-pak   Quake II PAK
+  format pak, store by default, reproducibility portable
+  ...
+
+quake3-pk3   Quake III PK3 (ZIP)
+  format pk3, deflate by default, reproducibility per_build
+  ...
+```
+
+Nothing is written until you have seen what would be. `preview` decides and
+prints; `create` decides again from the same flags and writes, refusing anything
+the preview flagged:
+
+```console
+$ companion package preview --target quake-pak --from ~/maps/mymap
+target quake-pak — pak, store, reproducibility portable
+2 file(s) selected, 34 B to package
+
+  gfx/palette.lmp       15 B  authored      authored-root
+    from /home/you/maps/mymap/gfx/palette.lmp
+    it came from /home/you/maps/mymap, which you declared as your own content
+  maps/e1m1.bsp         19 B  authored      authored-root
+    from /home/you/maps/mymap/maps/e1m1.bsp
+    it came from /home/you/maps/mymap, which you declared as your own content
+
+2 to package, 0 awaiting review, 0 refused
+
+$ companion package create --target quake-pak --from ~/maps/mymap --out ~/mymap.pak --label "my first map"
+wrote /home/you/mymap.pak
+      /home/you/mymap.pak.package.json
+mymap.pak  quake-pak  2 members, 174 B
+  reproducibility: portable — the same members produce the same bytes on any machine and under any build of the Companion: this container carries no timestamp, no permission bits and no compressor
+```
+
+`--build <id>` packages what a pipeline produced, and carries that build's
+pipeline digest, recipe key and tool digests into the package manifest, so the
+archive answers *what compiled this* without the machine that compiled it:
+
+```console
+$ companion build run --pipeline aucom.pipeline.ericw-q1 --input map=mymap.map
+$ companion package create --target quake-pak --build 20260907T075808Z-1a2b3c4d --out ~/mymap.pak
+```
+
+Reading an archive is two commands, and the split matters. `inspect` reads the
+directory and decompresses nothing — it is what you run on a file you do not
+trust yet. `verify` reads every member, checks it against what the directory
+declared, and compares the whole thing with the sidecar if there is one:
+
+```console
+$ companion package inspect ~/mymap.pak
+mymap.pak  pak  2 members, 174 B stored, 34 B of contents
+sha256:90229e3fb149e918d50d15568e06f618b58ec3a2962e39211c870b8a6e091a72
+
+          15  store    gfx/palette.lmp
+          19  store    maps/e1m1.bsp
+
+$ companion package verify ~/mymap.pak
+...
+verified 2 of 2 members
+  manifest: /home/you/mymap.pak.package.json (agrees)
+
+$ companion package extract ~/mymap.pak --dest ~/unpacked
+extracted 2 file(s), 34 bytes, into /home/you/unpacked
+  gfx/palette.lmp
+  maps/e1m1.bsp
+```
+
+#### What "reproducible" means for an archive
+
+Two promises, and the manifest says which one it is making rather than leaving
+you to infer it.
+
+**`portable`** — PAK, and PK3 with `--compression store`. The same members
+produce the same bytes on any machine and under any build of the Companion.
+Neither container carries a timestamp, a permission bit or a compressor, so
+there is nothing in the byte stream that a machine can put its fingerprints on.
+Demonstrated rather than asserted:
+
+```console
+$ companion package create --target quake-pak --from ~/maps/mymap --out /tmp/a.pak
+$ touch -d 2011-01-01 ~/maps/mymap/maps/e1m1.bsp && chmod 600 ~/maps/mymap/gfx/palette.lmp
+$ companion package create --target quake-pak --from ~/maps/mymap --out /tmp/b.pak
+$ sha256sum /tmp/a.pak /tmp/b.pak
+90229e3fb149e918d50d15568e06f618b58ec3a2962e39211c870b8a6e091a72  /tmp/a.pak
+90229e3fb149e918d50d15568e06f618b58ec3a2962e39211c870b8a6e091a72  /tmp/b.pak
+```
+
+**`per_build`** — PK3 with the default `deflate`. The same members produce the
+same bytes under one build of the Companion, on any operating system, and may
+differ under another. The compressor is Go's, and its output is a property of
+that library's version rather than of this program. That is the honest scope of
+the claim; `--compression store` buys the stronger one at the cost of size.
+
+The test suite proves both. It cannot run on three operating systems at once, so
+instead it varies *everything that differs between them* — modification times,
+permission bits, path separators, directory walk order and the absolute path of
+the source tree — and asserts the archive does not move, with the two `portable`
+digests pinned as golden constants.
+
+#### Asset safety, and what this policy does not claim
+
+The working directory for making a Quake map is very often the directory the
+game is installed in, so a `--from .` that sweeps it up will happily package
+id Software's content alongside yours. Preventing that is what the policy is
+for, and *how* it does it is the part worth reading.
+
+It is **not** a list of forbidden filenames. That would be easy and wrong in
+both directions: it refuses your own `progs.dat` from a total conversion you
+wrote, it passes id's `e1m1.bsp` the moment somebody renames it, and — worst —
+it implies a legal conclusion that a filename cannot support.
+
+Instead every candidate is classified by **where its bytes came from**, and the
+rules are ordered by strength of evidence. First match wins:
+
+| Rule | Evidence | Verdict |
+| --- | --- | --- |
+| `known-asset-digest` | its SHA-256 is a released commercial file's | **refuse** |
+| `authorized-known-asset` | the same, and you asserted the right to distribute it | include, both facts recorded |
+| `authorized` | you asserted the right, for a file the corpus did not identify | include |
+| `build-output` | a build manifest records this exact content | include |
+| `game-content-root` | it was selected out of an installed game's directory | **review** |
+| `authored-root` | it came from a directory you declared as your own | include |
+| `unknown-provenance` | nothing above applies | **review** |
+
+`review` is the normal outcome for a file this program knows nothing about, and
+it is neither an accusation nor a refusal — it is an unanswered question, held
+until somebody answers it. `create` will not write a package with one
+outstanding.
+
+Your configured game roots are used automatically, without a flag, because the
+accident this exists to catch is one you have not yet noticed:
+
+```console
+$ companion package preview --target quake-pak --from ~/maps/mymap --from-at id1=/games/quake/id1
+? id1/pak0.pak          23 B  game_content  game-content-root
+    from /games/quake/id1/pak0.pak
+    it was selected out of /games/quake, which is an installed game's content directory. That says where it was found, not who wrote it — your own mod lives there too — so it needs a look before it ships
+    hint: "pak0.pak" is the naming id Software used for the archives it shipped; that is a name, and it decides nothing
+    hint: a path element is "id1", which is Quake's content directory; a directory name is not evidence about a file's author
+...
+2 to package, 1 awaiting review, 0 refused
+
+this plan will not be written as it stands:
+  pack: 1 file(s) need review before they can be packaged, starting with "id1/pak0.pak" — …
+```
+
+Filenames appear only as **hints**, which explain a decision made on other
+grounds and say so in their own text. Resolve a held file by narrowing the
+selection, or by accepting it explicitly:
+
+```console
+$ companion package create --target quake-pak --from ~/maps/mymap --out ~/mymap.pak \
+    --acknowledge id1/pak0.pak
+$ companion package create --target quake-pak --from ~/maps/mymap --out ~/mymap.pak \
+    --authorize id1/pak0.pak --reason "distribution licence, reference 12345"
+```
+
+`--authorize` and `--acknowledge-all` require `--reason`, and the reason is
+recorded verbatim in the manifest. That sentence is the point of the whole
+mechanism: it is what somebody stands behind.
+
+The exact-identification corpus (`--known-assets <file>`, or `known-assets.json`
+in the configuration directory) **ships empty**, deliberately. A list of
+plausible-looking hashes copied from somewhere would be a rule that never fires
+while looking like one that does, and this repository has computed no digests
+from released media. The protection comes from the two `review` rules, which
+need no corpus. A supplied corpus must declare its own `source`, because a
+digest list that does not say who computed it cannot be argued with:
+
+```json
+{
+  "schema_version": "aucom.known-assets/1.0",
+  "source": "digests computed from a retail Quake CD, 2026-09-06, by <who>",
+  "assets": [
+    {"sha256": "sha256:…", "release": "Quake 1.06 registered, id1/pak1.pak"}
+  ]
+}
+```
+
+None of this is a legal opinion, and the program does not offer one. It reports
+what it knows about where bytes came from, and it declines to guess when it
+knows nothing. Why provenance rather than filenames, what it costs and what was
+rejected, is
+[ADR-0006](docs/adr/0006-provenance-decides-what-is-packaged-not-filenames.md).
+
+#### The sidecar, and what never goes inside the archive
+
+The package manifest is written beside the archive as
+`<archive>.package.json` — never inside it. An engine walking a PAK for
+`progs.dat` has no use for a manifest, and a PK3 with an `aucom/` directory
+publishes your toolchain to everyone who downloads the map. **No built-in target
+permits Auto-Pigeon metadata inside a game archive**; the mechanism exists for a
+profile-supplied target that says otherwise, and `--embed-manifest` is refused
+with an explanation rather than silently ignored.
+
+The sidecar carries the archive's digest and size, every member with its own
+digest and the decision that let it in, the review record, the build reference
+and recipe key, and each tool profile's id, version, digest and executable
+digests. `companion package verify` compares it against the archive and reports
+every disagreement, not just the first.
+
+#### What is refused, in both directions
+
+The same rules apply to what is written and to what is read, and none of them
+repairs anything — an archive member named `../../.ssh/authorized_keys` is not a
+malformed name to be tidied into a safe one, it is a document that has said what
+it is for.
+
+- Absolute paths, Windows drive and UNC paths, `~`, `..` and `.` elements, empty
+  elements, NUL bytes, backslashes, and anything outside printable ASCII.
+- Reserved Windows device names (`aux.bsp` fails the way `aux` does), and
+  elements Windows cannot store as written.
+- Symbolic links, devices, sockets and pipes — in a source tree being packaged,
+  and as members of an archive being read.
+- Duplicate member paths, and paths differing only in capitalisation: two files
+  on Linux and one on Windows and macOS, so packing one is choosing which half
+  of your audience gets the wrong map.
+- Extraction outside the destination, including through a symbolic link that was
+  *already sitting in* the destination before extraction started.
+- Overwriting anything implicitly — an existing archive, an existing extracted
+  file, or a source file the package is about to read. Each needs `--replace`,
+  and packaging a directory into itself is refused outright.
+- Structurally impossible archives: a PAK directory that is not a whole number
+  of 64-byte records, offsets that point past the end of the file or into the
+  header, a name field with no terminator, member data that overlaps the
+  directory, a PK3 member whose data disagrees with its declared length or its
+  own CRC.
+
+Bombs are refused **on the declaration, before anything is allocated**: entry
+count, per-member size, total size, and the ratio of declared contents to the
+archive's own length. The two containers get bombed differently — a PK3 lies
+with its compression ratio, and a PAK, which cannot compress, lies with its
+*offsets* instead, pointing a hundred thousand directory records at one blob.
+Both are caught by the same budget, because it sums what the directory declares.
+
+The archive is staged in the destination directory and renamed into place, so
+the output path never holds a half-written archive.
+
+#### q1tools, and what this does not replace
+
+`q1tools` and QPakMan are perfectly good **interactive** PAK tools, and if you
+want to browse an archive, drag files around and rebuild it by hand, use one of
+them. (Neither is bundled, and neither is pinned here: this repository does not
+carry a URL for a tool it does not download. `AUCOM 217` is the task that gives
+external community tools a catalogue entry of their own.) No q1tools or QPakMan
+code was copied or translated into this repository; the formats here are
+implemented from their published structures.
+
+What `companion package` is for instead is the *unattended* half: a packaging
+step that produces the same bytes twice, refuses what it cannot vouch for, and
+leaves a manifest saying what it did. Those are different jobs, and there is no
+reason to do only one of them.
 
 ### Launch
 

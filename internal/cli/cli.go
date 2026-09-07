@@ -108,6 +108,11 @@ var commands = []Command{
 		Run:     runBuild,
 	},
 	{
+		Name: "package", Usage: "targets | preview | create | inspect | verify | extract",
+		Summary: "build a PAK or PK3 from what a build produced, and read one somebody else made",
+		Run:     runPackage,
+	},
+	{
 		Name: "profile", Usage: "validate | show | canonicalize | digest | diff | list | schema",
 		Summary: "read, check and compare tool, engine and pipeline profiles",
 		Run:     runProfile,
