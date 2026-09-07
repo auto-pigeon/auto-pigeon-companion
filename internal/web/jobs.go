@@ -3,7 +3,6 @@ package web
 import (
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -274,119 +273,10 @@ func (s *Server) handleJobArtifact(w http.ResponseWriter, r *http.Request) {
 	http.ServeContent(w, r, "", info.ModTime(), file)
 }
 
-func (s *Server) handleProfileList(w http.ResponseWriter, r *http.Request) {
-	service, ok := s.requireJobs(w)
-	if !ok {
-		return
-	}
-	entries, err := service.Catalog().List()
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	items := make([]map[string]any, 0, len(entries))
-	for _, entry := range entries {
-		items = append(items, describeProfile(entry))
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items})
-}
-
-func (s *Server) handleProfileGet(w http.ResponseWriter, r *http.Request) {
-	service, ok := s.requireJobs(w)
-	if !ok {
-		return
-	}
-	entry, err := service.Catalog().Lookup(r.PathValue("id"))
-	if err != nil {
-		writeError(w, jobStatus(err), err)
-		return
-	}
-	writeJSON(w, http.StatusOK, describeProfile(entry))
-}
-
-// handleProfileValidate checks a document a caller pasted in, without importing
-// it and without running anything.
-//
-// The whole point of the trust model is that reading a stranger's profile is
-// inert, so this is the one route that takes a document body: it decodes,
-// validates, digests and summarises the permissions, which is exactly what
-// somebody needs in front of them before they decide to grant anything.
-func (s *Server) handleProfileValidate(w http.ResponseWriter, r *http.Request) {
-	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxRequestBody))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("reading the profile document: %w", err))
-		return
-	}
-	if len(raw) == 0 {
-		writeError(w, http.StatusBadRequest, errors.New("no profile document was sent"))
-		return
-	}
-	document, decodeErr := profile.Decode(raw)
-	if decodeErr != nil {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]any{
-			"valid": false,
-			"error": decodeErr.Error(),
-		})
-		return
-	}
-	digest, err := profile.Digest(document)
-	if err != nil {
-		writeError(w, http.StatusUnprocessableEntity, err)
-		return
-	}
-	meta := document.Metadata()
-	writeJSON(w, http.StatusOK, map[string]any{
-		"valid":       true,
-		"id":          meta.ID,
-		"version":     meta.Version,
-		"kind":        meta.Kind,
-		"name":        meta.Name,
-		"summary":     meta.Summary,
-		"digest":      digest,
-		"permissions": document.Permissions(),
-		// `local` because that is what a document somebody pasted is. Saying so
-		// here means the caller is told what it would take to run it, rather
-		// than finding out when it is refused.
-		"trust":  profile.TrustLocal,
-		"report": profile.PermissionReport(document, profile.TrustLocal),
-	})
-}
-
-func describeProfile(entry job.CatalogEntry) map[string]any {
-	meta := entry.Profile.Metadata()
-	actions := make([]map[string]any, 0, len(entry.Profile.ActionList()))
-	for _, action := range entry.Profile.ActionList() {
-		actions = append(actions, map[string]any{
-			"id":              action.ID,
-			"title":           action.Title,
-			"capability":      action.Capability,
-			"session_role":    action.SessionRole,
-			"inputs":          action.Inputs,
-			"outputs":         action.Outputs,
-			"options":         action.Options,
-			"timeout_seconds": action.TimeoutSeconds,
-		})
-	}
-	return map[string]any{
-		"id":          meta.ID,
-		"kind":        meta.Kind,
-		"version":     meta.Version,
-		"name":        meta.Name,
-		"summary":     meta.Summary,
-		"publisher":   meta.Publisher,
-		"license":     meta.License,
-		"trust":       entry.Trust,
-		"digest":      entry.Digest,
-		"source":      entry.Source,
-		"permissions": entry.Profile.Permissions(),
-		"actions":     actions,
-	}
-}
-
 // jobAPI is the whole versioned API as a table.
 //
-// One table, so `jobRoutes` and any test that asserts the surface read the same
-// list. A second hand-copied list of routes is a list that goes out of date.
+// One table, merged into [Server.api] with the rest. A second hand-copied list
+// of routes is a list that goes out of date.
 func (s *Server) jobAPI() map[string]http.HandlerFunc {
 	return map[string]http.HandlerFunc{
 		"GET /api/v1/jobs":                       s.handleJobList,
@@ -398,15 +288,5 @@ func (s *Server) jobAPI() map[string]http.HandlerFunc {
 		"GET /api/v1/jobs/{id}/logs":             s.handleJobLogs,
 		"GET /api/v1/jobs/{id}/artifacts":        s.handleJobArtifacts,
 		"GET /api/v1/jobs/{id}/artifacts/{name}": s.handleJobArtifact,
-		"GET /api/v1/profiles":                   s.handleProfileList,
-		"GET /api/v1/profiles/{id}":              s.handleProfileGet,
-		"POST /api/v1/profiles/validate":         s.handleProfileValidate,
-	}
-}
-
-// jobRoutes registers the versioned API, every route behind the same guard.
-func (s *Server) jobRoutes(mux *http.ServeMux) {
-	for pattern, handler := range s.jobAPI() {
-		mux.Handle(pattern, s.guard(handler))
 	}
 }

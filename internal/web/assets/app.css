@@ -1,138 +1,341 @@
-/* Plain CSS, no framework and no build step: the whole frontend is three files
-   embedded into the binary. Kept small enough to read in one sitting. */
+/*
+  One stylesheet, no framework, no build step. It is served from the binary's
+  embedded assets and loads nothing from anywhere else — which is what keeps the
+  GUI usable with no network and keeps the Content-Security-Policy in
+  internal/web/server.go able to say `default-src 'none'`.
+
+  Three things here are requirements rather than taste:
+
+  - Colour is never the only signal. A trust state, a job state and a warning
+    all carry a word as well as a hue, because a reader with low vision or a
+    monochrome display gets exactly the words.
+  - Motion is opt-out at the system level. Everything that moves is inside a
+    `prefers-reduced-motion` guard.
+  - The layout has one breakpoint and no horizontal scrolling below it. A
+    Companion squeezed beside an editor is the normal way to use it.
+*/
 
 :root {
   color-scheme: light dark;
+
+  --bg: #f6f6f4;
+  --surface: #ffffff;
+  --surface-2: #f0efec;
+  --ink: #1b1b1a;
+  --ink-muted: #5c5b57;
+  --line: #d6d4cf;
+  --accent: #35566d;
+  --accent-ink: #ffffff;
+  --ok: #1f6b3f;
+  --warn: #7a5307;
+  --bad: #96271d;
+  --focus: #b8541b;
+
+  --radius: 6px;
   --gap: 0.75rem;
-  --border: #8884;
-  --muted: #6b7280;
-  --accent: #b45309;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }
 
-* {
-  box-sizing: border-box;
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16171a;
+    --surface: #1e2024;
+    --surface-2: #262930;
+    --ink: #e8e8e6;
+    --ink-muted: #a3a49f;
+    --line: #383c44;
+    --accent: #7fa8c4;
+    --accent-ink: #10151a;
+    --ok: #6fce97;
+    --warn: #e0b357;
+    --bad: #f08a7e;
+    --focus: #f0a35c;
+  }
 }
+
+* { box-sizing: border-box; }
 
 body {
-  margin: 0 auto;
-  padding: 1.5rem;
-  max-width: 46rem;
-  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
-}
-
-h1 {
   margin: 0;
-  font-size: 1.5rem;
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--bg);
 }
 
-h2 {
-  margin: 0 0 var(--gap);
-  font-size: 1.1rem;
+h1 { font-size: 1.15rem; margin: 0; }
+h2 { font-size: 1.35rem; margin: 0 0 0.25rem; }
+h3 { font-size: 1.02rem; margin: 0; }
+h4 { font-size: 0.94rem; margin: 1rem 0 0.35rem; }
+
+.muted { color: var(--ink-muted); }
+.hint { color: var(--ink-muted); font-weight: normal; font-size: 0.85em; }
+.lede { max-width: 62ch; color: var(--ink-muted); margin-top: 0; }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0;
+  overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%);
+  white-space: nowrap;
 }
 
-header {
-  border-bottom: 1px solid var(--border);
-  padding-bottom: var(--gap);
-  margin-bottom: 1.5rem;
+/* The skip link is visible the moment it is focused, and only then. It is the
+   first thing in the tab order because a keyboard user should not have to walk
+   the whole navigation to reach the page. */
+.skip-link {
+  position: absolute;
+  left: 0.5rem; top: -3rem;
+  z-index: 10;
+  padding: 0.5rem 0.75rem;
+  background: var(--accent); color: var(--accent-ink);
+  border-radius: var(--radius);
+  text-decoration: none;
+}
+.skip-link:focus { top: 0.5rem; }
+
+/* One focus style everywhere, and it is never removed. */
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
 }
 
-section {
-  border: 1px solid var(--border);
-  border-radius: 0.5rem;
-  padding: 1rem;
-  margin-bottom: 1.25rem;
-}
-
-.muted {
-  color: var(--muted);
-  font-size: 0.9rem;
-  margin: 0 0 var(--gap);
-}
-
-.row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+.app-header {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
   gap: var(--gap);
-  margin-top: var(--gap);
+  padding: 0.75rem 1rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.brand p { margin: 0.1rem 0 0; font-size: 0.85rem; }
+.account { display: flex; align-items: center; gap: var(--gap); }
+.account-email { font-size: 0.85rem; color: var(--ink-muted); }
+
+.first-run {
+  margin: 1rem; padding: 1rem;
+  background: var(--surface);
+  border: 2px solid var(--accent);
+  border-radius: var(--radius);
+  max-width: 42rem;
 }
 
-label {
-  display: block;
-  font-size: 0.85rem;
-  color: var(--muted);
+.app-body { display: flex; align-items: flex-start; gap: 0; }
+
+.areas {
+  flex: 0 0 13rem;
+  border-right: 1px solid var(--line);
+  background: var(--surface);
+  min-height: 60vh;
+}
+.areas ul { list-style: none; margin: 0; padding: 0.5rem; }
+.areas li { margin: 0; }
+.area-tab {
+  display: block; width: 100%; text-align: left;
+  padding: 0.5rem 0.6rem; margin: 0 0 0.15rem;
+  background: transparent; color: var(--ink);
+  border: 1px solid transparent; border-radius: var(--radius);
+  font: inherit; font-weight: 600; cursor: pointer;
+}
+.area-tab:hover { background: var(--surface-2); }
+.area-tab[aria-current="page"] {
+  background: var(--surface-2);
+  border-color: var(--accent);
+  /* A left bar as well as the background, so the current area is legible
+     without colour. */
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.tab-note { display: block; font-weight: normal; font-size: 0.78rem; color: var(--ink-muted); }
+
+main { flex: 1 1 auto; padding: 1rem 1.25rem 3rem; min-width: 0; }
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.9rem 1rem;
+  margin: 0 0 1rem;
+}
+.panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--gap); margin-bottom: 0.5rem; flex-wrap: wrap;
 }
 
-input,
-select {
+.row { display: flex; flex-wrap: wrap; gap: var(--gap); align-items: flex-end; margin: 0.5rem 0; }
+.field { display: flex; flex-direction: column; gap: 0.2rem; min-width: 11rem; }
+.field.grow { flex: 1 1 16rem; }
+label { font-weight: 600; font-size: 0.85rem; }
+.check { display: flex; align-items: center; gap: 0.4rem; font-weight: normal; }
+
+input, select, textarea {
   font: inherit;
-  padding: 0.4rem 0.5rem;
-  border: 1px solid var(--border);
-  border-radius: 0.35rem;
-  background: transparent;
-  color: inherit;
-  min-width: 12rem;
+  color: var(--ink); background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 0.35rem 0.45rem;
+  max-width: 100%;
 }
+textarea { width: 100%; font-family: var(--mono); font-size: 0.82rem; }
+input[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--bad); border-width: 2px; }
 
 button {
-  font: inherit;
-  padding: 0.4rem 0.9rem;
-  border: 1px solid var(--border);
-  border-radius: 0.35rem;
-  background: transparent;
-  color: inherit;
+  font: inherit; font-weight: 600;
+  padding: 0.4rem 0.8rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface-2); color: var(--ink);
   cursor: pointer;
 }
-
-button:hover:not(:disabled) {
-  border-color: var(--accent);
-  color: var(--accent);
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: 0.55; cursor: not-allowed; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button.secondary { font-weight: normal; }
+button.danger { border-color: var(--bad); color: var(--bad); }
+button.link {
+  background: none; border: none; padding: 0; color: var(--accent);
+  text-decoration: underline; font-weight: 600;
 }
 
-button:disabled {
-  opacity: 0.5;
-  cursor: progress;
+.message { margin: 0.5rem 0 0; min-height: 1.2em; font-size: 0.9rem; }
+.message.error { color: var(--bad); font-weight: 600; }
+.message.error::before { content: "Error: "; }
+.message.ok { color: var(--ok); }
+.message.busy { color: var(--ink-muted); }
+
+.output, .preview pre {
+  font-family: var(--mono); font-size: 0.8rem;
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 0.55rem; margin: 0.4rem 0 0;
+  max-height: 22rem; overflow: auto; white-space: pre-wrap; word-break: break-word;
 }
 
-.output {
-  margin: var(--gap) 0 0;
-  padding: 0.75rem;
-  border-radius: 0.35rem;
-  background: #8881;
-  font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
-  white-space: pre-wrap;
-  overflow-x: auto;
-  min-height: 1.5rem;
+.cards { list-style: none; margin: 0.5rem 0 0; padding: 0; display: grid; gap: var(--gap);
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); }
+.card {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 0.6rem 0.7rem; background: var(--surface-2);
+  display: flex; flex-direction: column; gap: 0.3rem;
+}
+.card h4 { margin: 0; font-size: 0.95rem; }
+
+.rows { list-style: none; margin: 0.5rem 0 0; padding: 0; }
+.rows > li {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 0.5rem 0.6rem; margin-bottom: 0.4rem; background: var(--surface-2);
+}
+.rows .row-head { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: baseline; justify-content: space-between; }
+.rows .row-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+
+.mono { font-family: var(--mono); font-size: 0.82rem; word-break: break-all; }
+
+/* Badges always carry their word. `.badge` alone is the shape; the modifier
+   only changes the colour, so removing every colour leaves the meaning. */
+.badge {
+  display: inline-block; padding: 0.05rem 0.4rem;
+  border: 1px solid var(--line); border-radius: 999px;
+  font-size: 0.75rem; font-weight: 700; text-transform: lowercase;
+  background: var(--surface);
+}
+.badge.builtin { border-color: var(--ok); color: var(--ok); }
+.badge.verified { border-color: var(--ok); color: var(--ok); }
+.badge.community { border-color: var(--warn); color: var(--warn); }
+.badge.local { border-color: var(--warn); color: var(--warn); }
+.badge.ok, .badge.succeeded { border-color: var(--ok); color: var(--ok); }
+.badge.running, .badge.queued { border-color: var(--accent); color: var(--accent); }
+.badge.failed, .badge.interrupted, .badge.blocked { border-color: var(--bad); color: var(--bad); }
+.badge.cancelled, .badge.skipped { border-color: var(--ink-muted); color: var(--ink-muted); }
+
+.stages { list-style: none; margin: 0.5rem 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
+.stages > li {
+  display: flex; gap: 0.6rem; align-items: baseline;
+  border-left: 4px solid var(--line); padding: 0.35rem 0.6rem;
+  background: var(--surface-2); border-radius: 0 var(--radius) var(--radius) 0;
+}
+.stages > li.running { border-left-color: var(--accent); }
+.stages > li.succeeded { border-left-color: var(--ok); }
+.stages > li.failed { border-left-color: var(--bad); }
+.stages .stage-name { font-weight: 600; }
+.stages .stage-detail { color: var(--ink-muted); font-size: 0.85rem; }
+
+.wizard-steps { list-style: none; display: flex; flex-wrap: wrap; gap: 0.4rem; padding: 0; margin: 0.5rem 0; }
+.wizard-steps li {
+  display: flex; align-items: center; gap: 0.35rem;
+  border: 1px solid var(--line); border-radius: 999px;
+  padding: 0.15rem 0.7rem; font-size: 0.85rem; color: var(--ink-muted);
+}
+.wizard-steps li[aria-current="step"] {
+  border-color: var(--accent); color: var(--ink); font-weight: 700;
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.step-number {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.3rem; height: 1.3rem; border-radius: 50%;
+  background: var(--surface-2); font-size: 0.75rem; font-weight: 700;
+}
+.wizard-step { display: none; padding-top: 0.5rem; }
+.wizard-step.active { display: block; }
+.wizard-nav { border-top: 1px solid var(--line); padding-top: 0.6rem; margin-top: 0.6rem; }
+
+.paths { display: grid; grid-template-columns: minmax(8rem, max-content) 1fr; gap: 0.25rem 1rem; margin: 0.5rem 0 0; }
+.paths dt { font-weight: 600; font-size: 0.85rem; }
+.paths dd { margin: 0; font-family: var(--mono); font-size: 0.8rem; word-break: break-all; }
+
+.path-field { display: flex; gap: 0.4rem; align-items: flex-end; flex-wrap: wrap; }
+.path-field .field { flex: 1 1 18rem; }
+
+.problem {
+  border-left: 4px solid var(--bad);
+  background: var(--surface-2);
+  padding: 0.4rem 0.6rem; margin: 0.3rem 0; border-radius: 0 var(--radius) var(--radius) 0;
+}
+.problem .fix { color: var(--ink-muted); font-size: 0.88rem; }
+
+.permission { border-left: 4px solid var(--warn); background: var(--surface-2);
+  padding: 0.4rem 0.6rem; margin: 0.3rem 0; border-radius: 0 var(--radius) var(--radius) 0; }
+
+.diff-add { color: var(--ok); }
+.diff-remove { color: var(--bad); }
+.diff-change { color: var(--warn); }
+
+footer { padding: 1rem 1.25rem 2rem; border-top: 1px solid var(--line); }
+footer p { margin: 0; font-size: 0.82rem; max-width: 70ch; }
+
+.spinner {
+  display: inline-block; width: 0.8em; height: 0.8em; margin-right: 0.35em;
+  border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+  vertical-align: -0.05em;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Narrow windows: the navigation becomes a row above the content, and nothing
+   scrolls sideways. */
+@media (max-width: 46rem) {
+  .app-body { flex-direction: column; }
+  .areas { flex: none; width: 100%; border-right: none; border-bottom: 1px solid var(--line); min-height: 0; }
+  .areas ul { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+  .areas li { flex: 1 1 8rem; }
+  .area-tab { text-align: center; }
+  .tab-note { display: none; }
+  main { padding: 0.85rem; }
+  .cards { grid-template-columns: 1fr; }
+  .paths { grid-template-columns: 1fr; }
 }
 
-.message:empty {
-  display: none;
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* The spinner is the one thing whose whole job is to move. With motion off
+     it becomes a static mark, and the text beside it is what reports progress
+     — which is why every busy state in this page has text as well. */
+  .spinner { animation: none; border-top-color: var(--line); }
 }
 
-.message {
-  margin: var(--gap) 0 0;
-  font-size: 0.9rem;
-}
-
-.message.error {
-  color: #b91c1c;
-}
-
-footer {
-  border-top: 1px solid var(--border);
-  padding-top: var(--gap);
-}
-
-/* The job list: one line per job, monospaced so ids and states line up. */
-.job-list {
-  list-style: none;
-  margin: 0.5rem 0 0;
-  padding: 0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.85rem;
-}
-
-.job-list li {
-  padding: 0.15rem 0;
-  border-bottom: 1px solid var(--rule, #e3e3e3);
+@media (prefers-contrast: more) {
+  .panel, .rows > li, .card { border-width: 2px; }
+  .badge { border-width: 2px; }
 }

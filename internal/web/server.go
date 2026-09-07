@@ -45,27 +45,63 @@ import (
 	"net/http"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/aub"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/aue"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/engine"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/launch"
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/pathpick"
 )
 
 // DrainTimeout is how long a shutdown waits for in-flight requests.
 const DrainTimeout = 10 * time.Second
 
+// Paths is where this run keeps its state on disk.
+//
+// Passed in rather than resolved here, because the caller is the one that knows
+// what `--config` meant: a session pointed at a deliberate config file must not
+// reach into the real machine's profiles, bindings and grants. The CLI resolves
+// all of them in one place (`statePaths`) and hands them over.
+//
+// An empty field falls back to the configured default, which is what a test
+// that only cares about jobs wants.
+type Paths struct {
+	// Profiles is the directory of profile documents the catalog reads.
+	Profiles string
+	// Bindings is the file recording what is installed on this machine.
+	Bindings string
+	// Builds is where build manifests are kept.
+	Builds string
+	// AssetCache is the local cache of AUB revisions.
+	AssetCache string
+}
+
 // Server is the local GUI server.
 type Server struct {
 	version  string
-	client   *aub.Client
 	provider launch.Provider
 	jobs     *job.Service
 	runner   aue.Runner
-	settings config.Config
+	paths    Paths
+	picker   *pathpick.Picker
+	scanner  engine.Scanner
+	builds   *buildRuns
+	newAUB   func(baseURL string) (*aub.Client, error)
 	token    *Token
+
+	// mu guards the two values a request can change under another request:
+	// the stored configuration, and the client built from the address in it.
+	// Signing in rewrites the session; Settings rewrites the backend address
+	// and rebuilds the client around it. Both are ordinary things for a person
+	// with two tabs open to do at once, and neither is safe to read while the
+	// other is halfway through.
+	mu       sync.RWMutex
+	settings config.Config
+	client   *aub.Client
 	// index is the frontend page with the API token substituted in. Built once
 	// at construction: the token does not change during a run, and rebuilding
 	// it per request would be a string replacement on every page load.
@@ -97,6 +133,17 @@ type Options struct {
 	// test wants; `companion serve` passes the token it published so another
 	// process can use it.
 	Token *Token
+	// Paths is where this run keeps its state. See [Paths].
+	Paths Paths
+	// Picker opens native file dialogs on the user's desktop. Nil means a
+	// default one, which is what `serve` wants; a test supplies its own so no
+	// window ever opens.
+	Picker *pathpick.Picker
+	// Scanner looks for installed games. The zero value scans this machine.
+	Scanner engine.Scanner
+	// NewAUB builds a client for a base URL, so a settings change can point the
+	// server at a different backend without a restart. Nil means aub.New.
+	NewAUB func(baseURL string) (*aub.Client, error)
 }
 
 // NewServer builds the server and its routes.
@@ -137,14 +184,29 @@ func NewServer(options Options) (*Server, error) {
 		}
 	}
 
+	newAUB := options.NewAUB
+	if newAUB == nil {
+		newAUB = func(baseURL string) (*aub.Client, error) { return aub.New(baseURL, nil) }
+	}
+
+	picker := options.Picker
+	if picker == nil {
+		picker = &pathpick.Picker{}
+	}
+
 	server := &Server{
 		version:    options.Version,
-		client:     client,
 		provider:   provider,
 		jobs:       options.Jobs,
 		runner:     options.AUE,
-		settings:   settings,
+		paths:      options.Paths,
+		picker:     picker,
+		scanner:    options.Scanner,
+		builds:     newBuildRuns(),
+		newAUB:     newAUB,
 		token:      token,
+		settings:   settings,
+		client:     client,
 		saveConfig: save,
 	}
 	index, err := indexPage(token)
@@ -158,6 +220,24 @@ func NewServer(options Options) (*Server, error) {
 
 // Token is the credential this server requires on every API request.
 func (s *Server) Token() *Token { return s.token }
+
+// config is the current settings, copied under the lock.
+//
+// config.Config is a value, so a handler that took one holds a consistent
+// snapshot for as long as it needs one — which is what a handler wants, rather
+// than a pointer whose fields could change between two reads of it.
+func (s *Server) config() config.Config {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.settings
+}
+
+// aubClient is the current AUB client, or nil when no address is configured.
+func (s *Server) aubClient() *aub.Client {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.client
+}
 
 // ServeHTTP makes the Server an http.Handler, which is what lets tests drive it
 // with httptest.NewServer and no port of its own.
@@ -175,18 +255,47 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("GET /index.html", http.HandlerFunc(s.handleIndex))
 	mux.Handle("GET /", s.hostGuard(http.FileServerFS(assetsFS())))
 
-	mux.Handle("GET /api/status", s.guard(s.handleStatus))
-	mux.Handle("POST /api/auth/login", s.guard(s.handleLogin))
-	mux.Handle("POST /api/auth/logout", s.guard(s.handleLogout))
-	mux.Handle("GET /api/launch-configs", s.guard(s.handleLaunchConfigs))
-	mux.Handle("POST /api/launch", s.guard(s.handleLaunch))
-	// Deliberately not a general "run any AUE subcommand" escape hatch: each
-	// extractor operation gets its own route with its own validated inputs as
-	// features land. This one proves the subprocess path end to end.
-	mux.Handle("GET /api/aue/version", s.guard(s.handleAUEVersion))
-
-	s.jobRoutes(mux)
+	// One table, one registration loop. Every guarded route in this package
+	// comes from [Server.api], so a route cannot be added without the guard,
+	// and the test that sweeps the surface sweeps all of it.
+	for pattern, handler := range s.api() {
+		mux.Handle(pattern, s.guard(handler))
+	}
 	return mux
+}
+
+// api is the whole guarded HTTP surface, as one table.
+//
+// The unversioned `/api/...` routes are the page's own and are not a contract.
+// Everything under `/api/v1/` is: `companion job` talks to it, and a script may.
+func (s *Server) api() map[string]http.HandlerFunc {
+	routes := map[string]http.HandlerFunc{
+		"GET /api/status":         s.handleStatus,
+		"POST /api/auth/login":    s.handleLogin,
+		"POST /api/auth/logout":   s.handleLogout,
+		"GET /api/launch-configs": s.handleLaunchConfigs,
+		"POST /api/launch":        s.handleLaunch,
+		// Deliberately not a general "run any AUE subcommand" escape hatch:
+		// each extractor operation gets its own route with its own validated
+		// inputs as features land. This one proves the subprocess path end to
+		// end.
+		"GET /api/aue/version": s.handleAUEVersion,
+	}
+	for _, table := range []map[string]http.HandlerFunc{
+		s.jobAPI(), s.profileAPI(), s.libraryAPI(),
+		s.engineAPI(), s.buildAPI(), s.settingsAPI(), s.pathAPI(),
+	} {
+		for pattern, handler := range table {
+			if _, clash := routes[pattern]; clash {
+				// Unreachable unless two tables in this package claim one
+				// pattern, which http.ServeMux would panic on at registration
+				// anyway — said here so the message names the cause.
+				panic("web: two API tables both register " + pattern)
+			}
+			routes[pattern] = handler
+		}
+	}
+	return routes
 }
 
 // guard applies every check in auth.go to an API route.
@@ -298,11 +407,12 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, out any) bool {
 // and returns false. Every AUB-backed route goes through it so an unconfigured
 // address produces one accurate message instead of a nil dereference.
 func (s *Server) requireClient(w http.ResponseWriter) (*aub.Client, bool) {
-	if s.client == nil {
+	client := s.aubClient()
+	if client == nil {
 		writeError(w, http.StatusServiceUnavailable, config.ErrAUBNotConfigured)
 		return nil, false
 	}
-	return s.client, true
+	return client, true
 }
 
 type statusBody struct {
@@ -325,19 +435,20 @@ type statusBody struct {
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
-	cache, err := s.settings.ToolCache()
+	settings := s.config()
+	cache, err := settings.ToolCache()
 	if err != nil {
 		cache = ""
 	}
-	jobs, err := s.settings.Jobs()
+	jobs, err := settings.Jobs()
 	if err != nil {
 		jobs = ""
 	}
 	baseURL := ""
 	authenticated := false
-	if s.client != nil {
-		baseURL = s.client.BaseURL()
-		authenticated = s.client.Authenticated()
+	if client := s.aubClient(); client != nil {
+		baseURL = client.BaseURL()
+		authenticated = client.Authenticated()
 	}
 	verified, provenance := false, ""
 	if aue.Available(s.runner) {
@@ -348,7 +459,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		Version:       s.version,
 		AUBBaseURL:    baseURL,
 		Authenticated: authenticated,
-		Email:         s.settings.Session.Email,
+		Email:         settings.Session.Email,
 		Platform:      runtime.GOOS + "/" + runtime.GOARCH,
 		ToolCacheDir:  cache,
 		JobsDir:       jobs,
@@ -382,13 +493,16 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.mu.Lock()
 	s.settings.Session = config.Session{
 		Token:   session.Token,
 		UserID:  session.UserID,
 		Email:   session.Email,
 		Expires: session.Expires,
 	}
-	if err := s.saveConfig(s.settings); err != nil {
+	updated := s.settings
+	s.mu.Unlock()
+	if err := s.saveConfig(updated); err != nil {
 		// The login itself succeeded and the in-memory client is usable; only
 		// persistence failed, so this is reported without failing the request.
 		writeJSON(w, http.StatusOK, map[string]any{
@@ -401,11 +515,14 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
-	if s.client != nil {
-		s.client.Logout()
+	if client := s.aubClient(); client != nil {
+		client.Logout()
 	}
+	s.mu.Lock()
 	s.settings.Session = config.Session{}
-	if err := s.saveConfig(s.settings); err != nil {
+	updated := s.settings
+	s.mu.Unlock()
+	if err := s.saveConfig(updated); err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -456,7 +573,7 @@ func (s *Server) handleLaunch(w http.ResponseWriter, r *http.Request) {
 	}
 	gameRoot := request.GameRoot
 	if gameRoot == "" {
-		gameRoot = s.settings.GameRoots[selected.Game]
+		gameRoot = s.config().GameRoots[selected.Game]
 	}
 	jobRequest, err := launch.JobRequest(selected, gameRoot, request.Map, nil)
 	if err != nil {

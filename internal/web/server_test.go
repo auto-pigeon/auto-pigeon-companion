@@ -3,10 +3,12 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"io/fs"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -112,7 +114,8 @@ func TestServesTheEmbeddedFrontend(t *testing.T) {
 
 	// The page and the assets are reachable without a token: a browser has none
 	// until it has loaded the page that carries it.
-	for _, path := range []string{"/", "/app.js", "/app.css"} {
+	for _, path := range []string{"/", "/app.js", "/app.css", "/core.js", "/library.js",
+		"/build.js", "/run.js", "/profiles.js", "/jobs.js", "/settings.js"} {
 		r := httptest.NewRequest(http.MethodGet, path, nil)
 		r.Host = testHost
 		recorder := httptest.NewRecorder()
@@ -144,6 +147,19 @@ func TestServesTheEmbeddedFrontend(t *testing.T) {
 	}
 	if got := recorder.Header().Get("Cache-Control"); got != "no-store" {
 		t.Errorf("Cache-Control = %q, want no-store: the page carries a credential", got)
+	}
+
+	// Every script and stylesheet the page names is actually embedded. A
+	// <script src> that 404s is a page that half-works, and the half that is
+	// missing is whichever area's file somebody forgot to add.
+	for _, match := range regexp.MustCompile(`(?:src|href)="([^"#]+)"`).FindAllStringSubmatch(page, -1) {
+		reference := match[1]
+		if strings.HasPrefix(reference, "/") || strings.Contains(reference, ":") {
+			continue
+		}
+		if _, err := fs.ReadFile(assetsFS(), reference); err != nil {
+			t.Errorf("the page references %q, which is not embedded: %v", reference, err)
+		}
 	}
 }
 

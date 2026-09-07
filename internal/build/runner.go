@@ -38,6 +38,18 @@ type Options struct {
 	Now func() time.Time
 	// Logf receives one line per step. Nil discards them.
 	Logf func(format string, args ...any)
+	// Announce reports the manifest as it changes, before Run returns.
+	//
+	// It exists for the caller that is NOT blocking on Run. The GUI starts a
+	// build and immediately has to answer three questions the return value
+	// cannot: what is this build called, which stage is it on, and which job
+	// would a Cancel button have to stop. A build whose id only exists once it
+	// has finished is a build nothing can report the progress of.
+	//
+	// It is called from the goroutine running the build, so an implementation
+	// must not block and must not keep the pointer: the manifest goes on
+	// changing underneath. Copy what is needed. Nil discards them.
+	Announce func(*Manifest)
 }
 
 // Runner runs pipelines.
@@ -68,6 +80,9 @@ func New(options Options) (*Runner, error) {
 	}
 	if options.Logf == nil {
 		options.Logf = func(string, ...any) {}
+	}
+	if options.Announce == nil {
+		options.Announce = func(*Manifest) {}
 	}
 	return &Runner{options: options, resolver: resolver}, nil
 }
@@ -158,6 +173,10 @@ func (r *Runner) Run(ctx context.Context, request Request) (*Manifest, error) {
 	if err := manifest.Save(dir); err != nil {
 		return nil, err
 	}
+	// The earliest point at which this build has an identity. Announced before
+	// a single byte is staged, so a caller watching it never has a window in
+	// which a build is running and has no name.
+	r.options.Announce(manifest)
 
 	wires, err := r.stageInputs(pipeline, request, layout, manifest)
 	if err != nil {
@@ -169,11 +188,22 @@ func (r *Runner) Run(ctx context.Context, request Request) (*Manifest, error) {
 	}
 
 	for i, resolved := range steps {
-		step, err := r.runStep(ctx, request, layout, resolved, wires, manifest)
+		index := i
+		// Recorded the moment the step has a job, rather than when it finishes.
+		// Between those two points is where a build spends nearly all of its
+		// time, and it is exactly the interval in which somebody wants to know
+		// what is running and be able to stop it.
+		started := func(running Step) {
+			manifest.Steps[index] = running
+			_ = manifest.Save(dir)
+			r.options.Announce(manifest)
+		}
+		step, err := r.runStep(ctx, request, layout, resolved, wires, manifest, started)
 		manifest.Steps[i] = step
 		if saveErr := manifest.Save(dir); saveErr != nil {
 			return nil, saveErr
 		}
+		r.options.Announce(manifest)
 		if err != nil {
 			// Published anyway, best effort. A failed compile still wrote the
 			// point file that says where the leak is, and leaving it inside the
@@ -576,7 +606,7 @@ func (r *Runner) stepRequest(request Request, layout layout, resolved profile.Re
 }
 
 // runStep submits one step and waits for it.
-func (r *Runner) runStep(ctx context.Context, request Request, layout layout, resolved profile.ResolvedStep, wires map[string]wire, manifest *Manifest) (Step, error) {
+func (r *Runner) runStep(ctx context.Context, request Request, layout layout, resolved profile.ResolvedStep, wires map[string]wire, manifest *Manifest, started func(Step)) (Step, error) {
 	step := Step{
 		ID:         resolved.Step.ID,
 		Title:      resolved.Step.Title,
@@ -612,6 +642,10 @@ func (r *Runner) runStep(ctx context.Context, request Request, layout layout, re
 		return step, err
 	}
 	step.JobID = submitted.ID
+	step.State = job.Running
+	step.Skipped = false
+	step.Error = ""
+	started(step)
 	r.options.Logf("build %s: step %s is job %s", manifest.BuildID, resolved.Step.ID, submitted.ID)
 
 	finished, err := r.options.Service.Wait(ctx, submitted.ID)

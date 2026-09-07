@@ -14,88 +14,530 @@
     <link rel="stylesheet" href="app.css" />
   </head>
   <body>
-    <header>
-      <h1>Auto-Pigeon Companion</h1>
-      <p id="status-line" class="muted">loading…</p>
+    <a class="skip-link" href="#area-heading">Skip to the main content</a>
+
+    <header class="app-header">
+      <div class="brand">
+        <h1>Auto-Pigeon Companion</h1>
+        <p id="identity" class="muted">Starting…</p>
+      </div>
+      <div class="account">
+        <span id="account-email" class="account-email"></span>
+        <button type="button" id="sign-out" hidden>Sign out</button>
+      </div>
     </header>
 
-    <main>
-      <section id="auth-section">
-        <h2>auto-pigeon-backend</h2>
-        <form id="login-form" autocomplete="on">
+    <!--
+      The first-run panel. It is a region rather than a modal: a modal that
+      cannot be dismissed is a page a keyboard user can be trapped in, and
+      everything behind this one — the Jobs list, Settings — is still worth
+      reading while somebody works out where their backend is.
+    -->
+    <section id="first-run" class="first-run" aria-labelledby="first-run-heading" hidden>
+      <h2 id="first-run-heading">Sign in to auto-pigeon-backend</h2>
+      <p id="first-run-why" class="muted"></p>
+      <form id="sign-in-form" autocomplete="on">
+        <div class="field">
           <label for="email">Email</label>
           <input id="email" name="email" type="email" required autocomplete="username" />
+        </div>
+        <div class="field">
           <label for="password">Password</label>
           <input id="password" name="password" type="password" required autocomplete="current-password" />
-          <div class="row">
-            <button type="submit">Sign in</button>
-            <button type="button" id="logout-button" hidden>Sign out</button>
+        </div>
+        <div class="row">
+          <button type="submit" id="sign-in">Sign in</button>
+          <button type="button" id="go-to-settings" class="secondary">Where is my backend?</button>
+        </div>
+      </form>
+      <p id="sign-in-message" class="message" role="alert"></p>
+    </section>
+
+    <div class="app-body">
+      <nav class="areas" aria-label="Areas">
+        <ul>
+          <li><button type="button" class="area-tab" data-area="library">Library<span class="tab-note">maps and assets</span></button></li>
+          <li><button type="button" class="area-tab" data-area="build">Build<span class="tab-note">compile a map</span></button></li>
+          <li><button type="button" class="area-tab" data-area="run">Run<span class="tab-note">start a game</span></button></li>
+          <li><button type="button" class="area-tab" data-area="profiles">Profiles<span class="tab-note">tools and engines</span></button></li>
+          <li><button type="button" class="area-tab" data-area="jobs">Jobs<span class="tab-note">what has run</span></button></li>
+          <li><button type="button" class="area-tab" data-area="settings">Settings<span class="tab-note">where things are</span></button></li>
+        </ul>
+      </nav>
+
+      <main id="main">
+        <h2 id="area-heading" tabindex="-1">Library</h2>
+
+        <!-- Library ------------------------------------------------------ -->
+        <section id="area-library" class="area" aria-labelledby="area-heading">
+          <p class="lede">
+            Everything in your auto-pigeon-backend account, and everything this
+            machine has already downloaded and verified. Choose an exact
+            revision — a build reads the copy in the cache, so a newer revision
+            on the server cannot change a build you have already started.
+          </p>
+
+          <div class="panel">
+            <div class="panel-head">
+              <h3>On the backend</h3>
+              <button type="button" id="library-refresh" class="secondary">Refresh</button>
+            </div>
+            <div class="row">
+              <div class="field">
+                <label for="library-type">Asset type</label>
+                <select id="library-type"><option value="">All types</option></select>
+              </div>
+              <div class="field grow">
+                <label for="library-search">Name contains</label>
+                <input id="library-search" type="search" placeholder="e1m1" />
+              </div>
+            </div>
+            <p id="library-message" class="message" role="status"></p>
+            <ul id="library-assets" class="cards" aria-label="Assets on the backend"></ul>
           </div>
-        </form>
-        <p id="auth-message" class="message" role="status"></p>
-      </section>
 
-      <section id="extractor-section">
-        <h2>Extractor</h2>
-        <p class="muted" id="extractor-state">Checking the bundled extractor…</p>
-        <div class="row">
-          <button type="button" id="extractor-button">Read extractor version</button>
-        </div>
-        <pre id="extractor-output" class="output" aria-live="polite"></pre>
-      </section>
+          <div class="panel" id="library-revisions-panel" hidden>
+            <div class="panel-head">
+              <h3 id="library-revisions-title">Revisions</h3>
+              <button type="button" id="library-close-revisions" class="secondary">Close</button>
+            </div>
+            <p id="library-revisions-note" class="muted"></p>
+            <ul id="library-revisions" class="rows" aria-label="Revisions"></ul>
+          </div>
 
-      <section id="jobs-section">
-        <h2>Jobs</h2>
-        <p class="muted">
-          Every program the Companion runs is a job: a compile, a game, anything a
-          profile declares. Choose an action, see exactly what would run, then run it.
-        </p>
-        <div class="row">
-          <label for="job-profile">Profile</label>
-          <select id="job-profile"></select>
-          <label for="job-action">Action</label>
-          <select id="job-action"></select>
-        </div>
-        <div class="row">
-          <button type="button" id="job-preview-button">Preview command</button>
-          <button type="button" id="job-run-button">Run</button>
-          <button type="button" id="job-refresh-button">Refresh list</button>
-        </div>
-        <pre id="job-output" class="output" aria-live="polite"></pre>
-        <ul id="job-list" class="job-list"></ul>
-      </section>
+          <div class="panel">
+            <div class="panel-head">
+              <h3>Downloaded on this machine</h3>
+              <button type="button" id="cached-refresh" class="secondary">Refresh</button>
+            </div>
+            <p class="muted">
+              This list is the record of every completed download. It is read from
+              disk, so it is still here after a reload, after a restart, and with
+              no network at all.
+            </p>
+            <p id="cached-message" class="message" role="status"></p>
+            <ul id="cached-list" class="rows" aria-label="Revisions cached on this machine"></ul>
+          </div>
+        </section>
 
-      <section id="launch-section">
-        <h2>Launch</h2>
-        <p class="muted">
-          Launch configs are stubbed locally until AUB's schema is confirmed.
-          "Preview" resolves the command without starting anything.
-        </p>
-        <div class="row">
-          <label for="game">Game</label>
-          <select id="game"></select>
-          <label for="map">Map</label>
-          <input id="map" type="text" placeholder="e1m1" />
-        </div>
-        <div class="row">
-          <label for="game-root">Game directory</label>
-          <input id="game-root" type="text" placeholder="/path/to/quake" />
-        </div>
-        <div class="row">
-          <button type="button" id="preview-button">Preview command</button>
-          <button type="button" id="launch-button">Launch</button>
-        </div>
-        <pre id="launch-output" class="output" aria-live="polite"></pre>
-      </section>
-    </main>
+        <!-- Build -------------------------------------------------------- -->
+        <section id="area-build" class="area" aria-labelledby="area-heading" hidden>
+          <p class="lede">
+            A build is several supervised programs, wired together, with a
+            manifest recording exactly what ran. Preview shows the command each
+            stage will run before anything starts.
+          </p>
+
+          <div class="panel">
+            <h3>What to build</h3>
+            <div class="field">
+              <label for="build-pipeline">Pipeline</label>
+              <select id="build-pipeline"></select>
+            </div>
+            <p id="build-pipeline-note" class="muted"></p>
+            <ol id="build-stages" class="stages" aria-label="Stages of this pipeline"></ol>
+            <div id="build-inputs" class="inputs"></div>
+            <div class="field">
+              <label for="build-label">Label <span class="hint">(optional, so you can find this build later)</span></label>
+              <input id="build-label" type="text" placeholder="first pass at e1m1" />
+            </div>
+            <div class="row">
+              <label class="check">
+                <input type="checkbox" id="build-strict" />
+                Fail on any error-severity warning, even when the tool exits successfully
+              </label>
+            </div>
+            <div class="row">
+              <button type="button" id="build-preview">Preview commands</button>
+              <button type="button" id="build-start" class="primary">Build</button>
+            </div>
+            <p id="build-message" class="message" role="alert"></p>
+            <div id="build-preview-out" class="preview" hidden></div>
+          </div>
+
+          <div class="panel" id="build-current-panel" hidden>
+            <div class="panel-head">
+              <h3 id="build-current-title">Building</h3>
+              <button type="button" id="build-cancel" class="danger">Cancel this build</button>
+            </div>
+            <ol id="build-progress" class="stages" aria-label="Build progress"></ol>
+            <h4>Output so far</h4>
+            <pre id="build-log" class="output" aria-label="Live build output" tabindex="0"></pre>
+            <p id="build-log-note" class="muted"></p>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head">
+              <h3>Builds on this machine</h3>
+              <button type="button" id="build-history-refresh" class="secondary">Refresh</button>
+            </div>
+            <p class="muted">
+              Every build writes a manifest as it goes, so this list survives a
+              reload and a restart of the Companion.
+            </p>
+            <ul id="build-history" class="rows" aria-label="Past builds"></ul>
+          </div>
+        </section>
+
+        <!-- Run ---------------------------------------------------------- -->
+        <section id="area-run" class="area" aria-labelledby="area-heading" hidden>
+          <p class="lede">
+            An engine you already have, started as a supervised job. The
+            Companion never ships a game or its data; it starts a program on
+            your machine and records exactly what it started.
+          </p>
+
+          <div class="panel">
+            <div class="panel-head">
+              <h3>Engine</h3>
+              <button type="button" id="run-refresh" class="secondary">Refresh</button>
+            </div>
+            <div class="field">
+              <label for="run-engine">Installed engine profile</label>
+              <select id="run-engine"></select>
+            </div>
+            <div id="run-engine-detail"></div>
+          </div>
+
+          <div class="panel" id="run-setup-panel">
+            <h3>Set up this engine on this machine</h3>
+            <p class="muted">
+              These are the parts that are about <em>your</em> computer. They are
+              recorded separately from the profile, and are never part of a
+              profile you export.
+            </p>
+            <div id="run-binding-fields"></div>
+            <div class="row">
+              <button type="button" id="run-detect">Look for installed games</button>
+              <button type="button" id="run-save-binding" class="primary">Save setup</button>
+              <button type="button" id="run-forget" class="danger">Forget this setup</button>
+            </div>
+            <ul id="run-detected" class="rows" aria-label="Detected game directories"></ul>
+            <p id="run-setup-message" class="message" role="alert"></p>
+          </div>
+
+          <div class="panel">
+            <h3>Start</h3>
+            <div class="row">
+              <div class="field">
+                <label for="run-action">What to do</label>
+                <select id="run-action"></select>
+              </div>
+              <div class="field">
+                <label for="run-map">Map</label>
+                <input id="run-map" type="text" placeholder="e1m1" />
+              </div>
+              <div class="field">
+                <label for="run-mod">Mod / package directory <span class="hint">(optional)</span></label>
+                <input id="run-mod" type="text" placeholder="mymod" />
+              </div>
+            </div>
+            <div class="row" id="run-server-row" hidden>
+              <div class="field">
+                <label for="run-server-host">Server address</label>
+                <input id="run-server-host" type="text" placeholder="quake.example.net" />
+              </div>
+              <div class="field">
+                <label for="run-server-port">Port</label>
+                <input id="run-server-port" type="text" inputmode="numeric" placeholder="26000" />
+              </div>
+            </div>
+            <p id="run-session-note" class="muted"></p>
+            <div class="row">
+              <button type="button" id="run-preview">Show the exact command</button>
+              <button type="button" id="run-launch" class="primary">Start</button>
+            </div>
+            <p id="run-message" class="message" role="alert"></p>
+            <div id="run-preview-out" class="preview" hidden></div>
+          </div>
+        </section>
+
+        <!-- Profiles ----------------------------------------------------- -->
+        <section id="area-profiles" class="area" aria-labelledby="area-heading" hidden>
+          <p class="lede">
+            A profile describes a tool or an engine: what it is, what it may do,
+            and how to start it. Reading one is inert — nothing here can run
+            until you have read what it asks for and approved it.
+          </p>
+
+          <div class="panel">
+            <div class="panel-head">
+              <h3>Installed profiles</h3>
+              <button type="button" id="profiles-refresh" class="secondary">Refresh</button>
+            </div>
+            <div class="field">
+              <label for="profiles-kind">Kind</label>
+              <select id="profiles-kind">
+                <option value="">All</option>
+                <option value="tool">Tools</option>
+                <option value="engine">Engines</option>
+                <option value="pipeline">Pipelines</option>
+              </select>
+            </div>
+            <p id="profiles-message" class="message" role="status"></p>
+            <ul id="profiles-list" class="cards" aria-label="Installed profiles"></ul>
+          </div>
+
+          <div class="panel" id="profile-detail-panel" hidden>
+            <div class="panel-head">
+              <h3 id="profile-detail-title">Profile</h3>
+              <button type="button" id="profile-detail-close" class="secondary">Close</button>
+            </div>
+            <div id="profile-detail"></div>
+          </div>
+
+          <div class="panel">
+            <h3>New profile</h3>
+            <p class="muted">
+              Start from a profile that has been tested, then change what is
+              different about yours. The document is composed and checked by the
+              Companion, so what you see below is the real thing rather than a
+              preview of one.
+            </p>
+            <ol class="wizard-steps" id="wizard-steps">
+              <li aria-current="step"><span class="step-number">1</span> Kind and template</li>
+              <li><span class="step-number">2</span> Identity</li>
+              <li><span class="step-number">3</span> Program and actions</li>
+              <li><span class="step-number">4</span> Permissions and review</li>
+            </ol>
+
+            <div class="wizard-step" id="wizard-step-1">
+              <div class="row">
+                <div class="field">
+                  <label for="wizard-kind">What are you describing?</label>
+                  <select id="wizard-kind">
+                    <option value="engine">A game engine</option>
+                    <option value="tool">A build tool</option>
+                  </select>
+                </div>
+                <div class="field grow">
+                  <label for="wizard-template">Start from</label>
+                  <select id="wizard-template"></select>
+                </div>
+              </div>
+              <p id="wizard-template-note" class="muted"></p>
+            </div>
+
+            <div class="wizard-step" id="wizard-step-2">
+              <div class="row">
+                <div class="field grow">
+                  <label for="wizard-id">Profile id <span class="hint">(namespaced and permanent)</span></label>
+                  <input id="wizard-id" type="text" placeholder="me.engine.my-quake" />
+                </div>
+                <div class="field">
+                  <label for="wizard-version">Version</label>
+                  <input id="wizard-version" type="text" placeholder="1.0.0" />
+                </div>
+              </div>
+              <div class="row">
+                <div class="field grow">
+                  <label for="wizard-name">Name</label>
+                  <input id="wizard-name" type="text" placeholder="My Quake build" />
+                </div>
+              </div>
+              <div class="field">
+                <label for="wizard-summary">Summary <span class="hint">(one line, shown in lists)</span></label>
+                <input id="wizard-summary" type="text" />
+              </div>
+              <div class="row">
+                <div class="field grow">
+                  <label for="wizard-publisher">Publisher</label>
+                  <input id="wizard-publisher" type="text" placeholder="Your name" />
+                </div>
+                <div class="field">
+                  <label for="wizard-license">Licence (SPDX)</label>
+                  <input id="wizard-license" type="text" placeholder="GPL-2.0-or-later" />
+                </div>
+              </div>
+            </div>
+
+            <div class="wizard-step" id="wizard-step-3">
+              <div class="row" id="wizard-engine-fields">
+                <div class="field">
+                  <label for="wizard-runtime">Engine runtime id</label>
+                  <input id="wizard-runtime" type="text" placeholder="quakespasm" />
+                </div>
+                <div class="field">
+                  <label for="wizard-engine-version">Engine version</label>
+                  <input id="wizard-engine-version" type="text" placeholder="0.94.x" />
+                </div>
+              </div>
+              <div id="wizard-executables"></div>
+              <fieldset id="wizard-actions-fieldset">
+                <legend>What this program can do</legend>
+                <p class="muted">
+                  Leave out anything your build does not do. A profile says
+                  "this engine cannot host a dedicated server" by not offering
+                  the action, never by offering one that does something else.
+                </p>
+                <div id="wizard-actions"></div>
+              </fieldset>
+            </div>
+
+            <div class="wizard-step" id="wizard-step-4">
+              <div id="wizard-review"></div>
+              <details id="wizard-json-details">
+                <summary>Advanced: the document itself</summary>
+                <p class="muted">
+                  This is the whole profile, canonically encoded — the same bytes
+                  its digest covers. Edit it here, or paste one somebody sent
+                  you, then check it.
+                </p>
+                <label class="visually-hidden" for="wizard-json">Profile document</label>
+                <textarea id="wizard-json" rows="18" spellcheck="false"></textarea>
+                <div class="row">
+                  <button type="button" id="wizard-check-json">Check this document</button>
+                  <button type="button" id="wizard-copy-json" class="secondary">Copy</button>
+                  <button type="button" id="wizard-download-json" class="secondary">Save to a file…</button>
+                  <button type="button" id="wizard-load-json" class="secondary">Load from a file…</button>
+                </div>
+              </details>
+              <div class="row">
+                <button type="button" id="wizard-import" class="primary">Install this profile</button>
+                <label class="check">
+                  <input type="checkbox" id="wizard-replace" />
+                  Replace the installed profile with the same id
+                </label>
+              </div>
+              <p id="wizard-message" class="message" role="alert"></p>
+            </div>
+
+            <div class="row wizard-nav">
+              <button type="button" id="wizard-back" class="secondary">Back</button>
+              <button type="button" id="wizard-next">Next</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Jobs --------------------------------------------------------- -->
+        <section id="area-jobs" class="area" aria-labelledby="area-heading" hidden>
+          <p class="lede">
+            Every program the Companion has run, with the exact command, the
+            exit status and the output. This list is read from disk: it is the
+            same after a reload and after a restart.
+          </p>
+
+          <div class="panel">
+            <div class="panel-head">
+              <h3>Recent actions in this window</h3>
+              <button type="button" id="activity-clear" class="secondary">Clear this list</button>
+            </div>
+            <p class="muted">
+              What this window has asked the Companion to do, and what it
+              answered. It is a convenience — the record that matters is the job,
+              the build or the file each line points at.
+            </p>
+            <ol id="activity-log" class="rows" aria-label="Recent actions"></ol>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head">
+              <h3>Jobs</h3>
+              <button type="button" id="jobs-refresh" class="secondary">Refresh</button>
+            </div>
+            <div class="row">
+              <div class="field">
+                <label for="jobs-state">State</label>
+                <select id="jobs-state">
+                  <option value="">All</option>
+                  <option value="queued">Queued</option>
+                  <option value="running">Running</option>
+                  <option value="succeeded">Succeeded</option>
+                  <option value="failed">Failed</option>
+                  <option value="cancelled">Cancelled</option>
+                  <option value="interrupted">Interrupted</option>
+                </select>
+              </div>
+            </div>
+            <p id="jobs-message" class="message" role="status"></p>
+            <ul id="jobs-list" class="rows" aria-label="Jobs"></ul>
+          </div>
+
+          <div class="panel" id="job-detail-panel" hidden>
+            <div class="panel-head">
+              <h3 id="job-detail-title">Job</h3>
+              <button type="button" id="job-detail-close" class="secondary">Close</button>
+            </div>
+            <div id="job-detail"></div>
+          </div>
+        </section>
+
+        <!-- Settings ----------------------------------------------------- -->
+        <section id="area-settings" class="area" aria-labelledby="area-heading" hidden>
+          <p class="lede">
+            Where the Companion talks to, and where it keeps things. Nothing in
+            this program has a built-in address for another component: an
+            address that is not set is an error you have to fix, never a guess.
+          </p>
+
+          <div class="panel">
+            <h3>auto-pigeon-backend</h3>
+            <div class="field">
+              <label for="settings-aub">Address <span class="hint">(written as scheme://host:port)</span></label>
+              <input id="settings-aub" type="url" placeholder="where your backend is served" />
+            </div>
+            <p id="settings-aub-note" class="muted"></p>
+            <div class="row">
+              <div class="field">
+                <label for="settings-port">GUI port <span class="hint">(0 lets the system choose)</span></label>
+                <input id="settings-port" type="number" min="0" max="65535" />
+              </div>
+              <div class="field">
+                <label for="settings-concurrency">Jobs at once <span class="hint">(0 lets the executor choose)</span></label>
+                <input id="settings-concurrency" type="number" min="0" max="64" />
+              </div>
+            </div>
+            <div class="row">
+              <button type="button" id="settings-save" class="primary">Save</button>
+            </div>
+            <p id="settings-message" class="message" role="alert"></p>
+          </div>
+
+          <div class="panel">
+            <h3>Where things are</h3>
+            <p class="muted">
+              These come from the configuration file and this operating system's
+              conventions. Changing one is a config-file edit and a restart:
+              a running job has files open under them.
+            </p>
+            <dl id="settings-paths" class="paths"></dl>
+          </div>
+
+          <div class="panel">
+            <h3>Extractor</h3>
+            <p id="extractor-state" class="muted">Checking…</p>
+            <div class="row">
+              <button type="button" id="extractor-version">Read the extractor version</button>
+            </div>
+            <pre id="extractor-output" class="output"></pre>
+          </div>
+        </section>
+      </main>
+    </div>
 
     <footer>
       <p class="muted">
-        External map-building tools are separate GPL-2.0 programs, downloaded and
-        run as their own processes. See THIRD_PARTY_NOTICES.md.
+        External map-building tools and game engines are separate programs under
+        their own licences, downloaded and run as their own processes. See
+        THIRD_PARTY_NOTICES.md.
       </p>
     </footer>
 
+    <!--
+      The screen-reader announcement channel. Polite, so it never interrupts,
+      and it is the only place in this page that says something and then stops
+      saying it — everything a user has to be able to check later is written
+      into a list that stays.
+    -->
+    <p id="live-region" class="visually-hidden" role="status" aria-live="polite"></p>
+
+    <script src="core.js"></script>
+    <script src="library.js"></script>
+    <script src="build.js"></script>
+    <script src="run.js"></script>
+    <script src="profiles.js"></script>
+    <script src="jobs.js"></script>
+    <script src="settings.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

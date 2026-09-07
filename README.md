@@ -197,6 +197,117 @@ What it guarantees:
 - a malformed config is refused rather than replaced;
 - running it again changes nothing.
 
+## The desktop interface
+
+Running the binary with no arguments starts the local server and opens your
+browser at it. There is no window toolkit anywhere in this program: the window
+is your own browser, which is what keeps the binary CGO-free and buildable for
+all six targets with plain `go build`. Everything the page can do, the CLI can
+do too, through the same services — there is no browser-only path into anything.
+
+The page has six areas, and the order is the order of a first run.
+
+| Area | What it is for |
+| --- | --- |
+| **Library** | Your maps and assets on auto-pigeon-backend, and the exact revisions this machine has downloaded and verified. |
+| **Build** | Compiling: which pipeline, which tool provides each stage, the exact command, live output, artifacts. |
+| **Run** | Starting a game: which engine, where it is on this machine, which map or package, and the exact command. |
+| **Profiles** | Reading what a tool or engine asks to be allowed to do, approving it, and writing your own. |
+| **Jobs** | Everything that has run, with its command, its exit status and its output. |
+| **Settings** | Where the backend is, and where the Companion keeps things. |
+
+### The default path through it
+
+Sign in → choose an exact map revision in **Library** and download it → in
+**Build**, pick a pipeline and press Build → in **Run**, pick the engine you
+have and start it. Expert controls — a step's options, the raw profile document,
+a hand-written engine — are all reachable and none of them are on that path.
+
+### Two halves of every profile, kept apart
+
+A profile is portable: it describes a program, and it contains no path on
+anybody's machine. What it does *not* contain is where that program is on
+**your** machine, which directories it may read, and whether you have approved
+it. That half is a **local binding**, and the interface never mixes the two —
+the profile panel shows them as separate sections, and exporting a profile
+carries none of your paths with it.
+
+Every profile carries a trust state, shown as a badge with a word in it rather
+than as a colour:
+
+| Badge | What it means |
+| --- | --- |
+| `builtin` | Shipped inside this build of the Companion. Trusting it is the same act as trusting the program. |
+| `verified` | Signed by an Auto-Pigeon catalogue key, covering this document's exact digest. |
+| `community` | Came from somewhere else. It may be excellent; nothing here knows. |
+| `local` | Written or edited on this machine, or found in your profile folder. Not a synonym for safe. |
+
+A `builtin` or `verified` profile needs no approval from you. Anything else
+cannot run until you have read what it asks for and approved it, against that
+exact document's digest — importing one grants nothing, and a document that
+changes after you approved it needs approving again. This is enforced in
+`internal/profile`, not in the page: the API has no route that skips it.
+
+### The profile wizard
+
+**Profiles → New profile** starts from a profile that has been tested, changes
+what is different about yours, and shows you the result. Raw JSON is not the
+normal path: four steps of ordinary form fields are, and the JSON view is behind
+a disclosure at the end for people who want it.
+
+The document is composed and validated by the Companion, never by the page — so
+what the advanced view shows is the real document, canonically encoded, with the
+digest it will actually have. Beside it is a **normalized diff against the
+template**, which is how you see what you changed rather than what you meant to.
+
+That view is also the import and export path: paste a profile somebody sent you,
+press *Check this document*, read what it asks for, and install it. Setting up an
+engine nobody anticipated needs no change to this program's source.
+
+### Choosing files without giving the browser your disk
+
+A browser cannot hand a page a *path*, and it certainly cannot hand it a
+directory. So the Companion opens the desktop's own file chooser — `zenity` or
+`kdialog` on Linux and the BSDs, `osascript` on macOS, PowerShell's dialogs on
+Windows — and the one path you picked comes back.
+
+There is no directory listing, no `stat` and no completion in the API. The page
+is never given the filesystem; it is given the answer to one question a person
+answered in a dialog they saw.
+
+On a machine with no chooser installed — a headless server, a minimal container
+— the **Browse** button is not drawn at all, and the text field beside it is the
+whole answer. A typed path goes through exactly the same validation the dialog's
+answer does: absolute, no control characters, and of the kind that was asked
+for, with the reason stated when it is not.
+
+### Nothing important is only a message
+
+A message that appears and disappears is not evidence. Every download, build,
+launch and approval leaves a record that is read back from disk — the cached
+revision list, the build manifest, the job, the binding file — and the page
+shows those, not a memory of what it was told. Reloading the page, or restarting
+the Companion, loses nothing and re-runs nothing.
+
+The Jobs area additionally keeps *Recent actions in this window*: a list of what
+this window asked for and what it was told. It is a convenience, every line
+points at something durable, and clearing it deletes nothing.
+
+### Keyboard, screen readers, and small windows
+
+Every control is a native `button`, `input` or `select`, so all of them are in
+the tab order. The first thing focus reaches is a **Skip to the main content**
+link. Switching area moves focus to the new heading, so a keyboard or
+screen-reader user lands on the content that changed rather than being left
+behind it. Status changes are announced through a polite live region; errors
+carry the word *Error* as well as a colour.
+
+The whole first-run journey — sign in, download, approve, build, launch — is
+tested in a real headless browser at 1280 pixels and at the narrowest window
+Chrome will open, and neither one scrolls sideways. Animation is confined to one
+spinner, which stops moving under `prefers-reduced-motion` and always has text
+beside it saying what is happening.
+
 ## Usage
 
 Launching with **no subcommand** is GUI mode — it starts the server and opens
@@ -2346,6 +2457,147 @@ $ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/auth/logo
 {"authenticated":false}
 ```
 
+The areas of the page are the same API. Settings, so a machine with no backend
+address configured can be given one without editing a file and restarting:
+
+```console
+$ curl -s -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/settings
+{"aub_base_url":"","port":8791,"job_concurrency":0,"aub_effective_url":"",
+ "config_path":"/home/you/.config/auto-pigeon-companion/config.json",
+ "tool_cache_dir":"/home/you/.cache/auto-pigeon-companion/tools",
+ "jobs_dir":"/home/you/.cache/auto-pigeon-companion/jobs",
+ "profiles_dir":"/home/you/.config/auto-pigeon-companion/profiles",
+ "builds_dir":"/home/you/.cache/auto-pigeon-companion/builds",
+ "asset_cache_dir":"/home/you/.cache/auto-pigeon-companion/assets",
+ "bindings_path":"/home/you/.config/auto-pigeon-companion/bindings.json",
+ "offline":false,"path_helper":"zenity"}
+
+$ curl -s -X PUT -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/settings \
+    -d '{"aub_base_url":"https://aub.example","port":8791,"job_concurrency":0}' | head -c 60
+{"aub_base_url":"https://aub.example","port":8791, …
+
+$ curl -s -X PUT -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/settings \
+    -d '{"aub_base_url":"aub.example","port":8791,"job_concurrency":0}'
+{"error":"\"aub.example\" has no scheme; write it as http://host:port or https://host"}
+```
+
+Choosing a path. `pick` opens the desktop's own chooser and returns the one path
+the user picked; `validate` checks a typed one the same way. On a machine with no
+chooser the pick route says so, by name, and the caller falls back to the text
+field rather than to a guess:
+
+```console
+$ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/paths/pick \
+    -d '{"kind":"directory","title":"Where is Quake installed?"}'
+{"cancelled":false,"helper":"zenity","path":"/games/quake"}
+
+$ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/paths/pick \
+    -d '{"kind":"directory"}'          # the user pressed Cancel
+{"cancelled":true,"helper":""}
+
+$ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/paths/pick \
+    -d '{"kind":"directory"}'          # a machine with no chooser installed
+{"error":"pathpick: this machine has no file chooser the Companion can open; type the path instead"}
+
+$ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/paths/validate \
+    -d '{"kind":"directory","path":"quake"}'
+{"error":"\"quake\" is not an absolute path; a relative one would depend on where the Companion
+ happens to be running","valid":false}
+```
+
+The Library. A catalogue read needs a session; the cached list needs neither a
+session nor a network, because it is read off this machine's disk:
+
+```console
+$ curl -s -H "X-AUCOM-Token: $TOKEN" 'http://127.0.0.1:8791/api/v1/library/catalog?type=map' | head -c 110
+{"api_version":"aucom.companion/1.0","scope":"owned","items":[{"asset_type":"map","asset_id":"map-e1m1", …
+
+$ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/library/sync \
+    -d '{"asset_type":"map","asset_id":"map-e1m1","revision":"rev-000004"}'
+{"already_complete":false,"bytes_fetched":2914,"fetched":1,"key":"rev-000004","record":{…},"reused":0}
+
+$ curl -s -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/library/cached | head -c 90
+{"items":[{"key":"rev-000004","record":{"schema_version":"aucom.asset-revision/1.0", …
+```
+
+Approving a profile, and saying where its program is. The digest is required and
+must be the document on disk: an approval for something that has changed since
+it was displayed is an approval of something nobody read.
+
+```console
+$ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" \
+    http://127.0.0.1:8791/api/v1/profiles/auto-pigeon.ericw-tools.q1/grant \
+    -d '{"digest":"sha256:not-the-one-you-read"}'
+{"error":"this approval is for sha256:not-the-one-you-read and the document on this machine is now
+ sha256:0a318124692ae01fb58f9ca132edc64e4a57315bb0b6d86c67b1a04ca82d4ef2; read it again before
+ approving it"}
+
+$ DIGEST=$(curl -s -H "X-AUCOM-Token: $TOKEN" \
+    http://127.0.0.1:8791/api/v1/profiles/auto-pigeon.ericw-tools.q1 | grep -o '"digest":"[^"]*"' | head -1 | cut -d'"' -f4)
+
+$ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" \
+    http://127.0.0.1:8791/api/v1/profiles/auto-pigeon.ericw-tools.q1/grant \
+    -d "{\"digest\":\"$DIGEST\"}" | grep -o '"authorized":[a-z]*'
+"authorized":true
+
+$ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" \
+    http://127.0.0.1:8791/api/v1/profiles/auto-pigeon.engine.quakespasm/bind \
+    -d '{"executables":{"engine":"/opt/quakespasm/quakespasm"},
+         "roots":{"game_root":"/games/quake","content_root":"/home/you/maps"}}' | head -c 70
+{"actions":[…],"authorized":true,"binding":{"executables":{"engine":"/opt/quakespasm/quakespasm"}, …
+```
+
+Writing a profile. The wizard's forms post fields; the Companion composes,
+validates and digests the document and returns it with a normalized diff against
+the template it started from. Nothing is written until you import it, and
+importing grants nothing:
+
+```console
+$ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/profiles/compose \
+    -d '{"template":"auto-pigeon.engine.quakespasm","id":"me.engine.my-quake",
+         "name":"My Quake build","version":"1.0.0","runtime":"my-quake",
+         "engine_version":"1.2.3","executables":{"engine":"my-quake{platform.exe_suffix}"},
+         "actions":["play_map","play_package"]}' | head -c 100
+{"actions":["play_map","play_package"],"diff":{…},"digest":"sha256:…","document":{…},
+ "from":"auto-pigeon.engine.quakespasm","id":"me.engine.my-quake","kind":"engine", …
+
+$ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/profiles/compose \
+    -d '{"template":"auto-pigeon.engine.quakespasm","actions":["warp_to_hyperspace"]}'
+{"error":"this template has no warp_to_hyperspace action; it offers play_map, play_package,
+ join_server, host_listen. An action describes something the program actually does, so one has to be
+ written rather than named"}
+
+$ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/profiles/import \
+    -d "{\"document\":$(cat my-quake.engine.json)}" | grep -o '"trust":"[a-z]*"'
+"trust":"local"
+```
+
+Building. The POST returns as soon as the build has an identity; everything after
+that is read back from the manifest on disk, which is why a reload loses nothing:
+
+```console
+$ curl -s -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/build/pipelines | head -c 120
+{"items":[{"digest":"sha256:5606f106…","id":"auto-pigeon.q1.fast-preview","inputs":[{ …
+
+$ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/build/runs \
+    -d '{"pipeline":"auto-pigeon.q1.normal","label":"first pass",
+         "inputs":{"source_map":"aub:map/map-e1m1@rev-000004#e1m1.map"}}'
+{"build":"20260907T134410Z-10b2d970","label":"first pass","pipeline":"auto-pigeon.q1.normal","started":true}
+
+$ curl -s -H "X-AUCOM-Token: $TOKEN" \
+    http://127.0.0.1:8791/api/v1/build/runs/20260907T134410Z-10b2d970 | head -c 110
+{"live":true,"log":"---- qbsp ----\n","manifest":{"schema_version":"aucom.build/1.1","state":"running", …
+
+$ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" \
+    http://127.0.0.1:8791/api/v1/build/runs/20260907T134410Z-10b2d970/cancel
+{"build":"20260907T134410Z-10b2d970","cancelled_jobs":["20260907T134411Z-2b1f…"]}
+```
+
+A build is cancelled by cancelling the job its current stage *is*, through the
+same executor `companion job cancel` uses — so the process tree gets the same
+SIGTERM then SIGKILL, the stage records that it was cancelled, and the manifest
+is completed rather than abandoned.
+
 | Route | Method | Purpose |
 | --- | --- | --- |
 | `/` | GET | the embedded frontend, carrying this run's API token |
@@ -2363,13 +2615,46 @@ $ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/auth/logo
 | `/api/v1/jobs/{id}/logs` | GET | `?stream=stdout\|stderr`, `?raw=1` for the bytes the program wrote |
 | `/api/v1/jobs/{id}/artifacts` | GET | what it produced |
 | `/api/v1/jobs/{id}/artifacts/{name}` | GET | download one |
-| `/api/v1/profiles` | GET | what can be run on this machine |
-| `/api/v1/profiles/{id}` | GET | one profile, with its permissions |
+| `/api/v1/profiles` | GET | what can be run on this machine; `?kind=tool\|engine\|pipeline` |
+| `/api/v1/profiles/templates` | GET | the tested documents the wizard starts from |
+| `/api/v1/profiles/{id}` | GET | one profile, its permissions, and this machine's binding |
+| `/api/v1/profiles/{id}/document` | GET | export: the canonical bytes its digest covers |
 | `/api/v1/profiles/validate` | POST | check a document without importing it |
+| `/api/v1/profiles/compose` | POST | apply the wizard's fields to a template, validate, digest, diff |
+| `/api/v1/profiles/diff` | POST | a normalized diff against the installed document, and whether it escalates |
+| `/api/v1/profiles/import` | POST | write a document into the profile directory. Grants nothing |
+| `/api/v1/profiles/{id}/bind` | POST | where its programs are here, which roots it may reach, and an approval |
+| `/api/v1/profiles/{id}/unbind` | POST | forget this machine's setup. Deletes no files |
+| `/api/v1/profiles/{id}/grant` | POST | approve what it asks for, against one exact digest |
+| `/api/v1/profiles/{id}/withdraw` | POST | take that approval back. The paths stay |
+| `/api/v1/profiles/{id}/remove` | POST | delete an imported document. Built-in ones are refused |
+| `/api/v1/engines` | GET | engine profiles, each with its binding and what is stopping it, per action |
+| `/api/v1/engines/{id}` | GET | one of them |
+| `/api/v1/engines/detect` | GET | game directories that look installed. Proposals; it writes nothing |
+| `/api/v1/library/capabilities` | GET | what the backend offers |
+| `/api/v1/library/catalog` | GET | the account's assets; `?type=`, `?name=`, `?limit=`, `?cursor=` |
+| `/api/v1/library/assets/{type}/{id}` | GET | one asset, its revisions, and which are already here |
+| `/api/v1/library/assets/{type}/{id}/{rev}` | GET | one revision with its file list |
+| `/api/v1/library/sync` | POST | fetch one exact revision, verifying every file |
+| `/api/v1/library/cached` | GET | what this machine holds. No session, no network |
+| `/api/v1/build/pipelines` | GET | what can be built, and what is missing when something cannot be |
+| `/api/v1/build/preview` | POST | resolve every stage into its exact command, start nothing |
+| `/api/v1/build/runs` | GET, POST | past builds; start one |
+| `/api/v1/build/runs/{id}` | GET | the manifest, plus the live log while it is running |
+| `/api/v1/build/runs/{id}/cancel` | POST | stop the stage that is running |
+| `/api/v1/build/runs/{id}/output/{name}` | GET | download something it published |
+| `/api/v1/settings` | GET, PUT | the backend address, the port, job concurrency, and where things are |
+| `/api/v1/paths/pick` | POST | open the desktop's file chooser and return the one path chosen |
+| `/api/v1/paths/validate` | POST | check a typed path the same way |
 
 The `/api/v1` routes are versioned because `companion job` and your own scripts
 drive them; the unversioned `/api` routes are the page's own and are not a
 contract.
+
+There is deliberately **no route that lists a directory, stats a path or
+completes one**. The page is never given the filesystem: it can ask a person a
+question in a dialog they see, and receive the answer. Keeping that surface small
+is what limits what a mistake behind the guard could cost.
 
 **What the token does not cover, said plainly.** The page has to be able to
 load, so `GET /` is unauthenticated and carries the token — which means a

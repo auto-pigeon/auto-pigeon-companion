@@ -128,8 +128,8 @@ var commands = []Command{
 		Run:     runAcquire,
 	},
 	{
-		Name: "catalog", Usage: "keygen | sign | verify | show | status",
-		Summary: "sign, verify and inspect the acquisition catalogue and its keyring",
+		Name: "catalog", Usage: "keygen | sign | verify | show | status | release",
+		Summary: "sign, verify and inspect the acquisition catalogue, its keyring and its compatibility manifest",
 		Run:     runCatalog,
 	},
 	{
@@ -143,8 +143,8 @@ var commands = []Command{
 		Run:     runLaunch,
 	},
 	{
-		Name: "extractor", Usage: "version",
-		Summary: "run the bundled auto-pigeon-extractor (AUE)",
+		Name: "extractor", Usage: "status | plan | install | version",
+		Summary: "obtain and run the separately licensed auto-pigeon-extractor (AUE)",
 		Run:     runExtractor,
 	},
 	{

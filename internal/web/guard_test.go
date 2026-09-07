@@ -150,10 +150,14 @@ func TestAPageOnAnotherSiteIsRefusedEvenWithAToken(t *testing.T) {
 // somebody kept up to date by hand.
 func TestEveryAPIRouteIsGuarded(t *testing.T) {
 	server, _ := newTestServer(t, nil)
-	patterns := []string{"GET /api/status", "POST /api/auth/login", "POST /api/auth/logout",
-		"GET /api/launch-configs", "POST /api/launch", "GET /api/aue/version"}
-	for pattern := range server.jobAPI() {
+	// The whole registered surface, from the one table the routes come from.
+	// A route added without the guard cannot be added without failing here.
+	patterns := make([]string, 0)
+	for pattern := range server.api() {
 		patterns = append(patterns, pattern)
+	}
+	if len(patterns) < 30 {
+		t.Fatalf("only %d API routes were registered; the table looks truncated", len(patterns))
 	}
 	for _, pattern := range patterns {
 		method, path, _ := strings.Cut(pattern, " ")
@@ -161,6 +165,8 @@ func TestEveryAPIRouteIsGuarded(t *testing.T) {
 		// handler would find that it does not exist.
 		path = strings.ReplaceAll(path, "{id}", "20260906T000000Z-0d13ed8e44d8")
 		path = strings.ReplaceAll(path, "{name}", "result")
+		path = strings.ReplaceAll(path, "{type}", "map")
+		path = strings.ReplaceAll(path, "{rev}", "current")
 
 		t.Run(pattern, func(t *testing.T) {
 			r := request(t, server, method, path, "{}")

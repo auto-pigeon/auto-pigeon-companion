@@ -180,17 +180,43 @@ func runServe(env *Env, args []string) int {
 		}
 	}()
 
+	// The same three paths every other command resolves, so a `--config`
+	// pointing somewhere deliberate keeps the GUI's profiles, bindings and
+	// builds beside it rather than reaching into the real machine's.
+	_, profilesDir, bindingsPath, err := statePaths(env, settings)
+	if err != nil {
+		return fail(env, err)
+	}
+	buildsPath, err := buildsDir(env, settings)
+	if err != nil {
+		return fail(env, err)
+	}
+	assetCache, err := settings.AssetCache()
+	if err != nil {
+		return fail(env, err)
+	}
+
 	server, err := web.NewServer(web.Options{
-		Version:    env.Version,
-		Config:     settings,
-		AUE:        runner,
-		Jobs:       service,
-		Token:      token,
+		Version: env.Version,
+		Config:  settings,
+		AUE:     runner,
+		Jobs:    service,
+		Token:   token,
+		Paths: web.Paths{
+			Profiles:   profilesDir,
+			Bindings:   bindingsPath,
+			Builds:     buildsPath,
+			AssetCache: assetCache,
+		},
 		SaveConfig: func(updated config.Config) error { return saveSettings(env, updated) },
 	})
 	if err != nil {
 		return fail(env, err)
 	}
+	// Every build this process started stops with it. A Companion that quits
+	// leaving a compiler running is a Companion that has lost track of a
+	// process the user cannot see.
+	defer server.Close()
 
 	listener, err := web.Listen(chosen)
 	if err != nil {
