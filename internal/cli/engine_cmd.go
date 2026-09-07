@@ -373,12 +373,23 @@ func engineBind(env *Env, args []string) int {
 			fmt.Fprintf(env.Stderr, "error: %s is not a program on this machine\n", absolute)
 			return 1
 		}
+		// One `--engine` sets one executable. A profile that declared two —
+		// a client and a dedicated-server binary, say — would need one path
+		// each, and pointing both at the same file would be a binding that
+		// looks complete and starts the wrong program.
+		if len(document.Executables) != 1 {
+			names := make([]string, 0, len(document.Executables))
+			for _, executable := range document.Executables {
+				names = append(names, executable.Name)
+			}
+			fmt.Fprintf(env.Stderr, "error: %s declares %d executables (%s); --engine sets one, so this profile needs a flag per executable that does not exist yet\n",
+				document.ID, len(document.Executables), strings.Join(names, ", "))
+			return 2
+		}
 		if local.Executables == nil {
 			local.Executables = map[string]string{}
 		}
-		for _, executable := range document.Executables {
-			local.Executables[executable.Name] = absolute
-		}
+		local.Executables[document.Executables[0].Name] = absolute
 	}
 	for _, pair := range []struct {
 		role, value string
