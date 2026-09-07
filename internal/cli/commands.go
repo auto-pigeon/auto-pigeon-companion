@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/aub"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/aue"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/launch"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/web"
@@ -135,11 +134,13 @@ func runServe(env *Env, args []string) int {
 		return code
 	}
 
-	// The extractor runner is built here and closed when serve returns, so a
-	// process that never touches AUE never extracts anything and a process
-	// that does cleans up after itself.
-	runner := aue.NewEmbeddedRunner()
-	defer runner.Close()
+	// The extractor runner is built here and resolves LAZILY, so a process that
+	// never touches the extractor never fetches a catalogue — and a server does
+	// not have to reach the network before it can listen. See
+	// internal/aue.LazyRunner.
+	runner := extractorRunner(env, func(format string, args ...any) {
+		fmt.Fprintf(env.Stderr, format+"\n", args...)
+	})
 
 	ctx, stop := signalContext()
 	defer stop()
@@ -444,41 +445,6 @@ func runLaunch(env *Env, args []string) int {
 	}
 	fmt.Fprintf(env.Stderr, "error: %s\n", finished.Error)
 	return 1
-}
-
-// runExtractor reaches the bundled AUE binary from the command line.
-//
-// The GUI has the same capability on GET /api/aue/version. Both go through
-// internal/aue rather than spawning a process themselves, and both are
-// deliberately narrow: one named operation per subcommand, never a
-// "run any AUE subcommand" pass-through, so every input a user can reach AUE
-// with stays something this repository validated.
-func runExtractor(env *Env, args []string) int {
-	if len(args) == 0 {
-		fmt.Fprintln(env.Stderr, "error: extractor requires a subcommand: version")
-		return 2
-	}
-	if args[0] != "version" {
-		fmt.Fprintf(env.Stderr, "error: unknown extractor subcommand %q (want version)\n", args[0])
-		return 2
-	}
-	set := newFlagSet(env, "extractor version")
-	if _, code, ok := parseFlags(env, set, args[1:]); !ok {
-		return code
-	}
-
-	runner := aue.NewEmbeddedRunner()
-	defer runner.Close()
-
-	ctx, stop := signalContext()
-	defer stop()
-
-	stdout, err := runner.Run(ctx, "version")
-	if err != nil {
-		return fail(env, err)
-	}
-	fmt.Fprintln(env.Stdout, strings.TrimSpace(string(stdout)))
-	return 0
 }
 
 // runMigrate runs the configuration migration on demand and prints its full

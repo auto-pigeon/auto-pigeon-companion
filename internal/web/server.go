@@ -314,6 +314,14 @@ type statusBody struct {
 	ToolCacheDir  string `json:"tool_cache_dir"`
 	JobsDir       string `json:"jobs_dir"`
 	AUEAvailable  bool   `json:"aue_available"`
+	// AUEVerified says whether the extractor this build would run was verified
+	// against the signed catalogue, or is an unverified developer override. It
+	// is a separate field from AUEAvailable because "there is one" and "it is
+	// the one we vouch for" are different facts, and a page that showed only
+	// the first would show a development override exactly as it shows a
+	// production install.
+	AUEVerified   bool   `json:"aue_verified"`
+	AUEProvenance string `json:"aue_provenance,omitempty"`
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
@@ -331,6 +339,11 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		baseURL = s.client.BaseURL()
 		authenticated = s.client.Authenticated()
 	}
+	verified, provenance := false, ""
+	if aue.Available(s.runner) {
+		record := s.runner.Provenance()
+		verified, provenance = record.Verified, record.Mode
+	}
 	writeJSON(w, http.StatusOK, statusBody{
 		Version:       s.version,
 		AUBBaseURL:    baseURL,
@@ -340,6 +353,8 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		ToolCacheDir:  cache,
 		JobsDir:       jobs,
 		AUEAvailable:  aue.Available(s.runner),
+		AUEVerified:   verified,
+		AUEProvenance: provenance,
 	})
 }
 
@@ -476,7 +491,7 @@ func (s *Server) handleAUEVersion(w http.ResponseWriter, r *http.Request) {
 	// override — the same thing the page says next to its disabled button.
 	// Only an extractor that exists and then fails is 502.
 	if !aue.Available(s.runner) {
-		writeError(w, http.StatusServiceUnavailable, aue.ErrNoEmbeddedBinary)
+		writeError(w, http.StatusServiceUnavailable, aue.ErrNoExtractor)
 		return
 	}
 	stdout, err := s.runner.Run(r.Context(), "version")

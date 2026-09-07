@@ -15,10 +15,19 @@ import (
 // hold one that has not been through [Verifier.Verify] — the failure mode where
 // a refactor moves a check and one path stops performing it is not available.
 type Verified struct {
-	Keyring        *Keyring
-	Catalog        *Catalog
-	KeyringSigners []string
-	CatalogSigners []string
+	Keyring *Keyring
+	Catalog *Catalog
+	// Compatibility is the manifest saying which component build this
+	// Companion should run, when the catalogue publishes one. Nil is not a
+	// fault: a catalogue that describes only tools a profile pins by name needs
+	// no such document, and a component that requires one says so when it is
+	// asked for rather than at fetch time.
+	Compatibility *Compatibility
+	// CompatibilityDigest identifies the exact document, for an install record.
+	CompatibilityDigest  string
+	CompatibilitySigners []string
+	KeyringSigners       []string
+	CatalogSigners       []string
 	// KeyringDigest and CatalogDigest identify the exact documents, for the
 	// install record and for a log a person has to reason about later.
 	KeyringDigest string
@@ -160,6 +169,55 @@ func (v *Verifier) VerifyCatalog(keyring *Keyring, envelope *Signed) (*Catalog, 
 	}
 	state.recordCatalog(&catalog, now)
 	return &catalog, signers, nil
+}
+
+// VerifyCompatibility checks a signed compatibility manifest against a keyring
+// that has itself been verified.
+//
+// The same chain, the same signing role, the same expiry rule and the same
+// serial ratchet as [Verifier.VerifyCatalog]. Deliberately so: a second trust
+// model for the document that decides WHICH build to run would be the weakest
+// link in the first one.
+//
+// It signs under [RoleCatalog] rather than a role of its own. A publisher who
+// can say "this build is downloadable and these are its bytes" is the same
+// publisher who says "this build is the one for that Companion", and a third
+// role would be a key to manage for a separation nobody needs.
+func (v *Verifier) VerifyCompatibility(keyring *Keyring, envelope *Signed) (*Compatibility, []string, error) {
+	if keyring == nil {
+		return nil, nil, fmt.Errorf("catalog: a compatibility manifest cannot be verified without a keyring")
+	}
+	state := v.state()
+	now := v.now()
+
+	payload, err := envelope.PayloadBytes()
+	if err != nil {
+		return nil, nil, err
+	}
+	var document Compatibility
+	if err := decodeStrict(payload, &document); err != nil {
+		return nil, nil, err
+	}
+	if err := checkCanonical(payload, &document); err != nil {
+		return nil, nil, err
+	}
+	signers, err := envelope.verifySignatures(payload, newKeySet(keyring.Keys, RoleCatalog, now, state.RevokedKeys))
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := document.Validate(); err != nil {
+		return nil, nil, err
+	}
+	if !now.Before(document.ExpiresAt) {
+		return nil, nil, &ExpiredError{Document: "compatibility manifest", ID: document.DocumentID,
+			Serial: document.Serial, ExpiredAt: document.ExpiresAt, Now: now}
+	}
+	if err := state.checkCompatibilitySerial(document.DocumentID, document.Serial); err != nil {
+		return nil, nil, err
+	}
+	state.recordCompatibility(&document, now)
+
+	return &document, signers, nil
 }
 
 // Verify is the whole chain: anchors vouch for the keyring, the keyring vouches

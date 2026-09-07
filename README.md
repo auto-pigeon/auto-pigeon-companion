@@ -2,8 +2,9 @@
 
 The local Auto-Pigeon runtime: one MIT-licensed desktop application that signs
 in against **AUB** ([auto-pigeon-backend][aub], a PocketBase instance), builds
-Quake maps with external map-building tools, inspects them by driving **AUE**
-([auto-pigeon-extractor][aue]) as a subprocess, and launches games.
+Quake maps with external map-building tools, inspects them by downloading,
+verifying and driving **AUE** ([auto-pigeon-extractor][aue]) as a separate
+process, and launches games.
 
 It runs as a local web app in the browser you already have, or headless from
 the command line. Both surfaces are the same binary.
@@ -56,10 +57,12 @@ Dependencies: none. `go.mod` lists no third-party modules and there is no
 `go.sum`, because everything used is in the standard library — including the
 CLI dispatcher and the AUB REST client.
 
-Neither AUE nor any map-building tool is imported as a Go library. Both are
-separate programs reached through `os/exec`. That is an architectural boundary,
-not an implementation detail: it is what keeps this repository MIT while AUE is
-AGPL-3.0 and the map tools are GPL-2.0. See [THIRD_PARTY_NOTICES.md][notices].
+Neither AUE nor any map-building tool is imported as a Go library, and neither
+is compiled into this binary. Both are separate programs, obtained separately
+against a signed catalogue and reached through `os/exec`. That is an
+architectural boundary, not an implementation detail: it is what keeps this
+repository MIT while AUE is AGPL-3.0 and the map tools are GPL-2.0. See
+[THIRD_PARTY_NOTICES.md][notices].
 
 ## Install
 
@@ -70,6 +73,9 @@ $ go build -o companion ./cmd/companion
 $ ./companion version
 0.1.0-dev
 ```
+
+That builds the Companion and nothing else. **The extractor is not part of it**
+and is obtained separately — see [Extractor](#extractor).
 
 Packaging skeletons for `.deb`/`.rpm` (nfpm), a Windows installer (Inno Setup)
 and a macOS `.app` bundle live under [`build/`](build/) and are run by hand.
@@ -151,7 +157,7 @@ signed in: no
 | --- | --- | --- |
 | `AUCOM_AUB_BASE_URL` | `internal/config` | where auto-pigeon-backend lives |
 | `AUCOM_PASSWORD` | `companion auth login` | password for a scripted login |
-| `AUCOM_AUE_BINARY` | `internal/aue` | an on-disk AUE to use instead of the embedded one |
+| `AUCOM_AUE_BINARY` | `internal/aue` | an on-disk AUE to use instead of the verified one — a local, **unverified** development override |
 | `AUCOM_JOBS_DIR` | `internal/config` | where job records, logs and artifacts live |
 | `AUCOM_PROFILES_DIR` | `internal/config` | where imported profile documents are read from |
 | `AUCOM_ASSET_CACHE_DIR` | `internal/config` | where assets synced from AUB are cached |
@@ -213,10 +219,10 @@ commands:
   package targets | preview | create | inspect | verify | extract                          build a PAK or PK3 from what a build produced, and read one somebody else made
   profile validate | show | canonicalize | digest | diff | list | schema                   read, check and compare tool, engine and pipeline profiles
   acquire plan | install | accept | list | verify | use | gc | resolve                     obtain a profile's programs from the signed catalogue, and manage the cache
-  catalog keygen | sign | verify | show | status                                           sign, verify and inspect the acquisition catalogue and its keyring
+  catalog keygen | sign | verify | show | status | release                                 sign, verify and inspect the acquisition catalogue, its keyring and its compatibility manifest
   engine list | show | detect | bind | check | preview | run | stage | unstage             set up a Quake engine you already have, and start it as a supervised job
   launch <game> [--map <name>] [--game-root <dir>] [--dry-run]                             launch a game as a supervised job, using its AUB launch config
-  extractor version                                                                        run the bundled auto-pigeon-extractor (AUE)
+  extractor status | plan | install | version                                               obtain and run the separately licensed auto-pigeon-extractor (AUE)
   migrate                                                                                  fold Launcher and older Companion configuration into the current one
   version                                                                                  print the build version
 ```
@@ -1241,18 +1247,116 @@ generated stand-in by existing — the catalog prefers one to the other.
 
 ### Extractor
 
+**Auto-Pigeon Extractor is a separate program under its own licence (AGPL-3.0).**
+It is not part of this application, it is not inside this binary, and this
+repository claims no licence over it. It is downloaded against the signed
+catalogue, at the version a signed compatibility manifest names for this
+Companion on this platform, and run as its own process.
+
+It used to be embedded — the build copied a platform's AUE binary into
+`internal/aue/embedded/` and `//go:embed` compiled it in. Three things were
+wrong with that, and they are different kinds of wrong:
+
+1. **Licensing.** An MIT artifact contained and appeared to cover an AGPL
+   program, and a user holding the Companion had no way to tell whose bytes they
+   were running or where to get their source.
+2. **Verification.** Nothing checked the staged binary. `//go:embed` resolves at
+   compile time, so a stale or wrong-platform file shipped silently and failed
+   on the user's machine.
+3. **Coupling.** A patched extractor needed a new Companion release.
+
 ```console
+$ companion extractor status
+extractor: Auto-Pigeon Extractor 1.171, verified
+  required: 1.171 (invocation protocol 1.0 or later)
+
+$ companion extractor plan
+Auto-Pigeon Extractor 1.171, protocol 1.0 or later
+already installed: 1.171 (sha256:49170ba6ee5d2200…)
+
+$ companion extractor install
+Auto-Pigeon Extractor 1.171 (linux/amd64), verified
+/home/you/.cache/auto-pigeon-companion/packages/sha256-49170ba6…/files/auto-pigeon-extractor
+digest  sha256:49170ba6ee5d220011c08ab010eaa84d784190878db5e8b28d311728f12a75f6
+signed by k-9f2a… in catalogue auto-pigeon serial 7
+invocation protocol 1.0 (this build requires at least 1.0)
+licence AGPL-3.0-only — corresponding source: https://github.com/andrea-dintino/auto-pigeon-extractor
+Auto-Pigeon Extractor is a separate program under its own licence. Running it as a subprocess does not make it part of the program that ran it, and does not relicense either one.
+
 $ companion extractor version
-auto-pigeon-extractor 0.4.1
+1.171
 ```
 
-A build with no embedded extractor and no `AUCOM_AUE_BINARY` reports that
-instead:
+#### There are exactly two ways to an executable
+
+```text
+managed             a verified cache entry, at the version the manifest names
+developer override  AUCOM_AUE_BINARY, unverified, local, and labelled so
+```
+
+There is **no third, and no fallback between them.** A managed resolution that
+fails is an error you read; it never quietly becomes an override, and an
+override is never quietly treated as verified.
 
 ```console
-$ companion extractor version
-error: no AUE binary is embedded in this build and AUCOM_AUE_BINARY is not set
+$ companion extractor status
+extractor: none — Auto-Pigeon Extractor 1.171 is required and is not installed
+
+$ AUCOM_AUE_BINARY=../auto-pigeon-extractor/bin/auto-pigeon-extractor companion extractor status
+extractor: UNVERIFIED developer override
+  ../auto-pigeon-extractor/bin/auto-pigeon-extractor
+  This extractor was named by AUCOM_AUE_BINARY. Nothing verified it: no catalogue signature, no digest, no compatibility rule. It is a local development override, it is never uploaded or published, and results produced with it are not results a managed extractor produced.
 ```
+
+The override exists for development and for a support case where somebody must
+be moved onto a patched build before a release. It is **local**: nothing
+produced with it is uploaded, and every surface that describes an extractor says
+it is unverified — including `/api/status`, which carries `aue_verified`
+alongside `aue_available` because *there is one* and *it is the one we vouch for*
+are different facts.
+
+#### The protocol handshake, before anything else
+
+A verified executable is not automatically one this build can talk to. The first
+thing a resolved runner does is ask it `protocol --json` and compare what it
+reports against the minimum the compatibility manifest declared: **the majors
+must be equal and the minor at least the required one.** A later major is a
+different contract, not a newer version of this one, and running it would mean
+parsing its output against a contract that has been replaced.
+
+That is why the manifest carries `min_protocol` at all. Without it the Companion
+would be trusting a version *number* to imply a contract — exactly the
+assumption a rebuilt or forked extractor breaks.
+
+#### Every invocation is bounded
+
+A timeout on the whole run (ten minutes by default, not per read: a process
+printing one line every nine minutes keeps a per-read deadline satisfied for
+ever). Cancellation by **SIGTERM first**, because the extractor's published
+contract says a supervised run ends deliberately on one and writes a record
+saying why. A fresh working directory per invocation, removed afterwards, so two
+concurrent runs cannot see each other's scratch. And a bounded read, because a
+subprocess is not a trusted producer of unbounded output.
+
+#### Offline
+
+Offline means no network and **no fewer checks**. The requirement comes from
+`extractor-pin.json` — the last one this machine verified, recorded beside
+`config.json` with the catalogue state — and the executable comes from the
+cache, which is re-hashed against its install record on every use. The protocol
+handshake still runs, against the recorded minimum.
+
+A machine that has never resolved a requirement online says so rather than
+guessing:
+
+```console
+$ companion extractor version --offline
+error: catalog: offline: offline, and this machine has no recorded requirement for auto-pigeon.extractor on linux/amd64; run once with the network to resolve one
+```
+
+The fallback to the recorded answer happens **only** because you said
+`--offline`. A verification that failed, a rollback attempt, an expired document
+or an unreachable server is a refusal, and never becomes "use the older answer".
 
 ## Assets from auto-pigeon-backend
 
@@ -2203,7 +2307,8 @@ $ TOKEN=$(cat ~/.config/auto-pigeon-companion/api-token)
 $ curl -s -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/status
 {"version":"0.1.0-dev","aub_base_url":"","authenticated":false,
  "platform":"linux/amd64","tool_cache_dir":"/home/you/.cache/auto-pigeon-companion/tools",
- "jobs_dir":"/home/you/.cache/auto-pigeon-companion/jobs","aue_available":false}
+ "jobs_dir":"/home/you/.cache/auto-pigeon-companion/jobs","aue_available":false,
+ "aue_verified":false}
 
 $ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8791/api/status
 401
@@ -2249,7 +2354,7 @@ $ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/auth/logo
 | `/api/auth/logout` | POST | forget the session locally |
 | `/api/launch-configs` | GET | available launch configurations |
 | `/api/launch` | POST | resolve a launch, and submit it as a job unless `dry_run` |
-| `/api/aue/version` | GET | the bundled extractor's version |
+| `/api/aue/version` | GET | the verified extractor's version |
 | `/api/v1/jobs` | GET, POST | list jobs; submit one |
 | `/api/v1/jobs/preview` | POST | resolve a request into its exact command, start nothing |
 | `/api/v1/jobs/{id}` | GET | one job's whole record |
@@ -2285,24 +2390,40 @@ $ GOOS=windows GOARCH=arm64 CGO_ENABLED=0 go build ./cmd/companion
 CI runs the tests on Linux, Windows and macOS, checks `gofmt`, and
 cross-compiles all six targets. It publishes no releases.
 
-A development build embeds no extractor. Point at a locally built one instead:
+CI additionally proves three things about the extractor boundary, because they
+are the ones a change could undo quietly: that nothing stages an extractor
+binary or embeds one, that no executable is committed anywhere in the tree, and
+that the publishing path composes a catalogue package and a compatibility
+component from a release manifest and refuses one offering no corresponding
+source. It reads **no secrets** — the check that keeps it that way is a job of
+its own — because signing a catalogue is a publisher's act performed with a key
+that is not in CI, and a workflow that could do it from a pull request would be
+a workflow that publishes whatever a pull request contains.
+
+A development build has no extractor installed. Point at a locally built one
+instead, and note what it says about itself:
 
 ```console
 $ AUCOM_AUE_BINARY=../auto-pigeon-extractor/bin/auto-pigeon-extractor \
-    ./companion extractor version
+    ./companion extractor status
+extractor: UNVERIFIED developer override
 ```
 
 ## Licence
 
 MIT — see [LICENSE](LICENSE). That covers **this repository's own code only**.
 
-AUE is AGPL-3.0 and the external map-building tools are GPL — ericw-tools
+AUE is AGPL-3.0-only and the external map-building tools are GPL — ericw-tools
 0.18.1 is GPL-2.0-or-later at the source and GPL-3.0-or-later as the official
 binaries are distributed, because they link Embree. All of them are separate
 programs, and none is relicensed by anything here.
-[THIRD_PARTY_NOTICES.md][notices] sets out what is compiled in, what is run as
-a separate process, and what a release redistributes — including the open
-decision about embedding AUE.
+
+**No release of this program contains any of them.** They are obtained from
+their own publishers, verified against a signed catalogue, and run as separate
+processes; the catalogue refuses a copyleft package that offers no
+corresponding source, so the offer travels with every one of them.
+[THIRD_PARTY_NOTICES.md][notices] sets out what is compiled in, what is run as a
+separate process, and what a release redistributes.
 
 [aub]: https://github.com/andrea-dintino/auto-pigeon-backend
 [aue]: https://github.com/andrea-dintino/auto-pigeon-extractor

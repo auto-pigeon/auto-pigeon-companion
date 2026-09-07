@@ -47,6 +47,28 @@ type Options struct {
 	HTTP *http.Client
 	// Now is the clock.
 	Now func() time.Time
+	// Authorize turns a catalogue artifact's published URL into the URL this
+	// machine should actually fetch, for a publisher who keeps its artifacts
+	// behind an account rather than on an open mirror.
+	//
+	// Nil is the ordinary case and means "fetch the published URL". When it is
+	// set it is called once per download, immediately before it, so whatever it
+	// returns is as short-lived as the publisher made it.
+	//
+	// # Why this is a hook and not a credential on the downloader
+	//
+	// [Downloader] holds no credentials and sends none, and that is a property
+	// worth keeping: a downloader that carried a token would be a downloader
+	// whose every URL and every error had to be scrubbed of one. What this
+	// returns is not a credential either — it is a capability for ONE artifact,
+	// valid for minutes, which is exactly the pre-signed-URL shape
+	// [catalog.RedactURL] already exists to keep out of logs and records.
+	//
+	// It changes NOTHING about verification. The size, the digest and the
+	// signature chain are checked against the catalogue exactly as they are for
+	// a public URL, because who let you fetch the bytes and whether the bytes
+	// are the right bytes are different questions with different answers.
+	Authorize func(ctx context.Context, artifact catalog.Artifact) (string, error)
 }
 
 // Acquirer resolves a profile's acquisition options into executables on this
@@ -136,8 +158,26 @@ func (a *Acquirer) Catalog(ctx context.Context) (*catalog.Verified, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The third document, and the only optional one. Fetched in the same pass so
+	// that one command verifies one consistent published state of the world: a
+	// catalogue read now and a compatibility manifest read after the user
+	// decided would be two answers with a decision between them.
+	compatibilityEnvelope, err := client.FetchCompatibility(ctx)
+	if err != nil {
+		return nil, err
+	}
 	verifier := &catalog.Verifier{Anchors: anchors, State: state, Now: a.options.Now}
 	verified, err := verifier.Verify(keyringEnvelope, catalogEnvelope)
+	if err == nil && compatibilityEnvelope != nil {
+		var compatibility *catalog.Compatibility
+		var signers []string
+		compatibility, signers, err = verifier.VerifyCompatibility(verified.Keyring, compatibilityEnvelope)
+		if err == nil {
+			verified.Compatibility = compatibility
+			verified.CompatibilitySigners = signers
+			verified.CompatibilityDigest = compatibilityEnvelope.Digest()
+		}
+	}
 	if err != nil {
 		// The state is still written on a failed verification when the failure
 		// came *after* a document was accepted — a keyring that verified and a
@@ -324,7 +364,14 @@ func (a *Acquirer) install(ctx context.Context, plan *Plan) (*Install, error) {
 	defer os.RemoveAll(staged)
 
 	download := filepath.Join(staged, "download")
-	if err := a.downloader.download(ctx, plan.Artifact, download); err != nil {
+	source := plan.Artifact.URL
+	if a.options.Authorize != nil {
+		source, err = a.options.Authorize(ctx, plan.Artifact)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if err := a.downloader.download(ctx, plan.Artifact, source, download); err != nil {
 		return nil, err
 	}
 

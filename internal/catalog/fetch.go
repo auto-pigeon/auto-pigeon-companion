@@ -25,6 +25,13 @@ import (
 const (
 	KeyringFileName = "keyring.json"
 	CatalogFileName = "catalog.json"
+	// CompatibilityFileName is the third document, and the only OPTIONAL one.
+	// A catalogue describing tools a profile pins by name needs none; a
+	// catalogue distributing a component whose version this build must not
+	// choose for itself does. Absence is reported as absence — see
+	// [Client.FetchCompatibility] — rather than as a fetch failure, because a
+	// caller that needs it says so with a much better message than "404".
+	CompatibilityFileName = "compatibility.json"
 )
 
 // maxDocumentBytes bounds a fetched signed document. A catalogue is a few
@@ -91,6 +98,37 @@ func (c *Client) Fetch(ctx context.Context) (keyring, catalog *Signed, err error
 	return keyring, catalog, nil
 }
 
+// FetchCompatibility retrieves and decodes the compatibility manifest, if the
+// catalogue publishes one.
+//
+// A 404 returns `(nil, nil)`: this is the one document a catalogue may
+// legitimately not have, and turning its absence into an error would make every
+// existing catalogue unusable the day this was added. Any other failure is a
+// failure — a 500 or a truncated body is not evidence that the document does
+// not exist.
+func (c *Client) FetchCompatibility(ctx context.Context) (*Signed, error) {
+	base, err := c.base()
+	if err != nil {
+		return nil, err
+	}
+	body, err := c.get(ctx, base, CompatibilityFileName)
+	if err != nil {
+		if errors.Is(err, errNotFound) {
+			return nil, nil
+		}
+
+		return nil, err
+	}
+
+	return DecodeSigned(body)
+}
+
+// errNotFound distinguishes "the server said 404" from every other fetch
+// failure. Unexported: it is an internal distinction this package makes, and a
+// caller that needed to branch on it would be a caller treating a missing
+// document as a normal outcome, which only FetchCompatibility does.
+var errNotFound = errors.New("catalog: not found")
+
 func (c *Client) base() (*url.URL, error) {
 	if strings.TrimSpace(c.BaseURL) == "" {
 		return nil, ErrNoCatalogURL
@@ -127,6 +165,9 @@ func (c *Client) get(ctx context.Context, base *url.URL, name string) ([]byte, e
 		return nil, fmt.Errorf("catalog: fetching %s: %w", RedactURL(target.String()), redactError(err))
 	}
 	defer response.Body.Close()
+	if response.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("catalog: fetching %s: %w", RedactURL(target.String()), errNotFound)
+	}
 	if response.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("catalog: fetching %s: HTTP %d", RedactURL(target.String()), response.StatusCode)
 	}

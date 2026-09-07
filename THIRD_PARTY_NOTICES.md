@@ -15,7 +15,7 @@ kept apart here on purpose.
 | This repository's code | MIT | is the product | yes |
 | Go standard library | BSD-3-Clause | compiled in | yes, as part of the binary |
 | Go module dependencies | — | none exist | — |
-| auto-pigeon-extractor (AUE) | **AGPL-3.0** | separate process, **embedded in release builds** | **yes, in a release build** |
+| auto-pigeon-extractor (AUE) | **AGPL-3.0-only** | separate process, downloaded at runtime against a signed catalogue | no |
 | ericw-tools 0.18.1 (qbsp, vis, light, bspinfo, bsputil) | **GPL-3.0-or-later** as distributed (GPL-2.0-or-later source) | separate process, downloaded at runtime | no |
 | Games the user launches | the user's own | separate process, already installed | no |
 
@@ -29,59 +29,84 @@ travels with every Go binary.
 If a dependency is ever added, its licence goes in this document, and it must be
 compatible with MIT redistribution.
 
-## auto-pigeon-extractor (AUE) — AGPL-3.0, and the open decision about it
+## auto-pigeon-extractor (AUE) — AGPL-3.0-only, and why no release contains it
 
 AUE is a **separate program under the GNU Affero General Public License,
-version 3**. It is not part of this codebase and this repository's MIT licence
-does not apply to it, does not relicense it, and cannot.
+version 3**. It is not part of this codebase, this repository's MIT licence does
+not apply to it, does not relicense it, and cannot.
+
+**No release of the Companion contains it.** That is the answer to what used to
+be an open decision here, and it was settled by `AUE/AUB/AUCOM 211`.
+
+### The identifier is `AGPL-3.0-only`
+
+Not `-or-later`. That election belongs to the copyright holder and is made by
+saying so; the extractor's repository ships the plain AGPLv3 text and elects no
+later version anywhere. The extractor declares the identifier ITSELF — run
+`auto-pigeon-extractor protocol` — and every document here carries that answer
+rather than restating it, because a program under a different licence must not
+be the thing that says what this one is licensed as: it ships a copy of the
+claim, the copy goes stale, and the stale copy is the one a user reads.
 
 ### How it is used
 
-The Companion invokes AUE as a **separate operating-system process** through
-`os/exec` and reads its stdout — see [`internal/aue`](internal/aue/runner.go).
-Communication is process-level only: subcommand, arguments, environment,
-working directory, standard output, exit status. AUE's own packages all live
-under `internal/`, so Go's internal-package rule makes importing them
-impossible even by accident, and AUE never appears in `go.mod`.
+The Companion **downloads** it, against the same signed, revocable catalogue the
+map-building tools come through, at the version a signed compatibility manifest
+names for this Companion on this platform — and then invokes it as a **separate
+operating-system process** through `os/exec` and reads its stdout. See
+[`internal/aue`](internal/aue/doc.go).
 
-### The part that needs a decision
+Communication is process-level only: subcommand, arguments, environment, working
+directory, standard output, exit status. AUE's own packages all live under
+`internal/`, so Go's internal-package rule makes importing them impossible even
+by accident, and AUE never appears in `go.mod`.
 
-`internal/aue/embed.go` is written for a build that **copies the
-platform-matching AUE binary into the Companion executable with `//go:embed`**.
-A release built that way *redistributes AGPL-3.0 software inside an
-MIT-licensed binary*.
+### What that means for distribution, precisely
 
-Two facts about that, kept separate because they are separate:
+**Downloading redistributes nothing.** The bytes come from their publisher to
+the user's machine; this program is not in the chain of distribution any more
+than a package manager's index is. The obligations of AGPL-3.0 section 6 fall on
+whoever publishes the artifacts, which is that project.
 
-1. **It is not a combined work.** Embedded bytes that are written to a
-   temporary file and executed as their own process are at the same arm's
-   length as two programs shipped in one archive. Nothing links, and nothing
-   shares an address space. AUE's copyleft therefore does not reach this
-   repository's code, and the Companion stays MIT.
-2. **The distribution obligations still apply, in full.** Shipping an AGPL-3.0
-   program means the release must carry AUE's full licence text and its
-   copyright notice, and must offer the corresponding source for exactly the
-   AUE build it contains — AGPL-3.0 section 6. AUE's own third-party notices
-   (its Go dependencies, which are compiled into it) travel with it.
+Two things are nevertheless enforced here rather than assumed:
 
-**As of this writing no release does either, because no release embeds AUE
-yet.** `internal/aue/embedded/` contains only `.gitkeep`, CI builds without an
-extractor, and such a binary reports the extractor as unavailable at runtime.
-A developer points at a local build with `AUCOM_AUE_BINARY`, which redistributes
-nothing.
+1. **The corresponding-source offer travels with the entry.** The catalogue
+   refuses an `AGPL-`/`GPL-` package that names no corresponding source, in
+   `catalog.Package.validate`. So a user who is about to download it is shown
+   where the source for exactly that build is, before anything is fetched.
+2. **The licence is shown, and the aggregation sentence with it.**
+   `companion extractor install` prints the SPDX identifier, the
+   corresponding-source URL, and the fixed sentence saying that running a
+   program as a subprocess does not make it part of the program that ran it.
 
-**TODO(andrea): decide before the first release that embeds AUE.** The options
-are:
+### What was wrong with embedding it, since the code for that existed
 
-- **Embed it**, and add to every release artifact: AUE's `LICENSE`, its
-  copyright notice, its own third-party notices, the exact AUE commit or tag,
-  and a written offer of corresponding source. `build/macos/make-app-bundle.sh`,
-  `build/linux/nfpm.yaml` and `build/windows/installer.iss` all need entries.
-- **Download it at first run**, the way the map-building tools below are
-  handled, which redistributes nothing and reduces this section to the
-  process-boundary paragraph above.
+`internal/aue/embed.go` used to copy the platform-matching AUE binary into the
+Companion executable with `//go:embed`, and a release built that way would have
+redistributed AGPL-3.0 software inside an MIT-licensed binary. It was never
+released — `internal/aue/embedded/` only ever contained `.gitkeep` — and the
+mechanism is now gone, along with the build steps that staged it. CI fails if it
+comes back: see the `no-embedded-extractor` job.
 
-This is flagged as a decision to make, not one made here.
+Two facts about that arrangement, kept separate because they are separate and
+because they still describe the boundary correctly:
+
+1. **It would not have been a combined work.** Embedded bytes written to a
+   temporary file and executed as their own process are at the same arm's length
+   as two programs shipped in one archive. Nothing links, and nothing shares an
+   address space. AUE's copyleft did not reach this repository's code, and the
+   Companion stayed MIT.
+2. **The distribution obligations would have applied, in full.** Shipping an
+   AGPL-3.0 program means carrying its full licence text and copyright notice,
+   and offering the corresponding source for exactly the build shipped —
+   AGPL-3.0 section 6 — together with its own third-party notices. Nothing here
+   did that, which is the second reason the arrangement had to go.
+
+### The developer override redistributes nothing
+
+`AUCOM_AUE_BINARY` points at a build the developer already has. It is local, it
+is labelled unverified everywhere it appears, and nothing produced with it is
+uploaded or published.
 
 ## External map-building tools (GPL)
 

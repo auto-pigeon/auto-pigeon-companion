@@ -44,6 +44,11 @@ type State struct {
 	// not have that catalogue's serials interfere with the first's.
 	KeyringSerial map[string]int64 `json:"keyring_serial,omitempty"`
 	CatalogSerial map[string]int64 `json:"catalog_serial,omitempty"`
+	// CompatibilitySerial is the same ratchet for the compatibility manifest.
+	// A third map rather than a shared one: the three documents have
+	// independent id spaces and a collision between them would silently apply
+	// one document's history to another.
+	CompatibilitySerial map[string]int64 `json:"compatibility_serial,omitempty"`
 	// RevokedKeys maps a key id to why it was revoked.
 	RevokedKeys map[string]string `json:"revoked_keys,omitempty"`
 	// RevokedArtifacts maps an artifact digest to its revocation.
@@ -68,6 +73,9 @@ func (s *State) fill() {
 	}
 	if s.CatalogSerial == nil {
 		s.CatalogSerial = map[string]int64{}
+	}
+	if s.CompatibilitySerial == nil {
+		s.CompatibilitySerial = map[string]int64{}
 	}
 	if s.RevokedKeys == nil {
 		s.RevokedKeys = map[string]string{}
@@ -103,6 +111,30 @@ func (s *State) checkCatalogSerial(id string, serial int64) error {
 			"a correctly signed older document is a replay, not an update", ErrRollback, id, serial, highest)
 	}
 	return nil
+}
+
+// checkCompatibilitySerial enforces the ratchet for a compatibility manifest.
+//
+// It matters as much as the catalogue's and for a sharper reason: withdrawing a
+// bad build means publishing a manifest that points at the previous one, and a
+// replay of the superseded manifest puts the bad build back.
+func (s *State) checkCompatibilitySerial(id string, serial int64) error {
+	s.fill()
+	if highest, ok := s.CompatibilitySerial[id]; ok && serial < highest {
+		return fmt.Errorf("%w: compatibility manifest %s is serial %d and this machine has already accepted %d; "+
+			"a correctly signed older document is a replay, not an update", ErrRollback, id, serial, highest)
+	}
+
+	return nil
+}
+
+// recordCompatibility advances the compatibility ratchet.
+func (s *State) recordCompatibility(c *Compatibility, now time.Time) {
+	s.fill()
+	if highest, ok := s.CompatibilitySerial[c.DocumentID]; !ok || c.Serial > highest {
+		s.CompatibilitySerial[c.DocumentID] = c.Serial
+	}
+	s.UpdatedAt = now
 }
 
 // recordKeyring advances the keyring ratchet and folds in every key revocation

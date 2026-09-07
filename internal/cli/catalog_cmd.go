@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/aue"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/catalog"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
 )
@@ -33,6 +34,9 @@ const catalogUsage = `usage:
   companion catalog verify  --anchors <file> --keyring <file> --catalog <file> [--state <file>]
   companion catalog show    [--anchors <file>] [--keyring <file>] [--catalog <file>] [--json]
   companion catalog status  what this machine remembers: serials, revocations
+  companion catalog release --manifest <release-manifest.json> --base-url <https://…> --signer <key id>
+                            --min-companion <version> [--below-companion <version>] [--id <package id>]
+                            [--note <text>] [--out-package <file>] [--out-component <file>]
 `
 
 func runCatalog(env *Env, args []string) int {
@@ -54,6 +58,8 @@ func runCatalog(env *Env, args []string) int {
 		return catalogShow(env, args[1:])
 	case "status":
 		return catalogStatus(env, args[1:])
+	case "release":
+		return catalogRelease(env, args[1:])
 	}
 	fmt.Fprintf(env.Stderr, "error: unknown catalog command %q\n\n", args[0])
 	fmt.Fprint(env.Stderr, catalogUsage)
@@ -189,9 +195,21 @@ func decodeUnsigned(raw []byte) (document any, role, kind string, err error) {
 			return nil, "", "", err
 		}
 		return decoded, catalog.RoleCatalog, "catalogue", nil
+	case catalog.CompatibilitySchemaVersion:
+		// The catalogue key, not a third role. A publisher who can say "this
+		// build is downloadable and these are its bytes" is the same publisher
+		// who says "this build is the one for that Companion"; a third role
+		// would be another key to keep for a separation nobody needs.
+		decoded, err := catalog.DecodeCompatibility(raw)
+		if err != nil {
+			return nil, "", "", err
+		}
+		return decoded, catalog.RoleCatalog, "compatibility manifest", nil
 	}
-	return nil, "", "", fmt.Errorf("the document is %q; a keyring is %q and a catalogue is %q",
-		head.SchemaVersion, catalog.KeyringSchemaVersion, catalog.SchemaVersion)
+	return nil, "", "", fmt.Errorf("the document is %q; a keyring is %q, a catalogue is %q and a "+
+		"compatibility manifest is %q",
+		head.SchemaVersion, catalog.KeyringSchemaVersion, catalog.SchemaVersion,
+		catalog.CompatibilitySchemaVersion)
 }
 
 func loadSigningKeys(paths []string, role string) ([]ed25519.PrivateKey, map[string]bool, error) {
@@ -254,6 +272,11 @@ func validateUnsigned(document any, keyIDs map[string]bool) error {
 		return typed.Validate()
 	case *catalog.Catalog:
 		return typed.Validate(keyIDs)
+	case *catalog.Compatibility:
+		// No signer set: nothing in a compatibility manifest is attributed to a
+		// key, because nothing in it vouches for bytes. What vouches for bytes
+		// is the catalogue entry it points at.
+		return typed.Validate()
 	}
 	return fmt.Errorf("catalog: %T is not a signable document", document)
 }
@@ -443,4 +466,106 @@ func sortedMapKeys[V any](m map[string]V) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// catalogRelease turns a component's release manifest into the two unsigned
+// documents a publisher signs.
+//
+// It writes nothing signed and holds no key. The composition and the signature
+// are separate steps so that a publisher reads what they are about to vouch
+// for — see `companion catalog sign`.
+func catalogRelease(env *Env, args []string) int {
+	set := newFlagSet(env, "catalog release")
+	manifestPath := set.String("manifest", "", "the component's release-manifest.json")
+	baseURL := set.String("base-url", "", "where the artifacts were uploaded, https")
+	signer := set.String("signer", "", "the catalogue key id that will vouch for these artifacts")
+	packageID := set.String("id", aue.ComponentID, "the catalogue package id")
+	minCompanion := set.String("min-companion", "", "the lowest Companion version this build is for")
+	belowCompanion := set.String("below-companion", "", "the first Companion version it is not for")
+	note := set.String("note", "", "one sentence a person reads before installing")
+	outPackage := set.String("out-package", "", "write the catalogue package here")
+	outComponent := set.String("out-component", "", "write the compatibility component here")
+	if _, code, ok := parseFlags(env, set, args); !ok {
+		return code
+	}
+	if strings.TrimSpace(*manifestPath) == "" {
+		fmt.Fprint(env.Stderr, "error: --manifest is required\n\n"+catalogUsage)
+
+		return 2
+	}
+	raw, err := os.ReadFile(*manifestPath)
+	if err != nil {
+		fmt.Fprintf(env.Stderr, "error: %v\n", err)
+
+		return 1
+	}
+	manifest, err := catalog.DecodeReleaseManifest(raw)
+	if err != nil {
+		fmt.Fprintf(env.Stderr, "error: %v\n", err)
+
+		return 1
+	}
+	options := catalog.ReleaseOptions{
+		PackageID: *packageID, BaseURL: *baseURL, Signer: *signer,
+		MinCompanion: *minCompanion, BelowCompanion: *belowCompanion, Note: *note,
+	}
+	pkg, err := catalog.PackageFromRelease(manifest, options)
+	if err != nil {
+		fmt.Fprintf(env.Stderr, "error: %v\n", err)
+
+		return 1
+	}
+	// Validated here, against the one key that is going to vouch for it,
+	// because a publisher who finds out now has published nothing yet. The
+	// copyleft rule is the one that matters: an AGPL package offering no
+	// corresponding source is refused before it can be signed.
+	if err := (&catalog.Catalog{
+		SchemaVersion: catalog.SchemaVersion, CatalogID: "preflight", Serial: 1,
+		IssuedAt: time.Now().UTC(), ExpiresAt: time.Now().UTC().Add(time.Hour),
+		Packages: []catalog.Package{pkg},
+	}).Validate(map[string]bool{*signer: true}); err != nil {
+		fmt.Fprintf(env.Stderr, "error: %v\n", err)
+
+		return 1
+	}
+	component, err := catalog.ComponentFromRelease(manifest, options)
+	if err != nil {
+		fmt.Fprintf(env.Stderr, "error: %v\n", err)
+
+		return 1
+	}
+
+	if code := writeDocument(env, *outPackage, "catalogue package", pkg); code != 0 {
+		return code
+	}
+	if code := writeDocument(env, *outComponent, "compatibility component", component); code != 0 {
+		return code
+	}
+	fmt.Fprintf(env.Stderr, "%s %s: %d artifact(s), %s, protocol %s\n",
+		manifest.Product.Name, manifest.Version, len(pkg.Artifacts),
+		manifest.License.SPDX, manifest.Protocol)
+
+	return 0
+}
+
+func writeDocument(env *Env, path, what string, document any) int {
+	encoded, err := catalog.MarshalIndented(document)
+	if err != nil {
+		fmt.Fprintf(env.Stderr, "error: %v\n", err)
+
+		return 1
+	}
+	if path == "" {
+		env.Stdout.Write(encoded)
+
+		return 0
+	}
+	if err := os.WriteFile(path, encoded, 0o644); err != nil {
+		fmt.Fprintf(env.Stderr, "error: %v\n", err)
+
+		return 1
+	}
+	fmt.Fprintf(env.Stderr, "wrote %s — the %s\n", path, what)
+
+	return 0
 }

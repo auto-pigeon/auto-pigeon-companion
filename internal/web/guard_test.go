@@ -218,6 +218,7 @@ type stubRunner struct {
 	output    string
 	err       error
 	available bool
+	verified  bool
 	gotArgs   []string
 }
 
@@ -230,6 +231,18 @@ func (r *stubRunner) Run(_ context.Context, subcommand string, args ...string) (
 }
 
 func (r *stubRunner) Available() bool { return r.available }
+
+// Provenance is on the Runner interface because every surface that shows an
+// extractor has to show whether anything verified it, and a caller holding a
+// Runner must not have to type-assert to find out.
+func (r *stubRunner) Provenance() aue.Provenance {
+	mode := aue.ModeManaged
+	if !r.verified {
+		mode = aue.ModeDeveloperOverride
+	}
+
+	return aue.Provenance{Mode: mode, Verified: r.verified}
+}
 
 func serverWithRunner(t *testing.T, runner aue.Runner) *Server {
 	t.Helper()

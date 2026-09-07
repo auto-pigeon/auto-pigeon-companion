@@ -331,6 +331,22 @@ func CatalogStatePath() (string, error) {
 	return filepath.Join(dir, "catalog-state.json"), nil
 }
 
+// ExtractorPinPath is the record of the last compatibility requirement this
+// machine verified for the extractor.
+//
+// Beside config.json for the same reason as the catalogue state: it records a
+// decision — which build a signed manifest said goes with this Companion — and
+// it is what makes an offline run able to check a protocol minimum instead of
+// skipping the check. Clearing a cache must not erase it.
+func ExtractorPinPath() (string, error) {
+	dir, err := Dir()
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(dir, "extractor-pin.json"), nil
+}
+
 // LicenseAcceptancePath is the record of which licence notices have been shown
 // and acknowledged on this machine. Configuration, not cache, for the same
 // reason: it records a decision.

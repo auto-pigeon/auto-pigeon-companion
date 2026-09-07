@@ -1,70 +1,90 @@
-// Package aue drives AUE (auto-pigeon-extractor) as a subprocess.
-//
-// # Why a subprocess and not a library
-//
-// AUE's packages all live under internal/, and Go's internal-package rule
-// blocks a different module from importing them. That is not an obstacle to
-// route around: AUE's CLI is its supported public surface, and its subcommands
-// already print JSON. So the Companion shells out and reads stdout, and AUE never
-// appears in go.mod.
-//
-// # Why an interface
-//
-// AUE also has a `serve` subcommand that exposes the same operations over
-// local HTTP. Nothing here is built for that today, but every caller depends
-// on the Runner interface rather than on process spawning, so a future
-// HTTPRunner can be substituted without touching call sites.
-//
-// # Where the binary comes from
-//
-// The platform-matching AUE binary is embedded into the companion executable
-// at build time (see embed.go for the build ordering constraint). On first use
-// EmbeddedRunner extracts it to a temp directory, marks it executable, and
-// execs it from there; Close removes the directory.
-//
-// TODO(confirm-aue-embed-decision): the embed-rather-than-download approach is
-// this session's assumption, not a confirmed decision. If it changes to a
-// runtime download, only this package changes.
 package aue
 
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
+	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"runtime"
+	"strconv"
 	"sync"
+	"syscall"
+	"time"
 )
 
-// EnvBinaryOverride names an on-disk AUE binary to use instead of the embedded
-// one. It exists for development (a plain `go build` embeds nothing) and for
-// support cases where a user must be moved onto a patched AUE without a new
-// Companion release.
+// EnvBinaryOverride names an on-disk extractor to use instead of the managed
+// one.
+//
+// It exists for development — building the extractor from a checkout and
+// driving it from here — and for a support case where somebody must be moved
+// onto a patched build before a release. It is LOCAL: nothing produced with it
+// is uploaded, and every surface that describes an extractor says the override
+// is unverified.
 const EnvBinaryOverride = "AUCOM_AUE_BINARY"
 
-// LegacyEnvBinaryOverride is the first Companion bootstrap's spelling of
-// EnvBinaryOverride, still read so an existing development setup keeps working.
+// LegacyEnvBinaryOverride is the first Companion bootstrap's spelling, still
+// read so an existing development setup keeps working.
 const LegacyEnvBinaryOverride = "AUC_AUE_BINARY"
 
-// ErrNoEmbeddedBinary is returned when the companion binary was built without
-// an AUE binary staged in internal/aue/embedded/ and no override is set.
-var ErrNoEmbeddedBinary = errors.New("no AUE binary is embedded in this build and " + EnvBinaryOverride + " is not set")
+// DefaultTimeout bounds one invocation.
+//
+// Ten minutes: an extraction over a whole corpus is minutes of real work, and
+// an invocation that has been silent for ten is one that is not coming back. It
+// bounds the WHOLE run rather than a read, because the failure and the hang
+// look the same from here — a process producing one line every nine minutes
+// keeps a per-read deadline satisfied for ever.
+const DefaultTimeout = 10 * time.Minute
 
-// Runner invokes one AUE subcommand and returns its stdout.
+// DefaultGrace is how long a cancelled run has after SIGTERM.
+//
+// The extractor's published contract says a supervised run ends deliberately on
+// SIGTERM and writes a terminal record saying why. Five seconds is long enough
+// for that and short enough that a build which ignores the signal does not hold
+// a user's Ctrl-C indefinitely.
+const DefaultGrace = 5 * time.Second
+
+// maxOutputBytes bounds what one invocation may return.
+//
+// A subprocess is not a trusted producer of unbounded output: it can be a
+// wrong build, a corrupted one, or the right one asked for a corpus report
+// nobody expected to be a gigabyte. 64 MiB is far above any real answer and
+// finite.
+const maxOutputBytes = 64 << 20
+
+// ErrNoExtractor reports that this Companion has no extractor it may run.
+var ErrNoExtractor = errors.New("aue: no verified extractor is installed and " + EnvBinaryOverride + " is not set")
+
+// ErrOutputNotJSON reports a subcommand that was asked for JSON and produced
+// something else.
+var ErrOutputNotJSON = errors.New("aue: the extractor's output is not the single JSON document this call expects")
+
+// ErrOutputTooLarge reports output over the cap.
+var ErrOutputTooLarge = errors.New("aue: the extractor produced more output than this Companion will read")
+
+// Runner invokes one extractor subcommand and returns its stdout.
 //
 // Implementations must be safe for concurrent use: the local HTTP server
 // handles requests on many goroutines.
 type Runner interface {
 	Run(ctx context.Context, subcommand string, args ...string) ([]byte, error)
+	// Provenance says where this runner's executable came from and whether
+	// anything verified it. On the interface rather than on the concrete type
+	// because every surface that shows an extractor has to show it, and a
+	// caller holding a Runner must not have to type-assert to find out whether
+	// it is about to run something unverified.
+	Provenance() Provenance
 }
 
-// ExitError describes an AUE invocation that ran but failed. AUE's exit codes
-// are meaningful (1 = the operation failed, 2 = the invocation was wrong), so
-// they are surfaced rather than collapsed into a generic error.
+// ExitError describes an invocation that ran and failed.
+//
+// The extractor's exit codes are meaningful and its own `protocol` document
+// publishes the table: 1 is the operation failing, which is usually the input,
+// and 2 is the invocation being wrong, which is a bug in whatever composed the
+// argument vector. Collapsing them loses the one distinction that decides who
+// needs to be told.
 type ExitError struct {
 	Subcommand string
 	ExitCode   int
@@ -76,157 +96,224 @@ func (err *ExitError) Error() string {
 	if err.Stderr != "" {
 		message += ": " + err.Stderr
 	}
+
 	return message
 }
 
-// EmbeddedRunner execs the embedded AUE binary, extracting it to a temp
-// directory on first use. The zero value is not usable; call NewEmbeddedRunner.
-type EmbeddedRunner struct {
-	// override, when non-empty, is an on-disk binary used instead of the
-	// embedded one and never extracted or deleted.
-	override string
-
-	once    sync.Once
-	dir     string
-	path    string
-	extract error
+// TimeoutError describes an invocation this Companion stopped.
+type TimeoutError struct {
+	Subcommand string
+	After      time.Duration
 }
 
-// NewEmbeddedRunner returns a Runner backed by the embedded AUE binary, or by
-// the EnvBinaryOverride path when that environment variable is set.
+func (err *TimeoutError) Error() string {
+	return fmt.Sprintf("auto-pigeon-extractor %s did not finish within %s and was stopped",
+		err.Subcommand, err.After)
+}
+
+// ProcessRunner execs one extractor executable.
 //
-// Extraction is deferred to the first Run, so constructing a runner is free
-// and a companion process that never touches AUE never writes to disk.
-func NewEmbeddedRunner() *EmbeddedRunner {
-	override := os.Getenv(EnvBinaryOverride)
-	if override == "" {
-		override = os.Getenv(LegacyEnvBinaryOverride)
-	}
-	return &EmbeddedRunner{override: override}
+// The zero value is not usable; a Runner comes from [Resolver.Resolve] or from
+// [NewOverrideRunner], and those are the only two ways there are.
+type ProcessRunner struct {
+	path       string
+	provenance Provenance
+
+	// Timeout bounds one invocation. Zero means DefaultTimeout.
+	Timeout time.Duration
+
+	// WorkRoot is where per-invocation job directories are created. Empty means
+	// the OS temp directory.
+	WorkRoot string
+
+	// Grace is how long a cancelled run has after SIGTERM before the runtime
+	// stops waiting for it. Zero means DefaultGrace.
+	//
+	// A field because the right value is a property of what is being run: a
+	// real extraction wants seconds to finish writing its terminal record, and
+	// a test wants milliseconds. The DEFAULT is the production one, so a caller
+	// that never thinks about it gets the patient answer.
+	Grace time.Duration
+
+	// Environment is what the child process is given. Nil means this process's
+	// own environment plus the deadline variable.
+	//
+	// NOT scrubbed by default, deliberately: the extractor's own configuration
+	// is environment-driven — where its APMap contract is, where the mapper
+	// root is — and a runner that cleared the environment would break every
+	// deployment that configured one. What is ADDED is the deadline, so the
+	// process can end itself with a named reason instead of being killed with
+	// none.
+	Environment []string
+
+	once sync.Once
 }
 
-// binaryPath resolves the executable path, extracting the embedded binary once.
-func (runner *EmbeddedRunner) binaryPath() (string, error) {
-	runner.once.Do(func() {
-		if runner.override != "" {
-			runner.path = runner.override
-			return
-		}
-		runner.extract = runner.extractEmbedded()
-	})
-	if runner.extract != nil {
-		return "", runner.extract
+// Provenance says where this runner's executable came from.
+func (r *ProcessRunner) Provenance() Provenance { return r.provenance }
+
+// Path is the executable this runner execs.
+func (r *ProcessRunner) Path() string { return r.path }
+
+func (r *ProcessRunner) timeout() time.Duration {
+	if r.Timeout > 0 {
+		return r.Timeout
 	}
-	return runner.path, nil
+
+	return DefaultTimeout
 }
 
-func (runner *EmbeddedRunner) extractEmbedded() error {
-	name, err := embeddedBinaryName()
-	if err != nil {
-		return err
-	}
-	payload, err := embedded.ReadFile("embedded/" + name)
-	if err != nil {
-		return fmt.Errorf("cannot read embedded AUE binary: %w", err)
+func (r *ProcessRunner) grace() time.Duration {
+	if r.Grace > 0 {
+		return r.Grace
 	}
 
-	dir, err := os.MkdirTemp("", "auc-aue-")
-	if err != nil {
-		return fmt.Errorf("cannot create temporary directory for AUE: %w", err)
-	}
-	target := filepath.Join(dir, name)
-	if runtime.GOOS == "windows" && filepath.Ext(target) == "" {
-		target += ".exe"
-	}
-	// 0700: the extracted binary is this user's, and a world-writable copy of
-	// an executable this process is about to run would be a local privilege
-	// escalation waiting to happen.
-	if err := os.WriteFile(target, payload, 0o700); err != nil {
-		os.RemoveAll(dir)
-		return fmt.Errorf("cannot write %s: %w", target, err)
-	}
-	runner.dir = dir
-	runner.path = target
-	return nil
+	return DefaultGrace
 }
 
-// embeddedBinaryName finds the single staged binary inside embedded/.
-func embeddedBinaryName() (string, error) {
-	entries, err := fs.ReadDir(embedded, "embedded")
-	if err != nil {
-		return "", fmt.Errorf("cannot list embedded AUE directory: %w", err)
-	}
-	var names []string
-	for _, entry := range entries {
-		if entry.IsDir() || entry.Name() == ".gitkeep" {
-			continue
-		}
-		names = append(names, entry.Name())
-	}
-	switch len(names) {
-	case 0:
-		return "", ErrNoEmbeddedBinary
-	case 1:
-		return names[0], nil
-	default:
-		// Guessing here would ship the wrong platform's binary to users. The
-		// build script's contract is exactly one file; say so instead.
-		return "", fmt.Errorf("expected exactly one embedded AUE binary, found %d: %v", len(names), names)
-	}
-}
+// Run executes one subcommand and returns its stdout.
+//
+// Four things happen around the exec, and each is a requirement rather than a
+// nicety:
+//
+//   - **a timeout**, bounding the whole run;
+//   - **cancellation that the extractor can honour** — SIGTERM first, because
+//     its published contract says a supervised run ends deliberately on one and
+//     writes a terminal record saying why. SIGKILL is what happens if it does
+//     not, after a grace period, and it is the answer that loses the reason;
+//   - **an isolated working directory**, fresh per invocation and removed
+//     after, so two concurrent invocations cannot see each other's scratch and
+//     a relative path in an argument cannot reach this program's own directory;
+//   - **a bounded read**, because a subprocess is not a trusted producer of
+//     unbounded output.
+func (r *ProcessRunner) Run(ctx context.Context, subcommand string, args ...string) ([]byte, error) {
+	timeout := r.timeout()
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 
-// Run executes one AUE subcommand and returns its stdout.
-func (runner *EmbeddedRunner) Run(ctx context.Context, subcommand string, args ...string) ([]byte, error) {
-	path, err := runner.binaryPath()
+	jobDir, err := os.MkdirTemp(r.WorkRoot, "aucom-aue-job-")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("aue: creating a job directory: %w", err)
 	}
-	command := exec.CommandContext(ctx, path, append([]string{subcommand}, args...)...)
+	defer os.RemoveAll(jobDir)
+
+	command := exec.CommandContext(ctx, r.path, append([]string{subcommand}, args...)...)
+	command.Dir = jobDir
+	command.Env = r.environment(timeout)
+
+	// The extractor's published cancellation contract, honoured rather than
+	// assumed: SIGTERM, then a grace period, then whatever the runtime does to
+	// a process that ignored it.
+	command.Cancel = func() error { return command.Process.Signal(syscall.SIGTERM) }
+	command.WaitDelay = r.grace()
+
 	var stdout, stderr bytes.Buffer
-	command.Stdout = &stdout
-	command.Stderr = &stderr
+	capped := &limitedWriter{writer: &stdout, remaining: maxOutputBytes}
+	command.Stdout = capped
+	command.Stderr = &limitedWriter{writer: &stderr, remaining: 1 << 20}
 
-	if err := command.Run(); err != nil {
+	runErr := command.Run()
+
+	// Checked BEFORE the exit code, because refusing to read any more closes
+	// the pipe and the child then dies of SIGPIPE. Reporting that as "exit 141"
+	// would name the symptom and hide the cause.
+	if capped.tripped {
+		return nil, fmt.Errorf("%w: %s", ErrOutputTooLarge, subcommand)
+	}
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return stdout.Bytes(), &TimeoutError{Subcommand: subcommand, After: timeout}
+	}
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return stdout.Bytes(), ctx.Err()
+	}
+	if runErr != nil {
 		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
+		if errors.As(runErr, &exitErr) {
 			return stdout.Bytes(), &ExitError{
 				Subcommand: subcommand,
 				ExitCode:   exitErr.ExitCode(),
 				Stderr:     trimmed(stderr.String()),
 			}
 		}
-		return nil, fmt.Errorf("cannot run auto-pigeon-extractor %s: %w", subcommand, err)
+		return nil, fmt.Errorf("aue: running auto-pigeon-extractor %s: %w", subcommand, runErr)
 	}
+
 	return stdout.Bytes(), nil
 }
 
-// Close removes the extracted binary. It is safe to call on a runner that
-// never extracted anything.
-func (runner *EmbeddedRunner) Close() error {
-	if runner.dir == "" {
-		return nil
-	}
-	dir := runner.dir
-	runner.dir = ""
-	return os.RemoveAll(dir)
-}
-
-// Available reports whether this build can run AUE at all, without executing
-// it. The server uses this to tell the frontend up front rather than failing
-// on the user's first real operation.
-func (runner *EmbeddedRunner) Available() bool {
-	_, err := runner.binaryPath()
-	return err == nil
-}
-
-// Available reports whether runner can run AUE at all, without executing it.
+// RunJSON runs a subcommand and decodes its stdout as one JSON document.
 //
-// It is a free function rather than a Runner method because availability is
-// interesting to a caller holding any Runner — including a nil one, which is
-// what a build with no extractor and no override produces — while a Runner
-// implementation that always works (a future HTTPRunner) should not have to
-// carry the method. A runner that does not implement the optional interface is
-// reported available: it exists, so it can be tried.
+// The validation is the point, and it is why callers do not simply
+// `json.Unmarshal(runner.Run(...))`. A subprocess can exit 0 having printed a
+// warning, half a document, or a document with something appended; each of
+// those decodes into a partially-filled struct that a caller then acts on.
+// Refusing trailing content and an empty body turns three silent
+// misinterpretations into one error naming the subcommand.
+func (r *ProcessRunner) RunJSON(ctx context.Context, target any, subcommand string, args ...string) error {
+	stdout, err := r.Run(ctx, subcommand, args...)
+	if err != nil {
+		return err
+	}
+	if len(bytes.TrimSpace(stdout)) == 0 {
+		return fmt.Errorf("%w: %s produced no output", ErrOutputNotJSON, subcommand)
+	}
+	decoder := json.NewDecoder(bytes.NewReader(stdout))
+	if err := decoder.Decode(target); err != nil {
+		return fmt.Errorf("%w: %s: %v", ErrOutputNotJSON, subcommand, err)
+	}
+	if decoder.More() {
+		return fmt.Errorf("%w: %s wrote more than one document", ErrOutputNotJSON, subcommand)
+	}
+
+	return nil
+}
+
+func (r *ProcessRunner) environment(timeout time.Duration) []string {
+	base := r.Environment
+	if base == nil {
+		base = os.Environ()
+	}
+	// The extractor's own deadline variable, so it can end itself with a named
+	// reason before this Companion has to signal it. Its published protocol
+	// document names this variable; it is not guessed at here.
+	seconds := int64(timeout / time.Second)
+
+	return append(append([]string{}, base...),
+		"AUTO_PIGEON_JOB_DEADLINE_SECONDS="+strconv.FormatInt(seconds, 10))
+}
+
+// NewOverrideRunner returns a runner for an on-disk executable the user named.
+//
+// It is a separate constructor rather than a mode of the managed one, so that
+// nothing can arrive at an unverified executable by falling through a managed
+// path that failed. Every caller of this function is a caller that read the
+// environment variable and decided, and the provenance it produces says so.
+func NewOverrideRunner(path string) *ProcessRunner {
+	return &ProcessRunner{
+		path: path,
+		provenance: Provenance{
+			Mode: ModeDeveloperOverride, Verified: false, Path: path,
+			Note: UnverifiedNote,
+		},
+	}
+}
+
+// OverridePath returns the configured developer override, if any.
+func OverridePath() string {
+	if path := os.Getenv(EnvBinaryOverride); path != "" {
+		return path
+	}
+
+	return os.Getenv(LegacyEnvBinaryOverride)
+}
+
+// Available reports whether a runner can run an extractor at all.
+//
+// A free function rather than a method because availability is interesting to a
+// caller holding any Runner — including a nil one, which is what an
+// unconfigured build produces. A runner that knows how to answer cheaply says
+// so through the optional interface; one that does not is reported available,
+// because it exists and can therefore be tried.
 func Available(runner Runner) bool {
 	if runner == nil {
 		return false
@@ -234,27 +321,35 @@ func Available(runner Runner) bool {
 	if checker, ok := runner.(interface{ Available() bool }); ok {
 		return checker.Available()
 	}
+
 	return true
 }
 
-func trimmed(text string) string {
-	return string(bytes.TrimSpace([]byte(text)))
+// errOutputTooLarge is what limitedWriter returns past its cap.
+var errOutputTooLarge = errors.New("aue: output cap reached")
+
+// limitedWriter refuses past a byte cap instead of growing without bound.
+type limitedWriter struct {
+	writer    io.Writer
+	remaining int64
+	// tripped records that the cap was reached, so the caller can report the
+	// cause rather than whatever the child died of afterwards.
+	tripped bool
 }
 
-// KnownSubcommands is AUE's subcommand list as of this bootstrap, recorded so
-// the frontend has something to show before any real feature exists.
-//
-// It is a snapshot, not a contract: AUE's internal/cli/cli.go is authoritative
-// and has been growing. Nothing in the Companion validates against this list before
-// spawning — AUE rejects an unknown subcommand with exit code 2 and a clear
-// message, which is a better error than one derived from a stale copy.
-var KnownSubcommands = []string{
-	"entities",
-	"targets",
-	"compat-stats",
-	"summarize",
-	"roundtrip",
-	"wad-textures",
-	"model-footprints",
-	"apmap-validate",
+func (w *limitedWriter) Write(p []byte) (int, error) {
+	if int64(len(p)) > w.remaining {
+		if w.remaining > 0 {
+			_, _ = w.writer.Write(p[:w.remaining])
+			w.remaining = 0
+		}
+		w.tripped = true
+
+		return 0, errOutputTooLarge
+	}
+	w.remaining -= int64(len(p))
+
+	return w.writer.Write(p)
 }
+
+func trimmed(text string) string { return string(bytes.TrimSpace([]byte(text))) }

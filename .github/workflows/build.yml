@@ -7,9 +7,22 @@
 # runners exist only to run the tests natively, where the platform-specific
 # paths (%AppData%, ~/Library, the .exe suffix) are actually exercised.
 #
-# This does not publish anything: no release, no artifacts uploaded anywhere
-# durable, no signing. Packaging skeletons live under build/ and are run by
-# hand — see README.md.
+# # This workflow publishes NOTHING and holds no credential
+#
+# No release, no durable upload, no signing, and it reads no `secrets` anywhere —
+# `grep -c secrets` on this file is zero and the `no-credentials` job below keeps
+# it that way. Signing a catalogue is a publisher's act performed deliberately
+# with a key that is not in CI, and a workflow that could do it from a pull
+# request would be a workflow that publishes whatever a pull request contains.
+# Packaging skeletons live under build/ and are run by hand — see README.md.
+#
+# # The extractor is not built here, and is not IN here
+#
+# Auto-Pigeon Extractor is a separate program under its own licence (AGPL-3.0).
+# It used to be staged into `internal/aue/embedded/` and compiled into this
+# binary; it is now downloaded against a signed catalogue at run time
+# (`AUE/AUB/AUCOM 211`). Nothing in this workflow fetches, stages or embeds it,
+# and the `no-embedded-extractor` job fails if that ever comes back.
 
 name: build
 
@@ -81,29 +94,6 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      # TODO(confirm-aue-build-source): the AUE binary matching this matrix
-      # entry's GOOS/GOARCH must be staged into internal/aue/embedded/ HERE —
-      # after checkout, before `go build` — because //go:embed resolves at
-      # compile time. Two options, undecided:
-      #
-      #   (a) check out github.com/andrea-dintino/auto-pigeon-extractor and
-      #       cross-compile it as a prior step in this job, or
-      #   (b) download a tagged release artifact for this GOOS/GOARCH.
-      #
-      # (a) needs no release process but rebuilds AUE on every push; (b) is
-      # faster and pins an exact version but requires AUE to publish artifacts,
-      # which it does not yet. Andrea to decide.
-      #
-      # Until then this job builds the Companion WITHOUT an embedded extractor,
-      # which compiles fine (the embedded/ directory holds only .gitkeep) and is
-      # enough to verify the six targets. Such a binary reports the extractor as
-      # unavailable at runtime.
-      #
-      # Whatever the answer, the staged file must be removed after the build so
-      # a later matrix entry cannot pick up the previous platform's binary. On a
-      # fresh runner per matrix entry that cannot happen, but the same sequence
-      # run locally in a loop absolutely can.
-
       - name: go build
         env:
           GOOS: ${{ matrix.goos }}
@@ -140,5 +130,114 @@ jobs:
       # wired into CI yet — they belong in a release workflow, not this
       # per-push verification one.
       #
-      # TODO: code signing and notarization. No certificates or credentials
-      # exist; see build/macos/make-app-bundle.sh and README.md.
+      # TODO: code signing and notarization of the COMPANION's own artifacts.
+      # No certificates exist; see build/macos/make-app-bundle.sh and README.md.
+      # Whenever they do, they belong in a release workflow that a tag triggers —
+      # never in this one, which runs on every pull request.
+
+  no-embedded-extractor:
+    name: the extractor is not embedded
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Three ways the embed could come back, each checked by name rather than
+      # by reading a diff. It was removed for a licensing reason as much as a
+      # technical one — an MIT artifact must not contain an AGPL program — so a
+      # reviewer who does not know that history still gets a failure that
+      # explains it.
+      - name: no staged extractor binary
+        run: |
+          if [ -e internal/aue/embedded ]; then
+            echo "internal/aue/embedded exists. The extractor is a separate AGPL-3.0" >&2
+            echo "program obtained at run time against a signed catalogue; embedding it" >&2
+            echo "puts its bytes inside this repository's MIT artifact. See internal/aue." >&2
+            exit 1
+          fi
+      # The DIRECTIVE, at the start of a line — not the two places the package
+      # comment mentions it while explaining why it is gone.
+      - name: no go:embed directive in internal/aue
+        run: |
+          if grep -rnE '^[[:space:]]*//go:embed' internal/aue; then
+            echo "internal/aue embeds something. See the job above." >&2
+            exit 1
+          fi
+      - name: no committed executable anywhere
+        run: |
+          # An ELF, Mach-O or PE header in a tracked file. The frontend assets
+          # are text and the fixtures are JSON, so anything matching is either a
+          # mistake or a binary somebody meant to ship.
+          found=0
+          while IFS= read -r file; do
+            case "$(head -c 4 "$file" | od -An -tx1 | tr -d ' \n')" in
+              7f454c46|cffaedfe|cefaedfe|4d5a*) echo "executable committed: $file" >&2; found=1 ;;
+            esac
+          done < <(git ls-files)
+          exit "$found"
+
+  release-contract:
+    name: the release contract composes
+    needs: [test, gofmt]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      # The publishing path, exercised end to end and publishing nothing: a
+      # release manifest of the shape the extractor's build script writes goes
+      # in, and a catalogue package and a compatibility component come out, both
+      # validated against the rules a signature would otherwise make permanent —
+      # including the copyleft rule that refuses a package offering no
+      # corresponding source.
+      #
+      # The fixture has fabricated digests and version 0.0.0-example. It is not
+      # a release, nothing signs it, and no key exists in this workflow to sign
+      # it with.
+      - name: compose catalogue entries from a release manifest
+        run: |
+          go run ./cmd/companion catalog release \
+            --manifest internal/catalog/testdata/example-release-manifest.json \
+            --base-url https://releases.invalid/aue/0.0.0-example/ \
+            --signer ci-example-key \
+            --min-companion 0.1.0 \
+            --out-package "$RUNNER_TEMP/package.json" \
+            --out-component "$RUNNER_TEMP/component.json"
+          test -s "$RUNNER_TEMP/package.json"
+          test -s "$RUNNER_TEMP/component.json"
+
+      - name: it refuses a release with no corresponding source
+        run: |
+          python3 - <<'PY'
+          import json, pathlib
+          document = json.loads(pathlib.Path("internal/catalog/testdata/example-release-manifest.json").read_text())
+          document["source"]["corresponding_source"] = ""
+          pathlib.Path("no-source.json").write_text(json.dumps(document))
+          PY
+          if go run ./cmd/companion catalog release \
+               --manifest no-source.json \
+               --base-url https://releases.invalid/aue/0.0.0-example/ \
+               --signer ci-example-key --min-companion 0.1.0 >/dev/null; then
+            echo "a copyleft release offering no corresponding source was accepted" >&2
+            exit 1
+          fi
+
+  no-credentials:
+    name: this workflow holds no credential
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # A publishing step is a deliberate act with a key that is not here. This
+      # fails the moment somebody adds one to THIS workflow, which is the one
+      # that runs on every pull request.
+      # The pattern is written so it does not match ITSELF: a check that fails on
+      # its own source is a check nobody can keep.
+      - name: no secrets are read
+        run: |
+          if grep -nE '[$][{][{][[:space:]]*secrets' .github/workflows/build.yml; then
+            echo "this workflow reads a secret. Publishing and signing belong in a" >&2
+            echo "release workflow a tag triggers, never in one a pull request runs." >&2
+            exit 1
+          fi

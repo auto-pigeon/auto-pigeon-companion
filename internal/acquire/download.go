@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/catalog"
@@ -59,15 +60,26 @@ func (d *Downloader) client() *http.Client {
 // checked afterwards, the digest is computed over what was actually written,
 // and only then does any caller get to open the file. A download that fails at
 // any point leaves a file the caller deletes and nothing that could be run.
-func (d *Downloader) download(ctx context.Context, artifact catalog.Artifact, path string) error {
+// The `source` parameter is the URL to actually fetch, which is the catalogue's
+// published URL unless an [Options.Authorize] hook replaced it with a
+// short-lived authorized one. It is a parameter rather than a field because
+// this type must keep holding no credentials: what varies per download is the
+// address, and the address is an argument.
+func (d *Downloader) download(ctx context.Context, artifact catalog.Artifact, source, path string) error {
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	if strings.TrimSpace(source) == "" {
+		source = artifact.URL
 	}
 	ctx, cancel := context.WithTimeout(ctx, downloadTimeout)
 	defer cancel()
 
-	where := catalog.RedactURL(artifact.URL)
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, artifact.URL, nil)
+	// Redacted the moment it becomes text, and this is the case that comment
+	// anticipates: an authorized URL's query string IS the authorization, and a
+	// URL that reaches a log has been disclosed to everyone who later reads it.
+	where := catalog.RedactURL(source)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, source, nil)
 	if err != nil {
 		return fmt.Errorf("acquire: building the request for %s: %w", where, err)
 	}

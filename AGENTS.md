@@ -38,6 +38,129 @@ What that means for work here:
 - Do not mutate `auto-pigeon-launcher/` unless a prompt names it as a
   mutation target, exactly as for any other sibling.
 
+## 1. THE EXTRACTOR IS NOT IN THIS BINARY, AND THERE IS NO THIRD WAY TO ONE (`AUE/AUB/AUCOM 211`)
+
+**Auto-Pigeon Extractor is a separate program under a different licence. It is
+downloaded against a signed catalogue, at a version a signed compatibility
+manifest names, and run as its own process. Nothing here contains it, embeds it,
+or claims a licence over it.**
+
+```text
+managed             a verified cache entry, at the version the manifest names
+developer override  AUCOM_AUE_BINARY, unverified, local, and labelled so
+```
+
+There is **no third way and no fallback between the two.** A managed resolution
+that fails is an error the user reads; it never quietly becomes an override, and
+an override is never quietly treated as verified.
+`internal/aue.Provenance.Verified` is the ONE place that distinction is
+recorded, it travels with every runner, and every surface that shows an
+extractor shows it. A caller that has to compute "was this verified" from four
+other fields is a caller that will one day compute it wrong.
+
+### What embedding cost, and why it is three separate faults
+
+`internal/aue/embed.go` copied a platform's extractor binary into this executable
+with `//go:embed`. It was never released, and it had to go for three unrelated
+reasons — a later change that fixes one of them has not fixed the others:
+
+1. **Licensing.** An MIT artifact contained and appeared to cover an AGPL
+   program, and a user had no way to tell whose bytes they were running.
+2. **Verification.** Nothing checked the staged binary. `//go:embed` resolves at
+   compile time, so a stale or wrong-platform file shipped silently and failed
+   on the user's machine.
+3. **Coupling.** A patched extractor needed a new Companion release.
+
+CI fails if it returns: `no-embedded-extractor` checks for the directory, for
+the directive, and for any committed executable anywhere in the tree.
+
+### It reuses the acquisition machinery; it is not a second updater
+
+`internal/acquire` verifies, downloads, caches and re-checks — the same verifier,
+the same sticky revocations, the same serial ratchet, the same cache every other
+managed tool uses. This package decides only WHICH version to ask for. A change
+to the verification chain therefore applies here with nothing kept in step, and
+a prompt that adds a second update path for the extractor is undoing that.
+
+### The compatibility manifest is a THIRD signed document, and it carries no digest
+
+`aucom.compatibility/1.0` maps a Companion version and a platform to a component
+version and a minimum protocol. Every fact about the BYTES — size, digest,
+signer, licence, source — stays in the catalogue and only there, so there is no
+second copy of a digest for a careless edit to make wrong. Two documents that
+both carry the digest can disagree; one carries the digest and the other carries
+the choice.
+
+**Overlapping rules are refused, not resolved by order.** A rule that depends on
+which one a reader's eye reaches first is a rule nobody can review, and a
+publisher who splits a range and gets the boundary wrong by one release would
+silently install the older build for everybody in the overlap. `Requirement`
+therefore returns *the* match rather than the first, and a later change that
+introduced a precedence order would have to delete that check first.
+
+### The protocol handshake, before the executable is used for anything
+
+A verified executable is not automatically one this build can talk to. **Majors
+equal, minor at least the required one** — never `>= major`, because a later
+major is defined as breaking. The rule lives in one function on each side of the
+boundary (`catalog.ProtocolSatisfies` here, `protocol.Satisfies` there) and a
+second call site implementing a laxer version of it is the failure mode.
+
+Without `min_protocol` the Companion would be trusting a version NUMBER to imply
+a contract, which is exactly the assumption a rebuilt or forked extractor breaks.
+
+### Offline is a different authority, never a weaker check
+
+`extractor-pin.json` records the requirement this machine last VERIFIED, beside
+`config.json` with the catalogue state because it records a decision and
+clearing a cache must not erase one. Offline resolution reads it and the
+handshake still runs against the minimum it carries.
+
+**The fallback happens only because the caller said `Offline`.** A verification
+that failed, a rollback attempt, an expired document or an unreachable server is
+a refusal and never becomes "use the older answer" — that is the difference
+between an offline mode and a way around the catalogue.
+
+### Every invocation is bounded, and the bounds are not decoration
+
+A timeout on the WHOLE run, because a process printing one line every nine
+minutes keeps a per-read deadline satisfied for ever. **SIGTERM first**, because
+the extractor's published contract says a supervised run ends deliberately on
+one and writes a record saying why; the grace period is a field, so the default
+is the patient production answer and a test can shorten it. A fresh working
+directory per invocation, removed afterwards. A bounded read, because a
+subprocess is not a trusted producer of unbounded output — and the cap is
+reported as the cap, not as whatever the child died of when the pipe closed.
+
+`RunJSON` refuses an empty body and trailing content. A subprocess can exit 0
+having printed a warning, half a document, or a document with something
+appended, and each of those decodes into a partially-filled struct a caller then
+acts on.
+
+### Authorization is not verification
+
+When the artifact is served by a backend that authorizes downloads,
+`acquire.Options.Authorize` rewrites the URL immediately before the fetch.
+Nothing else changes: the size, the digest and the signature chain are checked
+exactly as they are for a public URL. **Who let you fetch the bytes and whether
+the bytes are the right bytes are different questions with different answers**,
+and keeping them apart is what stops a compromised backend from being able to
+make this program run something.
+
+`Downloader` still holds no credentials and sends none. What the hook returns is
+a capability for one artifact valid for minutes — the pre-signed-URL shape
+`catalog.RedactURL` already exists to keep out of logs and records.
+
+### Publishing is executable, and holds no key here
+
+`companion catalog release` turns a component's release manifest into the two
+unsigned documents, validated against the rules a signature would otherwise make
+permanent — including the copyleft rule that refuses a package offering no
+corresponding source. `companion catalog sign` is a separate step, so a
+publisher reads what they are about to vouch for. **CI reads no secrets**, and a
+job of its own keeps it that way: a workflow that could sign from a pull request
+would be a workflow that publishes whatever a pull request contains.
+
 ## Cross-repository boundary
 
 Agents may inspect sibling repositories and run their public CLI/API when
