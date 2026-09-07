@@ -15,14 +15,25 @@
 // compares the resulting commands. If a privileged path ever appears, that test
 // is what fails.
 //
-// # These three are samples
+// # What is qualified and what is still a sample
 //
-// They are named `sample.…` deliberately. The qualified EricW toolchain and the
-// curated engine profiles are added by the tasks that qualify them against
-// upstream releases; presenting an unqualified sample as though it were one of
-// those would be exactly the kind of plausible-looking wrong answer the rest of
-// this repository is careful about. They exist so the format has complete,
-// valid, readable examples that the tests exercise.
+// The EricW Q1 toolchain and the three Q1 pipelines are qualified: the version
+// is the one AUT pinned and measured, the archives are pinned by digest in the
+// signed catalogue, and what each program does was measured by running it
+// rather than read off a manual.
+//
+// The engine document is still named `sample.…`, and says so, because no engine
+// build has been qualified against an upstream release yet. Presenting an
+// unqualified document as though it were curated would be exactly the kind of
+// plausible-looking wrong answer the rest of this repository is careful about.
+//
+// There was a `sample.q1-toolchain` here too, and it was retired rather than
+// kept beside the qualified profile. Two built-in tool profiles both providing
+// `q1.bsp.compile` would make "which tool runs this step" a question a pipeline
+// resolves by iteration order, and it also described a compiler nobody had run:
+// it passed `-threads` to a `qbsp` that has no such flag and `-fast` to a
+// `light` that has no such flag. `TestNoTwoBuiltinToolsProvideTheSameCapability`
+// is what keeps the first half from coming back.
 package builtin
 
 import (
@@ -36,6 +47,24 @@ import (
 
 //go:embed *.json
 var files embed.FS
+
+// The ids of the documents this build ships.
+//
+// Constants rather than string literals scattered through the CLI and the
+// tests, because a profile id is a published identity: it appears in a binding,
+// in a job record and in a build manifest, and a typo in one of those places is
+// a lookup that fails in a way nobody reads as a typo.
+const (
+	// EricwQ1 is the qualified Quake 1 toolchain: ericw-tools 0.18.1.
+	EricwQ1 = "auto-pigeon.ericw-tools.q1"
+	// The three Q1 pipelines, which differ only in the options they set.
+	Q1FastPreview = "auto-pigeon.q1.fast-preview"
+	Q1Normal      = "auto-pigeon.q1.normal"
+	Q1Final       = "auto-pigeon.q1.final"
+)
+
+// Q1Pipelines is the three built-in Quake 1 pipelines, quickest first.
+var Q1Pipelines = []string{Q1FastPreview, Q1Normal, Q1Final}
 
 // Entry is one built-in document: what it says, what file it came from, and
 // the digest of its canonical form.

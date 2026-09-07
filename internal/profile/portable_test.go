@@ -127,9 +127,9 @@ func TestPublishedProfilesCarryNoEmptyObjects(t *testing.T) {
 	for _, path := range []string{
 		"valid/minimal.tool.json",
 		"community/user-q1-toolchain.tool.json",
-		"../builtin/sample-q1-toolchain.tool.json",
+		"../builtin/ericw-tools-q1.tool.json",
 		"../builtin/sample-q1-engine.engine.json",
-		"../builtin/sample-q1-normal.pipeline.json",
+		"../builtin/q1-normal.pipeline.json",
 	} {
 		t.Run(path, func(t *testing.T) {
 			canonical, err := Canonical(decodeFixture(t, path))

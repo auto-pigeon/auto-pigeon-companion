@@ -44,9 +44,18 @@ const (
 	RootContent     = "content_root" // where built content is published (a mod directory)
 	RootToolInstall = "tool_root"    // where this profile's own executables live
 	RootToolCache   = "tool_cache"   // the Companion's download cache
+	// RootBuild is where one pipeline run's stages hand files to each other.
+	//
+	// It exists because a job workspace is per job and is deleted, and a
+	// pipeline is several jobs: the `.bsp` `qbsp` produced has to survive the
+	// compile job's cleanup and be readable by the vis job, and neither the
+	// user's project nor the mod directory is the right place to put a build's
+	// half-finished intermediates. It is created and owned by the build runner,
+	// never named by the user.
+	RootBuild = "build_root"
 )
 
-var rootRoles = []string{RootWorkspace, RootProject, RootGame, RootContent, RootToolInstall, RootToolCache}
+var rootRoles = []string{RootWorkspace, RootProject, RootGame, RootContent, RootToolInstall, RootToolCache, RootBuild}
 
 // Platform placeholders.
 var platformNames = []string{"os", "arch", "exe_suffix"}

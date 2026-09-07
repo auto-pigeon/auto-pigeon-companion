@@ -225,7 +225,13 @@ const maxInputBytes = 2 << 30
 // caller is already running as them. When roots *are* declared, a source
 // outside them is refused, including one reached through a symlink, which is
 // what stops an API request from staging a file the profile was never granted.
-func plannedInput(l layout, name, source string, allowedRoots []string) (resolved, destination string, err error) {
+//
+// group is the staging directory the input belongs to: its own name, or — for a
+// sidecar declared with `stage_with` — the name of the input it accompanies.
+// Two inputs in one directory is exactly what a tool that opens a `.prt` beside
+// the `.bsp` it was handed needs, and the per-input default is what stops two
+// unrelated inputs with the same file name from overwriting each other.
+func plannedInput(l layout, name, group, source string, allowedRoots []string) (resolved, destination string, err error) {
 	if strings.TrimSpace(source) == "" {
 		return "", "", fmt.Errorf("job: the input %q has no path", name)
 	}
@@ -256,7 +262,10 @@ func plannedInput(l layout, name, source string, allowedRoots []string) (resolve
 		return "", "", fmt.Errorf("job: the input %q is %d bytes, over the %d-byte limit", name, info.Size(), int64(maxInputBytes))
 	}
 
-	destination = filepath.Join(l.Input, safeBase(name), safeBase(resolved))
+	if strings.TrimSpace(group) == "" {
+		group = name
+	}
+	destination = filepath.Join(l.Input, safeBase(group), safeBase(resolved))
 	if err := within(l.Workspace, destination); err != nil {
 		return "", "", fmt.Errorf("job: the input %q: %w", name, err)
 	}

@@ -288,6 +288,8 @@ func rootPhrase(role string) string {
 		return "this tool's own installation folder"
 	case RootToolCache:
 		return "the Companion's download cache"
+	case RootBuild:
+		return "the folder this build's stages hand files through"
 	}
 	return role
 }
@@ -296,12 +298,12 @@ func rootPhrase(role string) string {
 // costs somebody their files, so it is the line the risk levels are drawn at.
 func rootRisk(role string, access Access) Risk {
 	if access == AccessRead {
-		if role == RootWorkspace || role == RootToolInstall || role == RootToolCache {
+		if role == RootWorkspace || role == RootToolInstall || role == RootToolCache || role == RootBuild {
 			return RiskLow
 		}
 		return RiskMedium
 	}
-	if role == RootWorkspace {
+	if role == RootWorkspace || role == RootBuild {
 		return RiskLow
 	}
 	return RiskHigh

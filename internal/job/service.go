@@ -655,9 +655,13 @@ func (s *Service) inputRoots(id string, request Request) []string {
 func (s *Service) resolve(id string, request Request, entry CatalogEntry, action profile.Action, stage bool) (profile.Invocation, error) {
 	l := s.store.layout(id)
 	allowed := s.inputRoots(id, request)
+	groups := make(map[string]string, len(action.Inputs))
+	for _, declared := range action.Inputs {
+		groups[declared.Name] = declared.StageGroup()
+	}
 	inputs := make(map[string]string, len(request.Inputs))
 	for _, name := range sortedKeys(request.Inputs) {
-		resolved, destination, err := plannedInput(l, name, request.Inputs[name], allowed)
+		resolved, destination, err := plannedInput(l, name, groups[name], request.Inputs[name], allowed)
 		if err != nil {
 			return profile.Invocation{}, err
 		}

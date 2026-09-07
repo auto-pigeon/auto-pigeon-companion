@@ -166,7 +166,7 @@ func Resolve(p Profile, actionID string, request Request) (Invocation, error) {
 		Options:     options,
 		Runtime:     request.Runtime,
 	}
-	outputs, optional, err := resolveOutputs(action, env, workingDir)
+	outputs, optional, err := resolveOutputs(action, env, workingDir, request.Inputs)
 	if err != nil {
 		return Invocation{}, fmt.Errorf("profile: resolving %s/%s: %w", meta.ID, actionID, err)
 	}
@@ -317,10 +317,29 @@ func resolveWorkingDir(action Action, request Request) (string, error) {
 	return filepath.Join(base, filepath.FromSlash(sub)), nil
 }
 
-func resolveOutputs(action Action, env Env, workingDir string) (map[string]string, []string, error) {
+func resolveOutputs(action Action, env Env, workingDir string, inputs map[string]string) (map[string]string, []string, error) {
 	outputs := make(map[string]string, len(action.Outputs))
 	var optional []string
 	for _, out := range action.Outputs {
+		if out.InPlace != "" {
+			// The path the executor staged the input at, verbatim. Not
+			// recomputed and not guessed: the whole point of `in_place` is that
+			// this is one path, known to one component, and the profile does
+			// not get to have an opinion about it.
+			staged, ok := inputs[out.InPlace]
+			if !ok || strings.TrimSpace(staged) == "" {
+				return nil, nil, fmt.Errorf("the output %q is the input %q rewritten in place, and that input was not supplied", out.Name, out.InPlace)
+			}
+			resolved := filepath.Clean(staged)
+			if out.Extension != "" {
+				resolved = strings.TrimSuffix(resolved, filepath.Ext(resolved)) + out.Extension
+			}
+			outputs[out.Name] = resolved
+			if out.Optional {
+				optional = append(optional, out.Name)
+			}
+			continue
+		}
 		t, err := parseTemplate(out.Path)
 		if err != nil {
 			return nil, nil, fmt.Errorf("the output %q has an unreadable path: %w", out.Name, err)

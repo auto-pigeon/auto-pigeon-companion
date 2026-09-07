@@ -207,7 +207,7 @@ func TestJobProfilesListsWhatCanBeRun(t *testing.T) {
 	}
 	// The built-in samples and the profiles generated from this machine's
 	// launch configs, from the one chained catalog.
-	for _, want := range []string{"auto-pigeon.sample.q1-toolchain", "auto-pigeon.launch.quake"} {
+	for _, want := range []string{"auto-pigeon.ericw-tools.q1", "auto-pigeon.launch.quake"} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Errorf("the catalog is missing %q:\n%s", want, stdout.String())
 		}

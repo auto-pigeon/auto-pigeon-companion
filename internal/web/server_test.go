@@ -247,7 +247,7 @@ func TestTheProfileCatalogIsServed(t *testing.T) {
 	}
 	// Both sources of the chain are represented: an embedded document and one
 	// generated from this machine's launch configuration.
-	if !found["auto-pigeon.sample.q1-toolchain"] {
+	if !found["auto-pigeon.ericw-tools.q1"] {
 		t.Errorf("the built-in sample toolchain is missing: %v", found)
 	}
 	if !found["auto-pigeon.launch.quake"] {

@@ -84,7 +84,7 @@ func TestProfileShowSaysNothingIsGrantedYet(t *testing.T) {
 // shipped. Claiming a built-in id is not the same as being one.
 func TestProfileShowTrustsABuiltinDocumentByItsBytes(t *testing.T) {
 	env, stdout, stderr := testEnv(t)
-	path := filepath.Join("..", "profile", "builtin", "sample-q1-toolchain.tool.json")
+	path := filepath.Join("..", "profile", "builtin", "ericw-tools-q1.tool.json")
 	if code := Run(env, []string{"profile", "show", path}); code != 0 {
 		t.Fatalf("exit code = %d, stderr = %s", code, stderr)
 	}

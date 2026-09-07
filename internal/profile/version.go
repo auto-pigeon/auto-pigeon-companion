@@ -13,13 +13,21 @@ import (
 // Confusing the two is the classic forward-compatibility bug: a reader that
 // treats "I don't know this profile version" as "I don't know this format"
 // refuses documents it could have read perfectly well.
-const SchemaVersion = "aucom.profile/1.0"
+const SchemaVersion = "aucom.profile/1.1"
 
 // SupportedSchemaVersions is every document format this build can read, oldest
 // first. A document naming anything else is refused by name rather than being
 // parsed hopefully — a format this build has never heard of is exactly the case
 // where a partial read is worse than no read.
-var SupportedSchemaVersions = []string{"aucom.profile/1.0"}
+//
+// 1.1 added two members, both additive and both discovered by writing the
+// first profile for a toolchain that is actually run: `stage_with` on an input,
+// because `vis` reads a `.prt` that must sit beside the `.bsp` it was given,
+// and `in_place` on an output, because `vis` and `light` rewrite the file they
+// were handed rather than writing a new one. A 1.0 document is still read
+// exactly as it was; a 1.1 document read by an older build is refused by name
+// rather than half-understood, which is what the version is for.
+var SupportedSchemaVersions = []string{"aucom.profile/1.0", "aucom.profile/1.1"}
 
 // LocalBindingSchemaVersion versions the machine-local binding record. It is
 // separate from SchemaVersion because bindings are never published: the two

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://auto-pigeon.invalid/schema/aucom.profile/1.0/engine",
-  "title": "Auto-Pigeon Companion engine profile 1.0",
+  "$id": "https://auto-pigeon.invalid/schema/aucom.profile/1.1/engine",
+  "title": "Auto-Pigeon Companion engine profile 1.1",
   "description": "One game engine the Companion can start. Action ids are a closed vocabulary \u2014 play_map, play_package, join_server, host_listen, host_dedicated \u2014 so that an engine which does not support one omits it rather than declaring one that does something else.",
   "type": "object",
   "additionalProperties": false,
@@ -24,16 +24,16 @@
   ],
   "properties": {
     "schema_version": {
-      "const": "aucom.profile/1.0"
+      "enum": ["aucom.profile/1.0", "aucom.profile/1.1"]
     },
     "kind": {
       "const": "engine"
     },
     "id": {
-      "$ref": "profile-common-1.0.schema.json#/$defs/profileId"
+      "$ref": "profile-common-1.1.schema.json#/$defs/profileId"
     },
     "version": {
-      "$ref": "profile-common-1.0.schema.json#/$defs/version"
+      "$ref": "profile-common-1.1.schema.json#/$defs/version"
     },
     "name": {
       "type": "string",
@@ -48,19 +48,19 @@
       "maxLength": 4000
     },
     "publisher": {
-      "$ref": "profile-common-1.0.schema.json#/$defs/publisher"
+      "$ref": "profile-common-1.1.schema.json#/$defs/publisher"
     },
     "source": {
-      "$ref": "profile-common-1.0.schema.json#/$defs/source"
+      "$ref": "profile-common-1.1.schema.json#/$defs/source"
     },
     "license": {
-      "$ref": "profile-common-1.0.schema.json#/$defs/license"
+      "$ref": "profile-common-1.1.schema.json#/$defs/license"
     },
     "compatibility": {
-      "$ref": "profile-common-1.0.schema.json#/$defs/compatibility"
+      "$ref": "profile-common-1.1.schema.json#/$defs/compatibility"
     },
     "game_profile": {
-      "$ref": "profile-common-1.0.schema.json#/$defs/gameProfileRef"
+      "$ref": "profile-common-1.1.schema.json#/$defs/gameProfileRef"
     },
     "runtime": {
       "type": "string",
@@ -81,7 +81,7 @@
       "minItems": 1,
       "maxItems": 256,
       "items": {
-        "$ref": "profile-common-1.0.schema.json#/$defs/platformSupport"
+        "$ref": "profile-common-1.1.schema.json#/$defs/platformSupport"
       }
     },
     "acquisition": {
@@ -89,17 +89,17 @@
       "minItems": 1,
       "maxItems": 256,
       "items": {
-        "$ref": "profile-common-1.0.schema.json#/$defs/acquisitionOption"
+        "$ref": "profile-common-1.1.schema.json#/$defs/acquisitionOption"
       }
     },
     "version_probe": {
-      "$ref": "profile-common-1.0.schema.json#/$defs/versionProbe"
+      "$ref": "profile-common-1.1.schema.json#/$defs/versionProbe"
     },
     "content_layouts": {
       "type": "array",
       "maxItems": 256,
       "items": {
-        "$ref": "profile-common-1.0.schema.json#/$defs/contentLayout"
+        "$ref": "profile-common-1.1.schema.json#/$defs/contentLayout"
       }
     },
     "executables": {
@@ -107,7 +107,7 @@
       "minItems": 1,
       "maxItems": 256,
       "items": {
-        "$ref": "profile-common-1.0.schema.json#/$defs/executable"
+        "$ref": "profile-common-1.1.schema.json#/$defs/executable"
       }
     },
     "actions": {
@@ -117,7 +117,7 @@
       "items": {
         "allOf": [
           {
-            "$ref": "profile-common-1.0.schema.json#/$defs/action"
+            "$ref": "profile-common-1.1.schema.json#/$defs/action"
           },
           {
             "properties": {

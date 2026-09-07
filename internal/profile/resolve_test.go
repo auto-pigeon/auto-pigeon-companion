@@ -284,7 +284,7 @@ func TestPipelineResolvesThroughCapabilitiesAndChecksTheWiring(t *testing.T) {
 // A pipeline needing a capability nothing provides fails before anything runs,
 // which is the point of resolving separately from executing.
 func TestPipelineWithNoProviderFailsBeforeAnythingRuns(t *testing.T) {
-	pipeline := decodeFixture(t, "../builtin/sample-q1-normal.pipeline.json").(*PipelineProfile)
+	pipeline := decodeFixture(t, "../builtin/q1-normal.pipeline.json").(*PipelineProfile)
 	if _, err := pipeline.Resolve(fixedResolver{}); err == nil {
 		t.Fatal("a pipeline resolved with nothing installed")
 	} else if !strings.Contains(err.Error(), "q1.bsp.compile") {

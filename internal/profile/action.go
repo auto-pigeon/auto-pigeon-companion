@@ -172,6 +172,19 @@ type InputSpec struct {
 	// Extensions, when given, are the file extensions this input accepts, for
 	// the file picker and for a legibility check. Advisory, not a guarantee.
 	Extensions []string `json:"extensions,omitempty"`
+	// StageWith names another input this one must be staged beside.
+	//
+	// Some tools do not take every file they read as an argument. `vis` is
+	// handed a `.bsp` and then opens the `.prt` of the same stem in the same
+	// directory; without it, it says `LoadPortals: couldn't read …` and exits
+	// non-zero. The executor stages each input into its own directory so that
+	// two inputs cannot collide, which is right by default and exactly wrong
+	// for a sidecar — so a sidecar says so, and the two are staged together.
+	//
+	// One level only: the named input may not itself be staged with a third.
+	// A chain would make "which directory does this file end up in" a question
+	// with a traversal in it.
+	StageWith string `json:"stage_with,omitempty"`
 }
 
 func (i InputSpec) validate(c *collector) {
@@ -179,6 +192,20 @@ func (i InputSpec) validate(c *collector) {
 	c.child(field("title"), func(c *collector) { checkText(c, i.Title, maxNameLength, false) })
 	c.child(field("role"), func(c *collector) { checkArtifactRole(c, i.Role) })
 	c.child(field("extensions"), func(c *collector) { checkExtensions(c, i.Extensions) })
+	c.child(field("stage_with"), func(c *collector) {
+		if i.StageWith != "" {
+			checkToken(c, i.StageWith)
+		}
+	})
+}
+
+// StageGroup is the staging directory an input belongs to: its own name, or the
+// name of the input it is a sidecar of.
+func (i InputSpec) StageGroup() string {
+	if i.StageWith != "" {
+		return i.StageWith
+	}
+	return i.Name
 }
 
 // OutputSpec is a file an action produces.
@@ -190,7 +217,25 @@ type OutputSpec struct {
 	// directory. `{option.…}` and `{runtime.…}` may appear in it; a root may
 	// not, because an output that could name a root would be a write outside
 	// the workspace dressed as a file name.
-	Path string `json:"path" aucom:"required"`
+	//
+	// Required unless InPlace is set, in which case there is no path to write:
+	// the output is a file the tool was handed.
+	Path string `json:"path,omitempty"`
+	// InPlace names an input this output *is*, because the tool rewrote it
+	// where it stood.
+	//
+	// `vis` and `light` do not write a new BSP; they read the one they were
+	// given and save it back over itself. Declaring a path for that would mean
+	// guessing where the executor staged the input, which is the executor's
+	// business and not a profile's — and a wrong guess is a job that reports
+	// "the action declared outputs it did not produce" while the tool sits on
+	// disk having succeeded. Naming the input instead is exact.
+	InPlace string `json:"in_place,omitempty"`
+	// Extension is the file extension the tool used for a companion file it
+	// wrote beside the one it was handed: `light` is given `level.bsp` and
+	// writes `level.lit` next to it. Only meaningful with InPlace, whose path
+	// it borrows everything but the extension from.
+	Extension string `json:"extension,omitempty"`
 	// Optional marks an output the tool may or may not produce — a leak file,
 	// a log — so its absence is not a failure.
 	Optional bool `json:"optional,omitempty"`
@@ -200,7 +245,38 @@ func (o OutputSpec) validate(c *collector, s scope) {
 	c.child(field("name"), func(c *collector) { checkToken(c, o.Name) })
 	c.child(field("title"), func(c *collector) { checkText(c, o.Title, maxNameLength, false) })
 	c.child(field("role"), func(c *collector) { checkArtifactRole(c, o.Role) })
+	c.child(field("in_place"), func(c *collector) {
+		if o.InPlace == "" {
+			return
+		}
+		checkToken(c, o.InPlace)
+		if !s.inputs[o.InPlace] {
+			c.fixf("declared inputs are: "+strings.Join(sortedKeys(s.inputs), ", "),
+				"names the undeclared input %q", o.InPlace)
+		}
+	})
+	c.child(field("extension"), func(c *collector) {
+		if o.Extension == "" {
+			return
+		}
+		if o.InPlace == "" {
+			c.fixf("set `in_place` to the input it sits beside, or remove it",
+				"is set on an output that is not written beside an input")
+			return
+		}
+		checkExtensions(c, []string{o.Extension})
+	})
 	c.child(field("path"), func(c *collector) {
+		switch {
+		case o.InPlace != "" && o.Path != "":
+			c.fixf("remove one of them", "is set on an output that is already the input %q rewritten in place", o.InPlace)
+			return
+		case o.InPlace != "":
+			return
+		case o.Path == "":
+			c.fixf("say where the file appears, or set `in_place`", "is required and empty")
+			return
+		}
 		checkNoShellSyntax(c, o.Path)
 		t, err := parseTemplate(o.Path)
 		if err != nil {
@@ -646,7 +722,30 @@ func (a Action) validate(c *collector, executables map[string]bool, capabilities
 		c.child(field("working_dir"), a.WorkingDir.validate)
 	}
 	c.child(field("inputs"), func(c *collector) {
-		validateNamed(c, a.Inputs, func(i InputSpec) string { return i.Name }, func(c *collector, i InputSpec) { i.validate(c) })
+		sidecar := map[string]bool{}
+		for _, i := range a.Inputs {
+			if i.StageWith != "" {
+				sidecar[i.Name] = true
+			}
+		}
+		validateNamed(c, a.Inputs, func(i InputSpec) string { return i.Name }, func(c *collector, i InputSpec) {
+			i.validate(c)
+			if i.StageWith == "" {
+				return
+			}
+			c.child(field("stage_with"), func(c *collector) {
+				switch {
+				case i.StageWith == i.Name:
+					c.fixf("remove it; an input is already staged in its own directory", "names the input itself")
+				case !s.inputs[i.StageWith]:
+					c.fixf("declared inputs are: "+strings.Join(sortedKeys(s.inputs), ", "),
+						"names the undeclared input %q", i.StageWith)
+				case sidecar[i.StageWith]:
+					c.fixf("stage it with an input that is not itself a sidecar",
+						"names %q, which is itself staged with another input", i.StageWith)
+				}
+			})
+		})
 	})
 	c.child(field("outputs"), func(c *collector) {
 		validateNamed(c, a.Outputs, func(o OutputSpec) string { return o.Name }, func(c *collector, o OutputSpec) { o.validate(c, s) })

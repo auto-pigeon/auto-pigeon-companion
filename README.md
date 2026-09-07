@@ -620,13 +620,13 @@ implementation:
 
 ```console
 $ companion profile schema
-engine-profile-1.0.schema.json
+engine-profile-1.1.schema.json
 local-binding-1.1.schema.json
-pipeline-profile-1.0.schema.json
-profile-common-1.0.schema.json
-tool-profile-1.0.schema.json
+pipeline-profile-1.1.schema.json
+profile-common-1.1.schema.json
+tool-profile-1.1.schema.json
 
-$ companion profile schema tool-profile-1.0.schema.json > tool.schema.json
+$ companion profile schema tool-profile-1.1.schema.json > tool.schema.json
 ```
 
 The Go types in `internal/profile` are the enforcement point — they check things

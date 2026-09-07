@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://auto-pigeon.invalid/schema/aucom.profile/1.0/common",
+  "$id": "https://auto-pigeon.invalid/schema/aucom.profile/1.1/common",
   "title": "Auto-Pigeon Companion profile \u2014 shared definitions",
-  "description": "Definitions shared by the tool, engine and pipeline profile schemas. This document is normative for anything outside the Companion that reads or writes profiles; inside the Companion the Go types in internal/profile are the enforcement point, and a test asserts that the two describe the same members.",
+  "description": "Definitions shared by the tool, engine and pipeline profile schemas. This document is normative for anything outside the Companion that reads or writes profiles; inside the Companion the Go types in internal/profile are the enforcement point, and a test asserts that the two describe the same members. 1.1 adds `stage_with` to an input and `in_place` to an output, and the `build_root` root role; a 1.0 document uses none of them and is still read.",
   "$defs": {
     "version": {
       "type": "string",
@@ -45,7 +45,8 @@
         "game_root",
         "content_root",
         "tool_root",
-        "tool_cache"
+        "tool_cache",
+        "build_root"
       ]
     },
     "versionRange": {
@@ -547,6 +548,10 @@
             "maxLength": 16,
             "pattern": "^\\.[^./\\\\ ]+$"
           }
+        },
+        "stage_with": {
+          "$ref": "#/$defs/token",
+          "description": "Stage this input into the same directory as the named input. For a sidecar file a tool opens by convention rather than by argument \u2014 the .prt that vis reads beside the .bsp it was handed. One level only: the named input may not itself be staged with a third."
         }
       }
     },
@@ -555,8 +560,7 @@
       "additionalProperties": false,
       "required": [
         "name",
-        "role",
-        "path"
+        "role"
       ],
       "properties": {
         "name": {
@@ -571,12 +575,45 @@
         },
         "path": {
           "type": "string",
-          "maxLength": 512
+          "maxLength": 512,
+          "description": "Where the file appears, relative to the action's working directory. Required unless `in_place` is set."
+        },
+        "in_place": {
+          "$ref": "#/$defs/token",
+          "description": "The name of an input this output is: the tool rewrote the file it was handed rather than writing a new one, as vis and light do with a .bsp. Mutually exclusive with `path`; exactly one of the two is set."
+        },
+        "extension": {
+          "type": "string",
+          "maxLength": 16,
+          "pattern": "^\\.[^./\\\\ ]+$",
+          "description": "The extension of a companion file the tool wrote beside the file it was handed \u2014 light writes level.lit next to level.bsp. Only meaningful with `in_place`."
         },
         "optional": {
           "type": "boolean"
         }
-      }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "path"
+          ],
+          "not": {
+            "required": [
+              "in_place"
+            ]
+          }
+        },
+        {
+          "required": [
+            "in_place"
+          ],
+          "not": {
+            "required": [
+              "path"
+            ]
+          }
+        }
+      ]
     },
     "enumValue": {
       "type": "object",

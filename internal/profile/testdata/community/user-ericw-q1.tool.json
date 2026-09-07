@@ -1,0 +1,933 @@
+{
+  "actions": [
+    {
+      "id": "compile",
+      "title": "Compile the map",
+      "description": "qbsp reads the .map and writes the .bsp. The WAD the map names in its worldspawn is found beside the .map, which is why the optional `wad` input is staged with the source.",
+      "capability": "q1.bsp.compile",
+      "executable": "qbsp",
+      "working_dir": {
+        "root": "workspace"
+      },
+      "args": [
+        {
+          "value": "-leaktest",
+          "when": {
+            "option": "leaktest"
+          }
+        },
+        {
+          "value": "-verbose",
+          "when": {
+            "option": "verbosity",
+            "equals": "verbose"
+          }
+        },
+        {
+          "value": "-noverbose",
+          "when": {
+            "option": "verbosity",
+            "equals": "quiet"
+          }
+        },
+        {
+          "value": "-nopercent",
+          "when": {
+            "option": "verbosity",
+            "equals": "quiet"
+          }
+        },
+        {
+          "value": "-bsp2",
+          "when": {
+            "option": "bsp2"
+          }
+        },
+        {
+          "value": "-nofill",
+          "when": {
+            "option": "nofill"
+          }
+        },
+        {
+          "value": "-noclip",
+          "when": {
+            "option": "noclip"
+          }
+        },
+        {
+          "value": "-nodetail",
+          "when": {
+            "option": "nodetail"
+          }
+        },
+        {
+          "value": "-notex",
+          "when": {
+            "option": "notex"
+          }
+        },
+        {
+          "value": "-wrbrushes",
+          "when": {
+            "option": "wrbrushes"
+          }
+        },
+        {
+          "value": "-subdivide",
+          "when": {
+            "option": "subdivide"
+          }
+        },
+        {
+          "value": "{option.subdivide}",
+          "when": {
+            "option": "subdivide"
+          }
+        },
+        {
+          "value": "{input.source_map}"
+        },
+        {
+          "value": "{output.bsp}"
+        }
+      ],
+      "inputs": [
+        {
+          "name": "source_map",
+          "title": "Map source",
+          "role": "q1.map.source",
+          "required": true,
+          "extensions": [
+            ".map"
+          ]
+        },
+        {
+          "name": "wad",
+          "title": "Texture WAD",
+          "role": "q1.wad",
+          "extensions": [
+            ".wad"
+          ],
+          "stage_with": "source_map"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "bsp",
+          "title": "Compiled BSP",
+          "role": "q1.bsp",
+          "path": "{option.basename}.bsp"
+        },
+        {
+          "name": "prt",
+          "title": "Portal file",
+          "role": "q1.prt",
+          "path": "{option.basename}.prt",
+          "optional": true
+        },
+        {
+          "name": "pts",
+          "title": "Leak point file",
+          "role": "q1.pts",
+          "path": "{option.basename}.pts",
+          "optional": true
+        },
+        {
+          "name": "log",
+          "title": "Compiler log",
+          "role": "q1.compile.log",
+          "path": "{option.basename}.log",
+          "optional": true
+        }
+      ],
+      "options": [
+        {
+          "name": "basename",
+          "title": "Output name",
+          "description": "The stem of the .bsp and of the files qbsp writes beside it.",
+          "type": "text",
+          "default": "level",
+          "max_length": 64
+        },
+        {
+          "name": "leaktest",
+          "title": "Fail if the map leaks",
+          "description": "qbsp exits non-zero on a leak instead of writing a BSP with no visibility data. The point file is still written, and is what you load in the editor to find the hole.",
+          "type": "bool",
+          "default": "true"
+        },
+        {
+          "name": "verbosity",
+          "title": "How much qbsp prints",
+          "type": "enum",
+          "default": "normal",
+          "values": [
+            {
+              "value": "normal",
+              "title": "Normal"
+            },
+            {
+              "value": "verbose",
+              "title": "Verbose"
+            },
+            {
+              "value": "quiet",
+              "title": "Almost nothing"
+            }
+          ]
+        },
+        {
+          "name": "bsp2",
+          "title": "BSP2 format",
+          "description": "For maps that exceed the limits of the original format. Needs an engine that reads BSP2.",
+          "type": "bool",
+          "default": "false",
+          "advanced": true
+        },
+        {
+          "name": "nofill",
+          "title": "Skip outside filling",
+          "type": "bool",
+          "default": "false",
+          "advanced": true
+        },
+        {
+          "name": "noclip",
+          "title": "Skip the clipping hulls",
+          "type": "bool",
+          "default": "false",
+          "advanced": true
+        },
+        {
+          "name": "nodetail",
+          "title": "Treat func_detail as structural",
+          "type": "bool",
+          "default": "false",
+          "advanced": true
+        },
+        {
+          "name": "notex",
+          "title": "Placeholder textures only",
+          "type": "bool",
+          "default": "false",
+          "advanced": true
+        },
+        {
+          "name": "wrbrushes",
+          "title": "Write brush data (bspx)",
+          "type": "bool",
+          "default": "false",
+          "advanced": true
+        },
+        {
+          "name": "subdivide",
+          "title": "Texture subdivision",
+          "description": "qbsp's default is 240. Leave it unset to use it.",
+          "type": "integer",
+          "minimum": 32,
+          "maximum": 1024,
+          "advanced": true
+        }
+      ],
+      "diagnostics": [
+        {
+          "id": "leak",
+          "match": "Reached occupant",
+          "severity": "error",
+          "message": "The map leaks: there is a gap between the inside and the void.",
+          "hint": "Load the .pts point file this build published in your editor and follow it to the hole."
+        },
+        {
+          "id": "leakfile",
+          "match": "Leak file written",
+          "severity": "info",
+          "message": "A point file was written."
+        },
+        {
+          "id": "brush_faces",
+          "match": "WARNING 09",
+          "severity": "error",
+          "message": "A brush produced no faces, so the compiler dropped it.",
+          "hint": "Its plane triples enclose no volume. Check the winding of the faces the editor wrote."
+        },
+        {
+          "id": "no_wad",
+          "match": "WARNING 01",
+          "severity": "error",
+          "message": "The map names no WAD the compiler could open, so every face is untextured.",
+          "hint": "Add the .wad as the pipeline's `wad` input, or fix the `wad` key in worldspawn."
+        },
+        {
+          "id": "texture_missing",
+          "match": "WARNING 16",
+          "severity": "error",
+          "message": "A texture the map uses is not in any WAD that was opened.",
+          "hint": "The BSP will build, with a placeholder where that texture should be."
+        },
+        {
+          "id": "empty_entity",
+          "match": "Entity with no valid brushes",
+          "severity": "warning",
+          "message": "An entity has no usable brushes and was dropped."
+        },
+        {
+          "id": "degenerate",
+          "match": "with duplicate plane",
+          "severity": "warning",
+          "message": "A brush has two identical planes."
+        },
+        {
+          "id": "bsp2_needed",
+          "match": "exceeds max",
+          "severity": "error",
+          "message": "The map is over a hard limit of the original BSP format.",
+          "hint": "Turn on the BSP2 format option, and use an engine that reads it."
+        },
+        {
+          "id": "wad_opened",
+          "match": "Opened WAD",
+          "severity": "info",
+          "message": "A texture WAD was opened."
+        },
+        {
+          "id": "written",
+          "match": "WriteBSPFile",
+          "severity": "progress",
+          "message": "Writing the BSP."
+        }
+      ],
+      "roots": [
+        {
+          "role": "workspace",
+          "access": "read_write",
+          "purpose": "read the staged map source and write the compiled BSP beside it"
+        }
+      ],
+      "timeout_seconds": 3600
+    },
+    {
+      "id": "vis",
+      "title": "Compute visibility",
+      "description": "vis rewrites the BSP it is given. It also opens the .prt of the same stem in the same directory, which is why that file is an input here and is staged beside the BSP.",
+      "capability": "q1.bsp.vis",
+      "executable": "vis",
+      "working_dir": {
+        "root": "workspace"
+      },
+      "args": [
+        {
+          "value": "-threads"
+        },
+        {
+          "value": "{option.threads}"
+        },
+        {
+          "value": "-fast",
+          "when": {
+            "option": "fast"
+          }
+        },
+        {
+          "value": "-level",
+          "when": {
+            "option": "fast",
+            "equals": "false"
+          }
+        },
+        {
+          "value": "{option.level}",
+          "when": {
+            "option": "fast",
+            "equals": "false"
+          }
+        },
+        {
+          "value": "{input.bsp}"
+        }
+      ],
+      "inputs": [
+        {
+          "name": "bsp",
+          "title": "Compiled BSP",
+          "role": "q1.bsp",
+          "required": true,
+          "extensions": [
+            ".bsp"
+          ]
+        },
+        {
+          "name": "prt",
+          "title": "Portal file",
+          "role": "q1.prt",
+          "required": true,
+          "extensions": [
+            ".prt"
+          ],
+          "stage_with": "bsp"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "bsp",
+          "title": "BSP with visibility",
+          "role": "q1.bsp.vised",
+          "in_place": "bsp"
+        },
+        {
+          "name": "log",
+          "title": "vis log",
+          "role": "q1.vis.log",
+          "path": "vis.log",
+          "optional": true
+        }
+      ],
+      "options": [
+        {
+          "name": "threads",
+          "title": "Threads",
+          "type": "integer",
+          "default": "4",
+          "minimum": 1,
+          "maximum": 64
+        },
+        {
+          "name": "fast",
+          "title": "Fast, rough visibility",
+          "description": "A quick pass for previewing. The result is not what you ship.",
+          "type": "bool",
+          "default": "false"
+        },
+        {
+          "name": "level",
+          "title": "Test level",
+          "description": "vis's own 0-4. Ignored when the fast pass is on.",
+          "type": "integer",
+          "default": "4",
+          "minimum": 0,
+          "maximum": 4,
+          "advanced": true
+        }
+      ],
+      "diagnostics": [
+        {
+          "id": "no_portals",
+          "match": "couldn't read",
+          "severity": "error",
+          "message": "vis could not read the portal file that belongs to this BSP.",
+          "hint": "The compile stage produces it. A leaked map has none, because qbsp stops before writing one."
+        },
+        {
+          "id": "not_vised",
+          "match": "No vising performed",
+          "severity": "error",
+          "message": "vis did not compute anything."
+        },
+        {
+          "id": "progress",
+          "match": "visdatasize",
+          "severity": "progress",
+          "message": "Visibility data written."
+        }
+      ],
+      "roots": [
+        {
+          "role": "workspace",
+          "access": "read_write",
+          "purpose": "rewrite the staged BSP with its visibility data"
+        }
+      ],
+      "timeout_seconds": 21600
+    },
+    {
+      "id": "light",
+      "title": "Compute lighting",
+      "description": "light rewrites the BSP it is given, and writes the coloured lightmap beside it as a .lit when that is asked for.",
+      "capability": "q1.bsp.light",
+      "executable": "light",
+      "working_dir": {
+        "root": "workspace"
+      },
+      "args": [
+        {
+          "value": "-threads"
+        },
+        {
+          "value": "{option.threads}"
+        },
+        {
+          "value": "-extra",
+          "when": {
+            "option": "sampling",
+            "equals": "extra"
+          }
+        },
+        {
+          "value": "-extra4",
+          "when": {
+            "option": "sampling",
+            "equals": "extra4"
+          }
+        },
+        {
+          "value": "-lit",
+          "when": {
+            "option": "lit"
+          }
+        },
+        {
+          "value": "-soft",
+          "when": {
+            "option": "soft"
+          }
+        },
+        {
+          "value": "-bounce",
+          "when": {
+            "option": "bounce"
+          }
+        },
+        {
+          "value": "1",
+          "when": {
+            "option": "bounce"
+          }
+        },
+        {
+          "value": "-gate",
+          "when": {
+            "option": "gate"
+          }
+        },
+        {
+          "value": "{option.gate}",
+          "when": {
+            "option": "gate"
+          }
+        },
+        {
+          "value": "{input.bsp}"
+        }
+      ],
+      "inputs": [
+        {
+          "name": "bsp",
+          "title": "BSP with visibility",
+          "role": "q1.bsp.vised",
+          "required": true,
+          "extensions": [
+            ".bsp"
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "name": "bsp",
+          "title": "Lit BSP",
+          "role": "q1.bsp.lit",
+          "in_place": "bsp"
+        },
+        {
+          "name": "lit",
+          "title": "Coloured lighting",
+          "role": "q1.lit",
+          "in_place": "bsp",
+          "extension": ".lit",
+          "optional": true
+        },
+        {
+          "name": "log",
+          "title": "light log",
+          "role": "q1.light.log",
+          "path": "light.log",
+          "optional": true
+        }
+      ],
+      "options": [
+        {
+          "name": "threads",
+          "title": "Threads",
+          "type": "integer",
+          "default": "4",
+          "minimum": 1,
+          "maximum": 64
+        },
+        {
+          "name": "sampling",
+          "title": "Supersampling",
+          "description": "How many samples per lightmap texel. extra4 is the slow one you use for a final build.",
+          "type": "enum",
+          "default": "none",
+          "values": [
+            {
+              "value": "none",
+              "title": "None"
+            },
+            {
+              "value": "extra",
+              "title": "2x"
+            },
+            {
+              "value": "extra4",
+              "title": "4x"
+            }
+          ]
+        },
+        {
+          "name": "lit",
+          "title": "Write a .lit file",
+          "description": "Coloured lighting, for engines that read it.",
+          "type": "bool",
+          "default": "true"
+        },
+        {
+          "name": "soft",
+          "title": "Soften the lightmap",
+          "type": "bool",
+          "default": "false"
+        },
+        {
+          "name": "bounce",
+          "title": "Bounced light",
+          "type": "bool",
+          "default": "false"
+        },
+        {
+          "name": "gate",
+          "title": "Light cutoff",
+          "description": "Stop tracing a light below this brightness. Higher is faster and coarser; leave it unset for light's own default.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "advanced": true
+        }
+      ],
+      "diagnostics": [
+        {
+          "id": "empty_lightmaps",
+          "match": "empty lightmaps",
+          "severity": "info",
+          "message": "light reported how many faces received no light."
+        },
+        {
+          "id": "no_lights",
+          "match": "0 lights",
+          "severity": "warning",
+          "message": "The map has no light entities, so the result will be fullbright or black."
+        },
+        {
+          "id": "written",
+          "match": "Writing",
+          "severity": "progress",
+          "message": "Writing the lit BSP."
+        }
+      ],
+      "roots": [
+        {
+          "role": "workspace",
+          "access": "read_write",
+          "purpose": "rewrite the staged BSP with its lighting data"
+        }
+      ],
+      "timeout_seconds": 21600
+    },
+    {
+      "id": "inspect",
+      "title": "Report what is inside the BSP",
+      "capability": "q1.bsp.inspect",
+      "executable": "bspinfo",
+      "working_dir": {
+        "root": "workspace"
+      },
+      "args": [
+        {
+          "value": "{input.bsp}"
+        }
+      ],
+      "description": "bspinfo prints its report; there is no file to collect, and the job's captured output is the report.",
+      "inputs": [
+        {
+          "name": "bsp",
+          "title": "BSP",
+          "role": "q1.bsp",
+          "required": true,
+          "extensions": [
+            ".bsp"
+          ]
+        }
+      ],
+      "outputs": [],
+      "options": [],
+      "roots": [
+        {
+          "role": "workspace",
+          "access": "read",
+          "purpose": "read the staged BSP"
+        }
+      ],
+      "timeout_seconds": 300
+    },
+    {
+      "id": "check",
+      "title": "Check the BSP for inconsistencies",
+      "capability": "q1.bsp.check",
+      "executable": "bsputil",
+      "working_dir": {
+        "root": "workspace"
+      },
+      "args": [
+        {
+          "value": "--check"
+        },
+        {
+          "value": "{input.bsp}"
+        }
+      ],
+      "inputs": [
+        {
+          "name": "bsp",
+          "title": "BSP",
+          "role": "q1.bsp",
+          "required": true,
+          "extensions": [
+            ".bsp"
+          ]
+        }
+      ],
+      "outputs": [],
+      "options": [],
+      "diagnostics": [
+        {
+          "id": "check_failed",
+          "match": "ERROR",
+          "severity": "error",
+          "message": "bsputil found something wrong inside the BSP."
+        }
+      ],
+      "roots": [
+        {
+          "role": "workspace",
+          "access": "read",
+          "purpose": "read the staged BSP"
+        }
+      ],
+      "timeout_seconds": 300
+    }
+  ],
+  "executables": [
+    {
+      "name": "qbsp",
+      "title": "Map compiler",
+      "file": "bin/qbsp{platform.exe_suffix}"
+    },
+    {
+      "name": "vis",
+      "title": "Visibility",
+      "file": "bin/vis{platform.exe_suffix}"
+    },
+    {
+      "name": "light",
+      "title": "Lighting",
+      "file": "bin/light{platform.exe_suffix}"
+    },
+    {
+      "name": "bspinfo",
+      "title": "BSP reporter",
+      "file": "bin/bspinfo{platform.exe_suffix}"
+    },
+    {
+      "name": "bsputil",
+      "title": "BSP utility",
+      "file": "bin/bsputil{platform.exe_suffix}"
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "q1.bsp.compile",
+      "title": "Compile a Quake 1 map into a BSP",
+      "description": "Reads .map source and writes the BSP, the portal file vis needs, and a point file when the map leaks.",
+      "consumes": [
+        "q1.map.source"
+      ],
+      "produces": [
+        "q1.bsp",
+        "q1.prt",
+        "q1.pts"
+      ]
+    },
+    {
+      "id": "q1.bsp.vis",
+      "title": "Compute the potentially visible set",
+      "consumes": [
+        "q1.bsp",
+        "q1.prt"
+      ],
+      "produces": [
+        "q1.bsp.vised"
+      ]
+    },
+    {
+      "id": "q1.bsp.light",
+      "title": "Compute lighting",
+      "consumes": [
+        "q1.bsp.vised"
+      ],
+      "produces": [
+        "q1.bsp.lit",
+        "q1.lit"
+      ]
+    },
+    {
+      "id": "q1.bsp.inspect",
+      "title": "Report what is inside a BSP",
+      "description": "bspinfo prints its report and writes no file, so this capability consumes a BSP and produces nothing: the report is the job's captured output.",
+      "consumes": [
+        "q1.bsp"
+      ]
+    },
+    {
+      "id": "q1.bsp.check",
+      "title": "Check a BSP for internal inconsistencies",
+      "description": "bsputil --check prints what it found and writes no file.",
+      "consumes": [
+        "q1.bsp"
+      ]
+    }
+  ],
+  "version_probe": {
+    "executable": "qbsp",
+    "args": [],
+    "parse": {
+      "kind": "after_marker",
+      "marker": "ericw-tools v",
+      "stream": "stdout"
+    },
+    "timeout_seconds": 10
+  },
+  "acquisition": [
+    {
+      "mode": "managed_download",
+      "title": "Download the official v0.18.1 release",
+      "catalog_package": "ericw-tools.q1",
+      "platforms": [
+        {
+          "os": "linux",
+          "arch": "amd64"
+        },
+        {
+          "os": "windows",
+          "arch": "amd64"
+        },
+        {
+          "os": "windows",
+          "arch": "386"
+        },
+        {
+          "os": "darwin",
+          "arch": "amd64"
+        }
+      ],
+      "note": "The four archives upstream published for v0.18.1, each pinned by size and SHA-256 in the signed catalogue. There is no arm64 build to pin, on any operating system, so arm64 is not offered here."
+    },
+    {
+      "mode": "user_path",
+      "title": "Use a copy you already have",
+      "hint": "choose the unpacked ericw-tools folder \u2014 the one with bin/qbsp inside it",
+      "note": "The route for arm64, for a distribution package, and for a build you made yourself from the v0.18.1 tag. Nothing verifies it against the catalogue: you are the authority for what you pointed at."
+    },
+    {
+      "mode": "system_path",
+      "title": "Find them on PATH",
+      "commands": [
+        "qbsp",
+        "vis",
+        "light",
+        "bspinfo",
+        "bsputil"
+      ],
+      "note": "Whatever version is first on PATH. Run the version probe afterwards: this route cannot tell 0.18.1 from anything else."
+    }
+  ],
+  "platforms": [
+    {
+      "platform": {
+        "os": "linux",
+        "arch": "amd64"
+      },
+      "status": "supported"
+    },
+    {
+      "platform": {
+        "os": "windows",
+        "arch": "amd64"
+      },
+      "status": "unverified",
+      "note": "the official win64 build is pinned in the catalogue; nobody here has run it"
+    },
+    {
+      "platform": {
+        "os": "windows",
+        "arch": "386"
+      },
+      "status": "unverified",
+      "note": "the official win32 build is pinned in the catalogue; nobody here has run it"
+    },
+    {
+      "platform": {
+        "os": "darwin",
+        "arch": "amd64"
+      },
+      "status": "unverified",
+      "note": "the 2018 Darwin build is unsigned and unnotarized; recent macOS will refuse it until the user allows it"
+    },
+    {
+      "platform": {
+        "os": "darwin",
+        "arch": "arm64"
+      },
+      "status": "unverified",
+      "note": "no arm64 build exists upstream; the amd64 build runs under Rosetta 2, or point the Companion at your own"
+    },
+    {
+      "platform": {
+        "os": "linux",
+        "arch": "arm64"
+      },
+      "status": "unverified",
+      "note": "no arm64 build exists upstream; build it from the tagged source or point the Companion at your own"
+    }
+  ],
+  "tool_version": "0.18.1",
+  "game_profile": {
+    "slug": "quake1",
+    "engine_family": "quake1"
+  },
+  "compatibility": {
+    "companion": {
+      "at_least": "0.1.0"
+    }
+  },
+  "license": {
+    "spdx": "GPL-3.0-or-later",
+    "name": "GNU General Public License v3.0 or later",
+    "url": "https://www.gnu.org/licenses/gpl-3.0.html",
+    "corresponding_source": "https://github.com/ericwa/ericw-tools/tree/v0.18.1",
+    "notice": "ericw-tools is somebody else's program, under its own licence, and describing it here changes nothing about that. Its own source terms are GPL-2.0-or-later; the official binaries link Embree, and its README states that builds using Embree are licensed under GPLv3+ for compatibility with the Apache licence, so GPL-3.0-or-later is what the downloadable build is conveyed under. The corresponding source for exactly this version is the v0.18.1 tag named above. Auto-Pigeon Companion is MIT and separate: it runs these programs as separate processes and does not contain, link or relicense them."
+  },
+  "source": {
+    "homepage": "https://ericwa.github.io/ericw-tools/",
+    "repository": "https://github.com/ericwa/ericw-tools",
+    "release_notes": "https://github.com/ericwa/ericw-tools/releases/tag/v0.18.1"
+  },
+  "publisher": {
+    "name": "A mapper",
+    "url": "https://example.invalid/mapper"
+  },
+  "description": "This is the twin `TestBuiltinAndUserAuthoredResolveToTheSameCommand` compares against. It is a different document by every measure a digest can see \u2014 different id, different publisher, different prose, arguments written in the object spelling where the built-in uses the plain string one \u2014 and it resolves through the same function to the same argv. If a privileged path for built-in profiles is ever added, that test is what fails.",
+  "summary": "A hand-written profile for the same five programs, to prove nothing is privileged.",
+  "name": "My ericw-tools 0.18.1",
+  "version": "1.0.0",
+  "id": "community.mapper.ericw-q1",
+  "kind": "tool",
+  "schema_version": "aucom.profile/1.1"
+}

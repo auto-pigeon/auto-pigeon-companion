@@ -21,7 +21,7 @@ import (
 // producing a schema that quietly lies to whoever is writing a profile in an
 // editor.
 
-const commonSchema = "profile-common-1.0.schema.json"
+const commonSchema = "profile-common-1.1.schema.json"
 
 type schemaCase struct {
 	// Name is what fails.
@@ -65,12 +65,12 @@ func schemaCases() []schemaCase {
 		def("networkNeed", NetworkNeed{}),
 		def("environmentPolicy", EnvironmentPolicy{}),
 		def("action", Action{}),
-		{Name: "toolProfile", File: "tool-profile-1.0.schema.json", Value: ToolProfile{}},
-		{Name: "engineProfile", File: "engine-profile-1.0.schema.json", Value: EngineProfile{}},
-		{Name: "pipelineProfile", File: "pipeline-profile-1.0.schema.json", Value: PipelineProfile{}},
-		{Name: "pipelineStep", File: "pipeline-profile-1.0.schema.json", Pointer: []string{"$defs", "pipelineStep"}, Value: PipelineStep{}},
-		{Name: "pipelineWire", File: "pipeline-profile-1.0.schema.json", Pointer: []string{"$defs", "pipelineWire"}, Value: PipelineWire{}},
-		{Name: "pipelineOutput", File: "pipeline-profile-1.0.schema.json", Pointer: []string{"$defs", "pipelineOutput"}, Value: PipelineOutput{}},
+		{Name: "toolProfile", File: "tool-profile-1.1.schema.json", Value: ToolProfile{}},
+		{Name: "engineProfile", File: "engine-profile-1.1.schema.json", Value: EngineProfile{}},
+		{Name: "pipelineProfile", File: "pipeline-profile-1.1.schema.json", Value: PipelineProfile{}},
+		{Name: "pipelineStep", File: "pipeline-profile-1.1.schema.json", Pointer: []string{"$defs", "pipelineStep"}, Value: PipelineStep{}},
+		{Name: "pipelineWire", File: "pipeline-profile-1.1.schema.json", Pointer: []string{"$defs", "pipelineWire"}, Value: PipelineWire{}},
+		{Name: "pipelineOutput", File: "pipeline-profile-1.1.schema.json", Pointer: []string{"$defs", "pipelineOutput"}, Value: PipelineOutput{}},
 	}
 }
 

@@ -1,0 +1,145 @@
+{
+  "schema_version": "aucom.profile/1.1",
+  "kind": "pipeline",
+  "id": "auto-pigeon.q1.fast-preview",
+  "version": "1.0.0",
+  "name": "Quake 1 \u2014 fast preview",
+  "summary": "The quickest build that is still a playable map: rough visibility, no supersampling.",
+  "description": "For the loop where you are moving a wall and want to see it. vis runs its fast pass and light takes one sample per texel, so a small map builds in seconds and the lighting is approximately right. Nothing here is what you publish.\n\nEvery step names a capability, never a tool. Nothing in this document says which program compiles the map: that is answered on the machine, by whichever installed and granted profile provides `q1.bsp.compile`. The three built-in Q1 pipelines differ only in the options they set, and each option is one the tool's own author declared \u2014 a pipeline cannot invent an argument.\n\nThe portal file is wired from the compile step to the vis step explicitly. vis would open it anyway, by name, without being told; wiring it is what makes a leaked build fail at the stage that leaked instead of two stages later with a message about a missing file.",
+  "publisher": {
+    "name": "Auto-Pigeon",
+    "url": "https://github.com/andrea-dintino/auto-pigeon-companion"
+  },
+  "license": {
+    "spdx": "MIT",
+    "name": "MIT"
+  },
+  "compatibility": {
+    "companion": {
+      "at_least": "0.1.0"
+    }
+  },
+  "game_profile": {
+    "slug": "quake1",
+    "engine_family": "quake1"
+  },
+  "inputs": [
+    {
+      "name": "source_map",
+      "title": "Map source",
+      "role": "q1.map.source",
+      "required": true,
+      "extensions": [
+        ".map"
+      ]
+    },
+    {
+      "name": "wad",
+      "title": "Texture WAD",
+      "role": "q1.wad",
+      "extensions": [
+        ".wad"
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "id": "compile",
+      "title": "Compile the map",
+      "capability": "q1.bsp.compile",
+      "inputs": [
+        {
+          "name": "source_map",
+          "from": "pipeline.source_map"
+        },
+        {
+          "name": "wad",
+          "from": "pipeline.wad"
+        }
+      ],
+      "options": {
+        "basename": "level",
+        "leaktest": "true",
+        "verbosity": "quiet"
+      }
+    },
+    {
+      "id": "vis",
+      "title": "Compute visibility",
+      "capability": "q1.bsp.vis",
+      "inputs": [
+        {
+          "name": "bsp",
+          "from": "compile.bsp"
+        },
+        {
+          "name": "prt",
+          "from": "compile.prt"
+        }
+      ],
+      "options": {
+        "fast": "true",
+        "threads": "4"
+      }
+    },
+    {
+      "id": "light",
+      "title": "Compute lighting",
+      "capability": "q1.bsp.light",
+      "inputs": [
+        {
+          "name": "bsp",
+          "from": "vis.bsp"
+        }
+      ],
+      "options": {
+        "sampling": "none",
+        "lit": "false",
+        "threads": "4"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "name": "bsp",
+      "title": "The finished BSP",
+      "role": "q1.bsp.lit",
+      "from": "light.bsp"
+    },
+    {
+      "name": "lit",
+      "title": "Coloured lighting",
+      "role": "q1.lit",
+      "from": "light.lit",
+      "optional": true
+    },
+    {
+      "name": "pts",
+      "title": "Leak point file",
+      "role": "q1.pts",
+      "from": "compile.pts",
+      "optional": true
+    },
+    {
+      "name": "compile_log",
+      "title": "qbsp log",
+      "role": "q1.compile.log",
+      "from": "compile.log",
+      "optional": true
+    },
+    {
+      "name": "vis_log",
+      "title": "vis log",
+      "role": "q1.vis.log",
+      "from": "vis.log",
+      "optional": true
+    },
+    {
+      "name": "light_log",
+      "title": "light log",
+      "role": "q1.light.log",
+      "from": "light.log",
+      "optional": true
+    }
+  ]
+}

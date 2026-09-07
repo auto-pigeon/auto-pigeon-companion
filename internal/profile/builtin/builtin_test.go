@@ -15,7 +15,7 @@ func TestEveryBuiltinDocumentIsValidAndDigestible(t *testing.T) {
 		t.Fatalf("the profiles this build ships do not load: %v", err)
 	}
 	if len(entries) < 3 {
-		t.Fatalf("expected the three samples, got %d", len(entries))
+		t.Fatalf("expected at least one document of each kind, got %d", len(entries))
 	}
 	kinds := map[profile.Kind]bool{}
 	for _, e := range entries {
@@ -30,10 +30,19 @@ func TestEveryBuiltinDocumentIsValidAndDigestible(t *testing.T) {
 		if meta.SchemaVersion != profile.SchemaVersion {
 			t.Errorf("%s declares %q, not the current schema version", e.File, meta.SchemaVersion)
 		}
-		if !strings.Contains(meta.ID, ".sample.") {
-			t.Errorf("%s has the id %q; the documents shipping today are samples and say so, "+
-				"because presenting an unqualified profile as a curated one is exactly the kind of "+
-				"plausible wrong answer this repository is careful about", e.File, meta.ID)
+		if !strings.HasPrefix(meta.ID, "auto-pigeon.") {
+			t.Errorf("%s has the id %q; a document that ships inside this binary is published by "+
+				"this project and its id says so", e.File, meta.ID)
+		}
+		// A document that is still a sample says so in its id. The rule used to
+		// be that *every* built-in was one; it stopped being true when the
+		// qualified EricW profile arrived, and the half that still matters is
+		// that an unqualified document may not present itself as a curated one.
+		if tool, isTool := e.Profile.(*profile.ToolProfile); isTool && !strings.Contains(meta.ID, ".sample.") {
+			if strings.Contains(tool.ToolVersion, "sample") {
+				t.Errorf("%s claims the tool version %q while not calling itself a sample",
+					e.File, tool.ToolVersion)
+			}
 		}
 	}
 	for _, kind := range profile.Kinds {
@@ -60,7 +69,7 @@ func TestBuiltinDigestsAreStableAcrossLoads(t *testing.T) {
 }
 
 func TestFindReportsAMissingIdByName(t *testing.T) {
-	if _, err := Find("auto-pigeon.sample.q1-toolchain"); err != nil {
+	if _, err := Find(EricwQ1); err != nil {
 		t.Errorf("a built-in profile could not be found: %v", err)
 	}
 	_, err := Find("not.installed")
@@ -83,11 +92,11 @@ func TestFindReportsAMissingIdByName(t *testing.T) {
 //
 // If a privileged path for built-in profiles ever appears, this is what fails.
 func TestBuiltinAndUserAuthoredResolveToTheSameCommand(t *testing.T) {
-	sample, err := Find("auto-pigeon.sample.q1-toolchain")
+	sample, err := Find(EricwQ1)
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
-	authoredData, err := os.ReadFile(filepath.Join("..", "testdata", "community", "user-q1-toolchain.tool.json"))
+	authoredData, err := os.ReadFile(filepath.Join("..", "testdata", "community", "user-ericw-q1.tool.json"))
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
@@ -119,8 +128,8 @@ func TestBuiltinAndUserAuthoredResolveToTheSameCommand(t *testing.T) {
 			profile.RootWorkspace:   filepath.Join(base, "workspace"),
 			profile.RootToolInstall: filepath.Join(base, "tools"),
 		},
-		Inputs:  map[string]string{"source_map": filepath.Join(base, "workspace", "input", "level.map")},
-		Options: map[string]string{"threads": "8", "basename": "start"},
+		Inputs:  map[string]string{"source_map": filepath.Join(base, "workspace", "input", "source_map", "level.map")},
+		Options: map[string]string{"basename": "start", "verbosity": "verbose"},
 	}
 
 	fromBuiltin, err := profile.Resolve(sample.Profile, "compile", request)
@@ -143,8 +152,110 @@ func TestBuiltinAndUserAuthoredResolveToTheSameCommand(t *testing.T) {
 	if len(fromBuiltin.Command.Args) != 4 {
 		t.Errorf("unexpected argv: %v", fromBuiltin.Command.Args)
 	}
-	if want := filepath.Join(request.Roots[profile.RootWorkspace], "compile", "start.bsp"); fromBuiltin.Outputs["bsp"] != want {
+	if want := filepath.Join(request.Roots[profile.RootWorkspace], "start.bsp"); fromBuiltin.Outputs["bsp"] != want {
 		t.Errorf("output path is %q, want %q", fromBuiltin.Outputs["bsp"], want)
+	}
+}
+
+// Two built-in tool profiles that both provide `q1.bsp.compile` would make
+// "which tool runs this step" a question a pipeline could not answer, and the
+// answer would depend on iteration order. It is why the unqualified Q1 sample
+// was retired rather than kept beside the qualified profile.
+func TestNoTwoBuiltinToolsProvideTheSameCapability(t *testing.T) {
+	entries, err := Load()
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	provider := map[string]string{}
+	for _, e := range entries {
+		tool, isTool := e.Profile.(*profile.ToolProfile)
+		if !isTool {
+			continue
+		}
+		for _, a := range tool.Actions {
+			if a.Capability == "" {
+				continue
+			}
+			if first, clash := provider[a.Capability]; clash {
+				t.Errorf("%s and %s both provide %q", first, e.File, a.Capability)
+			}
+			provider[a.Capability] = e.File
+		}
+	}
+}
+
+// Every built-in pipeline resolves against the built-in toolchain, on the
+// machine this test runs on, before anybody has installed anything. A pipeline
+// that shipped and did not resolve would fail at the point a user pressed the
+// button.
+func TestEveryBuiltinPipelineResolvesAgainstTheBuiltinToolchain(t *testing.T) {
+	toolEntry, err := Find(EricwQ1)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	tool, ok := toolEntry.Profile.(*profile.ToolProfile)
+	if !ok {
+		t.Fatal("the EricW profile is not a tool profile")
+	}
+	entries, err := Load()
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	seen := 0
+	for _, e := range entries {
+		pipeline, isPipeline := e.Profile.(*profile.PipelineProfile)
+		if !isPipeline {
+			continue
+		}
+		seen++
+		steps, err := pipeline.Resolve(installed{tool})
+		if err != nil {
+			t.Errorf("%s does not resolve against the built-in toolchain:\n%v", e.File, err)
+			continue
+		}
+		if len(steps) != 3 {
+			t.Errorf("%s resolved to %d steps, want three", e.File, len(steps))
+			continue
+		}
+		for i, want := range []string{"compile", "vis", "light"} {
+			if steps[i].Action.ID != want {
+				t.Errorf("%s step %d resolved to %q, want %q", e.File, i, steps[i].Action.ID, want)
+			}
+		}
+	}
+	if seen != 3 {
+		t.Errorf("this build ships %d pipelines; fast_preview, normal and final are the three", seen)
+	}
+}
+
+// The three pipelines are the same three steps with different options. What
+// distinguishes them has to actually reach the command, or they are three names
+// for one build.
+func TestTheThreePipelinesDifferInWhatTheyRun(t *testing.T) {
+	want := map[string]struct{ visFast, sampling, lit string }{
+		"auto-pigeon.q1.fast-preview": {"true", "none", "false"},
+		"auto-pigeon.q1.normal":       {"false", "none", "true"},
+		"auto-pigeon.q1.final":        {"false", "extra4", "true"},
+	}
+	for id, expected := range want {
+		entry, err := Find(id)
+		if err != nil {
+			t.Fatalf("%v", err)
+		}
+		pipeline := entry.Profile.(*profile.PipelineProfile)
+		options := map[string]map[string]string{}
+		for _, step := range pipeline.Steps {
+			options[step.ID] = step.Options
+		}
+		if got := options["vis"]["fast"]; got != expected.visFast {
+			t.Errorf("%s: vis fast is %q, want %q", id, got, expected.visFast)
+		}
+		if got := options["light"]["sampling"]; got != expected.sampling {
+			t.Errorf("%s: light sampling is %q, want %q", id, got, expected.sampling)
+		}
+		if got := options["light"]["lit"]; got != expected.lit {
+			t.Errorf("%s: light lit is %q, want %q", id, got, expected.lit)
+		}
 	}
 }
 
@@ -227,40 +338,6 @@ func TestEngineActionsResolveWithRuntimeValues(t *testing.T) {
 	delete(request.Runtime, "map_name")
 	if _, err := profile.Resolve(entry.Profile, profile.ActionPlayMap, request); err == nil {
 		t.Error("play_map resolved with no map name")
-	}
-}
-
-// The sample pipeline resolves against the sample toolchain: three capabilities,
-// three actions, artifacts wired end to end.
-func TestTheSamplePipelineResolvesAgainstTheSampleToolchain(t *testing.T) {
-	toolEntry, err := Find("auto-pigeon.sample.q1-toolchain")
-	if err != nil {
-		t.Fatalf("%v", err)
-	}
-	pipelineEntry, err := Find("auto-pigeon.sample.q1-normal")
-	if err != nil {
-		t.Fatalf("%v", err)
-	}
-	tool, ok := toolEntry.Profile.(*profile.ToolProfile)
-	if !ok {
-		t.Fatal("the toolchain sample is not a tool profile")
-	}
-	pipeline, ok := pipelineEntry.Profile.(*profile.PipelineProfile)
-	if !ok {
-		t.Fatal("the pipeline sample is not a pipeline profile")
-	}
-
-	steps, err := pipeline.Resolve(installed{tool})
-	if err != nil {
-		t.Fatalf("the built-in pipeline does not resolve against the built-in toolchain:\n%v", err)
-	}
-	if len(steps) != 3 {
-		t.Fatalf("expected three steps, got %d", len(steps))
-	}
-	for i, want := range []string{"compile", "vis", "light"} {
-		if steps[i].Action.ID != want {
-			t.Errorf("step %d resolved to %q, want %q", i, steps[i].Action.ID, want)
-		}
 	}
 }
 

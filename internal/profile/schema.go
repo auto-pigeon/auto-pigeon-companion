@@ -58,11 +58,11 @@ func SchemaFiles() []string {
 func SchemaFileFor(kind Kind) (string, error) {
 	switch kind {
 	case KindTool:
-		return "tool-profile-1.0.schema.json", nil
+		return "tool-profile-1.1.schema.json", nil
 	case KindEngine:
-		return "engine-profile-1.0.schema.json", nil
+		return "engine-profile-1.1.schema.json", nil
 	case KindPipeline:
-		return "pipeline-profile-1.0.schema.json", nil
+		return "pipeline-profile-1.1.schema.json", nil
 	}
 	return "", fmt.Errorf("profile: %q is not a profile kind", kind)
 }

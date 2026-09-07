@@ -237,7 +237,7 @@ func TestFirstImportIsNotRenderedAsAChangeList(t *testing.T) {
 // A pipeline asks for nothing on its own account: every permission belongs to
 // the tool that resolves one of its steps and is granted there.
 func TestAPipelineGrantsNothing(t *testing.T) {
-	p := decodeFixture(t, "../builtin/sample-q1-normal.pipeline.json")
+	p := decodeFixture(t, "../builtin/q1-normal.pipeline.json")
 	if len(p.Permissions()) != 0 {
 		t.Errorf("a pipeline asked for %d permissions: %+v", len(p.Permissions()), p.Permissions())
 	}
