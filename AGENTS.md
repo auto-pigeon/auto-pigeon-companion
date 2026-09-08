@@ -1,5 +1,19 @@
 # AGENTS.md — Auto-Pigeon Companion
 
+## Do not read or run `run-sequence.sh`
+
+`run-sequence.sh` is the operator's unattended queue drainer. At ~250 KB it is
+the largest file in the workspace, it is not your task, and reading it costs
+the context your task needs.
+
+**Do not read, inspect, verify or debug it, and do not invoke it.** Starting it
+is the operator's own action, from their own terminal.
+
+Other files still mention it — as one of the ways a session gets started, or in
+a design note. Those mentions are background, not an instruction to go and open
+it. If `run-sequence.sh` looks like the cause of whatever you are investigating,
+say so and stop.
+
 ## 0. What this repository is
 
 This repository is **Auto-Pigeon Companion**, abbreviated **AUCOM**. Its expected
