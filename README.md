@@ -261,6 +261,9 @@ browser at it. There is no window toolkit anywhere in this program: the window
 is your own browser, which is what keeps the binary CGO-free and buildable for
 all six targets with plain `go build`. Everything the page can do, the CLI can
 do too, through the same services — there is no browser-only path into anything.
+Approving a profile was the one exception until `AUCOM/AUT 228`; it is now
+`companion profile review`, `grant` and `withdraw`, over the same
+[`approval.Service`](internal/approval) the page's grant route holds.
 
 The page has six areas, and the order is the order of a first run.
 
@@ -383,26 +386,26 @@ usage:
   companion <command> [arguments]
 
 commands:
-  serve [--port <n>] [--open]                                                              run the local GUI server without opening a browser
-  auth login [--email <address>] | status | logout                                         authenticate against auto-pigeon-backend
-  aub capabilities | catalog | show | revisions | sync | cached | verify | export | clean  browse auto-pigeon-backend's assets and sync exact revisions to this machine
-  job run | preview | list | show | logs | cancel | retry | artifacts | profiles           run a profile action as a supervised job, and inspect what ran
-  build run | preview | list | show | pipelines                                            build a map through a pipeline: several supervised jobs, wired, with a manifest
-  package targets | preview | create | inspect | verify | extract                          build a PAK or PK3 from what a build produced, and read one somebody else made
-  profile validate | show | canonicalize | digest | diff | list | schema                   read, check and compare tool, engine and pipeline profiles
-  acquire plan | install | accept | list | verify | use | gc | resolve                     obtain a profile's programs from the signed catalogue, and manage the cache
-  catalog keygen | sign | verify | show | status | release                                 sign, verify and inspect the acquisition catalogue, its keyring and its compatibility manifest
-  engine list | show | detect | bind | check | preview | run | stage | unstage             set up a Quake engine you already have, and start it as a supervised job
-  game list | show | join | preview | host | stop                                          find a game somebody is hosting and join it, or advertise one of your own
-  launch <game> [--map <name>] [--game-root <dir>] [--dry-run]                             launch a game as a supervised job, using its AUB launch config
-  extractor status | plan | install | version                                              obtain and run the separately licensed auto-pigeon-extractor (AUE)
-  feedback compatibility --game <family> --summary <text> [--share <what>]                 report that a work-in-progress game did not do what you expected — nothing is attached unless you say so
-  uri status | register | unregister                                                       see, set or remove this machine's handler for autopigeon:// links
-  security matrix | residual | audit                                                       the threat model, the risks accepted with it, and what this build is made of
-  release sbom | checksums                                                                 the documents a release ships beside its binaries
-  uninstall [--purge --confirm]                                                            show what this program keeps on this machine, and delete it
-  migrate                                                                                  fold Launcher and older Companion configuration into the current one
-  version                                                                                  print the build version
+  serve [--port <n>] [--open]                                                                         run the local GUI server without opening a browser
+  auth login [--email <address>] | status | logout                                                    authenticate against auto-pigeon-backend
+  aub capabilities | catalog | show | revisions | sync | cached | verify | export | clean             browse auto-pigeon-backend's assets and sync exact revisions to this machine
+  job run | preview | list | show | logs | cancel | retry | artifacts | profiles                      run a profile action as a supervised job, and inspect what ran
+  build run | preview | list | show | pipelines                                                       build a map through a pipeline: several supervised jobs, wired, with a manifest
+  package targets | preview | create | inspect | verify | extract                                     build a PAK or PK3 from what a build produced, and read one somebody else made
+  profile validate | show | canonicalize | digest | diff | list | schema | review | grant | withdraw  read, check and compare tool, engine and pipeline profiles, and approve one to run
+  acquire plan | install | accept | list | verify | use | gc | resolve                                obtain a profile's programs from the signed catalogue, and manage the cache
+  catalog keygen | sign | verify | show | status | release                                            sign, verify and inspect the acquisition catalogue, its keyring and its compatibility manifest
+  engine list | show | detect | bind | check | preview | run | stage | unstage                        set up a Quake engine you already have, and start it as a supervised job
+  game list | show | join | preview | host | stop                                                     find a game somebody is hosting and join it, or advertise one of your own
+  launch <game> [--map <name>] [--game-root <dir>] [--dry-run]                                        launch a game as a supervised job, using its AUB launch config
+  extractor status | plan | install | version                                                         obtain and run the separately licensed auto-pigeon-extractor (AUE)
+  feedback compatibility --game <family> --summary <text> [--share <what>]                            report that a work-in-progress game did not do what you expected — nothing is attached unless you say so
+  uri status | register | unregister                                                                  see, set or remove this machine's handler for autopigeon:// links
+  security matrix | residual | audit                                                                  the threat model, the risks accepted with it, and what this build is made of
+  release sbom | checksums                                                                            the documents a release ships beside its binaries
+  uninstall [--purge --confirm]                                                                       show what this program keeps on this machine, and delete it
+  migrate                                                                                             fold Launcher and older Companion configuration into the current one
+  version                                                                                             print the build version
 ```
 
 Exit codes: `0` success, `1` the operation failed, `2` the invocation was wrong.
@@ -2594,6 +2597,91 @@ signature covers bytes and changing the bytes does not produce a
 differently-signed document. Nothing is ever promoted to `builtin`: that is a
 fact about the release, not a status a file can earn.
 
+### Approving a profile you wrote, from the command line
+
+A tool profile you wrote and dropped into your profile folder is inert. To let it
+run you have to approve what it asks for, and that is one decision about one
+exact document. Three commands, and no prompt anywhere — a prompt would hang a
+script, and a script that could not approve a profile would have to start the
+GUI server to do it.
+
+Read it first. `profile review` takes the **id** of a document this machine has,
+against the same catalog the executor runs things from, and writes nothing:
+
+```console
+$ companion profile review example.local.harmless
+A tool profile somebody wrote 1.0.0 (example.local.harmless)
+  published by A Companion user, under MIT
+  Local — found in your profile folder; nobody has checked it for you, and the Companion cannot tell who put it there.
+
+  If you approve it, it may:
+    - Run A tool profile somebody wrote (harmless) as a program on your computer. [high]
+    - Read files in the folder built content is published into. [medium]
+    - Read files in a scratch folder created for this job. [low]
+    - Create and change files in a scratch folder created for this job. [low]
+
+  digest: sha256:2f188103bb82b192370f9c7228e8942e2489650f0141b3cf1ca33e24b74c3530
+  source: ~/.config/auto-pigeon-companion/profiles/my-toolchain.tool.json
+  approved: no — nothing has been granted, so it cannot run
+```
+
+Then approve it, naming the digest you just read. `--digest` says *which*
+document; `--approve` says *you decided*. Asking for neither prints the review
+and refuses, with the command filled in:
+
+```console
+$ companion profile grant example.local.harmless
+… the review above …
+
+error: nothing was approved. Read the report above, then:
+  companion profile grant example.local.harmless --digest=sha256:2f188103bb82b192370f9c7228e8942e2489650f0141b3cf1ca33e24b74c3530 --approve
+
+$ companion profile grant example.local.harmless \
+    --digest=sha256:2f188103bb82b192370f9c7228e8942e2489650f0141b3cf1ca33e24b74c3530 --approve
+approved everything example.local.harmless asks for, against sha256:2f188103bb82b192370f9c7228e8942e2489650f0141b3cf1ca33e24b74c3530
+  read:content_root
+  read:workspace
+  run_executable
+  write:workspace
+
+Withdraw it with `companion profile withdraw example.local.harmless --confirm`.
+```
+
+A digest that is not the document on this machine is refused, and the message
+names both — because if the file changed between the review and the approval,
+what you read is not what you would be approving:
+
+```console
+$ companion profile grant example.local.harmless --digest=sha256:0000…0000 --approve
+error: approval: this approval is for sha256:0000…0000 and the document on this
+machine is now sha256:2f18…3530; read example.local.harmless again before approving it
+```
+
+Taking it back is equally explicit, and leaves your setup alone — where a
+program is on this machine was never part of what you approved:
+
+```console
+$ companion profile withdraw example.local.harmless --confirm
+withdrew the approval for example.local.harmless. It cannot run until it is approved again.
+Where its programs and directories are on this machine is unchanged.
+```
+
+`profile review --json` and `profile grant --json` print the same thing for a
+script, including `authorized`, which is the program's own answer rather than
+something a caller assembles from `trust` and `grant`.
+
+Three things this deliberately does not do:
+
+- **Binding is not approving.** `acquire resolve --bind` and the Profiles area's
+  setup form record where a program is and grant nothing. So does importing.
+- **Approving a pipeline approves the pipeline.** Each tool it drives is a
+  separate document with a separate decision; there is no way to approve a build
+  and thereby approve every compiler in it.
+- **There is no `--force` and no way to skip the review.** The same
+  [`approval.Service`](internal/approval) writes the grant for this command, for
+  `POST /api/v1/profiles/{id}/grant`, and for the approval half of `engine bind`,
+  so the page and the terminal cannot come to disagree about what an approval is.
+
 ### Where the profile stops and your machine starts
 
 A profile says *what kind of place* it needs. Where those places are on your
@@ -3335,15 +3423,16 @@ $ curl -s -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/library/cached
 
 Approving a profile, and saying where its program is. The digest is required and
 must be the document on disk: an approval for something that has changed since
-it was displayed is an approval of something nobody read.
+it was displayed is an approval of something nobody read. This route and
+`companion profile grant` are the same code — see the parity table below.
 
 ```console
 $ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" \
     http://127.0.0.1:8791/api/v1/profiles/auto-pigeon.ericw-tools.q1/grant \
     -d '{"digest":"sha256:not-the-one-you-read"}'
-{"error":"this approval is for sha256:not-the-one-you-read and the document on this machine is now
- sha256:0a318124692ae01fb58f9ca132edc64e4a57315bb0b6d86c67b1a04ca82d4ef2; read it again before
- approving it"}
+{"error":"approval: this approval is for sha256:not-the-one-you-read and the document on this
+ machine is now sha256:0a318124692ae01fb58f9ca132edc64e4a57315bb0b6d86c67b1a04ca82d4ef2; read
+ auto-pigeon.ericw-tools.q1 again before approving it"}
 
 $ DIGEST=$(curl -s -H "X-AUCOM-Token: $TOKEN" \
     http://127.0.0.1:8791/api/v1/profiles/auto-pigeon.ericw-tools.q1 | grep -o '"digest":"[^"]*"' | head -1 | cut -d'"' -f4)
@@ -3463,6 +3552,37 @@ is completed rather than abandoned.
 The `/api/v1` routes are versioned because `companion job` and your own scripts
 drive them; the unversioned `/api` routes are the page's own and are not a
 contract.
+
+### The parity inventory
+
+*"Everything the page can do, the CLI can do too"* is a claim, so here is the
+list it is a claim about. Where the two columns name one implementation, they
+call the same function — not an equivalent one.
+
+| Route | Command | Shared code |
+| --- | --- | --- |
+| `GET /api/v1/profiles` | `companion job profiles` | `job.Catalog` |
+| `GET /api/v1/profiles/{id}` | `companion profile review <id>` | `job.Catalog`, `profile.Authorize` |
+| `GET /api/v1/profiles/{id}/document` | `companion profile canonicalize <file>` | `profile.Canonical` |
+| `POST /api/v1/profiles/validate` | `companion profile validate <file>` | `profile.Decode` |
+| `POST /api/v1/profiles/diff` | `companion profile diff <a> <b>` | `profile.DiffProfiles` |
+| `POST /api/v1/profiles/import` | copy the file into the profile folder | — (both grant nothing) |
+| `POST /api/v1/profiles/{id}/bind` | `companion engine bind <id>`, `companion acquire resolve --bind` | `binding.Update` |
+| `POST /api/v1/profiles/{id}/grant` | `companion profile grant <id> --digest=<d> --approve` | `approval.Service.Grant` |
+| `POST /api/v1/profiles/{id}/withdraw` | `companion profile withdraw <id> --confirm` | `approval.Service.Withdraw` |
+| `POST /api/v1/profiles/{id}/remove` | delete the file from the profile folder | `binding.Update` |
+| `GET, POST /api/v1/jobs` | `companion job list`, `companion job run` | `job.Service` |
+| `POST /api/v1/jobs/preview` | `companion job preview` | `job.Service.Preview` |
+| `POST /api/v1/jobs/{id}/cancel` | `companion job cancel <id>` | `job.Service.Cancel` |
+| `GET /api/v1/build/pipelines` | `companion build pipelines` | `build.Runner` |
+| `POST /api/v1/build/runs` | `companion build run` | `build.Runner` |
+| `GET /api/v1/library/catalog` | `companion aub catalog` | `aub.Client` |
+| `POST /api/v1/library/sync` | `companion aub sync` | `assetsync.Store` |
+
+Two rows have no command and are not meant to: importing a document is copying a
+file, and removing one is deleting it. Nothing else on the page is unreachable
+from a terminal — `AUT/AUCOM 219` found the one thing that was, an approval for a
+tool profile you wrote yourself, and `AUCOM/AUT 228` closed it.
 
 There is deliberately **no route that lists a directory, stats a path or
 completes one**. The page is never given the filesystem: it can ask a person a

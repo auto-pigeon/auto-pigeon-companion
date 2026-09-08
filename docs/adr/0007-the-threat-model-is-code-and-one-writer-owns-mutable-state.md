@@ -171,7 +171,7 @@ that somebody is made to look again.
 
 ## Evidence
 
-- `internal/threat` — 49 rows, `Check`, and `TestTheThreatMatrixHoldsUp`.
+- `internal/threat` — 50 rows, `Check`, and `TestTheThreatMatrixHoldsUp`.
 - `internal/lockfile` — `TestOnlyOneWriterIsEverInsideTheCriticalSection`,
   `TestAnAbandonedLockIsBrokenAndTheTakeoverIsReported`,
   `TestAHolderWhoseLockWasBrokenSaysSoAndDeletesNothing`.

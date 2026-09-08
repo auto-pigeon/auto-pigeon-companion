@@ -29,12 +29,14 @@ var rows = []Row{
 		Title:      "An update to a granted profile quietly asks for more than was granted",
 		Asset:      "the permission the user actually reviewed",
 		Vector:     "A community profile is granted at version 1.0. Version 1.1 adds a capability, or 1.0 is republished with different contents under the same version.",
-		Mitigation: "A grant is against a document's digest. An update that widens capabilities is an escalation, named in a diff and re-reviewed; a version whose bytes changed is refused outright rather than treated as an update.",
+		Mitigation: "A grant is against a document's digest. An update that widens capabilities is an escalation, named in a diff and re-reviewed; a version whose bytes changed is refused outright rather than treated as an update — including one that asks for strictly LESS, because a permission-set comparison is not a check on the bytes anybody read.",
 		Evidence: []Evidence{
 			{"internal/profile", "TestCapabilityEscalationIsRefusedAndTheDiffNamesIt"},
 			{"internal/profile", "TestRepublishingAVersionIsRefusedRatherThanTreatedAsAnUpdate"},
 			{"internal/publish", "TestAnUpdateThatAsksForMoreIsReportedAsAnEscalation"},
 			{"internal/publish", "TestAVersionThatMovedIsRefusedRatherThanTreatedAsAnUpdate"},
+			{"internal/approval", "TestAChangedDocumentInvalidatesTheGrantEvenWhenItAsksForLess"},
+			{"internal/cli", "TestAToolProfileSomebodyWroteIsApprovedRunAndWithdrawnFromTheCommandLine"},
 		},
 	},
 	{
@@ -62,6 +64,22 @@ var rows = []Row{
 			{"internal/profile", "TestLocalIsNotTreatedAsVouchedFor"},
 			{"internal/profile", "TestBuiltinIsAuthorizedByHavingBeenInstalled"},
 			{"internal/publish", "TestNothingIsWrittenWithoutAnApproval"},
+		},
+	},
+
+	{
+		ID: "T50", Category: CatDocument,
+		Title:      "One approval surface is weaker than another, or approves something nobody read",
+		Asset:      "the review step, on whichever surface the user happens to be on",
+		Vector:     "A grant can be recorded from the page and from the command line. Two implementations drift: one requires the digest of the document that was displayed and the other takes whatever is on disk when the request arrives, so the weaker one approves bytes that changed between the review and the decision.",
+		Mitigation: "There is one writer of a grant. internal/approval.Service is held by the local API, by `companion profile grant` and by the approval half of `engine bind` and the bind route, and it refuses an empty digest and a digest that is not the document on this machine — before writing anything, including the binding. Reviewing is a separate call that writes nothing, so `profile grant` with no decision prints the report and exits 2 rather than approving.",
+		Evidence: []Evidence{
+			{"internal/approval", "TestAnApprovalNamesTheExactDocumentItApproves"},
+			{"internal/approval", "TestImportingAndBindingGrantNothing"},
+			{"internal/approval", "TestApprovingAPipelineGrantsNothingToTheToolsItRuns"},
+			{"internal/cli", "TestTheCommandLineAndThePageRecordTheSameApproval"},
+			{"internal/cli", "TestBothSurfacesRefuseTheSameApprovals"},
+			{"internal/cli", "TestBindingThroughTheAPIGrantsNothingAndItsApprovalNamesTheDocument"},
 		},
 	},
 
@@ -493,11 +511,12 @@ var rows = []Row{
 	{
 		ID: "T35", Category: CatRace,
 		Title:      "Two instances write the same local state and one change disappears",
-		Asset:      "the catalogue trust state, which is where revocations live",
-		Vector:     "The GUI server and a `companion` invocation in a terminal both read catalog-state.json, each records a different revocation, both write. Atomic writes make both succeed and one revocation is gone, with no error anywhere.",
-		Mitigation: "A cross-process lock, and for the trust state a monotone merge under it: serials take the max, revocations take the union. The window between reading that file and writing it back spans a network fetch, so a lock alone would not have been enough.",
+		Asset:      "the catalogue trust state, which is where revocations live, and the binding store, which is where approvals live",
+		Vector:     "The GUI server and a `companion` invocation in a terminal both read catalog-state.json, each records a different revocation, both write. Atomic writes make both succeed and one revocation is gone, with no error anywhere. The same shape over bindings.json costs an approval, or resurrects one somebody withdrew.",
+		Mitigation: "A cross-process lock, and for the trust state a monotone merge under it: serials take the max, revocations take the union. The window between reading that file and writing it back spans a network fetch, so a lock alone would not have been enough. Every write to the binding store goes through binding.Update, which reads inside the same lock.",
 		Evidence: []Evidence{
 			{"internal/lockfile", "TestOnlyOneWriterIsEverInsideTheCriticalSection"},
+			{"internal/approval", "TestConcurrentGrantsAndWithdrawalsLoseNoUnrelatedBinding"},
 			{"internal/config", "TestAChangeByAnotherInstanceIsNotUndoneByThisOne"},
 			{"internal/config", "TestConcurrentUpdatesAllLand"},
 			{"internal/catalog", "TestARevocationRecordedByAnotherInstanceIsNotOverwritten"},

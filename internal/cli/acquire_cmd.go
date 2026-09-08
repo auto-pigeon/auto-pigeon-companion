@@ -460,60 +460,60 @@ func writeBinding(env *Env, document profile.Profile, result *acquire.Result, ro
 	if err != nil {
 		return err
 	}
-	set, err := binding.LoadFile(bindingsPath)
-	if err != nil && !errors.Is(err, binding.ErrNoFile) {
-		return err
-	}
 	digest, err := profile.Digest(document)
 	if err != nil {
 		return err
 	}
 	meta := document.Metadata()
-	local, existed := set.Find(meta.ID)
-	if !existed || local.ProfileDigest != digest {
-		local = binding.LocalBinding{Trust: profile.TrustLocal}
-	}
-	local.ProfileID = meta.ID
-	local.ProfileVersion = meta.Version
-	local.ProfileDigest = digest
-	if local.Trust == "" {
-		local.Trust = profile.TrustLocal
-	}
-	local.Acquisition = result.Mode
-	local.Executables = result.Executables
-	if local.Roots == nil && len(roots) > 0 {
-		local.Roots = map[string]string{}
-	}
-	for role, path := range roots {
-		if role == profile.RootWorkspace {
-			continue
+
+	// The read and the write inside one cross-process lock, so a resolution
+	// running beside a GUI server cannot discard a grant the user recorded
+	// there a moment ago. See [binding.Update].
+	_, err = binding.Update(bindingsPath, func(set *binding.Set) error {
+		local, existed := set.Find(meta.ID)
+		if !existed || local.ProfileDigest != digest {
+			local = binding.LocalBinding{Trust: profile.TrustLocal}
 		}
-		absolute, err := filepath.Abs(path)
-		if err != nil {
-			return err
+		local.ProfileID = meta.ID
+		local.ProfileVersion = meta.Version
+		local.ProfileDigest = digest
+		if local.Trust == "" {
+			local.Trust = profile.TrustLocal
 		}
-		local.Roots[role] = absolute
-	}
-	if result.ToolRoot != "" {
-		if local.Roots == nil {
+		local.Acquisition = result.Mode
+		local.Executables = result.Executables
+		if local.Roots == nil && len(roots) > 0 {
 			local.Roots = map[string]string{}
 		}
-		local.Roots[profile.RootToolInstall] = result.ToolRoot
-	}
-	if result.Install != nil {
-		local.Installs = pinInstall(local.Installs, binding.PinnedInstall{
-			PackageID: result.Install.PackageID,
-			Version:   result.Install.Version,
-			Digest:    result.Install.Digest,
-			Platform:  result.Install.Platform.String(),
-			PinnedAt:  time.Now().UTC(),
-		})
-	}
-	local.UpdatedAt = time.Now().UTC()
-	if err := set.Put(local); err != nil {
-		return err
-	}
-	return binding.SaveFile(bindingsPath, set)
+		for role, path := range roots {
+			if role == profile.RootWorkspace {
+				continue
+			}
+			absolute, err := filepath.Abs(path)
+			if err != nil {
+				return err
+			}
+			local.Roots[role] = absolute
+		}
+		if result.ToolRoot != "" {
+			if local.Roots == nil {
+				local.Roots = map[string]string{}
+			}
+			local.Roots[profile.RootToolInstall] = result.ToolRoot
+		}
+		if result.Install != nil {
+			local.Installs = pinInstall(local.Installs, binding.PinnedInstall{
+				PackageID: result.Install.PackageID,
+				Version:   result.Install.Version,
+				Digest:    result.Install.Digest,
+				Platform:  result.Install.Platform.String(),
+				PinnedAt:  time.Now().UTC(),
+			})
+		}
+		local.UpdatedAt = time.Now().UTC()
+		return set.Put(local)
+	})
+	return err
 }
 
 // pinInstall puts the newly resolved download first and keeps the others.

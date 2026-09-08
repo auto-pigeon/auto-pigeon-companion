@@ -4,6 +4,7 @@ import (
 	"errors"
 	"path/filepath"
 
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/approval"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/assetsync"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/binding"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
@@ -92,6 +93,25 @@ func (s *Server) bindings() (*binding.Set, string, error) {
 		return nil, path, err
 	}
 	return set, path, nil
+}
+
+// approvals is the grant service, holding the same catalog and the same binding
+// file every other route reads.
+//
+// The service is where a profile approval is written, for this API and for
+// `companion profile grant` alike. Built per request for the same reason the
+// catalog is: the profile directory and the binding file both change under a
+// running server.
+func (s *Server) approvals() (approval.Service, error) {
+	catalog, err := s.catalog()
+	if err != nil {
+		return approval.Service{}, err
+	}
+	path, err := s.bindingsPath()
+	if err != nil {
+		return approval.Service{}, err
+	}
+	return approval.Service{Catalog: catalog, BindingsPath: path}, nil
 }
 
 // assets opens the local asset cache.

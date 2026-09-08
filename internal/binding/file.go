@@ -6,6 +6,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/lockfile"
 )
 
 // Reading and writing the binding store as a file.
@@ -86,4 +88,42 @@ func Lookup(path string) func(string) (LocalBinding, bool) {
 		}
 		return set.Find(profileID)
 	}
+}
+
+// Update is the only way this program changes a binding file in place.
+//
+// # Why atomic was not enough
+//
+// [SaveFile] stops a torn write. It does nothing about a lost update, and a
+// binding file has two writers on any machine where the GUI server is running
+// and somebody types a command: the server records a grant, `companion engine
+// bind` records where an engine is, both read the file, both write it, and the
+// second rename silently discards the first change. On `config.json` that costs
+// a setting. Here it costs an approval — or, worse, resurrects one somebody
+// withdrew a moment ago.
+//
+// So mutate is handed the set as it is on disk NOW, inside the cross-process
+// lock, rather than whatever the caller read when it started. The signature
+// makes each call site declare the binding it is changing instead of writing
+// back a whole set it read minutes ago. See internal/lockfile for why the lock
+// is a file and internal/config for the same shape over the configuration.
+func Update(path string, mutate func(*Set) error) (*Set, error) {
+	var result *Set
+	err := lockfile.With(path, lockfile.Options{Program: "auto-pigeon-companion"}, func() error {
+		current, err := LoadFile(path)
+		if err != nil && !errors.Is(err, ErrNoFile) {
+			return err
+		}
+		if mutate != nil {
+			if err := mutate(current); err != nil {
+				return err
+			}
+		}
+		if err := SaveFile(path, current); err != nil {
+			return err
+		}
+		result = current
+		return nil
+	})
+	return result, err
 }

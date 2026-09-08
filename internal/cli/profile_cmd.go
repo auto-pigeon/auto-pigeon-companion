@@ -32,6 +32,11 @@ const profileUsage = `usage:
   companion profile list                        the profiles built into this build
   companion profile schema [name]               list or print the published JSON Schema documents
 
+approving an installed profile (by id, against the same catalog the executor reads):
+  companion profile review <id>                 what it would be allowed to do, and whether it may
+  companion profile grant <id> --digest=<d> --approve
+  companion profile withdraw <id> --confirm
+
 publishing and installing (these reach a backend):
   companion profile preview <file>              what publishing it would disclose
   companion profile publish <file> --confirm    publish it, after the preview
@@ -65,6 +70,12 @@ func runProfile(env *Env, args []string) int {
 		return profileList(env, args[1:])
 	case "schema":
 		return profileSchema(env, args[1:])
+	case "review":
+		return profileReview(env, args[1:])
+	case "grant":
+		return profileGrant(env, args[1:])
+	case "withdraw":
+		return profileWithdraw(env, args[1:])
 	case "preview":
 		return profilePreview(env, args[1:])
 	case "publish":

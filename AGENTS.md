@@ -359,7 +359,7 @@ a later prompt can undo by accident. `docs/adr/0007` is the record; this is what
 binds a change.
 
 **`internal/threat` is checked by the build, and that is the point.** Each of its
-49 rows names the tests that are its evidence, and `threat.Check` PARSES every
+50 rows names the tests that are its evidence, and `threat.Check` PARSES every
 `_test.go` in the tree — parses, not greps, because a name in a comment is not a
 test and a matrix satisfiable by writing a comment is satisfiable by writing a
 comment. **If you rename or delete a test, fix the row that cited it.** Do not
@@ -382,7 +382,10 @@ lock a file in the user's own config directory would cost the empty module graph
 that T45 is about. Use `config.Update(path, mutate)` for a read-modify-write —
 never Load, change, Save, which is the lost update this replaced. The web
 server's persist hook is a MUTATION, not a value, for the same reason; a handler
-declares the fields it owns.
+declares the fields it owns. `AUCOM/AUT 228` extended the same rule to
+`bindings.json`: every write goes through `binding.Update(path, mutate)`, because
+that file holds the GRANTS, and a lost update there costs an approval or brings
+back one somebody withdrew.
 
 **`catalog.SaveState` merges, and the merge is not optional.** Serials take the
 max, revocations take the union. That is the same ratchet the file already is,
@@ -426,6 +429,59 @@ through its documented CLI with `HOME` and the XDG variables pointed into a
 sandbox — the operating system's own mechanism, so no test-only fallback had to
 be added here. A change that makes a lane pass by adding an environment variable
 only a test reads is undoing that.
+
+## 6. THERE IS ONE WRITER OF AN APPROVAL, AND IT REFUSES (`AUCOM/AUT 228`)
+
+`AUT/AUCOM 219` found the one place the README's *"everything the page can do,
+the CLI can do too"* was false: `profile.NewGrant` had three call sites — engine
+profiles only, a deployment listing only, and the local API — so a TOOL profile
+somebody wrote and dropped into their profile folder could be validated, shown,
+digested and bound from a terminal, and then only ever RUN by starting the GUI
+server. `20260907_228` closed it, and what it left behind binds a later prompt.
+
+**`internal/approval.Service` is the one writer of a `profile.Grant`.** The local
+API holds one, `companion profile grant` holds one, and so does the approval half
+of `engine bind` and of `POST /api/v1/profiles/{id}/bind`. Two implementations of
+"record an approval" drift, and the one that drifts is the one that forgot a
+check — so a new surface takes this service, and never assembles a
+`binding.LocalBinding` with a `Grant` in it of its own. `publish/install.go` still
+writes one for a document arriving from a deployment listing, against a plan the
+user approved in the same call; that is the one remaining exception and it is
+reviewed by `TestNothingIsWrittenWithoutAnApproval`.
+
+**An approval names the exact document, and reviewing is not approving.**
+`Service.Grant` refuses an empty digest (`ErrDigestRequired`) and a digest that is
+not the document on this machine (`StaleDigestError`, which names both), BEFORE
+writing anything — including the binding, because a binding written by a refused
+approval is a state nobody asked for. `Service.Review` writes nothing at all, so
+"show me what this asks for" is safe to type. `companion profile grant <id>` with
+no decision prints the review and exits **2**: a script that left out `--approve`
+must not be able to read that as an approval.
+
+**The CLI contract is non-interactive and stays that way.** `--digest` says WHICH
+document and `--approve` says a person decided; `--confirm` withdraws. There is no
+prompt, because a prompt hangs automation, and a script that cannot approve a
+profile is a script that has to start the GUI server — which is the browser-only
+path this removed. Never add `--force`, `--yes`, or a flag that skips the review.
+
+**Binding is not approving, and a pipeline grants nothing to its tools.** Import
+writes a document; `acquire resolve --bind` and the setup form write where a
+program is; none of them writes a grant.
+`TestImportingAndBindingGrantNothing` and
+`TestApprovingAPipelineGrantsNothingToTheToolsItRuns` are where that is checked.
+
+**A changed document invalidates the grant even when it asks for LESS.** The
+grant is against bytes. A build that compared permission sets would let a
+narrower republication of the same version run unreviewed, which is why
+`TestAChangedDocumentInvalidatesTheGrantEvenWhenItAsksForLess` asserts the
+narrowness first and then the refusal.
+
+**A wrapped `*url.Error` no longer escapes a quote into the address.**
+`catalog.redactField` separates the punctuation from the address before parsing
+and puts it back afterwards, so `…/keyring.json%22:` reads `…/keyring.json:`.
+`RedactURL` still takes an address and still drops userinfo, query and fragment
+unconditionally — do not make it lenient about its input, and do not weaken the
+redaction to tidy a message.
 
 ## Cross-repository boundary
 

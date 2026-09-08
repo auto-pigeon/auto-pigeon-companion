@@ -1,0 +1,111 @@
+{
+  "schema_version": "aucom.profile/1.1",
+  "kind": "tool",
+  "id": "example.local.harmless",
+  "version": "1.1.0",
+  "name": "A tool profile somebody wrote",
+  "summary": "The same profile, one version later, asking for strictly less than it did before.",
+  "description": "Identical to 1.0.0 except that it no longer reads the project directory. It exists to prove that a grant is against a document's DIGEST and not against a set of permissions: an approval of 1.0.0 does not cover this, even though everything this asks for was already approved. A build that compared permission sets would let it run.",
+  "publisher": {
+    "name": "A Companion user"
+  },
+  "license": {
+    "spdx": "MIT",
+    "name": "MIT License"
+  },
+  "tool_version": "1.0.0",
+  "game_profile": {
+    "engine_family": "quake1",
+    "slug": "quake1"
+  },
+  "platforms": [
+    {
+      "platform": {
+        "os": "linux",
+        "arch": "amd64"
+      },
+      "status": "supported"
+    },
+    {
+      "platform": {
+        "os": "darwin",
+        "arch": "arm64"
+      },
+      "status": "supported"
+    },
+    {
+      "platform": {
+        "os": "windows",
+        "arch": "amd64"
+      },
+      "status": "supported"
+    }
+  ],
+  "acquisition": [
+    {
+      "mode": "user_path",
+      "title": "The copy I already have",
+      "hint": "choose the folder the program is in"
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "q1.bsp.compile",
+      "title": "Compile a Quake 1 map into a BSP",
+      "consumes": [
+        "q1.map.source"
+      ],
+      "produces": [
+        "q1.bsp"
+      ]
+    }
+  ],
+  "executables": [
+    {
+      "name": "harmless",
+      "file": "harmless{platform.exe_suffix}"
+    }
+  ],
+  "actions": [
+    {
+      "id": "compile",
+      "title": "Compile the map",
+      "capability": "q1.bsp.compile",
+      "executable": "harmless",
+      "working_dir": {
+        "root": "workspace"
+      },
+      "args": [
+        "{input.source_map}",
+        "{output.bsp}"
+      ],
+      "inputs": [
+        {
+          "name": "source_map",
+          "role": "q1.map.source",
+          "required": true,
+          "title": "Map source",
+          "extensions": [
+            ".map"
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "name": "bsp",
+          "role": "q1.bsp",
+          "title": "Compiled BSP",
+          "path": "compile/level.bsp"
+        }
+      ],
+      "roots": [
+        {
+          "role": "workspace",
+          "access": "read_write",
+          "purpose": "read the staged map source and write the compiled BSP"
+        }
+      ],
+      "timeout_seconds": 600
+    }
+  ]
+}

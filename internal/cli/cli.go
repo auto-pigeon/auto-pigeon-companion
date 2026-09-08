@@ -137,8 +137,8 @@ var commands = []Command{
 		Run:     runPackage,
 	},
 	{
-		Name: "profile", Usage: "validate | show | canonicalize | digest | diff | list | schema",
-		Summary: "read, check and compare tool, engine and pipeline profiles",
+		Name: "profile", Usage: "validate | show | canonicalize | digest | diff | list | schema | review | grant | withdraw",
+		Summary: "read, check and compare tool, engine and pipeline profiles, and approve one to run",
 		Run:     runProfile,
 	},
 	{

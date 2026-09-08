@@ -225,15 +225,67 @@ func redactError(err error) error {
 	if err == nil {
 		return nil
 	}
-	text := err.Error()
 	var rewritten []string
-	for _, field := range strings.Fields(text) {
-		trimmed := strings.Trim(field, `"'`)
-		if strings.HasPrefix(trimmed, "http://") || strings.HasPrefix(trimmed, "https://") {
-			rewritten = append(rewritten, RedactURL(trimmed))
-			continue
-		}
-		rewritten = append(rewritten, field)
+	for _, field := range strings.Fields(err.Error()) {
+		rewritten = append(rewritten, redactField(field))
 	}
 	return &redactedError{text: strings.Join(rewritten, " "), err: err}
+}
+
+// urlOpeners and urlClosers are the punctuation an address is found wrapped in.
+//
+// `/` is deliberately absent from the closers: a trailing slash is part of an
+// address and a redaction that ate it would name a different resource. So is
+// `-`, `_` and `~`, which are ordinary in a path.
+const (
+	urlOpeners = `"'([<`
+	urlClosers = `"'.,;:!?)]}>`
+)
+
+// redactField rewrites one whitespace-delimited field of an error message,
+// leaving anything that is not an address alone.
+//
+// # The defect this exists to fix
+//
+// A fetch failure carries its address twice: once from this repository's own
+// `fetching %s: %w`, and once from the *url.Error underneath, where net/url has
+// already QUOTED it — `Get "https://host/keyring.json": dial tcp …`. Splitting
+// on whitespace yields the field `"https://host/keyring.json":`, whose leading
+// quote a plain Trim removes and whose trailing quote it does not, because the
+// colon is in the way. What was then handed to [url.Parse] ended in a quote,
+// which came back out of the path escaped:
+//
+//	catalog: fetching https://host/keyring.json: Get https://host/keyring.json%22: dial tcp …
+//
+// Cosmetic, and cosmetic in the one place a person is already confused. So the
+// punctuation is separated from the address FIRST, and put back afterwards.
+//
+// # Why the fix is here and not in RedactURL
+//
+// [RedactURL] takes an address. Teaching it to accept an address wrapped in
+// somebody's quotation marks would make it lenient about its input, and a
+// lenient redactor is one that can be handed something it does not recognise
+// and return it unchanged. This function does the recognising; RedactURL still
+// only ever sees an address, and still drops the userinfo, the query and the
+// fragment unconditionally. Trimming punctuation cannot expose a credential:
+// everything after `?` or `#` is discarded whether or not a stray quote came
+// with it.
+func redactField(field string) string {
+	address := strings.TrimLeft(field, urlOpeners)
+	if !strings.HasPrefix(address, "http://") && !strings.HasPrefix(address, "https://") {
+		return field
+	}
+	trailing := address
+	address = strings.TrimRight(address, urlClosers)
+	trailing = trailing[len(address):]
+
+	// The quotation marks go, because they quoted an address that is no longer
+	// there; the sentence's own punctuation stays, because the reader needs it.
+	trailing = strings.Map(func(r rune) rune {
+		if strings.ContainsRune(`"'`+urlOpeners+`)]}>`, r) {
+			return -1
+		}
+		return r
+	}, trailing)
+	return RedactURL(address) + trailing
 }

@@ -383,25 +383,11 @@ func engineBind(env *Env, args []string) int {
 		return 2
 	}
 
-	set2, err := binding.LoadFile(bindingsPath)
-	if err != nil && !errors.Is(err, binding.ErrNoFile) {
-		return fail(env, err)
-	}
-	local, _ := set2.Find(document.ID)
-	if local.ProfileDigest != entry.Digest {
-		// The approval is against one exact document, so a changed document
-		// invalidates it. Where the engine and the game are is a fact about
-		// this machine and not about the document, so it survives — dropping
-		// it would mean a Companion upgrade quietly forgetting paths the user
-		// set months ago, and the next launch failing with "nothing on this
-		// machine says where the engine is".
-		local.Grant = nil
-	}
-	local.ProfileID = document.ID
-	local.ProfileVersion = document.Version
-	local.ProfileDigest = entry.Digest
-	local.Trust = entry.Trust
-	local.Acquisition = profile.AcquireUserPath
+	// Everything the flags ask for, checked before anything is written: an
+	// absolute path, a program that exists, a directory that is a directory.
+	// None of it depends on what is already recorded, so it is resolved out
+	// here and the write below stays short enough to hold under a lock.
+	newExecutables := map[string]string{}
 	if *enginePath != "" {
 		absolute, err := filepath.Abs(*enginePath)
 		if err != nil {
@@ -424,10 +410,7 @@ func engineBind(env *Env, args []string) int {
 				document.ID, len(document.Executables), strings.Join(names, ", "))
 			return 2
 		}
-		if local.Executables == nil {
-			local.Executables = map[string]string{}
-		}
-		local.Executables[document.Executables[0].Name] = absolute
+		newExecutables[document.Executables[0].Name] = absolute
 	}
 	named := []struct{ role, value string }{
 		{profile.RootGame, *gameRoot},
@@ -440,6 +423,7 @@ func engineBind(env *Env, args []string) int {
 		}
 		named = append(named, struct{ role, value string }{role, roots[role]})
 	}
+	newRoots := map[string]string{}
 	for _, pair := range named {
 		if pair.value == "" {
 			continue
@@ -452,20 +436,61 @@ func engineBind(env *Env, args []string) int {
 			fmt.Fprintf(env.Stderr, "error: %s is not a directory on this machine\n", absolute)
 			return 1
 		}
-		if local.Roots == nil {
-			local.Roots = map[string]string{}
+		newRoots[pair.role] = absolute
+	}
+
+	// One cross-process lock around the read and the write: the GUI server may
+	// be recording a grant for this same profile in another process, and an
+	// unlocked read-modify-write here would discard it. See [binding.Update].
+	var local binding.LocalBinding
+	if _, err := binding.Update(bindingsPath, func(set2 *binding.Set) error {
+		local, _ = set2.Find(document.ID)
+		if local.ProfileDigest != entry.Digest {
+			// The approval is against one exact document, so a changed document
+			// invalidates it. Where the engine and the game are is a fact about
+			// this machine and not about the document, so it survives — dropping
+			// it would mean a Companion upgrade quietly forgetting paths the user
+			// set months ago, and the next launch failing with "nothing on this
+			// machine says where the engine is".
+			local.Grant = nil
 		}
-		local.Roots[pair.role] = absolute
+		local.ProfileID = document.ID
+		local.ProfileVersion = document.Version
+		local.ProfileDigest = entry.Digest
+		local.Trust = entry.Trust
+		local.Acquisition = profile.AcquireUserPath
+		for name, path := range newExecutables {
+			if local.Executables == nil {
+				local.Executables = map[string]string{}
+			}
+			local.Executables[name] = path
+		}
+		for role, path := range newRoots {
+			if local.Roots == nil {
+				local.Roots = map[string]string{}
+			}
+			local.Roots[role] = path
+		}
+		local.UpdatedAt = time.Now().UTC()
+		return set2.Put(local)
+	}); err != nil {
+		return fail(env, err)
 	}
+
+	// The approval is recorded by the one service that records approvals — the
+	// same one `companion profile grant` and the local API hold — so there is a
+	// single answer to what a grant is and how it is stored. Binding alone
+	// records nothing of the sort.
 	if *approve {
-		local.Grant = profile.NewGrant(document, entry.Trust, entry.Digest, time.Now())
-	}
-	local.UpdatedAt = time.Now().UTC()
-	if err := set2.Put(local); err != nil {
-		return fail(env, err)
-	}
-	if err := binding.SaveFile(bindingsPath, set2); err != nil {
-		return fail(env, err)
+		service, err := openApprovals(env)
+		if err != nil {
+			return fail(env, err)
+		}
+		decision, err := service.Grant(document.ID, entry.Digest)
+		if err != nil {
+			return fail(env, err)
+		}
+		local = decision.Binding
 	}
 
 	fmt.Fprintf(env.Stdout, "recorded for %s:\n", document.ID)

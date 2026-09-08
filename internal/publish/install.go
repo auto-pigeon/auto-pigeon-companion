@@ -234,28 +234,27 @@ func Apply(plan Plan, paths InstallPaths, approved bool) (binding.LocalBinding, 
 		return binding.LocalBinding{}, err
 	}
 
-	set, err := loadBindings(paths.Bindings)
-	if err != nil {
-		return binding.LocalBinding{}, err
-	}
-	local, _ := set.Find(meta.ID)
-	local.SchemaVersion = binding.SchemaVersion
-	local.ProfileID = meta.ID
-	local.ProfileVersion = meta.Version
-	local.ProfileDigest = plan.Digest
-	local.Trust = plan.Trust
-	if local.Acquisition == "" {
-		local.Acquisition = profile.AcquireUserPath
-	}
+	// Read, changed and written inside one cross-process lock, so an install
+	// running beside a GUI server cannot discard a grant or an engine path the
+	// other recorded. See [binding.Update].
+	var local binding.LocalBinding
+	if _, err := binding.Update(paths.Bindings, func(set *binding.Set) error {
+		local, _ = set.Find(meta.ID)
+		local.SchemaVersion = binding.SchemaVersion
+		local.ProfileID = meta.ID
+		local.ProfileVersion = meta.Version
+		local.ProfileDigest = plan.Digest
+		local.Trust = plan.Trust
+		if local.Acquisition == "" {
+			local.Acquisition = profile.AcquireUserPath
+		}
 
-	// The grant is against THIS digest, so a later version asking for more is a
-	// new decision rather than something the old approval covers.
-	local.Grant = profile.NewGrant(plan.decoded, plan.Trust, plan.Digest, time.Now())
-	local.UpdatedAt = time.Now().UTC()
-	if err := set.Put(local); err != nil {
-		return binding.LocalBinding{}, err
-	}
-	if err := binding.SaveFile(paths.Bindings, set); err != nil {
+		// The grant is against THIS digest, so a later version asking for more is a
+		// new decision rather than something the old approval covers.
+		local.Grant = profile.NewGrant(plan.decoded, plan.Trust, plan.Digest, time.Now())
+		local.UpdatedAt = time.Now().UTC()
+		return set.Put(local)
+	}); err != nil {
 		return binding.LocalBinding{}, err
 	}
 
@@ -282,18 +281,6 @@ func digestOf(document []byte) string {
 	sum := sha256.Sum256(document)
 
 	return "sha256:" + hex.EncodeToString(sum[:])
-}
-
-func loadBindings(path string) (*binding.Set, error) {
-	raw, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return binding.NewSet(), nil
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	return binding.Load(raw)
 }
 
 // writeAtomically stages beside the target and renames, so an interrupted write

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/approval"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/binding"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
@@ -718,6 +719,11 @@ func profileFileName(meta profile.Meta) (string, error) {
 // approval of one exact document — see [profile.NewGrant] — and accepting one
 // for a digest the page last saw would be accepting an approval of something
 // that has since changed.
+//
+// Nothing about that decision is implemented here. [approval.Service] is the one
+// writer of a grant on this machine and `companion profile grant` holds the same
+// one, so the page and the command line cannot come to disagree about what an
+// approval is or how it is stored. See internal/approval.
 func (s *Server) handleProfileGrant(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		Digest string `json:"digest"`
@@ -725,79 +731,48 @@ func (s *Server) handleProfileGrant(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &request) {
 		return
 	}
-	entry, _, err := s.profileEntry(r.PathValue("id"))
-	if err != nil {
-		writeError(w, jobStatus(err), err)
-		return
-	}
-	if request.Digest == "" {
-		writeError(w, http.StatusBadRequest, errors.New(
-			"an approval names the exact document being approved: send its digest"))
-		return
-	}
-	if request.Digest != entry.Digest {
-		writeError(w, http.StatusConflict, fmt.Errorf(
-			"this approval is for %s and the document on this machine is now %s; "+
-				"read it again before approving it", request.Digest, entry.Digest))
-		return
-	}
-
-	set, path, err := s.bindings()
+	service, err := s.approvals()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	meta := entry.Profile.Metadata()
-	local, _ := set.Find(meta.ID)
-	local.ProfileID = meta.ID
-	local.ProfileVersion = meta.Version
-	local.ProfileDigest = entry.Digest
-	local.Trust = entry.Trust
-	if local.Acquisition == "" {
-		local.Acquisition = profile.AcquireUserPath
-	}
-	local.Grant = profile.NewGrant(entry.Profile, entry.Trust, entry.Digest, time.Now())
-	local.UpdatedAt = time.Now().UTC()
-	if err := set.Put(local); err != nil {
-		writeError(w, http.StatusBadRequest, err)
+	decision, err := service.Grant(r.PathValue("id"), request.Digest)
+	if err != nil {
+		writeError(w, approvalStatus(err), err)
 		return
 	}
-	if err := binding.SaveFile(path, set); err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, s.describeCatalogEntry(entry, local))
+	writeJSON(w, http.StatusOK, s.describeCatalogEntry(decision.Entry, decision.Binding))
 }
 
 // handleProfileWithdraw takes an approval back. The paths stay: where a program
 // is on this machine is not part of what was approved.
 func (s *Server) handleProfileWithdraw(w http.ResponseWriter, r *http.Request) {
-	entry, _, err := s.profileEntry(r.PathValue("id"))
-	if err != nil {
-		writeError(w, jobStatus(err), err)
-		return
-	}
-	set, path, err := s.bindings()
+	service, err := s.approvals()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	local, found := set.Find(entry.Profile.Metadata().ID)
-	if !found || local.Grant == nil {
-		writeJSON(w, http.StatusOK, s.describeCatalogEntry(entry, local))
+	decision, err := service.Withdraw(r.PathValue("id"))
+	if err != nil {
+		writeError(w, approvalStatus(err), err)
 		return
 	}
-	local.Grant = nil
-	local.UpdatedAt = time.Now().UTC()
-	if err := set.Put(local); err != nil {
-		writeError(w, http.StatusBadRequest, err)
-		return
+	writeJSON(w, http.StatusOK, s.describeCatalogEntry(decision.Entry, decision.Binding))
+}
+
+// approvalStatus maps the approval service's refusals onto the statuses the page
+// already distinguishes: a missing digest is a malformed request, a stale one is
+// a conflict with the document on disk, and everything else falls through to the
+// job mapping so an unknown profile is still a 404.
+func approvalStatus(err error) int {
+	var stale *approval.StaleDigestError
+	switch {
+	case errors.Is(err, approval.ErrDigestRequired):
+		return http.StatusBadRequest
+	case errors.As(err, &stale):
+		return http.StatusConflict
 	}
-	if err := binding.SaveFile(path, set); err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, s.describeCatalogEntry(entry, local))
+	return jobStatus(err)
 }
 
 // handleProfileRemove deletes an imported document.
@@ -820,16 +795,17 @@ func (s *Server) handleProfileRemove(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	set, path, err := s.bindings()
+	path, err := s.bindingsPath()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	if set.Remove(entry.Profile.Metadata().ID) {
-		if err := binding.SaveFile(path, set); err != nil {
-			writeError(w, http.StatusInternalServerError, err)
-			return
-		}
+	if _, err := binding.Update(path, func(set *binding.Set) error {
+		set.Remove(entry.Profile.Metadata().ID)
+		return nil
+	}); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"removed": entry.Profile.Metadata().ID, "was": entry.Source,
@@ -975,35 +951,12 @@ func (s *Server) handleProfileBind(w http.ResponseWriter, r *http.Request) {
 			errors.New("nothing to record: send an executable, a root, or an approval"))
 		return
 	}
-	if request.Approve && request.Digest != "" && request.Digest != entry.Digest {
-		writeError(w, http.StatusConflict, fmt.Errorf(
-			"this approval is for %s and the document on this machine is now %s; "+
-				"read it again before approving it", request.Digest, entry.Digest))
-		return
-	}
 
-	set, path, err := s.bindings()
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	local, _ := set.Find(meta.ID)
-	if local.ProfileDigest != entry.Digest {
-		// The approval was for one exact document, so a changed document
-		// invalidates it. The paths survive: where a program and its data are
-		// is a fact about this machine, not about the document, and dropping
-		// them would mean an upgrade quietly forgetting what the user set.
-		local.Grant = nil
-	}
-	local.ProfileID = meta.ID
-	local.ProfileVersion = meta.Version
-	local.ProfileDigest = entry.Digest
-	local.Trust = entry.Trust
-	if local.Acquisition == "" {
-		local.Acquisition = profile.AcquireUserPath
-	}
-
+	// What the request asks for, checked and resolved before anything is
+	// written. An empty value is a removal, which is why the maps hold a
+	// pointer-free "" rather than being absent.
 	declared := declaredExecutables(document)
+	executables := map[string]string{}
 	for name, value := range request.Executables {
 		if !declared[name] {
 			writeError(w, http.StatusBadRequest, fmt.Errorf(
@@ -1011,7 +964,7 @@ func (s *Server) handleProfileBind(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if value == "" {
-			delete(local.Executables, name)
+			executables[name] = ""
 			continue
 		}
 		resolved, err := checkExecutable(value)
@@ -1019,11 +972,9 @@ func (s *Server) handleProfileBind(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, fmt.Errorf("the %s program: %w", name, err))
 			return
 		}
-		if local.Executables == nil {
-			local.Executables = map[string]string{}
-		}
-		local.Executables[name] = resolved
+		executables[name] = resolved
 	}
+	roots := map[string]string{}
 	for role, value := range request.Roots {
 		if role == profile.RootWorkspace {
 			writeError(w, http.StatusBadRequest, fmt.Errorf(
@@ -1032,7 +983,7 @@ func (s *Server) handleProfileBind(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if value == "" {
-			delete(local.Roots, role)
+			roots[role] = ""
 			continue
 		}
 		resolved, err := checkDirectory(value)
@@ -1040,23 +991,83 @@ func (s *Server) handleProfileBind(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, fmt.Errorf("the %s root: %w", role, err))
 			return
 		}
-		if local.Roots == nil {
-			local.Roots = map[string]string{}
-		}
-		local.Roots[role] = resolved
+		roots[role] = resolved
 	}
-	if request.Approve {
-		local.Grant = profile.NewGrant(document, entry.Trust, entry.Digest, time.Now())
-	}
-	local.UpdatedAt = time.Now().UTC()
 
-	if err := set.Put(local); err != nil {
+	path, err := s.bindingsPath()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	// The read, the change and the write inside one cross-process lock. The GUI
+	// server is one process and a `companion` command in a terminal is another;
+	// without this, whichever renamed last would silently discard the other's
+	// change. See [binding.Update].
+	var local binding.LocalBinding
+	updated, err := binding.Update(path, func(set *binding.Set) error {
+		local, _ = set.Find(meta.ID)
+		if local.ProfileDigest != entry.Digest {
+			// The approval was for one exact document, so a changed document
+			// invalidates it. The paths survive: where a program and its data are
+			// is a fact about this machine, not about the document, and dropping
+			// them would mean an upgrade quietly forgetting what the user set.
+			local.Grant = nil
+		}
+		local.ProfileID = meta.ID
+		local.ProfileVersion = meta.Version
+		local.ProfileDigest = entry.Digest
+		local.Trust = entry.Trust
+		if local.Acquisition == "" {
+			local.Acquisition = profile.AcquireUserPath
+		}
+		for name, value := range executables {
+			if value == "" {
+				delete(local.Executables, name)
+				continue
+			}
+			if local.Executables == nil {
+				local.Executables = map[string]string{}
+			}
+			local.Executables[name] = value
+		}
+		for role, value := range roots {
+			if value == "" {
+				delete(local.Roots, role)
+				continue
+			}
+			if local.Roots == nil {
+				local.Roots = map[string]string{}
+			}
+			local.Roots[role] = value
+		}
+		local.UpdatedAt = time.Now().UTC()
+		return set.Put(local)
+	})
+	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	if err := binding.SaveFile(path, set); err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
+	if stored, found := updated.Find(meta.ID); found {
+		local = stored
+	}
+
+	// The approval is a second, separate decision, and it is recorded by the one
+	// service that records approvals — the same one `companion profile grant`
+	// holds. Binding does not imply it: a request with no `approve` writes the
+	// paths and grants nothing, which is what makes "set this up now, decide
+	// later" a state the program actually has.
+	if request.Approve {
+		service, err := s.approvals()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		decision, err := service.Grant(meta.ID, request.Digest)
+		if err != nil {
+			writeError(w, approvalStatus(err), err)
+			return
+		}
+		local = decision.Binding
 	}
 	writeJSON(w, http.StatusOK, s.describeCatalogEntry(entry, local))
 }
@@ -1072,17 +1083,18 @@ func (s *Server) handleProfileUnbind(w http.ResponseWriter, r *http.Request) {
 		writeError(w, jobStatus(err), err)
 		return
 	}
-	set, path, err := s.bindings()
+	path, err := s.bindingsPath()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	removed := set.Remove(entry.Profile.Metadata().ID)
-	if removed {
-		if err := binding.SaveFile(path, set); err != nil {
-			writeError(w, http.StatusInternalServerError, err)
-			return
-		}
+	removed := false
+	if _, err := binding.Update(path, func(set *binding.Set) error {
+		removed = set.Remove(entry.Profile.Metadata().ID)
+		return nil
+	}); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"removed": removed,
