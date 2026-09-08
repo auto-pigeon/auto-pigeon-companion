@@ -1,0 +1,52 @@
+{
+  "schema": "aucom.native-support/1.0",
+  "targets": [
+    {
+      "target": "linux/amd64",
+      "built": true,
+      "native_host": "agent",
+      "note": "The development host. An agent and the project owner can both run the kit here."
+    },
+    {
+      "target": "linux/arm64",
+      "built": true,
+      "native_host": "owner_manual",
+      "note": "The project owner can run the kit on a machine they have. No agent host is available."
+    },
+    {
+      "target": "windows/amd64",
+      "built": true,
+      "native_host": "owner_manual",
+      "note": "The project owner can run the kit on a machine they have. No agent host is available."
+    },
+    {
+      "target": "windows/arm64",
+      "built": true,
+      "native_host": "none",
+      "note": "No native host is declared for this target. The artifact is cross-compiled and untested on the hardware."
+    },
+    {
+      "target": "darwin/amd64",
+      "built": true,
+      "native_host": "none",
+      "note": "No native host is declared for this target. The artifact is cross-compiled and untested on the hardware."
+    },
+    {
+      "target": "darwin/arm64",
+      "built": true,
+      "native_host": "none",
+      "note": "No native host is declared for this target. The artifact is cross-compiled and untested on the hardware."
+    }
+  ],
+  "verifications": [
+    {
+      "target": "linux/amd64",
+      "bundle_id": "linux-amd64-20260908T105259Z-e76cee2f9c88",
+      "digest": "0b1614cc0a50ab4e2aa5c2a1fba61cdad6aea272b0c283c335789e3781734571",
+      "companion_version": "0.1.0-dev",
+      "verdict": "pass",
+      "produced_at": "2026-09-08T10:52:59Z",
+      "note": "AUT/AUCOM 231. Driven through the shipped acceptance/run-acceptance.sh on the development host with the pinned ericw-tools v0.18.1 build: 50 pass, 0 fail, 2 not_applicable \u2014 the URI registration this platform does not own on Windows or macOS, and an owned-game launch nobody supplied a game for."
+    }
+  ]
+}

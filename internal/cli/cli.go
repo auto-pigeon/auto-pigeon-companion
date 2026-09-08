@@ -197,6 +197,11 @@ var commands = []Command{
 		Run:     runUninstall,
 	},
 	{
+		Name: "acceptance", Usage: "run | verify | lanes | schema | fixture | noise",
+		Summary: "the native operator acceptance kit, on the machine an artifact is for",
+		Run:     runAcceptance,
+	},
+	{
 		Name:    "migrate",
 		Summary: "fold Launcher and older Companion configuration into the current one",
 		Run:     runMigrate,

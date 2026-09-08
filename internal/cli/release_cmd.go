@@ -1,11 +1,13 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/maturity"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/release"
 )
 
@@ -21,6 +23,10 @@ const releaseUsage = `usage:
                                     a CycloneDX document for this build
   companion release checksums --dir <dir> [--out <file>]
                                     SHA256SUMS for a built release directory
+  companion release support [--json]
+                                    which platforms this build produces an artifact
+                                    for, which have been RUN on real hardware, and
+                                    which game families are still work in progress
 
 Neither signs anything. Signing is a publisher's act with a key that is not in
 this program and not in CI — see README.md for the procedures, and
@@ -37,6 +43,8 @@ func runRelease(env *Env, args []string) int {
 		return releaseSBOM(env, args[1:])
 	case "checksums":
 		return releaseChecksums(env, args[1:])
+	case "support":
+		return releaseSupport(env, args[1:])
 	}
 	fmt.Fprintf(env.Stderr, "error: unknown release subcommand %q\n", args[0])
 	fmt.Fprint(env.Stderr, releaseUsage)
@@ -114,5 +122,81 @@ func releaseChecksums(env *Env, args []string) int {
 		return fail(env, err)
 	}
 	fmt.Fprintf(env.Stdout, "wrote %s (%d files)\n", destination, len(sums))
+	return 0
+}
+
+// releaseSupport prints the two axes a release note has to keep apart.
+//
+// BUILT is what `build/release.sh` produces. NATIVELY VERIFIED is what somebody
+// ran the acceptance kit on and sent a bundle back from. A cross-compiled
+// artifact is a real artifact and stays in the list; what it does not get is a
+// claim nobody checked. `build_only` and `manual_pending` are printed as
+// themselves and are never rendered as a pass.
+//
+// The game-family half is `internal/maturity`'s, unchanged: Quake II and Quake
+// III are work in progress and say so in the same sentence every other surface
+// prints.
+func releaseSupport(env *Env, args []string) int {
+	set := newFlagSet(env, "release support")
+	asJSON := set.Bool("json", false, "print the tables as JSON")
+	if _, code, ok := parseInterspersed(env, set, args); !ok {
+		return code
+	}
+	rows, err := release.Rows()
+	if err != nil {
+		return fail(env, err)
+	}
+	families := make([]map[string]string, 0, len(maturity.Families()))
+	for _, family := range maturity.Families() {
+		statement := maturity.Of(family)
+		families = append(families, map[string]string{
+			"family": statement.Family, "state": string(statement.State),
+			"message": statement.Message,
+		})
+	}
+	if *asJSON {
+		encoded, err := json.MarshalIndent(map[string]any{
+			"schema": release.SupportSchema, "platforms": rows, "families": families,
+		}, "", "  ")
+		if err != nil {
+			return fail(env, err)
+		}
+		fmt.Fprintln(env.Stdout, string(encoded))
+		return 0
+	}
+
+	fmt.Fprintln(env.Stdout, "platforms — an artifact is built for each of these:")
+	for _, row := range rows {
+		built := "built"
+		if !row.Built {
+			built = "not built"
+		}
+		fmt.Fprintf(env.Stdout, "  %-15s %-10s %-15s %s\n", row.Target, built, row.State, row.Note)
+		for _, verification := range row.Verifications {
+			fmt.Fprintf(env.Stdout, "  %-15s   %s %s %s\n", "",
+				verification.Verdict, verification.ProducedAt, verification.BundleID)
+		}
+	}
+	fmt.Fprint(env.Stdout, `
+  native_pass     something ran the acceptance kit on that hardware and it passed
+  native_fail     something ran it there and it did not pass
+  manual_pending  a machine exists and nobody has run it yet — NOT a pass
+  build_only      an artifact is produced and no native host is declared — NOT a pass
+  unsupported     no artifact is produced for that target
+
+`)
+	fmt.Fprintln(env.Stdout, "game families:")
+	for _, family := range families {
+		state := family["state"]
+		if state == "work_in_progress" {
+			fmt.Fprintf(env.Stdout, "  %-8s experimental  %s\n", family["family"], family["message"])
+		} else {
+			fmt.Fprintf(env.Stdout, "  %-8s %s\n", family["family"], state)
+		}
+	}
+	fmt.Fprintln(env.Stdout, `
+A built artifact is a real artifact: it is produced, checksummed and published.
+What it is not, on its own, is evidence that the program works on that hardware.
+Run `+"`acceptance/run-acceptance.sh`"+` or `+"`acceptance/run-acceptance.ps1`"+` there and send the bundle back.`)
 	return 0
 }

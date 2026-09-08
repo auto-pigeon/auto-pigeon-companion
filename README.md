@@ -60,9 +60,14 @@ There is no GUI toolkit and no embedded browser engine. The binary:
   accidentally gets published — see [Packaging](#packaging-pak-and-pk3).
 
 The result is a single CGO-free executable that cross-compiles to all six
-supported targets with nothing but `GOOS`/`GOARCH` and `go build`:
+**built** targets with nothing but `GOOS`/`GOARCH` and `go build`:
 `windows/amd64`, `windows/arm64`, `linux/amd64`, `linux/arm64`,
 `darwin/amd64`, `darwin/arm64`.
+
+Six builds is six statements that this code compiles for six targets. It is not
+one statement about whether the program *works* on any of them — that is a
+separate question with a separate answer, and `companion release support` prints
+both. See [What is built, and what has been run](#what-is-built-and-what-has-been-run).
 
 Dependencies: none. `go.mod` lists no third-party modules and there is no
 `go.sum`, because everything used is in the standard library — including the
@@ -404,6 +409,7 @@ commands:
   security matrix | residual | audit                                                                  the threat model, the risks accepted with it, and what this build is made of
   release sbom | checksums                                                                            the documents a release ships beside its binaries
   uninstall [--purge --confirm]                                                                       show what this program keeps on this machine, and delete it
+  acceptance run | verify | lanes | schema | fixture | noise                                          the native operator acceptance kit, on the machine an artifact is for
   migrate                                                                                             fold Launcher and older Companion configuration into the current one
   version                                                                                             print the build version
 ```
@@ -3772,8 +3778,89 @@ digest of itself. The checksum file never digests itself, because a self-digest
 stops being true the moment it is written.
 
 `build/release.sh` runs the whole thing: six targets with `-trimpath` and
-`CGO_ENABLED=0`, the macOS bundles, the licence files inside every artifact, then
-the SBOM and the checksums.
+`CGO_ENABLED=0`, the macOS bundles, the licence files and the native acceptance
+kit inside every artifact, then the SBOM and the checksums. It finishes by
+printing `companion release support`, so the last thing a release run says is
+what the release actually claims.
+
+## What is built, and what has been run
+
+These are two different questions and this project answers them separately.
+
+```console
+$ ./companion release support
+platforms — an artifact is built for each of these:
+  darwin/amd64    built      build_only      No native host is declared for this target. …
+  darwin/arm64    built      build_only      No native host is declared for this target. …
+  linux/amd64     built      native_pass     The development host. …
+                    pass 2026-09-08T10:52:59Z linux-amd64-20260908T105259Z-e76cee2f9c88
+  linux/arm64     built      manual_pending  The project owner can run the kit on a machine they have. …
+  windows/amd64   built      manual_pending  The project owner can run the kit on a machine they have. …
+  windows/arm64   built      build_only      No native host is declared for this target. …
+```
+
+| state | what it means |
+| --- | --- |
+| `native_pass` | somebody ran the acceptance kit on that hardware and it passed |
+| `native_fail` | somebody ran it there and it did not pass |
+| `manual_pending` | a machine exists and nobody has run it yet — **not** a pass |
+| `build_only` | an artifact is produced and no native host is declared — **not** a pass |
+| `unsupported` | no artifact is produced for that target |
+
+A cross-compiled artifact is a real artifact: it is produced, checksummed and
+published, and you are welcome to run it. What it is not, on its own, is
+evidence that it works on hardware nobody has tried it on. Nothing here promotes
+a build into a verification; only a result bundle moves a row.
+
+Quake II and Quake III are printed beside the platforms and are **work in
+progress**, in the same sentence every other surface shows.
+
+### The native acceptance kit
+
+Every artifact carries a small kit. Unpack the download and run one command on
+the machine it is for:
+
+```console
+$ ./run-acceptance.sh                                   # POSIX shells
+$ ./run-acceptance.sh --tool-path /opt/ericw-tools      # …with a compiler you have
+
+PS> .\run-acceptance.ps1                                # Windows
+PS> .\run-acceptance.ps1 -ToolPath C:\ericw-tools
+```
+
+It checks the artifact's own checksums *before* starting it, then walks nine
+lanes: the artifact and its SBOM and notices, a portable first start and a
+migration, the `autopigeon://` handler where this package owns it, a tool
+profile imported, bound, reviewed, granted, run and withdrawn, an EricW build
+managed or named, a real Quake 1 compile with VIS and LIGHT and a deterministic
+PAK, the engine command previewed *without any game data*, job cancellation and
+retry and the log bound this build publishes, and finally `uninstall --purge`.
+
+It writes a small `bundle.json` and a digest beside it. Send that back.
+
+```console
+$ ./companion acceptance lanes            # what a run performs, in order
+$ ./companion acceptance verify ./acceptance-bundle
+$ ./companion acceptance schema           # what a bundle may say
+```
+
+**Nothing in the bundle can identify you or your machine's layout.** It is built
+from typed facts the program put there — no field can hold a log, a credential,
+a user name or a path — and `acceptance verify` refuses a document in which
+anything that still looks like an absolute path survived. Check it yourself
+before sending it; that is what `verify` is for.
+
+**The optional owned-game lane never touches your game data.** If you pass
+`--engine` and `--game-root` it will also start the engine you named and record
+six things: the game family, the profile and its version, your platform, the
+command *shape* with every path replaced by its role, whether it became ready,
+and how long it took. No byte of the installation is copied, archived, hashed
+or uploaded, and there is no option that makes one. Without those two flags the
+launch row stays `not_run` and the matrix keeps saying `manual_pending`, which
+is the honest answer.
+
+The whole run happens in a directory the run makes, so it changes nothing you
+have configured — which matters, because the last lane is a purge.
 
 ### Nothing is signed, and that is the current truth
 

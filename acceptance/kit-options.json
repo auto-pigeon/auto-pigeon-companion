@@ -1,0 +1,77 @@
+{
+  "kit_version": "1",
+  "summary": "The options both entry points accept. One table, so a POSIX shell and PowerShell cannot drift.",
+  "why": [
+    "Two hand-written argument parsers in two languages are two contracts that agree until the day they do not.",
+    "This file is the one they are both checked against: auto-pigeon-tools/tests/test_aucom_native.py fails when either script accepts an option this table does not name, or omits one it does."
+  ],
+  "options": [
+    {
+      "name": "--out",
+      "takes_value": true,
+      "forwarded": true,
+      "summary": "where the result bundle is written (default: acceptance-bundle beside this script)"
+    },
+    {
+      "name": "--tool-path",
+      "takes_value": true,
+      "forwarded": true,
+      "summary": "the ROOT of an EricW build you already have; the profile finds bin/qbsp under it"
+    },
+    {
+      "name": "--engine",
+      "takes_value": true,
+      "forwarded": true,
+      "summary": "an engine executable you already have; needs --game-root too"
+    },
+    {
+      "name": "--game-root",
+      "takes_value": true,
+      "forwarded": true,
+      "summary": "a game installation you already own; no byte of it is copied, hashed or uploaded"
+    },
+    {
+      "name": "--game-family",
+      "takes_value": true,
+      "forwarded": true,
+      "summary": "quake1 (default), quake2 or quake3"
+    },
+    {
+      "name": "--only",
+      "takes_value": true,
+      "forwarded": true,
+      "summary": "run only these lanes, comma separated"
+    },
+    {
+      "name": "--skip",
+      "takes_value": true,
+      "forwarded": true,
+      "summary": "run everything but these lanes, comma separated"
+    },
+    {
+      "name": "--companion",
+      "takes_value": true,
+      "forwarded": false,
+      "summary": "the Companion to run; the default is the one beside this script"
+    },
+    {
+      "name": "--no-checksums",
+      "takes_value": false,
+      "forwarded": false,
+      "summary": "skip the checksum verification and record that it was skipped, rather than claiming it passed"
+    },
+    {
+      "name": "--help",
+      "takes_value": false,
+      "forwarded": false,
+      "summary": "print this list and exit 0"
+    }
+  ],
+  "always_reported": [
+    "--entry-point  which of the two scripts ran",
+    "--shell        what that script is running under",
+    "--host-arch    what the operating system calls this machine, so an emulated artifact is not reported as native",
+    "--checksums    pass, fail or not_available — the SHELL's answer, because a program cannot vouch for its own bytes",
+    "--checksum-detail  one line about it"
+  ]
+}
