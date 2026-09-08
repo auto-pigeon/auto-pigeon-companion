@@ -70,6 +70,74 @@ func helperMain(args []string) int {
 		for written := 0; written < count; written += len(line) {
 			os.Stdout.WriteString(line)
 		}
+	case "flood-stderr":
+		count, _ := strconv.Atoi(rest[0])
+		// 'z' appears nowhere in the elision marker, so a test looking for one
+		// stream's letter in another stream's log cannot be fooled by the
+		// marker's own prose. Same reason for 'q' below.
+		line := strings.Repeat("z", 99) + "\n"
+		for written := 0; written < count; written += len(line) {
+			os.Stderr.WriteString(line)
+		}
+	case "flood-both":
+		// Interleaved, so the two captures are genuinely concurrent rather than
+		// one after the other. `count` is the total across both streams.
+		count, _ := strconv.Atoi(rest[0])
+		out := strings.Repeat("q", 99) + "\n"
+		err := strings.Repeat("z", 99) + "\n"
+		for written := 0; written < count; written += len(out) + len(err) {
+			os.Stdout.WriteString(out)
+			os.Stderr.WriteString(err)
+		}
+	case "flood-unbroken":
+		// Not one newline anywhere. The line splitter has to bound `partial`
+		// itself rather than relying on the program to end a line.
+		count, _ := strconv.Atoi(rest[0])
+		block := strings.Repeat("u", 64<<10)
+		for written := 0; written < count; written += len(block) {
+			os.Stdout.WriteString(block)
+		}
+	case "flood-slow":
+		// Bytes, then a pause, repeatedly: output that crosses the head/tail
+		// boundary and the tail's compaction point while the reader is idle
+		// between chunks, rather than in one burst the runtime may coalesce.
+		count, _ := strconv.Atoi(rest[0])
+		pause, _ := strconv.Atoi(rest[1])
+		line := strings.Repeat("s", 99) + "\n"
+		burst := (count / 16) + len(line)
+		for written := 0; written < count; {
+			for end := written + burst; written < end; written += len(line) {
+				os.Stdout.WriteString(line)
+			}
+			os.Stdout.Sync()
+			time.Sleep(time.Duration(pause) * time.Millisecond)
+		}
+	case "defiant":
+		// `defiant <seconds> <depth>`: ignore SIGTERM, and start one of these
+		// at depth-1 that does the same. Depth 2 is a leader, a child and a
+		// grandchild, none of which leaves voluntarily — which is the tree the
+		// executor's forceful pass exists for, and the one a `kill(pid)` on the
+		// leader alone would leave running.
+		seconds := rest[0]
+		ignoreTermination()
+		depth := 0
+		if len(rest) > 1 {
+			depth, _ = strconv.Atoi(rest[1])
+		}
+		if depth > 0 {
+			child := exec.Command(os.Args[0], helperFlag, "defiant", seconds, strconv.Itoa(depth-1))
+			child.Stdout = os.Stdout
+			child.Stderr = os.Stderr
+			if err := child.Start(); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				return 1
+			}
+		}
+		fmt.Println("defiant", os.Getpid(), depth)
+		os.Stdout.Sync()
+		wait, _ := strconv.Atoi(seconds)
+		time.Sleep(time.Duration(wait) * time.Second)
+		fmt.Println("defiant-finished", os.Getpid())
 	case "invalid-utf8":
 		// A truncated multi-byte sequence, a lone continuation byte, and an
 		// ANSI escape that would repaint the reader's terminal.

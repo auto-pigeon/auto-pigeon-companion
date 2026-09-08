@@ -35,6 +35,7 @@ const jobUsage = `usage:
   companion job retry   <job-id> [--wait]
   companion job artifacts <job-id> [--json]
   companion job profiles [--json]                                   what can be run on this machine
+  companion job limits  [--json]                                    what a job's logs may keep
 `
 
 func runJob(env *Env, args []string) int {
@@ -62,6 +63,8 @@ func runJob(env *Env, args []string) int {
 		return jobArtifacts(env, rest)
 	case "profiles":
 		return jobProfiles(env, rest)
+	case "limits":
+		return jobLimits(env, rest)
 	case "-h", "--help", "help":
 		fmt.Fprint(env.Stdout, jobUsage)
 		return 0
@@ -585,6 +588,39 @@ func jobProfiles(env *Env, args []string) int {
 		}
 		fmt.Fprintf(env.Stdout, "%-40s %-7s %-9s %s\n", meta.ID, meta.Kind, entry.Trust, strings.Join(actions, ", "))
 	}
+	return 0
+}
+
+// jobLimits prints the bounded-capture envelope this build holds itself to.
+//
+// It opens no store and reads no job: the answer is a property of the program,
+// which is exactly why it is worth being able to ask for. A harness measuring
+// resident memory under a flood needs a bound that comes FROM the product — a
+// threshold the harness picked is a threshold that passes whatever the product
+// happens to do, and `AUCOM 219` left the bounded-log row unmeasured for want
+// of one.
+func jobLimits(env *Env, args []string) int {
+	set := newFlagSet(env, "job limits")
+	asJSON := set.Bool("json", false, "print the limits as JSON")
+	if _, code, ok := parseFlags(env, set, args); !ok {
+		return code
+	}
+
+	limits := job.RetentionLimits()
+	if *asJSON {
+		return printJSON(env, limits)
+	}
+	fmt.Fprintf(env.Stdout, "kept per stream       %d bytes (head %d + tail %d)\n",
+		limits.KeptBytesPerStream, limits.HeadBytes, limits.TailBytes)
+	fmt.Fprintf(env.Stdout, "raw log file at most  %d bytes\n", limits.MaxLogFileBytes)
+	fmt.Fprintf(env.Stdout, "read buffer           %d bytes, fixed\n", limits.ReadChunkBytes)
+	fmt.Fprintf(env.Stdout, "longest line held     %d bytes\n", limits.MaxLineBytes)
+	fmt.Fprintf(env.Stdout, "diagnostics kept      %d\n", limits.MaxDiagnostics)
+	fmt.Fprintf(env.Stdout, "resident per stream   %d bytes while the program is still writing\n",
+		limits.ResidentBytesPerStream)
+	fmt.Fprintf(env.Stdout, "resident per job      %d bytes across %d streams\n",
+		limits.ResidentBytesPerJob, limits.StreamsPerJob)
+	fmt.Fprint(env.Stdout, "\nNone of these grows with how much a tool writes.\n")
 	return 0
 }
 

@@ -559,6 +559,41 @@ outcome nobody knows — is never repeated without being asked.
 Exit status: `0` the job succeeded, `1` it did not, `2` the command was typed
 wrong. `--json` prints the whole record for a script.
 
+**A tool that floods you cannot flood this program**, and `companion job limits`
+is the number that says so rather than a promise that it is true.
+
+A compiler emitting a warning per surface can write hundreds of megabytes in a
+minute. The executor never stops reading — a supervisor that lets the pipe fill
+is a supervisor that hangs the build it is watching — so what is bounded is what
+it *keeps*: the first 256 KiB of a stream and the last 256 KiB, with a marker
+naming the count that fell out of the middle. The beginning of a flood and the
+end of it are the two parts anybody reads.
+
+```console
+$ companion job limits
+kept per stream       524288 bytes (head 262144 + tail 262144)
+raw log file at most  524416 bytes
+read buffer           32768 bytes, fixed
+longest line held     65536 bytes
+diagnostics kept      500
+resident per stream   1540096 bytes while the program is still writing
+resident per job      3080192 bytes across 2 streams
+
+None of these grows with how much a tool writes.
+```
+
+`--json` prints the same as an object. It exists so a measurement can be held to
+the product's own figures instead of one whoever wrote the check felt was
+generous: `resident per job` is what a running capture may hold, which is larger
+than what it keeps, because the tail is compacted at twice its bound rather than
+on every write.
+
+Measured rather than asserted, on Linux, against a granted profile writing 512
+MiB across both streams in four rounds: peak resident memory 22 MB against a 74
+MB envelope, and settled memory 241 KB higher at the end than at the start —
+0.00045 bytes retained per byte written. `job show --json` reports `bytes`,
+`stored`, `dropped`, `lines` and `truncated` per stream for any job.
+
 #### What the executor guarantees
 
 - **There is no shell.** A command is an executable path and a `[]string`, all

@@ -290,6 +290,19 @@ var rows = []Row{
 			{"internal/job", "TestATimeoutStopsTheProgramAndSaysSo"},
 			{"internal/job", "TestAnOutputFloodIsBoundedInMemoryAndOnDisk"},
 			{"internal/job", "TestAChildThatOutlivesItsParentDoesNotHangTheJob"},
+			// AUCOM/AUT 229. The row said "bounded in memory and on disk" and
+			// had one flood on one stream to show for it. These are the shapes
+			// that flood differently: both streams at once, no newline at all,
+			// bursts with the reader idle in between, two noisy jobs sharing a
+			// supervisor, and a tree that declines to stop politely.
+			{"internal/job", "TestBothStreamsFloodWithoutMixing"},
+			{"internal/job", "TestAStreamWithNoNewlinesIsCountedAndStillBounded"},
+			{"internal/job", "TestASlowFloodCrossesTheRetentionBoundariesAndStaysTrue"},
+			{"internal/job", "TestTwoNoisyJobsKeepSeparateRecordsAndLogs"},
+			{"internal/job", "TestAProcessTreeThatIgnoresSIGTERMIsStillStopped"},
+			// The bound a measurement is held to has to come from the product.
+			{"internal/job", "TestTheLimitsPublishWhatTheCaptureActuallyDoes"},
+			{"internal/job", "TestALineCountIsKeptWhenNoRuleAsksForOne"},
 			{"internal/aue", "TestAnInvocationThatHangsIsStoppedAndSaysSo"},
 			{"internal/aue", "TestOutputPastTheCapIsRefusedRatherThanBuffered"},
 			{"internal/aue", "TestCancellationSendsSIGTERMBeforeAnythingHarsher"},

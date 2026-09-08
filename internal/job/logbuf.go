@@ -139,11 +139,22 @@ func (c *capture) store(chunk []byte) {
 	}
 }
 
-// split turns the byte stream into lines for the diagnostic rules.
+// split turns the byte stream into lines: for the diagnostic rules when the
+// action declared any, and for the line COUNT either way.
+//
+// The count is not a by-product of the rules, and used to be. `lineHandler`
+// returns nil for an action with no diagnostics, this function returned
+// immediately on that nil, and so a job whose profile declared no rules — which
+// is most of them, and every one the acceptance harness authors — reported
+// `lines: 0` however much the program wrote. A megabyte over ten thousand lines
+// was recorded as none of them. That is a job record stating something false
+// about what happened, which is worse than a missing field: `bytes` and
+// `dropped` were right beside it and right, so nothing looked broken.
+//
+// Splitting always costs one IndexByte per line and one copy per line that
+// straddles a read boundary, which is what any reader of this stream would pay.
+// It does not grow with what is kept.
 func (c *capture) split(chunk []byte) {
-	if c.onLine == nil {
-		return
-	}
 	for len(chunk) > 0 {
 		newline := bytes.IndexByte(chunk, '\n')
 		if newline < 0 {
@@ -170,6 +181,12 @@ func (c *capture) split(chunk []byte) {
 
 func (c *capture) emit(line []byte) {
 	c.lines++
+	if c.onLine == nil {
+		// Counted, and there is no rule to offer it to. The redaction and the
+		// rule matching in the handler are the expensive half; a job with no
+		// diagnostics pays for neither and still gets a true count.
+		return
+	}
 	c.onLine(c.stream, c.lines, bytes.TrimSuffix(line, []byte("\r")))
 }
 
