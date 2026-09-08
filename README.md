@@ -401,7 +401,7 @@ commands:
   acquire plan | install | accept | list | verify | use | gc | resolve                                obtain a profile's programs from the signed catalogue, and manage the cache
   catalog keygen | sign | verify | show | status | release                                            sign, verify and inspect the acquisition catalogue, its keyring and its compatibility manifest
   engine list | show | detect | bind | check | preview | run | stage | unstage                        set up a Quake engine you already have, and start it as a supervised job
-  game list | show | join | preview | host | stop                                                     find a game somebody is hosting and join it, or advertise one of your own
+  game list | show | link | join | preview | host | stop                                              find a game somebody is hosting and join it, or advertise one of your own
   launch <game> [--map <name>] [--game-root <dir>] [--dry-run]                                        launch a game as a supervised job, using its AUB launch config
   extractor status | plan | install | version                                                         obtain and run the separately licensed auto-pigeon-extractor (AUE)
   feedback compatibility --game <family> --summary <text> [--share <what>]                            report that a work-in-progress game did not do what you expected — nothing is attached unless you say so
@@ -2125,6 +2125,11 @@ $ companion game list
 gme000000000001  Friday deathmatch            public     live      Vera
 gme000000000002  Coop night, bring a torch    unlisted   live      Sam
 
+$ companion game link gme000000000001
+autopigeon://join/tkt1
+  yours alone, for 2m0s, and redeemable once
+  join it with: companion game join autopigeon://join/tkt1
+
 $ companion game join autopigeon://join/tkt1
 Friday deathmatch
   hosted by  Vera
@@ -2139,6 +2144,15 @@ This is what will run:
 
 Nothing has been started. Add --approve to run the command above.
 ```
+
+`game link` mints a capability **for you** — the account this installation is
+signed in as, and nobody else. AUB decides from that session whether you may see
+the game at all, and a game you may not see is refused with the same *"no hosted
+game with this id"* a game that does not exist gets, so the command can neither
+hand somebody else a capability nor be used to enumerate private games one guess
+at a time. It exists because there was no way to obtain one from this program at
+all until `AUT/AUCOM 232`: `game join` takes a LINK, `ParseJoinLink` refuses a
+game id, and only the gallery's browser button could mint.
 
 A join link is `autopigeon://join/<opaque-id>` and carries no token, no address
 and no map id: everything is behind the id and is fetched over your own session,

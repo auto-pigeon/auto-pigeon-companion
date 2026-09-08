@@ -99,31 +99,37 @@ func NewJoiner(resolver Resolver, fetcher Fetcher, objects Objects, catalog Cata
 // request from the plan's parts would be able to approve one command and start
 // another.
 type Plan struct {
-	// Join is what AUB said.
-	Join aub.HostedGame
-	// Resolution is the redeemed ticket, verbatim.
-	Resolution aub.HostedGameJoin
+	// Resolution is the redeemed ticket, verbatim: what AUB said, in AUB's own
+	// vocabulary. It is the ONE statement about the game in this document.
+	//
+	// There used to be a `Join aub.HostedGame` field above it, documented as
+	// "what AUB said". Resolve never populated it, so `game join --json` emitted
+	// an empty game object — every id blank, every count zero — beside the real
+	// answer, which reads exactly like a game with no map. AUT/AUCOM 232 found it
+	// by parsing that output. A field a consumer can mistake for an answer is
+	// worse than a missing one.
+	Resolution aub.HostedGameJoin `json:"resolution"`
 
-	// Engine is the installed profile that will run, and Action is always
-	// `join_server`.
-	EngineProfileID string
-	Action          string
+	// EngineProfileID is the installed profile that will run, and Action is
+	// always `join_server`.
+	EngineProfileID string `json:"engine_profile_id"`
+	Action          string `json:"action"`
 
 	// MapPath is where the downloaded document is on this machine.
-	MapPath string
+	MapPath string `json:"map_path"`
 	// MapDigest is the digest of what was downloaded, which was compared against
 	// what the resolution declared.
-	MapDigest string
+	MapDigest string `json:"map_digest"`
 
 	// Request is exactly what will be submitted, and Preview is the argv the job
 	// service resolved from it. The preview is the SERVICE's, not a rendering
 	// built here: a preview a user approved cannot differ from what starts.
-	Request job.Request
-	Preview *job.CommandPreview
+	Request job.Request         `json:"request"`
+	Preview *job.CommandPreview `json:"preview,omitempty"`
 
 	// Warnings are AUB's, carried through verbatim, plus this program's own about
 	// the address. They are shown before the command, never instead of it.
-	Warnings []string
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 // Resolve redeems a link and prepares everything a launch needs, without

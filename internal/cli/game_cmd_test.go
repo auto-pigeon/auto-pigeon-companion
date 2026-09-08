@@ -115,3 +115,75 @@ func TestTheGameCommandContactsNothingButAUB(t *testing.T) {
 		}
 	}
 }
+
+// `game link` — the one thing a person joining somebody else's game could not do
+// from this program until `AUT/AUCOM 232`.
+//
+// `aub.Client.MintJoinLink` had no caller outside a test: `game join` takes a
+// LINK, and `ParseJoinLink` refuses anything with a `/` in it, so a game id is
+// not one. The whole joining half of the lifecycle was reachable only from the
+// gallery's button in a browser, which is why `219` had to drive that step by
+// hand against a disposable backend.
+func TestGameLinkIsRegisteredAndTakesOneGameID(t *testing.T) {
+	env, _, stderr := testEnv(t)
+	if code := Run(env, []string{"game", "link"}); code != 2 {
+		t.Fatalf("`game link` with no argument: exit %d, want 2", code)
+	}
+	if !strings.Contains(stderr.String(), "game link") {
+		t.Errorf("the usage does not offer `game link`:\n%s", stderr)
+	}
+}
+
+// Two game ids are two decisions, and this command makes one.
+func TestGameLinkRefusesTwoGameIDs(t *testing.T) {
+	env, _, _ := testEnv(t)
+	if code := Run(env, []string{"game", "link", "gme1", "gme2"}); code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+}
+
+// The flag reads naturally AFTER the positional, so the command parses
+// interspersed — the defect `AUT/AUCOM 219` found in four other commands and
+// `232` found in two more.
+func TestGameLinkParsesTheFlagAfterThePositional(t *testing.T) {
+	raw, err := os.ReadFile("game_cmd.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(raw)
+	start := strings.Index(source, "func gameLink(")
+	if start < 0 {
+		t.Fatal("gameLink is gone")
+	}
+	body := source[start:]
+	if end := strings.Index(body, "\nfunc "); end > 0 {
+		body = body[:end]
+	}
+	if !strings.Contains(body, "parseInterspersed") {
+		t.Error("gameLink uses parseFlags; `game link <id> --json` would be answered with a " +
+			"usage dump, because Go's flag package stops at the first non-flag argument")
+	}
+}
+
+// A capability is minted for the CALLER. Nothing here takes an account, a
+// subject or a recipient: whether the session may see the game at all is AUB's
+// decision, and a game it may not see is refused with the same answer a
+// nonexistent id gets.
+func TestGameLinkMintsForTheCallerAndNobodyElse(t *testing.T) {
+	raw, err := os.ReadFile("game_cmd.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(raw)
+	start := strings.Index(source, "func gameLink(")
+	body := source[start:]
+	if end := strings.Index(body, "\nfunc "); end > 0 {
+		body = body[:end]
+	}
+	for _, forbidden := range []string{"--for", "--subject", "--account", "--email"} {
+		if strings.Contains(body, forbidden) {
+			t.Errorf("gameLink accepts %q; a join capability is minted for the caller and for "+
+				"nobody else", forbidden)
+		}
+	}
+}

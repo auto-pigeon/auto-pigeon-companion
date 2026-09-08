@@ -39,6 +39,7 @@ const gameUsage = `usage:
   companion game list [--mine]                    games being hosted now
   companion game show <game-id>                   one game, in full
   companion game join <link> [--approve]          resolve a join link; --approve to launch
+  companion game link <game-id> [--json]          mint your OWN join link for a game
   companion game preview --map=<id> --endpoint=<host:port> [flags]
                                                   what advertising it would disclose
   companion game host --job=<id> --map=<id> --endpoint=<host:port> --confirm [flags]
@@ -59,6 +60,8 @@ func runGame(env *Env, args []string) int {
 		return gameShow(env, args[1:])
 	case "join":
 		return gameJoin(env, args[1:])
+	case "link":
+		return gameLink(env, args[1:])
 	case "preview":
 		return gamePreview(env, args[1:])
 	case "host":
@@ -178,6 +181,58 @@ func installRoot(env *Env, settings config.Config) (string, error) {
 	_ = settings
 
 	return config.Dir()
+}
+
+// gameLink mints a join capability for THIS account and prints it.
+//
+// The one thing a person joining somebody else's game could not do from this
+// program. `game join` takes a LINK, and `aub.ParseJoinLink` refuses anything
+// with a `/` in it, so a game id is not one — which left `aub.Client.MintJoinLink`
+// with no caller outside a test and the whole joining half of the lifecycle
+// reachable only from the gallery's button in a browser. `AUT/AUCOM 232` found
+// it while trying to automate the journey through shipped surfaces.
+//
+// It mints for the CALLER and for nobody else: AUB decides, from the session
+// this program is holding, whether the account may see the game at all, and a
+// game it may not see is refused with the same "no hosted game with this id"
+// that a nonexistent id gets. So this command cannot be used to hand somebody
+// else a capability, and cannot be used to enumerate private games.
+//
+// Nothing is started. The link is printed; joining it is `game join`, which
+// prints the command and waits for `--approve`.
+func gameLink(env *Env, args []string) int {
+	set := newFlagSet(env, "game link")
+	asJSON := set.Bool("json", false, "print the ticket as JSON")
+	rest, code, ok := parseInterspersed(env, set, args)
+	if !ok {
+		return code
+	}
+	if len(rest) != 1 {
+		fmt.Fprint(env.Stderr, gameUsage)
+
+		return 2
+	}
+	settings, err := loadSettings(env)
+	if err != nil {
+		return fail(env, err)
+	}
+	client, err := newClient(settings)
+	if err != nil {
+		return fail(env, err)
+	}
+	ticket, err := client.MintJoinLink(context.Background(), rest[0])
+	if err != nil {
+		return fail(env, err)
+	}
+	if *asJSON {
+		return printJSON(env, ticket)
+	}
+	fmt.Fprintln(env.Stdout, ticket.Link)
+	fmt.Fprintf(env.Stdout, "  yours alone, for %s, and redeemable once\n",
+		(time.Duration(ticket.TTLSecs) * time.Second).Round(time.Second))
+	fmt.Fprintf(env.Stdout, "  join it with: companion game join %s\n", ticket.Link)
+
+	return 0
 }
 
 func gamePreview(env *Env, args []string) int {

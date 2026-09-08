@@ -157,7 +157,7 @@ var commands = []Command{
 		Run:     runEngine,
 	},
 	{
-		Name: "game", Usage: "list | show | join | preview | host | stop",
+		Name: "game", Usage: "list | show | link | join | preview | host | stop",
 		Summary: "find a game somebody is hosting and join it, or advertise one of your own",
 		Run:     runGame,
 	},

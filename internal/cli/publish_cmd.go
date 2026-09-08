@@ -40,7 +40,13 @@ const profilePublishUsage = `usage:
 func profilePreview(env *Env, args []string) int {
 	set := newFlagSet(env, "profile preview")
 	asJSON := set.Bool("json", false, "print the preview as JSON")
-	rest, code, ok := parseFlags(env, set, args)
+	// Interspersed, for the reason the four commands below already carry: this
+	// command's own usage line prints the flag AFTER the positional, and Go's
+	// flag package stops at the first non-flag argument — so `profile preview <x>
+	// --json` was answered with a usage dump. AUT/AUCOM 219 fixed publish,
+	// install, yank and report; these two take a positional too and were missed,
+	// which AUT/AUCOM 232 found by typing the documented invocation.
+	rest, code, ok := parseInterspersed(env, set, args)
 	if !ok {
 		return code
 	}
@@ -217,7 +223,13 @@ func publisherName(listing aub.PublishedProfile) string {
 func profilePublished(env *Env, args []string) int {
 	set := newFlagSet(env, "profile published")
 	asJSON := set.Bool("json", false, "print the listing as JSON")
-	rest, code, ok := parseFlags(env, set, args)
+	// Interspersed, for the reason the four commands below already carry: this
+	// command's own usage line prints the flag AFTER the positional, and Go's
+	// flag package stops at the first non-flag argument — so `profile published <x>
+	// --json` was answered with a usage dump. AUT/AUCOM 219 fixed publish,
+	// install, yank and report; these two take a positional too and were missed,
+	// which AUT/AUCOM 232 found by typing the documented invocation.
+	rest, code, ok := parseInterspersed(env, set, args)
 	if !ok {
 		return code
 	}
