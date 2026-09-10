@@ -93,6 +93,16 @@ $ ./companion version
 That builds the Companion and nothing else. **The extractor is not part of it**
 and is obtained separately — see [Extractor](#extractor).
 
+It needs **Go 1.26.8** (`go.mod`; with the default `GOTOOLCHAIN=auto` an older
+`go` downloads it). The toolchain decides the oldest system a build runs on:
+Linux kernel 3.2, Windows 10 / Server 2016, and **macOS 12 Monterey** — Go 1.25
+dropped macOS 11, and Go 1.27 will drop macOS 12.
+
+```console
+$ go version -m ./companion | head -1
+./companion: go1.26.8
+```
+
 Packaging for `.deb`/`.rpm` (nfpm), a Windows installer (Inno Setup) and a macOS
 `.app` bundle lives under [`build/`](build/). `build/release.sh` is the whole
 procedure — six targets, the bundles, an SBOM and a checksum file — and it is run

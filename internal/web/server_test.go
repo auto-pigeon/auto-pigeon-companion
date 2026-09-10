@@ -320,13 +320,15 @@ func TestAJobIsSubmittedAndReadBack(t *testing.T) {
 func TestAJobIdFromAURLCannotReachOutsideTheStore(t *testing.T) {
 	server, _ := newTestServer(t, nil)
 	// Two refusals, both correct. A `..` is normalised away by the mux before
-	// any handler sees it, which answers 301 to the cleaned path; anything else
-	// reaches the store, which refuses an id it did not mint. What matters is
-	// that neither serves a job.
+	// any handler sees it, which answers a redirect to the cleaned path — 301
+	// up to Go 1.25, 307 from Go 1.26, whose ServeMux redirects with
+	// StatusTemporaryRedirect so the method survives; anything else reaches
+	// the store, which refuses an id it did not mint. What matters is that
+	// neither serves a job.
 	for _, id := range []string{"..", "..%2F..%2Fetc%2Fpasswd", "not-an-id", "20260906T000000Z-zzzzzzzzzzzz", "%2e%2e%2f%2e%2e"} {
 		response, body := do(t, server, http.MethodGet, "/api/v1/jobs/"+id, "")
 		switch response.StatusCode {
-		case http.StatusNotFound, http.StatusMovedPermanently, http.StatusPermanentRedirect:
+		case http.StatusNotFound, http.StatusMovedPermanently, http.StatusTemporaryRedirect, http.StatusPermanentRedirect:
 		default:
 			t.Errorf("GET /api/v1/jobs/%s = %d, want a refusal", id, response.StatusCode)
 		}
