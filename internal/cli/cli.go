@@ -68,6 +68,18 @@ type Env struct {
 	// config — the alternative, mutating HOME for the test process, changes
 	// behaviour for anything else running in it.
 	ConfigPath string
+	// Group is the spelling of the command group this invocation was reached by.
+	//
+	// It exists for exactly one situation and should not grow past it: a group
+	// that has a retired spelling kept as an alias. `toolchain` is canonical and
+	// `profile` is the retired name (AUP/AUCOM 200F §D), and a dispatcher reads
+	// this so its own help and its "unknown <group> command" line say the word
+	// the reader actually typed rather than the other one. Set by Run on a COPY
+	// of the caller's Env, so nothing a test hands in is mutated.
+	//
+	// Empty means "not reached through a group", and every reader treats that as
+	// the canonical name.
+	Group string
 	// URIRegistrar registers and removes the autopigeon:// handler; nil means
 	// the real one.
 	//
@@ -97,6 +109,22 @@ func (e *Env) lookenv(name string) (string, bool) {
 // Command is one registered subcommand.
 type Command struct {
 	Name string
+	// Aliases are retired spellings that still resolve to this command.
+	//
+	// They are deliberately SILENT: no warning, no note, nothing on stderr. That
+	// is at odds with LegacyPasswordEnv's stance a few files over — "a variable
+	// name that silently keeps working forever is a rename that never finishes" —
+	// and the difference is what each one protects. An env var is read by a
+	// person's shell profile; a command name is read by scripts and by installed
+	// documentation, and AUP/AUCOM 200F §D requires the retired spelling to match
+	// the canonical one byte-for-byte on stdout and in exit status. A warning is a
+	// byte. The silent precedent is feedback_cmd.go's `compat` and
+	// security_cmd.go's `residuals`; the retirement is carried in human help and
+	// in the README instead.
+	//
+	// An alias is not in Names() and not in UsageText(): the registry lists what
+	// this build calls things, and README's help block is checked against it.
+	Aliases []string
 	// Summary is one line, shown in the usage listing.
 	Summary string
 	// Usage is the argument shape, shown after the name in help.
@@ -137,13 +165,20 @@ var commands = []Command{
 		Run:     runPackage,
 	},
 	{
-		Name: "profile", Usage: "validate | show | canonicalize | digest | diff | list | schema | review | grant | withdraw",
-		Summary: "read, check and compare tool, engine and pipeline profiles, and approve one to run",
-		Run:     runProfile,
+		// `toolchain` since AUP/AUCOM 200F §D. A tool, engine or pipeline document
+		// is a TOOLCHAIN; `profile` is what a map's project definition is called in
+		// AUP and AUB, and one word meaning both is what that task removed. The
+		// on-disk schemas, the Go package `internal/profile` and AUB's
+		// /companion-profiles routes are unchanged — a rename chased into a stable
+		// contract is a break, not a clarification.
+		Name: "toolchain", Aliases: []string{"profile"},
+		Usage:   "validate | show | canonicalize | digest | diff | list | schema | review | grant | withdraw",
+		Summary: "read, check and compare tool, engine and pipeline toolchains, and approve one to run",
+		Run:     runToolchain,
 	},
 	{
 		Name: "acquire", Usage: "plan | install | accept | list | verify | use | gc | resolve",
-		Summary: "obtain a profile's programs from the signed catalogue, and manage the cache",
+		Summary: "obtain a toolchain's programs from the signed catalogue, and manage the cache",
 		Run:     runAcquire,
 	},
 	{
@@ -218,8 +253,29 @@ func lookup(name string) (Command, bool) {
 		if command.Name == name {
 			return command, true
 		}
+		for _, alias := range command.Aliases {
+			if alias == name {
+				return command, true
+			}
+		}
 	}
 	return Command{}, false
+}
+
+// Aliases lists the retired spellings of one registered command, for tests and
+// for the migration note in the README. Empty for a command that never moved.
+//
+// A separate accessor rather than widening Names(), because readme_test.go reads
+// Names() as "what this build calls things" in both directions — every registered
+// name needs a README row and every README row must be registered — and an alias
+// is precisely a name this build no longer calls things.
+func Aliases(name string) []string {
+	for _, command := range commands {
+		if command.Name == name {
+			return append([]string(nil), command.Aliases...)
+		}
+	}
+	return nil
 }
 
 // Names lists every registered subcommand, for tests that assert the registry
@@ -251,7 +307,12 @@ func Run(env *Env, args []string) int {
 		fmt.Fprint(env.Stderr, UsageText())
 		return 2
 	}
-	return command.Run(env, args[1:])
+	// A copy, so a group's own name never leaks back into an Env a caller reused
+	// for a second invocation. Env holds streams, strings and pointers; a shallow
+	// copy shares every one of them, which is what is wanted — only Group differs.
+	invoked := *env
+	invoked.Group = args[0]
+	return command.Run(&invoked, args[1:])
 }
 
 // UsageText is the help output, generated from the registry so a new subcommand

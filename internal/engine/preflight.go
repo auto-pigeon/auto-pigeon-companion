@@ -130,14 +130,14 @@ func (c Checker) Check(document profile.Profile, trust profile.Trust, digest str
 			Fault: FaultStaleBinding,
 			Summary: fmt.Sprintf("The recorded setup for %s is for a different version of the document: it was written against %s and the document here is %s.",
 				meta.ID, short(local.ProfileDigest), short(digest)),
-			Fix: "Look at what changed with `companion profile diff`, then bind it again; a grant covers the exact document it was given.",
+			Fix: "Look at what changed with `companion toolchain diff`, then bind it again; a grant covers the exact document it was given.",
 		})
 	}
 	if err := profile.Authorize(document, trust, digest, local.Grant); err != nil {
 		problems = append(problems, Problem{
 			Fault:   FaultNotAuthorized,
 			Summary: fmt.Sprintf("Nothing has been approved for %s on this machine: %v.", meta.ID, err),
-			Fix:     "Read what it asks for with `companion profile show`, then approve it.",
+			Fix:     "Read what it asks for with `companion toolchain show`, then approve it.",
 		})
 	}
 

@@ -36,6 +36,30 @@ const profilePublishUsage = `usage:
   companion profile report <listing-id> --category=<c> [--detail=<text>]
 `
 
+// toolchainPublishUsage is the same listing in the canonical spelling. See
+// toolchainUsage in profile_cmd.go for why it is written out rather than derived.
+const toolchainPublishUsage = `usage:
+  companion toolchain preview <file>                     what publishing it would disclose
+  companion toolchain publish <file> --confirm           publish it, after the preview
+  companion toolchain catalog [filters]                  what this deployment has published
+  companion toolchain published <listing-id>             one listing and its versions
+  companion toolchain install <listing-id>[@<version>]   review it; --approve to install
+  companion toolchain yank <listing-id> <version> --reason=<why>
+  companion toolchain report <listing-id> --category=<c> [--detail=<text>]
+`
+
+// publishUsage is the publishing help for the spelling that was typed. It goes
+// to stderr on a bad invocation, which is why it may differ between the two
+// spellings: AUP/AUCOM 200F §F9 pins STDOUT and the exit status, and a usage
+// block naming a command the reader did not type would be a worse kind of
+// identical.
+func publishUsage(env *Env) string {
+	if env.group() == "profile" {
+		return profilePublishUsage
+	}
+	return toolchainPublishUsage
+}
+
 // profilePreview prints the export gate's answer without sending anything.
 func profilePreview(env *Env, args []string) int {
 	set := newFlagSet(env, "profile preview")
@@ -51,7 +75,7 @@ func profilePreview(env *Env, args []string) int {
 		return code
 	}
 	if len(rest) != 1 {
-		fmt.Fprint(env.Stderr, profilePublishUsage)
+		fmt.Fprint(env.Stderr, publishUsage(env))
 
 		return 2
 	}
@@ -96,7 +120,7 @@ func printPublishPreview(env *Env, preview publish.Preview) int {
 		}
 	}
 	fmt.Fprintf(env.Stdout, "\n%s\n", preview.LicenceNote)
-	fmt.Fprintln(env.Stdout, "\nNothing has been sent. Add --confirm to `companion profile publish` to send it.")
+	fmt.Fprintln(env.Stdout, "\nNothing has been sent. Add --confirm to `companion toolchain publish` to send it.")
 
 	return 0
 }
@@ -117,7 +141,7 @@ func profilePublish(env *Env, args []string) int {
 		return code
 	}
 	if len(rest) != 1 {
-		fmt.Fprint(env.Stderr, profilePublishUsage)
+		fmt.Fprint(env.Stderr, publishUsage(env))
 
 		return 2
 	}
@@ -234,7 +258,7 @@ func profilePublished(env *Env, args []string) int {
 		return code
 	}
 	if len(rest) != 1 {
-		fmt.Fprint(env.Stderr, profilePublishUsage)
+		fmt.Fprint(env.Stderr, publishUsage(env))
 
 		return 2
 	}
@@ -300,7 +324,7 @@ func profileInstall(env *Env, args []string) int {
 		return code
 	}
 	if len(rest) != 1 {
-		fmt.Fprint(env.Stderr, profilePublishUsage)
+		fmt.Fprint(env.Stderr, publishUsage(env))
 
 		return 2
 	}
@@ -437,7 +461,7 @@ func profileYank(env *Env, args []string) int {
 		return code
 	}
 	if len(rest) != 2 {
-		fmt.Fprint(env.Stderr, profilePublishUsage)
+		fmt.Fprint(env.Stderr, publishUsage(env))
 
 		return 2
 	}
@@ -479,7 +503,7 @@ func profileReport(env *Env, args []string) int {
 		return code
 	}
 	if len(rest) != 1 || strings.TrimSpace(*category) == "" {
-		fmt.Fprint(env.Stderr, profilePublishUsage)
+		fmt.Fprint(env.Stderr, publishUsage(env))
 
 		return 2
 	}

@@ -72,7 +72,7 @@ var rows = []Row{
 		Title:      "One approval surface is weaker than another, or approves something nobody read",
 		Asset:      "the review step, on whichever surface the user happens to be on",
 		Vector:     "A grant can be recorded from the page and from the command line. Two implementations drift: one requires the digest of the document that was displayed and the other takes whatever is on disk when the request arrives, so the weaker one approves bytes that changed between the review and the decision.",
-		Mitigation: "There is one writer of a grant. internal/approval.Service is held by the local API, by `companion profile grant` and by the approval half of `engine bind` and the bind route, and it refuses an empty digest and a digest that is not the document on this machine — before writing anything, including the binding. Reviewing is a separate call that writes nothing, so `profile grant` with no decision prints the report and exits 2 rather than approving.",
+		Mitigation: "There is one writer of a grant. internal/approval.Service is held by the local API, by `companion toolchain grant` and by the approval half of `engine bind` and the bind route, and it refuses an empty digest and a digest that is not the document on this machine — before writing anything, including the binding. Reviewing is a separate call that writes nothing, so `toolchain grant` with no decision prints the report and exits 2 rather than approving.",
 		Evidence: []Evidence{
 			{"internal/approval", "TestAnApprovalNamesTheExactDocumentItApproves"},
 			{"internal/approval", "TestImportingAndBindingGrantNothing"},

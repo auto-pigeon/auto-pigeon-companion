@@ -55,7 +55,7 @@ func profileReview(env *Env, args []string) int {
 		return code
 	}
 	if len(rest) != 1 {
-		fmt.Fprintln(env.Stderr, "error: profile review takes one profile id")
+		fmt.Fprintln(env.Stderr, "error: toolchain review takes one toolchain id")
 		return 2
 	}
 	service, err := openApprovals(env)
@@ -83,7 +83,7 @@ func profileGrant(env *Env, args []string) int {
 		return code
 	}
 	if len(rest) != 1 {
-		fmt.Fprintln(env.Stderr, "error: profile grant takes one profile id")
+		fmt.Fprintln(env.Stderr, "error: toolchain grant takes one toolchain id")
 		return 2
 	}
 	id := rest[0]
@@ -111,7 +111,7 @@ func profileGrant(env *Env, args []string) int {
 		default:
 			fmt.Fprintln(env.Stderr, "error: an approval names the exact document being approved. Then:")
 		}
-		fmt.Fprintf(env.Stderr, "  companion profile grant %s --digest=%s --approve\n", id, decision.Entry.Digest)
+		fmt.Fprintf(env.Stderr, "  companion toolchain grant %s --digest=%s --approve\n", id, decision.Entry.Digest)
 		return 2
 	}
 
@@ -135,7 +135,7 @@ func profileGrant(env *Env, args []string) int {
 	if len(decision.Binding.Grant.Granted) == 0 {
 		fmt.Fprintln(env.Stdout, "  (it asks for nothing on its own account)")
 	}
-	fmt.Fprintf(env.Stdout, "\nWithdraw it with `companion profile withdraw %s --confirm`.\n",
+	fmt.Fprintf(env.Stdout, "\nWithdraw it with `companion toolchain withdraw %s --confirm`.\n",
 		decision.Entry.Profile.Metadata().ID)
 	return 0
 }
@@ -149,7 +149,7 @@ func profileWithdraw(env *Env, args []string) int {
 		return code
 	}
 	if len(rest) != 1 {
-		fmt.Fprintln(env.Stderr, "error: profile withdraw takes one profile id")
+		fmt.Fprintln(env.Stderr, "error: toolchain withdraw takes one toolchain id")
 		return 2
 	}
 	id := rest[0]
@@ -160,7 +160,7 @@ func profileWithdraw(env *Env, args []string) int {
 	if !*confirm {
 		fmt.Fprintf(env.Stderr,
 			"error: withdrawing an approval stops %s running until it is approved again. Add --confirm:\n"+
-				"  companion profile withdraw %s --confirm\n", id, id)
+				"  companion toolchain withdraw %s --confirm\n", id, id)
 		return 2
 	}
 	decision, err := service.Withdraw(id)

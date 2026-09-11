@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -231,19 +232,123 @@ func TestProfileWithNoSubcommandIsABadInvocation(t *testing.T) {
 	}
 }
 
-// The README's profile examples are executable, and this is what keeps them
+// The README's toolchain examples are executable, and this is what keeps them
 // honest: the commands it shows are the commands that exist.
-func TestReadmeProfileExamplesNameRealSubcommands(t *testing.T) {
+//
+// The canonical spelling since AUP/AUCOM 200F §D. The retired one is asserted
+// separately below — it has to stay documented, and it has to stay documented
+// as retired, which is a different claim from being an example.
+func TestReadmeToolchainExamplesNameRealSubcommands(t *testing.T) {
 	readme := string(readFile(t, filepath.Join("..", "..", "README.md")))
 	for _, command := range []string{
-		"companion profile list",
-		"companion profile validate",
-		"companion profile show",
-		"companion profile diff",
-		"companion profile schema",
+		"companion toolchain list",
+		"companion toolchain validate",
+		"companion toolchain show",
+		"companion toolchain diff",
+		"companion toolchain schema",
 	} {
 		if !strings.Contains(readme, command) {
 			t.Errorf("the README does not show %q", command)
+		}
+	}
+}
+
+// The retired spelling is documented, and it resolves.
+//
+// Both halves matter and neither implies the other: an alias nobody documents
+// is a trap for the reader who has the old link, and a documented alias that
+// stopped resolving is worse than one that was removed.
+func TestTheRetiredProfileSpellingIsDocumentedAndResolves(t *testing.T) {
+	readme := string(readFile(t, filepath.Join("..", "..", "README.md")))
+	if !strings.Contains(readme, "companion profile list") {
+		t.Error("the README does not show the retired spelling at all")
+	}
+	if !strings.Contains(readme, "### `companion profile …` still works") {
+		t.Error("the README does not mark the retired spelling as retired")
+	}
+	if got := Aliases("toolchain"); len(got) != 1 || got[0] != "profile" {
+		t.Fatalf("toolchain aliases = %v, want [profile]", got)
+	}
+	// Registered names are what this build calls things; an alias is not one.
+	for _, name := range Names() {
+		if name == "profile" {
+			t.Error("the retired spelling is in Names(), so it would need a README commands row")
+		}
+	}
+}
+
+// Both usage blocks list the same verbs — AUP/AUCOM 200F §D.
+//
+// They are two hand-written literals (see toolchainUsage for why), and two
+// hand-written listings of one command set drift the first time somebody adds a
+// verb to only one. This is the thing that makes them not drift.
+func TestBothSpellingsListTheSameVerbs(t *testing.T) {
+	verbs := func(text, group string) []string {
+		var found []string
+		prefix := "  companion " + group + " "
+		for _, line := range strings.Split(text, "\n") {
+			if !strings.HasPrefix(line, prefix) {
+				continue
+			}
+			rest := strings.TrimPrefix(line, prefix)
+			if fields := strings.Fields(rest); len(fields) > 0 {
+				found = append(found, fields[0])
+			}
+		}
+		return found
+	}
+	legacy := verbs(profileUsage, "profile")
+	canonical := verbs(toolchainUsage, "toolchain")
+	if len(legacy) == 0 {
+		t.Fatal("no verbs parsed out of profileUsage; the parser or the block changed shape")
+	}
+	if !slices.Equal(legacy, canonical) {
+		t.Errorf("the two spellings list different verbs:\n  profile:   %v\n  toolchain: %v", legacy, canonical)
+	}
+	// Both blocks also have to cover the dispatcher, or a verb exists and is
+	// reachable and nothing tells anybody about it.
+	for _, verb := range []string{
+		"validate", "show", "canonicalize", "digest", "diff", "list", "schema",
+		"review", "grant", "withdraw",
+		"preview", "publish", "catalog", "published", "install", "yank", "report",
+	} {
+		if !slices.Contains(canonical, verb) {
+			t.Errorf("toolchainUsage does not name %q", verb)
+		}
+	}
+}
+
+// The alias is byte-for-byte the canonical command — AUP/AUCOM 200F §F9.
+//
+// stdout and the exit status, over every verb that can answer without a network
+// or a decision. Group `--help` is deliberately NOT in this set and deliberately
+// does differ: it is the one output whose whole job is to name the group the
+// reader typed, and printing the canonical spelling to somebody who typed the
+// retired one would be the rename finishing in the wrong place.
+func TestTheAliasIsByteIdenticalOnStdout(t *testing.T) {
+	document := filepath.Join(t.TempDir(), "example.profile.json")
+	if err := os.WriteFile(document, []byte("{ not json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cases := [][]string{
+		{"list"},
+		{"schema"},
+		{"validate", document},
+		{"show", document},
+		{"digest", document},
+		{"nonsense"},
+		{"review"},
+	}
+	for _, argv := range cases {
+		legacyEnv, legacyOut, _ := testEnv(t)
+		canonicalEnv, canonicalOut, _ := testEnv(t)
+		legacyCode := Run(legacyEnv, append([]string{"profile"}, argv...))
+		canonicalCode := Run(canonicalEnv, append([]string{"toolchain"}, argv...))
+		if legacyCode != canonicalCode {
+			t.Errorf("%v: exit %d through profile, %d through toolchain", argv, legacyCode, canonicalCode)
+		}
+		if legacyOut.String() != canonicalOut.String() {
+			t.Errorf("%v: stdout differs\n  profile:   %q\n  toolchain: %q", argv, legacyOut, canonicalOut)
 		}
 	}
 }

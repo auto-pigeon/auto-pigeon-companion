@@ -277,7 +277,7 @@ is your own browser, which is what keeps the binary CGO-free and buildable for
 all six targets with plain `go build`. Everything the page can do, the CLI can
 do too, through the same services — there is no browser-only path into anything.
 Approving a profile was the one exception until `AUCOM/AUT 228`; it is now
-`companion profile review`, `grant` and `withdraw`, over the same
+`companion toolchain review`, `grant` and `withdraw`, over the same
 [`approval.Service`](internal/approval) the page's grant route holds.
 
 The page has six areas, and the order is the order of a first run.
@@ -401,27 +401,27 @@ usage:
   companion <command> [arguments]
 
 commands:
-  serve [--port <n>] [--open]                                                                         run the local GUI server without opening a browser
-  auth login [--email <address>] | status | logout                                                    authenticate against auto-pigeon-backend
-  aub capabilities | catalog | show | revisions | sync | cached | verify | export | clean             browse auto-pigeon-backend's assets and sync exact revisions to this machine
-  job run | preview | list | show | logs | cancel | retry | artifacts | profiles                      run a profile action as a supervised job, and inspect what ran
-  build run | preview | list | show | pipelines                                                       build a map through a pipeline: several supervised jobs, wired, with a manifest
-  package targets | preview | create | inspect | verify | extract                                     build a PAK or PK3 from what a build produced, and read one somebody else made
-  profile validate | show | canonicalize | digest | diff | list | schema | review | grant | withdraw  read, check and compare tool, engine and pipeline profiles, and approve one to run
-  acquire plan | install | accept | list | verify | use | gc | resolve                                obtain a profile's programs from the signed catalogue, and manage the cache
-  catalog keygen | sign | verify | show | status | release                                            sign, verify and inspect the acquisition catalogue, its keyring and its compatibility manifest
-  engine list | show | detect | bind | check | preview | run | stage | unstage                        set up a Quake engine you already have, and start it as a supervised job
-  game list | show | link | join | preview | host | stop                                              find a game somebody is hosting and join it, or advertise one of your own
-  launch <game> [--map <name>] [--game-root <dir>] [--dry-run]                                        launch a game as a supervised job, using its AUB launch config
-  extractor status | plan | install | version                                                         obtain and run the separately licensed auto-pigeon-extractor (AUE)
-  feedback compatibility --game <family> --summary <text> [--share <what>]                            report that a work-in-progress game did not do what you expected — nothing is attached unless you say so
-  uri status | register | unregister                                                                  see, set or remove this machine's handler for autopigeon:// links
-  security matrix | residual | audit                                                                  the threat model, the risks accepted with it, and what this build is made of
-  release sbom | checksums                                                                            the documents a release ships beside its binaries
-  uninstall [--purge --confirm]                                                                       show what this program keeps on this machine, and delete it
-  acceptance run | verify | lanes | schema | fixture | noise                                          the native operator acceptance kit, on the machine an artifact is for
-  migrate                                                                                             fold Launcher and older Companion configuration into the current one
-  version                                                                                             print the build version
+  serve [--port <n>] [--open]                                                                           run the local GUI server without opening a browser
+  auth login [--email <address>] | status | logout                                                      authenticate against auto-pigeon-backend
+  aub capabilities | catalog | show | revisions | sync | cached | verify | export | clean               browse auto-pigeon-backend's assets and sync exact revisions to this machine
+  job run | preview | list | show | logs | cancel | retry | artifacts | profiles                        run a profile action as a supervised job, and inspect what ran
+  build run | preview | list | show | pipelines                                                         build a map through a pipeline: several supervised jobs, wired, with a manifest
+  package targets | preview | create | inspect | verify | extract                                       build a PAK or PK3 from what a build produced, and read one somebody else made
+  toolchain validate | show | canonicalize | digest | diff | list | schema | review | grant | withdraw  read, check and compare tool, engine and pipeline toolchains, and approve one to run
+  acquire plan | install | accept | list | verify | use | gc | resolve                                  obtain a toolchain's programs from the signed catalogue, and manage the cache
+  catalog keygen | sign | verify | show | status | release                                              sign, verify and inspect the acquisition catalogue, its keyring and its compatibility manifest
+  engine list | show | detect | bind | check | preview | run | stage | unstage                          set up a Quake engine you already have, and start it as a supervised job
+  game list | show | link | join | preview | host | stop                                                find a game somebody is hosting and join it, or advertise one of your own
+  launch <game> [--map <name>] [--game-root <dir>] [--dry-run]                                          launch a game as a supervised job, using its AUB launch config
+  extractor status | plan | install | version                                                           obtain and run the separately licensed auto-pigeon-extractor (AUE)
+  feedback compatibility --game <family> --summary <text> [--share <what>]                              report that a work-in-progress game did not do what you expected — nothing is attached unless you say so
+  uri status | register | unregister                                                                    see, set or remove this machine's handler for autopigeon:// links
+  security matrix | residual | audit                                                                    the threat model, the risks accepted with it, and what this build is made of
+  release sbom | checksums                                                                              the documents a release ships beside its binaries
+  uninstall [--purge --confirm]                                                                         show what this program keeps on this machine, and delete it
+  acceptance run | verify | lanes | schema | fixture | noise                                            the native operator acceptance kit, on the machine an artifact is for
+  migrate                                                                                               fold Launcher and older Companion configuration into the current one
+  version                                                                                               print the build version
 ```
 
 Exit codes: `0` success, `1` the operation failed, `2` the invocation was wrong.
@@ -1433,11 +1433,11 @@ An engine profile is a document, so this needs no release and no Go code. The
 repository keeps a worked example of one written by hand:
 
 ```console
-$ companion profile validate internal/engine/testdata/user-q1-engine.engine.json
+$ companion toolchain validate internal/engine/testdata/user-q1-engine.engine.json
 internal/engine/testdata/user-q1-engine.engine.json: valid engine profile example.engines.quakespasm-of-my-own 0.3.1
   sha256:b759281c01c70ac572d751e7ffc1520a2a979135f5b47b9737de8f2f93258286
 
-$ companion profile show internal/engine/testdata/user-q1-engine.engine.json
+$ companion toolchain show internal/engine/testdata/user-q1-engine.engine.json
 My own Quake engine 0.3.1 (example.engines.quakespasm-of-my-own)
   published by A Companion user, under GPL-2.0-or-later
   Community — imported from elsewhere; nobody has checked it for you.
@@ -2288,7 +2288,7 @@ there is no random access inside one to offer. An interrupted download is
 proved instead is the `ETag`, which is the file's SHA-256, so re-syncing an
 unchanged asset costs a conditional request and no body.
 
-**`current_only`** — a Game Profile carries a revision counter and no
+**`current_only`** — a Profile carries a revision counter and no
 per-version rows. Only `current` can be fetched, what it resolves to changes
 when somebody edits the profile, and a build that uses one records a digest it
 can check rather than a version it can get back.
@@ -2458,9 +2458,9 @@ error: assetsync: the downloaded bytes are not what the server declared: the byt
 nothing was published to the cache; no build can read these bytes
 ```
 
-## Profiles
+## Toolchains
 
-A **profile** is a small JSON document that describes an external program the
+A **toolchain** is a small JSON document that describes an external program the
 Companion can drive: which programs it provides, what arguments they take, what
 files they read and write, whether they go online, and how to get them. There
 are three kinds.
@@ -2471,6 +2471,34 @@ are three kinds.
 | `engine` | a game engine, and the five things it can be asked to do |
 | `pipeline` | an ordered list of *capabilities* and the files that flow between them |
 
+### `companion profile …` still works
+
+The command group is `companion toolchain` and the documents are **toolchains**.
+It was `companion profile` until `AUP/AUCOM 200F`, and that spelling is kept as
+an alias: every verb resolves, with the same stdout, the same JSON and the same
+exit status, and no warning is printed. A script written against the old name
+does not have to change, and neither does a link somebody bookmarked.
+
+```console
+$ companion profile list        # the retired spelling
+$ companion toolchain list      # the same command
+```
+
+The reason for the rename is that three different things were called a profile.
+A **Profile** in Auto-Pigeon and AUB is what a *map's project* is — engine
+family, map dialect, texture model, entity vocabulary. A **toolchain** is how a
+*program* is run. Calling both a profile made it impossible to say "install the
+profile" without being asked which kind. So the editor, the gallery and this
+program now all say toolchain for this document, and Profile for that one.
+
+What did **not** move: the JSON Schema documents and their `$id`s, the `profile`
+key inside a document, the Go package `internal/profile`, and AUB's
+`/companion-profiles` routes. A rename chased into a stable contract is a break
+rather than a clarification, and none of those is a word a user reads.
+
+The legacy spelling is documented here and in `companion profile --help`. It is
+listed nowhere else: `companion --help` names the canonical group only.
+
 The point of the format is that there is **one execution model**. The profiles
 that ship inside the binary go through the same decoder, the same validation,
 the same canonical encoding and the same resolution as a file you write by hand.
@@ -2478,7 +2506,7 @@ Adding a tool is a document, not a release — and the built-in ones cannot take
 shortcut that a user-authored one cannot, because there is no shortcut.
 
 ```console
-$ companion profile list
+$ companion toolchain list
 engine   auto-pigeon.engine.darkplaces      1.0.0    builtin
          A heavily extended Quake engine with its own renderer, still the base for several standalone games.
 engine   auto-pigeon.engine.fteqw           1.0.0    builtin
@@ -2580,7 +2608,7 @@ Filesystem reach is declared by **role**, never by path, so the profile says
 ```
 
 ```console
-$ companion profile validate minimal.tool.json
+$ companion toolchain validate minimal.tool.json
 minimal.tool.json: valid tool profile example.minimal 1.0.0
   sha256:200c222ed007a86002f59cab9c5e210c9bd7952c2a390b7c8c7751567cba25f6
 ```
@@ -2589,7 +2617,7 @@ A document that is wrong is refused with every fault located, because the person
 repairing it wants the list and not the first item on it:
 
 ```console
-$ companion profile validate broken.tool.json
+$ companion toolchain validate broken.tool.json
 broken.tool.json is not a valid profile:
   actions[0].args[0].value: contains "$(", which is command substitution — commands are an executable and an argument array; there is no shell, so write the value literally
 $ echo $?
@@ -2622,7 +2650,7 @@ canonicalized, digested and displayed before you have decided anything, and none
 of that fetches or runs a thing:
 
 ```console
-$ companion profile show community-toolchain.tool.json
+$ companion toolchain show community-toolchain.tool.json
 Andrea's Q1 compile 0.3.0 (example.andrea.q1-compile)
   published by A Companion user, under GPL-2.0-or-later
   Community — imported from elsewhere; nobody has checked it for you.
@@ -2641,7 +2669,7 @@ Approval is recorded against the **digest**, not the version number, so an
 update that asks for more is refused until you have seen what changed:
 
 ```console
-$ companion profile diff installed.tool.json incoming.tool.json
+$ companion toolchain diff installed.tool.json incoming.tool.json
 Changes (5):
   + actions[0].network = {"hosts":["updates.example.com"],"purpose":"check for tool updates","required":true}
   + actions[0].roots[1] = {"access":"read_write","purpose":"copy the finished map into the game folder","role":"game_root"}
@@ -2674,7 +2702,7 @@ Read it first. `profile review` takes the **id** of a document this machine has,
 against the same catalog the executor runs things from, and writes nothing:
 
 ```console
-$ companion profile review example.local.harmless
+$ companion toolchain review example.local.harmless
 A tool profile somebody wrote 1.0.0 (example.local.harmless)
   published by A Companion user, under MIT
   Local — found in your profile folder; nobody has checked it for you, and the Companion cannot tell who put it there.
@@ -2695,13 +2723,13 @@ document; `--approve` says *you decided*. Asking for neither prints the review
 and refuses, with the command filled in:
 
 ```console
-$ companion profile grant example.local.harmless
+$ companion toolchain grant example.local.harmless
 … the review above …
 
 error: nothing was approved. Read the report above, then:
-  companion profile grant example.local.harmless --digest=sha256:2f188103bb82b192370f9c7228e8942e2489650f0141b3cf1ca33e24b74c3530 --approve
+  companion toolchain grant example.local.harmless --digest=sha256:2f188103bb82b192370f9c7228e8942e2489650f0141b3cf1ca33e24b74c3530 --approve
 
-$ companion profile grant example.local.harmless \
+$ companion toolchain grant example.local.harmless \
     --digest=sha256:2f188103bb82b192370f9c7228e8942e2489650f0141b3cf1ca33e24b74c3530 --approve
 approved everything example.local.harmless asks for, against sha256:2f188103bb82b192370f9c7228e8942e2489650f0141b3cf1ca33e24b74c3530
   read:content_root
@@ -2709,7 +2737,7 @@ approved everything example.local.harmless asks for, against sha256:2f188103bb82
   run_executable
   write:workspace
 
-Withdraw it with `companion profile withdraw example.local.harmless --confirm`.
+Withdraw it with `companion toolchain withdraw example.local.harmless --confirm`.
 ```
 
 A digest that is not the document on this machine is refused, and the message
@@ -2717,7 +2745,7 @@ names both — because if the file changed between the review and the approval,
 what you read is not what you would be approving:
 
 ```console
-$ companion profile grant example.local.harmless --digest=sha256:0000…0000 --approve
+$ companion toolchain grant example.local.harmless --digest=sha256:0000…0000 --approve
 error: approval: this approval is for sha256:0000…0000 and the document on this
 machine is now sha256:2f18…3530; read example.local.harmless again before approving it
 ```
@@ -2726,7 +2754,7 @@ Taking it back is equally explicit, and leaves your setup alone — where a
 program is on this machine was never part of what you approved:
 
 ```console
-$ companion profile withdraw example.local.harmless --confirm
+$ companion toolchain withdraw example.local.harmless --confirm
 withdrew the approval for example.local.harmless. It cannot run until it is approved again.
 Where its programs and directories are on this machine is unchanged.
 ```
@@ -2751,7 +2779,7 @@ Three things this deliberately does not do:
 
 A profile says *what kind of place* it needs. Where those places are on your
 computer is a **local binding** — absolute paths, the version the tool reported
-when it was last asked, the AUB record the Game Profile slug resolves to on your
+when it was last asked, the AUB record the Profile slug resolves to on your
 account, and what you approved. A binding is never published, and it is a
 different type in a different package for exactly that reason
 ([ADR-0002](docs/adr/0002-portable-profiles-and-local-bindings-are-different-types.md)).
@@ -2762,12 +2790,12 @@ wrong on every other machine, and a profile containing `127.0.0.1` would name
 the reader's own computer. Both are refused, by name:
 
 ```console
-$ companion profile validate leaky.tool.json
+$ companion toolchain validate leaky.tool.json
 leaky.tool.json is not a valid profile:
   actions[0].roots[0].purpose: contains the absolute path "/home/andrea/quake/id1/maps", which is a path on one machine and wrong on every other — name a root role — workspace, project_root, game_root, content_root, tool_root, tool_cache — and let the local binding say where it is on this machine
 ```
 
-### Game Profiles belong to AUB
+### Profiles belong to AUB
 
 A profile does **not** describe what a game is. Which engine family a project
 uses, its map dialect, its texture model and its entity vocabulary are a *Game
@@ -2789,14 +2817,14 @@ contract for anything outside the Companion — an editor, a CI check, a second
 implementation:
 
 ```console
-$ companion profile schema
+$ companion toolchain schema
 engine-profile-1.1.schema.json
 local-binding-1.1.schema.json
 pipeline-profile-1.1.schema.json
 profile-common-1.1.schema.json
 tool-profile-1.1.schema.json
 
-$ companion profile schema tool-profile-1.1.schema.json > tool.schema.json
+$ companion toolchain schema tool-profile-1.1.schema.json > tool.schema.json
 ```
 
 The Go types in `internal/profile` are the enforcement point — they check things
@@ -2827,7 +2855,7 @@ The policy:
   ordinary update:
 
   ```console
-  $ companion profile diff installed.tool.json republished.tool.json
+  $ companion toolchain diff installed.tool.json republished.tool.json
   This document has the same id and version as the one installed, and says something different. A published version is immutable: whatever changed should have been a new version.
   …
   ```
@@ -2836,7 +2864,7 @@ The policy:
   partial read is worse than no read:
 
   ```console
-  $ companion profile validate from-the-future.tool.json
+  $ companion toolchain validate from-the-future.tool.json
   from-the-future.tool.json is not a valid profile:
     schema_version: is "aucom.profile/9.9", which this build of the Companion cannot read — this build reads: aucom.profile/1.0
   ```
@@ -2889,7 +2917,7 @@ happens on your machine.
 #### The export gate: see it before it leaves
 
 ```console
-$ companion profile preview ./my-toolchain.tool.json
+$ companion toolchain preview ./my-toolchain.tool.json
 ```
 
 The preview is the whole gate. It validates the document, canonicalizes it — one
@@ -2901,7 +2929,7 @@ variable name, and the permissions whoever installs it will be asked to allow.
 Nothing is sent. Publishing needs a separate, explicit act:
 
 ```console
-$ companion profile publish ./my-toolchain.tool.json --visibility=public --confirm
+$ companion toolchain publish ./my-toolchain.tool.json --visibility=public --confirm
 ```
 
 **A document that names one machine cannot be previewed at all**, so it cannot be
@@ -2922,8 +2950,8 @@ and grants nothing beyond what its own licence grants.
 #### Finding one
 
 ```console
-$ companion profile catalog --kind=tool --game=quake1 --capability=compile.bsp
-$ companion profile published <listing-id>
+$ companion toolchain catalog --kind=tool --game=quake1 --capability=compile.bsp
+$ companion toolchain published <listing-id>
 ```
 
 **Compatibility is not endorsement.** A listing reports what its author declared
@@ -2933,7 +2961,7 @@ security review, and not a claim that any of it works.
 #### Installing one
 
 ```console
-$ companion profile install <listing-id>@1.2.0
+$ companion toolchain install <listing-id>@1.2.0
 ```
 
 Five checks, in an order that matters, and **nothing is written until you say
@@ -2969,9 +2997,9 @@ gave, and any replacement they named, are printed before you approve.
 #### Withdrawing one, and reporting one
 
 ```console
-$ companion profile yank <listing-id> 1.2.0 --reason="It passes -noskip, which corrupts water brushes." \
+$ companion toolchain yank <listing-id> 1.2.0 --reason="It passes -noskip, which corrupts water brushes." \
     --superseded-by=1.2.1
-$ companion profile report <listing-id> --category=licence --detail="The source offer is a dead link."
+$ companion toolchain report <listing-id> --category=licence --detail="The source offer is a dead link."
 ```
 
 A withdrawal keeps the version readable, with its reason, so anybody already
@@ -3489,7 +3517,7 @@ $ curl -s -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/library/cached
 Approving a profile, and saying where its program is. The digest is required and
 must be the document on disk: an approval for something that has changed since
 it was displayed is an approval of something nobody read. This route and
-`companion profile grant` are the same code — see the parity table below.
+`companion toolchain grant` are the same code — see the parity table below.
 
 ```console
 $ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" \
@@ -3627,14 +3655,14 @@ call the same function — not an equivalent one.
 | Route | Command | Shared code |
 | --- | --- | --- |
 | `GET /api/v1/profiles` | `companion job profiles` | `job.Catalog` |
-| `GET /api/v1/profiles/{id}` | `companion profile review <id>` | `job.Catalog`, `profile.Authorize` |
-| `GET /api/v1/profiles/{id}/document` | `companion profile canonicalize <file>` | `profile.Canonical` |
-| `POST /api/v1/profiles/validate` | `companion profile validate <file>` | `profile.Decode` |
-| `POST /api/v1/profiles/diff` | `companion profile diff <a> <b>` | `profile.DiffProfiles` |
+| `GET /api/v1/profiles/{id}` | `companion toolchain review <id>` | `job.Catalog`, `profile.Authorize` |
+| `GET /api/v1/profiles/{id}/document` | `companion toolchain canonicalize <file>` | `profile.Canonical` |
+| `POST /api/v1/profiles/validate` | `companion toolchain validate <file>` | `profile.Decode` |
+| `POST /api/v1/profiles/diff` | `companion toolchain diff <a> <b>` | `profile.DiffProfiles` |
 | `POST /api/v1/profiles/import` | copy the file into the profile folder | — (both grant nothing) |
 | `POST /api/v1/profiles/{id}/bind` | `companion engine bind <id>`, `companion acquire resolve --bind` | `binding.Update` |
-| `POST /api/v1/profiles/{id}/grant` | `companion profile grant <id> --digest=<d> --approve` | `approval.Service.Grant` |
-| `POST /api/v1/profiles/{id}/withdraw` | `companion profile withdraw <id> --confirm` | `approval.Service.Withdraw` |
+| `POST /api/v1/profiles/{id}/grant` | `companion toolchain grant <id> --digest=<d> --approve` | `approval.Service.Grant` |
+| `POST /api/v1/profiles/{id}/withdraw` | `companion toolchain withdraw <id> --confirm` | `approval.Service.Withdraw` |
 | `POST /api/v1/profiles/{id}/remove` | delete the file from the profile folder | `binding.Update` |
 | `GET, POST /api/v1/jobs` | `companion job list`, `companion job run` | `job.Service` |
 | `POST /api/v1/jobs/preview` | `companion job preview` | `job.Service.Preview` |

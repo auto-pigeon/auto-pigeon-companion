@@ -47,14 +47,68 @@ publishing and installing (these reach a backend):
   companion profile report <listing-id> --category=<c>
 `
 
-func runProfile(env *Env, args []string) int {
+// toolchainUsage is the same listing in the canonical spelling — AUP/AUCOM 200F §D.
+//
+// Hand-written rather than derived from profileUsage by string replacement, and
+// profileUsage is left byte-for-byte alone. `toolchain` is two characters longer
+// than `profile`, so a ReplaceAll would push every description two columns right
+// and silently misalign the block; and the legacy text must not move at all,
+// because a script that greps its own help is a reader too.
+//
+// The pair cannot drift: TestBothSpellingsListTheSameVerbs parses the verbs out
+// of each block and fails when one gains a line the other does not.
+const toolchainUsage = `usage:
+  companion toolchain validate <file>...        check documents and report every fault
+  companion toolchain show <file>               what it is, what it would ask for, its digest
+  companion toolchain canonicalize <file>       print the exact bytes a digest is taken over
+  companion toolchain digest <file>...          print each document's digest
+  companion toolchain diff <before> <after>     the normalized difference, and whether it escalates
+  companion toolchain list                      the toolchains built into this build
+  companion toolchain schema [name]             list or print the published JSON Schema documents
+
+approving an installed toolchain (by id, against the same catalog the executor reads):
+  companion toolchain review <id>               what it would be allowed to do, and whether it may
+  companion toolchain grant <id> --digest=<d> --approve
+  companion toolchain withdraw <id> --confirm
+
+publishing and installing (these reach a backend):
+  companion toolchain preview <file>            what publishing it would disclose
+  companion toolchain publish <file> --confirm  publish it, after the preview
+  companion toolchain catalog [filters]         what this deployment has published
+  companion toolchain published <listing-id>    one listing and its versions
+  companion toolchain install <listing-id>[@ver]  review it; --approve to install
+  companion toolchain yank <listing-id> <version> --reason=<why>
+  companion toolchain report <listing-id> --category=<c>
+
+"companion profile ..." is the retired spelling of this group. It still works,
+unchanged, for scripts and for documentation installed with it.
+`
+
+// group is the spelling this invocation reached a group command by, defaulting
+// to the canonical one. See Env.Group.
+func (e *Env) group() string {
+	if e.Group == "" {
+		return "toolchain"
+	}
+	return e.Group
+}
+
+// groupUsage is the group-level help for the spelling that was typed.
+func groupUsage(env *Env) string {
+	if env.group() == "profile" {
+		return profileUsage
+	}
+	return toolchainUsage
+}
+
+func runToolchain(env *Env, args []string) int {
 	if len(args) == 0 {
-		fmt.Fprint(env.Stderr, profileUsage)
+		fmt.Fprint(env.Stderr, groupUsage(env))
 		return 2
 	}
 	switch args[0] {
 	case "-h", "--help", "help":
-		fmt.Fprint(env.Stdout, profileUsage)
+		fmt.Fprint(env.Stdout, groupUsage(env))
 		return 0
 	case "validate":
 		return profileValidate(env, args[1:])
@@ -91,8 +145,8 @@ func runProfile(env *Env, args []string) int {
 	case "report":
 		return profileReport(env, args[1:])
 	}
-	fmt.Fprintf(env.Stderr, "error: unknown profile command %q\n\n", args[0])
-	fmt.Fprint(env.Stderr, profileUsage)
+	fmt.Fprintf(env.Stderr, "error: unknown %s command %q\n\n", env.group(), args[0])
+	fmt.Fprint(env.Stderr, groupUsage(env))
 	return 2
 }
 

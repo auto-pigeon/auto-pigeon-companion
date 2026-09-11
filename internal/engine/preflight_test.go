@@ -149,7 +149,7 @@ func TestAStaleBindingIsNamedRatherThanUsed(t *testing.T) {
 	if !problems.Has(engine.FaultStaleBinding) {
 		t.Fatalf("a binding for a different document reported %v", problems)
 	}
-	if !strings.Contains(problems.Error(), "profile diff") {
+	if !strings.Contains(problems.Error(), "toolchain diff") {
 		t.Errorf("the message does not say how to see what changed: %s", problems.Error())
 	}
 }
