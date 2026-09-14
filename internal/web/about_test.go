@@ -92,6 +92,26 @@ func TestTheAboutRouteNeedsTheRunToken(t *testing.T) {
 	}
 }
 
+// The other half of "render it with outbound networking disabled": the About area has no address to
+// fetch from, and the page it lives on is not ALLOWED to fetch one. The policy has always said so —
+// this is the assertion that keeps it saying so, because an About area is exactly the kind of page
+// somebody would be tempted to let reach a gallery, a CDN or an image host.
+func TestTheAboutPageCannotReachAnotherOrigin(t *testing.T) {
+	server, _ := newTestServer(t, nil)
+
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.Host = testHost
+	recorder := httptest.NewRecorder()
+	server.ServeHTTP(recorder, r)
+
+	policy := recorder.Header().Get("Content-Security-Policy")
+	for _, want := range []string{"default-src 'none'", "connect-src 'self'", "img-src 'self' data:"} {
+		if !strings.Contains(policy, want) {
+			t.Errorf("the page's policy is %q, which does not contain %q", policy, want)
+		}
+	}
+}
+
 func TestTheAboutAreaIsWiredIntoThePage(t *testing.T) {
 	server, _ := newTestServer(t, nil)
 
