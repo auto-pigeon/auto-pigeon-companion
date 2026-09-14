@@ -1,0 +1,183 @@
+{
+  "schema": "auto-pigeon.site-content/1.0",
+  "source": {
+    "about": "about.md",
+    "news": "news.md"
+  },
+  "digest": "c07504a8c2b6d42a06dd838e386d8f13a0cb604642e2156704d859d7c9f2f067",
+  "about": {
+    "meta": {
+      "title": "About Auto-Pigeon",
+      "description": "Auto-Pigeon is a level editor for Quake-family games that runs in a browser tab, where several people can edit one map at the same time.",
+      "updated": null,
+      "lang": "en"
+    },
+    "blocks": [
+      {
+        "type": "paragraph",
+        "children": [
+          {
+            "type": "text",
+            "value": "Auto-Pigeon is a level editor that runs in a browser tab. Open a map, invite people in, and edit it at the same time — nothing to install, nothing to configure."
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "level": 2,
+        "id": "what-it-does-today",
+        "children": [
+          {
+            "type": "text",
+            "value": "What it does today"
+          }
+        ]
+      },
+      {
+        "type": "list",
+        "ordered": false,
+        "items": [
+          [
+            {
+              "type": "text",
+              "value": "Opens and edits Quake-family maps in the browser."
+            }
+          ],
+          [
+            {
+              "type": "text",
+              "value": "Lets several people work in one map at once. What somebody has selected is locked while they hold it, and everyone sees where the others are working."
+            }
+          ],
+          [
+            {
+              "type": "text",
+              "value": "Lifts reusable pieces — a stair, an arch, a room — out of existing maps as prefabs, to use again."
+            }
+          ]
+        ]
+      },
+      {
+        "type": "heading",
+        "level": 2,
+        "id": "where-it-is-going",
+        "children": [
+          {
+            "type": "text",
+            "value": "Where it is going"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "children": [
+          {
+            "type": "text",
+            "value": "Playing a map where you built it, without exporting or launching anything. That is not built yet: it is what the project is working towards, not something you can do today."
+          }
+        ]
+      },
+      {
+        "type": "heading",
+        "level": 2,
+        "id": "status",
+        "children": [
+          {
+            "type": "text",
+            "value": "Status"
+          }
+        ]
+      },
+      {
+        "type": "paragraph",
+        "children": [
+          {
+            "type": "text",
+            "value": "Auto-Pigeon is in a closed beta. Read the "
+          },
+          {
+            "type": "link",
+            "href": "/legal/terms-of-service",
+            "kind": "route",
+            "children": [
+              {
+                "type": "text",
+                "value": "Terms of Service"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "value": ", the "
+          },
+          {
+            "type": "link",
+            "href": "/legal/privacy-notice",
+            "kind": "route",
+            "children": [
+              {
+                "type": "text",
+                "value": "privacy notice"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "value": " and the "
+          },
+          {
+            "type": "link",
+            "href": "/legal/ai-transparency",
+            "kind": "route",
+            "children": [
+              {
+                "type": "text",
+                "value": "AI transparency notice"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "value": " before creating an account. Announcements are on the "
+          },
+          {
+            "type": "link",
+            "href": "/news",
+            "kind": "route",
+            "children": [
+              {
+                "type": "text",
+                "value": "News"
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "value": " page."
+          }
+        ]
+      }
+    ]
+  },
+  "news": {
+    "meta": {
+      "title": "News",
+      "description": "Announcements about Auto-Pigeon, newest first.",
+      "updated": null,
+      "lang": "en"
+    },
+    "intro": [
+      {
+        "type": "paragraph",
+        "children": [
+          {
+            "type": "text",
+            "value": "Announcements about Auto-Pigeon, newest first."
+          }
+        ]
+      }
+    ],
+    "entries": []
+  },
+  "assets": []
+}

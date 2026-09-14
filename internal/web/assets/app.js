@@ -21,7 +21,10 @@
   // because every area can open it. See core.js.
   wireCompatibilityReport();
 
-  const areaNames = ["library", "build", "run", "profiles", "jobs", "settings"];
+  // `about` is last because it is the one area that is not a task: somebody
+  // looking for a job should never have to pass the prose about the program to
+  // reach it.
+  const areaNames = ["library", "build", "run", "profiles", "jobs", "settings", "about"];
   const titles = {
     library: "Library",
     build: "Build",
@@ -29,6 +32,7 @@
     profiles: "Profiles",
     jobs: "Jobs",
     settings: "Settings",
+    about: "About",
   };
 
   function show(area, { focus = true } = {}) {

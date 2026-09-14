@@ -62,6 +62,7 @@
           <li><button type="button" class="area-tab" data-area="profiles">Profiles<span class="tab-note">tools and engines</span></button></li>
           <li><button type="button" class="area-tab" data-area="jobs">Jobs<span class="tab-note">what has run</span></button></li>
           <li><button type="button" class="area-tab" data-area="settings">Settings<span class="tab-note">where things are</span></button></li>
+          <li><button type="button" class="area-tab" data-area="about">About<span class="tab-note">what this is</span></button></li>
         </ul>
       </nav>
 
@@ -564,6 +565,18 @@
             <div class="row" id="feedback-actions"></div>
           </div>
         </section>
+        <section id="area-about" class="area" aria-labelledby="area-heading" hidden>
+          <p class="lede">
+            What Auto-Pigeon is, in the words the web site and the editor use.
+            The text is written once, in the gallery's own
+            <code>content/about.md</code>, and this page reads the artefact that
+            file was compiled into — so the three applications cannot drift
+            apart about what this project is.
+          </p>
+
+          <div id="about-body" class="panel"></div>
+          <p id="about-message" class="message" role="alert"></p>
+        </section>
       </main>
     </div>
 
@@ -590,6 +603,7 @@
     <script src="profiles.js"></script>
     <script src="jobs.js"></script>
     <script src="settings.js"></script>
+    <script src="about.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

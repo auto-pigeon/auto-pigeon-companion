@@ -101,11 +101,16 @@
 
     // The keyboard path is real: the skip link is the first focusable thing,
     // and every area is reachable as a button.
+    // Named rather than counted: a bare number told the next person that
+    // something changed, not what. The About area joined this list when the
+    // gallery's About prose became a global area (AUP/AUCOM 243E §B).
+    const AREAS = ["library", "build", "run", "profiles", "jobs", "settings", "about"];
     const tabs = [...document.querySelectorAll(".area-tab")];
+    const named = tabs.map((tab) => tab.dataset.area);
     record(
       "every area is a keyboard-reachable control",
-      tabs.length === 6 && tabs.every((tab) => tab.tagName === "BUTTON"),
-      tabs.map((tab) => tab.dataset.area).join(", ")
+      named.join(",") === AREAS.join(",") && tabs.every((tab) => tab.tagName === "BUTTON"),
+      named.join(", ")
     );
 
     // --- 2. sign in ---------------------------------------------------------
@@ -379,6 +384,28 @@
       "the build flow is reachable by tabbing, in the order it is used",
       positions.every((index, i) => index >= 0 && (i === 0 || index > positions[i - 1])),
       wanted.map((id, i) => `${id}@${positions[i]}`).join(", ")
+    );
+
+    // --- the About area -----------------------------------------------------
+    //
+    // The words are the gallery's, compiled into the artefact this binary
+    // serves; what a browser can add is that the area fills in at all, and that
+    // a link this program cannot honour is NAMED rather than pointed at an
+    // origin it was never told about — nothing here has a built-in address for
+    // another component, so a route link would have to be a guess.
+    await go("about");
+    await waitFor("the About content", () => $("about-body").children.length > 0);
+    const aboutText = textOf($("about-body"));
+    record(
+      "the About area renders the published prose",
+      aboutText.includes("Auto-Pigeon is a level editor") && aboutText.includes("Published digest"),
+      aboutText.slice(0, 80)
+    );
+    const aboutLinks = [...$("about-body").querySelectorAll("a")].map((a) => a.getAttribute("href"));
+    record(
+      "no link in the About area leaves for a host this program was not told about",
+      aboutLinks.every((href) => href.startsWith("#about-") || /^https?:/i.test(href)),
+      aboutLinks.join(", ") || "no links"
     );
 
     // Switching area moves focus to the heading, so a keyboard user lands on
