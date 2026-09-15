@@ -24,10 +24,10 @@ the command line. Both surfaces are the same binary.
 > bytes. The Quake II package in that document is a **2.0.0-alpha7
 > pre-release**, because Quake II support exists nowhere else.
 >
-> **What is still a stub is the launch configuration**, and only that: the
-> per-game launch config still comes from `internal/launch`'s example provider
-> because AUB's collection and schema for it are not confirmed. Every
-> placeholder is marked in the source at the point it will be replaced.
+> **The launch-configuration stub is retired** (`NEW_244D`). `companion launch`
+> and the page's `/api/launch` routes read a placeholder configuration that
+> guessed a quakespasm path under a game root; the curated engine profiles below
+> are now the one launch route, from the Run area and from `companion engine run`.
 >
 > The **twelve** Quake engine profiles that ship are curated from each engine's
 > own published command line, and every platform in them is marked `unverified`
@@ -223,11 +223,39 @@ aub: (not configured — set AUCOM_AUB_BASE_URL or aub_base_url)
 signed in: no
 ```
 
+### A development `.env`, for a local stack
+
+Testing against a local auto-pigeon-backend? Put its address in a `.env` in
+the directory you start the Companion from — this checkout, say — instead of
+exporting it in every terminal or writing it into the `config.json` your
+everyday install also reads:
+
+```console
+$ cp .env.example .env
+$ sed -i 's|^AUCOM_AUB_BASE_URL=.*|AUCOM_AUB_BASE_URL=http://localhost:9190|' .env
+$ go run ./cmd/companion auth status
+using AUCOM_AUB_BASE_URL from .env
+aub: http://localhost:9190
+signed in: no
+$ AUCOM_ENV_FILE=/path/to/stack.env companion serve   # a file somewhere else
+```
+
+It is optional and read only from the working directory or the file
+`AUCOM_ENV_FILE` names; a released Companion on a clean machine has neither and
+needs neither. **It may set `AUCOM_AUB_BASE_URL` and nothing else** — a `.env`
+lying in whatever directory a terminal happened to be in must not be able to
+move the catalogue's trust anchors, point at an unverified extractor or relocate
+the job store, so any other key is named in a warning and ignored. The real
+environment wins over the file. Nothing in it is expanded or executed. The GUI's
+**Settings** area shows the address as coming from the environment when it was
+supplied this way, and is still where a person without a checkout sets it.
+
 ### Environment variables
 
 | Variable | Read by | Purpose |
 | --- | --- | --- |
 | `AUCOM_AUB_BASE_URL` | `internal/config` | where auto-pigeon-backend lives |
+| `AUCOM_ENV_FILE` | `cmd/companion` | an optional development `.env` to read instead of `./.env` — see above |
 | `AUCOM_PASSWORD` | `companion auth login` | password for a scripted login |
 | `AUCOM_AUE_BINARY` | `internal/aue` | an on-disk AUE to use instead of the verified one — a local, **unverified** development override |
 | `AUCOM_JOBS_DIR` | `internal/config` | where job records, logs and artifacts live |
@@ -412,7 +440,7 @@ commands:
   catalog keygen | sign | verify | show | status | release                                              sign, verify and inspect the acquisition catalogue, its keyring and its compatibility manifest
   engine list | show | detect | bind | check | preview | run | stage | unstage                          set up a Quake engine you already have, and start it as a supervised job
   game list | show | link | join | preview | host | stop                                                find a game somebody is hosting and join it, or advertise one of your own
-  launch <game> [--map <name>] [--game-root <dir>] [--dry-run]                                          launch a game as a supervised job, using its AUB launch config
+  launch (retired)                                                                                      retired: it read a placeholder launch config; use `engine run <profile> --action play_map`
   extractor status | plan | install | version                                                           obtain and run the separately licensed auto-pigeon-extractor (AUE)
   feedback compatibility --game <family> --summary <text> [--share <what>]                              report that a work-in-progress game did not do what you expected — nothing is attached unless you say so
   uri status | register | unregister                                                                    see, set or remove this machine's handler for autopigeon:// links
@@ -480,8 +508,7 @@ probe: same queue, same supervision, same record afterwards. There is one
 executor and nothing goes round it.
 
 `companion job profiles` is what can be run on this machine — the documents
-compiled into the build, plus any you have imported, plus an engine profile
-generated from each of your launch configs:
+compiled into the build, plus any you have imported:
 
 ```console
 $ companion job profiles
@@ -496,8 +523,6 @@ auto-pigeon.ericw-tools.q1               tool    builtin   compile, vis, light, 
 auto-pigeon.q1.fast-preview              pipeline builtin
 auto-pigeon.q1.final                     pipeline builtin
 auto-pigeon.q1.normal                    pipeline builtin
-auto-pigeon.launch.quake                 engine  builtin   play_map
-auto-pigeon.launch.quake2                engine  builtin   play_map
 ```
 
 **Preview first.** `job preview` resolves an action into the exact command and
@@ -1506,28 +1531,26 @@ pretends otherwise — that is what `unverified` means.
 
 ### Launch
 
+`companion launch` is **retired**, and prints where the real route is:
+
 ```console
-$ companion launch quake --map e1m1 --game-root /games/quake --dry-run
-/games/quake/quakespasm -basedir /games/quake +map e1m1
+$ companion launch quake --map e1m1
+error: `companion launch` is retired: it read a placeholder launch configuration, not your engine.
+Set up the engine you have and start it through its profile instead:
+  companion engine list
+  companion engine bind <profile> --engine <path> --game-root <dir>
+  companion engine run <profile> --action play_map --map <name>
+$ echo $?
+2
 ```
 
-Drop `--dry-run` to start it. With a game root in `config.json` the flag is
-unnecessary.
-
-Starting a game is a job. The launch config becomes a generated engine profile
-— `auto-pigeon.launch.quake` in `companion job profiles` above — and the start
-is a submission to the same executor a compile goes through, so a game you
-launched is listed, cancellable and recorded like anything else. `companion
-launch` is the short way to say it; `companion job run --profile
-auto-pigeon.launch.quake --action play_map --runtime map_name=e1m1` is the same
-thing spelled out.
-
-The generated profile is a bridge, not the model: it has one action, no content
-layouts and no version probe, because a stubbed launch config does not know
-enough to claim more. It answers "what does AUB say to run for this game"; the
-curated documents under [Engines](#engines) answer "what does this engine
-actually do", and that is the model. A document with the same id replaces a
-generated stand-in by existing — the catalog prefers one to the other.
+It turned a hard-coded example "launch config" into a generated engine profile
+(`auto-pigeon.launch.quake`), which then appeared in the Run area and in
+`companion job profiles` beside the curated engines — a second launch route that
+started whatever the placeholder guessed. The curated engine documents under
+[Engines](#engines) were always the model; since `NEW_244D` they are the only
+route, from the page's **Run** area and from `companion engine run`. A game
+started either way is a job, listed, cancellable and recorded like a compile.
 
 ### Extractor
 
@@ -3615,8 +3638,6 @@ is completed rather than abandoned.
 | `/api/status` | GET | version, platform, AUB address, sign-in state, extractor availability |
 | `/api/auth/login` | POST | sign in and persist the session |
 | `/api/auth/logout` | POST | forget the session locally |
-| `/api/launch-configs` | GET | available launch configurations |
-| `/api/launch` | POST | resolve a launch, and submit it as a job unless `dry_run` |
 | `/api/aue/version` | GET | the verified extractor's version |
 | `/api/v1/jobs` | GET, POST | list jobs; submit one |
 | `/api/v1/jobs/preview` | POST | resolve a request into its exact command, start nothing |

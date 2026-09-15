@@ -47,3 +47,6 @@ Thumbs.db
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 /graft/
+
+# The optional development .env (see .env.example). Never committed.
+/.env

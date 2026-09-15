@@ -14,9 +14,12 @@
 package main
 
 import (
+	"fmt"
 	"os"
+	"strings"
 
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/cli"
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
 )
 
 // version is the build-time version string. Override it with:
@@ -25,6 +28,22 @@ import (
 var version = "0.1.0-dev"
 
 func main() {
+	// The optional development `.env` — see internal/config/envfile.go. Read
+	// before anything else so every command, the GUI included, resolves the
+	// same backend address. Absent is the ordinary case and says nothing.
+	report, err := config.LoadDevEnvFile(os.Getenv, os.LookupEnv, os.Setenv)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(2)
+	}
+	if len(report.Applied) > 0 {
+		fmt.Fprintf(os.Stderr, "using %s from %s\n", strings.Join(report.Applied, ", "), report.Path)
+	}
+	if len(report.Ignored) > 0 {
+		fmt.Fprintf(os.Stderr, "warning: %s may only set %s; ignored %s\n",
+			report.Path, strings.Join(config.DevEnvKeys, ", "), strings.Join(report.Ignored, ", "))
+	}
+
 	env := &cli.Env{
 		Stdin:   os.Stdin,
 		Stdout:  os.Stdout,

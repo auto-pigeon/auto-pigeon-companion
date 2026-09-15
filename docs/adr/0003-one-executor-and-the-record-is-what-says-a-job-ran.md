@@ -160,6 +160,10 @@ page reads from its own markup and a second process reads from a 0600 file.
   this record left in place.
 - `AUCOM 209` replaces the generated launch profiles with curated engine
   profiles. When it lands, `internal/launch/profile.go` should go, not stay.
+  **Done in `NEW_244D`:** the whole of `internal/launch` was deleted, the page's
+  `/api/launch` routes with it, and `companion launch` now refuses (exit 2) and
+  names `companion engine run`. The generated `auto-pigeon.launch.*` profiles had
+  still been listed in the Run area beside the curated engines.
 - Nothing prunes finished job directories. A retention policy belongs with the
   job UX in `AUCOM 212`.
 - The Windows process-tree path wants a machine to run on before it is trusted.

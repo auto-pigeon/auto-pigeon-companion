@@ -197,8 +197,8 @@ var commands = []Command{
 		Run:     runGame,
 	},
 	{
-		Name: "launch", Usage: "<game> [--map <name>] [--game-root <dir>] [--dry-run]",
-		Summary: "launch a game as a supervised job, using its AUB launch config",
+		Name: "launch", Usage: "(retired)",
+		Summary: "retired: it read a placeholder launch config; use `engine run <profile> --action play_map`",
 		Run:     runLaunch,
 	},
 	{

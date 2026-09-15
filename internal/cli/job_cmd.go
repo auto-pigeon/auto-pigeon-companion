@@ -13,7 +13,6 @@ import (
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/binding"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/launch"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
 )
 
@@ -180,7 +179,7 @@ func openJobs(ctx context.Context, env *Env, started bool, logf func(string, ...
 		// Two sources, in order: documents, then the engine profiles generated
 		// from this machine's launch configs. Documents win, so a curated
 		// profile for a game replaces the generated one by existing.
-		Catalog:     job.Chain{job.NewCatalog(profilesDir), launch.NewCatalog(launch.ExampleProvider())},
+		Catalog:     job.NewCatalog(profilesDir),
 		Bindings:    binding.Lookup(bindingsPath),
 		Concurrency: settings.JobConcurrency,
 		// The AUB session token, so that a tool which somehow printed it does

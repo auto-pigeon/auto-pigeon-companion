@@ -53,7 +53,6 @@ import (
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/engine"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/launch"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/pathpick"
 )
 
@@ -82,16 +81,15 @@ type Paths struct {
 
 // Server is the local GUI server.
 type Server struct {
-	version  string
-	provider launch.Provider
-	jobs     *job.Service
-	runner   aue.Runner
-	paths    Paths
-	picker   *pathpick.Picker
-	scanner  engine.Scanner
-	builds   *buildRuns
-	newAUB   func(baseURL string) (*aub.Client, error)
-	token    *Token
+	version string
+	jobs    *job.Service
+	runner  aue.Runner
+	paths   Paths
+	picker  *pathpick.Picker
+	scanner engine.Scanner
+	builds  *buildRuns
+	newAUB  func(baseURL string) (*aub.Client, error)
+	token   *Token
 
 	// mu guards the two values a request can change under another request:
 	// the stored configuration, and the client built from the address in it.
@@ -123,9 +121,8 @@ type Server struct {
 // Options configures a Server. Every field except Config has a working default,
 // so a caller that only has a version string still gets a functioning GUI.
 type Options struct {
-	Version  string
-	Client   *aub.Client
-	Provider launch.Provider
+	Version string
+	Client  *aub.Client
 	// Jobs is the process runtime. A server without one still serves the page
 	// and the account routes; the job routes report that this build has none.
 	Jobs *job.Service
@@ -174,11 +171,6 @@ func NewServer(options Options) (*Server, error) {
 		}
 	}
 
-	provider := options.Provider
-	if provider == nil {
-		provider = launch.ExampleProvider()
-	}
-
 	update := options.UpdateConfig
 	if update == nil {
 		update = func(mutate func(*config.Config) error) (config.Config, error) {
@@ -210,7 +202,6 @@ func NewServer(options Options) (*Server, error) {
 
 	server := &Server{
 		version:      options.Version,
-		provider:     provider,
 		jobs:         options.Jobs,
 		runner:       options.AUE,
 		paths:        options.Paths,
@@ -284,11 +275,9 @@ func (s *Server) routes() http.Handler {
 // Everything under `/api/v1/` is: `companion job` talks to it, and a script may.
 func (s *Server) api() map[string]http.HandlerFunc {
 	routes := map[string]http.HandlerFunc{
-		"GET /api/status":         s.handleStatus,
-		"POST /api/auth/login":    s.handleLogin,
-		"POST /api/auth/logout":   s.handleLogout,
-		"GET /api/launch-configs": s.handleLaunchConfigs,
-		"POST /api/launch":        s.handleLaunch,
+		"GET /api/status":       s.handleStatus,
+		"POST /api/auth/login":  s.handleLogin,
+		"POST /api/auth/logout": s.handleLogout,
 		// Deliberately not a general "run any AUE subcommand" escape hatch:
 		// each extractor operation gets its own route with its own validated
 		// inputs as features land. This one proves the subprocess path end to
@@ -549,79 +538,6 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	s.settings = updated
 	s.mu.Unlock()
 	writeJSON(w, http.StatusOK, map[string]any{"authenticated": false})
-}
-
-func (s *Server) handleLaunchConfigs(w http.ResponseWriter, r *http.Request) {
-	configs, err := s.provider.Configs(r.Context())
-	if err != nil {
-		writeError(w, http.StatusBadGateway, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": configs})
-}
-
-// handleLaunch resolves a launch config into a command, and starts it as a job.
-//
-// There is no separate "run a game" path any more. The config becomes a
-// generated engine profile (see internal/launch), and starting it is a
-// submission to the same executor a compile goes through — so a launched game
-// is supervised, cancellable, and recorded, exactly like everything else.
-func (s *Server) handleLaunch(w http.ResponseWriter, r *http.Request) {
-	var request struct {
-		Game     string `json:"game"`
-		Map      string `json:"map"`
-		GameRoot string `json:"game_root"`
-		// DryRun resolves the command and returns it without starting
-		// anything. The page defaults to it until a user has a game installed.
-		DryRun bool `json:"dry_run"`
-	}
-	if !decodeJSON(w, r, &request) {
-		return
-	}
-	service, ok := s.requireJobs(w)
-	if !ok {
-		return
-	}
-
-	configs, err := s.provider.Configs(r.Context())
-	if err != nil {
-		writeError(w, http.StatusBadGateway, err)
-		return
-	}
-	selected, err := launch.Find(configs, request.Game)
-	if err != nil {
-		writeError(w, http.StatusNotFound, err)
-		return
-	}
-	gameRoot := request.GameRoot
-	if gameRoot == "" {
-		gameRoot = s.config().GameRoots[selected.Game]
-	}
-	jobRequest, err := launch.JobRequest(selected, gameRoot, request.Map, nil)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err)
-		return
-	}
-
-	if request.DryRun {
-		previewed, err := service.Preview(jobRequest)
-		if err != nil {
-			writeError(w, jobStatus(err), err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{
-			"job": previewed, "command": previewed.Command.Shell, "started": false,
-		})
-		return
-	}
-
-	submitted, err := service.Submit(jobRequest)
-	if err != nil {
-		writeError(w, jobStatus(err), err)
-		return
-	}
-	w.Header().Set("Location", "/api/v1/jobs/"+submitted.ID)
-	writeJSON(w, http.StatusAccepted, map[string]any{"job": submitted, "started": true})
 }
 
 func (s *Server) handleAUEVersion(w http.ResponseWriter, r *http.Request) {

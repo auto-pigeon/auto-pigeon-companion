@@ -227,53 +227,37 @@ func TestJobProfilesListsWhatCanBeRun(t *testing.T) {
 	if code := Run(env, []string{"job", "profiles"}); code != 0 {
 		t.Fatalf("exit code = %d (stderr: %s)", code, stderr.String())
 	}
-	// The built-in samples and the profiles generated from this machine's
-	// launch configs, from the one chained catalog.
-	for _, want := range []string{"auto-pigeon.ericw-tools.q1", "auto-pigeon.launch.quake"} {
+	for _, want := range []string{"auto-pigeon.ericw-tools.q1", "auto-pigeon.engine.quakespasm"} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Errorf("the catalog is missing %q:\n%s", want, stdout.String())
 		}
 	}
+	// NEW_244D: the launch-config stub no longer generates engine profiles.
+	if strings.Contains(stdout.String(), "auto-pigeon.launch.") {
+		t.Errorf("a generated launch-config profile is still listed:\n%s", stdout.String())
+	}
 }
 
-func TestLaunchDryRun(t *testing.T) {
+// TestLaunchIsRetiredAndNamesTheRealRoute is NEW_244D's regression. The
+// command read a placeholder launch configuration, and a refusal that exits 0
+// or names nothing would let a script believe a game started.
+func TestLaunchIsRetiredAndNamesTheRealRoute(t *testing.T) {
 	env, stdout, stderr := testEnv(t)
 	code := Run(env, []string{"launch", "quake", "--map", "e1m1", "--game-root", "/games/quake", "--dry-run"})
-	if code != 0 {
-		t.Fatalf("exit code = %d (stderr: %s)", code, stderr.String())
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
 	}
-	line := strings.TrimSpace(stdout.String())
-	if !strings.Contains(line, "quakespasm") || !strings.Contains(line, "e1m1") {
-		t.Errorf("stdout = %q", line)
+	if stdout.Len() != 0 {
+		t.Errorf("a retired command printed a command line: %q", stdout.String())
 	}
-	if runtime.GOOS == "windows" && !strings.Contains(line, ".exe") {
-		t.Errorf("stdout = %q, want a .exe on Windows", line)
-	}
-}
-
-func TestLaunchUsesTheConfiguredGameRoot(t *testing.T) {
-	env, stdout, _ := testEnv(t)
-	settings := config.Default()
-	settings.GameRoots = map[string]string{"quake": filepath.FromSlash("/opt/quake")}
-	if err := config.SaveTo(env.ConfigPath, settings); err != nil {
-		t.Fatal(err)
-	}
-
-	if code := Run(env, []string{"launch", "quake", "--map", "e1m1", "--dry-run"}); code != 0 {
-		t.Fatalf("exit code = %d", code)
-	}
-	if !strings.Contains(stdout.String(), filepath.FromSlash("/opt/quake")) {
-		t.Errorf("stdout = %q, want the configured game root", stdout.String())
+	if !strings.Contains(stderr.String(), "retired") || !strings.Contains(stderr.String(), "companion engine run") {
+		t.Errorf("stderr = %q, want the retirement and the real route", stderr.String())
 	}
 }
 
 func TestLaunchArgumentErrors(t *testing.T) {
 	cases := map[string][]string{
-		"no game":        {"launch"},
-		"two games":      {"launch", "quake", "quake2"},
-		"unknown game":   {"launch", "doom", "--dry-run"},
-		"missing map":    {"launch", "quake", "--game-root", "/games/quake", "--dry-run"},
-		"no game root":   {"launch", "quake", "--map", "e1m1", "--dry-run"},
+		"launch":         {"launch"},
 		"bad auth verb":  {"auth", "nonsense"},
 		"auth with none": {"auth"},
 	}

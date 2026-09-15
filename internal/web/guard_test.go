@@ -10,7 +10,6 @@ import (
 
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/aue"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/launch"
 )
 
 // withOrigin issues a request carrying an explicit Origin header, to a
@@ -196,7 +195,7 @@ func TestEveryAPIRouteIsGuarded(t *testing.T) {
 func TestMutatingRoutesRejectGET(t *testing.T) {
 	server, saved := newTestServer(t, nil)
 	before := saved.Session
-	for _, path := range []string{"/api/auth/login", "/api/auth/logout", "/api/launch", "/api/v1/jobs/preview"} {
+	for _, path := range []string{"/api/auth/login", "/api/auth/logout", "/api/v1/jobs/preview"} {
 		response, _ := do(t, server, http.MethodGet, path, "")
 		if response.StatusCode != http.StatusNotFound {
 			t.Errorf("GET %s = %d, want 404 (no handler reached)", path, response.StatusCode)
@@ -255,11 +254,10 @@ func serverWithRunner(t *testing.T, runner aue.Runner) *Server {
 	settings := config.Default()
 	settings.ToolCacheDir = t.TempDir()
 	server, err := NewServer(Options{
-		Version:  "test",
-		Config:   settings,
-		AUE:      runner,
-		Jobs:     newTestJobs(t),
-		Provider: launch.ExampleProvider(),
+		Version: "test",
+		Config:  settings,
+		AUE:     runner,
+		Jobs:    newTestJobs(t),
 		UpdateConfig: func(mutate func(*config.Config) error) (config.Config, error) {
 			current := settings
 			return current, mutate(&current)

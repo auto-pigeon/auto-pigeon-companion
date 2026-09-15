@@ -16,7 +16,6 @@ import (
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/aub"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/launch"
 )
 
 // testHost is the Host every request in these tests is sent to.
@@ -37,11 +36,10 @@ func newTestServer(t *testing.T, client *aub.Client) (*Server, *config.Config) {
 
 	saved := settings
 	server, err := NewServer(Options{
-		Version:  "test",
-		Client:   client,
-		Config:   settings,
-		Jobs:     newTestJobs(t),
-		Provider: launch.ExampleProvider(),
+		Version: "test",
+		Client:  client,
+		Config:  settings,
+		Jobs:    newTestJobs(t),
 		UpdateConfig: func(mutate func(*config.Config) error) (config.Config, error) {
 			if err := mutate(&saved); err != nil {
 				return config.Config{}, err
@@ -69,7 +67,7 @@ func newTestJobs(t *testing.T) *job.Service {
 	}
 	service, err := job.NewService(job.Options{
 		Store:   store,
-		Catalog: job.Chain{job.NewCatalog(filepath.Join(dir, "profiles")), launch.NewCatalog(launch.ExampleProvider())},
+		Catalog: job.NewCatalog(filepath.Join(dir, "profiles")),
 		Logf:    func(format string, args ...any) { t.Logf("jobs: "+format, args...) },
 	})
 	if err != nil {
@@ -238,15 +236,6 @@ func TestLoginRejectionIsReportedAsUnauthorized(t *testing.T) {
 	}
 }
 
-func TestLaunchConfigs(t *testing.T) {
-	server, _ := newTestServer(t, nil)
-	_, body := do(t, server, http.MethodGet, "/api/launch-configs", "")
-	items, ok := body["items"].([]any)
-	if !ok || len(items) == 0 {
-		t.Fatalf("items = %v", body["items"])
-	}
-}
-
 func TestTheProfileCatalogIsServed(t *testing.T) {
 	server, _ := newTestServer(t, nil)
 	response, body := do(t, server, http.MethodGet, "/api/v1/profiles", "")
@@ -266,13 +255,15 @@ func TestTheProfileCatalogIsServed(t *testing.T) {
 			t.Errorf("%s has no digest or trust state: %v", id, entry)
 		}
 	}
-	// Both sources of the chain are represented: an embedded document and one
-	// generated from this machine's launch configuration.
 	if !found["auto-pigeon.ericw-tools.q1"] {
 		t.Errorf("the built-in sample toolchain is missing: %v", found)
 	}
-	if !found["auto-pigeon.launch.quake"] {
-		t.Errorf("the generated launch profile is missing: %v", found)
+	// NEW_244D retired the launch-config stub: nothing generated from a
+	// placeholder launch configuration may be offered as an engine.
+	for id := range found {
+		if strings.HasPrefix(id, "auto-pigeon.launch.") {
+			t.Errorf("a generated launch-config profile is still listed: %s", id)
+		}
 	}
 }
 
@@ -283,8 +274,8 @@ func TestAJobIsSubmittedAndReadBack(t *testing.T) {
 	// under test is the API, not the tool: the job is accepted, given an id, and
 	// reaches a terminal state that says what went wrong.
 	response, body := do(t, server, http.MethodPost, "/api/v1/jobs",
-		`{"profile":"auto-pigeon.launch.quake","action":"play_map","runtime":{"map_name":"e1m1"},`+
-			`"roots":{"game_root":"/games/quake"},"executables":{"engine":"/games/quake/quakespasm"}}`)
+		`{"profile":"auto-pigeon.engine.quakespasm","action":"play_map","runtime":{"map_name":"e1m1","mod_name":"id1"},`+
+			`"roots":{"game_root":"/games/quake","content_root":"/games/project"},"executables":{"engine":"/games/quake/quakespasm"}}`)
 	if response.StatusCode != http.StatusAccepted {
 		t.Fatalf("status = %d, body = %v", response.StatusCode, body)
 	}
@@ -368,38 +359,33 @@ func TestAPastedProfileIsValidatedWithoutBeingImported(t *testing.T) {
 	}
 }
 
-func TestLaunchDryRunResolvesWithoutStartingAnything(t *testing.T) {
+// TestTheLaunchConfigStubIsRetired is NEW_244D's regression: the page's
+// launch routes read a placeholder configuration and were a second launch
+// route beside the curated engine profiles. Neither may answer again.
+func TestTheLaunchConfigStubIsRetired(t *testing.T) {
 	server, _ := newTestServer(t, nil)
-	response, body := do(t, server, http.MethodPost, "/api/launch",
-		`{"game":"quake","map":"e1m1","game_root":"/games/quake","dry_run":true}`)
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, body = %v", response.StatusCode, body)
+	for _, probe := range []struct{ method, path, body string }{
+		{http.MethodGet, "/api/launch-configs", ""},
+		{http.MethodPost, "/api/launch", `{"game":"quake","map":"e1m1","dry_run":true}`},
+	} {
+		response, _ := do(t, server, probe.method, probe.path, probe.body)
+		if response.StatusCode != http.StatusNotFound && response.StatusCode != http.StatusMethodNotAllowed {
+			t.Errorf("%s %s = %d, want the route to be gone", probe.method, probe.path, response.StatusCode)
+		}
 	}
-	if body["started"] != false {
-		t.Errorf("started = %v, want false for a dry run", body["started"])
-	}
-	command, _ := body["command"].(string)
-	if !strings.Contains(command, "e1m1") {
-		t.Errorf("command = %q", command)
-	}
-	// A dry run leaves no job behind.
-	_, list := do(t, server, http.MethodGet, "/api/v1/jobs", "")
-	if items, _ := list["items"].([]any); len(items) != 0 {
-		t.Errorf("a dry run created %d jobs", len(items))
-	}
-}
-
-func TestLaunchUnknownGameIs404(t *testing.T) {
-	server, _ := newTestServer(t, nil)
-	response, _ := do(t, server, http.MethodPost, "/api/launch", `{"game":"doom","dry_run":true}`)
-	if response.StatusCode != http.StatusNotFound {
-		t.Errorf("status = %d, want 404", response.StatusCode)
+	_, engines := do(t, server, http.MethodGet, "/api/v1/engines", "")
+	items, _ := engines["items"].([]any)
+	for _, item := range items {
+		entry, _ := item.(map[string]any)
+		if id, _ := entry["id"].(string); strings.HasPrefix(id, "auto-pigeon.launch.") {
+			t.Errorf("the Run area is offered the launch-config stub %s", id)
+		}
 	}
 }
 
 func TestUnknownFieldsAreRejected(t *testing.T) {
 	server, _ := newTestServer(t, nil)
-	response, _ := do(t, server, http.MethodPost, "/api/launch", `{"game":"quake","typo":true}`)
+	response, _ := do(t, server, http.MethodPost, "/api/v1/build/preview", `{"pipeline":"auto-pigeon.q1.fast-preview","typo":true}`)
 	if response.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", response.StatusCode)
 	}

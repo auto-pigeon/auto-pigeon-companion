@@ -9,7 +9,6 @@ import (
 
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/aub"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/launch"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/web"
 )
 
@@ -410,86 +409,24 @@ func runAuthLogout(env *Env, args []string) int {
 	return 0
 }
 
-// runLaunch starts a game as a supervised job.
+// runLaunch is the retired `companion launch`.
 //
-// The launch config becomes a generated engine profile and the start becomes a
-// job submission — see internal/launch. So a game the Companion started is
-// recorded, cancellable and bounded exactly like a compile, and there is no
-// second execution path to keep in step with the first.
+// It read a per-game launch configuration that was never more than a
+// placeholder (`internal/launch`'s example provider: a quakespasm path invented
+// under a game root) and turned it into a generated engine profile. The curated
+// engine profiles replaced that model in AUCOM 209, and NEW_244D removed the
+// bridge: a control that started whatever the placeholder guessed was a second
+// launch route beside the real one, and the one a first-time user was most
+// likely to find. The command stays in the dispatcher only to say where the
+// real route is, and it refuses with exit 2 so a script that still calls it
+// cannot read a success.
 func runLaunch(env *Env, args []string) int {
-	set := newFlagSet(env, "launch")
-	mapName := set.String("map", "", "map to load")
-	gameRoot := set.String("game-root", "", "directory the game is installed in")
-	dryRun := set.Bool("dry-run", false, "print the resolved command without starting it")
-	wait := set.Bool("wait", true, "wait for the game to exit")
-	rest, code, ok := parseInterspersed(env, set, args)
-	if !ok {
-		return code
-	}
-	if len(rest) == 0 {
-		fmt.Fprintln(env.Stderr, "error: launch requires a game name")
-		return 2
-	}
-	if len(rest) > 1 {
-		fmt.Fprintf(env.Stderr, "error: launch accepts one game name, got %d\n", len(rest))
-		return 2
-	}
-
-	ctx, stop := signalContext()
-	defer stop()
-
-	service, settings, err := openJobs(ctx, env, !*dryRun, nil)
-	if err != nil {
-		return fail(env, err)
-	}
-	defer service.Close()
-
-	// The stubbed provider until AUB's schema is confirmed — see
-	// internal/launch/config.go.
-	configs, err := launch.ExampleProvider().Configs(ctx)
-	if err != nil {
-		return fail(env, err)
-	}
-	selected, err := launch.Find(configs, rest[0])
-	if err != nil {
-		return fail(env, err)
-	}
-	root := *gameRoot
-	if root == "" {
-		root = settings.GameRoots[selected.Game]
-	}
-	request, err := launch.JobRequest(selected, root, *mapName, nil)
-	if err != nil {
-		return fail(env, err)
-	}
-
-	if *dryRun {
-		previewed, err := service.Preview(request)
-		if err != nil {
-			return fail(env, err)
-		}
-		fmt.Fprintln(env.Stdout, previewed.Command.Shell)
-		return 0
-	}
-
-	submitted, err := service.SubmitWatched(request, env.Stdout)
-	if err != nil {
-		return fail(env, err)
-	}
-	fmt.Fprintf(env.Stderr, "job %s: %s\n", submitted.ID, selected.Game)
-	if !*wait {
-		warnNotWaiting(env, submitted.ID)
-		return 0
-	}
-	finished, err := service.Wait(ctx, submitted.ID)
-	if err != nil {
-		return fail(env, err)
-	}
-	if finished.Succeeded() {
-		return 0
-	}
-	fmt.Fprintf(env.Stderr, "error: %s\n", finished.Error)
-	return 1
+	fmt.Fprintln(env.Stderr, "error: `companion launch` is retired: it read a placeholder launch configuration, not your engine.")
+	fmt.Fprintln(env.Stderr, "Set up the engine you have and start it through its profile instead:")
+	fmt.Fprintln(env.Stderr, "  companion engine list")
+	fmt.Fprintln(env.Stderr, "  companion engine bind <profile> --engine <path> --game-root <dir>")
+	fmt.Fprintln(env.Stderr, "  companion engine run <profile> --action play_map --map <name>")
+	return 2
 }
 
 // runMigrate runs the configuration migration on demand and prints its full

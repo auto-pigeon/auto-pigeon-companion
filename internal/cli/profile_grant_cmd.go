@@ -9,7 +9,6 @@ import (
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/approval"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/binding"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/launch"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
 )
 
@@ -197,7 +196,7 @@ func openApprovals(env *Env) (approval.Service, error) {
 		return approval.Service{}, err
 	}
 	return approval.Service{
-		Catalog:      job.Chain{job.NewCatalog(profilesDir), launch.NewCatalog(launch.ExampleProvider())},
+		Catalog:      job.NewCatalog(profilesDir),
 		BindingsPath: bindingsPath,
 	}, nil
 }

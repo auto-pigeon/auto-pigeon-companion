@@ -21,7 +21,6 @@ import (
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/enginefixture"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/launch"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/pathpick"
 )
 
@@ -329,7 +328,7 @@ func newMachine(t *testing.T) *machine {
 	}
 	service, err := job.NewService(job.Options{
 		Store:   store,
-		Catalog: job.Chain{job.NewCatalog(m.profiles), launch.NewCatalog(launch.ExampleProvider())},
+		Catalog: job.NewCatalog(m.profiles),
 		// binding.Lookup re-reads the file on every call, so a setup recorded
 		// through the API is visible to the executor at once — which is the
 		// whole of what "save the setup, then press Start" has to mean.
@@ -351,11 +350,10 @@ func newMachine(t *testing.T) *machine {
 		t.Fatal(err)
 	}
 	server, err := NewServer(Options{
-		Version:  "test",
-		Config:   settings,
-		Client:   client,
-		Jobs:     service,
-		Provider: launch.ExampleProvider(),
+		Version: "test",
+		Config:  settings,
+		Client:  client,
+		Jobs:    service,
 		Paths: Paths{
 			Profiles:   m.profiles,
 			Bindings:   m.bindings,
@@ -626,11 +624,10 @@ func (m *machine) restart() *machine {
 	}
 	client.SetToken(m.settings.Session.Token)
 	server, err := NewServer(Options{
-		Version:  "test",
-		Config:   m.settings,
-		Client:   client,
-		Jobs:     m.server.jobs,
-		Provider: launch.ExampleProvider(),
+		Version: "test",
+		Config:  m.settings,
+		Client:  client,
+		Jobs:    m.server.jobs,
 		Paths: Paths{
 			Profiles:   m.profiles,
 			Bindings:   m.bindings,
