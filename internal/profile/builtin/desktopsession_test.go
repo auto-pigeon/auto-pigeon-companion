@@ -64,3 +64,25 @@ func TestOnlyTheDesktopSessionEscapesTheCredentialNameFilter(t *testing.T) {
 		t.Errorf("a profile inheriting GITHUB_AUTH_TOKEN was accepted: %v", err)
 	}
 }
+
+// vkQuake 1.36.0 aborts in glibc's fortify check as it quits, outside the
+// Companion too, so a normal session ends with a non-zero status. The job stays
+// failed (the status is the status); the finding says what actually happened.
+func TestVkQuakeNamesItsCrashOnQuit(t *testing.T) {
+	entry, err := Find("auto-pigeon.engine.vkquake")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const line = "*** buffer overflow detected ***: terminated"
+	for _, action := range entry.Profile.ActionList() {
+		found := false
+		for _, rule := range action.Diagnostics {
+			if rule.Matches("stderr", line) {
+				found = rule.ID == "quit_crash" && rule.Severity == profile.SeverityWarning
+			}
+		}
+		if !found {
+			t.Errorf("%s: the quit crash is not named by a quit_crash warning", action.ID)
+		}
+	}
+}

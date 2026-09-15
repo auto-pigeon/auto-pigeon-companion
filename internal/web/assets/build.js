@@ -515,6 +515,9 @@
     $("build-cancel").hidden = !body.live;
     $("build-output-heading").textContent = body.live ? "Output so far" : "Output";
     $("build-current-empty").hidden = true;
+    // Play this build: a finished build with a level goes straight to Run.
+    $("build-play").hidden = !(manifest.state === "succeeded" &&
+      (manifest.outputs || []).some((output) => output.name === "bsp" && output.path && !output.missing));
     if (body.live) {
       outcome = manifest.state;
       renderSteps();
@@ -688,6 +691,11 @@
   });
   $("build-start").addEventListener("click", (event) => start(event.currentTarget));
   $("build-history-refresh").addEventListener("click", (event) => withBusy(event.currentTarget, refreshHistory));
+  $("build-play").addEventListener("click", async () => {
+    if (!currentBuild) return;
+    window.AUCOM.showArea("run");
+    await window.AUCOM.areas.run?.chooseBuild?.(currentBuild);
+  });
   $("build-cancel").addEventListener("click", (event) =>
     withBusy(event.currentTarget, async () => {
       if (!currentBuild) return;
@@ -709,6 +717,15 @@
     // a check was out would un-check the choices it was checking.
     revisionChosen() {
       revisionChosen();
+      // The map input takes the chosen revision. Choosing one in My Maps and
+      // then having to find a "Where Map source comes from" select as well was
+      // two acts for one decision (NEW_244D, with the operator's own install).
+      const rows = [...inputFields.values()];
+      const mapRow = rows.find((row) => /map/i.test(row.input.name) && !/wad/i.test(row.input.name)) || rows[0];
+      if (mapRow && window.AUCOM.chosenRevision) {
+        mapRow.source.value = "asset";
+        mapRow.apply();
+      }
       choicesChanged();
     },
     async refresh() {

@@ -248,6 +248,13 @@ func runServe(env *Env, args []string) int {
 		UpdateConfig: func(mutate func(*config.Config) error) (config.Config, error) {
 			return updateSettings(env, mutate)
 		},
+		ReadConfig: func() (config.Config, error) {
+			path, err := settingsPath(env)
+			if err != nil {
+				return config.Config{}, err
+			}
+			return config.LoadFrom(path)
+		},
 	})
 	if err != nil {
 		return fail(env, err)

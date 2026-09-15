@@ -197,6 +197,9 @@
             </div>
             <p id="library-message" class="message" role="status"></p>
             <ul id="library-assets" class="cards" aria-label="Maps and assets in your account"></ul>
+            <div class="row-actions">
+              <button type="button" id="library-more" class="secondary" hidden>Show more</button>
+            </div>
           </div>
 
           <div class="panel" id="library-revisions-panel" hidden>
@@ -320,6 +323,7 @@
             </div>
             <div class="bwiz-nav">
               <button type="button" class="secondary" data-go="2">Build another map</button>
+              <button type="button" id="build-play" class="primary" hidden>Play this build</button>
               <button type="button" class="secondary" data-go="3">Build this again</button>
             </div>
           </div>
@@ -376,6 +380,11 @@
 
           <div class="panel">
             <h3>Start</h3>
+            <div class="field">
+              <label for="run-build">Map from a build <span class="hint">(optional)</span></label>
+              <select id="run-build"><option value="">None — type the map name below</option></select>
+              <p id="run-build-note" class="muted"></p>
+            </div>
             <div class="row">
               <div class="field">
                 <label for="run-action">What to do</label>

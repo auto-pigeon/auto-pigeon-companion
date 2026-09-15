@@ -440,8 +440,76 @@
     });
   }
 
+  // --- a map from a build ------------------------------------------------------
+  //
+  // A finished build's level, staged where this engine looks for it before the
+  // game starts: <game directory>/<mod>/maps/<map>.bsp. Playing what you just
+  // built used to need a hand-made maps/ folder and `companion engine stage`
+  // (NEW_244D, with the operator's own vkQuake).
+  let playableBuilds = [];
+
+  // mapNameFor is build.MapName: the source map's name, as `+map` accepts it.
+  function mapNameFor(manifest) {
+    const input = (manifest.inputs || []).find((item) => item.name === "source_map") || (manifest.inputs || [])[0];
+    const base = String(input?.path || "").split(/[\\/]/).pop().replace(/\.[^.]*$/, "");
+    const name = base.toLowerCase().replace(/[^a-z0-9_-]/g, "_").replace(/^_+|_+$/g, "").slice(0, 56);
+    return name || "level";
+  }
+
+  async function refreshBuilds() {
+    const select = $("run-build");
+    const previous = select.value;
+    const { ok, body } = await api("/api/v1/build/runs?limit=30");
+    if (!ok) return;
+    playableBuilds = (body.items || [])
+      .map((item) => item.manifest)
+      .filter((manifest) => manifest.state === "succeeded" && (manifest.outputs || []).some((output) => output.name === "bsp" && output.path && !output.missing));
+    select.replaceChildren(el("option", { text: "None — type the map name below", attrs: { value: "" } }));
+    for (const manifest of playableBuilds) {
+      select.append(el("option", {
+        text: `${manifest.label || manifest.pipeline?.name || "Untitled build"} — ${mapNameFor(manifest)} · ${when(manifest.started_at)}`,
+        attrs: { value: manifest.build_id },
+      }));
+    }
+    if (previous && playableBuilds.some((manifest) => manifest.build_id === previous)) select.value = previous;
+    describeChosenBuild();
+  }
+
+  function describeChosenBuild() {
+    const manifest = playableBuilds.find((item) => item.build_id === $("run-build").value);
+    const note = $("run-build-note");
+    if (!manifest) {
+      note.textContent = "";
+      return;
+    }
+    if (!$("run-mod").value.trim()) $("run-mod").value = "auto-pigeon";
+    $("run-map").value = mapNameFor(manifest);
+    note.textContent = `Start copies this build's level into your game directory as ${$("run-mod").value.trim()}/maps/${$("run-map").value}.bsp first, and replaces what the Companion staged there before.`;
+  }
+
+  async function stageChosenBuild() {
+    const buildID = $("run-build").value;
+    if (!buildID) return true;
+    busy("run-message", "Copying the build's level into the game directory…");
+    const engine = current();
+    const { ok, body } = await api(`/api/v1/engines/${encodeURIComponent(engine.id)}/stage-build`, {
+      method: "POST",
+      body: { build_id: buildID, mod: $("run-mod").value.trim(), map: $("run-map").value.trim() },
+    });
+    if (!ok) {
+      setMessage("run-message", body.error || "the build's level could not be copied into the game", "error");
+      record("Could not stage the build", body.error, "failed");
+      return false;
+    }
+    $("run-mod").value = body.mod;
+    $("run-map").value = body.map;
+    record(`Staged ${body.label || "a build"} as ${body.mod}/maps/${body.map}.bsp`, (body.files || []).join(", "), "ok");
+    return true;
+  }
+
   async function launch(button) {
     await withBusy(button, async () => {
+      if (!(await stageChosenBuild())) return;
       busy("run-message", "Starting…");
       const { ok, body } = await api("/api/v1/jobs", { method: "POST", body: launchBody() });
       if (!ok) {
@@ -471,5 +539,24 @@
   $("run-preview").addEventListener("click", (event) => previewLaunch(event.currentTarget));
   $("run-launch").addEventListener("click", (event) => launch(event.currentTarget));
 
-  window.AUCOM.areas.run = { refresh: refreshEngines };
+  $("run-build").addEventListener("change", describeChosenBuild);
+
+  window.AUCOM.areas.run = {
+    async refresh() {
+      await refreshEngines();
+      await refreshBuilds();
+    },
+    // From Build step 4: this build, ready to play in the engine chosen here.
+    async chooseBuild(buildID) {
+      await refreshBuilds();
+      $("run-build").value = buildID;
+      if ([...$("run-action").options].some((option) => option.value === "play_map")) {
+        $("run-action").value = "play_map";
+        $("run-action").dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      describeChosenBuild();
+      $("run-build").scrollIntoView({ block: "center" });
+      $("run-build").focus();
+    },
+  };
 })();

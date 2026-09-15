@@ -43,15 +43,53 @@
     }
   }
 
-  async function refreshCatalog() {
-    const list = $("library-assets");
-    busy("library-message", "Reading your account…");
+  // The account is read a page at a time. The first page used to be all the
+  // page ever showed: with more than 50 assets, dm2 was simply absent until its
+  // name was typed into the filter, under a message that said "50 assets."
+  // as if that were all of them (NEW_244D). The rest is behind Show more.
+  let nextCursor = "";
+
+  function catalogQuery(cursor) {
     const query = new URLSearchParams();
     const type = $("library-type").value;
     const name = $("library-search").value.trim();
     if (type) query.set("type", type);
     if (name) query.set("name", name);
     query.set("limit", "50");
+    if (cursor) query.set("cursor", cursor);
+    return query;
+  }
+
+  function sayHowMany(hasMore) {
+    nextCursor = hasMore ? nextCursor : "";
+    $("library-more").hidden = !hasMore;
+    setMessage("library-message", hasMore
+      ? `Showing the first ${assets.length}. Your account has more: press Show more, or narrow the list with Name contains.`
+      : `${assets.length} asset${assets.length === 1 ? "" : "s"}.`);
+  }
+
+  async function showMore(button) {
+    if (!nextCursor) return;
+    await withBusy(button, async () => {
+      const { ok, body } = await api("/api/v1/library/catalog?" + catalogQuery(nextCursor).toString());
+      if (!ok) {
+        setMessage("library-message", body.error || "could not read the next page", "error");
+        return;
+      }
+      const more = body.items || [];
+      assets = assets.concat(more);
+      for (const asset of more) $("library-assets").append(assetCard(asset));
+      nextCursor = body.next_cursor || "";
+      sayHowMany(Boolean(body.has_more && nextCursor));
+    });
+  }
+
+  async function refreshCatalog() {
+    const list = $("library-assets");
+    busy("library-message", "Reading your account…");
+    $("library-more").hidden = true;
+    nextCursor = "";
+    const query = catalogQuery("");
 
     const { ok, status, body } = await api("/api/v1/library/catalog?" + query.toString());
     list.replaceChildren();
@@ -72,8 +110,9 @@
       setMessage("library-message", "Nothing matched. This account may have no assets of that type yet.");
       return;
     }
-    setMessage("library-message", `${assets.length} asset${assets.length === 1 ? "" : "s"}.`);
     for (const asset of assets) list.append(assetCard(asset));
+    nextCursor = body.next_cursor || "";
+    sayHowMany(Boolean(body.has_more && nextCursor));
   }
 
   // A person knows a map by the name they gave it. Ids, revision ids and cache
@@ -209,7 +248,8 @@
 
     use.addEventListener("click", () => {
       chooseRevision(asset, revision, key);
-      setMessage(status, "Chosen. The Build area will offer it as an input.", "ok");
+      setMessage(status, "Chosen. Build is open on it.", "ok");
+      openBuildOnChosen();
     });
 
     return el("li", {
@@ -227,6 +267,14 @@
       files: revision.files || [],
     };
     window.AUCOM.areas.build?.revisionChosen?.();
+  }
+
+  // "Use in a build" goes to the build: the Build area, at the map step, with
+  // the revision already in the map field. It used to say "Chosen" and stay
+  // here (NEW_244D).
+  function openBuildOnChosen() {
+    window.AUCOM.showArea("build");
+    window.AUCOM.areas.build?.showStep?.(2);
   }
 
   async function refreshCached() {
@@ -269,13 +317,15 @@
           record_,
           item.key
         );
-        setMessage("cached-message", "Chosen. The Build area will offer it as an input.", "ok");
+        setMessage("cached-message", "Chosen. Build is open on it.", "ok");
+        openBuildOnChosen();
       });
       list.append(el("li", { children: [head, detail, el("div", { className: "row-actions", children: [use] })] }));
     }
   }
 
   $("library-refresh").addEventListener("click", (event) => withBusy(event.currentTarget, refreshCatalog));
+  $("library-more").addEventListener("click", (event) => showMore(event.currentTarget));
   $("cached-refresh").addEventListener("click", (event) => withBusy(event.currentTarget, refreshCached));
   $("library-type").addEventListener("change", refreshCatalog);
   $("library-search").addEventListener("change", refreshCatalog);

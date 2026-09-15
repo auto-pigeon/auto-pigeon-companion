@@ -362,6 +362,24 @@ under the stage that needs it, with a **Set up …** button that opens the tool 
 then in **Run**, pick the engine you have and start it. **Build** stays
 disabled until the check for the current choices has passed.
 
+**Play this build.** A finished build with a level shows **Play this build** on
+step 4. It opens **Run** with that build chosen under *Map from a build*, the map
+name filled in from the source map (`dm2.apmap` plays as `dm2`) and the game
+directory set to `auto-pigeon`; **Start** copies the level into your game as
+`auto-pigeon/maps/dm2.bsp` (and `.lit`) through the same staging record
+`companion engine unstage` reads, replacing whatever the Companion staged there
+before, and then starts the engine. It never writes into a directory the
+Companion did not stage.
+
+**My Maps reads your account a page at a time.** When there is more than one
+page it says so — *Showing the first 50. Your account has more* — and **Show
+more** brings the next; **Name contains** narrows the list instead. **Use in a
+build** opens **Build** at the map step with that revision already chosen.
+
+**Signing in from a terminal reaches an open page.** `companion auth login` (and
+`logout`) writes the session to `config.json`; the running page picks it up on
+its next status check instead of waiting for the Companion to restart.
+
 With an auto-pigeon-backend account the path starts one step earlier: **Sign
 in** (the button in the header, or the Library's own) opens a sign-in dialog —
 the same dialog AUG and AUP use, dismissible with Close or Escape — and the
@@ -1500,6 +1518,24 @@ $ companion job list
 20260907T094345Z-15ca5e0e3abb  succeeded    1ms        auto-pigeon.engine.quakespasm play_map (client)
 ```
 
+#### A game window needs the desktop session, and the profile says so
+
+A job's environment is built from nothing (see *Jobs*), so an engine started as
+a job only reaches your display because its profile asks for it. Every client
+and listen-server action of the built-in engine profiles inherits `DISPLAY`,
+`WAYLAND_DISPLAY`, `XDG_RUNTIME_DIR`, `XAUTHORITY` and `PULSE_SERVER` — names
+only, listed in the permission review; a dedicated server inherits none. Before
+this, no engine started from Run could open a window on Linux. vkQuake's
+official Linux build is an AppImage, and a job has no `PATH` for the AppImage
+runtime to find `fusermount` on, so its profile also sets
+`APPIMAGE_EXTRACT_AND_RUN=1`: point **vkQuake program** straight at the
+`.AppImage` file.
+
+vkQuake 1.36.0 aborts in glibc's fortify check as it quits (it does outside the
+Companion too), so a normal session ends with a non-zero status and the job reads
+`failed`. The job carries a `quit_crash` warning that says exactly that, rather
+than leaving the failure unexplained.
+
 #### Client, listen server, dedicated server
 
 The `(client)` on those lines is a recorded field and not a label. Each engine
@@ -1534,6 +1570,17 @@ maps/level.lit
 $ companion engine stage --game-root ~/games/quake --mod mymap --from ~/maps/mylevel/out
 staged 2 file(s) into /home/you/games/quake/mymap
 start the engine with --mod mymap; `companion engine unstage` removes exactly these files
+```
+
+A build's output directory is laid out as `bsp/` and `lit/`, which is not where
+an engine looks, so a build is staged with `--build` instead of `--from`: its
+level goes in as `maps/<map>.bsp`, named after the source map unless `--map`
+says otherwise. It is the same thing the page's **Play this build** does.
+
+```console
+$ companion engine stage --game-root ~/games/quake --mod auto-pigeon --build 20260915T161334Z-bfb92d17
+staged 2 file(s) into /home/you/games/quake/auto-pigeon
+start the engine with --mod auto-pigeon --map dm2; `companion engine unstage` removes exactly these files
 ```
 
 `companion engine run --stage <dir> --mod <name>` does both around one launch,

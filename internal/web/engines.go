@@ -1,12 +1,15 @@
 package web
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"runtime"
 	"sort"
+	"strings"
 
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/binding"
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/build"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/engine"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
@@ -37,6 +40,8 @@ func (s *Server) engineAPI() map[string]http.HandlerFunc {
 		"GET /api/v1/engines":        s.handleEngineList,
 		"GET /api/v1/engines/detect": s.handleEngineDetect,
 		"GET /api/v1/engines/{id}":   s.handleEngineGet,
+		// Play this build: its level staged where this engine looks, before Start.
+		"POST /api/v1/engines/{id}/stage-build": s.handleEngineStageBuild,
 	}
 }
 
@@ -238,3 +243,87 @@ func (s *Server) handleEngineDetect(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": scanner.Detect()})
 }
+
+// handleEngineStageBuild stages a finished build's level into this engine's
+// game directory as `<mod>/maps/<map>.bsp`, so the Run area can start it with
+// `-game <mod> +map <map>`. It writes only through engine.LevelStaging, whose
+// record `engine unstage` reads, and it refuses a directory the Companion did
+// not stage (NEW_244D: playing a build needed a hand-made maps/ folder and the
+// CLI).
+func (s *Server) handleEngineStageBuild(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		BuildID string `json:"build_id"`
+		Mod     string `json:"mod"`
+		Map     string `json:"map"`
+	}
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	entry, err := s.engineEntry(r.PathValue("id"))
+	if err != nil {
+		writeError(w, jobStatus(err), err)
+		return
+	}
+	set, _, err := s.bindings()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	id := entry.Profile.Metadata().ID
+	local, _ := set.Find(id)
+	gameRoot := local.Roots["game_root"]
+	if gameRoot == "" {
+		writeError(w, http.StatusBadRequest, errors.New(
+			"this engine has no game directory set yet: choose it under “Set up this engine on this machine” and press Save setup"))
+		return
+	}
+	dir, err := s.buildsDir()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	manifest, err := build.Find(dir, request.BuildID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err)
+		return
+	}
+	s.reconcileBuild(manifest)
+	level, err := build.PlayableLevel(manifest)
+	if err != nil {
+		writeError(w, http.StatusConflict, err)
+		return
+	}
+	mod := strings.TrimSpace(request.Mod)
+	if mod == "" {
+		mod = DefaultPlayMod
+	}
+	mapName := strings.TrimSpace(request.Map)
+	if mapName == "" {
+		mapName = level.MapName
+	}
+	staged, err := engine.LevelStaging{
+		GameRoot: gameRoot, ModName: mod, MapName: mapName,
+		BSP: level.BSP, Lit: level.Lit, ProfileID: id,
+	}.Stage()
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, engine.ErrOccupied) {
+			status = http.StatusConflict
+		}
+		writeError(w, status, err)
+		return
+	}
+	files := make([]string, 0, len(staged.Stamp.Files))
+	for _, file := range staged.Stamp.Files {
+		files = append(files, file.Path)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"mod": mod, "map": mapName, "files": files, "overwrote": staged.Overwrote,
+		"label": manifest.Label, "pipeline": manifest.Pipeline.Name,
+	})
+}
+
+// DefaultPlayMod is the game directory a build is staged into when nobody named
+// one. One directory for "what I am trying right now": staging the next build
+// replaces the previous one through the staging record.
+const DefaultPlayMod = "auto-pigeon"

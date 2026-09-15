@@ -199,11 +199,23 @@ func (b *fixtureBackend) serve(w http.ResponseWriter, r *http.Request) {
 			"server_time": "2026-09-07T00:00:00Z",
 		})
 	case rest == "/catalog":
+		// Two pages, so the page's "Show more" is exercised: the account has
+		// more than one page of assets, as the operator's did (NEW_244D).
+		if r.URL.Query().Get("cursor") == "page-2" {
+			older := b.assetView()
+			older["asset_id"], older["display_name"] = "older0000000001", "Older Coast"
+			write(map[string]any{
+				"api_version": aub.CompanionAPIVersion, "scope": "owned",
+				"items": []map[string]any{older}, "has_more": false,
+			})
+			return
+		}
 		write(map[string]any{
 			"api_version": aub.CompanionAPIVersion,
 			"scope":       "owned",
 			"items":       []map[string]any{b.assetView()},
-			"has_more":    false,
+			"has_more":    true,
+			"next_cursor": "page-2",
 		})
 	case rest == b.assetPath():
 		write(map[string]any{

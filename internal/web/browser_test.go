@@ -9,9 +9,12 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/engine"
 )
 
 // The first-run journey, in a real browser, against the real page.
@@ -294,6 +297,13 @@ collect:
 	// the same question a reload asks.
 	if err := m.expectDurable(); err != nil {
 		t.Error(err)
+	}
+	// Play this build staged a level where an engine loads it, with the record
+	// `engine unstage` reads (NEW_244D).
+	for _, name := range []string{filepath.Join("maps", "e1m1.bsp"), engine.StampName} {
+		if _, err := os.Stat(filepath.Join(m.gameRoot, "auto-pigeon", name)); err != nil {
+			t.Errorf("Play this build left no %s in the game directory: %v", name, err)
+		}
 	}
 }
 

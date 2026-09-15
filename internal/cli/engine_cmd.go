@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/binding"
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/build"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/engine"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/maturity"
@@ -47,6 +48,8 @@ const engineUsage = `usage:
   companion engine preview <profile> --action <id> [launch flags]   the exact command, starting nothing
   companion engine run <profile> --action <id> [launch flags]       start it as a supervised job
   companion engine stage --game-root <dir> --mod <name> --from <dir>
+  companion engine stage --game-root <dir> --mod <name> --build <id> [--map <name>]
+                                                    a finished build's level, as <mod>/maps/<map>.bsp
   companion engine unstage --game-root <dir> --mod <name>
 
 launch flags:
@@ -693,12 +696,17 @@ func engineStage(env *Env, args []string) int {
 	gameRoot := set.String("game-root", "", "the directory the game is installed in")
 	mod := set.String("mod", "", "the game directory to stage into")
 	from := set.String("from", "", "the directory whose contents are staged")
+	buildID := set.String("build", "", "a finished build whose level is staged as maps/<map>.bsp instead of --from")
+	mapName := set.String("map", "", "with --build: the map name to stage it as (default: the source map's name)")
 	dryRun := set.Bool("dry-run", false, "list what would be staged and copy nothing")
 	if _, code, ok := parseFlags(env, set, args); !ok {
 		return code
 	}
+	if *buildID != "" {
+		return engineStageBuild(env, *gameRoot, *mod, *buildID, *mapName, *dryRun)
+	}
 	if *gameRoot == "" || *mod == "" || *from == "" {
-		fmt.Fprintln(env.Stderr, "error: engine stage needs --game-root, --mod and --from")
+		fmt.Fprintln(env.Stderr, "error: engine stage needs --game-root, --mod and --from (or --build <id> instead of --from)")
 		return 2
 	}
 	staging := engine.Staging{GameRoot: *gameRoot, ModName: *mod, Source: *from}
@@ -749,5 +757,50 @@ func engineUnstage(env *Env, args []string) int {
 	for _, name := range kept {
 		fmt.Fprintf(env.Stdout, "  %s\n", name)
 	}
+	return 0
+}
+
+// engineStageBuild stages a finished build's level where an engine looks for
+// it. A build's output directory is laid out as bsp/ and lit/, and staging that
+// directory as it stood put the level where no engine reads it (NEW_244D).
+func engineStageBuild(env *Env, gameRoot, mod, buildID, mapName string, dryRun bool) int {
+	if gameRoot == "" || mod == "" {
+		fmt.Fprintln(env.Stderr, "error: engine stage --build needs --game-root and --mod")
+		return 2
+	}
+	settings, err := loadSettings(env)
+	if err != nil {
+		return fail(env, err)
+	}
+	dir, err := buildsDir(env, settings)
+	if err != nil {
+		return fail(env, err)
+	}
+	manifest, err := build.Find(dir, buildID)
+	if err != nil {
+		return fail(env, err)
+	}
+	reconcileBuilds(env, manifest)
+	level, err := build.PlayableLevel(manifest)
+	if err != nil {
+		return fail(env, err)
+	}
+	if mapName == "" {
+		mapName = level.MapName
+	}
+	if dryRun {
+		fmt.Fprintf(env.Stdout, "maps/%s.bsp\n", mapName)
+		if level.Lit != "" {
+			fmt.Fprintf(env.Stdout, "maps/%s.lit\n", mapName)
+		}
+		fmt.Fprintf(env.Stdout, "would be copied into %s\n", filepath.Join(gameRoot, mod))
+		return 0
+	}
+	staged, err := engine.LevelStaging{GameRoot: gameRoot, ModName: mod, MapName: mapName, BSP: level.BSP, Lit: level.Lit}.Stage()
+	if err != nil {
+		return fail(env, err)
+	}
+	fmt.Fprintf(env.Stdout, "staged %d file(s) into %s\n", len(staged.Stamp.Files), filepath.Join(gameRoot, mod))
+	fmt.Fprintf(env.Stdout, "start the engine with --mod %s --map %s; `companion engine unstage` removes exactly these files\n", mod, mapName)
 	return 0
 }

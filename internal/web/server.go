@@ -115,6 +115,7 @@ type Server struct {
 	// at startup would silently undo whatever another instance changed in
 	// between. See [config.Update].
 	updateConfig func(func(*config.Config) error) (config.Config, error)
+	readConfig   func() (config.Config, error)
 
 	handler http.Handler
 }
@@ -139,6 +140,11 @@ type Options struct {
 	// makes this program a single writer of it. Nil means the user's own
 	// config.json through [config.Update].
 	UpdateConfig func(func(*config.Config) error) (config.Config, error)
+	// ReadConfig reads the config file as it is now. With it, a sign-in or a
+	// sign-out made by `companion auth` in a terminal reaches a page that is
+	// already running; without it (tests), the session is the one given at
+	// construction.
+	ReadConfig func() (config.Config, error)
 	// Token authenticates every API request. Nil mints one, which is what a
 	// test wants; `companion serve` passes the token it published so another
 	// process can use it.
@@ -224,6 +230,7 @@ func NewServer(options Options) (*Server, error) {
 		settings:     settings,
 		client:       client,
 		updateConfig: update,
+		readConfig:   options.ReadConfig,
 	}
 	index, err := indexPage(token)
 	if err != nil {
@@ -246,6 +253,36 @@ func (s *Server) config() config.Config {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.settings
+}
+
+// adoptSessionFromDisk takes the session another process wrote to the config
+// file. The page used to keep the session it read at start, so `companion
+// auth login` in a terminal was invisible until the Companion restarted
+// (NEW_244D, with the operator's own install). Only the session moves: the
+// backend address is rebuilt by Settings, and changing it under a running page
+// is a restart's job.
+func (s *Server) adoptSessionFromDisk() {
+	if s.readConfig == nil {
+		return
+	}
+	current, err := s.readConfig()
+	if err != nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if current.Session.Token == s.settings.Session.Token {
+		return
+	}
+	s.settings.Session = current.Session
+	if s.client == nil {
+		return
+	}
+	if current.Session.Token == "" {
+		s.client.Logout()
+	} else {
+		s.client.SetToken(current.Session.Token)
+	}
 }
 
 // aubClient is the current AUB client, or nil when no address is configured.
@@ -434,6 +471,7 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, out any) bool {
 // and returns false. Every AUB-backed route goes through it so an unconfigured
 // address produces one accurate message instead of a nil dereference.
 func (s *Server) requireClient(w http.ResponseWriter) (*aub.Client, bool) {
+	s.adoptSessionFromDisk()
 	client := s.aubClient()
 	if client == nil {
 		writeError(w, http.StatusServiceUnavailable, config.ErrAUBNotConfigured)
@@ -468,6 +506,7 @@ type statusBody struct {
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
+	s.adoptSessionFromDisk()
 	settings := s.config()
 	cache, err := settings.ToolCache()
 	if err != nil {

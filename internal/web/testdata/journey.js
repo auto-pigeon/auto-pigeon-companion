@@ -163,6 +163,21 @@
     );
     record("the library lists the account's maps", true, settings.asset_name);
 
+    // More than one page: the first says so, and Show more brings the rest.
+    await waitFor("the more-than-one-page note", () => visible($("library-more")));
+    record(
+      "My Maps says the account has more than the first page",
+      textOf($("library-message")).includes("Your account has more"),
+      textOf($("library-message"))
+    );
+    $("library-more").click();
+    await waitFor("the second page", () => rowContaining($("library-assets"), "Older Coast"));
+    record(
+      "Show more adds the next page and then goes away",
+      !visible($("library-more")) && rowContaining($("library-assets"), settings.asset_name) !== null,
+      textOf($("library-message"))
+    );
+
     // NEW_244D: the card downloads the LATEST revision; older ones are folded
     // away. And no id of any kind is shown to the person.
     record(
@@ -191,6 +206,12 @@
     buttonIn(cachedRow, "Use in a build").click();
     record("a revision can be chosen for a build", Boolean(window.AUCOM.chosenRevision),
       window.AUCOM.chosenRevision ? window.AUCOM.chosenRevision.revision_id : "nothing chosen");
+    await waitFor("Build to open on the chosen map", () => visible($("area-build")) && visible($("build-step-2")));
+    record(
+      "Use in a build opens Build at the map step with the revision in the map field",
+      $("build-input-source_map-source")?.value === "asset" && textOf($("build-step-2")).includes("downloaded to this computer"),
+      `${$("build-input-source_map-source")?.value} · ${textOf($("build-step-summary-2"))}`
+    );
 
     // --- 5. the toolchain has to be reviewed and approved -------------------
     await go("profiles");
@@ -323,6 +344,7 @@
       rowContaining($("build-history"), "the browser journey")
     );
     record("the build is in the history read back from disk", true, textOf(historyRow).trim().slice(0, 90));
+    record("a finished build with a level offers Play this build", visible($("build-play")), textOf($("build-play")));
 
     // --- 7. set the engine up, and start it ---------------------------------
     await go("run");
@@ -352,6 +374,28 @@
     await waitFor("the engine to become ready", () =>
       !textOf($("run-engine-detail")).includes("Before this can start")
     );
+
+    // Play this build: Run offers the build just made, and Start stages its
+    // level as <mod>/maps/<map>.bsp before the engine starts (NEW_244D).
+    await window.AUCOM.areas.run.chooseBuild(
+      [...$("run-build").options].find((option) => option.textContent.includes("the browser journey"))?.value || ""
+    );
+    const chosenBuild = $("run-build").selectedOptions[0];
+    record(
+      "Run offers the build just made, with its map and a game directory filled in",
+      Boolean($("run-build").value) && $("run-mod").value === "auto-pigeon" && $("run-map").value.length > 0,
+      `${chosenBuild ? chosenBuild.textContent : "none"} · mod ${$("run-mod").value} · map ${$("run-map").value}`
+    );
+    $("run-launch").click();
+    await waitFor("the staged launch to be accepted", () =>
+      $("run-message").classList.contains("ok") || $("run-message").classList.contains("error"), 60000);
+    record(
+      "Start copies the build's level into the game directory, then starts the engine",
+      $("run-message").classList.contains("ok") &&
+        [...document.querySelectorAll("#activity-log li")].some((row) => row.textContent.includes("maps/")),
+      textOf($("run-message"))
+    );
+    setValue($("run-build"), "");
     setValue($("run-action"), "play_map");
     setValue($("run-map"), "e1m1");
     setValue($("run-mod"), "id1");
