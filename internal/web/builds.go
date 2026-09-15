@@ -191,6 +191,19 @@ func (s *Server) buildRunner(announce func(*build.Manifest)) (*build.Runner, err
 	})
 }
 
+// reconcileBuild records a build a stopped Companion left `running`; see
+// build.Reconcile. Only for a build this process is not running itself.
+func (s *Server) reconcileBuild(manifest *build.Manifest) {
+	if s.jobs == nil || manifest.Directory == "" {
+		return
+	}
+	if build.Reconcile(manifest, s.jobs.Get, time.Now()) {
+		// A manifest that cannot be rewritten is still answered reconciled;
+		// the next read tries the write again.
+		_ = manifest.Save(manifest.Directory)
+	}
+}
+
 func (s *Server) requireJobsService() (*job.Service, error) {
 	if s.jobs == nil {
 		return nil, errors.New("this build has no job service")
@@ -509,6 +522,9 @@ func (s *Server) handleBuildList(w http.ResponseWriter, r *http.Request) {
 	}
 	items := make([]map[string]any, 0, len(manifests))
 	for _, manifest := range manifests {
+		if !live[manifest.BuildID] {
+			s.reconcileBuild(manifest)
+		}
 		items = append(items, map[string]any{"manifest": manifest, "live": live[manifest.BuildID]})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
@@ -525,6 +541,9 @@ func (s *Server) handleBuildGet(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, http.StatusNotFound, err)
 		return
+	}
+	if _, running := s.builds.get(id); !running {
+		s.reconcileBuild(manifest)
 	}
 	body := map[string]any{"manifest": manifest, "live": false}
 	// The statement about the family this build was for, so the progress panel

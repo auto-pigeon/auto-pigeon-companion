@@ -218,6 +218,7 @@ func (s *Service) heartbeat() {
 	defer s.workers.Done()
 	ticker := time.NewTicker(heartbeatInterval)
 	defer ticker.Stop()
+	tick := 0
 	for {
 		select {
 		case <-s.ctx.Done():
@@ -231,6 +232,18 @@ func (s *Service) heartbeat() {
 			s.mu.Unlock()
 			for _, id := range ids {
 				_ = s.store.Heartbeat(id, s.now())
+			}
+			// Recovery is not only a start-up act. A Companion restarted within
+			// heartbeatStale of a crash found the crashed one's claim still
+			// fresh and left the job `running` until the next restart, however
+			// long that was (NEW_244D). Jobs this process supervises heartbeat
+			// every tick above and are never stale here.
+			if tick++; tick%recoverEveryTicks == 0 {
+				if recovered, err := s.store.Recover(s.now(), ids...); err == nil {
+					for _, id := range recovered {
+						s.logf("job %s: its Companion stopped while it ran; it is marked interrupted and is not run again", id)
+					}
+				}
 			}
 		}
 	}
@@ -780,6 +793,7 @@ func (s *Service) execute(id string) {
 		onStarted: func(pid int, command *CommandPreview) error {
 			j.Command = command
 			j.Owner = Owner{PID: os.Getpid()}
+			j.Process = ProcessIdentity{PID: pid, StartTicks: processStartTicks(pid)}
 			j.StartedAt = s.now()
 			j.TimeoutSeconds = invocation.TimeoutSeconds
 			return s.step(j, Running, fmt.Sprintf("pid %d", pid))

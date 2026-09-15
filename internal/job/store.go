@@ -42,6 +42,10 @@ const heartbeatInterval = 2 * time.Second
 // jumped, does not lose a running build to a false positive.
 const heartbeatStale = 30 * time.Second
 
+// recoverEveryTicks is how many heartbeat intervals pass between the recovery
+// passes a running service makes: one stale period.
+const recoverEveryTicks = int(heartbeatStale / heartbeatInterval)
+
 const (
 	recordName    = "job.json"
 	heartbeatName = "heartbeat"
@@ -258,14 +262,22 @@ func (s *Store) heartbeatAge(id string, now time.Time) (time.Duration, bool) {
 // [Running]: a job that was still [Queued] never started, but re-running it
 // without being asked is exactly the behaviour this refuses, and a user who
 // wants it has [Service.Retry].
-func (s *Store) Recover(now time.Time) ([]string, error) {
+//
+// supervised names jobs the caller is supervising itself, which are never taken
+// whatever their heartbeat says: a laptop that slept longer than heartbeatStale
+// wakes with its own claims stale, and its own running build is not abandoned.
+func (s *Store) Recover(now time.Time, supervised ...string) ([]string, error) {
 	jobs, err := s.List()
 	if err != nil {
 		return nil, err
 	}
+	mine := make(map[string]bool, len(supervised))
+	for _, id := range supervised {
+		mine[id] = true
+	}
 	var recovered []string
 	for _, j := range jobs {
-		if !j.State.Active() {
+		if !j.State.Active() || mine[j.ID] {
 			continue
 		}
 		if age, found := s.heartbeatAge(j.ID, now); found && age < heartbeatStale {
@@ -273,6 +285,17 @@ func (s *Store) Recover(now time.Time) ([]string, error) {
 			continue
 		}
 		note := fmt.Sprintf("the Companion stopped while this job was %s; nothing here knows how it ended", j.State)
+		// A Companion killed outright cannot take its job's process tree down,
+		// and the tree goes on running with nobody supervising it (NEW_244D:
+		// a kill -9 left the compiler and its child running after restart).
+		// Stopped here only when the kernel still has the very process this
+		// job started — same pid, same start time — so a reused pid is never
+		// signalled. Nothing is run again.
+		if j.Process.PID > 0 && j.Process.StartTicks != 0 && processStartTicks(j.Process.PID) == j.Process.StartTicks {
+			if err := killAbandonedTree(j.Process.PID); err == nil {
+				note += "; its programs were still running with nobody supervising them, and were stopped"
+			}
+		}
 		j.History = append(j.History, Event{State: Interrupted, At: now.UTC(), Note: note})
 		j.State = Interrupted
 		j.Error = note

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/binding"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/build"
@@ -253,6 +254,7 @@ func buildList(env *Env, args []string) int {
 	if err != nil {
 		return fail(env, err)
 	}
+	reconcileBuilds(env, manifests...)
 	if *limit > 0 && len(manifests) > *limit {
 		manifests = manifests[:*limit]
 	}
@@ -293,6 +295,7 @@ func buildShow(env *Env, args []string) int {
 	if err != nil {
 		return fail(env, err)
 	}
+	reconcileBuilds(env, manifest)
 	if *asJSON {
 		return printJSON(env, manifest)
 	}
@@ -494,4 +497,27 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+// reconcileBuilds records builds a stopped Companion left `running`, from the
+// job records they point at; see build.Reconcile. A build another Companion is
+// running still has live jobs and is not touched.
+func reconcileBuilds(env *Env, manifests ...*build.Manifest) {
+	settings, err := loadSettings(env)
+	if err != nil {
+		return
+	}
+	jobsDir, _, _, err := statePaths(env, settings)
+	if err != nil {
+		return
+	}
+	store, err := job.OpenStore(jobsDir)
+	if err != nil {
+		return
+	}
+	for _, manifest := range manifests {
+		if manifest.Directory != "" && build.Reconcile(manifest, store.Load, time.Now()) {
+			_ = manifest.Save(manifest.Directory)
+		}
+	}
 }

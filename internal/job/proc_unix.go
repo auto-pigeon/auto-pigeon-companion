@@ -63,3 +63,13 @@ func processGroupAlive(pid int) bool {
 	err := syscall.Kill(-pid, 0)
 	return err == nil || err == syscall.EPERM
 }
+
+// killAbandonedTree takes down the process group a crashed Companion left
+// running. The caller has already proved the leader is the process the job
+// started.
+func killAbandonedTree(pid int) error {
+	if err := syscall.Kill(-pid, syscall.SIGKILL); err != nil && err != syscall.ESRCH {
+		return err
+	}
+	return nil
+}

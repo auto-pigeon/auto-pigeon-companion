@@ -171,6 +171,15 @@ type Owner struct {
 	Run string `json:"run,omitempty"`
 }
 
+// ProcessIdentity is a started program as the operating system knows it: its
+// pid, which is also its process group, and when the kernel started it. A pid
+// alone is not an identity — it is reused — so a zero StartTicks means "cannot
+// be verified here" and recovery then leaves the process alone.
+type ProcessIdentity struct {
+	PID        int    `json:"pid,omitempty"`
+	StartTicks uint64 `json:"start_ticks,omitempty"`
+}
+
 // Job is the whole record of one supervised process.
 type Job struct {
 	SchemaVersion string  `json:"schema_version"`
@@ -228,6 +237,10 @@ type Job struct {
 	FinishedAt time.Time `json:"finished_at,omitempty"`
 
 	Owner Owner `json:"owner,omitempty"`
+	// Process names the program this job started, precisely enough that
+	// recovery can tell the tree a crashed Companion left behind from an
+	// unrelated process that has since been given the same pid.
+	Process ProcessIdentity `json:"process,omitempty"`
 	// History is every state this job has been in, with when and why.
 	History []Event `json:"history,omitempty"`
 }

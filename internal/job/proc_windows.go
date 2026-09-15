@@ -81,3 +81,7 @@ func processGroupAlive(pid int) bool {
 	const stillActive = 259
 	return code == stillActive
 }
+
+// killAbandonedTree is never reached on Windows: processStartTicks returns zero
+// there, so recovery cannot prove a pid is still the job's and signals nothing.
+func killAbandonedTree(pid int) error { return nil }
