@@ -116,6 +116,13 @@ h4 { font-size: 0.94rem; margin: 1rem 0 0.35rem; }
   outline-offset: 1px;
 }
 
+/* ...on anything a person can operate. A heading that script focuses so a
+   screen reader starts reading at the step or panel that just appeared
+   (tabindex="-1": not in the tab order, never operated) is not a control, and
+   the outline drew a large box round "3. Check" in the Build wizard
+   (NEW_244D). */
+:is(h1, h2, h3, h4)[tabindex="-1"]:focus-visible { outline: none; }
+
 a { color: var(--accent); text-decoration-color: var(--accent-soft); }
 a:hover { color: var(--accent-strong); text-decoration-color: currentColor; }
 

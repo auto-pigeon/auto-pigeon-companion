@@ -448,6 +448,12 @@
       'button:not([disabled]), input:not([disabled]), select:not([disabled])'
     )].filter((node) => node.offsetParent !== null).map((node) => node.id).filter(Boolean);
     $("build-step-tab-1").click();
+    const focusedHeading = document.activeElement;
+    record(
+      "a wizard step's heading takes focus without a focus box round it",
+      focusedHeading && focusedHeading.tagName === "H3" && getComputedStyle(focusedHeading).outlineStyle === "none",
+      focusedHeading ? `${focusedHeading.tagName} outline ${getComputedStyle(focusedHeading).outlineStyle}` : "nothing focused"
+    );
     const first = tabOrder();
     window.AUCOM.areas.build.showStep(3, { check: false, focus: false });
     // Arriving back on Build re-runs a stale check, and a button is disabled
