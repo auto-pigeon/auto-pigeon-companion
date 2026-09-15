@@ -286,12 +286,12 @@
     await waitFor(
       "the build to finish",
       () => {
-        const message = $("build-message");
+        const message = $("build-result");
         return message.classList.contains("ok") && message.textContent.includes("succeeded");
       },
       120000
     ).catch((err) => {
-      throw new Error(`${err.message}; the build area said: ${textOf($("build-message"))} | ${textOf($("build-progress")).replace(/\s+/g, " ").slice(0, 300)}`);
+      throw new Error(`${err.message}; the build area said: ${textOf($("build-result"))} | ${textOf($("build-progress")).replace(/\s+/g, " ").slice(0, 300)}`);
     });
     record("the build succeeds", true, textOf($("build-progress")).replace(/\s+/g, " ").trim().slice(0, 120));
     record(
@@ -442,13 +442,25 @@
       focusable[0] && focusable[0].classList.contains("skip-link"),
       focusable[0] ? focusable[0].className || focusable[0].tagName : "nothing focusable"
     );
-    const wanted = ["build-pipeline", "build-preview", "build-start"];
-    const positions = wanted.map((id) => order.indexOf(id));
+    // The build is a wizard: the step buttons come first, then the current
+    // step's controls, and the check step holds Check again before Build.
+    const tabOrder = () => [...document.querySelectorAll(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled])'
+    )].filter((node) => node.offsetParent !== null).map((node) => node.id).filter(Boolean);
+    $("build-step-tab-1").click();
+    const first = tabOrder();
+    window.AUCOM.areas.build.showStep(3, { check: false, focus: false });
+    const third = tabOrder();
+    const positions = [
+      first.indexOf("build-step-tab-1"), first.indexOf("build-step-tab-4"), first.indexOf("build-pipeline"),
+    ];
     record(
-      "the build flow is reachable by tabbing, in the order it is used",
-      positions.every((index, i) => index >= 0 && (i === 0 || index > positions[i - 1])),
-      wanted.map((id, i) => `${id}@${positions[i]}`).join(", ")
+      "the build wizard is reachable by tabbing, in the order it is used",
+      positions.every((index, i) => index >= 0 && (i === 0 || index > positions[i - 1])) &&
+        third.indexOf("build-preview") >= 0 && third.indexOf("build-preview") < third.indexOf("build-history-refresh"),
+      `step buttons ${positions.slice(0, 2).join("→")}, pipeline @${positions[2]}; check again @${third.indexOf("build-preview")}`
     );
+    $("build-step-tab-1").click();
 
     // --- the About area -----------------------------------------------------
     //

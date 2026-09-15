@@ -344,8 +344,8 @@ The page has six areas, and the order is the order of a first run.
 
 | Area | What it is for |
 | --- | --- |
-| **Library** | Your maps and assets on auto-pigeon-backend, and the exact revisions this machine has downloaded and verified. |
-| **Build** | Compiling: which pipeline, which tool provides each stage, the exact command, live output, artifacts. |
+| **My Maps** | Your maps in your Auto-Pigeon account, and the exact revisions this machine has downloaded and verified. |
+| **Build** | Compiling, as four steps in a row: **How to build** (the pipeline), **The map**, **Check** (the exact command per stage, and what is missing), **Build** (live output, artifacts). |
 | **Run** | Starting a game: which engine, where it is on this machine, which map or package, and the exact command. |
 | **Profiles** | Reading what a tool or engine asks to be allowed to do, approving it, and writing your own. |
 | **Jobs** | Everything that has run, with its command, its exit status and its output. |
@@ -354,10 +354,13 @@ The page has six areas, and the order is the order of a first run.
 ### The default path through it
 
 **Nothing on the local path needs an account.** A signed-out page opens on
-**Build**: choose a `.map` on this machine with **Browse…**, say where your
-compiler is in **Profiles** if the preview asks, press Build, and read the
-result in the Build area or in **Jobs**; then in **Run**, pick the engine you
-have and start it.
+**Build**, a four-step wizard whose steps sit in one row and can be revisited:
+pick a pipeline, choose a `.map` (and its WAD) on this machine with
+**Browse…**, let **Check** show the exact commands — it names anything missing
+under the stage that needs it, with a **Set up …** button that opens the tool in
+**Profiles** — then press **Build** and read the result there or in **Jobs**;
+then in **Run**, pick the engine you have and start it. **Build** stays
+disabled until the check for the current choices has passed.
 
 With an auto-pigeon-backend account the path starts one step earlier: **Sign
 in** (the button in the header, or the Library's own) opens a sign-in dialog —

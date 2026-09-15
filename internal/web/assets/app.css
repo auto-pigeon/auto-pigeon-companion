@@ -255,7 +255,6 @@ fieldset { min-width: 0; }
 #area-build .field { margin: 0 0 0.9rem; gap: 0.35rem; }
 #area-build .build-input { border-top: 1px solid var(--line-strong); padding: 1rem 0 0.25rem; margin: 0.5rem 0 0; }
 #area-build .build-input + .build-input { margin-top: 0; }
-#area-build #build-inputs + .field { border-top: 1px solid var(--line-strong); padding-top: 1rem; }
 #area-build .row { gap: 0.75rem 1rem; margin: 0.9rem 0; }
 #area-build .stages { gap: 0; margin: 0.5rem 0 1rem; }
 #area-build .stages > li {
@@ -270,6 +269,59 @@ fieldset { min-width: 0; }
 #area-build .rows > li:last-child { border-bottom: none; }
 #area-build .preview h4 { margin: 1.25rem 0 0.5rem; }
 #area-build .preview > div { border-bottom: 1px solid var(--line); padding: 0.4rem 0 0.8rem; }
+/*
+  The Build wizard (NEW_244D, operator: "redesign it as a wizard, in horizontal
+  steps"). One row of numbered steps, each a button; the current one is teal,
+  a finished one carries a tick and what was chosen, and one that needs
+  attention is marked. On a phone the row scrolls sideways inside itself rather
+  than wrapping into a grid, so the order still reads left to right.
+*/
+.bwiz { margin: 0 0 1.25rem; min-width: 0; max-width: 100%; }
+.bwiz-steps {
+  list-style: none; margin: 0; padding: 0; display: grid;
+  grid-template-columns: repeat(4, minmax(8.5rem, 1fr)); counter-reset: none;
+}
+.bwiz-steps > li { min-width: 0; }
+.bwiz-step {
+  width: 100%; display: flex; align-items: flex-start; gap: 0.6rem; text-align: left;
+  background: transparent; border: none; border-radius: 0; border-top: 3px solid var(--line-strong);
+  padding: 0.7rem 0.6rem 0.5rem 0; color: var(--ink-muted); cursor: pointer; font: inherit;
+}
+.bwiz-step:hover { color: var(--ink); background: transparent; }
+.bwiz-step:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.bwiz-step__n {
+  flex: none; width: 1.7rem; height: 1.7rem; border-radius: 50%; display: grid; place-items: center;
+  border: 2px solid var(--line-strong); font-weight: 700; font-size: 0.85rem; color: var(--ink-muted);
+}
+.bwiz-step__text { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+.bwiz-step__label { font-weight: 600; font-size: 0.95rem; }
+.bwiz-step__summary { font-size: 0.8rem; color: var(--ink-muted); overflow-wrap: anywhere; }
+.bwiz-step.done { border-top-color: var(--ok); color: var(--ink); }
+.bwiz-step.done .bwiz-step__n { border-color: var(--ok); background: var(--ok); color: var(--accent-ink); font-size: 0; }
+.bwiz-step.done .bwiz-step__n::before { content: "✓"; font-size: 0.9rem; }
+.bwiz-step.attention { border-top-color: var(--bad); }
+.bwiz-step.attention .bwiz-step__n { border-color: var(--bad); color: var(--bad); }
+.bwiz-step.current { border-top-color: var(--accent); color: var(--ink); }
+.bwiz-step.current .bwiz-step__n { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); font-size: 0.85rem; }
+.bwiz-step.current .bwiz-step__n::before { content: none; }
+#area-build > .bwiz-panel { border-top: none; padding-top: 0; }
+#area-build > .bwiz-panel > h3 { font-size: 1.15rem; margin: 0 0 0.35rem; }
+#area-build > .bwiz-panel > p.muted:first-of-type { margin: 0 0 1rem; }
+.bwiz-nav {
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0.75rem;
+  border-top: 1px solid var(--line-strong); margin-top: 1.25rem; padding-top: 1rem;
+}
+.bwiz-nav__end { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-left: auto; }
+#area-build .build-label-field { border-top: 1px solid var(--line-strong); padding-top: 1rem; }
+#build-result:empty, #build-message:empty { display: none; }
+@media (max-width: 640px) {
+  /* Four equal columns that always fit: the number and the step's name, and
+     what was chosen only under the step on screen. */
+  .bwiz-steps { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .bwiz-step { flex-direction: column; gap: 0.3rem; padding-right: 0.25rem; }
+  .bwiz-step__label { font-size: 0.8rem; }
+  .bwiz-step:not(.current) .bwiz-step__summary { display: none; }
+}
 .build-chosen { margin: 0.25rem 0 0.75rem; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem 0.75rem; }
 .build-chosen__name { font-size: 1.15rem; font-weight: 600; color: var(--ink); }
 .build-chosen__detail { font-size: 0.9rem; color: var(--ink-muted); }

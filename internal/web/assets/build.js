@@ -17,6 +17,13 @@
   let inputFields = new Map();
   let currentBuild = null;
   let poller = null;
+  // The wizard. `step` is the panel on screen; `checked` is what the last check
+  // (step 3) found for the choices as they are now — "ok", "blocked", or null
+  // once anything in steps 1 and 2 changed after it; `outcome` is the state of
+  // the build step 4 is showing.
+  let step = 1;
+  let checked = null;
+  let outcome = null;
 
   function currentPipeline() {
     return pipelines.find((item) => item.id === $("build-pipeline").value);
@@ -194,6 +201,73 @@
   }
 
   // revisionChosen is called by the Library when the user picks a revision.
+  // --- the wizard -------------------------------------------------------------
+
+  function chosenFiles() {
+    const names = [];
+    for (const [, row] of inputFields) {
+      if (row.source.value === "asset") {
+        if (window.AUCOM.chosenRevision) names.push(window.AUCOM.chosenRevision.display_name);
+      } else if (row.file.input.value.trim()) {
+        names.push(row.file.input.value.trim().split(/[\\/]/).pop());
+      }
+    }
+    return [...new Set(names)];
+  }
+
+  function missingRequired() {
+    const pipeline = currentPipeline();
+    const body = requestBody();
+    return (pipeline?.inputs || []).filter((input) => input.required && !body.inputs[input.name]);
+  }
+
+  function renderSteps() {
+    const pipeline = currentPipeline();
+    const files = chosenFiles();
+    const missing = missingRequired();
+    const summaries = {
+      1: pipeline ? pipeline.name : "",
+      2: files.length ? files.join(", ") : "nothing chosen yet",
+      3: checked === "ok" ? "ready to build" : checked === "blocked" ? "something is missing" : "not checked yet",
+      4: outcome ? outcome : "",
+    };
+    const done = { 1: Boolean(pipeline), 2: Boolean(pipeline) && missing.length === 0 && files.length > 0,
+      3: checked === "ok", 4: outcome === "succeeded" };
+    const attention = { 3: checked === "blocked", 4: Boolean(outcome) && !["succeeded", "running", "queued"].includes(outcome) };
+    for (let n = 1; n <= 4; n += 1) {
+      const tab = $("build-step-tab-" + n);
+      tab.classList.toggle("current", n === step);
+      tab.classList.toggle("done", n !== step && done[n]);
+      tab.classList.toggle("attention", n !== step && !done[n] && Boolean(attention[n]));
+      if (n === step) tab.setAttribute("aria-current", "step");
+      else tab.removeAttribute("aria-current");
+      $("build-step-summary-" + n).textContent = summaries[n];
+    }
+    $("build-start").disabled = checked !== "ok";
+  }
+
+  // showStep puts one panel on screen. Arriving at the check runs it, because a
+  // check of choices that have since changed is not a check of anything.
+  function showStep(n, { check = true, focus = true } = {}) {
+    step = n;
+    for (let i = 1; i <= 4; i += 1) $("build-step-" + i).hidden = i !== n;
+    renderSteps();
+    if (focus) {
+      const heading = $("build-step-" + n).querySelector("h3");
+      if (heading) {
+        heading.setAttribute("tabindex", "-1");
+        heading.focus({ preventScroll: true });
+      }
+      $("build-steps").scrollIntoView({ block: "nearest" });
+    }
+    if (n === 3 && check && checked === null) preview($("build-preview"));
+  }
+
+  function choicesChanged() {
+    checked = null;
+    renderSteps();
+  }
+
   function revisionChosen() {
     const chosen = window.AUCOM.chosenRevision;
     for (const [, row] of inputFields) {
@@ -215,6 +289,7 @@
       }
       row.apply();
     }
+    choicesChanged();
   }
 
   function requestBody() {
@@ -289,7 +364,10 @@
       const field = $("build-input-" + why.name);
       if (field) {
         const focus = el("button", { text: `Choose the ${inputTitle(why.name)}`, attrs: { type: "button", class: "secondary" } });
-        focus.addEventListener("click", () => field.focus());
+        focus.addEventListener("click", () => {
+          showStep(2, { focus: false });
+          field.focus();
+        });
         block.append(el("div", { className: "row-actions", children: [focus] }));
       }
     }
@@ -297,6 +375,7 @@
   }
 
   async function preview(button) {
+    if (step !== 3) showStep(3, { check: false });
     await withBusy(button, async () => {
       busy("build-message", "Resolving every stage…");
       const { ok, body } = await api("/api/v1/build/preview", { method: "POST", body: requestBody() });
@@ -304,17 +383,21 @@
       out.hidden = false;
       out.replaceChildren();
       if (!ok) {
+        checked = "blocked";
+        renderSteps();
         setMessage("build-message", explain(body.error)?.advice || body.error || "the preview failed", "error");
         out.append(problemBlock(body.error || "the preview failed"));
         return;
       }
       const blocked = (body.steps || []).filter((step) => step.error);
+      checked = blocked.length > 0 ? "blocked" : "ok";
+      renderSteps();
       if (blocked.length > 0) {
         setMessage("build-message",
           "This build cannot start yet. What is missing is said under the stage that needs it; nothing has started.",
           "error");
       } else {
-        setMessage("build-message", "This is what would run. Nothing has started.", "ok");
+        setMessage("build-message", "Everything is in place. This is what will run; nothing has started. Press Build.", "ok");
       }
       out.append(el("h4", { text: "Commands" }));
       for (const step of body.steps || []) {
@@ -344,6 +427,9 @@
         return;
       }
       setMessage("build-message", "The build has started.", "ok");
+      outcome = "running";
+      setMessage("build-result", "", "");
+      showStep(4, { focus: false });
       record(`Build started: ${$("build-label").value.trim() || currentPipeline()?.name || "untitled"}`, "", "running");
       currentBuild = body.build;
       $("build-current-panel").hidden = false;
@@ -372,8 +458,10 @@
         return;
       }
       const state = body.manifest.state;
+      outcome = state;
+      renderSteps();
       setMessage(
-        "build-message",
+        "build-result",
         state === "succeeded"
           ? "The build succeeded. Its outputs are listed below."
           : `The build ${state}: ${body.manifest.error || body.error || "see the stages below"}`,
@@ -390,6 +478,15 @@
     const list = $("build-progress");
     list.replaceChildren();
     $("build-cancel").disabled = !body.live;
+    // A finished build has nothing to cancel; the button is not left standing
+    // there disabled and red.
+    $("build-cancel").hidden = !body.live;
+    $("build-output-heading").textContent = body.live ? "Output so far" : "Output";
+    $("build-current-empty").hidden = true;
+    if (body.live) {
+      outcome = manifest.state;
+      renderSteps();
+    }
     $("build-current-title").textContent =
       `${body.live ? "Building" : "Build"}: ${manifest.label || manifest.pipeline?.name || "this build"} — ${manifest.state}`;
 
@@ -518,6 +615,9 @@
       open.addEventListener("click", () => {
         currentBuild = manifest.build_id;
         $("build-current-panel").hidden = false;
+        outcome = manifest.state;
+        setMessage("build-result", "", "");
+        showStep(4, { focus: false });
         poll();
         $("build-current-title").setAttribute("tabindex", "-1");
         $("build-current-title").focus();
@@ -533,8 +633,22 @@
     const kept = keptInputs();
     renderPipeline();
     restoreInputs(kept);
+    choicesChanged();
   });
-  $("build-preview").addEventListener("click", (event) => preview(event.currentTarget));
+  for (const id of ["build-inputs", "build-strict"]) {
+    $(id).addEventListener("input", choicesChanged);
+    $(id).addEventListener("change", choicesChanged);
+  }
+  for (const tab of document.querySelectorAll("#build-steps .bwiz-step")) {
+    tab.addEventListener("click", () => showStep(Number(tab.dataset.step)));
+  }
+  for (const go of document.querySelectorAll("#area-build [data-go]")) {
+    go.addEventListener("click", () => showStep(Number(go.dataset.go)));
+  }
+  $("build-preview").addEventListener("click", (event) => {
+    checked = null;
+    preview(event.currentTarget);
+  });
   $("build-start").addEventListener("click", (event) => start(event.currentTarget));
   $("build-history-refresh").addEventListener("click", (event) => withBusy(event.currentTarget, refreshHistory));
   $("build-cancel").addEventListener("click", (event) =>
@@ -557,7 +671,9 @@
     async refresh() {
       await refreshPipelines();
       await refreshHistory();
+      renderSteps();
       if (currentBuild) poll();
     },
+    showStep,
   };
 })();

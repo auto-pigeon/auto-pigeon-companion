@@ -225,47 +225,103 @@
         <!-- Build -------------------------------------------------------- -->
         <section id="area-build" class="area" aria-labelledby="area-heading" hidden>
           <p class="lede">
-            A build is several supervised programs, wired together, with a
-            manifest recording exactly what ran. Preview shows the command each
-            stage will run before anything starts.
+            Four steps: choose how to build, choose the map, check what will
+            run, then build. Nothing starts before step 4.
           </p>
 
-          <div class="panel">
-            <h3>What to build</h3>
+          <!-- The wizard (NEW_244D, operator: "the Build section is super
+               messy… redesign it as a wizard, in horizontal steps"). Every
+               step is a button, so a person can go back to any of them; the
+               summary under each says what was chosen there. -->
+          <nav class="bwiz" aria-label="Build steps">
+            <ol class="bwiz-steps" id="build-steps">
+              <li><button type="button" class="bwiz-step" data-step="1" id="build-step-tab-1">
+                <span class="bwiz-step__n" aria-hidden="true">1</span>
+                <span class="bwiz-step__text"><span class="bwiz-step__label">How to build</span>
+                <span class="bwiz-step__summary" id="build-step-summary-1"></span></span>
+              </button></li>
+              <li><button type="button" class="bwiz-step" data-step="2" id="build-step-tab-2">
+                <span class="bwiz-step__n" aria-hidden="true">2</span>
+                <span class="bwiz-step__text"><span class="bwiz-step__label">The map</span>
+                <span class="bwiz-step__summary" id="build-step-summary-2"></span></span>
+              </button></li>
+              <li><button type="button" class="bwiz-step" data-step="3" id="build-step-tab-3">
+                <span class="bwiz-step__n" aria-hidden="true">3</span>
+                <span class="bwiz-step__text"><span class="bwiz-step__label">Check</span>
+                <span class="bwiz-step__summary" id="build-step-summary-3"></span></span>
+              </button></li>
+              <li><button type="button" class="bwiz-step" data-step="4" id="build-step-tab-4">
+                <span class="bwiz-step__n" aria-hidden="true">4</span>
+                <span class="bwiz-step__text"><span class="bwiz-step__label">Build</span>
+                <span class="bwiz-step__summary" id="build-step-summary-4"></span></span>
+              </button></li>
+            </ol>
+          </nav>
+
+          <div class="panel bwiz-panel" id="build-step-1" data-step="1">
+            <h3>1. How to build</h3>
+            <p class="muted">A pipeline is the programs a build runs, in order, and the settings it gives them.</p>
             <div class="field">
               <label for="build-pipeline">Pipeline</label>
               <select id="build-pipeline"></select>
             </div>
             <p id="build-pipeline-note" class="muted"></p>
             <ol id="build-stages" class="stages" aria-label="Stages of this pipeline"></ol>
+            <label class="check">
+              <input type="checkbox" id="build-strict" />
+              Fail on any error-severity warning, even when the tool exits successfully
+            </label>
+            <div class="bwiz-nav">
+              <span></span>
+              <button type="button" class="primary" data-go="2">Next: the map</button>
+            </div>
+          </div>
+
+          <div class="panel bwiz-panel" id="build-step-2" data-step="2" hidden>
+            <h3>2. The map</h3>
+            <p class="muted">Choose the files this build compiles. They are copied into the build, so the originals are never changed.</p>
             <div id="build-inputs" class="inputs"></div>
-            <div class="field">
+            <div class="field build-label-field">
               <label for="build-label">Label <span class="hint">(optional, so you can find this build later)</span></label>
               <input id="build-label" type="text" placeholder="first pass at e1m1" />
             </div>
-            <div class="row">
-              <label class="check">
-                <input type="checkbox" id="build-strict" />
-                Fail on any error-severity warning, even when the tool exits successfully
-              </label>
+            <div class="bwiz-nav">
+              <button type="button" class="secondary" data-go="1">Back</button>
+              <button type="button" class="primary" data-go="3">Next: check</button>
             </div>
-            <div class="row">
-              <button type="button" id="build-preview">Preview commands</button>
-              <button type="button" id="build-start" class="primary">Build</button>
-            </div>
-            <p id="build-message" class="message" role="alert"></p>
-            <div id="build-preview-out" class="preview" hidden></div>
           </div>
 
-          <div class="panel" id="build-current-panel" hidden>
-            <div class="panel-head">
-              <h3 id="build-current-title">Building</h3>
-              <button type="button" id="build-cancel" class="danger">Cancel this build</button>
+          <div class="panel bwiz-panel" id="build-step-3" data-step="3" hidden>
+            <h3>3. Check</h3>
+            <p class="muted">The exact command each stage will run. If something is missing, it is said under the stage that needs it.</p>
+            <p id="build-message" class="message" role="alert"></p>
+            <div id="build-preview-out" class="preview" hidden></div>
+            <div class="bwiz-nav">
+              <button type="button" class="secondary" data-go="2">Back</button>
+              <span class="bwiz-nav__end">
+                <button type="button" id="build-preview" class="secondary">Check again</button>
+                <button type="button" id="build-start" class="primary">Build</button>
+              </span>
             </div>
-            <ol id="build-progress" class="stages" aria-label="Build progress"></ol>
-            <h4>Output so far</h4>
-            <pre id="build-log" class="output" aria-label="Live build output" tabindex="0"></pre>
-            <p id="build-log-note" class="muted"></p>
+          </div>
+
+          <div class="panel bwiz-panel" id="build-step-4" data-step="4" hidden>
+            <p class="muted" id="build-current-empty">Nothing has been built in this window yet. Go through steps 1 to 3, or open a past build below.</p>
+            <div id="build-current-panel" hidden>
+              <div class="panel-head">
+                <h3 id="build-current-title">Building</h3>
+                <button type="button" id="build-cancel" class="danger">Cancel this build</button>
+              </div>
+              <p id="build-result" class="message" role="status"></p>
+              <ol id="build-progress" class="stages" aria-label="Build progress"></ol>
+              <h4 id="build-output-heading">Output so far</h4>
+              <pre id="build-log" class="output" aria-label="Live build output" tabindex="0"></pre>
+              <p id="build-log-note" class="muted"></p>
+            </div>
+            <div class="bwiz-nav">
+              <button type="button" class="secondary" data-go="2">Build another map</button>
+              <button type="button" class="secondary" data-go="3">Build this again</button>
+            </div>
           </div>
 
           <div class="panel">
