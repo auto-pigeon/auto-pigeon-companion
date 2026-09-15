@@ -24,6 +24,9 @@
   let step = 1;
   let checked = null;
   let outcome = null;
+  // Bumped by every change to steps 1 and 2, so a check that was out while the
+  // choices changed cannot mark the new choices checked.
+  let generation = 0;
 
   function currentPipeline() {
     return pipelines.find((item) => item.id === $("build-pipeline").value);
@@ -264,6 +267,7 @@
   }
 
   function choicesChanged() {
+    generation += 1;
     checked = null;
     renderSteps();
   }
@@ -289,7 +293,6 @@
       }
       row.apply();
     }
-    choicesChanged();
   }
 
   function requestBody() {
@@ -374,23 +377,47 @@
     return block;
   }
 
-  async function preview(button) {
+  // One check at a time. withBusy restores the disabled state it found, so a
+  // second check started while the first was out found the button disabled and
+  // left it that way for good (NEW_244D wizard: arriving back on step 3 while a
+  // check ran).
+  let checking = null;
+
+  function preview(button) {
     if (step !== 3) showStep(3, { check: false });
+    if (!checking) {
+      checking = (async () => {
+        // Choices that changed while a check was out (a chosen revision's file
+        // list arriving, say) are checked again, a bounded number of times.
+        for (let round = 0; round < 3; round += 1) {
+          const asked = generation;
+          await runPreview(button, asked);
+          if (asked === generation || step !== 3) break;
+        }
+      })().finally(() => { checking = null; });
+    }
+    return checking;
+  }
+
+  async function runPreview(button, asked) {
     await withBusy(button, async () => {
       busy("build-message", "Resolving every stage…");
       const { ok, body } = await api("/api/v1/build/preview", { method: "POST", body: requestBody() });
       const out = $("build-preview-out");
       out.hidden = false;
       out.replaceChildren();
+      // A result for choices that have changed since is still shown — it is
+      // what was asked — but it does not mark the new choices checked.
+      const verdict = (value) => (asked === generation ? value : null);
       if (!ok) {
-        checked = "blocked";
+        checked = verdict("blocked");
         renderSteps();
         setMessage("build-message", explain(body.error)?.advice || body.error || "the preview failed", "error");
         out.append(problemBlock(body.error || "the preview failed"));
         return;
       }
       const blocked = (body.steps || []).filter((step) => step.error);
-      checked = blocked.length > 0 ? "blocked" : "ok";
+      checked = verdict(blocked.length > 0 ? "blocked" : "ok");
       renderSteps();
       if (blocked.length > 0) {
         setMessage("build-message",
@@ -667,7 +694,13 @@
   );
 
   window.AUCOM.areas.build = {
-    revisionChosen,
+    // From My Maps: a revision chosen there is a new choice for step 2. The
+    // same redraw run by renderPipeline is not, or re-drawing the inputs while
+    // a check was out would un-check the choices it was checking.
+    revisionChosen() {
+      revisionChosen();
+      choicesChanged();
+    },
     async refresh() {
       await refreshPipelines();
       await refreshHistory();

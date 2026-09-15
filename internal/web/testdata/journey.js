@@ -450,6 +450,9 @@
     $("build-step-tab-1").click();
     const first = tabOrder();
     window.AUCOM.areas.build.showStep(3, { check: false, focus: false });
+    // Arriving back on Build re-runs a stale check, and a button is disabled
+    // while its own request is out.
+    await waitFor("the check to settle", () => !$("build-preview").disabled, 30000);
     const third = tabOrder();
     const positions = [
       first.indexOf("build-step-tab-1"), first.indexOf("build-step-tab-4"), first.indexOf("build-pipeline"),
