@@ -133,6 +133,16 @@ for target in "${targets[@]}"; do
        acceptance/kit-options.json "$staging/"
     chmod +x "$staging/run-acceptance.sh"
 
+    # run-acceptance.sh / .ps1 verify the program against a SHA256SUMS BESIDE
+    # it, before starting it. With none inside the archive, every operator's
+    # bundle recorded `checksums: not_available` (NEW_244D rehearsal). It is
+    # corruption evidence for the unpacked files; the archive's own digest is in
+    # the SHA256SUMS published beside the archives, and neither is a signature.
+    # macOS gets none: its binary moves inside the .app bundle below.
+    if [ "$goos" != "darwin" ]; then
+        go run ./cmd/companion release checksums --dir "$staging" --out - >/dev/null
+    fi
+
     case "$goos" in
         darwin)
             build/macos/make-app-bundle.sh \

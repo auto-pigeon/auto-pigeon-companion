@@ -213,7 +213,7 @@
         kind: "open-file",
         label: `${executable.title || executable.name} program`,
         value: (binding.executables || {})[executable.name] || "",
-        hint: `The profile looks for a file named ${executable.file}.`,
+        hint: `The profile looks for a file named ${window.AUCOM.programFileName(executable.file)}.`,
       });
       bindingInputs.set("executable:" + executable.name, field);
       container.append(field.container);

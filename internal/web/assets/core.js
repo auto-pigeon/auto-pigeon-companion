@@ -562,6 +562,24 @@ function permissionBlock(permission) {
   return el("div", { className: "permission", children: [head] });
 }
 
+// programFileName is a declared program file as it is named on THIS machine:
+// `{platform.exe_suffix}` is template syntax for the profile's author, and a
+// hint that printed it asked a person to read a placeholder (NEW_244D).
+function programFileName(file) {
+  const windows = /^windows\//.test(AUCOM.status?.platform || "");
+  return String(file || "").replaceAll("{platform.exe_suffix}", windows ? ".exe" : "");
+}
+
+// folderTitle names a root role the way a person calls that folder.
+function folderTitle(role) {
+  return {
+    game_root: "Game directory",
+    content_root: "Content folder",
+    project_root: "Project folder",
+    tool_root: "Program folder",
+  }[role] || role.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+}
+
 function when(value) {
   if (!value) return "";
   const date = new Date(value);
@@ -575,6 +593,6 @@ function terminal(state) {
 Object.assign(AUCOM, {
   $, el, api, announce, setMessage, busy, withBusy,
   record, renderActivity, clearActivity, pathField, downloadButton, tabsFor,
-  badge, maturityBadge, maturityNote, bytes, when, terminal, permissionBlock,
+  badge, maturityBadge, maturityNote, bytes, when, terminal, permissionBlock, programFileName, folderTitle,
   openCompatibilityReport, wireCompatibilityReport,
 });

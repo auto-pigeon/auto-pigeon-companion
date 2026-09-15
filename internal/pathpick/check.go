@@ -3,6 +3,7 @@ package pathpick
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -91,7 +92,7 @@ func Check(kind Kind, path string) (string, error) {
 	case Directory:
 		info, err := os.Stat(cleaned)
 		if err != nil {
-			return "", fmt.Errorf("%s: %w", cleaned, err)
+			return "", statError(cleaned, err)
 		}
 		if !info.IsDir() {
 			return "", fmt.Errorf("%s is a file; a directory was asked for", cleaned)
@@ -99,7 +100,7 @@ func Check(kind Kind, path string) (string, error) {
 	case OpenFile:
 		info, err := os.Stat(cleaned)
 		if err != nil {
-			return "", fmt.Errorf("%s: %w", cleaned, err)
+			return "", statError(cleaned, err)
 		}
 		if info.IsDir() {
 			return "", fmt.Errorf("%s is a directory; a file was asked for", cleaned)
@@ -108,13 +109,27 @@ func Check(kind Kind, path string) (string, error) {
 		parent := filepath.Dir(cleaned)
 		info, err := os.Stat(parent)
 		if err != nil {
-			return "", fmt.Errorf("%s: %w", parent, err)
+			return "", statError(parent, err)
 		}
 		if !info.IsDir() {
 			return "", fmt.Errorf("%s is not a directory, so nothing can be written inside it", parent)
 		}
 	}
 	return cleaned, nil
+}
+
+// statError says why a path could not be looked at in words a person reads.
+// Go's own `stat <path>: no such file or directory` repeats the path and names
+// a system call; the page showed it verbatim (NEW_244D rehearsal). The cause
+// stays wrapped for errors.Is.
+func statError(path string, err error) error {
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return fmt.Errorf("there is no such file or folder: %s (%w)", path, fs.ErrNotExist)
+	case errors.Is(err, fs.ErrPermission):
+		return fmt.Errorf("this account is not allowed to look at %s (%w)", path, fs.ErrPermission)
+	}
+	return fmt.Errorf("%s: %w", path, err)
 }
 
 // expandHome resolves a leading `~`.

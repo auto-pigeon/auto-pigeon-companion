@@ -95,8 +95,8 @@
 
     $("build-pipeline-note").textContent = pipeline.runnable
       ? `${pipeline.steps.length} stage(s). Version ${pipeline.version}.`
-      : "This pipeline cannot run here: nothing on this machine provides " +
-        pipeline.missing_capabilities.join(", ") +
+      : "This pipeline cannot run here: no tool installed on this machine does " +
+        (pipeline.missing_capabilities.length === 1 ? "one of its stages" : `${pipeline.missing_capabilities.length} of its stages`) +
         ". Install the tool that does, then approve it in Profiles.";
     $("build-pipeline-note").className = pipeline.runnable ? "muted" : "message error";
 
@@ -121,7 +121,7 @@
       const line = el("li");
       line.append(el("span", { className: "stage-name", text: step.title || step.id }));
       if (step.provider) {
-        const detail = `${step.provider.name} ${step.provider.version} · ${step.provider.action}`;
+        const detail = `${step.provider.name} ${step.provider.version}`;
         line.append(el("span", { className: "stage-detail", text: detail }));
         if (step.provider_trust) line.append(badge(step.provider_trust));
         if (step.provider_authorized === false) {
@@ -246,8 +246,8 @@
   }
 
   // explain turns the two refusals a first build meets into what to do about
-  // them. The executor's own sentence stays beside it, because it is the
-  // record; this is the next step (NEW_244D: a preview used to say "This is
+  // them. The executor's own sentence is the record for the CLI; this is the
+  // next step (NEW_244D: a preview used to say "This is
   // what would run" over "(no command resolved)" and hide both).
   function explain(text) {
     const missingInput =
@@ -256,6 +256,11 @@
     if (missingInput) {
       return { kind: "input", name: missingInput[1],
         advice: `Choose the ${inputTitle(missingInput[1])} first: use Browse… beside that field, or pick a map revision in My Maps.` };
+    }
+    const gone = /the input "([^"]+)": there is no such file or folder: (.+?) \(/.exec(text || "");
+    if (gone) {
+      return { kind: "input", name: gone[1],
+        advice: `The file chosen for ${inputTitle(gone[1])} is not there: ${gone[2]}. Choose it again with Browse….` };
     }
     if (/is not installed on this machine|root is not configured|not configured on this machine|no program is recorded/.test(text || "")) {
       return { kind: "setup",
@@ -268,7 +273,10 @@
     const why = explain(text);
     const block = el("div", { className: "problem" });
     block.append(el("p", { children: [el("strong", { text: why ? why.advice : text })] }));
-    if (why) block.append(el("p", { className: "fix", text: "The Companion said: " + text }));
+    // The executor's own sentence names profile ids, root roles and a CLI
+    // command; when the advice above already says what to do, the page does not
+    // repeat it (NEW_244D, operator: no internal ids on the page). A refusal
+    // the page cannot explain is still shown whole, because that is all there is.
     if (why?.kind === "setup" && profile?.id) {
       const setup = el("button", { text: `Set up ${profile.name || profile.id}`, attrs: { type: "button", class: "primary" } });
       setup.addEventListener("click", async () => {
@@ -406,7 +414,9 @@
       const line = el("li", { className: step.state || (step.skipped ? "skipped" : "") });
       line.append(el("span", { className: "stage-name", text: step.title || step.id }));
       line.append(badge(step.skipped && !step.state ? "skipped" : step.state || "waiting"));
-      const provider = step.profile ? `${step.profile.name || "a profile"} ${step.profile.version}` : "no tool recorded";
+      // A step the build never reached has no tool resolved for it yet; the badge
+      // already says it was skipped, so nothing stands in for a name.
+      const provider = step.profile?.name ? `${step.profile.name} ${step.profile.version}` : step.skipped ? "" : "no tool recorded";
       line.append(el("span", { className: "stage-detail", text: provider }));
       if (step.duration_ms) {
         line.append(el("span", { className: "stage-detail", text: `${step.duration_ms} ms` }));
@@ -516,7 +526,14 @@
     }
   }
 
-  $("build-pipeline").addEventListener("change", renderPipeline);
+  // A map and a WAD chosen for one pipeline stay chosen when another is picked:
+  // inputs are matched by name, so only what both pipelines declare carries
+  // over (NEW_244D rehearsal: switching fast preview to normal emptied the map).
+  $("build-pipeline").addEventListener("change", () => {
+    const kept = keptInputs();
+    renderPipeline();
+    restoreInputs(kept);
+  });
   $("build-preview").addEventListener("click", (event) => preview(event.currentTarget));
   $("build-start").addEventListener("click", (event) => start(event.currentTarget));
   $("build-history-refresh").addEventListener("click", (event) => withBusy(event.currentTarget, refreshHistory));

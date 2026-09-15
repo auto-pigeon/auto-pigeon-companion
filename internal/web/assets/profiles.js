@@ -276,7 +276,7 @@
         kind: "open-file",
         label: `${executable.title || executable.name}`,
         value: (body.binding?.executables || {})[executable.name] || "",
-        hint: `The profile looks for a file named ${executable.file}.`,
+        hint: `The profile looks for a file named ${window.AUCOM.programFileName(executable.file)}.`,
       });
       fields.set(executable.name, field);
       detail.append(field.container);
@@ -298,7 +298,7 @@
       const field = window.AUCOM.pathField({
         id: "profile-root-" + role,
         kind: "directory",
-        label: `Folder: ${role}${purposes.optional ? " (optional)" : ""}`,
+        label: `${window.AUCOM.folderTitle(role)}${purposes.optional ? " (optional)" : ""}`,
         value: (body.binding?.roots || {})[role] || "",
         hint: purposes.length ? `Used to ${purposes.join("; ")}.` : "",
       });
