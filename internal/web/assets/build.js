@@ -10,7 +10,7 @@
 "use strict";
 
 (() => {
-  const { $, el, api, setMessage, busy, withBusy, record, badge, shortDigest, when, terminal,
+  const { $, el, api, setMessage, busy, withBusy, record, badge, when, terminal,
     maturityBadge, maturityNote, openCompatibilityReport } = window.AUCOM;
 
   let pipelines = [];
@@ -159,7 +159,7 @@
       hint: input.description || "",
     });
 
-    const assetNote = el("p", { className: "muted", attrs: { id: id + "-asset" } });
+    const assetNote = el("p", { className: "build-chosen", attrs: { id: id + "-asset" } });
     const fileChoice = el("select", { attrs: { id: id + "-file", "aria-label": "Which file of that revision" } });
     const fileChoiceField = el("div", {
       className: "field",
@@ -168,7 +168,7 @@
     fileChoiceField.hidden = true;
 
     const wrapper = el("div", {
-      className: "panel",
+      className: "build-input",
       children: [
         el("div", {
           className: "field",
@@ -203,8 +203,12 @@
         row.apply();
         continue;
       }
-      row.assetNote.textContent =
-        `${chosen.display_name} · revision ${chosen.revision}`;
+      // The map the build will read, said plainly and large enough to check
+      // at a glance before pressing Build (operator, NEW_244D).
+      row.assetNote.replaceChildren(
+        el("span", { className: "build-chosen__name", text: chosen.display_name }),
+        el("span", { className: "build-chosen__detail", text: `revision ${chosen.revision}, downloaded to this computer` })
+      );
       row.fileChoice.replaceChildren();
       for (const file of chosen.files || []) {
         row.fileChoice.append(el("option", { text: file.path, attrs: { value: file.path } }));
@@ -311,7 +315,7 @@
           el("p", {
             children: [
               el("strong", { text: step.title || step.id }),
-              el("span", { className: "stage-detail", text: ` ${step.profile?.id || ""} ${step.profile?.version || ""}` }),
+              el("span", { className: "stage-detail", text: ` ${step.profile?.name || ""} ${step.profile?.version || ""}` }),
             ],
           })
         );
@@ -331,11 +335,11 @@
         record("Build could not be started", body.error, "failed");
         return;
       }
-      setMessage("build-message", `Build ${body.build} started.`, "ok");
-      record(`Build ${body.build} started`, body.pipeline, "running");
+      setMessage("build-message", "The build has started.", "ok");
+      record(`Build started: ${$("build-label").value.trim() || currentPipeline()?.name || "untitled"}`, "", "running");
       currentBuild = body.build;
       $("build-current-panel").hidden = false;
-      $("build-current-title").textContent = "Building " + body.build;
+      $("build-current-title").textContent = "Building " + ($("build-label").value.trim() || currentPipeline()?.name || "");
       $("build-current-title").setAttribute("tabindex", "-1");
       $("build-current-title").focus();
       poll();
@@ -367,7 +371,7 @@
           : `The build ${state}: ${body.manifest.error || body.error || "see the stages below"}`,
         state === "succeeded" ? "ok" : "error"
       );
-      record(`Build ${currentBuild} ${state}`, body.manifest.error || "", state);
+      record(`Build ${state}: ${body.manifest.label || body.manifest.pipeline?.name || "untitled"}`, body.manifest.error || "", state);
       await refreshHistory();
     };
     tick();
@@ -379,7 +383,7 @@
     list.replaceChildren();
     $("build-cancel").disabled = !body.live;
     $("build-current-title").textContent =
-      `${body.live ? "Building" : "Build"} ${manifest.build_id} — ${manifest.state}`;
+      `${body.live ? "Building" : "Build"}: ${manifest.label || manifest.pipeline?.name || "this build"} — ${manifest.state}`;
 
     // The finished build is the other moment a compatibility report is worth
     // offering: the user has just seen what happened and has the build id that
@@ -393,7 +397,7 @@
           family: manifest.engine_family,
           operation: "compile",
           build_id: manifest.build_id,
-          about: `About build ${manifest.build_id} with ${manifest.pipeline?.id || "this pipeline"}.`,
+          about: `About the build "${manifest.label || manifest.pipeline?.name || "untitled"}" with ${manifest.pipeline?.name || "this pipeline"}.`,
         })
     );
     if (body.maturity_message && buildNote) $("build-current-title").after(buildNote);
@@ -402,7 +406,7 @@
       const line = el("li", { className: step.state || (step.skipped ? "skipped" : "") });
       line.append(el("span", { className: "stage-name", text: step.title || step.id }));
       line.append(badge(step.skipped && !step.state ? "skipped" : step.state || "waiting"));
-      const provider = step.profile ? `${step.profile.id} ${step.profile.version}` : step.capability;
+      const provider = step.profile ? `${step.profile.name || "a profile"} ${step.profile.version}` : step.capability;
       line.append(el("span", { className: "stage-detail", text: provider }));
       if (step.duration_ms) {
         line.append(el("span", { className: "stage-detail", text: `${step.duration_ms} ms` }));
@@ -450,7 +454,7 @@
             filename
           )
         );
-        outputs.append(el("span", { className: "stage-detail", text: shortDigest(output.sha256) }));
+
       }
       list.append(outputs);
     }
@@ -489,13 +493,12 @@
     for (const item of items) {
       const manifest = item.manifest;
       const head = el("div", { className: "row-head" });
-      head.append(el("strong", { text: manifest.label || manifest.pipeline?.id || manifest.build_id }));
+      head.append(el("strong", { text: manifest.label || manifest.pipeline?.name || "Untitled build" }));
       head.append(badge(manifest.state));
       if (item.live) head.append(badge("running here", "running"));
-      const detail = el("p", { className: "mono" });
+      const detail = el("p", { className: "muted" });
       detail.textContent = [
-        manifest.build_id,
-        manifest.pipeline?.id,
+        manifest.pipeline?.name,
         manifest.duration_ms ? manifest.duration_ms + " ms" : "",
         when(manifest.started_at),
       ]
@@ -528,7 +531,7 @@
         return;
       }
       setMessage("build-message", "Stopping. The stage records what happened, and the manifest is completed rather than abandoned.", "");
-      record(`Build ${currentBuild} cancelled`, (body.cancelled_jobs || []).join(", "), "cancelled");
+      record("Build cancelled", "", "cancelled");
     })
   );
 

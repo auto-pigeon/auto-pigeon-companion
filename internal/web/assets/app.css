@@ -240,6 +240,39 @@ details.more > button { margin-top: 0.35rem; }
 #scratch-panel h4 { margin: 1.75rem 0 0.25rem; font-size: 0.9rem; }
 #scratch-panel > .row { gap: 0.75rem 1rem; margin: 0.9rem 0; }
 fieldset { min-width: 0; }
+
+/*
+  Build (NEW_244D, reworked at the operator's request like the from-scratch
+  editor): no grey frames. Each section of the area starts under a teal rule,
+  each input and each stage is separated by a thin grey rule, and rows have
+  room. The chosen map is the most readable thing on the page.
+*/
+#area-build > .panel {
+  background: transparent; border: none; border-radius: 0;
+  border-top: 2px solid var(--accent); padding: 1.1rem 0 0.5rem; margin: 0 0 1.75rem;
+}
+#area-build > .panel > h3, #area-build .panel-head h3 { font-size: 1rem; margin-bottom: 0.6rem; }
+#area-build .field { margin: 0 0 0.9rem; gap: 0.35rem; }
+#area-build .build-input { border-top: 1px solid var(--line-strong); padding: 1rem 0 0.25rem; margin: 0.5rem 0 0; }
+#area-build .build-input + .build-input { margin-top: 0; }
+#area-build #build-inputs + .field { border-top: 1px solid var(--line-strong); padding-top: 1rem; }
+#area-build .row { gap: 0.75rem 1rem; margin: 0.9rem 0; }
+#area-build .stages { gap: 0; margin: 0.5rem 0 1rem; }
+#area-build .stages > li {
+  background: transparent; border-radius: 0; border-left: 3px solid var(--line-strong);
+  border-bottom: 1px solid var(--line); padding: 0.7rem 0.9rem; flex-wrap: wrap; gap: 0.35rem 0.75rem;
+}
+#area-build .stages > li:last-child { border-bottom: none; }
+#area-build .rows > li {
+  background: transparent; border: none; border-radius: 0; border-bottom: 1px solid var(--line);
+  padding: 0.8rem 0; margin: 0;
+}
+#area-build .rows > li:last-child { border-bottom: none; }
+#area-build .preview h4 { margin: 1.25rem 0 0.5rem; }
+#area-build .preview > div { border-bottom: 1px solid var(--line); padding: 0.4rem 0 0.8rem; }
+.build-chosen { margin: 0.25rem 0 0.75rem; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem 0.75rem; }
+.build-chosen__name { font-size: 1.15rem; font-weight: 600; color: var(--ink); }
+.build-chosen__detail { font-size: 0.9rem; color: var(--ink-muted); }
 .stale-page {
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--gap);
   padding: 0.6rem 1rem; background: var(--warn-soft); border-bottom: 1px solid var(--warn); color: var(--ink);

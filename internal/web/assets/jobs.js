@@ -30,13 +30,19 @@
     for (const job of jobs) list.append(jobRow(job));
   }
 
+  function jobName(job) {
+    const what = job.action_title || job.action_id || "a job";
+    const who = job.profile_name || "";
+    return job.label || (who ? `${what} · ${who}` : what);
+  }
+
   function jobRow(job) {
     const head = el("div", { className: "row-head" });
-    head.append(el("strong", { text: job.label || `${job.profile_id || ""} ${job.action_id || ""}`.trim() || job.id }));
+    // Named by what ran, never by the job's id (operator, NEW_244D).
+    head.append(el("strong", { text: jobName(job) }));
     head.append(badge(job.state));
-    const detail = el("p", { className: "mono" });
+    const detail = el("p", { className: "muted" });
     detail.textContent = [
-      job.id,
       job.exit_code !== undefined && job.exit_code !== null ? "exit " + job.exit_code : "",
       job.started_at ? when(job.started_at) : "",
     ]
@@ -56,7 +62,7 @@
             setMessage("jobs-message", body.error, "error");
             return;
           }
-          record(`Stopped job ${job.id}`, "", "cancelled");
+          record(`Stopped ${jobName(job)}`, "", "cancelled");
           await refreshJobs();
         })
       );
@@ -84,12 +90,12 @@
       detail.replaceChildren(el("p", { className: "message error", text: body.error }));
       return;
     }
-    $("job-detail-title").textContent = `${body.profile_id || ""} ${body.action_id || ""}`.trim() || body.id;
+    $("job-detail-title").textContent = jobName(body);
 
     detail.replaceChildren();
     const head = el("p");
     head.append(badge(body.state));
-    head.append(document.createTextNode(" " + body.id));
+    head.append(document.createTextNode(" " + (body.started_at ? "started " + when(body.started_at) : "")));
     detail.append(head);
 
     if (body.command?.shell) {
@@ -166,7 +172,7 @@
             detail.append(el("p", { className: "message error", text: out.error }));
             return;
           }
-          record(`Ran job ${body.id} again as ${out.id}`, "", "running");
+          record(`Ran ${jobName(body)} again`, "", "running");
           await refreshJobs();
           await openJob(out.id);
         })
@@ -189,7 +195,7 @@
             detail.append(el("p", { className: "message error", text: out.error }));
             return;
           }
-          record(`Stopped job ${body.id}`, "", "cancelled");
+          record(`Stopped ${jobName(body)}`, "", "cancelled");
         })
       );
       actions.append(stop);

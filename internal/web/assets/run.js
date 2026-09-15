@@ -432,7 +432,7 @@
         `Started as job ${body.id}. It is in the Jobs area, with its command and its output.`,
         "ok"
       );
-      record(`Started ${current()?.name || "engine"} as job ${body.id}`, body.command?.shell || "", "running");
+      record(`Started ${current()?.name || "engine"}`, body.command?.shell || "", "running");
       window.AUCOM.areas.jobs?.refresh?.();
     });
   }
