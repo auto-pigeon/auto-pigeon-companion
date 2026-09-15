@@ -5,8 +5,8 @@
 // this program serves at `/api/about`, and this file only decides what a
 // `paragraph` or a `link` becomes. That is the same division AUP takes for the
 // same artefact on `Settings > Config > About` — see
-// `auto-pigeon-tools/scripts/aup/about/emit.py`, which writes both copies from
-// the one authority.
+// `auto-pigeon-tools/scripts/about-content.sh apply`, which writes both copies
+// from the one authority.
 //
 // Nothing here builds markup from a string: every node is created with `el` or
 // set with `textContent`. The prose is ours, but "the content is trusted" is a
@@ -62,12 +62,18 @@
           break;
         }
         case "image": {
-          // Named, never fetched. The page's Content-Security-Policy is
-          // `img-src 'self' data:`, so an image on another host would be blocked
-          // by the browser and draw as a broken icon — and a local-only GUI that
-          // silently reaches for the network is the thing that policy exists to
-          // prevent. The alternative text is shown with the path it wanted.
-          out.push(el("span", { className: "muted", attrs: { title: node.src }, text: node.alt }));
+          // The picture's own bytes travel inside the generated artefact as a
+          // `data:` URI (`about-content.sh apply`), which the page's
+          // `img-src 'self' data:` allows — so it is shown with no request to
+          // anywhere, the same picture the gallery shows. Anything that is not an
+          // embedded image of a known type is never fetched: the alternative text
+          // is shown with the path it wanted.
+          const embedded = (assetData || {})[node.src];
+          if (typeof embedded === "string" && /^data:image\/(png|jpeg|gif|webp|avif);base64,/.test(embedded)) {
+            out.push(el("img", { attrs: { src: embedded, alt: node.alt } }));
+          } else {
+            out.push(el("span", { className: "muted", attrs: { title: node.src }, text: node.alt }));
+          }
           break;
         }
         default:
@@ -109,9 +115,16 @@
     return out;
   }
 
+  // Every asset the prose names, as `data:` URIs, from the artefact being rendered.
+  let assetData = {};
+
   function render(artefact) {
     const body = $("about-body");
     body.replaceChildren();
+    assetData = artefact.asset_data || {};
+    // The prose is English only (NEW_243E_AUT_AUP_AUG_AUCOM §B); the shell around it is not.
+    body.setAttribute("lang", "en");
+    body.dataset.contentDigest = String(artefact.digest || "");
 
     const about = artefact.about || { meta: {}, blocks: [] };
     body.append(el("h3", { text: about.meta.title || "About", attrs: { id: "about-title" } }));

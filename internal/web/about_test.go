@@ -26,8 +26,7 @@ func TestServesTheAboutArtefactVerbatim(t *testing.T) {
 
 	embedded, err := fs.ReadFile(assetsFS(), aboutAsset)
 	if err != nil {
-		t.Fatalf("assets/%s is not embedded: %v — run `python3 scripts/aup/about/emit.py "+
-			"--tools-dir <aut> --vendor <companion>` and rebuild", aboutAsset, err)
+		t.Fatalf("assets/%s is not embedded: %v — run `auto-pigeon-tools/scripts/about-content.sh apply` and rebuild", aboutAsset, err)
 	}
 	if len(embedded) == 0 {
 		t.Fatalf("assets/%s is embedded but empty", aboutAsset)
@@ -147,5 +146,46 @@ func TestTheAboutAreaIsWiredIntoThePage(t *testing.T) {
 	}
 	if !strings.Contains(string(app), `"about"`) {
 		t.Error(`app.js does not list "about" in areaNames, so #about would land on Library`)
+	}
+}
+
+// The embedded copy is GENERATED, and says so before anything else in it — `NEW_243E_AUT_AUP_AUG_AUCOM`
+// §B. The one operator-edited About source is auto-pigeon-gallery/content/about.md; a copy here that
+// did not carry the notice would be a second place somebody could edit the words, and a release built
+// from a hand-edited copy would publish text the gallery does not show. The byte-for-byte comparison
+// with the canonical file is `auto-pigeon-tools/scripts/about-content.sh check`, which the release
+// script runs; this is the half a standalone checkout can still assert.
+func TestTheEmbeddedAboutIsTheGeneratedCopy(t *testing.T) {
+	raw, err := fs.ReadFile(assetsFS(), aboutAsset)
+	if err != nil {
+		t.Fatalf("assets/%s is not embedded: %v", aboutAsset, err)
+	}
+	var artefact struct {
+		Generated struct {
+			Notice, Source, Command string
+		} `json:"generated"`
+		Schema    string            `json:"schema"`
+		Digest    string            `json:"digest"`
+		Assets    []string          `json:"assets"`
+		AssetData map[string]string `json:"asset_data"`
+	}
+	if err := json.Unmarshal(raw, &artefact); err != nil {
+		t.Fatalf("assets/%s is not JSON: %v", aboutAsset, err)
+	}
+	if !bytes.HasPrefix(bytes.TrimSpace(raw), []byte("{\n  \"generated\"")) {
+		t.Error("the generated notice is not the first thing in the embedded About copy")
+	}
+	if !strings.HasPrefix(artefact.Generated.Notice, "GENERATED FILE") ||
+		artefact.Generated.Source != "auto-pigeon-gallery/content/about.md" ||
+		!strings.Contains(artefact.Generated.Command, "about-content.sh apply") {
+		t.Errorf("the embedded About copy does not name its canonical source and command: %+v", artefact.Generated)
+	}
+	if artefact.Schema != "auto-pigeon.site-content/1.0" || !regexp.MustCompile(`^[0-9a-f]{64}$`).MatchString(artefact.Digest) {
+		t.Errorf("schema %q / digest %q is not a site-content artefact", artefact.Schema, artefact.Digest)
+	}
+	for _, asset := range artefact.Assets {
+		if !strings.HasPrefix(artefact.AssetData[asset], "data:image/") {
+			t.Errorf("asset %s is named but its bytes are not embedded, so the About area would need the network", asset)
+		}
 	}
 }

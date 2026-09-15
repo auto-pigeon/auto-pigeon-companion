@@ -1,4 +1,9 @@
 {
+  "generated": {
+    "notice": "GENERATED FILE - do not edit by hand. The About text is written in auto-pigeon-gallery/content/about.md; change it there, run `auto-pigeon-tools/scripts/about-content.sh apply`, and commit the regenerated copies.",
+    "source": "auto-pigeon-gallery/content/about.md",
+    "command": "auto-pigeon-tools/scripts/about-content.sh apply"
+  },
   "schema": "auto-pigeon.site-content/1.0",
   "source": {
     "about": "about.md",
@@ -179,5 +184,6 @@
     ],
     "entries": []
   },
-  "assets": []
+  "assets": [],
+  "asset_data": {}
 }

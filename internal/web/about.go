@@ -15,7 +15,7 @@ import (
 // it — frontmatter required, heading anchors kept, every link classified. That
 // grammar is implemented **once**, by that repository's own emitter, and what
 // arrives here is the tree it produced: `internal/web/assets/about.json`,
-// written by `auto-pigeon-tools/scripts/aup/about/emit.py --vendor`, which also
+// written by `auto-pigeon-tools/scripts/about-content.sh apply`, which also
 // recomputes the artefact's digest from the source bytes before copying it.
 //
 // This handler therefore reads bytes and writes bytes. Parsing Markdown, or
@@ -52,8 +52,7 @@ func (s *Server) handleAbout(w http.ResponseWriter, r *http.Request) {
 		// reason given for it.
 		writeError(w, http.StatusInternalServerError, fmt.Errorf(
 			"this build has no About content: assets/%s is not embedded (%w). "+
-				"Run `python3 scripts/aup/about/emit.py --tools-dir <aut> --vendor <companion>` "+
-				"in auto-pigeon-tools and rebuild", aboutAsset, err))
+				"Run `auto-pigeon-tools/scripts/about-content.sh apply` and rebuild", aboutAsset, err))
 		return
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

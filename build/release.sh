@@ -60,6 +60,21 @@ fi
 cd "$repo_root"
 mkdir -p "$OUT"
 
+# # The About content is a release gate — NEW_243E_AUT_AUP_AUG_AUCOM §B
+#
+# internal/web/assets/about.json is a GENERATED copy of auto-pigeon-gallery/content/about.md, and every
+# artifact embeds it. In a workspace checkout the canonical comparison runs (read-only) and a stale,
+# hand-edited or unmarked copy refuses the release. Without the workspace, the copy must still say it
+# is generated and carry every image it names, and the release says the comparison was not made.
+about_command="$repo_root/../auto-pigeon-tools/scripts/about-content.sh"
+if [ -f "$about_command" ]; then
+    echo "== about content: auto-pigeon-tools/scripts/about-content.sh check =="
+    bash "$about_command" check || { echo "error: the About content gate refused this release" >&2; exit 1; }
+else
+    echo "== about content: NOT COMPARED with the canonical file (no auto-pigeon-tools beside this checkout) =="
+    go test ./internal/web -run 'TestTheEmbeddedAboutIsTheGeneratedCopy' -count=1
+fi
+
 echo "== building $VERSION into $OUT =="
 IFS=',' read -r -a targets <<< "$TARGETS"
 for target in "${targets[@]}"; do
