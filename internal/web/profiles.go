@@ -922,6 +922,12 @@ func describeProfile(entry job.CatalogEntry) map[string]any {
 // and cannot start.
 type bindRequest struct {
 	Executables map[string]string `json:"executables,omitempty"`
+	// Folder is a directory the user chose that holds the profile's programs
+	// the way the profile lays them out — an unpacked ericw-tools release, say.
+	// Every declared executable is found under it, or the request is refused
+	// naming the ones that are not there; nothing is recorded from a folder
+	// that holds half a toolchain (NEW_244D).
+	Folder string `json:"folder,omitempty"`
 	Roots       map[string]string `json:"roots,omitempty"`
 	// Approve records that the user read what the profile asks for and agreed
 	// to it. It is against one exact digest — see [profile.NewGrant].
@@ -946,10 +952,23 @@ func (s *Server) handleProfileBind(w http.ResponseWriter, r *http.Request) {
 	document := entry.Profile
 	meta := document.Metadata()
 
-	if len(request.Executables) == 0 && len(request.Roots) == 0 && !request.Approve {
+	if len(request.Executables) == 0 && len(request.Roots) == 0 && request.Folder == "" && !request.Approve {
 		writeError(w, http.StatusBadRequest,
-			errors.New("nothing to record: send an executable, a root, or an approval"))
+			errors.New("nothing to record: send an executable, a folder, a root, or an approval"))
 		return
+	}
+	if request.Folder != "" {
+		if len(request.Executables) > 0 {
+			writeError(w, http.StatusBadRequest,
+				errors.New("send a folder or individual programs, not both"))
+			return
+		}
+		found, err := executablesInFolder(document, request.Folder)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		request.Executables = found
 	}
 
 	// What the request asks for, checked and resolved before anything is
@@ -1019,6 +1038,14 @@ func (s *Server) handleProfileBind(w http.ResponseWriter, r *http.Request) {
 		local.Trust = entry.Trust
 		if local.Acquisition == "" {
 			local.Acquisition = profile.AcquireUserPath
+		}
+		// A program the user named is a program the user named, whatever put
+		// the previous paths here. Leaving `managed_download` on a binding
+		// whose paths a person has just replaced would describe bytes nothing
+		// verified as verified (NEW_244D).
+		if len(executables) > 0 && local.Acquisition != profile.AcquireUserPath {
+			local.Acquisition = profile.AcquireUserPath
+			local.Installs = nil
 		}
 		for name, value := range executables {
 			if value == "" {
@@ -1159,4 +1186,58 @@ func checkExecutable(path string) (string, error) {
 		return "", fmt.Errorf("%s is not a program on this machine", resolved)
 	}
 	return resolved, nil
+}
+
+// executablesInFolder finds every executable a profile declares under a folder
+// the user chose, laid out the way the profile says (`bin/qbsp`, …).
+//
+// A person who opens the `bin` directory itself rather than the folder above
+// it has still pointed at the right programs, so a folder whose name is the
+// first element every declared path shares is also tried from its parent.
+// Every file must be there: a partial toolchain is refused naming what is
+// missing, because a build that fails on its third stage for a program this
+// setup quietly left out is worse than a setup that says so now.
+func executablesInFolder(document profile.Profile, folder string) (map[string]string, error) {
+	root, err := checkDirectory(folder)
+	if err != nil {
+		return nil, fmt.Errorf("the folder: %w", err)
+	}
+	var declared []profile.Executable
+	switch typed := document.(type) {
+	case *profile.EngineProfile:
+		declared = typed.Executables
+	case *profile.ToolProfile:
+		declared = typed.Executables
+	}
+	if len(declared) == 0 {
+		return nil, errors.New("this profile declares no programs to find in a folder")
+	}
+	suffix := currentPlatform().ExeSuffix()
+	find := func(base string) (map[string]string, []string) {
+		found := map[string]string{}
+		var missing []string
+		for _, executable := range declared {
+			relative := strings.ReplaceAll(executable.File, "{platform.exe_suffix}", suffix)
+			path := filepath.Join(base, filepath.FromSlash(relative))
+			info, err := os.Stat(path)
+			if err != nil || !info.Mode().IsRegular() {
+				missing = append(missing, relative)
+				continue
+			}
+			found[executable.Name] = path
+		}
+		return found, missing
+	}
+	found, missing := find(root)
+	if len(missing) > 0 {
+		first := strings.SplitN(strings.ReplaceAll(declared[0].File, "{platform.exe_suffix}", suffix), "/", 2)
+		if len(first) == 2 && filepath.Base(root) == first[0] {
+			if alternative, stillMissing := find(filepath.Dir(root)); len(stillMissing) == 0 {
+				return alternative, nil
+			}
+		}
+		return nil, fmt.Errorf("%s does not hold this profile's programs: missing %s",
+			root, strings.Join(missing, ", "))
+	}
+	return found, nil
 }

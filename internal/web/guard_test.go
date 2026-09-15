@@ -346,3 +346,24 @@ func TestAUBRoutesWithoutAConfiguredAddress(t *testing.T) {
 		t.Errorf("error %q does not name %s", body["error"], config.EnvAUBBaseURL)
 	}
 }
+
+// TestAPageFromAnEarlierRunIsToldToReload is NEW_244D's regression: after a
+// restart, an open page's token is the previous run's, and every action failed
+// with advice about request headers. The refusal now carries a code the page
+// turns into "reload the page", and only a token refusal carries it.
+func TestAPageFromAnEarlierRunIsToldToReload(t *testing.T) {
+	server, _ := newTestServer(t, nil)
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/jobs", nil)
+	r.Host = testHost
+	r.Header.Set(tokenHeader, "a-token-from-the-previous-run")
+	response, body := send(t, server, r)
+	if response.StatusCode != http.StatusUnauthorized || body["code"] != codeTokenRefused {
+		t.Errorf("status = %d, body = %v", response.StatusCode, body)
+	}
+	r = httptest.NewRequest(http.MethodGet, "/api/v1/jobs", nil)
+	r.Host = "rebound.example"
+	response, body = send(t, server, r)
+	if response.StatusCode != http.StatusForbidden || body["code"] != nil {
+		t.Errorf("a host refusal is not a stale page: status = %d, body = %v", response.StatusCode, body)
+	}
+}

@@ -237,6 +237,55 @@
     };
   }
 
+  // inputTitle names a declared input the way its field is labelled.
+  function inputTitle(name) {
+    const input = (currentPipeline()?.inputs || []).find((item) => item.name === name);
+    return input?.title || name;
+  }
+
+  // explain turns the two refusals a first build meets into what to do about
+  // them. The executor's own sentence stays beside it, because it is the
+  // record; this is the next step (NEW_244D: a preview used to say "This is
+  // what would run" over "(no command resolved)" and hide both).
+  function explain(text) {
+    const missingInput =
+      /needs "([^"]+)", and nothing supplies/.exec(text || "") ||
+      /the required input "([^"]+)" was not supplied/.exec(text || "");
+    if (missingInput) {
+      return { kind: "input", name: missingInput[1],
+        advice: `Choose the ${inputTitle(missingInput[1])} first: use Browse… beside that field, or pick a revision in the Library.` };
+    }
+    if (/is not installed on this machine|root is not configured|not configured on this machine|no program is recorded/.test(text || "")) {
+      return { kind: "setup",
+        advice: "This stage's program is not set up on this machine yet. Say where it is, once, in Profiles." };
+    }
+    return null;
+  }
+
+  function problemBlock(text, profile) {
+    const why = explain(text);
+    const block = el("div", { className: "problem" });
+    block.append(el("p", { children: [el("strong", { text: why ? why.advice : text })] }));
+    if (why) block.append(el("p", { className: "fix", text: "The Companion said: " + text }));
+    if (why?.kind === "setup" && profile?.id) {
+      const setup = el("button", { text: `Set up ${profile.name || profile.id}`, attrs: { type: "button", class: "primary" } });
+      setup.addEventListener("click", async () => {
+        window.AUCOM.showArea("profiles");
+        await window.AUCOM.areas.profiles?.open?.(profile.id);
+      });
+      block.append(el("div", { className: "row-actions", children: [setup] }));
+    }
+    if (why?.kind === "input") {
+      const field = $("build-input-" + why.name);
+      if (field) {
+        const focus = el("button", { text: `Choose the ${inputTitle(why.name)}`, attrs: { type: "button", class: "secondary" } });
+        focus.addEventListener("click", () => field.focus());
+        block.append(el("div", { className: "row-actions", children: [focus] }));
+      }
+    }
+    return block;
+  }
+
   async function preview(button) {
     await withBusy(button, async () => {
       busy("build-message", "Resolving every stage…");
@@ -245,11 +294,18 @@
       out.hidden = false;
       out.replaceChildren();
       if (!ok) {
-        setMessage("build-message", body.error || "the preview failed", "error");
-        out.hidden = true;
+        setMessage("build-message", explain(body.error)?.advice || body.error || "the preview failed", "error");
+        out.append(problemBlock(body.error || "the preview failed"));
         return;
       }
-      setMessage("build-message", "This is what would run. Nothing has started.", "ok");
+      const blocked = (body.steps || []).filter((step) => step.error);
+      if (blocked.length > 0) {
+        setMessage("build-message",
+          "This build cannot start yet. What is missing is said under the stage that needs it; nothing has started.",
+          "error");
+      } else {
+        setMessage("build-message", "This is what would run. Nothing has started.", "ok");
+      }
       out.append(el("h4", { text: "Commands" }));
       for (const step of body.steps || []) {
         const block = el("div");
@@ -261,7 +317,8 @@
             ],
           })
         );
-        block.append(el("pre", { className: "output", text: step.command?.shell || "(no command resolved)" }));
+        if (step.error) block.append(problemBlock(step.error, step.profile));
+        if (step.command?.shell) block.append(el("pre", { className: "output", text: step.command.shell }));
         out.append(block);
       }
     });
@@ -272,7 +329,7 @@
       busy("build-message", "Starting…");
       const { ok, body } = await api("/api/v1/build/runs", { method: "POST", body: requestBody() });
       if (!ok) {
-        setMessage("build-message", body.error || "the build could not be started", "error");
+        setMessage("build-message", explain(body.error)?.advice || body.error || "the build could not be started", "error");
         record("Build could not be started", body.error, "failed");
         return;
       }

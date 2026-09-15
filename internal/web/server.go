@@ -306,7 +306,11 @@ func (s *Server) api() map[string]http.HandlerFunc {
 func (s *Server) guard(handler http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if status, err := checkRequest(r, s.token); err != nil {
-			writeError(w, status, err)
+			body := errorBody{Error: err.Error()}
+			if status == http.StatusUnauthorized {
+				body.Code = codeTokenRefused
+			}
+			writeJSON(w, status, body)
 			return
 		}
 		handler(w, r)
@@ -386,7 +390,15 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 
 type errorBody struct {
 	Error string `json:"error"`
+	// Code names the few refusals a page acts on rather than only shows.
+	Code string `json:"code,omitempty"`
 }
+
+// codeTokenRefused marks a request whose token is not this run's. From the
+// page that means one thing — it was served by an earlier start of the
+// Companion — and the page says so instead of printing the header advice
+// meant for somebody writing a script (NEW_244D).
+const codeTokenRefused = "token_refused"
 
 func writeError(w http.ResponseWriter, status int, err error) {
 	writeJSON(w, status, errorBody{Error: err.Error()})

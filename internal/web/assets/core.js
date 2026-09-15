@@ -66,6 +66,16 @@ async function api(path, options = {}) {
         body = { error: text };
       }
     }
+    if (response.status === 401 && body.code === "token_refused") {
+      // The Companion was restarted after this page was loaded: the token in
+      // the page belongs to the run that served it. Reloading fetches the new
+      // one, and nothing the Companion recorded is lost by doing so.
+      body.error =
+        "this page was opened from an earlier start of the Companion, which has since restarted. " +
+        "Reload the page to continue — every job, build and setting is still recorded.";
+      const banner = document.getElementById("stale-page");
+      if (banner) banner.hidden = false;
+    }
     return { ok: response.ok, status: response.status, body };
   } catch (err) {
     // A fetch rejection here means the local server went away — the one failure

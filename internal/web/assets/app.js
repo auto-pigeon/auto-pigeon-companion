@@ -130,7 +130,9 @@
     signInOpener = null;
   }
   window.AUCOM.openSignIn = openSignIn;
+  window.AUCOM.showArea = show;
 
+  $("stale-page-reload").addEventListener("click", () => window.location.reload());
   $("sign-in-open").addEventListener("click", (event) => openSignIn(event.currentTarget));
   $("library-sign-in").addEventListener("click", (event) => openSignIn(event.currentTarget));
   $("sign-in-close").addEventListener("click", () => closeSignIn());

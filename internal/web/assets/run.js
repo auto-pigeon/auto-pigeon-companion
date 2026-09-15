@@ -108,7 +108,10 @@
       for (const layout of engine.content_layouts) {
         layouts.append(
           el("li", {
-            text: `${layout.title || layout.id}: ${layout.root}/${layout.path} (${layout.kind})` +
+            // A layout with no fixed path (a mod directory, named when it is
+            // played) is the root itself plus "a directory you name" — never
+            // the word "undefined" (NEW_244D).
+            text: `${layout.title || layout.id}: ${layout.root}/${layout.path || "<a directory you name>"} (${layout.kind})` +
               (layout.note ? " — " + layout.note : ""),
           })
         );

@@ -232,15 +232,51 @@
     const executables = executableNames(body);
     if (executables.length === 0) return;
 
-    detail.append(el("h4", { text: "Where these programs are on this machine" }));
+    detail.append(el("h4", { text: "Where these programs are on this machine", attrs: { id: "profile-setup" } }));
     detail.append(
       el("p", {
         className: "muted",
         text:
           "This is recorded separately from the profile and is never part of a profile you export. " +
-          "A managed download fills it in for you; a copy you installed yourself is named here.",
+          "Choose the folder you unpacked the programs into, or name each program below.",
       })
     );
+
+    // Provenance, in words. A program somebody named is not a verified download,
+    // and the page must not let the builtin badge above read as if it were
+    // (NEW_244D).
+    const provenance = el("p", { className: "provenance", attrs: { id: "profile-provenance" } });
+    const describeProvenance = (binding) => {
+      const acquisition = binding?.acquisition || "";
+      const named = Object.values(binding?.executables || {}).filter(Boolean).length;
+      provenance.replaceChildren();
+      if (named === 0) {
+        provenance.append(badge("not set up", "blocked"),
+          document.createTextNode(" Nothing is recorded yet, so a build that needs these programs cannot start."));
+      } else if (acquisition === "managed_download") {
+        provenance.append(badge("verified download", "verified"),
+          document.createTextNode(" Downloaded and checked against the signed Auto-Pigeon catalogue."));
+      } else {
+        provenance.append(badge("local binding", "local"),
+          document.createTextNode(
+            " Programs you named on this machine. Nothing has checked these files against a catalogue; " +
+            "the profile's builtin badge is about the document, not about these bytes."));
+      }
+    };
+    describeProvenance(body.binding);
+    detail.append(provenance);
+
+    const folder = window.AUCOM.pathField({
+      id: "profile-folder",
+      kind: "directory",
+      label: `The folder that holds ${body.name}`,
+      hint: "For ericw-tools, the folder you unpacked the release into (the one containing bin).",
+    });
+    detail.append(folder.container);
+    const useFolder = el("button", { text: "Use this folder", attrs: { type: "button", class: "primary", id: "profile-use-folder" } });
+    const folderStatus = el("p", { className: "message", attrs: { role: "status" } });
+    detail.append(el("div", { className: "row-actions", children: [useFolder] }), folderStatus);
+
     const fields = new Map();
     for (const executable of executables) {
       const field = window.AUCOM.pathField({
@@ -269,6 +305,28 @@
         }
         setMessage(saveStatus, "Recorded. It survives a restart.", "ok");
         record(`Recorded where ${body.name} is`, Object.values(paths).filter(Boolean).join(", "), "ok");
+        describeProvenance(out.binding);
+      })
+    );
+    useFolder.addEventListener("click", () =>
+      withBusy(useFolder, async () => {
+        const chosen = folder.input.value.trim();
+        if (!chosen) {
+          setMessage(folderStatus, "Choose the folder first, with Browse… or by typing it.", "error");
+          return;
+        }
+        const { ok, body: out } = await api(`/api/v1/profiles/${encodeURIComponent(body.id)}/bind`, {
+          method: "POST",
+          body: { folder: chosen },
+        });
+        if (!ok) {
+          setMessage(folderStatus, out.error || "could not use this folder", "error");
+          return;
+        }
+        for (const [name, field] of fields) field.input.value = (out.binding?.executables || {})[name] || "";
+        describeProvenance(out.binding);
+        setMessage(folderStatus, `Found all ${fields.size} programs. Recorded as a local binding; it survives a restart.`, "ok");
+        record(`Recorded where ${body.name} is`, chosen, "ok");
       })
     );
     detail.append(el("div", { className: "row-actions", children: [save] }));

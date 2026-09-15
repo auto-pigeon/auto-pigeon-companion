@@ -158,6 +158,11 @@ a:hover { color: var(--accent-strong); text-decoration-color: currentColor; }
 .auth-dialog__form .field { min-width: 0; }
 .auth-dialog__foot { margin: 0; border-top: 1px solid var(--line); padding-top: 0.5rem; font-size: 0.8125rem; }
 .notice { border-left: 3px solid var(--accent); }
+.stale-page {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--gap);
+  padding: 0.6rem 1rem; background: var(--warn-soft); border-bottom: 1px solid var(--warn); color: var(--ink);
+}
+.stale-page p { margin: 0; }
 .notice p { margin: 0 0 0.5rem; }
 
 .app-body { display: flex; align-items: flex-start; gap: 0; }
