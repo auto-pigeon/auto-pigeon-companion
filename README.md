@@ -321,10 +321,23 @@ The page has six areas, and the order is the order of a first run.
 
 ### The default path through it
 
-Sign in → choose an exact map revision in **Library** and download it → in
-**Build**, pick a pipeline and press Build → in **Run**, pick the engine you
-have and start it. Expert controls — a step's options, the raw profile document,
-a hand-written engine — are all reachable and none of them are on that path.
+**Nothing on the local path needs an account.** A signed-out page opens on
+**Build**: choose a `.map` on this machine with **Browse…**, say where your
+compiler is in **Profiles** if the preview asks, press Build, and read the
+result in the Build area or in **Jobs**; then in **Run**, pick the engine you
+have and start it.
+
+With an auto-pigeon-backend account the path starts one step earlier: **Sign
+in** (the button in the header, or the Library's own) opens a sign-in dialog —
+the same dialog AUG and AUP use, dismissible with Close or Escape — and the
+**Library** then lets you download an exact map revision to build instead of a
+file. Expert controls — a step's options, the raw profile document, a
+hand-written engine — are all reachable and none of them are on either path.
+
+The page wears auto-pigeon-gallery's palette, type and control shapes (dark
+surfaces, the teal accent, the same buttons, inputs and badges), so the
+Companion reads as the same product; no font or stylesheet is fetched from
+anywhere, and the layout is the Companion's own.
 
 ### Two halves of every profile, kept apart
 

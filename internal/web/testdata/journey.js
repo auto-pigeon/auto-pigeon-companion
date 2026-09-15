@@ -80,7 +80,18 @@
     await waitFor(`the ${area} area`, () => visible($("area-" + area)));
     await sleep(60);
     const overflow = document.documentElement.scrollWidth - document.documentElement.clientWidth;
-    if (overflow > 2) overflowed.push(`${area} by ${overflow}px`);
+    if (overflow > 2) {
+      // Name what is too wide: the deepest elements whose own content is wider
+      // than the window, so a failure says what to fix.
+      const limit = document.documentElement.clientWidth;
+      const wide = [...$("area-" + area).querySelectorAll("*")].filter((node) =>
+        node.scrollWidth > limit && [...node.children].every((child) => child.scrollWidth <= limit)
+      );
+      const names = wide.slice(0, 4).map((node) =>
+        `${node.tagName.toLowerCase()}${node.id ? "#" + node.id : ""}${node.className ? "." + node.className : ""}(${node.scrollWidth}px: ${textOf(node).trim().slice(0, 40)})`
+      );
+      overflowed.push(`${area} by ${overflow}px after step ${steps.length} (${names.join("; ") || "nothing named"})`);
+    }
   }
 
   function setValue(node, value) {
@@ -96,8 +107,33 @@
     await waitFor("the application to boot", () => window.AUCOM && window.AUCOM.status.version);
     record("the page loads", true, `version ${window.AUCOM.status.version}`);
 
-    await waitFor("the sign-in panel", () => visible($("first-run")));
-    record("a fresh machine asks for a sign-in", true, textOf($("first-run-why")).slice(0, 80));
+    // NEW_244D: a fresh, signed-out machine opens on Build with nothing in the
+    // way. Signing in is for the Library, and is a dialog a person opens.
+    await waitFor("the first area", () => document.querySelector('.area-tab[aria-current="page"]'));
+    record(
+      "a fresh signed-out machine opens on Build, not on a sign-in form",
+      visible($("area-build")) && !visible($("first-run")),
+      `current area ${document.querySelector('.area-tab[aria-current="page"]').dataset.area}`
+    );
+    await go("library");
+    record(
+      "the Library says it is the one area that needs an account",
+      visible($("library-signed-out")) && textOf($("library-signed-out")).includes("work signed out"),
+      textOf($("library-signed-out")).replace(/\s+/g, " ").trim().slice(0, 90)
+    );
+    $("library-sign-in").click();
+    await waitFor("the sign-in dialog", () => visible($("first-run")));
+    record(
+      "signing in is a dialog, focused on its first field",
+      $("first-run").getAttribute("role") === "dialog" && document.activeElement === $("email"),
+      textOf($("first-run-why")).slice(0, 80)
+    );
+    $("email").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await waitFor("the dialog to close on Escape", () => !visible($("first-run")));
+    record("the dialog closes on Escape and gives focus back", document.activeElement === $("library-sign-in"),
+      document.activeElement ? document.activeElement.id : "nothing focused");
+    $("sign-in-open").click();
+    await waitFor("the sign-in dialog again", () => visible($("first-run")));
 
     // The keyboard path is real: the skip link is the first focusable thing,
     // and every area is reachable as a button.
@@ -226,7 +262,8 @@
     );
 
     $("build-start").click();
-    await waitFor("the build panel", () => visible($("build-current-panel")), 60000);
+    await waitFor("the build panel", () => visible($("build-current-panel")), 60000)
+      .catch((err) => { throw new Error(`${err.message}; the build area said: ${textOf($("build-message"))}`); });
     await waitFor(
       "the build to finish",
       () => {
@@ -234,7 +271,9 @@
         return message.classList.contains("ok") && message.textContent.includes("succeeded");
       },
       120000
-    );
+    ).catch((err) => {
+      throw new Error(`${err.message}; the build area said: ${textOf($("build-message"))} | ${textOf($("build-progress")).replace(/\s+/g, " ").slice(0, 300)}`);
+    });
     record("the build succeeds", true, textOf($("build-progress")).replace(/\s+/g, " ").trim().slice(0, 120));
     record(
       "the finished build lists its artifacts",

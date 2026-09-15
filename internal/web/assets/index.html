@@ -23,35 +23,48 @@
       </div>
       <div class="account">
         <span id="account-email" class="account-email"></span>
+        <button type="button" id="sign-in-open" class="primary" hidden>Sign in</button>
         <button type="button" id="sign-out" hidden>Sign out</button>
       </div>
     </header>
 
     <!--
-      The first-run panel. It is a region rather than a modal: a modal that
-      cannot be dismissed is a page a keyboard user can be trapped in, and
-      everything behind this one — the Jobs list, Settings — is still worth
-      reading while somebody works out where their backend is.
+      Sign-in is a dialog, the same two layers AUG and AUP use: a dimming sheet
+      and the dialog above it. It is opened by a person — from the header or from
+      the Library, which is the only area that needs an account — and never on
+      its own: building, running, profiles, jobs and settings all work signed
+      out, and a first run that opened with a sign-in form said the opposite
+      (NEW_244D). It is dismissible (Close, Escape, the sheet), so nobody is
+      trapped in it.
     -->
-    <section id="first-run" class="first-run" aria-labelledby="first-run-heading" hidden>
-      <h2 id="first-run-heading">Sign in to auto-pigeon-backend</h2>
-      <p id="first-run-why" class="muted"></p>
-      <form id="sign-in-form" autocomplete="on">
-        <div class="field">
-          <label for="email">Email</label>
-          <input id="email" name="email" type="email" required autocomplete="username" />
-        </div>
-        <div class="field">
-          <label for="password">Password</label>
-          <input id="password" name="password" type="password" required autocomplete="current-password" />
-        </div>
-        <div class="row">
-          <button type="submit" id="sign-in">Sign in</button>
-          <button type="button" id="go-to-settings" class="secondary">Where is my backend?</button>
-        </div>
-      </form>
-      <p id="sign-in-message" class="message" role="alert"></p>
-    </section>
+    <div id="sign-in-modal" class="auth-modal" hidden>
+      <div class="auth-overlay" data-dismiss="sign-in"></div>
+      <div class="auth-dialog__layer">
+        <section id="first-run" class="auth-dialog" role="dialog" aria-modal="true" aria-labelledby="first-run-heading" aria-describedby="first-run-why">
+          <div class="auth-dialog__head">
+            <h2 id="first-run-heading">Sign in to auto-pigeon-backend</h2>
+            <p id="first-run-why"></p>
+            <button type="button" id="sign-in-close" class="auth-dialog__close" aria-label="Close">×</button>
+          </div>
+          <form id="sign-in-form" class="auth-dialog__form" autocomplete="on">
+            <div class="field">
+              <label for="email">Email</label>
+              <input id="email" name="email" type="email" required autocomplete="username" />
+            </div>
+            <div class="field">
+              <label for="password">Password</label>
+              <input id="password" name="password" type="password" required autocomplete="current-password" />
+            </div>
+            <div class="row">
+              <button type="submit" id="sign-in" class="primary">Sign in</button>
+              <button type="button" id="go-to-settings" class="secondary">Where is my backend?</button>
+            </div>
+          </form>
+          <p id="sign-in-message" class="message" role="alert"></p>
+          <p class="auth-dialog__foot muted">Only the Library needs an account. Build, Run, Profiles, Jobs and Settings work signed out.</p>
+        </section>
+      </div>
+    </div>
 
     <div class="app-body">
       <nav class="areas" aria-label="Areas">
@@ -77,6 +90,17 @@
             revision — a build reads the copy in the cache, so a newer revision
             on the server cannot change a build you have already started.
           </p>
+
+          <div id="library-signed-out" class="panel notice" hidden>
+            <p>
+              <strong>The Library is the one area that needs an account.</strong>
+              Compiling a map from a file on this machine, running an engine you
+              have, reviewing profiles and reading jobs all work signed out.
+            </p>
+            <div class="row-actions">
+              <button type="button" id="library-sign-in" class="primary">Sign in</button>
+            </div>
+          </div>
 
           <div class="panel">
             <div class="panel-head">

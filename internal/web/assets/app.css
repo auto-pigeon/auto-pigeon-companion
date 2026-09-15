@@ -16,55 +16,69 @@
 */
 
 :root {
-  color-scheme: light dark;
+  /*
+    The palette, type and control shapes are auto-pigeon-gallery's
+    (`src/styles/tokens.css` and `base.css`, which follow AUP's), mapped onto
+    this sheet's own names so the layout below did not have to change
+    (NEW_244D, at the operator's request: the Companion should look like the
+    same product). Dark only, as AUG is. No font is downloaded — the page's CSP
+    forbids it and the stacks fall back to the system's own face.
 
-  --bg: #f6f6f4;
-  --surface: #ffffff;
-  --surface-2: #f0efec;
-  --ink: #1b1b1a;
-  --ink-muted: #5c5b57;
-  --line: #d6d4cf;
-  --accent: #35566d;
-  --accent-ink: #ffffff;
-  --ok: #1f6b3f;
-  --warn: #7a5307;
-  --bad: #96271d;
-  --focus: #b8541b;
+    `--ink-muted` is AUG's *secondary* text colour, not its muted one: muted
+    measures under 4.5:1 on these surfaces and this page uses the variable for
+    whole sentences.
+  */
+  color-scheme: dark;
 
-  --radius: 6px;
+  --bg: #0b0d10;            /* --color-bg-canvas */
+  --surface: #12151a;       /* --color-bg-panel */
+  --surface-2: #1a1e26;     /* --color-bg-raised */
+  --overlay: #1d222b;       /* --color-bg-overlay */
+  --inset: #0e1116;         /* --color-bg-inset */
+  --ink: #e8eaf0;           /* --color-text-primary */
+  --ink-muted: #a6adba;     /* --color-text-secondary */
+  --ink-faint: #6f7684;     /* --color-text-muted */
+  --line: #262b34;          /* --color-separator */
+  --line-strong: #333a46;   /* --color-separator-strong */
+  --accent: #4fd1c5;
+  --accent-strong: #7ee6dc;
+  --accent-soft: rgb(79 209 197 / .14);
+  --accent-ink: #0b0d10;
+  --ok: #6fd08c;
+  --ok-soft: rgb(111 208 140 / .14);
+  --warn: #f5a524;
+  --warn-soft: rgb(245 165 36 / .14);
+  --bad: #f36a5a;
+  --bad-soft: rgb(243 106 90 / .14);
+  --focus: #7ee6dc;
+
+  --radius: 4px;            /* --radius-sm: every control */
+  --radius-panel: 8px;      /* --radius-md: panels and dialogs */
+  --shadow-lg: 0 12px 32px rgb(0 0 0 / .55);
   --gap: 0.75rem;
-  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #16171a;
-    --surface: #1e2024;
-    --surface-2: #262930;
-    --ink: #e8e8e6;
-    --ink-muted: #a3a49f;
-    --line: #383c44;
-    --accent: #7fa8c4;
-    --accent-ink: #10151a;
-    --ok: #6fce97;
-    --warn: #e0b357;
-    --bad: #f08a7e;
-    --focus: #f0a35c;
-  }
+  --font: "Inter", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: "Inter", "Trebuchet MS", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", "Segoe UI Mono", monospace;
 }
 
 * { box-sizing: border-box; }
+
+/* `hidden` means hidden, whatever display a class gives the element: `.field`
+   is a flex box, and without this an empty "File" chooser for a Library
+   revision showed under a file on this machine (NEW_244D). */
+[hidden] { display: none !important; }
 
 body {
   margin: 0;
   font-family: var(--font);
   font-size: 15px;
-  line-height: 1.5;
+  line-height: 1.45;
   color: var(--ink);
   background: var(--bg);
+  -webkit-font-smoothing: antialiased;
 }
 
+h1, h2, h3, h4 { font-family: var(--font-display); font-weight: 600; letter-spacing: -.01em; }
 h1 { font-size: 1.15rem; margin: 0; }
 h2 { font-size: 1.35rem; margin: 0 0 0.25rem; }
 h3 { font-size: 1.02rem; margin: 0; }
@@ -88,7 +102,7 @@ h4 { font-size: 0.94rem; margin: 1rem 0 0.35rem; }
 .skip-link {
   position: absolute;
   left: 0.5rem; top: -3rem;
-  z-index: 10;
+  z-index: 300;
   padding: 0.5rem 0.75rem;
   background: var(--accent); color: var(--accent-ink);
   border-radius: var(--radius);
@@ -98,9 +112,12 @@ h4 { font-size: 0.94rem; margin: 1rem 0 0.35rem; }
 
 /* One focus style everywhere, and it is never removed. */
 :focus-visible {
-  outline: 3px solid var(--focus);
-  outline-offset: 2px;
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
 }
+
+a { color: var(--accent); text-decoration-color: var(--accent-soft); }
+a:hover { color: var(--accent-strong); text-decoration-color: currentColor; }
 
 .app-header {
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
@@ -113,13 +130,31 @@ h4 { font-size: 0.94rem; margin: 1rem 0 0.35rem; }
 .account { display: flex; align-items: center; gap: var(--gap); }
 .account-email { font-size: 0.85rem; color: var(--ink-muted); }
 
-.first-run {
-  margin: 1rem; padding: 1rem;
-  background: var(--surface);
-  border: 2px solid var(--accent);
-  border-radius: var(--radius);
-  max-width: 42rem;
+/* The sign-in dialog: AUG's `.auth-overlay` / `.auth-dialog__layer` /
+   `.auth-dialog`, declaration for declaration where the declarations exist. */
+.auth-overlay { position: fixed; inset: 0; z-index: 200; background: rgb(6 7 9 / .82); backdrop-filter: blur(3px); }
+.auth-dialog__layer { position: fixed; inset: 0; z-index: 201; display: grid; place-items: center; padding: 1rem; pointer-events: none; }
+.auth-dialog {
+  pointer-events: auto; box-sizing: border-box;
+  width: min(26rem, 100%); max-height: calc(100dvh - 4rem); overflow: auto;
+  display: grid; gap: 0.75rem; padding: 1rem;
+  background: var(--overlay); border: 1px solid var(--accent);
+  border-radius: var(--radius-panel); box-shadow: var(--shadow-lg);
 }
+.auth-dialog__head { position: relative; display: grid; gap: 0.25rem; padding-right: 2rem; }
+.auth-dialog__head h2 { margin: 0; font-size: 1rem; }
+.auth-dialog__head p { margin: 0; color: var(--ink-muted); font-size: 0.8125rem; }
+.auth-dialog__close {
+  position: absolute; top: -.25rem; right: -.25rem;
+  padding: 0 .4rem; border-color: transparent; background: none;
+  color: var(--ink-faint); font-size: 1.15rem; line-height: 1.2;
+}
+.auth-dialog__close:hover:not(:disabled) { background: none; color: var(--accent-strong); }
+.auth-dialog__form { display: grid; gap: 0.75rem; }
+.auth-dialog__form .field { min-width: 0; }
+.auth-dialog__foot { margin: 0; border-top: 1px solid var(--line); padding-top: 0.5rem; font-size: 0.8125rem; }
+.notice { border-left: 3px solid var(--accent); }
+.notice p { margin: 0 0 0.5rem; }
 
 .app-body { display: flex; align-items: flex-start; gap: 0; }
 
@@ -138,10 +173,11 @@ h4 { font-size: 0.94rem; margin: 1rem 0 0.35rem; }
   border: 1px solid transparent; border-radius: var(--radius);
   font: inherit; font-weight: 600; cursor: pointer;
 }
-.area-tab:hover { background: var(--surface-2); }
+.area-tab:hover { background: var(--surface-2); border-color: var(--line-strong); }
 .area-tab[aria-current="page"] {
-  background: var(--surface-2);
+  background: var(--accent-soft);
   border-color: var(--accent);
+  color: var(--accent-strong);
   /* A left bar as well as the background, so the current area is legible
      without colour. */
   box-shadow: inset 3px 0 0 var(--accent);
@@ -153,7 +189,7 @@ main { flex: 1 1 auto; padding: 1rem 1.25rem 3rem; min-width: 0; }
 .panel {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: var(--radius-panel);
   padding: 0.9rem 1rem;
   margin: 0 0 1rem;
 }
@@ -165,32 +201,45 @@ main { flex: 1 1 auto; padding: 1rem 1.25rem 3rem; min-width: 0; }
 .row { display: flex; flex-wrap: wrap; gap: var(--gap); align-items: flex-end; margin: 0.5rem 0; }
 .field { display: flex; flex-direction: column; gap: 0.2rem; min-width: 11rem; }
 .field.grow { flex: 1 1 16rem; }
-label { font-weight: 600; font-size: 0.85rem; }
+label { font-weight: 500; font-size: 0.8125rem; }
 .check { display: flex; align-items: center; gap: 0.4rem; font-weight: normal; }
 
 input, select, textarea {
-  font: inherit;
-  color: var(--ink); background: var(--surface-2);
-  border: 1px solid var(--line); border-radius: var(--radius);
-  padding: 0.35rem 0.45rem;
+  font: inherit; font-size: 0.8125rem;
+  color: var(--ink); background: var(--inset);
+  border: 1px solid var(--line-strong); border-radius: var(--radius);
+  padding: .4rem .6rem;
   max-width: 100%;
 }
+input::placeholder, textarea::placeholder { color: var(--ink-faint); }
+select:hover { border-color: var(--accent); }
+/* A select is as wide as its longest option unless told otherwise, and a
+   pipeline's summary is a sentence: without this the Build panel grew to
+   1 100px in a 500px window once the area had rendered while visible. */
+select { width: 100%; min-width: 0; }
 textarea { width: 100%; font-family: var(--mono); font-size: 0.82rem; }
 input[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--bad); border-width: 2px; }
 
+/* One button shape (AUG's), and every rank is that shape with different ink. */
 button {
-  font: inherit; font-weight: 600;
-  padding: 0.4rem 0.8rem;
+  font-family: inherit; font-size: 0.8125rem; font-weight: 500; line-height: 1.2;
+  padding: .4rem .75rem;
   border-radius: var(--radius);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   background: var(--surface-2); color: var(--ink);
   cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, transform 80ms ease;
 }
-button:hover:not(:disabled) { border-color: var(--accent); }
-button:disabled { opacity: 0.55; cursor: not-allowed; }
-button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
-button.secondary { font-weight: normal; }
-button.danger { border-color: var(--bad); color: var(--bad); }
+button:hover:not(:disabled) { background: var(--overlay); border-color: var(--accent); }
+button:active:not(:disabled) { transform: translateY(1px); }
+button:disabled { color: var(--ink-faint); border-color: var(--line); opacity: .45; cursor: not-allowed; }
+button[aria-busy="true"] { cursor: progress; }
+button.primary { background: var(--accent-soft); color: var(--accent-strong); border-color: var(--accent); }
+button.primary:hover:not(:disabled) { background: var(--accent); color: var(--accent-ink); }
+button.secondary { background: transparent; color: var(--ink-muted); }
+button.secondary:hover:not(:disabled) { background: transparent; color: var(--accent-strong); }
+button.danger { background: var(--bad-soft); border-color: var(--bad); color: var(--bad); }
+button.danger:hover:not(:disabled) { background: var(--bad); color: var(--bg); }
 button.link {
   background: none; border: none; padding: 0; color: var(--accent);
   text-decoration: underline; font-weight: 600;
@@ -204,7 +253,7 @@ button.link {
 
 .output, .preview pre {
   font-family: var(--mono); font-size: 0.8rem;
-  background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--inset); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 0.55rem; margin: 0.4rem 0 0;
   max-height: 22rem; overflow: auto; white-space: pre-wrap; word-break: break-word;
 }
@@ -212,7 +261,7 @@ button.link {
 .cards { list-style: none; margin: 0.5rem 0 0; padding: 0; display: grid; gap: var(--gap);
   grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); }
 .card {
-  border: 1px solid var(--line); border-radius: var(--radius);
+  border: 1px solid var(--line); border-radius: var(--radius-panel);
   padding: 0.6rem 0.7rem; background: var(--surface-2);
   display: flex; flex-direction: column; gap: 0.3rem;
 }
@@ -230,21 +279,23 @@ button.link {
 
 /* Badges always carry their word. `.badge` alone is the shape; the modifier
    only changes the colour, so removing every colour leaves the meaning. */
+/* AUG's badge geometry: a small filled tag, the tone carried by a soft fill
+   and the ink, and always by the word. */
 .badge {
-  display: inline-block; padding: 0.05rem 0.4rem;
-  border: 1px solid var(--line); border-radius: 999px;
-  font-size: 0.75rem; font-weight: 700; text-transform: lowercase;
-  background: var(--surface);
+  display: inline-block; padding: 0 0.5rem;
+  border: 1px solid transparent; border-radius: var(--radius);
+  font-size: 0.72rem; font-weight: 600; letter-spacing: .04em; text-transform: lowercase;
+  background: var(--surface-2); color: var(--ink-muted);
 }
-.badge.builtin { border-color: var(--ok); color: var(--ok); }
-.badge.verified { border-color: var(--ok); color: var(--ok); }
-.badge.community { border-color: var(--warn); color: var(--warn); }
-.badge.local { border-color: var(--warn); color: var(--warn); }
-.badge.ok, .badge.succeeded { border-color: var(--ok); color: var(--ok); }
-.badge.running, .badge.queued { border-color: var(--accent); color: var(--accent); }
-.badge.failed, .badge.interrupted, .badge.blocked { border-color: var(--bad); color: var(--bad); }
-.badge.cancelled, .badge.skipped { border-color: var(--ink-muted); color: var(--ink-muted); }
-.badge.warning { border-color: var(--warn); color: var(--warn); }
+.badge.builtin { background: var(--ok-soft); color: var(--ok); }
+.badge.verified { background: var(--ok-soft); color: var(--ok); }
+.badge.community { background: var(--warn-soft); color: var(--warn); }
+.badge.local { background: var(--warn-soft); color: var(--warn); }
+.badge.ok, .badge.succeeded { background: var(--ok-soft); color: var(--ok); }
+.badge.running, .badge.queued { background: var(--accent-soft); color: var(--accent-strong); }
+.badge.failed, .badge.interrupted, .badge.blocked { background: var(--bad-soft); color: var(--bad); }
+.badge.cancelled, .badge.skipped { background: var(--surface-2); color: var(--ink-muted); }
+.badge.warning { background: var(--warn-soft); color: var(--warn); }
 
 /* The work-in-progress statement. A note, not an error: the path it describes
    works, and a red box would be telling the user something untrue about it.
@@ -253,7 +304,7 @@ button.link {
 .wip {
   margin: 0.5rem 0; padding: 0.4rem 0.7rem;
   border-left: 3px solid var(--warn);
-  background: var(--surface);
+  background: var(--warn-soft);
   font-size: 0.85rem; line-height: 1.45;
 }
 .wip .wip__text { display: block; }
@@ -356,5 +407,5 @@ footer p { margin: 0; font-size: 0.82rem; max-width: 70ch; }
 
 @media (prefers-contrast: more) {
   .panel, .rows > li, .card { border-width: 2px; }
-  .badge { border-width: 2px; }
+  .badge { border-color: currentColor; }
 }

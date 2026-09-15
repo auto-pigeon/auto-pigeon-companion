@@ -35,8 +35,15 @@
     about: "About",
   };
 
+  // The area a fresh page opens on. Signed out, that is Build: local work needs
+  // no account, and opening on the one area that does told a first-time user
+  // otherwise (NEW_244D).
+  function defaultArea() {
+    return window.AUCOM.status?.authenticated ? "library" : "build";
+  }
+
   function show(area, { focus = true } = {}) {
-    if (!areaNames.includes(area)) area = "library";
+    if (!areaNames.includes(area)) area = defaultArea();
     for (const name of areaNames) {
       $("area-" + name).hidden = name !== area;
     }
@@ -80,14 +87,15 @@
     $("account-email").textContent = body.authenticated ? body.email || "signed in" : "not signed in";
     $("sign-out").hidden = !body.authenticated;
 
-    const firstRun = $("first-run");
-    firstRun.hidden = Boolean(body.authenticated);
-    if (!body.authenticated) {
+    $("sign-in-open").hidden = Boolean(body.authenticated);
+    $("library-signed-out").hidden = Boolean(body.authenticated);
+    if (body.authenticated) {
+      closeSignIn({ restoreFocus: false });
+    } else {
       $("first-run-why").textContent = body.aub_base_url
-        ? `Your maps and assets live in auto-pigeon-backend at ${body.aub_base_url}. Everything else — ` +
-          `builds, engines, jobs — works signed out.`
-        : "No backend address is configured yet. Nothing in the Companion has a built-in one, so open " +
-          "Settings and fill it in before signing in.";
+        ? `Your maps and assets live in auto-pigeon-backend at ${body.aub_base_url}.`
+        : "No backend address is configured yet, and nothing in the Companion has a built-in one. " +
+          "To use the Library, set it in Settings first.";
     }
 
     $("extractor-state").textContent = !body.aue_available
@@ -99,6 +107,51 @@
     $("extractor-version").disabled = !body.aue_available;
   }
   window.AUCOM.refreshStatus = refreshStatus;
+
+  // --- the sign-in dialog ----------------------------------------------------
+
+  let signInOpener = null;
+
+  function openSignIn(opener) {
+    signInOpener = opener || document.activeElement;
+    $("sign-in-modal").hidden = false;
+    $("email").focus();
+  }
+
+  function closeSignIn({ restoreFocus = true } = {}) {
+    if ($("sign-in-modal").hidden) return;
+    $("sign-in-modal").hidden = true;
+    $("password").value = "";
+    if (restoreFocus && signInOpener && document.contains(signInOpener)) signInOpener.focus();
+    signInOpener = null;
+  }
+  window.AUCOM.openSignIn = openSignIn;
+
+  $("sign-in-open").addEventListener("click", (event) => openSignIn(event.currentTarget));
+  $("library-sign-in").addEventListener("click", (event) => openSignIn(event.currentTarget));
+  $("sign-in-close").addEventListener("click", () => closeSignIn());
+  document.querySelector('[data-dismiss="sign-in"]').addEventListener("click", () => closeSignIn());
+  $("sign-in-modal").addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeSignIn();
+      return;
+    }
+    // Focus stays inside an open dialog: Tab past the last control comes back
+    // to the first, and Shift+Tab the other way.
+    if (event.key !== "Tab") return;
+    const focusable = [...$("first-run").querySelectorAll("button:not([disabled]), input:not([disabled])")];
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
 
   $("sign-in-form").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -138,7 +191,10 @@
     });
   });
 
-  $("go-to-settings").addEventListener("click", () => show("settings"));
+  $("go-to-settings").addEventListener("click", () => {
+    closeSignIn({ restoreFocus: false });
+    show("settings");
+  });
 
   // --- boot -----------------------------------------------------------------
 
@@ -149,11 +205,6 @@
     await window.AUCOM.areas.settings.refresh();
     await refreshStatus();
     window.AUCOM.renderActivity();
-    show(window.location.hash.replace(/^#/, "") || "library", { focus: false });
-    // The first-run panel takes focus only when it is the thing the user has
-    // to deal with, and only on a real first load.
-    if (!window.AUCOM.status.authenticated && !window.location.hash) {
-      $("email").focus();
-    }
+    show(window.location.hash.replace(/^#/, "") || defaultArea(), { focus: false });
   })();
 })();

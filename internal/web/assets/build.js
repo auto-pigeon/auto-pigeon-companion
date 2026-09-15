@@ -24,8 +24,16 @@
 
   async function refreshPipelines() {
     const select = $("build-pipeline");
-    const previous = select.value;
     const { ok, body } = await api("/api/v1/build/pipelines");
+    // Read AFTER the await, not before: a refresh that started while the user
+    // was choosing a pipeline must not put back the one that was selected
+    // when it started (NEW_244D found two overlapping refreshes doing exactly
+    // that, and a build then ran a pipeline nobody chose).
+    const previous = select.value;
+    // What the user already filled in survives a refresh of the same pipeline.
+    // Leaving Build to set a compiler up in Profiles and coming back used to
+    // come back to an empty map field.
+    const kept = previous ? keptInputs() : null;
     if (!ok) {
       setMessage("build-message", body.error || "could not read the pipelines", "error");
       return;
@@ -52,6 +60,26 @@
     }
     if (previous && pipelines.some((item) => item.id === previous)) select.value = previous;
     renderPipeline();
+    if (kept && select.value === previous) restoreInputs(kept);
+  }
+
+  function keptInputs() {
+    const values = new Map();
+    for (const [name, row] of inputFields) {
+      values.set(name, { source: row.source.value, path: row.file.input.value, choice: row.fileChoice.value });
+    }
+    return values;
+  }
+
+  function restoreInputs(values) {
+    for (const [name, value] of values) {
+      const row = inputFields.get(name);
+      if (!row) continue;
+      row.source.value = value.source;
+      row.file.input.value = value.path;
+      row.apply();
+      if (value.choice) row.fileChoice.value = value.choice;
+    }
   }
 
   // renderPipeline draws the stages and the inputs of whichever pipeline is
