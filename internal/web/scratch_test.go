@@ -172,3 +172,15 @@ func TestAScratchToolAndPipelineBuildAMap(t *testing.T) {
 		t.Errorf("the pipeline's parameter did not reach the command: %q", shell)
 	}
 }
+
+func TestAScratchArgumentCanBeConditionedOnAnOptionalFolder(t *testing.T) {
+	arg, err := scratchArg("-wadpath [if folder content_root]")
+	if err != nil {
+		t.Fatal(err)
+	}
+	object, _ := arg.(map[string]any)
+	when, _ := object["when"].(map[string]any)
+	if object["value"] != "-wadpath" || when["root"] != "content_root" {
+		t.Errorf("arg = %#v", arg)
+	}
+}

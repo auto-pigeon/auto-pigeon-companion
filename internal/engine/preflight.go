@@ -271,6 +271,9 @@ func (c Checker) rootProblems(document profile.Profile, action profile.Action, l
 			continue // created per job; it never exists in advance.
 		}
 		path := local.Roots[ref.Role]
+		if path == "" && ref.Optional {
+			continue
+		}
 		if path == "" {
 			problems = append(problems, Problem{
 				Fault:   FaultUnboundRoot,

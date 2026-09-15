@@ -114,7 +114,7 @@
     {
       "id": "compile",
       "title": "Compile the map",
-      "description": "qbsp reads the .map and writes the .bsp. The WAD the map names in its worldspawn is found beside the .map, which is why the optional `wad` input is staged with the source.",
+      "description": "qbsp reads the .map and writes the .bsp. The WAD the map names in its worldspawn is found beside the .map, which is why the optional `wad` input is staged with the source. A map that names its WAD with a folder — `gfx/metal.wad`, as every map id Software released does — is found only through `-wadpath`, so the optional texture folder is passed that way when it is set; with none set, nothing changes.",
       "capability": "q1.bsp.compile",
       "executable": "qbsp",
       "working_dir": { "root": "workspace" },
@@ -131,6 +131,8 @@
         { "value": "-wrbrushes", "when": { "option": "wrbrushes" } },
         { "value": "-subdivide", "when": { "option": "subdivide" } },
         { "value": "{option.subdivide}", "when": { "option": "subdivide" } },
+        { "value": "-wadpath", "when": { "root": "content_root" } },
+        { "value": "{root.content_root}", "when": { "root": "content_root" } },
         "{input.source_map}",
         "{output.bsp}"
       ],
@@ -174,7 +176,8 @@
         { "id": "written", "match": "WriteBSPFile", "severity": "progress", "message": "Writing the BSP." }
       ],
       "roots": [
-        { "role": "workspace", "access": "read_write", "purpose": "read the staged map source and write the compiled BSP beside it" }
+        { "role": "workspace", "access": "read_write", "purpose": "read the staged map source and write the compiled BSP beside it" },
+        { "role": "content_root", "access": "read", "optional": true, "purpose": "find the texture WADs the map names, such as gfx/metal.wad (the folder those paths start from)" }
       ],
       "timeout_seconds": 3600
     },

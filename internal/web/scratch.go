@@ -81,7 +81,8 @@ type scratchAction struct {
 }
 
 type scratchRoot struct {
-	Role    string `json:"role"`
+	Role     string `json:"role"`
+	Optional bool   `json:"optional,omitempty"`
 	Access  string `json:"access,omitempty"`
 	Purpose string `json:"purpose,omitempty"`
 }
@@ -296,10 +297,14 @@ func scratchActions(list []scratchAction, engine bool) ([]any, error) {
 			if strings.TrimSpace(root.Role) == "" || root.Role == "workspace" {
 				continue
 			}
-			roots = append(roots, map[string]any{
+			entry := map[string]any{
 				"role": strings.TrimSpace(root.Role), "access": orDefault(root.Access, "read"),
 				"purpose": orDefault(root.Purpose, "read files the program needs"),
-			})
+			}
+			if root.Optional {
+				entry["optional"] = true
+			}
+			roots = append(roots, entry)
 		}
 		entry["roots"] = roots
 		if action.Capability != "" {
@@ -373,6 +378,7 @@ func scratchActions(list []scratchAction, engine bool) ([]any, error) {
 //	{option.threads}            a placeholder the schema defines
 //	-fast [if fast]             only when the boolean option `fast` is true
 //	-level [if fast=false]      only when option `fast` equals `false`
+//	-wadpath [if folder content_root]   only when that optional folder is set
 //
 // Nothing is split on spaces: one line is one argv element, which is what
 // keeps a path with a space in it one argument and keeps a shell out of it.
@@ -389,6 +395,9 @@ func scratchArg(line string) (any, error) {
 		return nil, fmt.Errorf("argument %q: a condition is written `[if option]` or `[if option=value]`", line)
 	}
 	condition = strings.TrimSuffix(condition, "]")
+	if role, isFolder := strings.CutPrefix(strings.TrimSpace(condition), "folder "); isFolder {
+		return map[string]any{"value": strings.TrimSpace(value), "when": map[string]any{"root": strings.TrimSpace(role)}}, nil
+	}
 	option, equals, hasValue := strings.Cut(condition, "=")
 	when := map[string]any{"option": strings.TrimSpace(option)}
 	if hasValue {

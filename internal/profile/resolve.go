@@ -429,7 +429,7 @@ func executablesOf(p Profile) []Executable {
 func resolveArgs(action Action, env Env, options map[string]string, inputs map[string]string) ([]string, error) {
 	args := make([]string, 0, len(action.Args))
 	for i, arg := range action.Args {
-		include, err := argIncluded(arg, options, inputs)
+		include, err := argIncluded(arg, options, inputs, env.Roots)
 		if err != nil {
 			return nil, fmt.Errorf("argument %d: %w", i, err)
 		}
@@ -452,9 +452,12 @@ func resolveArgs(action Action, env Env, options map[string]string, inputs map[s
 	return args, nil
 }
 
-func argIncluded(arg Arg, options, inputs map[string]string) (bool, error) {
+func argIncluded(arg Arg, options, inputs, roots map[string]string) (bool, error) {
 	if arg.When == nil {
 		return true, nil
+	}
+	if arg.When.Root != "" {
+		return strings.TrimSpace(roots[arg.When.Root]) != "", nil
 	}
 	if arg.When.Input != "" {
 		return strings.TrimSpace(inputs[arg.When.Input]) != "", nil
@@ -498,6 +501,9 @@ func resolveRoots(action Action, roots map[string]string) (read, write []string,
 	for _, r := range action.Roots {
 		resolved, ok := roots[r.Role]
 		if !ok || resolved == "" {
+			if r.Optional {
+				continue
+			}
 			return nil, nil, fmt.Errorf("the action needs the %q root, which is not configured on this machine", r.Role)
 		}
 		resolved = filepath.Clean(resolved)

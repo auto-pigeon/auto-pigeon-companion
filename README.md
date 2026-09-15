@@ -743,6 +743,28 @@ process it starts is still a job — same queue, same supervision, same logs, an
 `companion job show` finds each one by the id the build printed. The build adds
 ordering, wiring and evidence, and nothing else.
 
+#### A map whose WAD is in a folder (`gfx/metal.wad`)
+
+Every map id Software released names its textures as `"wad" "gfx/metal.wad"`,
+and qbsp finds that only relative to a folder it is told about. The built-in
+Quake 1 compiler therefore has an **optional texture folder**: in **Profiles →
+ericw-tools 0.18.1 (Quake 1) → Review**, set *Folder: content_root (optional)* to
+the folder those paths start from (the one holding `gfx/`), and every Quake 1
+build passes `-wadpath <that folder>`. With none set nothing changes, and a WAD
+chosen beside the map is still what qbsp opens.
+
+Once it is set there, a build from a terminal uses it too:
+
+```console
+$ companion build run --pipeline auto-pigeon.q1.fast-preview --input source_map=/games/quake1-sources/dm2.map
+```
+
+A profile of your own can do the same: a root declared with `"optional": true`
+is one the action runs without, and an argument that uses it is written with
+`"when": {"root": "<role>"}` so it is passed only when the folder is set (the
+validator refuses an unconditioned use). In the from-scratch editor that is the
+folder's **Optional** box and an argument line ending in `[if folder <role>]`.
+
 Five pipelines ship — three for Quake 1 and two for Quake II — and within each
 game they are the same three stages with different options:
 

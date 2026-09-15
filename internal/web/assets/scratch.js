@@ -144,7 +144,8 @@
         el("span", {
           className: "hint",
           text: "{input.NAME} {output.NAME} {option.NAME} {root.ROLE} are filled in when it runs. " +
-            "A line ending in [if OPTION] is passed only when that yes/no parameter is on; [if OPTION=VALUE] when it equals VALUE.",
+            "A line ending in [if OPTION] is passed only when that yes/no parameter is on; [if OPTION=VALUE] when it equals VALUE; " +
+            "[if folder ROLE] when that optional folder is set.",
         }),
       ],
     }));
@@ -200,6 +201,7 @@
         children: [
           select("Folder", root.role, ROOT_ROLES, (v) => (root.role = v)),
           select("Access", root.access || "read", ["read", "read_write"], (v) => (root.access = v)),
+          check("Optional", root.optional, (v) => (root.optional = v)),
           text("What for", root.purpose, (v) => (root.purpose = v), { placeholder: "find the WADs the map names", grow: true }),
           removeButton("Remove this folder", () => action.roots.splice(i, 1)),
         ],

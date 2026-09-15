@@ -71,6 +71,9 @@ type ArgWhen struct {
 	Option string `json:"option,omitempty"`
 	// Input names a declared input; the condition is "the user supplied it".
 	Input string `json:"input,omitempty"`
+	// Root names a root the action declares as optional; the condition is
+	// "this machine has it set".
+	Root string `json:"root,omitempty"`
 	// Equals is the value the option must have. Omitted means "is true" for a
 	// boolean and "is set to anything" otherwise.
 	Equals string `json:"equals,omitempty"`
@@ -133,16 +136,39 @@ func (a Arg) validate(c *collector, s scope) {
 			return
 		}
 		s.check(c, t)
+		// An optional root may be unset, so an argument that uses it must be
+		// conditioned on it — or a machine without the folder would fail the
+		// resolution instead of leaving the argument out.
+		for _, ref := range t.refs() {
+			if ref.Namespace == NSRoot && s.optionalRoots[ref.Name] && (a.When == nil || a.When.Root != ref.Name) {
+				c.fixf(fmt.Sprintf("add \"when\": {\"root\": %q}", ref.Name),
+					"uses the optional root %q without being conditioned on it", ref.Name)
+			}
+		}
 	})
 	if a.When == nil {
 		return
 	}
 	c.child(field("when"), func(c *collector) {
+		named := 0
+		for _, set := range []string{a.When.Option, a.When.Input, a.When.Root} {
+			if set != "" {
+				named++
+			}
+		}
 		switch {
-		case a.When.Option == "" && a.When.Input == "":
-			c.fixf("name an option or an input", "names neither an option nor an input")
-		case a.When.Option != "" && a.When.Input != "":
-			c.fixf("name one or the other", "names both an option and an input")
+		case named == 0:
+			c.fixf("name an option, an input or a root", "names neither an option, an input nor a root")
+		case named > 1:
+			c.fixf("name one of them", "names more than one of an option, an input and a root")
+		case a.When.Root != "":
+			if !s.optionalRoots[a.When.Root] {
+				c.fixf("declare the root with `\"optional\": true` on this action, or drop the condition",
+					"names %q, which this action does not declare as an optional root", a.When.Root)
+			}
+			if a.When.Equals != "" {
+				c.fixf("drop `equals`", "sets `equals` on a root condition, which only tests whether the root is set")
+			}
 		case a.When.Option != "":
 			if !s.options[a.When.Option] {
 				c.fixf("declared options are: "+strings.Join(sortedKeys(s.options), ", "),
@@ -666,6 +692,13 @@ func (a Action) scopeFor(executables map[string]bool, runtime bool) scope {
 		outputs:     map[string]bool{},
 		options:     map[string]bool{},
 		runtime:     runtime,
+
+		optionalRoots: map[string]bool{},
+	}
+	for _, r := range a.Roots {
+		if r.Optional {
+			s.optionalRoots[r.Role] = true
+		}
 	}
 	for _, i := range a.Inputs {
 		s.inputs[i.Name] = true

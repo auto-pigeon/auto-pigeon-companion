@@ -297,6 +297,7 @@
         if (root.role === "workspace") continue;
         const purposes = roots.get(root.role) || [];
         if (root.purpose && !purposes.includes(root.purpose)) purposes.push(root.purpose);
+        purposes.optional = purposes.optional === undefined ? Boolean(root.optional) : purposes.optional && Boolean(root.optional);
         roots.set(root.role, purposes);
       }
     }
@@ -305,7 +306,7 @@
       const field = window.AUCOM.pathField({
         id: "profile-root-" + role,
         kind: "directory",
-        label: `Folder: ${role}`,
+        label: `Folder: ${role}${purposes.optional ? " (optional)" : ""}`,
         value: (body.binding?.roots || {})[role] || "",
         hint: purposes.length ? `Used to ${purposes.join("; ")}.` : "",
       });

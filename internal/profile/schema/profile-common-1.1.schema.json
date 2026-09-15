@@ -488,6 +488,9 @@
         "input": {
           "$ref": "#/$defs/token"
         },
+        "root": {
+          "$ref": "#/$defs/rootRole"
+        },
         "equals": {
           "type": "string",
           "maxLength": 256
@@ -771,6 +774,10 @@
         "purpose": {
           "type": "string",
           "maxLength": 200
+        },
+        "optional": {
+          "type": "boolean",
+          "description": "The action runs whether or not this root is set; arguments using it are conditioned with when.root."
         }
       }
     },

@@ -159,6 +159,9 @@ type scope struct {
 	outputs     map[string]bool
 	options     map[string]bool
 	runtime     bool
+	// optionalRoots are the roots this action may run without; see
+	// RootRef.Optional.
+	optionalRoots map[string]bool
 }
 
 // check validates a template's placeholders against this scope, reporting each

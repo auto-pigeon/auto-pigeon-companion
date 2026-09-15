@@ -36,6 +36,12 @@ type RootRef struct {
 	// access: "this tool writes into your project" is not a sentence a user can
 	// act on without knowing what it writes.
 	Purpose string `json:"purpose,omitempty"`
+	// Optional says the action runs whether or not this root is set on the
+	// machine. An argument that uses it is then written with `when.root`, so it
+	// is passed only when there is a folder to pass (NEW_244D: EricW's
+	// `-wadpath`, which finds `gfx/metal.wad` when a texture folder is set and
+	// is simply left out when none is). A required root stays the default.
+	Optional bool `json:"optional,omitempty"`
 }
 
 func (r RootRef) validate(c *collector) {
@@ -53,6 +59,11 @@ func (r RootRef) validate(c *collector) {
 		checkText(c, r.Purpose, maxSummaryLength, false)
 		if r.Access == AccessReadWrite && strings.TrimSpace(r.Purpose) == "" {
 			c.fixf("say what is written there", "is empty, and write access must say what it is for")
+		}
+	})
+	c.child(field("optional"), func(c *collector) {
+		if r.Optional && r.Role == RootWorkspace {
+			c.fixf("drop `optional`", "is set on the workspace, which every job has")
 		}
 	})
 }
