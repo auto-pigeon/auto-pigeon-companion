@@ -116,6 +116,9 @@
       "id": "play_map",
       "title": "Play a map",
       "session_role": "client",
+      "environment": {
+        "inherit": ["DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "XAUTHORITY", "PULSE_SERVER"]
+      },
       "executable": "engine",
       "working_dir": {
         "root": "game_root"
@@ -169,6 +172,9 @@
       "id": "play_package",
       "title": "Play a mod or package",
       "session_role": "client",
+      "environment": {
+        "inherit": ["DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "XAUTHORITY", "PULSE_SERVER"]
+      },
       "executable": "engine",
       "working_dir": {
         "root": "game_root"
@@ -220,6 +226,9 @@
       "id": "join_server",
       "title": "Join a server",
       "session_role": "client",
+      "environment": {
+        "inherit": ["DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "XAUTHORITY", "PULSE_SERVER"]
+      },
       "executable": "engine",
       "working_dir": {
         "root": "game_root"
@@ -269,6 +278,9 @@
       "id": "host_listen",
       "title": "Host a game and play in it",
       "session_role": "listen_server",
+      "environment": {
+        "inherit": ["DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "XAUTHORITY", "PULSE_SERVER"]
+      },
       "executable": "engine",
       "working_dir": {
         "root": "game_root"

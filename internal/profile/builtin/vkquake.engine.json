@@ -118,6 +118,10 @@
       "title": "Play a map",
       "description": "`play_map` names a game directory as well as a map, because that is what these engines' command lines do: `-game` chooses which directory the map is loaded from. Launching a map into a directory nobody named is how you end up watching the wrong map.",
       "session_role": "client",
+      "environment": {
+        "inherit": ["DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "XAUTHORITY", "PULSE_SERVER"],
+        "set": { "APPIMAGE_EXTRACT_AND_RUN": "1" }
+      },
       "executable": "engine",
       "working_dir": {
         "root": "game_root"
@@ -163,6 +167,10 @@
       "title": "Play a mod or package",
       "description": "Starts the engine in a game directory and lets the package choose where it begins.",
       "session_role": "client",
+      "environment": {
+        "inherit": ["DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "XAUTHORITY", "PULSE_SERVER"],
+        "set": { "APPIMAGE_EXTRACT_AND_RUN": "1" }
+      },
       "executable": "engine",
       "working_dir": {
         "root": "game_root"
@@ -205,6 +213,10 @@
       "id": "join_server",
       "title": "Join a server",
       "session_role": "client",
+      "environment": {
+        "inherit": ["DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "XAUTHORITY", "PULSE_SERVER"],
+        "set": { "APPIMAGE_EXTRACT_AND_RUN": "1" }
+      },
       "executable": "engine",
       "working_dir": {
         "root": "game_root"
@@ -247,6 +259,10 @@
       "title": "Host a game and play in it",
       "description": "Other people can connect to this computer while you play.",
       "session_role": "listen_server",
+      "environment": {
+        "inherit": ["DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "XAUTHORITY", "PULSE_SERVER"],
+        "set": { "APPIMAGE_EXTRACT_AND_RUN": "1" }
+      },
       "executable": "engine",
       "working_dir": {
         "root": "game_root"

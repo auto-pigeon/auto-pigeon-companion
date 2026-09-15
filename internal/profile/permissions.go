@@ -164,6 +164,15 @@ func (e EnvironmentPolicy) validate(c *collector, s scope) {
 	})
 }
 
+// envDesktopSession is what a program needs to open a window and play sound in
+// the person's desktop session on Linux: where the display is, where the
+// session's sockets are, and XAUTHORITY — the PATH of the X cookie file, which
+// the name filter below would read as a credential. A game started as a job has
+// HOME moved into its workspace, so without XAUTHORITY an X server that uses
+// cookies refuses it. Each is still inherited only when a profile lists it
+// (NEW_244D: no Linux engine profile could open a window at all).
+var envDesktopSession = []string{"DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "XAUTHORITY", "PULSE_SERVER"}
+
 func checkEnvName(c *collector, name string, inheriting bool) {
 	if name == "" {
 		c.addf("is an empty environment variable name")
@@ -186,7 +195,7 @@ func checkEnvName(c *collector, name string, inheriting bool) {
 			"names %s, which may not be inherited or set", upper)
 		return
 	}
-	if inheriting && looksSecret(upper) {
+	if inheriting && looksSecret(upper) && !contains(envDesktopSession, upper) {
 		c.fixf("a profile may not ask for a credential from the Companion's environment",
 			"names %s, which reads like a credential", upper)
 	}

@@ -93,6 +93,9 @@
       "id": "join_server",
       "title": "Join a Quake II server",
       "session_role": "client",
+      "environment": {
+        "inherit": ["DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "XAUTHORITY", "PULSE_SERVER"]
+      },
       "executable": "engine",
       "working_dir": {
         "root": "game_root"
