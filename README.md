@@ -438,6 +438,22 @@ an ephemeral one, so a stale instance cannot stop the app from starting. The
 listener is `127.0.0.1` by construction — there is no flag that binds a
 routable interface.
 
+### About
+
+The last item in the left navigation is **About** (`#about`, "what this is"): what Auto-Pigeon is and
+its News, in English, the same text the web site and the editor show. It is embedded in the binary —
+no sign-in, no network, readable on first run and in a narrow window — and images travel inside it as
+`data:` URIs. `internal/web/assets/about.json` is a **generated** copy of
+`auto-pigeon-gallery/content/about.md`; do not edit it. After changing that file:
+
+```sh
+../auto-pigeon-tools/scripts/about-content.sh apply   # refreshes this copy and the editor's
+go test ./internal/web -run About
+```
+
+`build/release.sh` runs `about-content.sh check` (read-only) before building and refuses a release
+whose copy is stale; with no `auto-pigeon-tools` beside the checkout it runs
+`TestTheEmbeddedAboutIsTheGeneratedCopy` and says the comparison was not made.
 ### Authenticate
 
 ```console
