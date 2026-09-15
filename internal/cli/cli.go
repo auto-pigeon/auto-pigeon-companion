@@ -135,7 +135,7 @@ type Command struct {
 // commands is the registry. Order here is display order in the usage text.
 var commands = []Command{
 	{
-		Name: "serve", Usage: "[--port <n>] [--open]",
+		Name: "serve", Usage: "[--port <n>] [--open] [--debug]",
 		Summary: "run the local GUI server without opening a browser",
 		Run:     runServe,
 	},
@@ -293,6 +293,11 @@ func Run(env *Env, args []string) int {
 	if len(args) == 0 {
 		// GUI mode: no subcommand starts the server and opens the browser.
 		return runServe(env, []string{"--open"})
+	}
+	// `companion --debug` is GUI mode with the developer controls unlocked —
+	// see runServe's --debug.
+	if args[0] == "--debug" && len(args) == 1 {
+		return runServe(env, []string{"--open", "--debug"})
 	}
 
 	switch args[0] {

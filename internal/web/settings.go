@@ -54,16 +54,20 @@ type settingsBody struct {
 	// facts and a field that showed only the second would make a Save write it.
 	AUBEffectiveURL    string `json:"aub_effective_url,omitempty"`
 	AUBFromEnvironment bool   `json:"aub_from_environment,omitempty"`
-	ConfigPath         string `json:"config_path,omitempty"`
-	ToolCacheDir       string `json:"tool_cache_dir,omitempty"`
-	JobsDir            string `json:"jobs_dir,omitempty"`
-	ProfilesDir        string `json:"profiles_dir,omitempty"`
-	BuildsDir          string `json:"builds_dir,omitempty"`
-	AssetCacheDir      string `json:"asset_cache_dir,omitempty"`
-	BindingsPath       string `json:"bindings_path,omitempty"`
-	CatalogBaseURL     string `json:"catalog_url,omitempty"`
-	CatalogAnchorsPath string `json:"catalog_anchors_path,omitempty"`
-	Offline            bool   `json:"offline"`
+	// Debug and Backends mirror /api/status, so Settings can draw its chooser
+	// from one response.
+	Debug              bool             `json:"debug"`
+	Backends           []config.Backend `json:"backends,omitempty"`
+	ConfigPath         string           `json:"config_path,omitempty"`
+	ToolCacheDir       string           `json:"tool_cache_dir,omitempty"`
+	JobsDir            string           `json:"jobs_dir,omitempty"`
+	ProfilesDir        string           `json:"profiles_dir,omitempty"`
+	BuildsDir          string           `json:"builds_dir,omitempty"`
+	AssetCacheDir      string           `json:"asset_cache_dir,omitempty"`
+	BindingsPath       string           `json:"bindings_path,omitempty"`
+	CatalogBaseURL     string           `json:"catalog_url,omitempty"`
+	CatalogAnchorsPath string           `json:"catalog_anchors_path,omitempty"`
+	Offline            bool             `json:"offline"`
 	// PathHelper is the native file chooser this machine has, or "" when it
 	// has none and the page must fall back to a text field.
 	PathHelper string `json:"path_helper,omitempty"`
@@ -91,6 +95,8 @@ func (s *Server) describeSettings() settingsBody {
 		CatalogAnchorsPath: settings.CatalogAnchorsPath,
 		Offline:            config.Offline(),
 		PathHelper:         s.picker.Available(),
+		Debug:              s.debug,
+		Backends:           config.OfficialBackends,
 	}
 	// The environment wins over the file — see config.EnvAUBBaseURL — so a user
 	// editing the field has to be told when what they type will not take
@@ -146,6 +152,16 @@ func (s *Server) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
+		// A person chooses one of the official deployments; typing any other
+		// address is a developer's act and needs `--debug` (HITL, NEW_244D).
+		// An address already saved is carried by a Save of the other fields,
+		// so a value set in a debug session does not make the page unsavable.
+		if !s.debug && !config.IsOfficialBackend(baseURL) && baseURL != strings.TrimSpace(s.config().AUBBaseURL) {
+			writeError(w, http.StatusForbidden, errors.New(
+				"only Auto-Pigeon or Auto-Pigeon beta can be chosen here; another server address needs the Companion started with --debug"))
+			return
+		}
+		baseURL = strings.TrimRight(baseURL, "/")
 	}
 	if request.Port < 0 || request.Port > 65535 {
 		writeError(w, http.StatusBadRequest,
@@ -265,4 +281,15 @@ func checkGameRoots(roots map[string]string) (map[string]string, error) {
 		return nil, nil
 	}
 	return checked, nil
+}
+
+// backendLabel names an official deployment, or "" for any other address.
+func backendLabel(address string) string {
+	trimmed := strings.TrimRight(strings.TrimSpace(address), "/")
+	for _, backend := range config.OfficialBackends {
+		if trimmed == backend.URL {
+			return backend.Label
+		}
+	}
+	return ""
 }

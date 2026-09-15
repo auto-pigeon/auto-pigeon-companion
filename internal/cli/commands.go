@@ -162,6 +162,7 @@ func runServe(env *Env, args []string) int {
 	set := newFlagSet(env, "serve")
 	port := set.Int("port", 0, "loopback port to bind; 0 uses the configured port")
 	open := set.Bool("open", false, "open the page in the default browser")
+	debug := set.Bool("debug", false, "unlock the developer controls: typing any server address in Settings")
 	if _, code, ok := parseFlags(env, set, args); !ok {
 		return code
 	}
@@ -188,6 +189,9 @@ func runServe(env *Env, args []string) int {
 	defer service.Close()
 
 	chosen := *port
+	if chosen == 0 {
+		chosen = config.PortOverride()
+	}
 	if chosen == 0 {
 		chosen = settings.Port
 	}
@@ -230,6 +234,7 @@ func runServe(env *Env, args []string) int {
 
 	server, err := web.NewServer(web.Options{
 		Version: env.Version,
+		Debug:   *debug,
 		Config:  settings,
 		AUE:     runner,
 		Jobs:    service,

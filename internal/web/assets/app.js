@@ -26,7 +26,7 @@
   // reach it.
   const areaNames = ["library", "build", "run", "profiles", "jobs", "settings", "about"];
   const titles = {
-    library: "Library",
+    library: "My Maps",
     build: "Build",
     run: "Run",
     profiles: "Profiles",
@@ -81,12 +81,13 @@
       return;
     }
     window.AUCOM.status = body;
-    const backend = body.aub_base_url || "no backend address configured";
+    const backend = body.backend_label || (body.aub_base_url ? body.aub_base_url : "no Auto-Pigeon server chosen");
     // The version is shown only in its frozen `1.<commit-count>` shape, as AUP
     // and AUG show it: an unstamped build's "unknown" is not a version anybody
     // should read out, so that segment is simply absent.
     const version = /^1\.\d+$/.test(body.version || "") ? `Version ${body.version} · ` : "";
-    $("identity").textContent = `${version}${body.platform} · ${backend}`;
+    $("identity").textContent = `${version}${body.platform} · ${backend}${body.debug ? " · debug mode" : ""}`;
+    renderBackendChoice($("sign-in-backend"), body);
     $("identity").className = "muted";
     $("account-email").textContent = body.authenticated ? body.email || "signed in" : "not signed in";
     $("sign-out").hidden = !body.authenticated;
@@ -97,13 +98,13 @@
       closeSignIn({ restoreFocus: false });
     } else {
       $("first-run-why").textContent = body.aub_base_url
-        ? `Your maps and assets live in auto-pigeon-backend at ${body.aub_base_url}.`
-        : "No backend address is configured yet, and nothing in the Companion has a built-in one. " +
-          "To use the Library, set it in Settings first.";
+        ? `Sign in to your account on ${body.backend_label || body.aub_base_url}.`
+        : "Choose which Auto-Pigeon your account is on, then sign in.";
     }
 
     $("extractor-state").textContent = !body.aue_available
-      ? "No extractor is available. It is a separate program: install it, or set AUCOM_AUE_BINARY to a local build."
+      ? "Map inspection is not installed on this machine. It is a separate, optional program." +
+        (body.debug ? " Debug mode: set AUCOM_AUE_BINARY to a local build." : "")
       : body.aue_verified
         ? `An extractor is available and was verified against the signed catalogue (${body.aue_provenance}).`
         : `An extractor is available but is an UNVERIFIED developer override (${body.aue_provenance}). ` +
@@ -111,6 +112,45 @@
     $("extractor-version").disabled = !body.aue_available;
   }
   window.AUCOM.refreshStatus = refreshStatus;
+
+  // renderBackendChoice draws the official servers as a choice. An address that
+  // is not one of them (a development server, set with --debug or by an
+  // override) is shown as itself and cannot be changed from here.
+  function renderBackendChoice(select, body) {
+    const current = (body.aub_base_url || "").replace(/\/+$/, "");
+    select.replaceChildren(el("option", { text: "Choose…", attrs: { value: "" } }));
+    for (const backend of body.backends || []) {
+      select.append(el("option", { text: `${backend.label} (${backend.url.replace(/^https:\/\//, "")})`, attrs: { value: backend.url } }));
+    }
+    const official = (body.backends || []).some((backend) => backend.url === current);
+    if (current && !official) {
+      select.append(el("option", { text: `Development server (${current})`, attrs: { value: current } }));
+    }
+    select.value = current;
+    select.disabled = Boolean(current && !official && !body.debug);
+  }
+  window.AUCOM.renderBackendChoice = renderBackendChoice;
+
+  $("sign-in-backend").addEventListener("change", async (event) => {
+    const chosen = event.currentTarget.value;
+    const settings = window.AUCOM.settings || {};
+    const { ok, body } = await api("/api/v1/settings", {
+      method: "PUT",
+      body: {
+        aub_base_url: chosen,
+        port: settings.port ?? 0,
+        job_concurrency: settings.job_concurrency ?? 0,
+        game_roots: settings.game_roots || undefined,
+      },
+    });
+    if (!ok) {
+      setMessage("sign-in-message", body.error || "could not choose that server", "error");
+      return;
+    }
+    window.AUCOM.settings = body;
+    setMessage("sign-in-message", chosen ? "" : "Choose a server to sign in to.", "");
+    await refreshStatus();
+  });
 
   // --- the sign-in dialog ----------------------------------------------------
 

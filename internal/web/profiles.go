@@ -939,8 +939,8 @@ type bindRequest struct {
 	// Every declared executable is found under it, or the request is refused
 	// naming the ones that are not there; nothing is recorded from a folder
 	// that holds half a toolchain (NEW_244D).
-	Folder string `json:"folder,omitempty"`
-	Roots       map[string]string `json:"roots,omitempty"`
+	Folder string            `json:"folder,omitempty"`
+	Roots  map[string]string `json:"roots,omitempty"`
 	// Approve records that the user read what the profile asks for and agreed
 	// to it. It is against one exact digest — see [profile.NewGrant].
 	Approve bool `json:"approve,omitempty"`

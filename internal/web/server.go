@@ -82,6 +82,7 @@ type Paths struct {
 // Server is the local GUI server.
 type Server struct {
 	version string
+	debug   bool
 	jobs    *job.Service
 	runner  aue.Runner
 	paths   Paths
@@ -122,7 +123,11 @@ type Server struct {
 // so a caller that only has a version string still gets a functioning GUI.
 type Options struct {
 	Version string
-	Client  *aub.Client
+	// Debug unlocks the developer controls — in Settings, typing a server
+	// address that is not one of the official deployments. Started with
+	// `companion --debug` / `serve --debug`; off for everybody else.
+	Debug  bool
+	Client *aub.Client
 	// Jobs is the process runtime. A server without one still serves the page
 	// and the account routes; the job routes report that this build has none.
 	Jobs *job.Service
@@ -202,6 +207,7 @@ func NewServer(options Options) (*Server, error) {
 
 	server := &Server{
 		version:      options.Version,
+		debug:        options.Debug,
 		jobs:         options.Jobs,
 		runner:       options.AUE,
 		paths:        options.Paths,
@@ -448,6 +454,12 @@ type statusBody struct {
 	// production install.
 	AUEVerified   bool   `json:"aue_verified"`
 	AUEProvenance string `json:"aue_provenance,omitempty"`
+	// Debug says the developer controls are unlocked (`--debug`).
+	Debug bool `json:"debug"`
+	// Backends are the official deployments a person may choose, and
+	// BackendLabel names the one in use when it is one of them.
+	Backends     []config.Backend `json:"backends"`
+	BackendLabel string           `json:"backend_label,omitempty"`
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
@@ -482,6 +494,9 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		AUEAvailable:  aue.Available(s.runner),
 		AUEVerified:   verified,
 		AUEProvenance: provenance,
+		Debug:         s.debug,
+		Backends:      config.OfficialBackends,
+		BackendLabel:  backendLabel(baseURL),
 	})
 }
 

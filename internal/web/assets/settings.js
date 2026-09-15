@@ -20,19 +20,23 @@
     window.AUCOM.settings = body;
 
     $("settings-aub").value = body.aub_base_url || "";
+    // A person chooses one of the official servers. Typing an address is a
+    // developer's act: the field exists only with --debug (HITL, NEW_244D).
+    window.AUCOM.renderBackendChoice($("settings-backend"), {
+      backends: body.backends, aub_base_url: body.aub_base_url, debug: body.debug,
+    });
+    $("settings-aub-field").hidden = !body.debug;
     $("settings-port").value = body.port ?? 0;
     $("settings-concurrency").value = body.job_concurrency ?? 0;
     // The field holds what the file holds, so pressing Save never copies an
     // environment variable's value into the file. The note says what is
     // actually in use when the two differ.
     $("settings-aub-note").textContent = body.aub_from_environment
-      ? `In use right now: ${body.aub_effective_url}, from the AUCOM_AUB_BASE_URL environment ` +
-        `variable, which wins over the configuration file. What you type here is saved to the file ` +
-        `and takes effect once that variable is unset.`
+      ? `In use right now: ${body.aub_effective_url}, set when the Companion was started ` +
+        `(environment, .env or the config.json beside the program). It wins over what is chosen here.`
       : body.aub_base_url
-        ? "Saved in the configuration file."
-        : "Not set. Nothing in the Companion has a built-in address for the backend, so this has to be filled in.";
-    $("settings-aub").setAttribute("aria-invalid", body.aub_effective_url ? "false" : "true");
+        ? "Saved. Signing in and My Maps use this server."
+        : "No server chosen. Nothing is contacted until you choose one; everything local works without it.";
 
     const paths = $("settings-paths");
     paths.replaceChildren();
@@ -56,13 +60,19 @@
     }
   }
 
+  const body_debug = () => Boolean(window.AUCOM.settings && window.AUCOM.settings.debug);
+
+  $("settings-backend").addEventListener("change", () => {
+    if (body_debug()) $("settings-aub").value = $("settings-backend").value;
+  });
+
   async function save(button) {
     await withBusy(button, async () => {
       busy("settings-message", "Saving…");
       const { ok, body } = await api("/api/v1/settings", {
         method: "PUT",
         body: {
-          aub_base_url: $("settings-aub").value.trim(),
+          aub_base_url: (body_debug() ? $("settings-aub").value.trim() : "") || $("settings-backend").value,
           port: Number($("settings-port").value || 0),
           job_concurrency: Number($("settings-concurrency").value || 0),
           game_roots: window.AUCOM.settings.game_roots || undefined,
@@ -75,10 +85,10 @@
       window.AUCOM.settings = body;
       setMessage(
         "settings-message",
-        "Saved. The port takes effect the next time the Companion starts; the backend address is in use now.",
+        "Saved. The port takes effect the next time the Companion starts; the server choice is in use now.",
         "ok"
       );
-      record("Saved settings", body.aub_base_url || "no backend address", "ok");
+      record("Saved settings", body.aub_base_url || "no server chosen", "ok");
       await refresh();
       await window.AUCOM.refreshStatus();
     });

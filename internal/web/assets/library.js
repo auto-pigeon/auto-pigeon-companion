@@ -45,9 +45,9 @@
       // session, not the password field the user is looking at.
       const hint =
         status === 401
-          ? " Sign in again from the panel at the top of this page."
+          ? " Sign in again with the Sign in button at the top of the page."
           : status === 503
-            ? " Set the backend address in Settings."
+            ? " Choose your Auto-Pigeon server in Settings."
             : "";
       setMessage("library-message", (body.error || "could not read the catalogue") + hint, "error");
       return;
@@ -129,7 +129,7 @@
     const head = el("div", { className: "row-head" });
     const label = el("strong", { text: `Revision ${revision.revision}` });
     head.append(label);
-    head.append(badge(held ? "downloaded" : "on the backend", held ? "ok" : "queued"));
+    head.append(badge(held ? "downloaded" : "in your account", held ? "ok" : "queued"));
 
     const detail = el("p", { className: "mono" });
     detail.textContent = [

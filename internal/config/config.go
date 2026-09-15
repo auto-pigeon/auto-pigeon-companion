@@ -163,8 +163,8 @@ const EnvAUBBaseURL = "AUCOM_AUB_BASE_URL"
 // two places that supply one so the message is actionable wherever it surfaces
 // — the CLI prints it, and the GUI shows it on the routes that need AUB.
 var ErrAUBNotConfigured = errors.New(
-	"no auto-pigeon-backend address is configured: set " + EnvAUBBaseURL +
-		" or the \"aub_base_url\" field in config.json")
+	"no Auto-Pigeon server is chosen yet: choose Auto-Pigeon or Auto-Pigeon beta in Settings " +
+		"(or set " + EnvAUBBaseURL + ")")
 
 // Default returns the configuration a first run uses. AUBBaseURL is
 // deliberately empty — see EnvAUBBaseURL.

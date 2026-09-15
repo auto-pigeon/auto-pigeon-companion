@@ -50,6 +50,20 @@ func main() {
 		fmt.Fprintf(os.Stderr, "warning: %s may only set %s; ignored %s\n",
 			report.Path, strings.Join(config.DevEnvKeys, ", "), strings.Join(report.Ignored, ", "))
 	}
+	// And the optional config.json beside the executable: the root of an
+	// unpacked release, for a person pointing it at a development stack
+	// without an environment variable. It may set the server address and the
+	// port, nothing else.
+	if executable, err := os.Executable(); err == nil {
+		override, err := config.LoadExecutableOverride(executable, os.LookupEnv, os.Setenv)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(2)
+		}
+		if len(override.Applied) > 0 {
+			fmt.Fprintf(os.Stderr, "using %s from %s\n", strings.Join(override.Applied, ", "), override.Path)
+		}
+	}
 
 	env := &cli.Env{
 		Stdin:   os.Stdin,

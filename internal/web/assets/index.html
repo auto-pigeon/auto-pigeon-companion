@@ -53,9 +53,13 @@
       <div class="auth-dialog__layer">
         <section id="first-run" class="auth-dialog" role="dialog" aria-modal="true" aria-labelledby="first-run-heading" aria-describedby="first-run-why">
           <div class="auth-dialog__head">
-            <h2 id="first-run-heading">Sign in to auto-pigeon-backend</h2>
+            <h2 id="first-run-heading">Sign in to Auto-Pigeon</h2>
             <p id="first-run-why"></p>
             <button type="button" id="sign-in-close" class="auth-dialog__close" aria-label="Close">×</button>
+          </div>
+          <div class="field" id="sign-in-backend-field">
+            <label for="sign-in-backend">Account on</label>
+            <select id="sign-in-backend"></select>
           </div>
           <form id="sign-in-form" class="auth-dialog__form" autocomplete="on">
             <div class="field">
@@ -68,11 +72,11 @@
             </div>
             <div class="row">
               <button type="submit" id="sign-in" class="primary">Sign in</button>
-              <button type="button" id="go-to-settings" class="secondary">Where is my backend?</button>
+              <button type="button" id="go-to-settings" class="secondary">Settings</button>
             </div>
           </form>
           <p id="sign-in-message" class="message" role="alert"></p>
-          <p class="auth-dialog__foot muted">Only the Library needs an account. Build, Run, Profiles, Jobs and Settings work signed out.</p>
+          <p class="auth-dialog__foot muted">Only My Maps needs an account. Build, Run, Profiles, Jobs and Settings work signed out.</p>
         </section>
       </div>
     </div>
@@ -80,7 +84,7 @@
     <div class="app-body">
       <nav class="areas" aria-label="Areas">
         <ul>
-          <li><button type="button" class="area-tab" data-area="library">Library<span class="tab-note">maps and assets</span></button></li>
+          <li><button type="button" class="area-tab" data-area="library">My Maps<span class="tab-note">from your account</span></button></li>
           <li><button type="button" class="area-tab" data-area="build">Build<span class="tab-note">compile a map</span></button></li>
           <li><button type="button" class="area-tab" data-area="run">Run<span class="tab-note">start a game</span></button></li>
           <li><button type="button" class="area-tab" data-area="profiles">Profiles<span class="tab-note">tools and engines</span></button></li>
@@ -96,15 +100,15 @@
         <!-- Library ------------------------------------------------------ -->
         <section id="area-library" class="area" aria-labelledby="area-heading">
           <p class="lede">
-            Everything in your auto-pigeon-backend account, and everything this
-            machine has already downloaded and verified. Choose an exact
+            The maps in your Auto-Pigeon account, and everything this machine
+            has already downloaded and verified. Choose an exact
             revision — a build reads the copy in the cache, so a newer revision
             on the server cannot change a build you have already started.
           </p>
 
           <div id="library-signed-out" class="panel notice" hidden>
             <p>
-              <strong>The Library is the one area that needs an account.</strong>
+              <strong>My Maps is the one area that needs an Auto-Pigeon account.</strong>
               Compiling a map from a file on this machine, running an engine you
               have, reviewing profiles and reading jobs all work signed out.
             </p>
@@ -115,7 +119,7 @@
 
           <div class="panel">
             <div class="panel-head">
-              <h3>On the backend</h3>
+              <h3>In your account</h3>
               <button type="button" id="library-refresh" class="secondary">Refresh</button>
             </div>
             <div class="row">
@@ -129,7 +133,7 @@
               </div>
             </div>
             <p id="library-message" class="message" role="status"></p>
-            <ul id="library-assets" class="cards" aria-label="Assets on the backend"></ul>
+            <ul id="library-assets" class="cards" aria-label="Maps and assets in your account"></ul>
           </div>
 
           <div class="panel" id="library-revisions-panel" hidden>
@@ -587,16 +591,20 @@
         <!-- Settings ----------------------------------------------------- -->
         <section id="area-settings" class="area" aria-labelledby="area-heading" hidden>
           <p class="lede">
-            Where the Companion talks to, and where it keeps things. Nothing in
-            this program has a built-in address for another component: an
-            address that is not set is an error you have to fix, never a guess.
+            Which Auto-Pigeon your account is on, and where the Companion keeps
+            things on this machine. Building, running and everything else local
+            work without choosing a server at all.
           </p>
 
           <div class="panel">
-            <h3>auto-pigeon-backend</h3>
+            <h3>Your Auto-Pigeon account</h3>
             <div class="field">
-              <label for="settings-aub">Address <span class="hint">(written as scheme://host:port)</span></label>
-              <input id="settings-aub" type="url" placeholder="where your backend is served" />
+              <label for="settings-backend">Server</label>
+              <select id="settings-backend"></select>
+            </div>
+            <div class="field" id="settings-aub-field" hidden>
+              <label for="settings-aub">Server address <span class="hint">(debug mode: written as scheme://host:port)</span></label>
+              <input id="settings-aub" type="url" placeholder="a development server" />
             </div>
             <p id="settings-aub-note" class="muted"></p>
             <div class="row">

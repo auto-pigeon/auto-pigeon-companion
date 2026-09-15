@@ -214,16 +214,39 @@ Three more files sit beside it, and each is somewhere different for a reason:
 `AUCOM_JOBS_DIR` and `AUCOM_PROFILES_DIR`. `job_concurrency` is how many jobs
 run at once; `0` lets the executor pick from the machine.
 
-### AUB's address is configured, never compiled in
+### Which Auto-Pigeon your account is on
 
-There is **no default AUB address**. The Companion does not guess where
-auto-pigeon-backend lives; a wrong address that looks deliberate is worse than
-a missing one that says so. Supply it with either:
+A person using the Companion does not type a server address. **Settings** and
+the **Sign in** dialog offer the two official deployments by name — **Auto-Pigeon**
+(`https://auto-pigeon.com`) and **Auto-Pigeon beta**
+(`https://beta.auto-pigeon.com`) — and **nothing is chosen until the person picks
+one**, so a first run, a signed-out Companion and an offline build contact neither
+(HITL decision, 2026-09-15; `internal/config/backends.go` records it).
 
-- `AUCOM_AUB_BASE_URL` in the environment, which wins when both are set, or
-- `"aub_base_url"` in `config.json`.
+Any other address — a local development stack, say — is a developer's act, and
+needs one of these:
 
-With neither, every AUB-backed operation reports that by name:
+- **`companion --debug`** (or `companion serve --debug`): Settings shows a free-text
+  server address field, and the header says `debug mode`. Without the flag the
+  API refuses a non-official address (`403`) and says why.
+- **`config.json` beside the executable** — the root of an unpacked release. It may
+  hold `aub_base_url` and `port` and nothing else; any other key refuses to start,
+  naming the file:
+
+  ```console
+  $ cat > "$(dirname "$(command -v companion)")/config.json" <<'JSON'
+  {"aub_base_url": "http://localhost:9190", "port": 8800}
+  JSON
+  $ companion auth status
+  using AUCOM_AUB_BASE_URL, AUCOM_PORT from /opt/auto-pigeon-companion/config.json
+  aub: http://localhost:9190
+  signed in: no
+  ```
+
+- `AUCOM_AUB_BASE_URL` in the environment, or the development `.env` below. The
+  real environment wins over both files.
+
+With none of these and nothing chosen, an operation that needs an account says so:
 
 ```console
 $ companion auth status
@@ -263,6 +286,7 @@ supplied this way, and is still where a person without a checkout sets it.
 | Variable | Read by | Purpose |
 | --- | --- | --- |
 | `AUCOM_AUB_BASE_URL` | `internal/config` | where auto-pigeon-backend lives |
+| `AUCOM_PORT` | `companion serve` | the GUI port when `--port` is not given; set by the `config.json` beside the executable |
 | `AUCOM_ENV_FILE` | `cmd/companion` | an optional development `.env` to read instead of `./.env` — see above |
 | `AUCOM_PASSWORD` | `companion auth login` | password for a scripted login |
 | `AUCOM_AUE_BINARY` | `internal/aue` | an on-disk AUE to use instead of the verified one — a local, **unverified** development override |
@@ -454,7 +478,7 @@ usage:
   companion <command> [arguments]
 
 commands:
-  serve [--port <n>] [--open]                                                                           run the local GUI server without opening a browser
+  serve [--port <n>] [--open] [--debug]                                                                 run the local GUI server without opening a browser
   auth login [--email <address>] | status | logout                                                      authenticate against auto-pigeon-backend
   aub capabilities | catalog | show | revisions | sync | cached | verify | export | clean               browse auto-pigeon-backend's assets and sync exact revisions to this machine
   job run | preview | list | show | logs | cancel | retry | artifacts | profiles                        run a profile action as a supervised job, and inspect what ran
