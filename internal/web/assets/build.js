@@ -487,12 +487,17 @@
       const state = body.manifest.state;
       outcome = state;
       renderSteps();
+      // A build somebody cancelled is not an error, and is not announced as one.
       setMessage(
         "build-result",
         state === "succeeded"
           ? "The build succeeded. Its outputs are listed below."
-          : `The build ${state}: ${body.manifest.error || body.error || "see the stages below"}`,
-        state === "succeeded" ? "ok" : "error"
+          : state === "cancelled"
+            ? "You cancelled this build. The stage that was running was stopped with everything it had started; what it had written is listed below."
+            : state === "interrupted"
+              ? "This build was interrupted: the Companion stopped while it ran. Nothing was run again; build it again when you are ready."
+              : `The build ${state}: ${body.manifest.error || body.error || "see the stages below"}`,
+        state === "succeeded" ? "ok" : state === "cancelled" || state === "interrupted" ? "" : "error"
       );
       record(`Build ${state}: ${body.manifest.label || body.manifest.pipeline?.name || "untitled"}`, body.manifest.error || "", state);
       await refreshHistory();
@@ -535,9 +540,14 @@
     if (body.maturity_message && buildNote) $("build-current-title").after(buildNote);
 
     for (const step of manifest.steps || []) {
-      const line = el("li", { className: step.state || (step.skipped ? "skipped" : "") });
+      // While the build is live, a stage it has not reached yet is waiting. The
+      // manifest pre-marks those as skipped ("the build stopped before this
+      // step") so a crash leaves a true record; on a running build that
+      // sentence is not true yet (NEW_244D rehearsal).
+      const pending = body.live && step.skipped && !step.state;
+      const line = el("li", { className: pending ? "" : step.state || (step.skipped ? "skipped" : "") });
       line.append(el("span", { className: "stage-name", text: step.title || step.id }));
-      line.append(badge(step.skipped && !step.state ? "skipped" : step.state || "waiting"));
+      line.append(badge(pending ? "waiting" : step.skipped && !step.state ? "skipped" : step.state || "waiting", pending ? "queued" : undefined));
       // A step the build never reached has no tool resolved for it yet; the badge
       // already says it was skipped, so nothing stands in for a name.
       const provider = step.profile?.name ? `${step.profile.name} ${step.profile.version}` : step.skipped ? "" : "no tool recorded";
@@ -555,7 +565,7 @@
           })
         );
       }
-      if (step.error) line.append(el("span", { className: "stage-detail", text: step.error }));
+      if (step.error && !pending) line.append(el("span", { className: "stage-detail", text: step.error }));
       if (step.command?.shell) {
         const details = el("details");
         details.append(el("summary", { text: "command" }));
