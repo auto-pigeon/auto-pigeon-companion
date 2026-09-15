@@ -114,6 +114,15 @@ type SourceRef struct {
 
 	// FetchedAt is when this machine's copy was synced. A fact about the copy.
 	FetchedAt string `json:"fetched_at,omitempty"`
+
+	// ConvertedTo is set when the fetched file was an APMap and the build read
+	// the `.map` the extractor wrote for it; ConvertedSHA256 names those bytes
+	// and ConvertedBy / ConverterVerified say which extractor did it and
+	// whether anything verified that extractor. See assetref.ConvertAPMapInputs.
+	ConvertedTo       string `json:"converted_to,omitempty"`
+	ConvertedSHA256   string `json:"converted_sha256,omitempty"`
+	ConvertedBy       string `json:"converted_by,omitempty"`
+	ConverterVerified bool   `json:"converter_verified,omitempty"`
 }
 
 // ExecutableRecord is one program a step actually started.

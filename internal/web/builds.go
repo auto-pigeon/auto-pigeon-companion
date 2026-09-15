@@ -333,7 +333,11 @@ func (s *Server) resolveInputs(ctx context.Context, request buildRequestBody) (
 	if err != nil {
 		return nil, nil, fmt.Errorf("creating a staging directory: %w", err)
 	}
-	return assetref.ResolveAll(ctx, store, syncer, request.Inputs, stage)
+	resolved, sources, err := assetref.ResolveAll(ctx, store, syncer, request.Inputs, stage)
+	if err != nil {
+		return nil, nil, err
+	}
+	return assetref.ConvertAPMapInputs(ctx, s.runner, resolved, sources)
 }
 
 func ensureDir(dir string) string {

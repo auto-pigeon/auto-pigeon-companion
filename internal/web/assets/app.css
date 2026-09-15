@@ -167,12 +167,44 @@ a:hover { color: var(--accent-strong); text-decoration-color: currentColor; }
 }
 .tabs [role="tab"]:hover:not(:disabled) { background: var(--surface-2); border-color: var(--line-strong); color: var(--ink); }
 .tabs [role="tab"][aria-selected="true"] { color: var(--accent-strong); border-color: var(--accent); background: transparent; }
-.scratch-card { background: var(--bg); }
-.scratch-list { border: 1px solid var(--line); border-radius: var(--radius); padding: 0.5rem 0.75rem; margin: 0.5rem 0; }
-.scratch-list legend { font-weight: 600; font-size: 0.8125rem; padding: 0 0.25rem; }
-.scratch-row { align-items: flex-end; }
-.scratch-row .field { min-width: 8rem; flex: 1 1 8rem; }
-.scratch-row .field.grow { flex: 3 1 14rem; }
+/*
+  The from-scratch editor (NEW_244D, reworked at the operator's request: "no
+  light square frames, horizontal separators, proper space"). No box is drawn
+  around a group: each action or stage is set apart by a teal rule above it,
+  each list inside it by a thin grey rule, and rows get room to breathe. The
+  structure is carried by headings and rules, not by nested borders.
+*/
+#scratch-panel .scratch-card {
+  background: transparent; border: none; border-radius: 0;
+  border-top: 2px solid var(--accent); padding: 1rem 0 0.5rem; margin: 1.5rem 0 0;
+}
+#scratch-panel .scratch-list {
+  border: none; border-radius: 0; border-top: 1px solid var(--line-strong);
+  padding: 0.75rem 0 0.25rem; margin: 1rem 0 0;
+}
+#scratch-panel .scratch-list legend {
+  float: left; width: 100%; padding: 0; margin: 0 0 0.35rem;
+  font-weight: 600; font-size: 0.8125rem; color: var(--accent-strong);
+  text-transform: uppercase; letter-spacing: .04em;
+}
+#scratch-panel .scratch-list legend + * { clear: left; }
+#scratch-panel .scratch-list > .muted { margin: 0 0 0.75rem; font-size: 0.8125rem; }
+#scratch-panel .scratch-row {
+  align-items: flex-start; gap: 0.75rem 1rem; margin: 0 0 0.9rem; padding: 0 0 0.9rem;
+  border-bottom: 1px solid var(--line);
+}
+/* Labels line up across a row whether or not a field carries a hint; the
+   controls without a label sit on the inputs' line. */
+#scratch-panel .scratch-row > button,
+#scratch-panel .scratch-row > .check { margin-top: 1.55rem; }
+#scratch-panel .scratch-row:last-of-type { border-bottom: none; }
+#scratch-panel .scratch-row .field { min-width: 10rem; flex: 1 1 11rem; gap: 0.3rem; }
+#scratch-panel .scratch-row .field.grow { flex: 3 1 18rem; }
+#scratch-panel .scratch-card > .field { margin: 0.75rem 0; gap: 0.3rem; }
+#scratch-panel .scratch-card textarea { min-height: 7rem; line-height: 1.5; }
+#scratch-panel .row-actions { margin: 0.25rem 0 0.5rem; }
+#scratch-panel h4 { margin: 1.75rem 0 0.25rem; font-size: 0.9rem; }
+#scratch-panel > .row { gap: 0.75rem 1rem; margin: 0.9rem 0; }
 fieldset { min-width: 0; }
 .stale-page {
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--gap);

@@ -57,7 +57,15 @@ func resolveAUBInputs(ctx context.Context, env *Env, inputs map[string]string, s
 			"pinned revisions already in the cache will still build\n", syncErr)
 	}
 
-	return assetref.ResolveAll(ctx, store, syncer, inputs, stage)
+	resolved, sources, err := assetref.ResolveAll(ctx, store, syncer, inputs, stage)
+	if err != nil {
+		return nil, nil, err
+	}
+	// An account map is an APMap; the compilers read `.map`. The extractor is
+	// resolved lazily, so an input that needs no conversion fetches nothing.
+	return assetref.ConvertAPMapInputs(ctx, extractorRunner(env, func(format string, args ...any) {
+		fmt.Fprintf(env.Stderr, format+"\n", args...)
+	}), resolved, sources)
 }
 
 // openSyncerQuietly is openSyncer without treating an absent session as fatal.
