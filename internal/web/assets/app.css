@@ -242,6 +242,10 @@ fieldset { min-width: 0; }
 .tab-note { display: block; font-weight: normal; font-size: 0.78rem; color: var(--ink-muted); }
 
 main { flex: 1 1 auto; padding: 1rem 1.25rem 3rem; min-width: 0; }
+.area-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--gap); }
+.area-head h2 { margin: 0 0 0.25rem; }
+/* The New profile page in its own tab has no area navigation of its own. */
+body.single-view .areas { display: none; }
 
 .panel {
   background: var(--surface);

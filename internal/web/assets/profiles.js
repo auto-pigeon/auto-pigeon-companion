@@ -671,12 +671,11 @@
       }
       setMessage(
         "wizard-message",
-        `Installed as ${body.id}. It is listed above as ${body.trust} and is not approved yet.`,
+        `Installed as ${body.id} (${body.trust}, not approved yet) — opening its review and setup in Profiles.`,
         "ok"
       );
       record(`Installed the profile ${body.id}`, body.imported_to, "ok");
-      await refreshList();
-      await openProfile(body.id);
+      await window.AUCOM.openInstalledProfile(body.id);
     })
   );
 
@@ -688,23 +687,46 @@
 
   // New profile opens both ways of writing one — from a tested template, or
   // from scratch — at the top of the area, where the button is.
+  // After an install on the New profile page, this tab becomes Profiles with
+  // the new document's review open: approving it and saying where its programs
+  // are is the next thing to do, and both live there.
+  window.AUCOM.openInstalledProfile = async (id) => {
+    document.body.classList.remove("single-view");
+    window.AUCOM.showArea("profiles");
+    await refreshList();
+    const found = installed.find((item) => item.id === id);
+    if (!found) {
+      // The installed list is one kind at a time; show the kind it is.
+      for (const candidate of ["tool", "engine", "pipeline"]) {
+        $("profiles-kind").value = candidate;
+        await refreshList();
+        if (installed.some((item) => item.id === id)) break;
+      }
+      $("profiles-kind").dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    await openProfile(id);
+    $("profile-detail-panel").scrollIntoView({ block: "start" });
+  };
+
+  // New profile opens the creator in a new browser tab: the page served there
+  // carries this run's own token, so it is the same Companion, and the
+  // installed list stays where the person left it (NEW_244D, operator).
   $("profiles-new").addEventListener("click", () => {
-    $("profiles-create").hidden = false;
-    $("profiles-create-title").focus();
-    $("profiles-create").scrollIntoView({ block: "start" });
+    window.open(window.location.pathname + "?view=new-profile#new-profile", "_blank", "noopener");
   });
-  $("profiles-create-close").addEventListener("click", () => {
-    $("profiles-create").hidden = true;
-    $("profiles-new").focus();
-  });
+
+  window.AUCOM.areas["new-profile"] = {
+    async refresh() {
+      if (templates.length === 0) await refreshTemplates();
+      setStep(step);
+      await window.AUCOM.scratch?.refresh?.();
+    },
+  };
 
   window.AUCOM.areas.profiles = {
     open: openProfile,
     async refresh() {
       await refreshList();
-      if (templates.length === 0) await refreshTemplates();
-      setStep(step);
-      await window.AUCOM.scratch?.refresh?.();
     },
   };
 })();

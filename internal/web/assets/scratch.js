@@ -402,10 +402,9 @@
     const id = composed.id;
     record(`Installed ${composed.name}`, id, "ok");
     setMessage("scratch-message",
-      `Installed ${composed.name} as a local profile. It cannot run until you approve it — its review is open below, with its setup.`, "ok");
+      `Installed ${composed.name} as a local profile. It cannot run until you approve it — opening its review and setup in Profiles.`, "ok");
     await refreshProviders();
-    await window.AUCOM.areas.profiles?.refresh?.();
-    await window.AUCOM.areas.profiles?.open?.(id);
+    await window.AUCOM.openInstalledProfile(id);
   }
 
   async function refreshProviders() {

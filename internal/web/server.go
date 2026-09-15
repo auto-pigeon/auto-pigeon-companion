@@ -167,8 +167,13 @@ func NewServer(options Options) (*Server, error) {
 		// something to paper over with a guessed default — see
 		// config.ErrAUBNotConfigured. The server still starts, so the page can
 		// say so; only the AUB-backed routes fail.
-		if settings.AUBBaseURL != "" {
-			client, err = aub.New(settings.AUBBaseURL, nil)
+		// The EFFECTIVE address: the environment (and so the development
+		// `.env` and the config.json beside the executable, which set it) wins
+		// over the file, exactly as it does for every CLI command. Reading
+		// only the file here made the page say "no server chosen" while
+		// `companion auth status` named one (NEW_244D).
+		if effective, aubErr := settings.AUB(); aubErr == nil {
+			client, err = aub.New(effective, nil)
 			if err != nil {
 				return nil, err
 			}

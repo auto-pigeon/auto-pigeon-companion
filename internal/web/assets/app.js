@@ -24,12 +24,13 @@
   // `about` is last because it is the one area that is not a task: somebody
   // looking for a job should never have to pass the prose about the program to
   // reach it.
-  const areaNames = ["library", "build", "run", "profiles", "jobs", "settings", "about"];
+  const areaNames = ["library", "build", "run", "profiles", "new-profile", "jobs", "settings", "about"];
   const titles = {
     library: "My Maps",
     build: "Build",
     run: "Run",
     profiles: "Profiles",
+    "new-profile": "New profile",
     jobs: "Jobs",
     settings: "Settings",
     about: "About",
@@ -57,6 +58,7 @@
     const feedback = $("feedback-panel");
     if (feedback) feedback.hidden = true;
     $("area-heading").textContent = titles[area];
+    $("profiles-new").hidden = area !== "profiles";
     if (focus) $("area-heading").focus();
     if (window.location.hash !== "#" + area) {
       window.history.replaceState(null, "", "#" + area);
@@ -243,6 +245,12 @@
   });
 
   // --- boot -----------------------------------------------------------------
+
+  // A page opened for one job — New profile, in its own tab — shows that page
+  // and not the area navigation.
+  if (new URLSearchParams(window.location.search).get("view") === "new-profile") {
+    document.body.classList.add("single-view");
+  }
 
   // Categories that decide what is drawn below them are tabs.
   for (const id of ["profiles-kind", "wizard-kind", "scratch-kind", "jobs-state", "library-type"]) {
