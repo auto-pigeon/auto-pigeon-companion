@@ -549,6 +549,17 @@
     // From Build step 4: this build, ready to play in the engine chosen here.
     async chooseBuild(buildID) {
       await refreshBuilds();
+      // An engine that can play a map on this machine, rather than whichever
+      // profile happens to be first in the list: the live check picked
+      // DarkPlaces, not set up, over the operator's ready vkQuake (NEW_244D).
+      const ready = (engine) => engine && !((engine.action_problems || {}).play_map || []).length;
+      if (!ready(current())) {
+        const candidate = engines.find(ready);
+        if (candidate) {
+          $("run-engine").value = candidate.id;
+          renderEngine();
+        }
+      }
       $("run-build").value = buildID;
       if ([...$("run-action").options].some((option) => option.value === "play_map")) {
         $("run-action").value = "play_map";

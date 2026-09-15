@@ -377,13 +377,18 @@
 
     // Play this build: Run offers the build just made, and Start stages its
     // level as <mod>/maps/<map>.bsp before the engine starts (NEW_244D).
+    // Start from an engine that is NOT set up, as a person arriving from Build
+    // would find the list: Play this build must pick the one that can play.
+    const notReady = [...$("run-engine").options].find((option) => option.value !== settings.engine_id);
+    if (notReady) setValue($("run-engine"), notReady.value);
     await window.AUCOM.areas.run.chooseBuild(
       [...$("run-build").options].find((option) => option.textContent.includes("the browser journey"))?.value || ""
     );
     const chosenBuild = $("run-build").selectedOptions[0];
     record(
       "Run offers the build just made, with its map and a game directory filled in",
-      Boolean($("run-build").value) && $("run-mod").value === "auto-pigeon" && $("run-map").value.length > 0,
+      Boolean($("run-build").value) && $("run-mod").value === "auto-pigeon" && $("run-map").value.length > 0 &&
+        $("run-engine").value === settings.engine_id,
       `${chosenBuild ? chosenBuild.textContent : "none"} · mod ${$("run-mod").value} · map ${$("run-map").value}`
     );
     $("run-launch").click();
