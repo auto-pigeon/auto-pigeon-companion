@@ -163,10 +163,10 @@
         <!-- Library ------------------------------------------------------ -->
         <section id="area-library" class="area" aria-labelledby="area-heading">
           <p class="lede">
-            The maps in your Auto-Pigeon account, and everything this machine
-            has already downloaded and verified. Choose an exact
-            revision — a build reads the copy in the cache, so a newer revision
-            on the server cannot change a build you have already started.
+            The maps in your Auto-Pigeon account, and what this computer has
+            already downloaded. Download a map to build its latest version; a
+            build keeps the copy it started with, so saving a newer version
+            in the editor never changes a build that is already running.
           </p>
 
           <div id="library-signed-out" class="panel notice" hidden>
@@ -210,13 +210,12 @@
 
           <div class="panel">
             <div class="panel-head">
-              <h3>Downloaded on this machine</h3>
+              <h3>Downloaded to this computer</h3>
               <button type="button" id="cached-refresh" class="secondary">Refresh</button>
             </div>
             <p class="muted">
-              This list is the record of every completed download. It is read from
-              disk, so it is still here after a reload, after a restart, and with
-              no network at all.
+              Everything here builds without a connection, and stays after a
+              restart.
             </p>
             <p id="cached-message" class="message" role="status"></p>
             <ul id="cached-list" class="rows" aria-label="Revisions cached on this machine"></ul>

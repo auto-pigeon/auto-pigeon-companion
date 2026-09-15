@@ -18,13 +18,28 @@
   // rather than an answer.
   window.AUCOM.chosenRevision = null;
 
+  // typeName says an asset type the way a person would: `prefab_package` is
+  // the account's own word for a thing people call a prefab package.
+  const TYPE_NAMES = {
+    map: ["Map", "Maps"], prefab_package: ["Prefab package", "Prefab packages"],
+    texture_source: ["Texture source", "Texture sources"], game_profile: ["Game profile", "Game profiles"],
+    entity_catalogue: ["Entity catalogue", "Entity catalogues"],
+  };
+  function typeName(type, plural = false) {
+    const known = TYPE_NAMES[type];
+    if (known) return known[plural ? 1 : 0];
+    const words = String(type || "asset").replace(/_/g, " ");
+    return words.charAt(0).toUpperCase() + words.slice(1) + (plural ? "s" : "");
+  }
+  window.AUCOM.typeName = typeName;
+
   async function refreshTypes() {
     const select = $("library-type");
     if (select.options.length > 1) return;
     const { ok, body } = await api("/api/v1/library/capabilities");
     if (!ok) return;
     for (const type of body.asset_types || []) {
-      select.append(el("option", { text: type.asset_type, attrs: { value: type.asset_type } }));
+      select.append(el("option", { text: typeName(type.asset_type, true), attrs: { value: type.asset_type } }));
     }
   }
 
@@ -66,13 +81,13 @@
   // NEW_244D). The ordinary action is the LATEST revision; an older one is
   // behind "Other revisions", for the rare time somebody needs it.
   function nameOf(asset) {
-    return asset.display_name || "Untitled " + (asset.asset_type || "asset");
+    return asset.display_name || "Untitled " + typeName(asset.asset_type).toLowerCase();
   }
 
   function assetCard(asset) {
     const title = el("h4", { text: nameOf(asset) });
     const meta = el("p", { className: "muted" });
-    meta.textContent = [asset.asset_type, asset.game, asset.visibility].filter(Boolean).join(" · ");
+    meta.textContent = [typeName(asset.asset_type), asset.game, asset.visibility].filter(Boolean).join(" · ");
 
     const revision = asset.current_revision;
     const current = el("p", { className: "muted" });
@@ -227,7 +242,7 @@
       "cached-message",
       items.length === 0
         ? "Nothing downloaded yet."
-        : `${items.length} map${items.length === 1 ? "" : "s"} downloaded to this computer.`
+        : `${items.length} downloaded to this computer.`
     );
     for (const item of items) {
       const record_ = item.record;
@@ -235,9 +250,9 @@
       // A record made before the name was known still gets one from the
       // account's own listing, when this page has read it.
       const known = assets.find((asset) => asset.asset_id === record_.asset_id);
-      const name = record_.display_name || known?.display_name || "Untitled " + (record_.asset_type || "asset");
+      const name = record_.display_name || known?.display_name || "Untitled " + typeName(record_.asset_type).toLowerCase();
       head.append(el("strong", { text: name }));
-      head.append(badge(record_.asset_type, "ok"));
+      head.append(badge(typeName(record_.asset_type), "ok"));
       const detail = el("p", { className: "muted" });
       detail.textContent = [
         `revision ${record_.revision}`,
