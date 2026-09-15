@@ -78,8 +78,15 @@ func TestVersion(t *testing.T) {
 	if code := Run(env, []string{"version"}); code != 0 {
 		t.Fatalf("exit code = %d", code)
 	}
-	if got := strings.TrimSpace(stdout.String()); got != "test-version" {
-		t.Errorf("stdout = %q", got)
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	// The first line is the version and nothing else: every harness reads it.
+	if lines[0] != "test-version" {
+		t.Errorf("first line = %q", lines[0])
+	}
+	// NEW_244D: the build's own record follows, so an unpacked release can
+	// name its commit and its CGO setting without Go or Git.
+	if len(lines) != 3 || !strings.HasPrefix(lines[1], "commit ") || !strings.Contains(lines[2], "CGO_ENABLED=") {
+		t.Errorf("stdout = %q", stdout.String())
 	}
 }
 

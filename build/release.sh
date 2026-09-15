@@ -4,8 +4,18 @@
 #
 # Usage, from the repository root:
 #
-#   build/release.sh --version 0.2.0
-#   build/release.sh --version 0.2.0 --out dist/0.2.0 --targets linux/amd64,windows/amd64
+#   build/release.sh
+#   build/release.sh --out dist/1.842 --targets linux/amd64,windows/amd64
+#
+# # The version is 1.<commit-count>
+#
+# The format AUP and AUG report: `1.` followed by `git rev-list --count HEAD`
+# in this repository, derived here rather than typed. `--version` is accepted
+# only to restate that number (a CI job that already computed it); any other
+# shape is refused, because a second version string for one commit is exactly
+# what the format exists to prevent. A tree with uncommitted changes is built,
+# and `companion version` says `modified` — the source commit and that fact are
+# in the binary's own build information.
 #
 # # This script signs nothing, and holds no key
 #
@@ -37,7 +47,7 @@ TARGETS="windows/amd64,windows/arm64,linux/amd64,linux/arm64,darwin/amd64,darwin
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 usage() {
-    sed -n '2,30p' "${BASH_SOURCE[0]}" >&2
+    sed -n '2,42p' "${BASH_SOURCE[0]}" >&2
 }
 
 while [ $# -gt 0 ]; do
@@ -51,13 +61,23 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-if [ -z "$VERSION" ]; then
-    echo "error: --version is required" >&2
-    usage
+cd "$repo_root"
+
+count="$(git rev-list --count HEAD 2>/dev/null || true)"
+if [ -z "$count" ]; then
+    echo "error: cannot count this repository's commits; the version is 1.<commit-count> and needs the Git history" >&2
     exit 2
 fi
-
-cd "$repo_root"
+derived="1.${count}"
+if [ -z "$VERSION" ]; then
+    VERSION="$derived"
+elif [ "$VERSION" != "$derived" ]; then
+    echo "error: --version $VERSION is not this commit's version ($derived = 1.<git rev-list --count HEAD>)" >&2
+    exit 2
+fi
+if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
+    echo "warning: the working tree has uncommitted changes; the artifacts will say 'modified'" >&2
+fi
 mkdir -p "$OUT"
 
 # # The About content is a release gate — NEW_243E_AUT_AUP_AUG_AUCOM §B
@@ -153,7 +173,7 @@ echo
 echo "Built $VERSION in $OUT. NOTHING HERE IS SIGNED — see the header of this"
 echo "script and 'companion security residual' for what that means."
 echo
-echo "Six artifacts were BUILT. What each of them is VERIFIED to do on its own"
+echo "${#targets[@]} artifact(s) were BUILT (${TARGETS}). What each of them is VERIFIED to do on its own"
 echo "hardware is the table above, and it does not change because a build"
 echo "succeeded: run acceptance/run-acceptance.sh (or .ps1) on the machine and"
 echo "send the bundle back."

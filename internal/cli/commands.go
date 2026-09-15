@@ -9,6 +9,7 @@ import (
 
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/aub"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/release"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/web"
 )
 
@@ -131,12 +132,27 @@ func fail(env *Env, err error) int {
 	return 1
 }
 
+// runVersion prints the version on its first line — the line every harness
+// reads — and then what the binary itself records about how it was built, so
+// a person holding only an unpacked release can name the exact source commit
+// without Go, Git or a checkout.
 func runVersion(env *Env, args []string) int {
 	set := newFlagSet(env, "version")
 	if _, code, ok := parseFlags(env, set, args); !ok {
 		return code
 	}
 	fmt.Fprintln(env.Stdout, env.Version)
+	build := release.ReadBuild()
+	if build.Commit != "" {
+		state := "clean"
+		if build.Modified {
+			state = "modified: built from uncommitted changes"
+		}
+		fmt.Fprintf(env.Stdout, "commit %s (%s)\n", build.Commit, state)
+	} else {
+		fmt.Fprintln(env.Stdout, "commit unknown (built without version control information)")
+	}
+	fmt.Fprintf(env.Stdout, "built with %s for %s, CGO_ENABLED=%s\n", build.GoVersion, build.Target, build.CGO)
 	return 0
 }
 

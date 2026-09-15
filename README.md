@@ -85,10 +85,18 @@ repository MIT while AUE is AGPL-3.0 and the map tools are GPL-2.0. See
 No release artifacts are published yet. Build from source:
 
 ```console
-$ go build -o companion ./cmd/companion
+$ go build -ldflags "-X main.version=1.$(git rev-list --count HEAD)" -o companion ./cmd/companion
 $ ./companion version
-0.1.0-dev
+1.842
+commit 207eb3815423df39b32423b9a32df7d5b438ce22 (clean)
+built with go1.26.8 for linux/amd64, CGO_ENABLED=1
 ```
+
+The version is **`1.<commit-count>`** — `git rev-list --count HEAD` in this
+repository, the same format AUP and AUG report, and the page's header shows it.
+A plain `go build` that nobody stamped says `unknown` rather than inventing a
+number; the source commit is read out of the binary's own build information
+either way, so an unpacked release can name it with no Go or Git installed.
 
 That builds the Companion and nothing else. **The extractor is not part of it**
 and is obtained separately — see [Extractor](#extractor).
@@ -110,14 +118,14 @@ by hand, because nothing about it is signed and there are no certificates yet.
 See [Releasing](#releasing).
 
 ```console
-$ ./build/release.sh --version 0.2.0
-== building 0.2.0 into dist ==
+$ ./build/release.sh
+== building 1.842 into dist ==
 -- windows/amd64
 ...
 == checksums ==
 wrote dist/SHA256SUMS (7 files)
 
-Built 0.2.0 in dist. NOTHING HERE IS SIGNED — see the header of this
+Built 1.842 in dist. NOTHING HERE IS SIGNED — see the header of this
 script and 'companion security residual' for what that means.
 ```
 
@@ -3867,15 +3875,15 @@ program rather than written next to it — an SBOM somebody maintains by hand is
 one that is wrong within two changes.
 
 ```console
-$ ./companion release sbom --out dist/auto-pigeon-companion-0.2.0.cdx.json
-wrote dist/auto-pigeon-companion-0.2.0.cdx.json
+$ ./companion release sbom --out dist/auto-pigeon-companion-1.842.cdx.json
+wrote dist/auto-pigeon-companion-1.842.cdx.json
 
 $ ./companion release checksums --dir dist --out -
 wrote dist/SHA256SUMS (7 files)
 
 $ ./companion release checksums --dir dist
-2c8b08da5ce60398e1f19af0e5dccc744df274b826abe585eaba68c525434806  companion-0.2.0-linux-amd64.tar.gz
-27dd8ed44a83ff94d557f9fd0412ed5a8cbca69ea04922d88c01184a07300a5a  companion-0.2.0-windows-amd64.zip
+2c8b08da5ce60398e1f19af0e5dccc744df274b826abe585eaba68c525434806  companion-1.842-linux-amd64.tar.gz
+27dd8ed44a83ff94d557f9fd0412ed5a8cbca69ea04922d88c01184a07300a5a  companion-1.842-windows-amd64.zip
 ```
 
 The SBOM carries **no timestamp** unless you pass `--timestamp`, so two runs of

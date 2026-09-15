@@ -22,10 +22,17 @@ import (
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
 )
 
-// version is the build-time version string. Override it with:
+// version is the build-time version string, `1.<commit-count>` — the format
+// AUP and AUG report, where the count is `git rev-list --count HEAD` in this
+// repository. build/release.sh sets it:
 //
-//	go build -ldflags "-X main.version=0.2.0" ./cmd/companion
-var version = "0.1.0-dev"
+//	go build -ldflags "-X main.version=1.$(git rev-list --count HEAD)" ./cmd/companion
+//
+// A build nobody stamped says `unknown`. A version-shaped placeholder would be
+// read out, quoted in a bug report and compared, and be wrong every time. The
+// commit itself is in the binary's own build information and `companion
+// version` prints it.
+var version = "unknown"
 
 func main() {
 	// The optional development `.env` — see internal/config/envfile.go. Read

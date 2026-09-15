@@ -82,7 +82,11 @@
     }
     window.AUCOM.status = body;
     const backend = body.aub_base_url || "no backend address configured";
-    $("identity").textContent = `v${body.version} · ${body.platform} · ${backend}`;
+    // The version is shown only in its frozen `1.<commit-count>` shape, as AUP
+    // and AUG show it: an unstamped build's "unknown" is not a version anybody
+    // should read out, so that segment is simply absent.
+    const version = /^1\.\d+$/.test(body.version || "") ? `Version ${body.version} · ` : "";
+    $("identity").textContent = `${version}${body.platform} · ${backend}`;
     $("identity").className = "muted";
     $("account-email").textContent = body.authenticated ? body.email || "signed in" : "not signed in";
     $("sign-out").hidden = !body.authenticated;
