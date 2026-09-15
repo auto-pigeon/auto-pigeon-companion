@@ -427,6 +427,11 @@ func applyComposeFields(tree map[string]any, request composeRequest) (map[string
 	}
 	setString("id", strings.TrimSpace(request.ID))
 	setString("name", strings.TrimSpace(request.Name))
+	if strings.TrimSpace(request.ID) == "" {
+		if id, ok := derivedProfileID(tree, request.Template); ok {
+			tree["id"] = id
+		}
+	}
 	setString("version", strings.TrimSpace(request.Version))
 	setString("summary", strings.TrimSpace(request.Summary))
 	setString("description", strings.TrimSpace(request.Description))
@@ -916,6 +921,58 @@ func describeProfile(entry job.CatalogEntry) map[string]any {
 		"engine_family": family,
 		"maturity":      describeMaturity(family),
 	}
+}
+
+// derivedProfileID names a new document after its name when the author left
+// the id empty (NEW_244D, operator: no profile ids anywhere a person looks).
+//
+// An id is still what a pipeline step, a grant and a sync match on, and it is
+// permanent once installed — so it is derived, never shown, and only while the
+// document is still being written: when it is the scratch placeholder, the
+// template's own id (a copy must not claim a built-in's identity), or an id
+// this function derived from an earlier name. An id the author typed into the
+// advanced document under any other namespace is left exactly as it is.
+func derivedProfileID(tree map[string]any, template string) (string, bool) {
+	current, _ := tree["id"].(string)
+	name, _ := tree["name"].(string)
+	derivable := current == "" || current == scratchPlaceholderID ||
+		(template != "" && current == template) || strings.HasPrefix(current, derivedIDPrefix)
+	if !derivable {
+		return "", false
+	}
+	slug := profileSlug(name)
+	if slug == "" || name == "Unnamed profile" {
+		return "", false
+	}
+	kind, _ := tree["kind"].(string)
+	if profileSlug(kind) == "" {
+		kind = "profile"
+	}
+	id := derivedIDPrefix + profileSlug(kind) + "." + slug
+	if len(id) > 128 {
+		id = strings.TrimRight(id[:128], "-.")
+	}
+	return id, true
+}
+
+// derivedIDPrefix is the namespace of every id the page made up for somebody.
+const derivedIDPrefix = "local."
+
+// profileSlug is a name reduced to one id segment: lower-case letters and
+// digits, runs of anything else become one hyphen, none at either end.
+func profileSlug(name string) string {
+	var builder strings.Builder
+	hyphen := false
+	for _, r := range strings.ToLower(name) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			builder.WriteRune(r)
+			hyphen = false
+		} else if builder.Len() > 0 && !hyphen {
+			builder.WriteRune('-')
+			hyphen = true
+		}
+	}
+	return strings.TrimRight(builder.String(), "-")
 }
 
 // bindRequest is what a setup form sends: where this machine keeps the programs

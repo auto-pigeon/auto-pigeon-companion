@@ -549,10 +549,17 @@ function bytes(n) {
   return `${value < 10 && unit > 0 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
 }
 
-function shortDigest(digest) {
-  if (!digest) return "";
-  const body = String(digest).replace(/^sha256[:-]/, "");
-  return body.length > 16 ? body.slice(0, 12) + "…" : body;
+// A permission as a person reads it: the sentence, and how much it gives away.
+// Its id is what a grant is recorded against, and stays on the wire (NEW_244D,
+// operator: no internal ids or digests anywhere on the page).
+function permissionBlock(permission) {
+  const head = el("p");
+  head.append(el("strong", { text: permission.summary || "An undescribed permission" }));
+  if (permission.risk) {
+    head.append(document.createTextNode(" "));
+    head.append(badge(permission.risk + " risk", permission.risk === "high" ? "failed" : permission.risk === "medium" ? "warning" : "queued"));
+  }
+  return el("div", { className: "permission", children: [head] });
 }
 
 function when(value) {
@@ -568,6 +575,6 @@ function terminal(state) {
 Object.assign(AUCOM, {
   $, el, api, announce, setMessage, busy, withBusy,
   record, renderActivity, clearActivity, pathField, downloadButton, tabsFor,
-  badge, maturityBadge, maturityNote, bytes, shortDigest, when, terminal,
+  badge, maturityBadge, maturityNote, bytes, when, terminal, permissionBlock,
   openCompatibilityReport, wireCompatibilityReport,
 });

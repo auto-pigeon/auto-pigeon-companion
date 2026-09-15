@@ -64,6 +64,46 @@ func TestAToolWrittenFromScratchComposesAndValidates(t *testing.T) {
 	}
 }
 
+// TestAProfileWrittenWithoutAnIdIsNamedAfterItsName: the page asks nobody for
+// an id (NEW_244D), so one is derived from the name — and a copy of a built-in
+// template never keeps the built-in's identity.
+func TestAProfileWrittenWithoutAnIdIsNamedAfterItsName(t *testing.T) {
+	m := newMachine(t)
+	request := ericwScratchTool()
+	delete(request, "id")
+	request["name"] = "My EricW (Quake 1)"
+	status, body := m.call(http.MethodPost, "/api/v1/profiles/compose", request)
+	if status != http.StatusOK || body["valid"] != true || body["id"] != "local.tool.my-ericw-quake-1" {
+		t.Fatalf("status = %d, valid = %v, id = %v, error = %v", status, body["valid"], body["id"], body["error"])
+	}
+
+	// Renaming before installing follows the name; an id the author wrote into
+	// the document under their own namespace is left alone.
+	var tree map[string]any
+	encoded, _ := json.Marshal(body["document"])
+	_ = json.Unmarshal(encoded, &tree)
+	_, renamed := m.call(http.MethodPost, "/api/v1/profiles/compose", map[string]any{"document": tree, "name": "Renamed"})
+	if renamed["id"] != "local.tool.renamed" {
+		t.Errorf("renamed id = %v", renamed["id"])
+	}
+	tree["id"] = "me.tools.kept"
+	_, kept := m.call(http.MethodPost, "/api/v1/profiles/compose", map[string]any{"document": tree, "name": "Renamed again"})
+	if kept["id"] != "me.tools.kept" {
+		t.Errorf("an authored id was replaced: %v", kept["id"])
+	}
+
+	_, templates := m.call(http.MethodGet, "/api/v1/profiles/templates?kind=engine", nil)
+	list, _ := templates["items"].([]any)
+	if len(list) == 0 {
+		t.Fatal("no templates")
+	}
+	first, _ := list[0].(map[string]any)
+	_, copied := m.call(http.MethodPost, "/api/v1/profiles/compose", map[string]any{"template": first["id"], "name": "My copy"})
+	if id, _ := copied["id"].(string); id == first["id"] || !strings.HasPrefix(id, "local.") || !strings.HasSuffix(id, ".my-copy") {
+		t.Errorf("a named copy of %v is %v", first["id"], copied["id"])
+	}
+}
+
 // TestAScratchToolAndPipelineBuildAMap walks the whole route a person takes
 // through the page, over the API the page uses: compose a tool from scratch,
 // install it, approve it, bind its program by FOLDER, compose a pipeline from

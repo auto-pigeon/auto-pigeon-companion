@@ -9,7 +9,7 @@
 "use strict";
 
 (() => {
-  const { $, el, api, setMessage, busy, withBusy, record, badge, shortDigest, when,
+  const { $, el, api, setMessage, busy, withBusy, record, badge, when, permissionBlock,
     maturityBadge, maturityNote, openCompatibilityReport } = window.AUCOM;
 
   let installed = [];
@@ -48,7 +48,7 @@
     }
 
     const summary = el("p", { className: "muted", text: profile.summary || "" });
-    const identity = el("p", { className: "mono", text: `${profile.id} ${profile.version} · ${shortDigest(profile.digest)}` });
+    const identity = el("p", { className: "muted", text: `Version ${profile.version}` });
 
     const open = el("button", { text: "Review", attrs: { type: "button" } });
     open.addEventListener("click", () => openProfile(profile.id));
@@ -84,7 +84,7 @@
     const note = maturityNote(body.maturity, () =>
       openCompatibilityReport({
         family: body.engine_family,
-        about: `About ${body.name} (${body.id}).`,
+        about: `About ${body.name}.`,
         profiles: [{ role: body.kind === "engine" ? "engine" : body.kind, id: body.id, version: body.version }],
       })
     );
@@ -93,8 +93,11 @@
     if (body.description) detail.append(el("p", { className: "muted", text: body.description }));
     detail.append(
       el("p", {
-        className: "mono",
-        text: `${body.id} ${body.version} · ${body.digest} · from ${body.source}`,
+        className: "muted",
+        // The terminal's permission report is not drawn here: it names the id,
+        // and every line of it is already on this panel in a person's words.
+        text: `Version ${body.version}` + (body.publisher?.name ? ` · published by ${body.publisher.name}` : "") +
+          (body.license?.spdx ? ` · ${body.license.spdx}` : ""),
       })
     );
 
@@ -103,27 +106,16 @@
       detail.append(el("p", { className: "muted", text: "Nothing. This document declares no permissions." }));
     } else {
       for (const permission of body.permissions) {
-        detail.append(
-          el("div", {
-            className: "permission",
-            children: [
-              el("p", { children: [el("strong", { text: permission.id }), document.createTextNode(" " + (permission.title || ""))] }),
-              el("p", { className: "fix", text: permission.reason || permission.description || "" }),
-            ],
-          })
-        );
+        detail.append(permissionBlock(permission));
       }
     }
-    detail.append(el("pre", { className: "output", text: body.report || "" }));
 
     detail.append(el("h4", { text: "Actions" }));
     const actions = el("ul");
     for (const action of body.actions || []) {
       actions.append(
         el("li", {
-          text: `${action.title || action.id} (${action.id})` +
-            (action.capability ? ` — provides ${action.capability}` : "") +
-            (action.session_role ? ` — ${action.session_role}` : ""),
+          text: action.title || action.id,
         })
       );
     }
@@ -143,7 +135,7 @@
         "This document arrived inside the Companion, so installing the program was the decision. " +
         "There is nothing else to approve.";
     } else if (body.authorized) {
-      status.textContent = `Approved on ${when(body.binding?.granted_at)}, against ${shortDigest(body.binding?.profile_digest)}.`;
+      status.textContent = `Approved on ${when(body.binding?.granted_at)}.`;
       status.className = "message ok";
       const withdraw = el("button", { text: "Withdraw approval", attrs: { type: "button", class: "danger" } });
       withdraw.addEventListener("click", () =>
@@ -153,7 +145,7 @@
             setMessage(status, out.error, "error");
             return;
           }
-          record(`Withdrew approval for ${id}`, "", "cancelled");
+          record(`Withdrew approval for ${body.name || "the profile"}`, "", "cancelled");
           await refreshList();
           await openProfile(id);
         })
@@ -173,7 +165,7 @@
             setMessage(status, out.error, "error");
             return;
           }
-          record(`Approved ${id}`, body.digest, "ok");
+          record(`Approved ${body.name || "the profile"}`, "", "ok");
           await refreshList();
           await openProfile(id);
         })
@@ -411,8 +403,7 @@
       return;
     }
     $("wizard-template-note").textContent =
-      `${template.id} ${template.version} · actions: ${template.actions.join(", ")}` +
-      (template.capabilities.length ? ` · provides: ${template.capabilities.join(", ")}` : "");
+      `Version ${template.version}` + (template.summary ? ` · ${template.summary}` : "");
     renderTemplateFields(template);
   }
 
@@ -464,7 +455,6 @@
 
     const request = {
       template: $("wizard-template").value,
-      id: $("wizard-id").value.trim() || undefined,
       name: $("wizard-name").value.trim() || undefined,
       version: $("wizard-version").value.trim() || undefined,
       summary: $("wizard-summary").value.trim() || undefined,
@@ -520,7 +510,6 @@
     head.append(document.createTextNode(" "));
     head.append(badge(body.trust));
     review.append(head);
-    review.append(el("p", { className: "mono", text: `${body.id} · ${body.digest}` }));
     review.append(
       el("p", {
         className: "muted",
@@ -535,15 +524,7 @@
       review.append(el("p", { className: "muted", text: "Nothing." }));
     } else {
       for (const permission of body.permissions) {
-        review.append(
-          el("div", {
-            className: "permission",
-            children: [
-              el("p", { children: [el("strong", { text: permission.id })] }),
-              el("p", { className: "fix", text: permission.reason || permission.description || "" }),
-            ],
-          })
-        );
+        review.append(permissionBlock(permission));
       }
     }
 
@@ -672,10 +653,10 @@
       }
       setMessage(
         "wizard-message",
-        `Installed as ${body.id} (${body.trust}, not approved yet) — opening its review and setup in Profiles.`,
+        `Installed ${body.name || "the profile"} (${body.trust}, not approved yet) — opening its review and setup in Profiles.`,
         "ok"
       );
-      record(`Installed the profile ${body.id}`, body.imported_to, "ok");
+      record(`Installed the profile ${body.name || ""}`.trim(), "", "ok");
       await window.AUCOM.openInstalledProfile(body.id);
     })
   );

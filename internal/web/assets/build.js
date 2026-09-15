@@ -131,7 +131,7 @@
           line.append(el("span", { className: "stage-detail", text: "installed " + step.provider_version }));
         }
       } else {
-        line.append(el("span", { className: "stage-detail", text: "no provider for " + step.capability }));
+        line.append(el("span", { className: "stage-detail", text: "no installed tool does this step yet — add one in Profiles" }));
         line.classList.add("failed");
       }
       stages.append(line);
@@ -406,7 +406,7 @@
       const line = el("li", { className: step.state || (step.skipped ? "skipped" : "") });
       line.append(el("span", { className: "stage-name", text: step.title || step.id }));
       line.append(badge(step.skipped && !step.state ? "skipped" : step.state || "waiting"));
-      const provider = step.profile ? `${step.profile.name || "a profile"} ${step.profile.version}` : step.capability;
+      const provider = step.profile ? `${step.profile.name || "a profile"} ${step.profile.version}` : "no tool recorded";
       line.append(el("span", { className: "stage-detail", text: provider }));
       if (step.duration_ms) {
         line.append(el("span", { className: "stage-detail", text: `${step.duration_ms} ms` }));

@@ -8,7 +8,7 @@
 "use strict";
 
 (() => {
-  const { $, el, api, setMessage, busy, withBusy, record, badge, when,
+  const { $, el, api, setMessage, busy, withBusy, record, badge, when, permissionBlock,
     maturityBadge, maturityNote, openCompatibilityReport } = window.AUCOM;
 
   let engines = [];
@@ -73,7 +73,7 @@
       openCompatibilityReport({
         family: engine.engine_family,
         operation: "run",
-        about: `About ${engine.name} (${engine.id}).`,
+        about: `About ${engine.name}.`,
         profiles: [{ role: "engine", id: engine.id, version: engine.version }],
       })
     );
@@ -82,12 +82,11 @@
     portable.append(el("p", { text: engine.summary || "" }));
     portable.append(
       el("p", {
-        className: "mono",
+        className: "muted",
         text: [
           "runtime " + engine.runtime,
           "engine " + engine.engine_version,
           engine.last_qualified ? "author last checked " + engine.last_qualified : "",
-          "digest " + window.AUCOM.shortDigest(engine.digest),
         ]
           .filter(Boolean)
           .join(" · "),
@@ -139,7 +138,7 @@
       rows.append(
         el("dd", {
           text: engine.binding.granted
-            ? `yes, on ${when(engine.binding.granted_at)}, against ${window.AUCOM.shortDigest(engine.binding.profile_digest)}`
+            ? `yes, on ${when(engine.binding.granted_at)}`
             : "no",
         })
       );
@@ -244,15 +243,7 @@
       const review = el("details", { attrs: { id: "run-permissions" } });
       review.append(el("summary", { text: `What ${engine.name} asks to be allowed to do (${engine.permissions.length})` }));
       for (const permission of engine.permissions) {
-        review.append(
-          el("div", {
-            className: "permission",
-            children: [
-              el("p", { children: [el("strong", { text: permission.id }), document.createTextNode(" " + (permission.title || "")) ] }),
-              el("p", { className: "fix", text: permission.reason || permission.description || "" }),
-            ],
-          })
-        );
+        review.append(permissionBlock(permission));
       }
       container.append(review);
     }
@@ -429,7 +420,7 @@
       }
       setMessage(
         "run-message",
-        `Started as job ${body.id}. It is in the Jobs area, with its command and its output.`,
+        "Started. It is in the Jobs area, with its command and its output.",
         "ok"
       );
       record(`Started ${current()?.name || "engine"}`, body.command?.shell || "", "running");

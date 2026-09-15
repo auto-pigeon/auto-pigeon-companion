@@ -359,7 +359,6 @@
     }
     return {
       scratch,
-      id: $("scratch-id").value.trim() || undefined,
       name: $("scratch-name").value.trim() || undefined,
       version: $("scratch-version").value.trim() || undefined,
       summary: $("scratch-summary").value.trim() || undefined,
@@ -388,7 +387,7 @@
     composed = body;
     $("scratch-install").disabled = false;
     setMessage("scratch-message",
-      `Valid: ${body.name} ${body.version} (${body.id}), digest ${String(body.digest).slice(0, 19)}…. Nothing is installed until you press Install.`, "ok");
+      `Valid: ${body.name} ${body.version}. Nothing is installed until you press Install.`, "ok");
   }
 
   async function install() {

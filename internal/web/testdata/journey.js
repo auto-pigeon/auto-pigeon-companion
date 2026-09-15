@@ -219,6 +219,14 @@
       textOf($("profile-detail")).includes("Approved on")
     );
     record("approving a local profile", true, "recorded against its digest");
+    // The digest is what the approval is recorded against, and it stays on the
+    // wire: neither it nor the profile's id is something a person reads.
+    const profilesText = textOf($("area-profiles"));
+    record(
+      "Profiles shows no profile id and no digest",
+      !profilesText.includes("aucom.fixture.toolchain") && !/sha256|[0-9a-f]{12}/.test(profilesText),
+      (profilesText.match(/.{0,80}(aucom\.fixture\.toolchain|sha256\S*|[0-9a-f]{12}\S*).{0,40}/) || ["none shown"])[0]
+    );
 
     // The tool's program has to be pointed at, the same way an engine's is.
     const toolField = await waitFor("the tool's path field", () =>
