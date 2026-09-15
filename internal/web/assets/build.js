@@ -672,6 +672,12 @@
       await refreshPipelines();
       await refreshHistory();
       renderSteps();
+      // Back from Profiles after "Set up …": the check that sent the person
+      // there is out of date, so it runs again rather than waiting for a click.
+      if (step === 3 && checked !== "ok") {
+        checked = null;
+        preview($("build-preview"));
+      }
       if (currentBuild) poll();
     },
     showStep,
