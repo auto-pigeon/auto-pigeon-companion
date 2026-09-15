@@ -541,13 +541,22 @@
 
   $("run-build").addEventListener("change", describeChosenBuild);
 
+  // The refresh showing this area starts. chooseBuild waits for it: otherwise
+  // the refresh rebuilt the engine list after the choice and put the previous
+  // engine back (NEW_244D, live on the operator's install).
+  let refreshing = Promise.resolve();
+
   window.AUCOM.areas.run = {
-    async refresh() {
-      await refreshEngines();
-      await refreshBuilds();
+    refresh() {
+      refreshing = (async () => {
+        await refreshEngines();
+        await refreshBuilds();
+      })();
+      return refreshing;
     },
     // From Build step 4: this build, ready to play in the engine chosen here.
     async chooseBuild(buildID) {
+      await refreshing.catch(() => {});
       await refreshBuilds();
       // An engine that can play a map on this machine, rather than whichever
       // profile happens to be first in the list: the live check picked

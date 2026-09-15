@@ -381,9 +381,14 @@
     // would find the list: Play this build must pick the one that can play.
     const notReady = [...$("run-engine").options].find((option) => option.value !== settings.engine_id);
     if (notReady) setValue($("run-engine"), notReady.value);
-    await window.AUCOM.areas.run.chooseBuild(
-      [...$("run-build").options].find((option) => option.textContent.includes("the browser journey"))?.value || ""
-    );
+    // Through the button, as a person gets there: showing Run starts its own
+    // refresh, and the choice must survive it (the live check lost it).
+    await go("build");
+    $("build-step-tab-4").click();
+    await waitFor("Play this build on step 4", () => visible($("build-play")));
+    $("build-play").click();
+    await waitFor("Run to open on the build", () => visible($("area-run")) && $("run-build").value !== "");
+    await sleep(1500);
     const chosenBuild = $("run-build").selectedOptions[0];
     record(
       "Run offers the build just made, with its map and a game directory filled in",
