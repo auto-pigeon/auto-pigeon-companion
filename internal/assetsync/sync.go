@@ -89,6 +89,12 @@ func (s *Syncer) Sync(ctx context.Context, assetType, assetID, revisionID string
 		Source:         s.client.BaseURL(),
 		SyncedAt:       time.Now().UTC(),
 	}
+	// The name a person gave the asset, so a downloaded copy is listed by it
+	// even offline (NEW_244D: ids are never shown). Best effort: a record
+	// without a name is still a correct record.
+	if detail, err := s.client.Asset(ctx, assetType, assetID); err == nil {
+		record.DisplayName = detail.Asset.DisplayName
+	}
 
 	// An already-complete revision is answered without touching the network
 	// again beyond the metadata read above. Not skipped silently: the caller is

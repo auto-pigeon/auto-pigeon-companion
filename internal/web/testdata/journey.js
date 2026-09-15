@@ -163,33 +163,28 @@
     );
     record("the library lists the account's maps", true, settings.asset_name);
 
-    buttonIn(card, "Choose a revision").click();
-    // The first child while it is loading is a placeholder, so this waits for a
-    // row that actually offers the action rather than for any row at all.
-    const revisionRow = await waitFor("the revision list", () => {
-      const row = $("library-revisions").children[0];
-      return row && buttonIn(row, "Download") ? row : null;
-    });
-    record("revisions are listed", true, textOf(revisionRow).trim().slice(0, 60));
-
-    // --- 4. download an exact revision, and see the durable record ----------
-    buttonIn(revisionRow, "Download").click();
+    // NEW_244D: the card downloads the LATEST revision; older ones are folded
+    // away. And no id of any kind is shown to the person.
+    record(
+      "a map is shown by its name, with no id",
+      !textOf(card).includes(settings.asset_id) && textOf(card).includes("Latest"),
+      textOf(card).replace(/\s+/g, " ").trim().slice(0, 90)
+    );
+    buttonIn(card, "Download latest").click();
     await waitFor(
       "the download to finish",
       () => {
-        const message = revisionRow.querySelector(".message");
+        const message = card.querySelector(".message");
         return message && message.classList.contains("ok");
       },
       60000
     );
-    // Matched on the asset id: a revision record carries the id for certain and
-    // the display name only when the backend recorded one.
     const cachedRow = await waitFor("the cached list", () =>
-      rowContaining($("cached-list"), settings.asset_id)
+      rowContaining($("cached-list"), settings.asset_name)
     );
     record(
-      "the download leaves a record that is read back from disk",
-      true,
+      "the download leaves a record that is read back from disk, without an id",
+      !textOf(cachedRow).includes(settings.asset_id),
       textOf(cachedRow).trim().slice(0, 90)
     );
 

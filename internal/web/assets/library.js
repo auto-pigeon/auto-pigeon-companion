@@ -61,27 +61,69 @@
     for (const asset of assets) list.append(assetCard(asset));
   }
 
+  // A person knows a map by the name they gave it. Ids, revision ids and cache
+  // keys are the program's own bookkeeping and are never shown (operator,
+  // NEW_244D). The ordinary action is the LATEST revision; an older one is
+  // behind "Other revisions", for the rare time somebody needs it.
+  function nameOf(asset) {
+    return asset.display_name || "Untitled " + (asset.asset_type || "asset");
+  }
+
   function assetCard(asset) {
-    const title = el("h4", { text: asset.display_name || asset.asset_id });
+    const title = el("h4", { text: nameOf(asset) });
     const meta = el("p", { className: "muted" });
     meta.textContent = [asset.asset_type, asset.game, asset.visibility].filter(Boolean).join(" · ");
 
     const revision = asset.current_revision;
-    const current = el("p", { className: "mono" });
+    const current = el("p", { className: "muted" });
     current.textContent = revision
-      ? `current: revision ${revision.revision}${revision.revision_id ? " (" + revision.revision_id + ")" : ""}`
-      : "no revisions yet";
+      ? `Latest: revision ${revision.revision}${revision.created_at ? " · " + when(revision.created_at) : ""}`
+      : "Nothing saved yet";
 
-    const open = el("button", {
-      text: "Choose a revision",
-      attrs: { type: "button" },
+    const status = el("p", { className: "message", attrs: { role: "status" } });
+    const download = el("button", { text: "Download latest", attrs: { type: "button", class: "primary" } });
+    download.disabled = !revision;
+    download.addEventListener("click", () =>
+      withBusy(download, () => downloadRevision(asset, revision || {}, "current", status, download))
+    );
+    // An older revision is a rare need, so it is folded away: the card offers
+    // the latest, and the fold offers the rest.
+    const other = el("button", { text: "Choose an older revision…", attrs: { type: "button", class: "secondary" } });
+    other.addEventListener("click", () => openRevisions(asset, other));
+    const more = el("details", {
+      className: "more",
+      children: [el("summary", { text: "More" }), other],
     });
-    open.addEventListener("click", () => openRevisions(asset, open));
 
     return el("li", {
       className: "card",
-      children: [title, meta, current, el("div", { className: "row-actions", children: [open] })],
+      children: [title, meta, current, el("div", { className: "row-actions", children: [download, more] }), status],
     });
+  }
+
+  // downloadRevision fetches and verifies one revision — the latest unless
+  // somebody chose another — and offers it to the Build area.
+  async function downloadRevision(asset, revision, key, status, button) {
+    busy(status, "Downloading and verifying…");
+    const { ok, body } = await api("/api/v1/library/sync", {
+      method: "POST",
+      body: { asset_type: asset.asset_type, asset_id: asset.asset_id, revision: key || "current" },
+    });
+    if (!ok) {
+      setMessage(status, body.error || "the download failed", "error");
+      record(`Download of ${nameOf(asset)} failed`, body.error, "failed");
+      return false;
+    }
+    const summary = body.already_complete
+      ? "Already on this computer. It is ready to build."
+      : `Downloaded (${bytes(body.bytes_fetched)}). It is ready to build.`;
+    setMessage(status, summary, "ok");
+    cachedKeys.add(body.key);
+    if (button) button.textContent = "Download again";
+    record(`Downloaded ${nameOf(asset)}, revision ${body.record.revision}`, "", "ok");
+    await refreshCached();
+    chooseRevision(asset, body.record, body.key);
+    return true;
   }
 
   async function openRevisions(asset, trigger) {
@@ -89,8 +131,7 @@
       const panel = $("library-revisions-panel");
       const list = $("library-revisions");
       panel.hidden = false;
-      $("library-revisions-title").textContent =
-        "Revisions of " + (asset.display_name || asset.asset_id);
+      $("library-revisions-title").textContent = "Revisions of " + nameOf(asset);
       list.replaceChildren(el("li", { className: "muted", text: "Reading…" }));
 
       const { ok, body } = await api(
@@ -131,11 +172,10 @@
     head.append(label);
     head.append(badge(held ? "downloaded" : "in your account", held ? "ok" : "queued"));
 
-    const detail = el("p", { className: "mono" });
+    const detail = el("p", { className: "muted" });
     detail.textContent = [
-      key ? "id " + key : "no revision id (this type keeps a counter only)",
-      revision.created_at ? "created " + when(revision.created_at) : "",
-      revision.immutable ? "immutable" : "may change",
+      revision.created_at ? "saved " + when(revision.created_at) : "",
+      revision.immutable ? "" : "may still change",
     ]
       .filter(Boolean)
       .join(" · ");
@@ -148,37 +188,7 @@
 
     download.addEventListener("click", () =>
       withBusy(download, async () => {
-        busy(status, "Downloading and verifying…");
-        const { ok, body } = await api("/api/v1/library/sync", {
-          method: "POST",
-          body: {
-            asset_type: asset.asset_type,
-            asset_id: asset.asset_id,
-            revision: key || "current",
-          },
-        });
-        if (!ok) {
-          setMessage(status, body.error || "the download failed", "error");
-          record(`Download of ${asset.display_name || asset.asset_id} failed`, body.error, "failed");
-          return;
-        }
-        const summary = body.already_complete
-          ? "Already here — nothing was fetched."
-          : `${body.fetched} file(s) fetched, ${body.reused} already held, ${bytes(body.bytes_fetched)} transferred.`;
-        setMessage(status, summary, "ok");
-        cachedKeys.add(body.key);
-        use.disabled = false;
-        download.textContent = "Download again";
-        // The durable evidence: the cached list is re-read from disk, so what
-        // the user is looking at afterwards is the server's record and not this
-        // message.
-        record(
-          `Downloaded ${asset.display_name || asset.asset_id} revision ${body.record.revision}`,
-          `${asset.asset_type}/${asset.asset_id} · ${body.key}`,
-          "ok"
-        );
-        await refreshCached();
-        chooseRevision(asset, body.record, body.key);
+        if (await downloadRevision(asset, revision, key, status, download)) use.disabled = false;
       })
     );
 
@@ -196,7 +206,7 @@
     window.AUCOM.chosenRevision = {
       asset_type: asset.asset_type,
       asset_id: asset.asset_id,
-      display_name: asset.display_name || asset.asset_id,
+      display_name: nameOf(asset),
       revision_id: key || revision.revision_id || "",
       revision: revision.revision,
       files: revision.files || [],
@@ -217,20 +227,22 @@
       "cached-message",
       items.length === 0
         ? "Nothing downloaded yet."
-        : `${items.length} revision${items.length === 1 ? "" : "s"} in ${body.root}.`
+        : `${items.length} map${items.length === 1 ? "" : "s"} downloaded to this computer.`
     );
     for (const item of items) {
       const record_ = item.record;
       const head = el("div", { className: "row-head" });
-      head.append(el("strong", { text: record_.display_name || record_.asset_id }));
+      // A record made before the name was known still gets one from the
+      // account's own listing, when this page has read it.
+      const known = assets.find((asset) => asset.asset_id === record_.asset_id);
+      const name = record_.display_name || known?.display_name || "Untitled " + (record_.asset_type || "asset");
+      head.append(el("strong", { text: name }));
       head.append(badge(record_.asset_type, "ok"));
-      const detail = el("p", { className: "mono" });
+      const detail = el("p", { className: "muted" });
       detail.textContent = [
         `revision ${record_.revision}`,
-        item.key,
-        `${record_.files.length} file(s)`,
         bytes(record_.total_bytes),
-        "synced " + when(record_.synced_at),
+        "downloaded " + when(record_.synced_at),
       ]
         .filter(Boolean)
         .join(" · ");
@@ -238,7 +250,7 @@
       const use = el("button", { text: "Use in a build", attrs: { type: "button", class: "secondary" } });
       use.addEventListener("click", () => {
         chooseRevision(
-          { asset_type: record_.asset_type, asset_id: record_.asset_id, display_name: record_.display_name },
+          { asset_type: record_.asset_type, asset_id: record_.asset_id, display_name: name },
           record_,
           item.key
         );

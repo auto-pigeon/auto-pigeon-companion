@@ -204,9 +204,7 @@
         continue;
       }
       row.assetNote.textContent =
-        `${chosen.display_name} · ${chosen.asset_type}/${chosen.asset_id}` +
-        (chosen.revision_id ? ` @ ${chosen.revision_id}` : " @ current") +
-        ` (revision ${chosen.revision})`;
+        `${chosen.display_name} · revision ${chosen.revision}`;
       row.fileChoice.replaceChildren();
       for (const file of chosen.files || []) {
         row.fileChoice.append(el("option", { text: file.path, attrs: { value: file.path } }));

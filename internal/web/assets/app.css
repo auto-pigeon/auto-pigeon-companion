@@ -158,6 +158,11 @@ a:hover { color: var(--accent-strong); text-decoration-color: currentColor; }
 .auth-dialog__form .field { min-width: 0; }
 .auth-dialog__foot { margin: 0; border-top: 1px solid var(--line); padding-top: 0.5rem; font-size: 0.8125rem; }
 .notice { border-left: 3px solid var(--accent); }
+details.more { display: inline-block; }
+details.more > summary { cursor: pointer; color: var(--ink-muted); font-size: 0.8125rem; padding: .4rem .5rem; list-style: none; }
+details.more > summary::after { content: " ▾"; }
+details.more[open] > summary { color: var(--accent-strong); }
+details.more > button { margin-top: 0.35rem; }
 
 /* The account button: AUP's COLLABORATE shape — a status, a word, a caret. */
 .account-menu { position: relative; }
