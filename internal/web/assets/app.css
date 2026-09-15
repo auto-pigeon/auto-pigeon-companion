@@ -127,6 +127,10 @@ a:hover { color: var(--accent-strong); text-decoration-color: currentColor; }
   border-bottom: 1px solid var(--line);
 }
 .brand p { margin: 0.1rem 0 0; font-size: 0.85rem; }
+/* AUG's `.site-brand-name` / `.site-brand-mark`: the mark rides on the name's
+   line at 22px, so it costs the header no width. The file is 128px. */
+.brand-name { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 1rem; }
+.brand-mark { flex-shrink: 0; display: block; inline-size: 22px; block-size: 22px; object-fit: contain; user-select: none; }
 .account { display: flex; align-items: center; gap: var(--gap); }
 .account-email { font-size: 0.85rem; color: var(--ink-muted); }
 

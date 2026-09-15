@@ -337,7 +337,11 @@ hand-written engine — are all reachable and none of them are on either path.
 The page wears auto-pigeon-gallery's palette, type and control shapes (dark
 surfaces, the teal accent, the same buttons, inputs and badges), so the
 Companion reads as the same product; no font or stylesheet is fetched from
-anywhere, and the layout is the Companion's own.
+anywhere, and the layout is the Companion's own. The header and the browser tab
+carry the Auto-Pigeon mark — a byte-for-byte copy of AUP's file, pinned by
+digest in `internal/web/brand_test.go`. **The mark is the project owner's
+artwork and is not licensed under this repository's MIT licence** by being
+shipped beside the code.
 
 ### Two halves of every profile, kept apart
 

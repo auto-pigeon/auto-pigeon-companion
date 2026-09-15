@@ -11,6 +11,10 @@
     -->
     <meta name="aucom-api-token" content="__AUCOM_API_TOKEN__" />
     <title>Auto-Pigeon Companion</title>
+    <!-- The Auto-Pigeon mark, the same file AUG and AUP show (see internal/web/brand_test.go). -->
+    <link rel="icon" type="image/png" href="brand/auto-pigeon-long-tail-transparent-no-padding-128x128.png" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0b0d10" />
     <link rel="stylesheet" href="app.css" />
   </head>
   <body>
@@ -18,7 +22,9 @@
 
     <header class="app-header">
       <div class="brand">
-        <h1>Auto-Pigeon Companion</h1>
+        <!-- AUG's brand: the mark on the name's line, decorative because the name
+             beside it is what a screen reader should hear. -->
+        <h1 class="brand-name"><img class="brand-mark" src="brand/auto-pigeon-long-tail-transparent-no-padding-128x128.png" alt="" aria-hidden="true" draggable="false" width="128" height="128" />Auto-Pigeon Companion</h1>
         <p id="identity" class="muted">Starting…</p>
       </div>
       <div class="account">
