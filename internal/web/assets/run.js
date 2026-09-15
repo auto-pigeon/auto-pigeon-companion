@@ -552,9 +552,14 @@
       // An engine that can play a map on this machine, rather than whichever
       // profile happens to be first in the list: the live check picked
       // DarkPlaces, not set up, over the operator's ready vkQuake (NEW_244D).
-      const ready = (engine) => engine && !((engine.action_problems || {}).play_map || []).length;
+      // Ready means it offers play_map and nothing stops it; failing that, one
+      // this machine already has a setup for (its approval may just need
+      // renewing after a profile update), rather than one nobody set up.
+      const plays = (engine) => engine && (engine.actions || []).some((action) => action.id === "play_map");
+      const ready = (engine) => plays(engine) && !((engine.action_problems || {}).play_map || []).length;
+      const setUp = (engine) => plays(engine) && engine.binding && Object.keys(engine.binding.executables || {}).length > 0;
       if (!ready(current())) {
-        const candidate = engines.find(ready);
+        const candidate = engines.find(ready) || (setUp(current()) ? null : engines.find(setUp));
         if (candidate) {
           $("run-engine").value = candidate.id;
           renderEngine();
