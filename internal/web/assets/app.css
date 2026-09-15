@@ -158,6 +158,22 @@ a:hover { color: var(--accent-strong); text-decoration-color: currentColor; }
 .auth-dialog__form .field { min-width: 0; }
 .auth-dialog__foot { margin: 0; border-top: 1px solid var(--line); padding-top: 0.5rem; font-size: 0.8125rem; }
 .notice { border-left: 3px solid var(--accent); }
+/* AUP's tab treatment (AUG's `.auth-dialog__tabs [role=tab]`): transparent,
+   a bottom rule, the accent under the selected one. */
+.tabs { display: flex; flex-wrap: wrap; gap: 2px; border-bottom: 1px solid var(--line); margin: 0.25rem 0 0.75rem; }
+.tabs [role="tab"] {
+  background: transparent; border: none; border-bottom: 2px solid transparent; border-radius: 0;
+  color: var(--ink-muted); padding: .5rem .75rem; font-size: 0.8125rem;
+}
+.tabs [role="tab"]:hover:not(:disabled) { background: var(--surface-2); border-color: var(--line-strong); color: var(--ink); }
+.tabs [role="tab"][aria-selected="true"] { color: var(--accent-strong); border-color: var(--accent); background: transparent; }
+.scratch-card { background: var(--bg); }
+.scratch-list { border: 1px solid var(--line); border-radius: var(--radius); padding: 0.5rem 0.75rem; margin: 0.5rem 0; }
+.scratch-list legend { font-weight: 600; font-size: 0.8125rem; padding: 0 0.25rem; }
+.scratch-row { align-items: flex-end; }
+.scratch-row .field { min-width: 8rem; flex: 1 1 8rem; }
+.scratch-row .field.grow { flex: 3 1 14rem; }
+fieldset { min-width: 0; }
 .stale-page {
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--gap);
   padding: 0.6rem 1rem; background: var(--warn-soft); border-bottom: 1px solid var(--warn); color: var(--ink);

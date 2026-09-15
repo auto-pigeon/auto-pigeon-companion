@@ -289,15 +289,41 @@
       fields.set(executable.name, field);
       detail.append(field.container);
     }
+    // Folders the actions use besides their job folder — a texture folder, a
+    // game directory. The document names the role; this machine says where.
+    const roots = new Map();
+    for (const action of body.actions || []) {
+      for (const root of action.roots || []) {
+        if (root.role === "workspace") continue;
+        const purposes = roots.get(root.role) || [];
+        if (root.purpose && !purposes.includes(root.purpose)) purposes.push(root.purpose);
+        roots.set(root.role, purposes);
+      }
+    }
+    const rootFields = new Map();
+    for (const [role, purposes] of roots) {
+      const field = window.AUCOM.pathField({
+        id: "profile-root-" + role,
+        kind: "directory",
+        label: `Folder: ${role}`,
+        value: (body.binding?.roots || {})[role] || "",
+        hint: purposes.length ? `Used to ${purposes.join("; ")}.` : "",
+      });
+      rootFields.set(role, field);
+      detail.append(field.container);
+    }
+
     const save = el("button", { text: "Save these paths", attrs: { type: "button", class: "primary" } });
     const saveStatus = el("p", { className: "message", attrs: { role: "status" } });
     save.addEventListener("click", () =>
       withBusy(save, async () => {
         const paths = {};
         for (const [name, field] of fields) paths[name] = field.input.value.trim();
+        const rootPaths = {};
+        for (const [role, field] of rootFields) rootPaths[role] = field.input.value.trim();
         const { ok, body: out } = await api(`/api/v1/profiles/${encodeURIComponent(body.id)}/bind`, {
           method: "POST",
-          body: { executables: paths },
+          body: { executables: paths, roots: rootFields.size ? rootPaths : undefined },
         });
         if (!ok) {
           setMessage(saveStatus, out.error || "could not record these paths", "error");
@@ -666,6 +692,7 @@
       await refreshList();
       if (templates.length === 0) await refreshTemplates();
       setStep(step);
+      await window.AUCOM.scratch?.refresh?.();
     },
   };
 })();

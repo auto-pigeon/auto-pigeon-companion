@@ -304,7 +304,6 @@
             <div class="field">
               <label for="profiles-kind">Kind</label>
               <select id="profiles-kind">
-                <option value="">All</option>
                 <option value="tool">Tools</option>
                 <option value="engine">Engines</option>
                 <option value="pipeline">Pipelines</option>
@@ -442,6 +441,93 @@
               <button type="button" id="wizard-back" class="secondary">Back</button>
               <button type="button" id="wizard-next">Next</button>
             </div>
+          </div>
+
+          <!-- Written from nothing: see scratch.js and internal/web/scratch.go. -->
+          <div class="panel" id="scratch-panel">
+            <h3>Write a profile from scratch</h3>
+            <p class="muted">
+              For a toolchain, a pipeline or an engine nobody has written a profile
+              for — any number of programs, actions with their own arguments and
+              parameters, and pipeline stages that set those parameters. The
+              Companion composes and checks the document; nothing runs until you
+              approve it, and where its programs and folders are is chosen in its
+              setup afterwards.
+            </p>
+            <div class="row">
+              <div class="field">
+                <label for="scratch-kind">What are you describing?</label>
+                <select id="scratch-kind">
+                  <option value="tool">A build tool</option>
+                  <option value="pipeline">A build pipeline</option>
+                  <option value="engine">A game engine</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="scratch-game">Game <span class="hint">(optional for tools and pipelines)</span></label>
+                <select id="scratch-game">
+                  <option value="">Any game, or one not listed</option>
+                  <option value="quake1">quake1</option>
+                  <option value="quake2">quake2</option>
+                  <option value="quake3">quake3</option>
+                </select>
+              </div>
+            </div>
+            <div class="row">
+              <div class="field grow">
+                <label for="scratch-id">Profile id <span class="hint">(namespaced and permanent)</span></label>
+                <input id="scratch-id" type="text" placeholder="me.my-toolchain" spellcheck="false" />
+              </div>
+              <div class="field">
+                <label for="scratch-version">Version</label>
+                <input id="scratch-version" type="text" placeholder="1.0.0" />
+              </div>
+              <div class="field grow">
+                <label for="scratch-name">Name</label>
+                <input id="scratch-name" type="text" placeholder="My toolchain" />
+              </div>
+            </div>
+            <div class="row">
+              <div class="field grow">
+                <label for="scratch-summary">Summary</label>
+                <input id="scratch-summary" type="text" placeholder="One line, shown in lists" />
+              </div>
+              <div class="field">
+                <label for="scratch-publisher">Publisher</label>
+                <input id="scratch-publisher" type="text" placeholder="Your name" />
+              </div>
+              <div class="field">
+                <label for="scratch-license">Licence (SPDX)</label>
+                <input id="scratch-license" type="text" placeholder="GPL-3.0-or-later" />
+              </div>
+            </div>
+            <div class="row" id="scratch-tool-fields">
+              <div class="field">
+                <label for="scratch-tool-version">The tool's own version</label>
+                <input id="scratch-tool-version" type="text" placeholder="0.18.1" />
+              </div>
+            </div>
+            <div class="row" id="scratch-engine-fields" hidden>
+              <div class="field">
+                <label for="scratch-runtime">Engine runtime id</label>
+                <input id="scratch-runtime" type="text" placeholder="myengine" />
+              </div>
+              <div class="field">
+                <label for="scratch-engine-version">Engine version</label>
+                <input id="scratch-engine-version" type="text" placeholder="1.0" />
+              </div>
+            </div>
+            <div id="scratch-body"></div>
+            <div class="row">
+              <button type="button" id="scratch-compose">Check this profile</button>
+              <button type="button" id="scratch-install" class="primary" disabled>Install this profile</button>
+              <label class="check"><input type="checkbox" id="scratch-replace" /> Replace an installed profile with the same id</label>
+            </div>
+            <p id="scratch-message" class="message" role="alert"></p>
+            <details>
+              <summary>The document the Companion composed</summary>
+              <pre id="scratch-json" class="output"></pre>
+            </details>
           </div>
         </section>
 
@@ -636,6 +722,7 @@
     <script src="build.js"></script>
     <script src="run.js"></script>
     <script src="profiles.js"></script>
+    <script src="scratch.js"></script>
     <script src="jobs.js"></script>
     <script src="settings.js"></script>
     <script src="about.js"></script>

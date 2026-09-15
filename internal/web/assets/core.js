@@ -202,6 +202,67 @@ function renderActivity() {
 // filesystem: what comes back is the one path the user picked, and it goes
 // through the same validation a typed one does. See internal/pathpick.
 
+// --- tabs -------------------------------------------------------------------
+//
+// A category that decides what a panel below draws is a row of tabs, as in
+// AUP, not a dropdown (NEW_244D, at the operator's request). The <select>
+// stays in the document, hidden, as the one holder of the value: every area
+// that already reads `.value` and listens for `change` keeps working, and the
+// tabs are a view of it. Options added later — the Library's asset types come
+// from the backend — redraw the tabs.
+function tabsFor(selectId) {
+  const select = document.getElementById(selectId);
+  if (!select || select.dataset.tabs) return;
+  select.dataset.tabs = "true";
+  const label = document.querySelector(`label[for="${selectId}"]`);
+  const bar = el("div", {
+    className: "tabs",
+    attrs: { role: "tablist", "aria-label": label ? label.textContent.trim() : selectId, id: selectId + "-tabs" },
+  });
+  const field = select.closest(".field") || select.parentElement;
+  // Above the row the field sat in, so the tabs head what they choose between
+  // rather than sitting beside a neighbouring field.
+  const row = field.parentElement && field.parentElement.classList.contains("row") ? field.parentElement : null;
+  if (row) row.before(bar);
+  else field.after(bar);
+  field.hidden = true;
+
+  const draw = () => {
+    bar.replaceChildren();
+    const options = [...select.options];
+    options.forEach((option, index) => {
+      const selected = option.value === select.value;
+      const tab = el("button", {
+        text: option.textContent,
+        attrs: {
+          type: "button", role: "tab", "aria-selected": String(selected),
+          tabindex: selected ? "0" : "-1", "data-value": option.value,
+        },
+      });
+      tab.addEventListener("click", () => {
+        if (select.value === option.value) return;
+        select.value = option.value;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+        draw();
+      });
+      tab.addEventListener("keydown", (event) => {
+        const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+        if (!step) return;
+        event.preventDefault();
+        const next = options[(index + step + options.length) % options.length];
+        select.value = next.value;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+        draw();
+        bar.querySelector(`[data-value="${CSS.escape(next.value)}"]`)?.focus();
+      });
+      bar.append(tab);
+    });
+  };
+  select.addEventListener("change", draw);
+  new MutationObserver(draw).observe(select, { childList: true });
+  draw();
+}
+
 function pathField(options) {
   const { id, label, kind = "directory", value = "", hint = "", onChange } = options;
   const input = el("input", {
@@ -506,7 +567,7 @@ function terminal(state) {
 
 Object.assign(AUCOM, {
   $, el, api, announce, setMessage, busy, withBusy,
-  record, renderActivity, clearActivity, pathField, downloadButton,
+  record, renderActivity, clearActivity, pathField, downloadButton, tabsFor,
   badge, maturityBadge, maturityNote, bytes, shortDigest, when, terminal,
   openCompatibilityReport, wireCompatibilityReport,
 });

@@ -286,6 +286,11 @@ type composeRequest struct {
 	// expresses that, and there is deliberately no way to add one the template
 	// did not have.
 	Actions []string `json:"actions,omitempty"`
+
+	// Scratch, when present and no Document is being edited, is a profile
+	// written from nothing — see scratch.go. The identity members above still
+	// apply on top of it.
+	Scratch *scratchDocument `json:"scratch,omitempty"`
 }
 
 // handleProfileCompose applies the wizard's fields and returns the result.
@@ -373,9 +378,16 @@ func (s *Server) composeBase(request composeRequest) (map[string]any, string, er
 		}
 		return tree, request.Template, nil
 	}
+	if request.Scratch != nil {
+		tree, err := scratchTree(*request.Scratch)
+		if err != nil {
+			return nil, "", err
+		}
+		return tree, "", nil
+	}
 	if request.Template == "" {
 		return nil, "", errors.New(
-			"a profile starts from a tested template: name one from /api/v1/profiles/templates")
+			"a profile starts from a tested template, or is written from scratch: name one from /api/v1/profiles/templates, or send `scratch`")
 	}
 	entry, err := builtin.Find(request.Template)
 	if err != nil {

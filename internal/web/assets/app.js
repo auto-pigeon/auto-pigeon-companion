@@ -204,6 +204,11 @@
 
   // --- boot -----------------------------------------------------------------
 
+  // Categories that decide what is drawn below them are tabs.
+  for (const id of ["profiles-kind", "wizard-kind", "scratch-kind", "jobs-state", "library-type"]) {
+    window.AUCOM.tabsFor(id);
+  }
+
   (async () => {
     // Settings first: the path fields ask it whether this machine has a file
     // chooser, and a field drawn before that answer arrives would offer a
