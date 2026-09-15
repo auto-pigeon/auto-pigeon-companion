@@ -727,8 +727,26 @@ MB envelope, and settled memory 241 KB higher at the end than at the start —
   no terminal control sequences, credentials redacted. `--raw` asks for the
   first.
 - **A crash is admitted, not repaired.** A job whose supervisor went away comes
-  back as `interrupted`, which means *nobody knows how this ended*. Running it
-  again is `job retry`, and it is your decision.
+  back as `interrupted`, which means *nobody knows how this ended*, and so does
+  the build it belonged to. Running it again is `job retry` (or **Build this
+  again**), and it is your decision.
+- **Nothing is left running after a crash.** Every job records the pid and the
+  kernel start time of the program it started. When a Companion finds a job
+  whose supervisor stopped heartbeating — at start-up, and once every 30 s
+  while it runs, so a quick restart after a crash is not a way to miss it — it
+  stops that process group if, and only if, both still match (Linux; on other
+  systems the job is still marked `interrupted`, and nothing is signalled). A
+  reused pid is never signalled. Seen on a release: `kill -9` of the GUI
+  mid-compile, restart within a second, and within one stale period the job and
+  its build read `interrupted`, the compiler and its child are gone, and no job
+  was started again.
+
+```console
+$ companion build list
+20260915T153812Z-9a30ec40  interrupted  auto-pigeon.q1.fast-preview   running when the Companion is killed
+$ companion job show 20260915T153812Z-80136cdae909 | head -2
+job 20260915T153812Z-80136cdae909: interrupted — the Companion stopped while this job was running; nothing here knows how it ended; its programs were still running with nobody supervising them, and were stopped
+```
 
 It is not a sandbox, and the Companion will not pretend otherwise: nothing here
 can stop a program you authorised from writing wherever you can write. What the
@@ -3942,7 +3960,24 @@ stops being true the moment it is written.
 
 `build/release.sh` runs the whole thing: six targets with `-trimpath` and
 `CGO_ENABLED=0`, the macOS bundles, the licence files and the native acceptance
-kit inside every artifact, then the SBOM and the checksums. It finishes by
+kit inside every artifact, then the SBOM and the checksums. The Linux and
+Windows archives also carry a `SHA256SUMS` beside `companion` itself, because
+that is the file `run-acceptance.sh` / `.ps1` verify the program against before
+starting it; without it every operator's bundle recorded `checksums:
+not_available`. It proves the unpacked files match what was archived, nothing
+more — the archive's own digest is in the `SHA256SUMS` published beside the
+archives, and neither is a signature.
+
+```console
+$ tar -xzf auto-pigeon-companion-1.90-linux-amd64.tar.gz --one-top-level
+$ cd auto-pigeon-companion-1.90-linux-amd64 && sha256sum -c SHA256SUMS
+LICENSE: OK
+THIRD_PARTY_NOTICES.md: OK
+companion: OK
+kit-options.json: OK
+run-acceptance.ps1: OK
+run-acceptance.sh: OK
+``` It finishes by
 printing `companion release support`, so the last thing a release run says is
 what the release actually claims.
 
