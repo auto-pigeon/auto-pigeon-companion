@@ -83,8 +83,8 @@ type scratchAction struct {
 type scratchRoot struct {
 	Role     string `json:"role"`
 	Optional bool   `json:"optional,omitempty"`
-	Access  string `json:"access,omitempty"`
-	Purpose string `json:"purpose,omitempty"`
+	Access   string `json:"access,omitempty"`
+	Purpose  string `json:"purpose,omitempty"`
 }
 
 type scratchPort struct {

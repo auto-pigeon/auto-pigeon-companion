@@ -43,4 +43,3 @@ func TestTheBuiltInQ1CompilePassesTheTextureFolderOnlyWhenOneIsSet(t *testing.T)
 		t.Errorf("argv = %v, want -wadpath followed by the texture folder as one element", with.Command.Args)
 	}
 }
-
