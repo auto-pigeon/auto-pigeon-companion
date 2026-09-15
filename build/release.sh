@@ -160,6 +160,14 @@ for target in "${targets[@]}"; do
                 -C "$staging" .
             ;;
     esac
+
+    # The kit's checksum lane is only as good as the file it reads. Checked here
+    # rather than trusted: an archive that shipped without it is refused.
+    if [ "$goos" != "darwin" ] && [ ! -f "$staging/SHA256SUMS" ] || \
+       { [ "$goos" != "darwin" ] && ! grep -q "  companion${ext}\$" "$staging/SHA256SUMS"; }; then
+        echo "error: ${goos}/${goarch}: no SHA256SUMS line for companion${ext} beside the program" >&2
+        exit 1
+    fi
 done
 
 # The SBOM comes from the program, not from a file beside it: an SBOM somebody

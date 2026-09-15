@@ -1,6 +1,8 @@
 package pathpick
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -85,5 +87,22 @@ func TestCheckExpandsHome(t *testing.T) {
 	if _, err := Check(Directory, "~backup"); err == nil ||
 		!strings.Contains(err.Error(), "not an absolute path") {
 		t.Fatalf("Check(directory, ~backup) = %v, want it left alone and refused as relative", err)
+	}
+}
+
+// TestAMissingPathIsSaidInWords: the page showed Go's `stat <path>: no such
+// file or directory` verbatim (NEW_244D). The sentence names the path once,
+// without a system call, and still answers errors.Is.
+func TestAMissingPathIsSaidInWords(t *testing.T) {
+	absent := filepath.Join(t.TempDir(), "gone.map")
+	_, err := Check(OpenFile, absent)
+	if err == nil {
+		t.Fatal("a missing file was accepted")
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("errors.Is(ErrNotExist) = false for %v", err)
+	}
+	if strings.Contains(err.Error(), "stat ") || strings.Count(err.Error(), absent) != 1 {
+		t.Errorf("message = %q", err.Error())
 	}
 }

@@ -251,6 +251,22 @@
       textOf($("build-stages")).replace(/\s+/g, " ").trim().slice(0, 120)
     );
 
+    // A map already chosen survives choosing another pipeline that also takes
+    // one, and choosing this one again (NEW_244D rehearsal: it was emptied).
+    const typedMap = await waitFor("the map path field", () => $("build-input-source_map"));
+    setValue(typedMap, "/a map chosen before switching.map");
+    const other = [...$("build-pipeline").options].find((option) => option.value !== settings.pipeline_id && /^Quake 1/.test(option.text));
+    if (other) {
+      setValue($("build-pipeline"), other.value);
+      setValue($("build-pipeline"), settings.pipeline_id);
+    }
+    record(
+      "a chosen map survives switching pipeline and back",
+      Boolean(other) && $("build-input-source_map")?.value === "/a map chosen before switching.map",
+      other ? String($("build-input-source_map")?.value) : "no second Quake 1 pipeline to switch to"
+    );
+    setValue($("build-input-source_map"), "");
+
     const inputSource = await waitFor("the input control", () => $("build-input-source_map-source"));
     setValue(inputSource, "asset");
     setValue($("build-label"), "the browser journey");
@@ -317,6 +333,12 @@
       "an engine that is not set up says what is stopping it",
       textOf($("run-engine-detail")).includes("Before this can start"),
       textOf($("run-engine-detail")).replace(/\s+/g, " ").slice(0, 140)
+    );
+    const runText = textOf($("run-engine-detail"));
+    record(
+      "what is stopping it points at the setup form, not at a command, an id or a placeholder",
+      !runText.includes("`companion ") && !runText.includes(settings.engine_id) && !runText.includes("{platform."),
+      (runText.match(new RegExp(".{0,80}(`companion |\\{platform\\.|" + settings.engine_id.replace(/\./g, "\\.") + ").{0,40}")) || ["clean"])[0]
     );
 
     setValue(await waitFor("the engine path field", () => $("run-exe-engine")), settings.tool_path);

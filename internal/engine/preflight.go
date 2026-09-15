@@ -129,14 +129,14 @@ func (c Checker) Check(document profile.Profile, trust profile.Trust, digest str
 		problems = append(problems, Problem{
 			Fault: FaultStaleBinding,
 			Summary: fmt.Sprintf("The recorded setup for %s is for a different version of the document: it was written against %s and the document here is %s.",
-				meta.ID, short(local.ProfileDigest), short(digest)),
+				meta.Name, short(local.ProfileDigest), short(digest)),
 			Fix: "Look at what changed with `companion toolchain diff`, then bind it again; a grant covers the exact document it was given.",
 		})
 	}
 	if err := profile.Authorize(document, trust, digest, local.Grant); err != nil {
 		problems = append(problems, Problem{
 			Fault:   FaultNotAuthorized,
-			Summary: fmt.Sprintf("Nothing has been approved for %s on this machine: %v.", meta.ID, err),
+			Summary: fmt.Sprintf("Nothing has been approved for %s on this machine: %v.", meta.Name, err),
 			Fix:     "Read what it asks for with `companion toolchain show`, then approve it.",
 		})
 	}
@@ -285,7 +285,7 @@ func (c Checker) rootProblems(document profile.Profile, action profile.Action, l
 		if info, err := c.stat(path); err != nil || !info.IsDir() {
 			problems = append(problems, Problem{
 				Fault:   FaultMissingRoot,
-				Summary: fmt.Sprintf("The %s recorded for %s is not a directory: %s.", phrase(ref.Role), document.Metadata().ID, path),
+				Summary: fmt.Sprintf("The %s recorded for %s is not a directory: %s.", phrase(ref.Role), document.Metadata().Name, path),
 				Fix:     "It was moved or removed. Set it again with `companion engine bind`.",
 			})
 			continue

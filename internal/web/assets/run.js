@@ -157,8 +157,8 @@
           el("div", {
             className: "problem",
             children: [
-              el("p", { text: problem.summary }),
-              el("p", { className: "fix", text: problem.fix }),
+              el("p", { text: pageSummary(problem, engine) }),
+              el("p", { className: "fix", text: pageFix(problem) }),
             ],
           })
         );
@@ -168,6 +168,37 @@
 
     renderActions(engine);
     renderBindingFields(engine);
+  }
+
+  // The engine preflight writes each remedy for the terminal
+  // (`companion engine bind <profile id> …`, `companion toolchain show`). On
+  // this page the remedy is a control right here, so that is what it names
+  // (NEW_244D rehearsal: Run told a person to type commands naming profile
+  // ids, and a stale setup's summary quoted two document digests).
+  const PAGE_FIX = {
+    missing_engine: "Choose the program under “Set up this engine on this machine” below, then press Save setup.",
+    unbound_root: "Choose the folder under “Set up this engine on this machine” below, then press Save setup.",
+    missing_root: "It was moved or removed. Choose it again below, then press Save setup.",
+    not_authorized: "Read what it asks for below, tick the approval, then press Save setup.",
+    stale_binding: "Read what it asks for below, tick the approval, then press Save setup again.",
+    missing_game_data: "Choose your own installed copy as the game directory below — “Look for installed games” lists the likely places. The Companion never downloads or copies game data.",
+    unsupported_platform: "Choose an engine whose profile supports this computer.",
+  };
+
+  function pageFix(problem) {
+    return PAGE_FIX[problem.fault] || (/`companion /.test(problem.fix || "") ? "Set it up below, then press Save setup." : problem.fix);
+  }
+
+  function pageSummary(problem, engine) {
+    if (problem.fault === "not_authorized") {
+      // The preflight quotes the authorizer's own error, which names the
+      // profile id and lists permission ids; the list is on this page in words.
+      return `${engine.name} has not been approved on this machine yet.`;
+    }
+    if (problem.fault === "stale_binding") {
+      return `The setup recorded for ${engine.name} was approved for a different version of its profile.`;
+    }
+    return problem.summary;
   }
 
   function renderActions(engine) {
