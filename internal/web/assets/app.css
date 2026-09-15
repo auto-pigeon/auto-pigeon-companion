@@ -158,6 +158,35 @@ a:hover { color: var(--accent-strong); text-decoration-color: currentColor; }
 .auth-dialog__form .field { min-width: 0; }
 .auth-dialog__foot { margin: 0; border-top: 1px solid var(--line); padding-top: 0.5rem; font-size: 0.8125rem; }
 .notice { border-left: 3px solid var(--accent); }
+
+/* The account button: AUP's COLLABORATE shape — a status, a word, a caret. */
+.account-menu { position: relative; }
+.account-button { display: inline-flex; align-items: center; gap: 0.45rem; }
+.account-button .caret { color: var(--ink-faint); font-size: 0.7rem; }
+.status-dot { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--ink-faint); flex-shrink: 0; }
+.status-dot.synced { background: var(--ok); }
+.status-dot.pending { background: var(--warn); }
+.status-dot.conflict { background: var(--bad); }
+.status-dot.offline { background: var(--ink-faint); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.menu {
+  position: absolute; right: 0; top: calc(100% + 0.35rem); z-index: 150; min-width: 17rem;
+  display: grid; gap: 0.15rem; padding: 0.5rem;
+  background: var(--overlay); border: 1px solid var(--line-strong); border-radius: var(--radius-panel); box-shadow: var(--shadow-lg);
+}
+.menu [role="menuitem"] {
+  display: block; width: 100%; text-align: left; background: transparent; border: none; border-radius: var(--radius);
+  padding: 0.45rem 0.6rem; color: var(--ink); font-size: 0.8125rem; text-decoration: none;
+}
+.menu [role="menuitem"]:hover:not(:disabled), .menu [role="menuitem"]:focus-visible { background: var(--surface-2); color: var(--accent-strong); }
+.menu-note { margin: 0.2rem 0.6rem 0.4rem; font-size: 0.8125rem; color: var(--ink-muted); }
+.menu-note + .menu-note { border-bottom: 1px solid var(--line); padding-bottom: 0.5rem; }
+.reconnect-banner {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--gap);
+  padding: 0.6rem 1rem; background: var(--accent-soft); border-bottom: 1px solid var(--accent);
+}
+.reconnect-banner p { margin: 0; }
+.sync-dialog { width: min(40rem, 100%); }
+.auth-dialog__help { margin: 0; padding-left: 1.1rem; display: grid; gap: 0.3rem; font-size: 0.8125rem; color: var(--ink-muted); }
 /* AUP's tab treatment (AUG's `.auth-dialog__tabs [role=tab]`): transparent,
    a bottom rule, the accent under the selected one. */
 .tabs { display: flex; flex-wrap: wrap; gap: 2px; border-bottom: 1px solid var(--line); margin: 0.25rem 0 0.75rem; }

@@ -298,7 +298,7 @@ func (s *Server) api() map[string]http.HandlerFunc {
 	for _, table := range []map[string]http.HandlerFunc{
 		s.jobAPI(), s.profileAPI(), s.libraryAPI(),
 		s.engineAPI(), s.buildAPI(), s.settingsAPI(), s.pathAPI(),
-		s.feedbackAPI(), s.aboutAPI(),
+		s.feedbackAPI(), s.aboutAPI(), s.accountAPI(),
 	} {
 		for pattern, handler := range table {
 			if _, clash := routes[pattern]; clash {

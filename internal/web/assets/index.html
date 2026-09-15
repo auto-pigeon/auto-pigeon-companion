@@ -28,9 +28,29 @@
         <p id="identity" class="muted">Starting…</p>
       </div>
       <div class="account">
-        <span id="account-email" class="account-email"></span>
+        <span id="account-signed-out" class="account-email">not signed in</span>
         <button type="button" id="sign-in-open" class="primary" hidden>Sign in</button>
-        <button type="button" id="sign-out" hidden>Sign out</button>
+        <!--
+          The account button (NEW_244D, operator): shown only once signed in,
+          like AUP's COLLABORATE — it says whether this machine can reach the
+          account and whether its profiles are in sync, and its menu is where
+          "Sync to cloud" lives. See account.js and internal/web/account.go.
+        -->
+        <div class="account-menu" id="account-menu" hidden>
+          <button type="button" id="account-button" class="account-button" aria-haspopup="menu" aria-expanded="false" aria-controls="account-dropdown">
+            <span class="status-dot" id="account-dot" aria-hidden="true"></span>
+            <span id="account-label">Checking…</span>
+            <span class="caret" aria-hidden="true">▾</span>
+          </button>
+          <div class="menu" id="account-dropdown" role="menu" hidden>
+            <p class="menu-note"><span id="account-email" class="account-email"></span><span id="account-server" class="muted"></span></p>
+            <p class="menu-note" id="account-sync-note"></p>
+            <button type="button" role="menuitem" id="account-sync">Sync to cloud…</button>
+            <button type="button" role="menuitem" id="account-check">Check connection</button>
+            <a role="menuitem" id="account-site" target="_blank" rel="noopener noreferrer" hidden>Open Auto-Pigeon</a>
+            <button type="button" role="menuitem" id="sign-out">Sign out</button>
+          </div>
+        </div>
       </div>
     </header>
 
@@ -46,6 +66,40 @@
     <div id="stale-page" class="stale-page" role="alert" hidden>
       <p>The Companion has restarted since this page was opened. Reload the page to continue — nothing was lost.</p>
       <button type="button" id="stale-page-reload" class="primary">Reload</button>
+    </div>
+
+    <!-- Back online with something to sync: said once, where the person is. -->
+    <div id="reconnect-banner" class="reconnect-banner" role="status" hidden>
+      <p id="reconnect-text"></p>
+      <div class="row-actions">
+        <button type="button" id="reconnect-sync" class="primary">Sync to cloud…</button>
+        <button type="button" id="reconnect-dismiss" class="secondary">Later</button>
+      </div>
+    </div>
+
+    <!-- Sync to cloud: a review first, then the result. Nothing is sent or
+         installed until Sync is pressed in here. -->
+    <div id="sync-modal" class="auth-modal" hidden>
+      <div class="auth-overlay" data-dismiss="sync"></div>
+      <div class="auth-dialog__layer">
+        <section id="sync-dialog" class="auth-dialog sync-dialog" role="dialog" aria-modal="true" aria-labelledby="sync-heading">
+          <div class="auth-dialog__head">
+            <h2 id="sync-heading">Sync to cloud</h2>
+            <p id="sync-intro">Checking what differs between this computer and your account…</p>
+            <button type="button" id="sync-close" class="auth-dialog__close" aria-label="Close">×</button>
+          </div>
+          <ul id="sync-list" class="rows" aria-label="What a sync would do"></ul>
+          <p class="auth-dialog__foot muted">
+            Your own profiles are kept privately in your account. Where programs are on
+            this computer, and what this computer has approved, never leave it.
+          </p>
+          <div class="row">
+            <button type="button" id="sync-run" class="primary" disabled>Sync</button>
+            <button type="button" id="sync-cancel" class="secondary">Cancel</button>
+          </div>
+          <p id="sync-message" class="message" role="alert"></p>
+        </section>
+      </div>
     </div>
 
     <div id="sign-in-modal" class="auth-modal" hidden>
@@ -76,7 +130,11 @@
             </div>
           </form>
           <p id="sign-in-message" class="message" role="alert"></p>
-          <p class="auth-dialog__foot muted">Only My Maps needs an account. Build, Run, Profiles, Jobs and Settings work signed out.</p>
+          <ul class="auth-dialog__help" id="sign-in-help">
+            <li id="sign-in-signup"></li>
+            <li id="sign-in-reset"></li>
+          </ul>
+          <p class="auth-dialog__foot muted">While you are offline you can keep building; sync your profiles when you are back.</p>
         </section>
       </div>
     </div>
@@ -96,7 +154,7 @@
 
       <main id="main">
         <div class="area-head">
-          <h2 id="area-heading" tabindex="-1">Library</h2>
+          <h2 id="area-heading" tabindex="-1">My Maps</h2>
           <!-- The page's own action, top right. Shown on Profiles only: it opens
                the profile creator in a new browser tab (NEW_244D, operator). -->
           <button type="button" id="profiles-new" class="primary" hidden>New profile</button>
@@ -751,6 +809,7 @@
     <script src="jobs.js"></script>
     <script src="settings.js"></script>
     <script src="about.js"></script>
+    <script src="account.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

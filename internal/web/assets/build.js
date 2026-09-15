@@ -150,7 +150,7 @@
     const id = "build-input-" + input.name;
     const source = el("select", { attrs: { id: id + "-source" } });
     source.append(el("option", { text: "A file on this machine", attrs: { value: "file" } }));
-    source.append(el("option", { text: "A revision from the Library", attrs: { value: "asset" } }));
+    source.append(el("option", { text: "A map from My Maps", attrs: { value: "asset" } }));
 
     const file = window.AUCOM.pathField({
       id,
@@ -198,7 +198,7 @@
     const chosen = window.AUCOM.chosenRevision;
     for (const [, row] of inputFields) {
       if (!chosen) {
-        row.assetNote.textContent = "Nothing chosen yet. Pick a revision in the Library area first.";
+        row.assetNote.textContent = "Nothing chosen yet. Pick a map revision in My Maps first.";
         row.fileChoice.replaceChildren();
         row.apply();
         continue;
@@ -253,7 +253,7 @@
       /the required input "([^"]+)" was not supplied/.exec(text || "");
     if (missingInput) {
       return { kind: "input", name: missingInput[1],
-        advice: `Choose the ${inputTitle(missingInput[1])} first: use Browse… beside that field, or pick a revision in the Library.` };
+        advice: `Choose the ${inputTitle(missingInput[1])} first: use Browse… beside that field, or pick a map revision in My Maps.` };
     }
     if (/is not installed on this machine|root is not configured|not configured on this machine|no program is recorded/.test(text || "")) {
       return { kind: "setup",

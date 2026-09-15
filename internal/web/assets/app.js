@@ -83,7 +83,8 @@
       return;
     }
     window.AUCOM.status = body;
-    const backend = body.backend_label || (body.aub_base_url ? body.aub_base_url : "no Auto-Pigeon server chosen");
+    const site = officialSite(body);
+    const backend = site ? site.host : body.aub_base_url ? "development server" : "no Auto-Pigeon server chosen";
     // The version is shown only in its frozen `1.<commit-count>` shape, as AUP
     // and AUG show it: an unstamped build's "unknown" is not a version anybody
     // should read out, so that segment is simply absent.
@@ -91,17 +92,23 @@
     $("identity").textContent = `${version}${body.platform} · ${backend}${body.debug ? " · debug mode" : ""}`;
     renderBackendChoice($("sign-in-backend"), body);
     $("identity").className = "muted";
-    $("account-email").textContent = body.authenticated ? body.email || "signed in" : "not signed in";
-    $("sign-out").hidden = !body.authenticated;
+    $("account-email").textContent = body.authenticated ? body.email || "signed in" : "";
+    $("account-signed-out").hidden = Boolean(body.authenticated);
+    $("account-menu").hidden = !body.authenticated;
+    window.AUCOM.account?.statusChanged?.(body);
 
     $("sign-in-open").hidden = Boolean(body.authenticated);
     $("library-signed-out").hidden = Boolean(body.authenticated);
     if (body.authenticated) {
       closeSignIn({ restoreFocus: false });
     } else {
-      $("first-run-why").textContent = body.aub_base_url
-        ? `Sign in to your account on ${body.backend_label || body.aub_base_url}.`
-        : "Choose which Auto-Pigeon your account is on, then sign in.";
+      const site = officialSite(body);
+      $("first-run-why").textContent = site
+        ? `Sign in to your account on ${site.host}.`
+        : body.aub_base_url
+          ? "Sign in to your account on the development server."
+          : "Choose which Auto-Pigeon your account is on, then sign in.";
+      renderSignInHelp(site);
     }
 
     $("extractor-state").textContent = !body.aue_available
@@ -114,6 +121,33 @@
     $("extractor-version").disabled = !body.aue_available;
   }
   window.AUCOM.refreshStatus = refreshStatus;
+
+  // officialSite is the official deployment in use, as {url, host}, or null.
+  // A person is shown `auto-pigeon.com`, never an address with a port — a
+  // development server is called that, and its address is in Settings.
+  function officialSite(body) {
+    const current = (body.aub_base_url || "").replace(/\/+$/, "");
+    const backend = (body.backends || []).find((item) => item.url === current);
+    return backend ? { url: backend.url, host: backend.url.replace(/^https?:\/\//, ""), label: backend.label } : null;
+  }
+  window.AUCOM.officialSite = officialSite;
+
+  // renderSignInHelp: the Companion cannot create an account or reset a
+  // password; both happen on the Auto-Pigeon site the account is on.
+  function renderSignInHelp(site) {
+    const link = (text, href) => el("a", { text, attrs: { href, target: "_blank", rel: "noopener noreferrer" } });
+    const signup = $("sign-in-signup");
+    const reset = $("sign-in-reset");
+    signup.replaceChildren();
+    reset.replaceChildren();
+    if (site) {
+      signup.append(document.createTextNode("No account yet? Accounts are created on "), link(site.host, site.url), document.createTextNode(", not in the Companion."));
+      reset.append(document.createTextNode("Forgot your password? Passwords are reset on "), link(site.host, site.url), document.createTextNode("."));
+    } else {
+      signup.textContent = "Accounts are created on the Auto-Pigeon site, not in the Companion.";
+      reset.textContent = "Passwords are reset on the Auto-Pigeon site.";
+    }
+  }
 
   // renderBackendChoice draws the official servers as a choice. An address that
   // is not one of them (a development server, set with --debug or by an
