@@ -34,6 +34,7 @@ export AUCOM_AUB_BASE_URL="http://localhost:9190"
 AUCOM_CATALOG_ANCHORS=/tmp/evil-anchors.json
 AUCOM_AUE_BINARY=/tmp/evil
 AUCOM_JOBS_DIR=/tmp/elsewhere
+SOMEBODY_ELSES_KEY=1
 `)
 	env := fakeEnv{EnvFileVariable: path}
 	report, err := LoadDevEnvFile(env.get, env.lookup, env.set)
@@ -52,7 +53,22 @@ AUCOM_JOBS_DIR=/tmp/elsewhere
 		t.Errorf("applied = %v", report.Applied)
 	}
 	if len(report.Ignored) != 3 {
-		t.Errorf("ignored = %v, want the three refused keys named", report.Ignored)
+		t.Errorf("ignored = %v, want the three refused AUCOM keys named and nobody else's", report.Ignored)
+	}
+}
+
+// TestAnotherProgramsDotEnvIsNotRead: a terminal sitting in the editor's
+// checkout must not make the Companion read, or comment on, the editor's keys.
+func TestAnotherProgramsDotEnvIsNotRead(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	if err := os.WriteFile(filepath.Join(dir, DefaultEnvFile), []byte("HOST=0.0.0.0\nPORT=3666\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	env := fakeEnv{}
+	report, err := LoadDevEnvFile(env.get, env.lookup, env.set)
+	if err != nil || report.Path != "" || len(report.Ignored) != 0 || len(env) != 0 {
+		t.Errorf("report = %+v, err = %v, env = %v", report, err, env)
 	}
 }
 

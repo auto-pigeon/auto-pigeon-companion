@@ -300,33 +300,16 @@
             until you have read what it asks for and approved it.
           </p>
 
-          <div class="panel">
+          <!-- NEW_244D, at the operator's request: creating a profile starts from
+               the New profile button at the top of the area, not from the bottom
+               of the page. -->
+          <div id="profiles-create" hidden>
             <div class="panel-head">
-              <h3>Installed profiles</h3>
-              <button type="button" id="profiles-refresh" class="secondary">Refresh</button>
+              <h3 id="profiles-create-title" tabindex="-1">New profile</h3>
+              <button type="button" id="profiles-create-close" class="secondary">Close</button>
             </div>
-            <div class="field">
-              <label for="profiles-kind">Kind</label>
-              <select id="profiles-kind">
-                <option value="tool">Tools</option>
-                <option value="engine">Engines</option>
-                <option value="pipeline">Pipelines</option>
-              </select>
-            </div>
-            <p id="profiles-message" class="message" role="status"></p>
-            <ul id="profiles-list" class="cards" aria-label="Installed profiles"></ul>
-          </div>
-
-          <div class="panel" id="profile-detail-panel" hidden>
-            <div class="panel-head">
-              <h3 id="profile-detail-title">Profile</h3>
-              <button type="button" id="profile-detail-close" class="secondary">Close</button>
-            </div>
-            <div id="profile-detail"></div>
-          </div>
-
           <div class="panel">
-            <h3>New profile</h3>
+            <h3>Start from a tested profile</h3>
             <p class="muted">
               Start from a profile that has been tested, then change what is
               different about yours. The document is composed and checked by the
@@ -533,6 +516,37 @@
               <pre id="scratch-json" class="output"></pre>
             </details>
           </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head">
+              <h3>Installed profiles</h3>
+              <div class="row-actions">
+                <button type="button" id="profiles-new" class="primary">New profile</button>
+                <button type="button" id="profiles-refresh" class="secondary">Refresh</button>
+              </div>
+            </div>
+            <div class="field">
+              <label for="profiles-kind">Kind</label>
+              <select id="profiles-kind">
+                <option value="tool">Tools</option>
+                <option value="engine">Engines</option>
+                <option value="pipeline">Pipelines</option>
+              </select>
+            </div>
+            <p id="profiles-message" class="message" role="status"></p>
+            <ul id="profiles-list" class="cards" aria-label="Installed profiles"></ul>
+          </div>
+
+          <div class="panel" id="profile-detail-panel" hidden>
+            <div class="panel-head">
+              <h3 id="profile-detail-title">Profile</h3>
+              <button type="button" id="profile-detail-close" class="secondary">Close</button>
+            </div>
+            <div id="profile-detail"></div>
+          </div>
+
+
         </section>
 
         <!-- Jobs --------------------------------------------------------- -->

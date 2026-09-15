@@ -686,6 +686,18 @@
     $("profile-detail-panel").hidden = true;
   });
 
+  // New profile opens both ways of writing one — from a tested template, or
+  // from scratch — at the top of the area, where the button is.
+  $("profiles-new").addEventListener("click", () => {
+    $("profiles-create").hidden = false;
+    $("profiles-create-title").focus();
+    $("profiles-create").scrollIntoView({ block: "start" });
+  });
+  $("profiles-create-close").addEventListener("click", () => {
+    $("profiles-create").hidden = true;
+    $("profiles-new").focus();
+  });
+
   window.AUCOM.areas.profiles = {
     open: openProfile,
     async refresh() {

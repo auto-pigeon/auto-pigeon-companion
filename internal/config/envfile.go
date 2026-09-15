@@ -82,6 +82,21 @@ func LoadDevEnvFile(getenv func(string) string, lookup func(string) (string, boo
 	if err != nil {
 		return EnvFileReport{}, fmt.Errorf("config: %s: %w", path, err)
 	}
+	// A `.env` that names no AUCOM_ key belongs to some other program — the
+	// editor's own, when a terminal is sitting in that checkout — and is not
+	// this program's to comment on. Found in NEW_244D's live session, where
+	// running the Companion from AUP's directory printed a warning listing a
+	// hundred of AUP's keys.
+	ours := false
+	for _, entry := range values {
+		if strings.HasPrefix(entry.Key, "AUCOM_") {
+			ours = true
+			break
+		}
+	}
+	if !ours && !named {
+		return EnvFileReport{}, nil
+	}
 	report := EnvFileReport{Path: path}
 	allowed := map[string]bool{}
 	for _, key := range DevEnvKeys {
@@ -89,7 +104,9 @@ func LoadDevEnvFile(getenv func(string) string, lookup func(string) (string, boo
 	}
 	for _, entry := range values {
 		if !allowed[entry.Key] {
-			report.Ignored = append(report.Ignored, entry.Key)
+			if strings.HasPrefix(entry.Key, "AUCOM_") {
+				report.Ignored = append(report.Ignored, entry.Key)
+			}
 			continue
 		}
 		if _, set := lookup(entry.Key); set {
