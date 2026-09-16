@@ -24,11 +24,12 @@
   // `about` is last because it is the one area that is not a task: somebody
   // looking for a job should never have to pass the prose about the program to
   // reach it.
-  const areaNames = ["library", "build", "run", "profiles", "new-profile", "jobs", "settings", "about"];
+  const areaNames = ["library", "build", "run", "games", "profiles", "new-profile", "jobs", "settings", "about"];
   const titles = {
     library: "My Maps",
     build: "Build",
     run: "Run",
+    games: "Games",
     profiles: "Profiles",
     "new-profile": "New profile",
     jobs: "Jobs",
@@ -44,6 +45,12 @@
   }
 
   function show(area, { focus = true } = {}) {
+    // An area may carry one argument after a slash — `#games/<id>` is one game —
+    // so a reload comes back to the same game rather than to the list.
+    let argument = "";
+    if (typeof area === "string" && area.includes("/")) {
+      [area, argument] = [area.slice(0, area.indexOf("/")), area.slice(area.indexOf("/") + 1)];
+    }
     if (!areaNames.includes(area)) area = defaultArea();
     for (const name of areaNames) {
       $("area-" + name).hidden = name !== area;
@@ -60,10 +67,11 @@
     $("area-heading").textContent = titles[area];
     $("profiles-new").hidden = area !== "profiles";
     if (focus) $("area-heading").focus();
-    if (window.location.hash !== "#" + area) {
-      window.history.replaceState(null, "", "#" + area);
+    const hash = "#" + area + (argument ? "/" + argument : "");
+    if (window.location.hash !== hash) {
+      window.history.replaceState(null, "", hash);
     }
-    window.AUCOM.areas[area]?.refresh?.();
+    window.AUCOM.areas[area]?.refresh?.(argument);
   }
 
   for (const tab of document.querySelectorAll(".area-tab")) {

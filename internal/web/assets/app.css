@@ -596,3 +596,25 @@ footer p { margin: 0; font-size: 0.82rem; max-width: 70ch; }
   .panel, .rows > li, .card { border-width: 2px; }
   .badge { border-color: currentColor; }
 }
+
+/* Games (244F) -------------------------------------------------------------- */
+.facts { display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 1rem; margin: 0.25rem 0 0.75rem; }
+.facts dt { color: var(--ink-muted); font-size: 0.8125rem; }
+.facts dd { margin: 0; }
+.games-subhead { margin: 0.75rem 0 0.25rem; font-size: 0.95rem; }
+.join-steps { list-style: none; margin: 0.25rem 0 0.5rem; padding: 0; }
+.join-step {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 0.45rem 0.6rem; margin-bottom: 0.35rem; background: var(--surface-2);
+}
+.join-step p { margin: 0.2rem 0 0; }
+.join-step.next { border-color: var(--warn); border-width: 2px; }
+.join-step.done { opacity: 0.85; }
+.join-warning { color: var(--warn); margin: 0.3rem 0 0; }
+.join-warning::before { content: "Note: "; font-weight: 600; }
+.games-action { border-top: 1px solid var(--line); margin-top: 0.75rem; padding-top: 0.5rem; }
+.games-provenance { margin-top: 0.75rem; }
+.games-provenance summary { cursor: pointer; color: var(--ink-muted); }
+@media (max-width: 40rem) {
+  .facts { grid-template-columns: 1fr; }
+}

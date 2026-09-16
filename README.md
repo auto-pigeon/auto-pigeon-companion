@@ -2308,62 +2308,87 @@ carries is AUB's — established from a machine that is not behind the host's ow
 NAT, which is why a check from here would establish only that this computer can
 reach itself.
 
-### Joining
+### Joining — the Games area, and the same thing in a terminal
+
+`AUB/AUG/AUCOM/AUT 244F`. The **Games** area of the Companion lists the games
+being hosted now (public games, or your own), and each game has **one** primary
+action: **Join** when this computer is ready, **Set up to join** when something is
+missing. Setup is a checklist computed fresh every time — never stored — and every
+step offers only a real action:
+
+| Step | What it checks | What "Set up to join" does |
+| --- | --- | --- |
+| The game | live, joinable, not your own | nothing to do: an ended game says so |
+| Game | the host's AUB Game Profile agrees with the game family | read only; nothing is installed |
+| Engine | a local engine profile for the host's runtime, approved for its exact digest | install the host's published profile as **community** after showing what it may do, or approve a local one |
+| Engine program | the program you chose is still there | opens your desktop's file chooser |
+| Your game folder | your own copy of the game is where you said | opens your desktop's folder chooser; the folder is read in place, never copied or uploaded |
+| Map files | the host's join content is readable, verified and staged | downloads each file, checks it against the package the game names, and stages it |
+| Start the game | the job service can build the exact command | Join |
+
+**Join** spends a fresh one-use link *only then*, checks the host has not moved to
+another revision, another package or another address since you set up, and shows
+the exact command. **Start the game** starts it once — a double click, a second
+tab or a second terminal finds the game already running rather than starting a
+second engine. A review is valid for two minutes.
+
+The Companion never downloads an engine or game data. The map files a host shares
+are staged under your asset cache, in a directory the engine is pointed at with
+`-basedir`, whose base-game folder (`id1`) is a *link* to your own installation —
+so nothing is ever written into the folder your game lives in.
+
+Signing out removes Games and nothing else: building and running on this computer
+need no account.
+
+The terminal reads the same report:
 
 ```console
 $ companion game list
 gme000000000001  Friday deathmatch            public     live      Vera
-gme000000000002  Coop night, bring a torch    unlisted   live      Sam
 
-$ companion game link gme000000000001
-autopigeon://join/tkt1
-  yours alone, for 2m0s, and redeemable once
-  join it with: companion game join autopigeon://join/tkt1
+$ companion game ready gme000000000001
+Friday deathmatch — setup required
+  ok Game is running          Heard from the host just now.
+  ok Game                     Quake
+  ok vkQuake                  Included with the Companion.
+  ok vkQuake                  Chosen on this computer.
+  ok Your Quake folder        Read in place from the folder you chose.
+  -> Map files for this game  Download 1.2 MB of map files for this game. Each file is checked before it is used.
+     Start the game           Available once everything above is done.
 
-$ companion game join autopigeon://join/tkt1
+$ companion game fetch gme000000000001
+  fetched 1 of 2 files
+  fetched 2 of 2 files
+Friday deathmatch — ready for review
+  …
+
+$ companion game join --game=gme000000000001
 Friday deathmatch
   hosted by  Vera
-  address    203.0.113.4:26000 (verified)
+  address    203.0.113.4:26000 (unverified)
   map        Sunken Chapel, revision 7
-  verified   c0ffee1234567890…
-  engine     auto-pigeon.engine.quakespasm (quakespasm)
+  map files  downloaded and checked (4c6d0b0d0f4d)
+  engine     vkQuake (vkquake)
 
 This is what will run:
-  quakespasm -basedir /games/quake +connect 203.0.113.4:26000
-  in /games/quake
+  vkquake -basedir ~/.cache/auto-pigeon-companion/assets/join-content/…/base -game ap-4c6d0b0d0f4d +connect 203.0.113.4:26000
 
 Nothing has been started. Add --approve to run the command above.
+
+$ companion game join --game=gme000000000001 --approve     # lasts as long as the game
 ```
 
-`game link` mints a capability **for you** — the account this installation is
-signed in as, and nobody else. AUB decides from that session whether you may see
-the game at all, and a game you may not see is refused with the same *"no hosted
-game with this id"* a game that does not exist gets, so the command can neither
-hand somebody else a capability nor be used to enumerate private games one guess
-at a time. It exists because there was no way to obtain one from this program at
-all until `AUT/AUCOM 232`: `game join` takes a LINK, `ParseJoinLink` refuses a
-game id, and only the gallery's browser button could mint.
+`game ready` exits 3 when setup is still required, so a script can tell. `game join
+<link>` takes a link you were given (`companion game link <id>` mints one for your
+own account) and spends it once.
 
 A join link is `autopigeon://join/<opaque-id>` and carries no token, no address
 and no map id: everything is behind the id and is fetched over your own session,
 so a link pasted into a chat window is worth nothing to anybody it was not minted
-for. It is redeemable **once** and lasts two minutes.
-
-Four things are checked before a command is offered, in this order:
-
-1. **May this account have the map at all.** AUB answers it in the resolution, so
-   you are told before anything is downloaded rather than half way through.
-2. **Is there an engine for this.** Matched on the RUNTIME the host declared —
-   `quakespasm`, `ironwail` — which is the thing two installations can agree
-   about; the host's own profile id says nothing about what you have installed.
-   Asked before the download, because refusing after fetching nine megabytes is
-   the same refusal arrived at more expensively.
-3. **Are the bytes the ones being played.** The revision is fetched through the
-   asset cache, which verifies every file against AUB's declared digest, and the
-   join link's own `map_content_sha256` is compared as well: two statements by
-   two routes, and a join is where they have to agree.
-4. **Do you approve the command.** The preview is the job service's own argv, not
-   a re-rendering of it, so what you approved is what starts.
+for. It is redeemable **once** and lasts two minutes. Clicking one runs
+`companion game open <link>`, which checks its shape, records it for the Companion
+page (for at most the link's two minutes) and starts or raises that page on the
+game — it starts nothing.
 
 ### Advertising a game you are hosting
 
@@ -2392,6 +2417,25 @@ $ companion game host --job=$JOB --confirm --map=$MAP --title='Friday deathmatch
 gme000000000001  Friday deathmatch  public  live  Vera
   beating every 30s while job jb-… runs; Ctrl-C to stop
 ```
+
+**Share the map files people need to join.** A join-content package is the
+compiled level your build produced — the `.bsp` and, when there is one, its
+`.lit` — uploaded to AUB and served only to people who can read the map. Name the
+build and the upload happens as part of the preview or the registration:
+
+```console
+$ companion game host --job=$JOB --confirm --map=$MAP --build=$BUILD \
+    --title='Friday deathmatch' --engine=vkquake --endpoint=203.0.113.4:26000 --visibility=public
+
+$ companion game package --build=$BUILD --map=$MAP      # just the upload; prints the digest
+sha256:4c6d0b0d0f4d…
+  2 file(s), 1245184 bytes, for revision 7; readable only by people who can read the map
+```
+
+A game that genuinely needs nothing beyond each player's own copy of the game says
+so, naming the content: `--no-join-content=quake1:id1/maps/e1m1.bsp`. Saying
+neither leaves the listing *undeclared*, and joiners are warned that nothing was
+checked.
 
 **Nothing is advertised before the preview has been read.** `--confirm` is a
 confirmation *of* the preview, and the preview is AUB's own computation run
@@ -3819,6 +3863,17 @@ is completed rather than abandoned.
 | `/api/v1/settings` | GET, PUT | the backend address, the port, job concurrency, and where things are |
 | `/api/v1/paths/pick` | POST | open the desktop's file chooser and return the one path chosen |
 | `/api/v1/paths/validate` | POST | check a typed path the same way |
+| `/api/v1/games` | GET | games hosted now; `?scope=public\|mine`, `?game_family=`, `?mode=`, `?cursor=` |
+| `/api/v1/games/{id}` | GET | one game and the readiness report for joining it from here |
+| `/api/v1/games/{id}/content` | POST | download, verify and stage its map files. Spends no join link |
+| `/api/v1/games/{id}/engine-profile/review` | POST | what the host's published engine profile may do, before installing it |
+| `/api/v1/games/{id}/engine-profile/install` | POST | install that exact publication as community, with `{digest, approve: true}` |
+| `/api/v1/games/{id}/engine-profile/permissions` | GET | what the chosen local engine profile asks for |
+| `/api/v1/games/{id}/engine-profile/approve` | POST | approve it, against `{digest}` |
+| `/api/v1/games/{id}/review` | POST | spend a fresh join link, revalidate the game, preview the exact command |
+| `/api/v1/games/{id}/launch` | POST | start a reviewed join, once: `{plan_id, approve: true}` |
+| `/api/v1/games/pending` | GET | the game a clicked `autopigeon://` link was for; redeems it at most once |
+| `/api/v1/games/pending/dismiss` | POST | forget it |
 
 The `/api/v1` routes are versioned because `companion job` and your own scripts
 drive them; the unversioned `/api` routes are the page's own and are not a
@@ -3849,6 +3904,13 @@ call the same function — not an equivalent one.
 | `POST /api/v1/build/runs` | `companion build run` | `build.Runner` |
 | `GET /api/v1/library/catalog` | `companion aub catalog` | `aub.Client` |
 | `POST /api/v1/library/sync` | `companion aub sync` | `assetsync.Store` |
+| `GET /api/v1/games` | `companion game list` | `aub.Client.HostedGames` |
+| `GET /api/v1/games/{id}` | `companion game ready <id>` | `joinready.Assess` |
+| `POST /api/v1/games/{id}/content` | `companion game fetch <id>` | `hostgame.Joiner.DownloadContent` |
+| `POST /api/v1/games/{id}/engine-profile/install` | `companion profile install <listing> --approve` | `publish.PlanInstall`, `publish.Apply` |
+| `POST /api/v1/games/{id}/engine-profile/approve` | `companion toolchain grant <id> --digest=<d> --approve` | `approval.Service.Grant` |
+| `POST /api/v1/games/{id}/review`, `/launch` | `companion game join --game=<id> [--approve]` | `hostgame.Joiner.Prepare`, `.Launch` |
+| `GET /api/v1/games/pending` | `companion game open <link>` records what this reads | `joinintent` |
 
 Two rows have no command and are not meant to: importing a document is copying a
 file, and removing one is deleting it. Nothing else on the page is unreachable

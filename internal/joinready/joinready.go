@@ -155,8 +155,10 @@ type Engine struct {
 	// Executable names the program a person chooses, and BaseDirs the base-game
 	// folders the engine reads — both from the document, so a picker can say
 	// "choose vkquake" and "choose the folder that contains id1".
-	Executable string   `json:"executable,omitempty"`
-	BaseDirs   []string `json:"base_dirs,omitempty"`
+	Executable string `json:"executable,omitempty"`
+	// ExecutableName is the declared name a binding records the program under.
+	ExecutableName string   `json:"executable_name,omitempty"`
+	BaseDirs       []string `json:"base_dirs,omitempty"`
 	// ListingID and ListingVersion name the exact AUB publication to install when
 	// no local profile exists and the host declared one.
 	ListingID      string `json:"listing_id,omitempty"`
@@ -428,6 +430,7 @@ func (r *Report) addEngine(local Local, game aub.HostedGame) {
 		Trust: entry.Trust, Digest: entry.Digest, BaseDirs: baseDirs(document)}
 	if action, ok := document.ActionByID(joinAction); ok {
 		r.Engine.Executable = executableTitle(document, action.Executable)
+		r.Engine.ExecutableName = action.Executable
 	}
 	if !strings.EqualFold(document.GameProfile.EngineFamily, game.GameFamily) && game.GameFamily != "" {
 		engineStep.State = EngineMissing

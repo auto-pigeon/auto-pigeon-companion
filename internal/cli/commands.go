@@ -247,6 +247,7 @@ func runServe(env *Env, args []string) int {
 			Bindings:   bindingsPath,
 			Builds:     buildsPath,
 			AssetCache: assetCache,
+			ConfigDir:  filepath.Dir(tokenPath),
 		},
 		UpdateConfig: func(mutate func(*config.Config) error) (config.Config, error) {
 			return updateSettings(env, mutate)

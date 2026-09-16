@@ -140,7 +140,7 @@
     // Named rather than counted: a bare number told the next person that
     // something changed, not what. The About area joined this list when the
     // gallery's About prose became a global area (AUP/AUCOM 243E §B).
-    const AREAS = ["library", "build", "run", "profiles", "jobs", "settings", "about"];
+    const AREAS = ["library", "build", "run", "games", "profiles", "jobs", "settings", "about"];
     const tabs = [...document.querySelectorAll(".area-tab")];
     const named = tabs.map((tab) => tab.dataset.area);
     record(

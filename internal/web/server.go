@@ -77,6 +77,9 @@ type Paths struct {
 	Builds string
 	// AssetCache is the local cache of AUB revisions.
 	AssetCache string
+	// ConfigDir is where this run's token, address and pending join link live.
+	// Empty means the user's configuration directory.
+	ConfigDir string
 }
 
 // Server is the local GUI server.
@@ -89,6 +92,9 @@ type Server struct {
 	picker  *pathpick.Picker
 	scanner engine.Scanner
 	builds  *buildRuns
+	// games is the Games area's process-wide state: download and launch
+	// coordination, and the reviews waiting for an approval.
+	games *gameState
 	newAUB  func(baseURL string) (*aub.Client, error)
 	token   *Token
 
@@ -225,6 +231,7 @@ func NewServer(options Options) (*Server, error) {
 		picker:       picker,
 		scanner:      options.Scanner,
 		builds:       newBuildRuns(),
+		games:        newGameState(),
 		newAUB:       newAUB,
 		token:        token,
 		settings:     settings,
@@ -335,7 +342,7 @@ func (s *Server) api() map[string]http.HandlerFunc {
 	for _, table := range []map[string]http.HandlerFunc{
 		s.jobAPI(), s.profileAPI(), s.libraryAPI(),
 		s.engineAPI(), s.buildAPI(), s.settingsAPI(), s.pathAPI(),
-		s.feedbackAPI(), s.aboutAPI(), s.accountAPI(),
+		s.feedbackAPI(), s.aboutAPI(), s.accountAPI(), s.gamesAPI(),
 	} {
 		for pattern, handler := range table {
 			if _, clash := routes[pattern]; clash {

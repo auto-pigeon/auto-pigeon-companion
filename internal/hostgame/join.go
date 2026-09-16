@@ -77,28 +77,45 @@ type Joiner struct {
 	local  joinready.Local
 	runner Runner
 	now    func() time.Time
+	shared *Coordination
+}
 
+// Coordination is what every joiner in one process shares: which packages are
+// downloading, and the one lock a launch is decided under. The page builds a
+// joiner per request — the catalog, the bindings and the session all change under
+// a running server — so these cannot live in the joiner, or two tabs would each
+// hold their own "nothing is running yet".
+type Coordination struct {
 	mu          sync.Mutex
+	launch      sync.Mutex
 	downloading map[string]bool
 }
 
-// NewJoiner builds one. `local.Runner` and `local.Downloading` are filled in from
-// the joiner itself, so the readiness a joiner reports is always computed by the
-// same service that will run the command.
+// NewCoordination builds one.
+func NewCoordination() *Coordination { return &Coordination{downloading: map[string]bool{}} }
+
+// NewJoiner builds one with its own coordination.
 func NewJoiner(remote Remote, local joinready.Local, runner Runner) *Joiner {
-	j := &Joiner{remote: remote, runner: runner, now: time.Now, downloading: map[string]bool{}}
+	return NewSharedJoiner(remote, local, runner, NewCoordination())
+}
+
+// NewSharedJoiner builds one sharing a process's coordination. `local.Runner` and
+// `local.Downloading` are filled in here, so the readiness a joiner reports is
+// always computed by the same service that will run the command.
+func NewSharedJoiner(remote Remote, local joinready.Local, runner Runner, shared *Coordination) *Joiner {
+	j := &Joiner{remote: remote, runner: runner, now: time.Now, shared: shared}
 	local.Runner = runner
-	local.Downloading = j.isDownloading
+	local.Downloading = shared.isDownloading
 	j.local = local
 
 	return j
 }
 
-func (j *Joiner) isDownloading(packageSHA256 string) bool {
-	j.mu.Lock()
-	defer j.mu.Unlock()
+func (c *Coordination) isDownloading(packageSHA256 string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-	return j.downloading[strings.ToLower(packageSHA256)]
+	return c.downloading[strings.ToLower(packageSHA256)]
 }
 
 // Plan is a prepared join, waiting for approval.
@@ -158,18 +175,18 @@ func (j *Joiner) DownloadContent(ctx context.Context, gameID string, progress fu
 		return report, fmt.Errorf("%w: %s", ErrNotReady, step.Detail)
 	}
 	digest := strings.ToLower(report.Game.JoinContent.PackageSHA256)
-	j.mu.Lock()
-	if j.downloading[digest] {
-		j.mu.Unlock()
+	j.shared.mu.Lock()
+	if j.shared.downloading[digest] {
+		j.shared.mu.Unlock()
 
 		return report, ErrAlreadyDownloading
 	}
-	j.downloading[digest] = true
-	j.mu.Unlock()
+	j.shared.downloading[digest] = true
+	j.shared.mu.Unlock()
 	defer func() {
-		j.mu.Lock()
-		delete(j.downloading, digest)
-		j.mu.Unlock()
+		j.shared.mu.Lock()
+		delete(j.shared.downloading, digest)
+		j.shared.mu.Unlock()
 	}()
 
 	fetch := func(ctx context.Context, file aub.JoinContentFile) (io.ReadCloser, error) {
@@ -314,8 +331,8 @@ func (j *Joiner) Launch(plan Plan, approved bool) (*job.Job, error) {
 	if !plan.PreparedAt.IsZero() && j.now().Sub(plan.PreparedAt) > PlanLifetime {
 		return nil, ErrPlanExpired
 	}
-	j.mu.Lock()
-	defer j.mu.Unlock()
+	j.shared.launch.Lock()
+	defer j.shared.launch.Unlock()
 	if existing := j.activeJoin(plan.Request); existing != nil {
 		return existing, ErrAlreadyJoining
 	}

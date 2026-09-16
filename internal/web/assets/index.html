@@ -145,6 +145,7 @@
           <li><button type="button" class="area-tab" data-area="library">My Maps<span class="tab-note">from your account</span></button></li>
           <li><button type="button" class="area-tab" data-area="build">Build<span class="tab-note">compile a map</span></button></li>
           <li><button type="button" class="area-tab" data-area="run">Run<span class="tab-note">start a game</span></button></li>
+          <li><button type="button" class="area-tab" data-area="games">Games<span class="tab-note">hosted now</span></button></li>
           <li><button type="button" class="area-tab" data-area="profiles">Profiles<span class="tab-note">tools and engines</span></button></li>
           <li><button type="button" class="area-tab" data-area="jobs">Jobs<span class="tab-note">what has run</span></button></li>
           <li><button type="button" class="area-tab" data-area="settings">Settings<span class="tab-note">where things are</span></button></li>
@@ -416,6 +417,98 @@
             </div>
             <p id="run-message" class="message" role="alert"></p>
             <div id="run-preview-out" class="preview" hidden></div>
+          </div>
+        </section>
+
+        <!-- Games (244F) ------------------------------------------------ -->
+        <!--
+          Games people are hosting now, from your account's listing on
+          Auto-Pigeon. One primary action per game: Join when this computer is
+          ready, Set up to join when something is missing. The review always
+          shows the exact command before anything starts, and a clicked
+          autopigeon:// link lands here without starting anything.
+        -->
+        <section id="area-games" class="area" aria-labelledby="area-heading" hidden>
+          <p class="lede">
+            Games people are hosting right now. Joining uses an engine and a
+            copy of the game you already have; the Companion downloads only the
+            map files a host shared for their game, checks every file, and shows
+            you the exact command before anything starts.
+          </p>
+
+          <div id="games-signed-out" class="panel notice" hidden>
+            <p>
+              <strong>Games are listed by your Auto-Pigeon account.</strong>
+              Building and running on this computer keep working without one.
+            </p>
+            <div class="row-actions">
+              <button type="button" id="games-sign-in" class="primary">Sign in</button>
+            </div>
+          </div>
+
+          <div id="games-pending" class="panel notice" hidden>
+            <p id="games-pending-text"></p>
+            <div class="row-actions">
+              <button type="button" id="games-pending-dismiss" class="secondary">Dismiss</button>
+            </div>
+          </div>
+
+          <div class="panel" id="games-list-panel">
+            <div class="panel-head">
+              <h3>Hosted now</h3>
+              <button type="button" id="games-refresh" class="secondary">Refresh</button>
+            </div>
+            <div class="row">
+              <div class="field">
+                <label for="games-scope">Show</label>
+                <select id="games-scope">
+                  <option value="public">Public games</option>
+                  <option value="mine">My games</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="games-family">Game</label>
+                <select id="games-family">
+                  <option value="">Every game</option>
+                  <option value="quake1">Quake</option>
+                  <option value="quake2">Quake II</option>
+                  <option value="quake3">Quake III</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="games-mode">Server</label>
+                <select id="games-mode">
+                  <option value="">Any</option>
+                  <option value="listen">The host is playing</option>
+                  <option value="dedicated">Dedicated</option>
+                </select>
+              </div>
+            </div>
+            <p id="games-message" class="message" role="status"></p>
+            <ul id="games-list" class="rows" aria-label="Games being hosted"></ul>
+            <div class="row-actions">
+              <button type="button" id="games-more" class="secondary" hidden>Show more</button>
+            </div>
+          </div>
+
+          <div class="panel" id="games-detail" hidden>
+            <div class="panel-head">
+              <h3 id="games-detail-title">Game</h3>
+              <button type="button" id="games-detail-close" class="secondary">All games</button>
+            </div>
+            <dl id="games-facts" class="facts"></dl>
+            <h4 class="games-subhead">Joining from this computer</h4>
+            <ol id="games-steps" class="join-steps" aria-label="What joining needs"></ol>
+            <div class="row-actions">
+              <button type="button" id="games-primary" class="primary">Join</button>
+              <button type="button" id="games-recheck" class="secondary">Check again</button>
+            </div>
+            <p id="games-detail-message" class="message" role="alert"></p>
+            <div id="games-action" class="games-action" hidden></div>
+            <details id="games-provenance-box" class="games-provenance">
+              <summary>Details</summary>
+              <dl id="games-provenance" class="facts"></dl>
+            </details>
           </div>
         </section>
 
@@ -860,6 +953,7 @@
     <script src="library.js"></script>
     <script src="build.js"></script>
     <script src="run.js"></script>
+    <script src="games.js"></script>
     <script src="profiles.js"></script>
     <script src="scratch.js"></script>
     <script src="jobs.js"></script>

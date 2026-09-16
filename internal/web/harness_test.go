@@ -121,6 +121,10 @@ type fixtureBackend struct {
 	// disk rather than going back to the network.
 	mu     sync.Mutex
 	served int
+
+	// games, when set, answers the hosted-game, game-profile and profile
+	// catalogue routes (244F). See games_test.go.
+	games http.Handler
 }
 
 func (b *fixtureBackend) count() int {
@@ -171,6 +175,11 @@ func (b *fixtureBackend) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if b.games != nil && (strings.HasPrefix(path, aub.HostedGamePrefix) ||
+		strings.HasPrefix(path, "/api/game-profiles") || strings.HasPrefix(path, aub.ProfileCatalogPrefix)) {
+		b.games.ServeHTTP(w, r)
+		return
+	}
 	if !strings.HasPrefix(path, aub.CompanionPrefix) {
 		http.NotFound(w, r)
 		return
@@ -371,6 +380,7 @@ func newMachine(t *testing.T) *machine {
 			Bindings:   m.bindings,
 			Builds:     m.builds,
 			AssetCache: m.assets,
+			ConfigDir:  filepath.Join(dir, "config"),
 		},
 		// A picker with no helpers installed, so no test ever opens a window on
 		// anybody's desktop and the page falls back to its text fields — which
