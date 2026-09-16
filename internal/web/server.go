@@ -94,9 +94,9 @@ type Server struct {
 	builds  *buildRuns
 	// games is the Games area's process-wide state: download and launch
 	// coordination, and the reviews waiting for an approval.
-	games *gameState
-	newAUB  func(baseURL string) (*aub.Client, error)
-	token   *Token
+	games  *gameState
+	newAUB func(baseURL string) (*aub.Client, error)
+	token  *Token
 
 	// mu guards the two values a request can change under another request:
 	// the stored configuration, and the client built from the address in it.
