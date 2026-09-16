@@ -220,6 +220,8 @@
       "args": [
         "-basedir",
         "{root.game_root}",
+        { "value": "-game", "when": { "root": "content_root" } },
+        { "value": "{runtime.mod_name}", "when": { "root": "content_root" } },
         "+connect",
         "{runtime.server_host}:{runtime.server_port}"
       ],
@@ -228,6 +230,12 @@
           "role": "game_root",
           "access": "read",
           "purpose": "load the base game and the game directory being played"
+        },
+        {
+          "role": "content_root",
+          "access": "read",
+          "optional": true,
+          "purpose": "load the map files downloaded for the game being joined, staged by the Companion"
         }
       ],
       "network": {

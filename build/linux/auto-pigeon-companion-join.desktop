@@ -1,15 +1,17 @@
 [Desktop Entry]
 Type=Application
 Name=Auto-Pigeon Companion join link
-Comment=Resolve an autopigeon:// join link and show what it would run
-# `game join` with no --approve: it resolves the link, prints the command it
-# would run, and starts nothing. A URL is a string somebody else chose, and a
-# handler that launched on arrival would make a link an execution primitive.
+Comment=Show an autopigeon:// join link in the Companion, starting nothing
+# `game open` (244F): it checks the link's shape, records it for the page, and
+# starts or raises the Companion's own page, which shows what this computer
+# still needs. It starts no game and has no approval flag. A URL is a string
+# somebody else chose, and a handler that launched on arrival would make a link
+# an execution primitive.
 #
 # %u, so the URL arrives as one argument. No shell is involved.
-Exec=companion game join %u
-# The plan is printed on stdout and has to be read before anything is approved.
-Terminal=true
+Exec=companion game open %u
+# The review happens in the Companion's page, so no terminal is opened.
+Terminal=false
 # NoDisplay, because auto-pigeon-companion.desktop is the launcher. This entry
 # exists only to declare the scheme, and a second Auto-Pigeon Companion in the
 # applications menu would be a bug.

@@ -115,6 +115,9 @@ type HostedGame struct {
 	Heartbeats    int        `json:"heartbeat_count"`
 
 	Joinable bool `json:"joinable"`
+
+	// JoinContent is what a joiner needs beyond their own installation (244F).
+	JoinContent JoinContent `json:"join_content"`
 }
 
 // Live reports whether AUB called this game live when it answered.
@@ -199,6 +202,11 @@ type HostedGameRegistration struct {
 	ProcessIdentity string `json:"process_identity,omitempty"`
 	ClientVersion   string `json:"client_version,omitempty"`
 
+	// ContentRequirement is `package` or `none`; ContentIdentity names the content
+	// a `none` game runs on. Empty with a package digest means `package`.
+	ContentRequirement string `json:"content_requirement,omitempty"`
+	ContentIdentity    string `json:"content_identity,omitempty"`
+
 	ConfirmExposure bool `json:"confirm_exposure"`
 }
 
@@ -230,6 +238,8 @@ type HostedGamePreview struct {
 	MapName    string `json:"map_name,omitempty"`
 	MapPublic  bool   `json:"map_public"`
 	MapWarning string `json:"map_warning,omitempty"`
+
+	JoinContent JoinContent `json:"join_content"`
 
 	Exposed []ExposedField `json:"exposed_fields"`
 }
@@ -305,6 +315,12 @@ type HostedGameJoin struct {
 	PackageSHA  string `json:"package_sha256,omitempty"`
 
 	Assets AssetProspect `json:"assets"`
+
+	// JoinContent carries this reader's answer, and its package digest is the one
+	// the ticket was minted against.
+	JoinContent JoinContent `json:"join_content"`
+	// EndpointKey is AUB's normalized `host:port`, the spelling a setup compares.
+	EndpointKey string `json:"endpoint_key,omitempty"`
 
 	// Action is the engine action to run, named by AUB so a client cannot invent
 	// one. It is always `join_server`.

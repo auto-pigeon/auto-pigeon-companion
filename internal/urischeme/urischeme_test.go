@@ -32,9 +32,10 @@ func linuxRegistrar(t *testing.T, executable string) (*Registrar, string) {
 }
 
 // The one property a URL handler has to have: the thing it runs must not launch
-// anything. `game join` with no --approve resolves the link and prints a plan.
+// anything. `game open` records the link and raises the Companion's page; it has
+// no approval flag to carry.
 func TestTheRegisteredCommandOnlyEverShowsAPlan(t *testing.T) {
-	if want := []string{"game", "join"}; strings.Join(JoinCommand, " ") != strings.Join(want, " ") {
+	if want := []string{"game", "open"}; strings.Join(JoinCommand, " ") != strings.Join(want, " ") {
 		t.Fatalf("the handler runs %v, want %v", JoinCommand, want)
 	}
 	registrar := &Registrar{GOOS: "linux"}
@@ -103,11 +104,10 @@ func TestRegisteringOnLinuxWritesTheEntryAndTheDefault(t *testing.T) {
 	}
 	for _, want := range []string{
 		"MimeType=" + MIMEType + ";",
-		"Exec=" + binary + " game join %u",
+		"Exec=" + binary + " game open %u",
 		"NoDisplay=true",
-		// The plan has to be readable, and a plan printed into no terminal is
-		// one nobody sees.
-		"Terminal=true",
+		// The review is in the Companion's page; no terminal is opened.
+		"Terminal=false",
 	} {
 		if !strings.Contains(string(body), want) {
 			t.Errorf("the desktop entry does not contain %q:\n%s", want, body)
@@ -235,7 +235,7 @@ func TestAnInstallationPathWithASpaceStaysOneArgument(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(body), `Exec="`+binary+`" game join %u`) {
+	if !strings.Contains(string(body), `Exec="`+binary+`" game open %u`) {
 		t.Errorf("the executable was not quoted:\n%s", body)
 	}
 	// The field code must stay unquoted, or the desktop passes two literal
@@ -293,7 +293,7 @@ func TestWindowsRegistrationIsPerUserAndQuotesBothTheBinaryAndTheURL(t *testing.
 	if commandLine == "" {
 		t.Fatalf("no command was written; calls were %v", runner.calls)
 	}
-	if !strings.HasSuffix(commandLine, ` game join "%1"`) {
+	if !strings.HasSuffix(commandLine, ` game open "%1"`) {
 		t.Errorf("the command line does not end in a quoted %%1: %q", commandLine)
 	}
 	if !strings.HasPrefix(commandLine, `"`) {
@@ -331,7 +331,7 @@ func TestWindowsUnregisteringSomethingAbsentIsNotAnError(t *testing.T) {
 func TestWindowsStatusReadsTheCommandBack(t *testing.T) {
 	runner := &recordingRunner{reply: map[string]string{
 		"query " + windowsCommandKey + " /ve": "\r\n" + windowsCommandKey +
-			"\r\n    (Default)    REG_SZ    \"C:\\Program Files\\Auto-Pigeon Companion\\companion.exe\" game join \"%1\"\r\n",
+			"\r\n    (Default)    REG_SZ    \"C:\\Program Files\\Auto-Pigeon Companion\\companion.exe\" game open \"%1\"\r\n",
 	}}
 	state, err := (&Registrar{GOOS: "windows", Run: runner.run}).Status()
 	if err != nil {
@@ -340,7 +340,7 @@ func TestWindowsStatusReadsTheCommandBack(t *testing.T) {
 	if !state.Registered {
 		t.Fatal("Status did not see the key")
 	}
-	if !strings.Contains(state.Detail, "game join") {
+	if !strings.Contains(state.Detail, "game open") {
 		t.Errorf("Status reports %q", state.Detail)
 	}
 }

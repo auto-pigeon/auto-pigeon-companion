@@ -415,7 +415,7 @@ binary states a fact. Adding a module is a decision about the artifact's licence
 and its supply chain: record it in `THIRD_PARTY_NOTICES.md` and in the matrix, in
 the same change.
 
-**A URL handler runs `game join` with no `--approve`, on every platform.** The
+**A URL handler runs `game open` — which has no approval flag — on every platform.** The
 URL arrives as one argv element through a field code, quoted on Windows, with no
 shell anywhere. Never register a command that launches on arrival, and never add
 a flag to the handler. `internal/urischeme` performs the Linux and Windows

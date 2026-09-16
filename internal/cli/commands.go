@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/aub"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/joinintent"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/release"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/web"
 )
@@ -163,6 +165,7 @@ func runServe(env *Env, args []string) int {
 	port := set.Int("port", 0, "loopback port to bind; 0 uses the configured port")
 	open := set.Bool("open", false, "open the page in the default browser")
 	debug := set.Bool("debug", false, "unlock the developer controls: typing any server address in Settings")
+	openArea := set.String("open-area", "", "with --open, the area to show first (games)")
 	if _, code, ok := parseFlags(env, set, args); !ok {
 		return code
 	}
@@ -271,6 +274,14 @@ func runServe(env *Env, args []string) int {
 	url := web.URL(listener)
 	fmt.Fprintf(env.Stdout, "companion %s listening on %s\n", env.Version, url)
 	fmt.Fprintf(env.Stderr, "API token written to %s\n", tokenPath)
+	// The address this run actually bound, beside the token, so a clicked
+	// `autopigeon://` link raises THIS page instead of starting a second server.
+	urlPath := web.URLPath(filepath.Dir(tokenPath))
+	if err := web.WriteURL(urlPath, url); err != nil {
+		fmt.Fprintf(env.Stderr, "warning: %v\n", err)
+	}
+	defer web.RemoveURL(urlPath)
+	_ = joinintent.Prune(joinintent.Path(filepath.Dir(tokenPath)), time.Now().UTC())
 
 	if *open {
 		opener := env.OpenBrowser
@@ -279,7 +290,11 @@ func runServe(env *Env, args []string) int {
 		}
 		// Never fatal: the URL is already printed, and a machine with no
 		// browser handler should still be able to use the server.
-		if err := opener(url); err != nil {
+		page := url
+		if *openArea == "games" {
+			page = url + "#games"
+		}
+		if err := opener(page); err != nil {
 			fmt.Fprintf(env.Stderr, "warning: %v\n", err)
 			fmt.Fprintf(env.Stderr, "open %s manually\n", url)
 		}

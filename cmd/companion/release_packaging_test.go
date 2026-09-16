@@ -13,19 +13,19 @@ import (
 // model.
 
 // The autopigeon:// handler has to be declared the same way by every package,
-// and the shape of it is the security property: `game join`, no approval flag,
+// and the shape of it is the security property: `game open`, no approval flag,
 // the URL as its own quoted argument, no shell.
 func TestEveryPackageRegistersTheHandlerTheSameWay(t *testing.T) {
 	desktop := repoFile(t, "build", "linux", "auto-pigeon-companion-join.desktop")
 	mustContain(t, "the join .desktop entry", desktop,
 		"MimeType=x-scheme-handler/autopigeon;",
-		"Exec="+executableName+" game join %u",
+		"Exec="+executableName+" game open %u",
 		// The launcher entry is the visible one. A second Auto-Pigeon
 		// Companion in the applications menu would be a bug.
 		"NoDisplay=true",
-		// `game join` prints a plan the person reads before approving, and a
-		// plan printed into no terminal is a plan nobody sees.
-		"Terminal=true",
+		// `game open` hands the link to the Companion's page, where the review
+		// is read; opening a terminal would show nothing.
+		"Terminal=false",
 	)
 	// In the Exec line, not in the comment above it explaining why it is absent.
 	if strings.Contains(directiveLines(desktop, "#"), "--approve") {
@@ -53,7 +53,7 @@ func TestEveryPackageRegistersTheHandlerTheSameWay(t *testing.T) {
 		`ValueName: "URL Protocol"`,
 		// The program path is quoted ALWAYS: an unquoted path under
 		// "C:\Program Files" invites the loader to try "C:\Program.exe".
-		`""{app}\{#AppExeName}"" game join ""%1"""`,
+		`""{app}\{#AppExeName}"" game open ""%1"""`,
 	)
 	directives := directiveLines(iss, ";")
 	if strings.Contains(directives, "HKLM") || strings.Contains(directives, "HKEY_LOCAL_MACHINE") {

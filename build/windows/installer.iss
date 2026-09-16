@@ -90,14 +90,14 @@ Source: "..\..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 ; with it, subkeys included. Without it the scheme would keep pointing at a
 ; program that is no longer there.
 ;
-; The command is `companion game join "%1"` — no --approve, so opening a link
-; resolves it, prints what it would run, and starts nothing. Both the program
+; The command is `companion game open "%1"` — no approval flag: opening a link
+; records it and raises the Companion's page, and starts nothing. Both the program
 ; path and %1 are quoted: an unquoted path under "C:\Program Files" invites the
 ; loader to try "C:\Program.exe", and %1 is a string somebody else chose.
 Root: HKCU; Subkey: "Software\Classes\autopigeon"; ValueType: string; ValueName: ""; ValueData: "URL:Auto-Pigeon Companion join link"; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\autopigeon"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
 Root: HKCU; Subkey: "Software\Classes\autopigeon\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#AppExeName},0"
-Root: HKCU; Subkey: "Software\Classes\autopigeon\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExeName}"" game join ""%1"""
+Root: HKCU; Subkey: "Software\Classes\autopigeon\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExeName}"" game open ""%1"""
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"

@@ -20,8 +20,8 @@ const uriUsage = `usage:
   companion uri register              make this program the handler, for this user
   companion uri unregister            stop handling it
 
-A link opens ` + "`companion game join <link>`" + `, which resolves the link, prints the
-command it would run, and starts nothing. Approving is a separate act.
+A link opens ` + "`companion game open <link>`" + `, which shows the game in the
+Companion's page and starts nothing. Joining is a separate, reviewed act.
 
 Linux    a NoDisplay desktop entry and a mimeapps.list default, both under
          $XDG_DATA_HOME. Installing the .deb or .rpm ships the entry; this

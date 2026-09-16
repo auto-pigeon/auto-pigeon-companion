@@ -67,8 +67,8 @@ contents:
   # The autopigeon:// handler. A separate, NoDisplay entry rather than a
   # MimeType= line on the launcher above: the launcher runs `companion` with no
   # arguments, which is GUI mode, and a desktop passing it a URL would have the
-  # URL silently dropped. This one runs `companion game join %u`, which prints
-  # the plan and starts nothing.
+  # URL silently dropped. This one runs `companion game open %u`, which shows
+  # the game in the Companion's page and starts nothing.
   #
   # The package declares the capability. It does NOT write the user's default
   # into mimeapps.list — which application opens a scheme is a per-user choice,

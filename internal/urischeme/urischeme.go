@@ -5,9 +5,10 @@
 //
 // A URL handler is the one place where a string somebody else chose reaches
 // this program without a person typing it. So the command that gets registered
-// is fixed here, and it is `companion game join <url>` with no `--approve`:
-// that subcommand resolves the link, prints what would run, and starts nothing.
-// The person reads a plan and decides. A handler registered as anything that
+// is fixed here, and it is `companion game open <url>`, which has no approval
+// flag at all: it checks the link's shape, records it for the Companion's page
+// and raises that page, and starts nothing (244F). The person sees what their
+// computer still needs, reviews the exact command there, and decides. A handler registered as anything that
 // launches on arrival would make a link into an execution primitive, which is
 // exactly what a scheme handler must never be.
 //
@@ -56,9 +57,9 @@ import (
 // parser does not accept would be a handler for links this program refuses.
 const Scheme = aub.JoinLinkScheme
 
-// JoinCommand is the subcommand a registered handler runs. It prints the plan
-// and starts nothing — see the package comment.
-var JoinCommand = []string{"game", "join"}
+// JoinCommand is the subcommand a registered handler runs. It shows the game in
+// the Companion and starts nothing — see the package comment.
+var JoinCommand = []string{"game", "open"}
 
 // DesktopEntryName is the XDG desktop entry this package writes. It is separate
 // from the application's own launcher entry, which packages install into
@@ -334,16 +335,16 @@ func (r *Registrar) xdgUnregister() (State, error) {
 //
 // NoDisplay, because the application already has a launcher entry that packages
 // install; a second visible one would be a second Auto-Pigeon Companion in the
-// menu. Terminal, because `game join` prints a plan the person has to read
-// before deciding, and a plan printed into no terminal is a plan nobody sees.
+// menu. No terminal, because `game open` hands the link to the Companion's page,
+// which is where the person reads the review.
 func desktopEntry(command []string) string {
 	var b strings.Builder
 	b.WriteString("[Desktop Entry]\n")
 	b.WriteString("Type=Application\n")
 	b.WriteString("Name=Auto-Pigeon Companion join link\n")
-	b.WriteString("Comment=Resolve an " + Scheme + ":// join link and show what it would run\n")
+	b.WriteString("Comment=Show an " + Scheme + ":// join link in the Companion, starting nothing\n")
 	b.WriteString("Exec=" + desktopExec(command) + "\n")
-	b.WriteString("Terminal=true\n")
+	b.WriteString("Terminal=false\n")
 	b.WriteString("NoDisplay=true\n")
 	b.WriteString("MimeType=" + MIMEType + ";\n")
 	return b.String()
@@ -627,7 +628,8 @@ func (r *Registrar) darwinStatus() (State, error) {
 		return state, nil
 	}
 	state.Registered = true
-	state.Command = []string{filepath.Join(bundle, "Contents", "MacOS", "companion"), "game", "join", "%u"}
+	state.Command = append(append([]string{filepath.Join(bundle, "Contents", "MacOS", "companion")},
+		JoinCommand...), "%u")
 	state.Detail = plist + " declares " + Scheme + ":// ; LaunchServices registers it when the bundle is installed"
 	return state, nil
 }

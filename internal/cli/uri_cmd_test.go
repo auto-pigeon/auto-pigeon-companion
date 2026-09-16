@@ -51,8 +51,8 @@ func TestURIStatusRegisterAndUnregisterThroughTheCLI(t *testing.T) {
 	}
 	// The command a link runs is the one a person can read, and it has to be
 	// the one that starts nothing.
-	if !strings.Contains(out, "game join %u") {
-		t.Errorf("the command is not shown, or is not `game join`:\n%s", out)
+	if !strings.Contains(out, "game open %u") {
+		t.Errorf("the command is not shown, or is not `game open`:\n%s", out)
 	}
 	if strings.Contains(out, "--approve") {
 		t.Errorf("the registered command approves something:\n%s", out)

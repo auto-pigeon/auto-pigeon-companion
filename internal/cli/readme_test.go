@@ -104,7 +104,7 @@ func TestTheReadmeStaysTruthfulAboutSigningAndAboutLinks(t *testing.T) {
 	for _, want := range []string{
 		"There is no Apple Developer ID and no Authenticode certificate",
 		"which is not a\nsignature",
-		"The command is `game join` with **no",
+		"The command is `game open` with **no",
 		"starts nothing",
 	} {
 		if !strings.Contains(body, want) {

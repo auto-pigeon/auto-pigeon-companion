@@ -38,8 +38,15 @@ import (
 const gameUsage = `usage:
   companion game list [--mine]                    games being hosted now
   companion game show <game-id>                   one game, in full
+  companion game ready <game-id> [--json]         what this computer still needs to join it
+  companion game fetch <game-id>                  download, verify and stage its map files
+  companion game join --game=<game-id> [--approve]
+                                                  fresh link, exact command; --approve to launch
   companion game join <link> [--approve]          resolve a join link; --approve to launch
+  companion game open <link>                      what a clicked link runs: show it in the Companion
   companion game link <game-id> [--json]          mint your OWN join link for a game
+  companion game package --build=<id> --map=<id> [--revision=<n>]
+                                                  upload a build's map files for people joining
   companion game preview --map=<id> --endpoint=<host:port> [flags]
                                                   what advertising it would disclose
   companion game host --job=<id> --map=<id> --endpoint=<host:port> --confirm [flags]
@@ -60,6 +67,14 @@ func runGame(env *Env, args []string) int {
 		return gameShow(env, args[1:])
 	case "join":
 		return gameJoin(env, args[1:])
+	case "ready":
+		return gameReady(env, args[1:])
+	case "fetch":
+		return gameFetch(env, args[1:])
+	case "open":
+		return gameOpen(env, args[1:])
+	case "package":
+		return gamePackage(env, args[1:])
 	case "link":
 		return gameLink(env, args[1:])
 	case "preview":
@@ -92,6 +107,8 @@ type gameRegistrationFlags struct {
 	maxPlay  *int
 	current  *int
 	visible  *string
+	build    *string
+	none     *string
 }
 
 func newGameRegistrationFlags(set flagSetter) *gameRegistrationFlags {
@@ -110,6 +127,10 @@ func newGameRegistrationFlags(set flagSetter) *gameRegistrationFlags {
 		maxPlay:  set.Int("max-players", 0, "how many people the server accepts"),
 		current:  set.Int("players", 0, "how many are in it now"),
 		visible:  set.String("visibility", aub.GamePrivate, "private, unlisted or public"),
+		build: set.String("build", "",
+			"upload this finished build's map files so people joining get them; implies --package-sha256"),
+		none: set.String("no-join-content", "",
+			"say joiners need nothing beyond their own game, naming the content, e.g. quake1:id1/maps/e1m1.bsp"),
 	}
 
 	return f
@@ -167,7 +188,36 @@ func (f *gameRegistrationFlags) registration(env *Env, settings config.Config) (
 		Visibility:        strings.TrimSpace(*f.visible),
 		ProcessIdentity:   hostgame.ProcessIdentity(root, strings.TrimSpace(*f.mapID), host, port),
 		ClientVersion:     "aucom/" + env.Version,
+		ContentIdentity:   strings.TrimSpace(*f.none),
 	}, nil
+}
+
+// withJoinContent completes a registration's join-content declaration: uploads
+// the build's map files when --build names one, or declares `none`.
+func (f *gameRegistrationFlags) withJoinContent(ctx context.Context, env *Env, settings config.Config,
+	registration aub.HostedGameRegistration,
+) (aub.HostedGameRegistration, error) {
+	buildID := strings.TrimSpace(*f.build)
+	switch {
+	case buildID != "" && (registration.PackageSHA != "" || registration.ContentIdentity != ""):
+		return registration, errors.New("--build names the package itself; do not also give --package-sha256 or --no-join-content")
+	case buildID != "":
+		pkg, err := uploadBuildPackage(ctx, env, settings, buildID, registration.MapID, registration.MapRevision,
+			registration.GameFamily)
+		if err != nil {
+			return registration, err
+		}
+		registration.PackageSHA = pkg.PackageSHA256
+		registration.MapRevision = pkg.MapRevision
+		registration.ContentRequirement = "package"
+	case registration.ContentIdentity != "":
+		if registration.PackageSHA != "" {
+			return registration, errors.New("--no-join-content and --package-sha256 say opposite things")
+		}
+		registration.ContentRequirement = aub.ContentNone
+	}
+
+	return registration, nil
 }
 
 // installRoot is what ProcessIdentity is anchored to: this installation's own
@@ -250,6 +300,9 @@ func gamePreview(env *Env, args []string) int {
 	if err != nil {
 		return fail(env, err)
 	}
+	if registration, err = flags.withJoinContent(context.Background(), env, settings, registration); err != nil {
+		return fail(env, err)
+	}
 	client, err := newClient(settings)
 	if err != nil {
 		return fail(env, err)
@@ -275,6 +328,15 @@ func printGamePreview(env *Env, preview aub.HostedGamePreview) int {
 			preview.EndpointScope)
 	}
 	fmt.Fprintf(env.Stdout, "reachable   %s\n", preview.Reachability)
+	switch preview.JoinContent.State {
+	case aub.JoinContentRequired:
+		fmt.Fprintf(env.Stdout, "map files   %d file(s), %d bytes, for people who can read the map\n",
+			preview.JoinContent.FileCount, preview.JoinContent.TotalBytes)
+	case aub.JoinContentNotRequired:
+		fmt.Fprintf(env.Stdout, "map files   none needed (%s)\n", preview.JoinContent.ContentIdentity)
+	default:
+		fmt.Fprintln(env.Stdout, "map files   not declared — people joining get no map files; use --build")
+	}
 	fmt.Fprintln(env.Stdout)
 	fmt.Fprintln(env.Stdout, "This is everything the listing will say about you:")
 	for _, field := range preview.Exposed {
@@ -330,6 +392,9 @@ func gameHost(env *Env, args []string) int {
 
 	registration, err := flags.registration(env, settings)
 	if err != nil {
+		return fail(env, err)
+	}
+	if registration, err = flags.withJoinContent(ctx, env, settings, registration); err != nil {
 		return fail(env, err)
 	}
 	registration.ConfirmExposure = true
@@ -491,87 +556,6 @@ func gameShow(env *Env, args []string) int {
 	}
 
 	return 0
-}
-
-func gameJoin(env *Env, args []string) int {
-	set := newFlagSet(env, "game join")
-	approve := set.Bool("approve", false, "run the command, having read it")
-	asJSON := set.Bool("json", false, "print the plan as JSON")
-	// Interspersed, because a link is a positional and `--approve` reads naturally
-	// AFTER it — `engine bind`'s precedent, and the shape a person actually types.
-	rest, code, ok := parseInterspersed(env, set, args)
-	if !ok {
-		return code
-	}
-	if len(rest) != 1 {
-		fmt.Fprint(env.Stderr, gameUsage)
-
-		return 2
-	}
-
-	ctx, stop := signalContext()
-	defer stop()
-
-	service, settings, err := openJobs(ctx, env, *approve, nil)
-	if err != nil {
-		return fail(env, err)
-	}
-	defer service.Close()
-
-	client, err := newClient(settings)
-	if err != nil {
-		return fail(env, err)
-	}
-	syncer, store, err := openSyncer(ctx, env)
-	if err != nil {
-		return fail(env, err)
-	}
-
-	joiner := hostgame.NewJoiner(client, syncer, store, service.Catalog(), service)
-	plan, err := joiner.Resolve(ctx, rest[0])
-	if err != nil {
-		return fail(env, err)
-	}
-	if *asJSON {
-		if code := printJSON(env, plan); code != 0 || !*approve {
-			return code
-		}
-	} else {
-		printJoinPlan(env, plan)
-	}
-	if !*approve {
-		fmt.Fprintln(env.Stdout, "\nNothing has been started. Add --approve to run the command above.")
-
-		return 0
-	}
-	started, err := joiner.Launch(plan, true)
-	if err != nil {
-		return fail(env, err)
-	}
-	fmt.Fprintf(env.Stdout, "\nstarted job %s\n", started.ID)
-
-	return 0
-}
-
-func printJoinPlan(env *Env, plan hostgame.Plan) {
-	resolution := plan.Resolution
-	fmt.Fprintf(env.Stdout, "%s\n", resolution.Title)
-	if resolution.Host != "" {
-		fmt.Fprintf(env.Stdout, "  hosted by  %s\n", resolution.Host)
-	}
-	fmt.Fprintf(env.Stdout, "  address    %s (%s)\n", resolution.Endpoint, resolution.Reachability)
-	fmt.Fprintf(env.Stdout, "  map        %s, revision %d\n",
-		nameOr(resolution.MapName, resolution.MapID), resolution.MapRevision)
-	fmt.Fprintf(env.Stdout, "  verified   %s\n", plan.MapDigest)
-	fmt.Fprintf(env.Stdout, "  engine     %s (%s)\n", plan.EngineProfileID, resolution.EngineRuntime)
-	for _, warning := range plan.Warnings {
-		fmt.Fprintf(env.Stdout, "\n  note: %s\n", warning)
-	}
-	if plan.Preview != nil {
-		fmt.Fprintln(env.Stdout, "\nThis is what will run:")
-		fmt.Fprintf(env.Stdout, "  %s\n", plan.Preview.Shell)
-		fmt.Fprintf(env.Stdout, "  in %s\n", plan.Preview.WorkingDir)
-	}
 }
 
 func printGameLine(env *Env, game aub.HostedGame) {

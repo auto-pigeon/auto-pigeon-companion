@@ -222,3 +222,43 @@ func checkRequest(r *http.Request, token *Token) (int, error) {
 	}
 	return http.StatusOK, nil
 }
+
+// URLFileName is where a running server records the address it actually bound,
+// beside its token, so `companion game open` can raise the page that is already
+// there instead of starting a second server. A configured port that was taken
+// falls back to a free one, which is why the port cannot be derived.
+const URLFileName = "api-url"
+
+// URLPath is the URL file for a configuration directory.
+func URLPath(configDir string) string { return filepath.Join(configDir, URLFileName) }
+
+// WriteURL records the running server's loopback address. 0600, like the token.
+func WriteURL(path, address string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(strings.TrimSpace(address)+"\n"), 0o600)
+}
+
+// ReadURL reads a running server's address. It accepts only a loopback http URL,
+// so a file somebody else wrote cannot send `game open` anywhere else.
+func ReadURL(path string) (string, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return "", ErrNoToken
+	}
+	value := strings.TrimSpace(string(raw))
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Scheme != "http" || !loopbackHost(parsed.Host) {
+		return "", fmt.Errorf("web: %s does not hold a loopback address", path)
+	}
+	return value, nil
+}
+
+// RemoveURL deletes the URL file. A missing file is not an error.
+func RemoveURL(path string) error {
+	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return nil
+}

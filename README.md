@@ -149,14 +149,16 @@ no desktop entry declares x-scheme-handler/autopigeon for this program
 
 $ ./companion uri register
 registered: yes
-command:    /opt/aucom/companion game join %u
+command:    /opt/aucom/companion game open %u
 
-x-scheme-handler/autopigeon now opens /opt/aucom/companion game join %u
+x-scheme-handler/autopigeon now opens /opt/aucom/companion game open %u
 ```
 
-**What gets registered is the point.** The command is `game join` with **no
-`--approve`**: opening a link resolves it, prints the command it would run, and
-starts nothing. Approving is a separate act you take after reading a plan. The
+**What gets registered is the point.** The command is `game open` with **no
+approval flag at all**: opening a link checks its shape, records it for the
+Companion's page and starts or raises that page, and starts nothing. The page
+redeems the link once, shows what this computer still needs, and joining is a
+separate act you take after reviewing the exact command there. The
 URL arrives as one argument through a field code — `%u`, or a quoted `"%1"` on
 Windows — and no shell is involved on any platform.
 

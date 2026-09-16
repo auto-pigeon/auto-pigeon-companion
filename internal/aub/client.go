@@ -240,3 +240,13 @@ func (c *Client) ListRecords(ctx context.Context, collection string, query url.V
 	}
 	return c.do(ctx, http.MethodGet, "/api/collections/"+url.PathEscape(collection)+"/records", query, nil, out)
 }
+
+// WithTimeout is a copy of this client whose requests are bounded by d instead
+// of DefaultTimeout — for the few transfers that are megabytes rather than a
+// JSON answer. The session and the deployment's answers are shared.
+func (c *Client) WithTimeout(d time.Duration) *Client {
+	copied := *c
+	transport := c.httpClient.Transport
+	copied.httpClient = &http.Client{Timeout: d, Transport: transport}
+	return &copied
+}

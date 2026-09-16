@@ -473,7 +473,7 @@ var rows = []Row{
 		Title:      "A registered handler launches something the moment a link is clicked",
 		Asset:      "the user's machine, from any web page that can emit a link",
 		Vector:     "A scheme handler registered as `companion game join %u --approve`, or one that goes through a shell, or one where the URL can become two arguments.",
-		Mitigation: "The registered command is `game join` with no approval flag: it resolves, prints the command it would run, and starts nothing. The URL is one argv element through a field code, quoted on Windows, with no shell on any platform.",
+		Mitigation: "The registered command is `game open` (244F), which has no approval flag: it checks the link's shape before anything else, records it for the Companion's page and raises that page, and starts nothing; the page redeems the link once and a join still takes a fresh review and an approval. The URL is one argv element through a field code, quoted on Windows, with no shell on any platform.",
 		Evidence: []Evidence{
 			{"internal/urischeme", "TestTheRegisteredCommandOnlyEverShowsAPlan"},
 			{"internal/urischeme", "TestTheURLArrivesAsOneArgumentOnEveryPlatform"},
