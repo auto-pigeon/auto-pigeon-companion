@@ -166,7 +166,7 @@ func TestATamperedServedFileNeverReachesTheStage(t *testing.T) {
 	if _, err = stager.Stage(f.pkg.PackageSHA256, files); err == nil {
 		t.Fatal("a package with a missing object was staged")
 	}
-	if _, statErr := os.Stat(filepath.Join(stager.Root, strings.TrimPrefix(f.pkg.PackageSHA256, "sha256:"))); statErr == nil {
+	if _, statErr := os.Stat(filepath.Join(stager.Root, strings.TrimPrefix(f.pkg.PackageSHA256, "sha256:")[:16])); statErr == nil {
 		t.Fatal("a partial package directory exists")
 	}
 }

@@ -2371,7 +2371,7 @@ Friday deathmatch
   engine     vkQuake (vkquake)
 
 This is what will run:
-  vkquake -basedir ~/.cache/auto-pigeon-companion/assets/join-content/…/base -game ap-4c6d0b0d0f4d +connect 203.0.113.4:26000
+  vkquake -basedir ~/.cache/auto-pigeon-companion/assets/join-content/…/b -game ap-4c6d0b0d0f4d +connect 203.0.113.4:26000
 
 Nothing has been started. Add --approve to run the command above.
 

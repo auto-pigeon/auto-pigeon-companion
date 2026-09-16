@@ -21,15 +21,30 @@ import (
 // Staging layout, under the asset cache:
 //
 //	join-content/
-//	  <package hex>/
-//	    staged.json               what was staged, and from which package
-//	    base/                     the engine's base directory (-basedir)
+//	  <first 16 hex of the package digest>/
+//	    staged.json               what was staged, and from which package (the whole digest)
+//	    b/                        the engine's base directory (-basedir)
 //	      <base-game dir> -> the user's own, as a symbolic link, created at launch
 //	      <game dir>/maps/x.bsp   the package's files (-game <game dir>)
 //
 // One directory per PACKAGE, so two games on the same build share a stage and a
 // rebuilt package is a different directory: a stage is never edited in place,
 // which is what makes "is this staged" a question with a stable answer.
+//
+// # Why the path is short, and why that is measured rather than tidy
+//
+// vkQuake 1.36.0 keeps the first 255 characters of its command line — the whole
+// line, its own executable path included — and executes whatever `+` commands
+// survive. Measured in 244F's native run: with a stage at
+// `…/join-content/<64 hex>/base`, `+map aut244f` arrived as `+ma`, the engine
+// reported `Unknown command "ma"` and played its demo loop instead. A join cut the
+// same way loses `+connect` and sits at the menu, which looks like a join that did
+// nothing. So the directory names here are as short as they can be while still
+// being one per package: sixteen hex characters (staged.json holds the whole
+// digest, and Lookup refuses a record naming any other) and a one-letter base.
+
+// baseDirName is the base directory inside a stage. One letter; see above.
+const baseDirName = "b"
 
 // StageSchema versions staged.json.
 const StageSchema = "aucom.join-content-stage/1.0"
@@ -98,7 +113,7 @@ func (s *Stager) dirFor(packageSHA256 string) (string, error) {
 		return "", errors.New("joincontent: no join-content directory is configured")
 	}
 
-	return filepath.Join(s.Root, hexDigest), nil
+	return filepath.Join(s.Root, hexDigest[:16]), nil
 }
 
 // Missing lists the files of a verified package the object store does not hold
@@ -176,7 +191,7 @@ func (s *Stager) Stage(packageSHA256 string, files []aub.JoinContentFile) (Stage
 		if err != nil {
 			return Stage{}, fmt.Errorf("%s has not been downloaded: %w", file.Destination, err)
 		}
-		target := filepath.Join(temporary, "base", gameDir, filepath.FromSlash(file.Destination))
+		target := filepath.Join(temporary, baseDirName, gameDir, filepath.FromSlash(file.Destination))
 		if err = copyVerified(source, target, file); err != nil {
 			return Stage{}, err
 		}
@@ -224,7 +239,7 @@ func (s *Stager) Lookup(packageSHA256 string, files []aub.JoinContentFile) (Stag
 	if files == nil {
 		files = record.Files
 	}
-	stage := Stage{Record: record, Dir: dir, BaseDir: filepath.Join(dir, "base")}
+	stage := Stage{Record: record, Dir: dir, BaseDir: filepath.Join(dir, baseDirName)}
 	stage.GameDirPath = filepath.Join(stage.BaseDir, record.GameDir)
 	if record.GameDir != GameDirName(packageSHA256) {
 		return Stage{}, fmt.Errorf("%w: it names the wrong game directory", ErrStageDamaged)
