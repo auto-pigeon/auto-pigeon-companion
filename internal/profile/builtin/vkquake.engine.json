@@ -239,7 +239,7 @@
       },
       "args": [
         "-basedir",
-        "{root.game_root}",
+        ".",
         { "value": "-game", "when": { "root": "content_root" } },
         { "value": "{runtime.mod_name}", "when": { "root": "content_root" } },
         "+connect",

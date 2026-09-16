@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -142,8 +143,72 @@ type Plan struct {
 }
 
 // Assess is the readiness report for one game.
+//
+// When the game's map files are downloaded and verified but their stage no
+// longer checks out, the stage is rebuilt from the verified objects first — no
+// network, and the strict "nothing but the package" check is unchanged. A game
+// that was played spoils its stage on its own: vkQuake writes vkQuake.cfg into
+// the -game directory, and 244F's native run found every second join refused as
+// "not yet set out for the engine". A stage a running engine is using is never
+// rebuilt under it.
 func (j *Joiner) Assess(ctx context.Context, gameID string) (joinready.Report, error) {
+	report, err := joinready.Assess(ctx, j.remote, j.local, gameID)
+	if err != nil || !j.restage(report) {
+		return report, err
+	}
+
 	return joinready.Assess(ctx, j.remote, j.local, gameID)
+}
+
+// restage rebuilds a verified package's stage, and reports whether it did.
+func (j *Joiner) restage(report joinready.Report) bool {
+	if stepOf(report, joinready.StepJoinContent).State != joinready.ContentVerified ||
+		j.local.Stager == nil || len(report.Files) == 0 || report.Game.JoinContent.PackageSHA256 == "" {
+		return false
+	}
+	digest := strings.ToLower(report.Game.JoinContent.PackageSHA256)
+	j.shared.mu.Lock()
+	if j.shared.downloading[digest] {
+		j.shared.mu.Unlock()
+
+		return false
+	}
+	j.shared.downloading[digest] = true
+	j.shared.mu.Unlock()
+	defer func() {
+		j.shared.mu.Lock()
+		delete(j.shared.downloading, digest)
+		j.shared.mu.Unlock()
+	}()
+	if j.stageInUse(digest) {
+		return false
+	}
+	_, err := j.local.Stager.Stage(digest, report.Files)
+
+	return err == nil
+}
+
+// stageInUse is whether an active join has a package's stage as its game root.
+func (j *Joiner) stageInUse(digest string) bool {
+	jobs, err := j.runner.List()
+	if err != nil {
+		return true // unknown is treated as in use: a rebuild is never worth pulling files from a game
+	}
+	directory, err := j.local.Stager.Dir(digest)
+	if err != nil {
+		return true
+	}
+	for _, candidate := range jobs {
+		if candidate == nil || !candidate.State.Active() || candidate.ActionID != profile.ActionJoinServer {
+			continue
+		}
+		root := candidate.Request.Roots[profile.RootGame]
+		if root != "" && (root == directory || strings.HasPrefix(root, directory+string(filepath.Separator))) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // DownloadContent fetches, verifies and stages a game's join content, and

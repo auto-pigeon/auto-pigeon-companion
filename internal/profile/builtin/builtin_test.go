@@ -751,8 +751,8 @@ func TestTheGenericProfileSendsOnlyTheUniversalSwitches(t *testing.T) {
 	allowed := map[string]bool{"-basedir": true, "-game": true, "+map": true, "+connect": true, "+maxplayers": true}
 	for _, action := range engine.Actions {
 		for _, arg := range action.Args {
-			if strings.HasPrefix(arg.Value, "{") {
-				continue // a value, not a switch
+			if strings.HasPrefix(arg.Value, "{") || arg.Value == "." {
+				continue // a value, not a switch ("." is the working directory, the game root)
 			}
 			if !allowed[arg.Value] {
 				t.Errorf("the generic profile passes %q in %q; a profile for an unknown engine "+
@@ -873,4 +873,45 @@ func (i installed) Provider(capability string) (*profile.ToolProfile, profile.Ac
 		}
 	}
 	return nil, profile.Action{}, false
+}
+
+// A Quake 1 join names its base directory as ".", the working directory the job
+// already sets to the game root, and puts no folder path on the command line at
+// all. vkQuake 1.36.0 keeps only the first 255 characters of its whole command
+// line, its own executable included — and an AppImage run extracted beside a job
+// has an executable path of about 140 characters. 244F's native run measured the
+// cost of an absolute stage path: `+connect` was cut off and the client played
+// its demo loop instead of joining.
+func TestAQuake1JoinPutsNoFolderOnTheCommandLine(t *testing.T) {
+	base := t.TempDir()
+	game := filepath.Join(base, "a-deliberately-long-directory-name-standing-in-for-a-join-content-stage", "b")
+	content := filepath.Join(game, "ap-0123456789ab")
+	engines := loadEngines(t)
+	for _, id := range Q1Engines {
+		engine := engines[id]
+		for _, support := range engine.Platforms {
+			if support.Status == profile.Unsupported {
+				continue
+			}
+			invocation, err := profile.Resolve(engine, profile.ActionJoinServer, profile.Request{
+				Platform: support.Platform,
+				Roots: map[string]string{
+					profile.RootGame: game, profile.RootContent: content,
+					profile.RootToolInstall: filepath.Join(base, "engines"),
+				},
+				Runtime: map[string]string{"mod_name": "ap-0123456789ab", "server_host": "203.0.113.4", "server_port": "26000"},
+			})
+			if err != nil {
+				t.Errorf("%s on %s: %v", id, support.Platform, err)
+				continue
+			}
+			if invocation.Command.WorkingDir != game {
+				t.Errorf("%s on %s runs in %q, not the game root", id, support.Platform, invocation.Command.WorkingDir)
+			}
+			line := strings.Join(invocation.Command.Args, " ")
+			if strings.Contains(line, base) || !strings.Contains(line, "-basedir . ") {
+				t.Errorf("%s on %s joins with %q; the base directory must be the working directory", id, support.Platform, line)
+			}
+		}
+	}
 }

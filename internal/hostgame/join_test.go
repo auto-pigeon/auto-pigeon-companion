@@ -424,6 +424,62 @@ func TestAStagedPackageIsWhatTheEngineLoads(t *testing.T) {
 	}
 }
 
+// A game that was played leaves the engine's own files in its stage — vkQuake
+// writes vkQuake.cfg into the -game directory — and the next join rebuilds the
+// stage from the verified objects instead of sending the user back to setup. It
+// does not download anything to do it, and it never rebuilds under a running game.
+func TestAPlayedStageIsRebuiltBeforeTheNextJoinAndNeverUnderARunningOne(t *testing.T) {
+	w := newWorld(t)
+	pkg := w.withPackage(t)
+	joiner := w.joiner()
+	if _, err := joiner.DownloadContent(context.Background(), "gme1", nil); err != nil {
+		t.Fatal(err)
+	}
+	stage, err := w.stager.Lookup(pkg.PackageSHA256, pkg.Files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	engineWrote := filepath.Join(stage.GameDirPath, "vkQuake.cfg")
+	if err = os.WriteFile(engineWrote, []byte("volume 0.7\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	plan, err := joiner.Prepare(context.Background(), "gme1")
+	if err != nil {
+		t.Fatalf("the second join was refused: %v", err)
+	}
+	downloads := w.remote.downloaded
+	if _, statErr := os.Stat(engineWrote); statErr == nil {
+		t.Fatal("the engine's file is still in the stage the next join loads")
+	}
+	if _, err = w.stager.Lookup(pkg.PackageSHA256, pkg.Files); err != nil {
+		t.Fatalf("the rebuilt stage does not check out: %v", err)
+	}
+	if _, err = joiner.Launch(plan, true); err != nil {
+		t.Fatal(err)
+	}
+	if w.remote.downloaded != downloads {
+		t.Fatal("rebuilding a stage downloaded something")
+	}
+
+	// Now a join using that stage is active: its files stay where they are.
+	w.runner.submitted[0].State = job.Running
+	w.runner.submitted[0].Request.Roots = map[string]string{"game_root": stage.BaseDir}
+	if err = os.WriteFile(engineWrote, []byte("volume 0.7\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	report, err := joiner.Assess(context.Background(), "gme1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, statErr := os.Stat(engineWrote); statErr != nil {
+		t.Fatal("a stage was rebuilt under a running game")
+	}
+	if report.State == "ready_for_review" {
+		t.Fatal("a stage that does not check out was reported ready")
+	}
+}
+
 // The game moving during setup is caught at the fresh ticket, by name.
 func TestAGameThatChangedDuringSetupIsRefusedAfterTheFreshTicket(t *testing.T) {
 	for name, change := range map[string]func(w *world){

@@ -660,6 +660,11 @@ aggregate digest (pinned in both repositories: `sha256:cdd70f33…62cf`);
 place; `Lookup` refuses any extra file, link or changed byte. The engine is pointed
 at a MANAGED base directory whose base-game folders are symbolic links to the
 user's installation. Do not stage into `game_root`, and do not copy game data.
+A Quake 1 `join_server` passes `-basedir .` and runs in the stage, because vkQuake
+keeps only 255 characters of its command line (`TestAQuake1JoinPutsNoFolderOnTheCommandLine`);
+do not put a folder path back on that line. The engine writes its settings into
+the stage, so `Joiner.Assess` rebuilds a verified-but-spoiled stage from the
+object store — never under an active join, and never by relaxing `Lookup`.
 
 **The `autopigeon://` handler is `game open`, and it has no approval flag.** It
 validates the link's shape before anything else, records it through

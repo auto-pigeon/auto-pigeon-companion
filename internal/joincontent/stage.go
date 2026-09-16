@@ -116,6 +116,9 @@ func (s *Stager) dirFor(packageSHA256 string) (string, error) {
 	return filepath.Join(s.Root, hexDigest[:16]), nil
 }
 
+// Dir is the directory a package is staged in, whether or not it is staged yet.
+func (s *Stager) Dir(packageSHA256 string) (string, error) { return s.dirFor(packageSHA256) }
+
 // Missing lists the files of a verified package the object store does not hold
 // yet, which is what a download still has to fetch.
 func (s *Stager) Missing(files []aub.JoinContentFile) []aub.JoinContentFile {
