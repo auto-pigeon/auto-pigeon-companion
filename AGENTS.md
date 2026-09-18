@@ -1,782 +1,206 @@
 # AGENTS.md — Auto-Pigeon Companion
 
+**This file holds the rules that bind nearly every task here, the source-of-truth order, and a
+routing table. Nothing else.** Every detailed rule this repository has lives in exactly one module
+under `docs/agent/`, which is READ WHEN A TASK NEEDS IT and is not loaded at startup.
+
+That is a change of shape, not of content. Before `NEW_246G` this file was 782 lines and 7,372
+words and an agent paid all of it before anybody typed anything — the extractor acquisition chain,
+the export gate, two work-in-progress game families, the threat matrix, the approval writer, the
+retention bounds, the five native-support states and the join readiness model, in every session,
+whatever the task was. `docs/agent/section-manifest.json` accounts for every line of that file and
+for every one of its 28 headings, and
+`../auto-pigeon-tools/scripts/agent_context_router.py gate --repo-root "$PWD"` re-derives the
+accounting on every run: a rule that went missing, or a destination that has since been deleted,
+fails the gate. **No rule was dropped for looking historical.**
+
 ## Do not read or run `run-sequence.sh`
 
-`run-sequence.sh` is the operator's unattended queue drainer. At ~250 KB it is
-the largest file in the workspace, it is not your task, and reading it costs
-the context your task needs.
+`run-sequence.sh` is the operator's unattended queue drainer. At ~250 KB it is the largest file in
+the workspace, it is not your task, and reading it costs the context your task needs.
 
-**Do not read, inspect, verify or debug it, and do not invoke it.** Starting it
-is the operator's own action, from their own terminal.
+**Do not read, inspect, verify or debug it, and do not invoke it.** Starting it is the operator's
+own action, from their own terminal.
 
-Other files still mention it — as one of the ways a session gets started, or in
-a design note. Those mentions are background, not an instruction to go and open
-it. If `run-sequence.sh` looks like the cause of whatever you are investigating,
-say so and stop.
+Other files still mention it — as one of the ways a session gets started, or in a design note.
+Those mentions are background, not an instruction to go and open it. If `run-sequence.sh` looks
+like the cause of whatever you are investigating, say so and stop.
 
 ## 0. What this repository is
 
-This repository is **Auto-Pigeon Companion**, abbreviated **AUCOM**. Its expected
-location is:
+This repository is **Auto-Pigeon Companion**, abbreviated **AUCOM**. Its expected location is
+`mapper-code/auto-pigeon-companion/`. It is the program that runs on a user's own machine: it
+acquires and runs the toolchains a map needs, holds the profiles and approvals that say what may
+run, publishes and installs portable profiles, and joins a hosted game with verified content.
 
-```text
-mapper-code/auto-pigeon-companion/
+It is one of the repositories under `mapper-code/` and follows the same mapper-wide prompt/handoff
+workflow as every sibling. `README.md` is the user-facing manual for what the program does — it is
+large, it is maintained separately, and it is **not** an instruction payload; nothing here may be
+moved into it and no session is asked to read it whole.
+
+This file was created to carry the shared workflow rules, which this repo previously had nowhere to
+record. It deliberately does **not** invent engineering rules for this codebase; add those in a
+task that is actually about them, in the module that owns the subject.
+
+`auto-pigeon-launcher` (**AUL**) was merged into this repository and retired —
+`docs/agent/aucom.launcher-merge.md` is the authority, and the rule it leaves behind is that there
+is one implementation of each thing.
+
+## 1. Source of truth, in order
+
+When two documents disagree, the earlier one in this list wins.
+
+1. **The active prompt.** It names the work, the execution repository and the complete list of
+   repositories you may change.
+2. **HITL.** A decision the operator froze, recorded in a handoff or in a module here with its date.
+3. **`$MAPPER_ROOT/LLM/WORKFLOW.md`** — the mapper-wide prompt/handoff protocol, shared by every
+   repository. This file follows it exactly and does not restate it.
+4. **`$MAPPER_ROOT/LLM/DOCTRINE.md`** — the observability doctrine. Binding here in full:
+   instrument before theorising, a message without a duration is an opinion, and a handoff is the
+   case law.
+5. **The workspace root** — `mapper-code/AGENTS.md` and `mapper-code/CLAUDE.md`, which every
+   session here already loads. It is the authority on the cross-repository boundary, where durable
+   task material lives, the AUB port contract (9190) and the rule that **component addresses live
+   in `.env`, never in code**. Those are not restated here;
+   `docs/agent/aucom.component-addresses.md` explains why the copy that used to be was removed.
+6. **This file**, for the always-rules and the routes.
+7. **The module under `docs/agent/`** that the routing table names for your task. Each one is the
+   single authoritative home for its rules, and the gate fails a change that gives one rule two
+   homes.
+8. **The code and its tests.** When a module and the code disagree, that is a finding to report,
+   not a licence to pick one. In this repository that is unusually literal: `internal/threat`,
+   `internal/maturity`, `internal/release/native-support.json` and `job.RetentionLimits` are
+   documents the build parses, so a claim in prose that the code contradicts fails a test rather
+   than merely being wrong.
+
+## 2. The rules that bind every task in this repository
+
+These are unconditional. Everything else is routed.
+
+- **Resolve the task, then checkpoint, then work.** Prompts live in
+  `$MAPPER_ROOT/LLM/prompts/auto-pigeon-companion/`, handoffs in
+  `$MAPPER_ROOT/LLM/handoffs/auto-pigeon-companion/`. Read the newest handoff, then the prompt it
+  points at, then the next prompt. Before resolving one, check for unrecorded manual work and write
+  a `MANUAL_*` handoff first if any exists. Then
+  `python3 ../scripts/agent_task.py checkpoint --repo-root "$PWD" --status in_progress` before any
+  task edit, and a truthful `complete` / `partial` / `blocked` / `failed` plus `validate` before
+  stopping. `agent_task.py checkpoint` writes are not fully trusted once more than one prompt might
+  be outstanding — verify the resulting handoff's `prompt_path` before finishing.
+- **New prompts** are named `YYYYMMDD_NN_Title-Case-With-Dashes.md` per the shared convention and
+  carry both a `## Prerequisite` prose section and a `requires:` frontmatter block (`requires: []`
+  if none). The one prompt in the archive that predates that convention has no `NN`; per
+  `WORKFLOW.md`, its marker uses the whole filename stem.
+- **The handoff is the deliverable, not the terminal.** Nothing decisive may exist only in command
+  output, background-task output or scrollback. Create the canonical handoff near the START with
+  status `in_progress`, refresh it after each coherent phase and before any long-running command or
+  likely interruption, and make every checkpoint sufficient for a fresh session to continue without
+  replaying the transcript.
+- **Print `WORKFLOW.md`'s end-of-task marker as the literal last line of the final response**, at
+  every status and however the session was started. This repo **is** routable through
+  `run-agent.sh` — discovery reads `AUCOM` out of `.agent-repo.json`, and `./run-agent.sh --repos`
+  lists it — but sessions here are still often started by hand, and a hand-started session gets no
+  task context: the only `SessionStart` hook this repository has is graft's, which injects a
+  repository map and nothing about the task. So the marker rule holds whichever way the session
+  began, and so does resolving the task yourself when nothing resolved it for you.
+- **`go build ./...`, `go vet ./...` and `go test ./...` must all pass before a task is complete**,
+  and the suite is not decoration: it parses the threat matrix, pins the two maturity sentences,
+  derives the retention bounds and checks the native-support states, so a documentation change that
+  contradicts the code fails here rather than in review.
+- **Never edit a sibling repository** unless the active prompt names it as a mutation target. That
+  includes `auto-pigeon-launcher/`, which still exists and now carries only a deprecation notice.
+  Agents may inspect siblings and run their public CLI/API when a prompt needs it.
+- **Run-specific and generated material belongs under `$MAPPER_ROOT/LLM/`**, never in this
+  checkout: handoffs, reports, screenshots, test logs, generated bundles and acceptance records.
+- **No component may compile in where another component lives.** The workspace root is the
+  authority and carries the incident this came from; `docs/agent/aucom.component-addresses.md` says
+  why this file keeps no second copy, and what it means for a program that runs on somebody else's
+  machine.
+- **Update `README.md` in the same task** when a task adds or materially changes a user-visible
+  feature, with at least one executable example per new or changed CLI command or HTTP workflow.
+  *"Everything the page can do, the CLI can do too"* is a claim this repository has already had to
+  repair once (`aucom.approvals`); do not let a new surface make it false again.
+- **Quake II and Quake III are WORK IN PROGRESS, and no document may say otherwise.** The statement
+  is `internal/maturity`, keyed on AUB's `engine_family`, pinned by SHA-256 on both sides. Never
+  soften it, never derive one family's sentence from another's, and never let a profile document
+  switch it off. `docs/agent/aucom.quake2-maturity.md`, `docs/agent/aucom.quake3-maturity.md`.
+- **Context lifecycle is not yours.** `run-sequence.sh` owns it through a `PreCompact` hook that
+  blocks compaction, checkpoints the work and starts a fresh session on the same prompt. Do not
+  estimate your window, adopt a threshold, compact by hand, or stop an unattended run to ask for a
+  session reset.
+- **Get context from `graft` before grepping or opening source files.** This repository is indexed
+  in `graft/`: `graft ask "<task>" --source` to locate and understand, `graft grep "<literal>"`
+  when you need EVERY occurrence, `graft callers <symbol>` before renaming anything. The full
+  guidance is injected by graft's own `SessionStart` hook.
+- **A new or changed rule goes in ONE module**, with a link from here if it binds every task. A
+  second detailed copy of a rule is a gate failure, and the gate names both files.
+
+## 3. The routing table
+
+Every module is `docs/agent/<id>.md`. Nothing below is loaded at startup: read the one your task
+names. `topics` is what `--topic` matches; each module also declares the file globs it governs, and
+the router resolves those for you rather than making you read the table.
+
+**Acquiring and running somebody else's program**
+
+| module | the authority on | topics |
+| --- | --- | --- |
+| `aucom.extractor-acquisition` | The extractor is acquired, never embedded — catalogue, updates and the compatibility manifest | extractor, aue, acquisition, download, update, catalogue, manifest, signature, licence |
+| `aucom.extractor-execution` | Running it — the handshake, offline authority, bounded invocation, and what authorization is not | extractor, handshake, protocol, offline, bounds, timeout, authorization, verification |
+| `aucom.job-bounds` | A bound is not a measurement, and the bound comes from here | job, bounds, retention, logbuf, memory, disk, stress, limits |
+
+**Profiles, approvals and trust**
+
+| module | the authority on | topics |
+| --- | --- | --- |
+| `aucom.export-gate` | The export gate is the only way out, and trust does not travel in | publish, export, profile, portable, trust, community, install, deployment |
+| `aucom.approvals` | There is one writer of an approval, and it refuses | approval, grant, binding, digest, review, cli-parity |
+| `aucom.threat-model` | The threat model is code, and there is one writer of a mutable local file | threat, security, risk, matrix, review-date, lockfile, mitigation, adr |
+
+**Game families and joining**
+
+| module | the authority on | topics |
+| --- | --- | --- |
+| `aucom.quake2-maturity` | Quake II is work in progress, and no document may say otherwise | quake2, maturity, work-in-progress, engine-family, capability, toolchain |
+| `aucom.quake3-maturity` | Quake III is work in progress too, and it is not Quake II renumbered | quake3, q3map2, maturity, shader, patch, toolchain, dependencies |
+| `aucom.join-readiness` | Joining is one readiness model, and a link starts nothing | join, game, live-game, readiness, ticket, stage, assetsync, uri, engine |
+
+**Shipping it**
+
+| module | the authority on | topics |
+| --- | --- | --- |
+| `aucom.release-verification` | A build is not a verification, and five states keep them apart | release, build, artifacts, native, windows, macos, matrix, bundle, acceptance |
+| `aucom.launcher-merge` | It absorbed the Launcher (AUL), and there is one implementation of each thing | launcher, aul, merge, history, bootstrap, duplication |
+| `aucom.component-addresses` | Component addresses live in `.env`, never in code | addresses, env, ports, localhost, port-contract, endpoint |
+
+## 4. Using the router
+
+```sh
+# what should I read for this task? Paths and reasons — never the contents.
+../auto-pigeon-tools/scripts/agent_context_router.py --repo-root "$PWD" route \
+    --prompt "$MAPPER_ROOT/LLM/prompts/auto-pigeon-companion/<prompt>.md"
+../auto-pigeon-tools/scripts/agent_context_router.py --repo-root "$PWD" route --path internal/joinready/assess.go
+../auto-pigeon-tools/scripts/agent_context_router.py --repo-root "$PWD" route --topic windows --topic release
+
+# every module, its authority, its topics and the globs it governs
+../auto-pigeon-tools/scripts/agent_context_router.py --repo-root "$PWD" modules
+
+# the budget gate, and the accounting for this file's split
+../auto-pigeon-tools/scripts/agent_context_router.py --repo-root "$PWD" gate
+../auto-pigeon-tools/scripts/agent_context_router.py --repo-root "$PWD" sections | grep '5\.'
 ```
 
-It is one of the repositories under `mapper-code/`, and it follows the
-same mapper-wide prompt/handoff workflow as every sibling. See
-`README.md` for what the program itself does — this file covers only how
-agents work in it.
-
-This file was created to carry the shared workflow rules, which this repo
-previously had nowhere to record. It deliberately does **not** invent
-engineering rules for this codebase; add those in a task that is actually
-about them.
-
-### It absorbed the Launcher
-
-`auto-pigeon-launcher` (**AUL**) was a second, overlapping bootstrap of the
-same program. In `20260906_203` its history was merged into this
-repository and it was retired: `mapper-code/auto-pigeon-launcher/` still
-exists, still has all its branches, tags and source, and now carries only
-a deprecation notice pointing here. Nothing was deleted or archived
-remotely.
-
-What that means for work here:
-
-- AUL's commits are reachable from this repository's `main` through the
-  merge commit. `git log` covers both.
-- There is one implementation of each thing. If you find yourself adding
-  a second auth, config, CLI or web stack "for the launcher case", the
-  merge is being undone.
-- Do not mutate `auto-pigeon-launcher/` unless a prompt names it as a
-  mutation target, exactly as for any other sibling.
-
-## 1. THE EXTRACTOR IS NOT IN THIS BINARY, AND THERE IS NO THIRD WAY TO ONE (`AUE/AUB/AUCOM 211`)
-
-**Auto-Pigeon Extractor is a separate program under a different licence. It is
-downloaded against a signed catalogue, at a version a signed compatibility
-manifest names, and run as its own process. Nothing here contains it, embeds it,
-or claims a licence over it.**
-
-```text
-managed             a verified cache entry, at the version the manifest names
-developer override  AUCOM_AUE_BINARY, unverified, local, and labelled so
-```
-
-There is **no third way and no fallback between the two.** A managed resolution
-that fails is an error the user reads; it never quietly becomes an override, and
-an override is never quietly treated as verified.
-`internal/aue.Provenance.Verified` is the ONE place that distinction is
-recorded, it travels with every runner, and every surface that shows an
-extractor shows it. A caller that has to compute "was this verified" from four
-other fields is a caller that will one day compute it wrong.
-
-### What embedding cost, and why it is three separate faults
-
-`internal/aue/embed.go` copied a platform's extractor binary into this executable
-with `//go:embed`. It was never released, and it had to go for three unrelated
-reasons — a later change that fixes one of them has not fixed the others:
-
-1. **Licensing.** An MIT artifact contained and appeared to cover an AGPL
-   program, and a user had no way to tell whose bytes they were running.
-2. **Verification.** Nothing checked the staged binary. `//go:embed` resolves at
-   compile time, so a stale or wrong-platform file shipped silently and failed
-   on the user's machine.
-3. **Coupling.** A patched extractor needed a new Companion release.
-
-CI fails if it returns: `no-embedded-extractor` checks for the directory, for
-the directive, and for any committed executable anywhere in the tree.
-
-### It reuses the acquisition machinery; it is not a second updater
-
-`internal/acquire` verifies, downloads, caches and re-checks — the same verifier,
-the same sticky revocations, the same serial ratchet, the same cache every other
-managed tool uses. This package decides only WHICH version to ask for. A change
-to the verification chain therefore applies here with nothing kept in step, and
-a prompt that adds a second update path for the extractor is undoing that.
-
-### The compatibility manifest is a THIRD signed document, and it carries no digest
-
-`aucom.compatibility/1.0` maps a Companion version and a platform to a component
-version and a minimum protocol. Every fact about the BYTES — size, digest,
-signer, licence, source — stays in the catalogue and only there, so there is no
-second copy of a digest for a careless edit to make wrong. Two documents that
-both carry the digest can disagree; one carries the digest and the other carries
-the choice.
-
-**Overlapping rules are refused, not resolved by order.** A rule that depends on
-which one a reader's eye reaches first is a rule nobody can review, and a
-publisher who splits a range and gets the boundary wrong by one release would
-silently install the older build for everybody in the overlap. `Requirement`
-therefore returns *the* match rather than the first, and a later change that
-introduced a precedence order would have to delete that check first.
-
-### The protocol handshake, before the executable is used for anything
-
-A verified executable is not automatically one this build can talk to. **Majors
-equal, minor at least the required one** — never `>= major`, because a later
-major is defined as breaking. The rule lives in one function on each side of the
-boundary (`catalog.ProtocolSatisfies` here, `protocol.Satisfies` there) and a
-second call site implementing a laxer version of it is the failure mode.
-
-Without `min_protocol` the Companion would be trusting a version NUMBER to imply
-a contract, which is exactly the assumption a rebuilt or forked extractor breaks.
-
-### Offline is a different authority, never a weaker check
-
-`extractor-pin.json` records the requirement this machine last VERIFIED, beside
-`config.json` with the catalogue state because it records a decision and
-clearing a cache must not erase one. Offline resolution reads it and the
-handshake still runs against the minimum it carries.
-
-**The fallback happens only because the caller said `Offline`.** A verification
-that failed, a rollback attempt, an expired document or an unreachable server is
-a refusal and never becomes "use the older answer" — that is the difference
-between an offline mode and a way around the catalogue.
-
-### Every invocation is bounded, and the bounds are not decoration
-
-A timeout on the WHOLE run, because a process printing one line every nine
-minutes keeps a per-read deadline satisfied for ever. **SIGTERM first**, because
-the extractor's published contract says a supervised run ends deliberately on
-one and writes a record saying why; the grace period is a field, so the default
-is the patient production answer and a test can shorten it. A fresh working
-directory per invocation, removed afterwards. A bounded read, because a
-subprocess is not a trusted producer of unbounded output — and the cap is
-reported as the cap, not as whatever the child died of when the pipe closed.
-
-`RunJSON` refuses an empty body and trailing content. A subprocess can exit 0
-having printed a warning, half a document, or a document with something
-appended, and each of those decodes into a partially-filled struct a caller then
-acts on.
-
-### Authorization is not verification
-
-When the artifact is served by a backend that authorizes downloads,
-`acquire.Options.Authorize` rewrites the URL immediately before the fetch.
-Nothing else changes: the size, the digest and the signature chain are checked
-exactly as they are for a public URL. **Who let you fetch the bytes and whether
-the bytes are the right bytes are different questions with different answers**,
-and keeping them apart is what stops a compromised backend from being able to
-make this program run something.
-
-`Downloader` still holds no credentials and sends none. What the hook returns is
-a capability for one artifact valid for minutes — the pre-signed-URL shape
-`catalog.RedactURL` already exists to keep out of logs and records.
-
-### Publishing is executable, and holds no key here
-
-`companion catalog release` turns a component's release manifest into the two
-unsigned documents, validated against the rules a signature would otherwise make
-permanent — including the copyleft rule that refuses a package offering no
-corresponding source. `companion catalog sign` is a separate step, so a
-publisher reads what they are about to vouch for. **CI reads no secrets**, and a
-job of its own keeps it that way: a workflow that could sign from a pull request
-would be a workflow that publishes whatever a pull request contains.
-
-## 2. THE EXPORT GATE IS THE ONLY WAY OUT, AND TRUST DOES NOT TRAVEL IN (`AUB/AUP/AUG/AUCOM 213`)
-
-`AUCOM 204` defined the portable profile and `212` made one runnable. `20260906_213` made one
-publishable. `internal/publish` owns both directions; the README's *Publishing a profile, and taking
-somebody else's* section is the user-facing statement of them. Six things follow, and they bind every
-future prompt.
-
-1. **THERE IS ONE FUNCTION THAT PRODUCES BYTES TO PUBLISH, AND IT REFUSES.** `publish.PreviewOf`
-   calls `profile.Export`, which validates and canonicalizes, and canonicalization runs
-   `CheckPortable`. So a document naming an absolute path, a home directory, a network address or
-   anything shaped like a credential cannot be PREVIEWED — let alone published. That is what makes
-   "publishing a local binding is structurally impossible" a property of the code rather than a rule
-   somebody remembers. **Never add a second path to publishable bytes**, and never add a `--force`,
-   an `--allow-local` or a "publish this document as-is".
-
-2. **PUBLISHING NEEDS AN EXPLICIT CONFIRMATION AND INSTALLING NEEDS AN EXPLICIT APPROVAL.** Both are
-   parameters, not defaults: `Publish` refuses `confirmed: false` and `Apply` refuses
-   `approved: false` before writing ANYTHING — not even the document, because a document on disk is
-   one the local catalog lists, and listing something nobody agreed to is how a review becomes a
-   formality.
-
-3. **A DEPLOYMENT'S TRUST STATE NEVER BECOMES THIS MACHINE'S.** An installed profile is
-   `profile.TrustCommunity`, always. AUB's `builtin` is the ONE state `profile.Authorize` accepts
-   with no grant, and AUB's `verified` claims a catalogue signature this build did not check;
-   adopting either would let anybody who runs an AUB hand out an unreviewed run.
-   `TestADeploymentCannotHandOutTrustThisMachineDidNotCheck` fails a change that does. The badge is
-   carried as `Plan.DeploymentTrust` and shown, because it is real information about what somebody
-   with a stake in that deployment thinks — it is just not this machine's authorization.
-
-4. **THE DIGEST IS RECOMPUTED HERE AND THE CANONICAL FORM IS CHECKED HERE.** AUB deliberately does
-   not re-canonicalize, because RFC 8785 is this repository's algorithm; so this is the side that
-   proves it, by re-exporting the decoded document and comparing byte-for-byte. Never accept the
-   announced digest, and never install bytes that are not the canonical encoding of what they decode
-   to — a digest over a non-canonical encoding names bytes nobody else would produce for the same
-   document.
-
-5. **THE PORTABILITY CORPUS IS SHARED AND PINNED.** `internal/profile/testdata/portability-corpus.json`
-   is byte-identical to auto-pigeon-backend's copy and both repositories pin its SHA-256, because
-   neither can read the other's tree at test time. Changing what may never be published is a change
-   in two repositories, in one task, or in neither.
-
-6. **A WITHDRAWN VERSION IS INSTALLABLE, AND NEVER SILENTLY.** Reproducing a build that used one is a
-   legitimate reason to want it. The publisher's reason and any replacement they named travel with
-   the plan and are printed before an approval. Never refuse one, and never install one without
-   printing why it was withdrawn.
-
-**What must not be done to make something pass.** Do not add a flag that skips the preview or the
-approval. Do not map AUB's trust word onto `profile.Trust`. Do not trust an announced digest. Do not
-publish anything but `profile.Export`'s output. Do not send a `trust`, `moderation_state`, `verified`
-or `publisher` member in a publication — they do not exist in the request and this client must not
-grow them.
-
-## 3. QUAKE II IS WORK IN PROGRESS, AND NO DOCUMENT MAY SAY OTHERWISE (`AUP/AUCOM 215`)
-
-`20260906_215` added a Quake II path that works and is not finished, and the
-second half of that sentence is the part with machinery behind it.
-
-**The statement lives in `internal/maturity`, keyed on AUB's `engine_family`.**
-It is not a member of a profile document, and it must not become one. A profile
-is written by whoever publishes it; the first community Quake II toolchain to
-declare itself stable would be a community document switching off a warning this
-build stands behind. `maturity.Of(family)` is what *this build* says, a
-community document is subject to it exactly as a built-in one is, and every
-surface — CLI listings, `profile show`, `build preview`, a running build, the
-Build/Run/Profiles areas, AUP's own panes — renders the same
-`maturity.Quake2Message`. Its SHA-256 is pinned here and in AUP's
-`frontend/src/services/gameMaturity.ts`, the way the portability corpus is,
-because neither repository can read the other at test time.
-
-**The two toolchains have different capability ids on purpose.** `q1.bsp.compile`
-and `q2.bsp.compile`. A shared `bsp.compile` would make "which compiler runs
-this step" a question a pipeline answers by iteration order, and the wrong
-answer produces a Quake 1 BSP for a Quake II project.
-`TestAQuake2PipelineCannotResolveAgainstTheQuake1Toolchain` checks both
-directions. Never merge them.
-
-**Everything the Q2 documents claim about ericw-tools 2.x was measured**, by
-running 2.0.0-alpha7 against a synthetic Quake II map. Seven behaviours differ
-from the qualified Q1 line and each is written into the document with its
-reason: no `bin/` in the archive, `maputil`, `<stem>-vis.log` / `<stem>-light.log`
-written *beside the input*, the `<stem>.texinfo.json` that `light` reads back,
-`-lit` doing nothing, `bspinfo` writing files, and contents coming from the
-`.wal` rather than from the texture name. A future change that re-derives a Q2
-document from the Q1 one is undoing that.
-
-**The base game data root is required, and that follows from the last of those.**
-A Quake II compile with nothing bound at `game_root` exits 0 and writes a BSP
-with default flags, no playerclip and no sky. Making the binding optional would
-trade a refusal that names the binding for a map that looks built and is wrong.
-Three roots, bound separately: `tool_root`, `game_root` (`-basedir`),
-`content_root` (`-gamedir`).
-
-**An engine profile declares the actions upstream documents and no others.**
-FTEQW's Quake II profile has `join_server` alone, because upstream's own
-QuickStart says every local Quake II server needs gamecode FTEQW does not ship
-and Auto-Pigeon must not distribute. Yamagi uses `-datadir` and `+set game`, not
-`-basedir` and `-game`, because Yamagi's own filesystem source calls the latter
-deprecated. Adding an action to make a button appear is the failure mode here.
-
-**`internal/feedback` builds a report; it does not filter one.** There is no
-member of `feedback.Report` that can hold a map, a log or a path, so nothing has
-to be cleaned up. `Consent` is four booleans defaulting to none, and the report
-records what was chosen so "did not share" and "shared, and there was none" stay
-distinguishable. A diagnostic carries the *profile's declared* message, never
-the tool's line. A credential or a path is **refused and named**, using
-`profile.CheckPortable` and `job.Redactor` as detectors rather than as filters —
-quietly redacting would hand a user a document they believe they wrote. Nothing
-in this repository sends a report anywhere, and adding a destination is a
-decision about somebody else's data, not a convenience.
-
-## 4. QUAKE III IS WORK IN PROGRESS TOO, AND IT IS NOT QUAKE II RENUMBERED (`AUP/AUCOM 216`)
-
-`20260906_216` added a Quake III path on the pattern `215` established, and the
-places where it is deliberately NOT the same pattern are the ones that bind a
-future prompt.
-
-**Its sentence is its own.** `maturity.Quake3Message` names shader, patch and
-entity workflows because a Quake III map has a shader script and patches; the
-Quake II sentence does not, because a Quake II map has neither. Both are pinned
-here and in AUP's `frontend/src/services/gameMaturity.ts`, and
-`TestTheTwoSentencesSayDifferentThings` fails a change that derives one from the
-other. Adding a family is one row in one table on each side — every surface
-already reads it, and a surface that had to be told about a new game is a
-surface that would one day not be told.
-
-**There is no managed download for Q3Map2, and that is the decision, not a gap.**
-Upstream's Linux release is a `.7z` holding one AppImage of the whole NetRadiant
-editor; Windows is a 43 MB zip of the same; macOS has nothing; and `q3map2`
-resolves libassimp, libdraco, libminizip and libicu out of the bundle's own
-`../lib`, so there is no smaller artifact to prefer. `internal/acquire` unpacks
-zip and tar.gz. A prompt that adds a `managed_download` here has to add a
-catalogue entry for a map editor first, and `TestQ3Map2DeclaresNoManagedDownloadAndSaysWhy`
-is where it is asked to think about that.
-
-**Q3Map2 is one program with three stage switches**, where the EricW documents
-are several programs. Its capability ids are `q3.bsp.compile`, `q3.bsp.vis` and
-`q3.bsp.light` — a third set, not a merge — and
-`TestAPipelineCannotResolveAgainstAnotherGamesToolchain` now checks six pairs
-rather than two, because "it is all the same compiler anyway" is exactly the
-reasoning that would produce a Quake 1 BSP for a Quake III project.
-
-**Nine measured behaviours are written into the document, and each differs from
-both EricW toolchains.** There is no output argument at all — the BSP, portal
-and surface files appear beside the input, so every output is declared with
-`in_place` and an extension rather than a path. `-vis` needs the `.prt` and
-nothing else; `-light` refuses to start without BOTH `<stem>.srf` and
-`<stem>.map`, which is why the pipeline wires the map source into the lighting
-step as well as the compile. `-vis` without `-saveprt` deletes the portal file it
-was handed, so that switch is not an option. A leak exits 0 having written no
-BSP, so it is the missing required output that fails the job. A missing texture
-is a warning and exit 0. Lighting is nondeterministic above one thread. A
-re-derivation of the Q3 document from the Q1 or Q2 one is undoing all of that.
-
-**`internal/q3deps` reviews; it does not filter, and it does not repair.** It
-resolves what a map names against the archive about to be written, the user's
-content and the base game, and `package create --map` refuses on it. Four rules
-hold it up:
-
-1. **It agrees with the compiler, and that is a test.**
-   `testdata/q3map2-2.5.17n-report.txt` is what Q3Map2 actually printed for the
-   fixture map; the scan's `missing` set has to equal the shaders it could not
-   find an image for. A change to the parser that stops agreeing fails there.
-2. **The base game's shader scripts are read, out of `pak0.pk3` as well as
-   loose.** A review that called every `common/*` shader missing is a review a
-   user learns to click past — and one nobody reads is worse than none. What a
-   base-game shader pulls in is NOT followed: it is inside somebody else's PK3.
-3. **The limits are a member of the report**, not a paragraph in a README. A
-   model's internal references are not read, and the report says so where the
-   model is listed. Do not remove a limit sentence; add one when you add a gap.
-4. **`--accept-missing` requires `--reason`, prints the review first and prints
-   the reason back.** It is not a way to switch the check off, and there must
-   never be a flag that skips the review itself.
-
-**A face or patch shader name carries no `textures/` prefix** — measured both
-ways, including for `patchDef2`. The scan normalizes the way the compiler does
-and names the doubling when it sees it, because `textures/textures/…` reads like
-a missing file and is an authoring mistake.
-
-**ioquake3 declares all five actions** where FTEQW's Quake II profile declares
-one, and the difference is upstream's own download: `baseq3/vm/qagame.qvm` ships
-beside the engine, so a local Quake III server needs no third-party gamecode.
-What it still needs is `pak0.pk3`, which is id's. The generic id Tech 3 profile
-sends only `fs_basepath`, `fs_game`, `sv_maxclients`, `map` and `connect`, and
-has no dedicated-server action because the name of a dedicated binary is each
-project's own invention.
-
-**The compiler redirects `-fs_homepath` and the engines do not.** A build must
-read only what was bound to it; a player's settings, demos and screenshots
-belong where the engine puts them. Those are different requirements and must not
-be made consistent with each other.
-
-## 5. THE THREAT MODEL IS CODE, AND THERE IS ONE WRITER (`AUCOM/AUT 218`)
-
-`20260906_218` was an evidence pass, and the two things it left behind are things
-a later prompt can undo by accident. `docs/adr/0007` is the record; this is what
-binds a change.
-
-**`internal/threat` is checked by the build, and that is the point.** Each of its
-50 rows names the tests that are its evidence, and `threat.Check` PARSES every
-`_test.go` in the tree — parses, not greps, because a name in a comment is not a
-test and a matrix satisfiable by writing a comment is satisfiable by writing a
-comment. **If you rename or delete a test, fix the row that cited it.** Do not
-delete the row: a row that has lost its proof is information, and removing it is
-how the model becomes a description of a program that used to exist. A row is not
-a claim that something is impossible; it is a claim that a named test would fail
-if the mitigation were removed, which is the only kind of security claim that
-survives a refactor.
-
-**A residual risk has an owner and a review date, and an expired one FAILS THE
-BUILD.** That is the mechanism. When `TestTheThreatMatrixHoldsUp` fails on a
-date, look at the risk, decide again, and move the date or fix the risk — never
-delete the entry to make it pass, and never soften a `Mitigation` string instead
-of fixing code. A model that lists only what is fixed is a model nobody learns
-from, and `TestTheMatrixStillSaysWhatIsNotSolved` fails an emptied register.
-
-**Every mutable local file has one writer.** `internal/lockfile` is O_EXCL rather
-than flock because `syscall.Flock` is not on Windows and a dependency taken to
-lock a file in the user's own config directory would cost the empty module graph
-that T45 is about. Use `config.Update(path, mutate)` for a read-modify-write —
-never Load, change, Save, which is the lost update this replaced. The web
-server's persist hook is a MUTATION, not a value, for the same reason; a handler
-declares the fields it owns. `AUCOM/AUT 228` extended the same rule to
-`bindings.json`: every write goes through `binding.Update(path, mutate)`, because
-that file holds the GRANTS, and a lost update there costs an approval or brings
-back one somebody withdrew.
-
-**`catalog.SaveState` merges, and the merge is not optional.** Serials take the
-max, revocations take the union. That is the same ratchet the file already is,
-not a policy on top of it, and it exists because the read-to-write window spans a
-network fetch — a lock alone would either block every instance behind one slow
-server or be released before the write. A corrupt state file fails the WRITE as
-well as the read.
-
-**Zero external Go dependencies is a security property, not an aesthetic.**
-`release.TestThisProgramLinksNoExternalModule` reads the module graph out of the
-BINARY with `debug.ReadBuildInfo`, because `go.mod` states an intent and the
-binary states a fact. Adding a module is a decision about the artifact's licence
-and its supply chain: record it in `THIRD_PARTY_NOTICES.md` and in the matrix, in
-the same change.
-
-**A URL handler runs `game open` — which has no approval flag — on every platform.** The
-URL arrives as one argv element through a field code, quoted on Windows, with no
-shell anywhere. Never register a command that launches on arrival, and never add
-a flag to the handler. `internal/urischeme` performs the Linux and Windows
-registrations and REFUSES the macOS one, because LaunchServices reads the
-declaration out of the bundle and there is no supported way to register a scheme
-for a loose binary — inventing a third way is the failure mode. `Env.URIRegistrar`
-exists so no test ever touches the desktop of the machine running it.
-
-**A package script deletes nobody's data.** It runs as root on a machine that may
-have several users. `companion uninstall --purge --confirm` is the per-user
-command, it lists everything first, and it refuses a directory whose name is not
-`auto-pigeon-companion` — because `AUCOM_JOBS_DIR` pointing at `~/projects` must
-not make purging delete `~/projects`.
-
-**Nothing here is signed, and every document says so.** No Apple Developer ID and
-no Authenticode certificate exist. The procedures are written down in
-`build/macos/make-app-bundle.sh` and `build/windows/installer.iss`; the
-verification workflow reads no secret and a job of its own fails the moment one
-is added. Do not make the packaging imply otherwise, and do not put a key in the
-workflow a pull request runs.
-
-**AUT asks the question this repository cannot ask about itself.**
-`auto-pigeon-tools/scripts/aucom-security.sh` builds the binary and drives it
-through its documented CLI with `HOME` and the XDG variables pointed into a
-sandbox — the operating system's own mechanism, so no test-only fallback had to
-be added here. A change that makes a lane pass by adding an environment variable
-only a test reads is undoing that.
-
-## 6. THERE IS ONE WRITER OF AN APPROVAL, AND IT REFUSES (`AUCOM/AUT 228`)
-
-`AUT/AUCOM 219` found the one place the README's *"everything the page can do,
-the CLI can do too"* was false: `profile.NewGrant` had three call sites — engine
-profiles only, a deployment listing only, and the local API — so a TOOL profile
-somebody wrote and dropped into their profile folder could be validated, shown,
-digested and bound from a terminal, and then only ever RUN by starting the GUI
-server. `20260907_228` closed it, and what it left behind binds a later prompt.
-
-**`internal/approval.Service` is the one writer of a `profile.Grant`.** The local
-API holds one, `companion profile grant` holds one, and so does the approval half
-of `engine bind` and of `POST /api/v1/profiles/{id}/bind`. Two implementations of
-"record an approval" drift, and the one that drifts is the one that forgot a
-check — so a new surface takes this service, and never assembles a
-`binding.LocalBinding` with a `Grant` in it of its own. `publish/install.go` still
-writes one for a document arriving from a deployment listing, against a plan the
-user approved in the same call; that is the one remaining exception and it is
-reviewed by `TestNothingIsWrittenWithoutAnApproval`.
-
-**An approval names the exact document, and reviewing is not approving.**
-`Service.Grant` refuses an empty digest (`ErrDigestRequired`) and a digest that is
-not the document on this machine (`StaleDigestError`, which names both), BEFORE
-writing anything — including the binding, because a binding written by a refused
-approval is a state nobody asked for. `Service.Review` writes nothing at all, so
-"show me what this asks for" is safe to type. `companion profile grant <id>` with
-no decision prints the review and exits **2**: a script that left out `--approve`
-must not be able to read that as an approval.
-
-**The CLI contract is non-interactive and stays that way.** `--digest` says WHICH
-document and `--approve` says a person decided; `--confirm` withdraws. There is no
-prompt, because a prompt hangs automation, and a script that cannot approve a
-profile is a script that has to start the GUI server — which is the browser-only
-path this removed. Never add `--force`, `--yes`, or a flag that skips the review.
-
-**Binding is not approving, and a pipeline grants nothing to its tools.** Import
-writes a document; `acquire resolve --bind` and the setup form write where a
-program is; none of them writes a grant.
-`TestImportingAndBindingGrantNothing` and
-`TestApprovingAPipelineGrantsNothingToTheToolsItRuns` are where that is checked.
-
-**A changed document invalidates the grant even when it asks for LESS.** The
-grant is against bytes. A build that compared permission sets would let a
-narrower republication of the same version run unreviewed, which is why
-`TestAChangedDocumentInvalidatesTheGrantEvenWhenItAsksForLess` asserts the
-narrowness first and then the refusal.
-
-**A wrapped `*url.Error` no longer escapes a quote into the address.**
-`catalog.redactField` separates the punctuation from the address before parsing
-and puts it back afterwards, so `…/keyring.json%22:` reads `…/keyring.json:`.
-`RedactURL` still takes an address and still drops userinfo, query and fragment
-unconditionally — do not make it lenient about its input, and do not weaken the
-redaction to tidy a message.
-
-## 7. A BOUND IS NOT A MEASUREMENT, AND THE BOUND COMES FROM HERE (`AUCOM/AUT 229`)
-
-`218` wrote T19 — a tool's output is "bounded in memory and on disk" — and `219`
-walked a first day without ever testing it. `20260907_229` took the measurement,
-and what it left behind binds a later prompt.
-
-**`job.RetentionLimits` is the one published envelope, and it is DERIVED.** Every
-field is computed from the constants in `logbuf.go`, never restated beside them,
-so changing `headBytes` changes the bound the next measurement is held to in the
-same commit. `companion job limits --json` is how a harness reads it. A check
-that carries its own threshold passes whatever the program happens to do, which
-is exactly how a row can look measured and mean nothing — so **never hard-code a
-size into a stress check**, here or in AUT.
-
-**`Kept` and `Resident` are different numbers on purpose.** `KeptBytesPerStream`
-is head+tail, what survives the job. `ResidentBytesPerStream` is what a live
-capture may hold, which is larger: the tail is compacted at twice its bound
-rather than on every append, and a Go slice's capacity is not its length. A
-measurement compared against the kept figure would fail a correct build. Do not
-"simplify" them into one.
-
-**The line count is not a by-product of the diagnostic rules, and used to be.**
-`lineHandler` returns nil when an action declares none, `split` returned
-immediately on that nil, and so a job that wrote a megabyte over ten thousand
-lines recorded `lines: 0` — beside a `bytes` and a `dropped` that were both
-correct, which is what made it invisible for four prompts. Most profiles declare
-no rules. `emit` now counts first and offers the line to a rule second;
-`TestALineCountIsKeptWhenNoRuleAsksForOne` fails a change that puts the early
-return back.
-
-**SIGTERM being ignored is a case that now has a fixture.** Every cancellation
-test before this used the `sleep` helper, which dies on the polite signal — so
-the grace period elapsing and the forceful pass reaching a whole group were the
-two halves of `execution.supervise` nothing had ever run. The fixture traps
-SIGTERM three processes deep, and the assertion is that the process GROUP is
-empty afterwards, not that the leader is gone: a grandchild still holding the
-workspace is the failure the mechanism exists for, and no field of the job record
-would report it.
-
-**The measurement is AUT's, and it names the platform it ran on.**
-`auto-pigeon-tools/scripts/aucom-acceptance.sh stress` floods a single long-lived
-`companion serve` — one process across several rounds, because a fresh process
-per flood can only show that one run is bounded and the question is what is
-RETAINED between them. `--mode contract` is the CI shape and `--mode measure` is
-the native one. Where an operating system will not report comparable RSS the lane
-answers `manual_pending` with a command to type; **it never substitutes a file
-size, a heap statistic or a reading of the source**, and completion never claims
-a platform nobody measured.
-
-## 8. A BUILD IS NOT A VERIFICATION, AND FIVE STATES KEEP THEM APART (`AUT/AUCOM 231`)
-
-`build/release.sh` produces six artifacts. That is six statements that this code
-COMPILES for six targets, and it is not one statement about whether the program
-starts, registers a URI scheme, finds a compiler, writes a PAK or composes an
-engine command on any of them. `219` asked one Linux-amd64 agent to execute
-Windows, Linux-arm64 and macOS targets and to launch Quake without owned game
-data; none of that is something an agent on one machine can do, and none of the
-failures would have been a product defect. `231` made the evidence model honest
-and shipped the kit that closes a row.
-
-**`internal/release/native-support.json` is the declaration, and
-`StateOf` is the one derivation.** Five states, and `build_only` and
-`manual_pending` are the ABSENCE of evidence rather than weaker passes:
-
-```text
-native_pass     a bundle from that platform passed
-native_fail     a bundle from that platform failed
-manual_pending  a native host exists and nobody has run it yet
-build_only      an artifact is produced and no native host is declared
-unsupported     no artifact is produced
-```
-
-There is no branch from either of the middle two to `native_pass` that does not
-go through a verification record, and a verification record names the bundle and
-the digest it came from. `auto-pigeon-tools/scripts/aucom/matrix.py` implements
-the same rule in the same words over imported bundles, and reports a row this
-file claims that no bundle supports. Do not add a flag that accepts a build as
-evidence, and do not widen `built` into `supported` in a release note.
-
-**The kit ships INSIDE every artifact.** `acceptance/run-acceptance.sh` and
-`acceptance/run-acceptance.ps1`, plus `kit-options.json`, go into all six
-archives. A platform whose artifact nobody can run stays `build_only` until
-somebody with that machine runs it, and the only way that is a single
-instruction rather than a checkout and a toolchain is if the kit is in the
-download. Both entry points ship in every artifact, deliberately: a Linux
-machine with `pwsh` and a Windows machine with a POSIX shell are both real.
-
-**The LANES are in the program, once.** `internal/nativeacceptance` drives THIS
-BINARY as a child process, lane by lane. Two hand-written harnesses in two shell
-languages would be two contracts that agree until the day they do not, and only
-one of them would ever be executed by the person maintaining them. What is in
-the shell is the half a program cannot do for itself: verify the artifact's
-checksums BEFORE starting it, and read what the operating system calls the
-machine — which is what separates a native arm64 run from an amd64 artifact
-under Rosetta or Prism. `kit-options.json` is the one option table both scripts
-are checked against.
-
-**The bundle is CONSTRUCTED, not collected.** `internal/feedback`'s rule, for
-the same reason: a filter is only as good as the last person who thought about
-it, and a struct with no field for a path cannot leak one however carelessly a
-future lane is written. `Bundle.Validate` then refuses a document in which
-anything that still looks like an absolute path survived, and AUT re-checks the
-result against its own allow-list in another language before merging it. Three
-layers, and none of them is the mechanism alone.
-
-**The owned-game lane records SIX facts and has nowhere to put a seventh.**
-Family, profile and version, platform, the command SHAPE with paths replaced,
-the signal, the elapsed time. No lane copies, archives, hashes wholesale or
-uploads a byte of game data, and there is no flag that makes one. Preview and
-launch are separate rows because they are separate claims: a preview that
-printed a command is not evidence that an engine started.
-
-**The run is isolated, and the purge lane is why.** Every lane runs against a
-HOME the run made. `uninstall --purge` deletes configuration, granted profiles,
-the catalogue's revocation ratchet and licence acknowledgements — an acceptance
-run that did that to the operator's own machine would cost them the decisions
-they had made. The two things no environment variable moves are reported as
-`not_applicable` with the reason rather than performed: a Windows HKCU
-registration, which the installer owns, and a macOS bundle, which a loose binary
-does not have.
-
-**Quake II and Quake III stay visibly work in progress.** `companion release
-support` prints the game families beside the platforms and calls both of them
-experimental, in `internal/maturity`'s own sentences. A platform row and a
-family row are different axes and neither is allowed to stand in for the other.
-
-## 9. JOINING IS ONE READINESS MODEL, AND A LINK STARTS NOTHING (`AUB/AUG/AUCOM/AUT 244F`)
-
-`20260916 244F` made a hosted game joinable from the Companion's own Games area,
-with verified map files. What it left behind binds a later prompt.
-
-**`internal/joinready.Assess` is the one answer to "can this machine join".** The
-CLI (`game ready`, `game join`), the local API (`/api/v1/games/...`) and the page
-all render its report. Never compute a join state anywhere else, and never store
-one: it is derived from AUB's current answer and this machine's current state
-every time. `StateReadyForReview` is reported only after the JOB SERVICE previewed
-the command — a surface that shows Join on the strength of green steps is the
-failure this exists to stop.
-
-**Four things are kept apart and must stay apart.** AUB's Game Profile (read,
-never installed), the Engine Profile (local, approved per digest), the local
-binding (where the owned program and game are), and join content (redistributable
-client files). The host's runtime is a compatibility requirement and NEVER picks
-an executable. A host's published engine profile installs through
-`publish.PlanInstall`/`Apply` as `community` and nowhere else; the install
-re-plans and refuses when the digest changed since the review.
-
-**A ticket is spent only immediately before the review.** Setup (profile install,
-bindings, downloads) never mints or redeems one. `hostgame.Joiner.Prepare` mints,
-redeems, revalidates revision, package and endpoint against the report, and
-previews; `Launch` refuses an unapproved or expired plan and returns the running
-job for a second launch of the same join. The page keeps one
-`hostgame.Coordination` per process — a joiner per request with its own lock would
-let two tabs start two engines.
-
-**Join content is re-checked here, verified through assetsync, and staged
-atomically — and the owned game is never written.** `internal/joincontent.Check`
-applies AUB's manifest rules again on this machine; `Verify` recomputes the
-aggregate digest (pinned in both repositories: `sha256:cdd70f33…62cf`);
-`Stager.Stage` builds a whole tree in a temporary directory and renames it into
-place; `Lookup` refuses any extra file, link or changed byte. The engine is pointed
-at a MANAGED base directory whose base-game folders are symbolic links to the
-user's installation. Do not stage into `game_root`, and do not copy game data.
-A Quake 1 `join_server` passes `-basedir .` and runs in the stage, because vkQuake
-keeps only 255 characters of its command line (`TestAQuake1JoinPutsNoFolderOnTheCommandLine`);
-do not put a folder path back on that line. The engine writes its settings into
-the stage, so `Joiner.Assess` rebuilds a verified-but-spoiled stage from the
-object store — never under an active join, and never by relaxing `Lookup`.
-
-**The `autopigeon://` handler is `game open`, and it has no approval flag.** It
-validates the link's shape before anything else, records it through
-`internal/joinintent` (the ticket for at most its two-minute TTL, removed once
-redeemed, deduplicated by digest), and starts or raises the page. The server
-redeems it once when the page asks. Never make the handler resolve, download or
-launch.
-
-## Cross-repository boundary
-
-Agents may inspect sibling repositories and run their public CLI/API when
-a prompt needs it. Do not edit, stage, commit, or push a sibling
-repository unless the prompt explicitly names it as a mutation target.
-
-When a task adds or changes a user-visible feature, update `README.md` in
-the same task. New or changed CLI/API behavior requires an executable
-example.
-
-## Prompt queue and handoff workflow
-
-See `$MAPPER_ROOT/LLM/WORKFLOW.md` for the full mapper-wide protocol
-(prompt/handoff layout, how the next prompt is selected, prerequisite
-declarations, manual-work handoffs, the end-of-task marker). This repo
-follows it exactly; the items below are what's specific to working in
-*this* repo.
-
-- Prompts live in `$MAPPER_ROOT/LLM/prompts/auto-pigeon-companion/`,
-  handoffs in `$MAPPER_ROOT/LLM/handoffs/auto-pigeon-companion/`.
-- New prompts: name them `YYYYMMDD_NN_Title-Case-With-Dashes.md` per the
-  shared convention, and give them both a `## Prerequisite` prose section
-  and a `requires:` YAML frontmatter block (`requires: []` if none). The
-  one prompt already in the archive predates that convention and has no
-  `NN`; per `WORKFLOW.md`, its marker uses the whole filename stem.
-- Session start: before resolving the next prompt, check for unrecorded
-  manual work (see WORKFLOW.md) and write a `MANUAL_*` handoff first if
-  any exists.
-- End of every task: print `WORKFLOW.md`'s end-of-task marker as the
-  literal last line of the final response. **Unconditionally** — every
-  status, and however the session was started (`run-agent.sh`,
-  `run-sequence.sh`, or a bare `claude` typed here). If nothing injected
-  the prompt number, derive it: alias from `.agent-repo.json`, `NN` from
-  the prompt filename. If there is no prompt file at all, print the
-  manual-work form. `WORKFLOW.md` has the format and the derivation
-  steps; do not restate the format here.
-- `agent_task.py checkpoint` writes are not fully trusted once more than
-  one prompt might be outstanding -- verify the resulting handoff's
-  `prompt_path` before finishing; write by hand if it's wrong (see
-  WORKFLOW.md for why).
-
-This repo **is** routable through `run-agent.sh`. That script no longer
-recites an alias table: it discovers one from every checkout's
-`.agent-repo.json`, so `./run-agent.sh claude AUCOM` works, and
-`./run-agent.sh --repos` lists `AUCOM auto-pigeon-companion` alongside its
-siblings. Verify with that command rather than trusting this sentence.
-
-Sessions here are still often started by hand — `run-sequence.sh`, or a
-bare `claude` typed in this directory — and a hand-started session gets no
-task context: the only `SessionStart` hook this repo has is graft's, which
-refreshes the code graph and injects a repository map, not a prompt or a
-handoff. So the unconditional marker rule above holds whichever way the
-session began, and so does resolving the task yourself when nothing
-resolved it for you.
-
-## Session continuity and context-budget safety
-
-Same rules as every other repo under `mapper-code/` — see
-`$MAPPER_ROOT/LLM/WORKFLOW.md` and `CLAUDE.md` in this repo. Create the
-task's canonical handoff near the start with status `in_progress`,
-refresh it after each coherent phase, and never rely on chat or terminal
-scrollback to preserve anything decisive.
-
-## Component addresses live in `.env`, never in code
-
-**No component may compile in where another component lives.** Not as a constant, not as a
-fallback, not as a "last resort" default, not in a test fixture that production code reads. No
-`localhost`, no `127.0.0.1`, no `192.168.*`, no port number standing in for a service.
-
-### Why this is a rule and not a preference
-
-`20260807_02` was reported like this: *"'Active Sessions' sends me to `http://127.0.0.1:5174/` even
-though in auto-pigeon `.env` there is `AUTO_PIGEON_GALLERY_BASE_URL=http://192.168.0.33:5174/`."*
-Both halves were true at once. Two things had gone wrong and each was invisible on its own:
-
-1. a **duplicate** `AUTO_PIGEON_GALLERY_BASE_URL` line had been appended below the hand-written one,
-   and a `.env` is *sourced*, so the last line silently won;
-2. `launch-aup.sh` set AUG's address in AUP's sibling but never set AUP's copy of AUG's — the link
-   was wired in one direction only.
-
-Neither would have reached a user if the code had had no opinion about where AUG was. Instead a
-compiled-in `127.0.0.1:5174` turned a misconfiguration into a plausible-looking wrong answer, on a
-LAN, where a loopback address means *the reader's own machine* and can never work. A missing address
-that says so gets fixed in an afternoon; a wrong address that looks right gets reported three times.
-
-### What to do instead
-
-- **Add a variable to that component's `.env` / `.env.example`, with a comment saying what reads it.**
-- **Test it**, by running the thing and watching it use the configured value.
-- **Then document it** in this file and in the component's `README.md`.
-- **If you cannot put it in `.env` — stop and ask the human.** Do not invent a fallback address to
-  keep moving.
-- Whoever brings the stack up wires **both** directions. `launch-aup.sh` is the one place that knows
-  the ports that were actually claimed, so it is the one place that writes them into each `.env`.
-
-### The one permitted derivation
-
-A page may use **its own origin** — `location.hostname`, `location.protocol`. That is not a
-hardcoded location, it is the single address the reader is already known to be able to reach, and it
-is the right answer whenever two services are served from one host. A **port** cannot be derived
-that way, so an origin that needs a port needs a variable.
-
-### When the address is missing
-
-Say so, in the place the user is. An unconfigured address is an error the user must act on — in AUP
-that means a modal per `DESIGN.md` §10, naming the variable — never a silent fallback and never a
-button that goes somewhere wrong.
+A prompt may name modules itself with an optional `context_docs:` list in its frontmatter — module
+ids or module paths — read by the one frontmatter decoder, so a prompt without it reads exactly as
+it did before.
+
+**A comment elsewhere in this repository that cites `AGENTS.md §2` or `§3d` is still right, and
+`sections` is what resolves it.** The module bodies keep their original heading lines verbatim, so
+`sections | grep '5\.'` answers *which file* that section now lives in, in one command. Nothing was
+renumbered.
+
+The router names files and reasons and **never concatenates them**; its budgets are engineering
+budgets over the words an agent loads before anybody types anything. And no `@import` may be added
+to `AGENTS.md` or `CLAUDE.md` to "link" a module: `@` is EAGER, so it would put that module's whole
+text back in the startup set, and the gate fails it. `auto-pigeon-tools/docs/agent/README.md` is
+the authority on the module schema and the route shape; `docs/agent/README.md` here says what is
+specific to this repository.

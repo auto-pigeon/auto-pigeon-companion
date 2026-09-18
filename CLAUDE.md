@@ -2,7 +2,10 @@
 
 # Claude Code delivery rules
 
-Claude Code must follow the imported repository instructions above.
+`AGENTS.md` above holds this repository's always-rules, its source-of-truth order and the routing
+table for `docs/agent/`. Claude Code must follow it. What is below is the part that is specifically
+about how a Claude Code session here reports its work — it is not repeated in `AGENTS.md`, and
+`AGENTS.md`'s rules are not repeated here.
 
 This repository is routable through `run-agent.sh` — discovery reads the
 `AUCOM` alias out of `.agent-repo.json`, and `./run-agent.sh --repos`
@@ -15,6 +18,15 @@ read the newest handoff in
 `$MAPPER_ROOT/LLM/handoffs/auto-pigeon-companion/`, then the prompt it
 points at, then the next prompt in
 `$MAPPER_ROOT/LLM/prompts/auto-pigeon-companion/`.
+
+Then ask the router what this task should read, rather than reading everything:
+
+```sh
+../auto-pigeon-tools/scripts/agent_context_router.py --repo-root "$PWD" route --prompt <the resolved prompt path>
+```
+
+It answers with module paths and the reason each was selected. It never
+prints a module's contents, and reading a routed module is your decision.
 
 The terminal is a work surface, not the user handoff. Do not leave any
 substantive completion information only in tool output, command output,
@@ -70,7 +82,7 @@ written. If the task had no prompt file at all, print the manual-work
 form (`I COMPLETED MANUAL WORK ON: AUCOM`) rather than nothing.
 `WORKFLOW.md` has the full status vocabulary and alias table.
 
-# Context-budget and stale-session rules
+# Checkpoint discipline
 
 Create the canonical handoff near the start of every non-trivial task with
 status `in_progress`. Refresh it after each coherent phase and before any
@@ -79,6 +91,12 @@ checkpoint sufficient for a new session to continue without replaying the
 transcript. When resuming after an idle period or a usage-window reset,
 prefer a fresh session that reads the newest handoff over a bare
 "continue" into a stale one.
+
+**Context lifecycle belongs to `run-sequence.sh`, not to you** —
+`AGENTS.md` §2. Do not work out how full your window is, do not adopt a
+threshold, do not compact by hand, and do not stop an unattended run to
+ask for a session reset. The discipline above is about the handoff, which
+is a deliverable; it is not a context policy.
 
 # Compact instructions
 
