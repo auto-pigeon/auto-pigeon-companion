@@ -22,7 +22,7 @@ import (
 // what somebody else reads to find out what produced it, and may be read by a
 // build of the Companion older or newer than the one that wrote it. So it is
 // versioned by name and refused rather than half-read.
-const SchemaVersion = "aucom.build-manifest/1.1"
+const SchemaVersion = "aucom.build-manifest/1.2"
 
 // readableSchemas is every version this build can read.
 //
@@ -31,10 +31,15 @@ const SchemaVersion = "aucom.build-manifest/1.1"
 // valid instance of, so refusing 1.0 would make this build unable to read the
 // manifests it wrote last week for nothing. What 1.1 adds is
 // [FileRecord.Source]: where an input came from, which a 1.0 manifest simply
-// does not record.
+// does not record. What 1.2 adds is [Manifest.Roots]: the directories a build
+// was given, and the identity of the AUB texture bundle that supplied one
+// (`AUCOM/AUE/AUT 246I1`). Both are additive, and every older manifest stays
+// readable — `companion build show` on a manifest written last week must keep
+// working, and a test pins that.
 var readableSchemas = map[string]bool{
 	"aucom.build-manifest/1.0": true,
 	"aucom.build-manifest/1.1": true,
+	"aucom.build-manifest/1.2": true,
 }
 
 // ManifestFileName is what the manifest is called inside a build directory.
@@ -239,7 +244,15 @@ type Manifest struct {
 	FinishedAt time.Time `json:"finished_at,omitempty"`
 	DurationMS int64     `json:"duration_ms,omitempty"`
 
-	Inputs  []FileRecord `json:"inputs,omitempty"`
+	Inputs []FileRecord `json:"inputs,omitempty"`
+	// Roots are the directories this build was given for one run: which role,
+	// where it was on this machine, what access the action declared, and — for
+	// an AUB texture bundle — the map revision, the bundle digest, the ordered
+	// WAD declaration and every carried file's digest.
+	//
+	// Added by `aucom.build-manifest/1.2`. A 1.0 or 1.1 manifest simply has no
+	// roots, which is exactly what those builds had.
+	Roots   []RootRecord `json:"roots,omitempty"`
 	Tools   []ToolRecord `json:"tools,omitempty"`
 	Steps   []Step       `json:"steps"`
 	Outputs []FileRecord `json:"outputs,omitempty"`
@@ -303,6 +316,32 @@ func (m *Manifest) computeKey(roots []string) {
 	write("platform=%s", m.Platform)
 	for _, input := range m.Inputs {
 		write("input=%s:%s:%s", input.Name, input.Role, input.SHA256)
+	}
+	// A root contributes its ROLE and the identity of what filled it, and never
+	// its absolute path: two machines that built from the same verified bundle
+	// built the same thing, and the directory it was cached in is not part of
+	// the recipe. A local directory the user pointed at has no identity, so
+	// what is recorded is that the role was supplied from one — which still
+	// changes the key, because a build with a texture folder is not the same
+	// build as one without.
+	for _, root := range m.Roots {
+		write("root=%s:%s", root.Role, root.Access)
+		switch {
+		case root.Source == nil:
+			write("root-source=unrecorded")
+		case root.Source.Bundle != nil:
+			bundle := root.Source.Bundle
+			write("root-bundle=%s:%s@%d:%s:%t",
+				bundle.Schema, bundle.MapID, bundle.Revision, bundle.Digest, bundle.CompilerReady)
+			for order, name := range bundle.WADsDeclared {
+				write("root-wad%d=%s", order, name)
+			}
+			for _, file := range bundle.Files {
+				write("root-file=%s:%s", file.Path, file.SHA256)
+			}
+		default:
+			write("root-source=%s", root.Source.Kind)
+		}
 	}
 	for _, tool := range m.Tools {
 		write("tool=%s@%s=%s:%s", tool.Profile.ID, tool.Profile.Version, tool.Profile.Digest, tool.ToolVersion)

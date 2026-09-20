@@ -106,7 +106,25 @@ type Request struct {
 	Sources map[string]SourceRef
 
 	// Inputs maps a declared pipeline input to a file on this machine.
+	//
+	// An input is one FILE. A directory is a root — see Roots, and see
+	// roots.go for why the two are different questions rather than one
+	// question with a lenient validator.
 	Inputs map[string]string
+
+	// Roots maps a root role to a directory on this machine, for this build
+	// only.
+	//
+	// It is how a verified AUB texture bundle becomes the `content_root` that
+	// EricW's `qbsp` is given with `-wadpath`, without the bundle's directory
+	// being written into the persistent tool binding. Every rule about which
+	// roles may be supplied, and what a supplied role must be, is in roots.go
+	// and is checked before anything runs.
+	Roots map[string]string
+	// RootSources names where a supplied root's contents came from, keyed by
+	// the same role Roots is. Optional, in the way Sources is: a directory the
+	// user pointed at has no identity, and its absence is recorded as absence.
+	RootSources map[string]RootSource
 	// Options overrides a step's options: step id -> option name -> value.
 	// Checked against the resolved action's own [profile.OptionSpec], so an
 	// override cannot be a value the tool's author did not allow.
@@ -135,6 +153,14 @@ func (r *Runner) Run(ctx context.Context, request Request) (*Manifest, error) {
 		return nil, err
 	}
 
+	// Before a directory is created or a byte is downloaded: a build that
+	// supplies a root no step declares is refused now rather than after two
+	// stages have compiled.
+	roots, err := checkRoots(request, steps)
+	if err != nil {
+		return nil, err
+	}
+
 	id, err := NewID(r.options.Now())
 	if err != nil {
 		return nil, err
@@ -157,6 +183,7 @@ func (r *Runner) Run(ctx context.Context, request Request) (*Manifest, error) {
 		Strict:        request.Strict,
 		StartedAt:     r.options.Now(),
 		Directory:     dir,
+		Roots:         roots,
 	}
 
 	// Everything the pipeline declared, in order, before anything runs. A step
@@ -266,6 +293,12 @@ func (r *Runner) Preview(request Request) (*Manifest, error) {
 		StartedAt:     r.options.Now(),
 	}
 	manifest.Tools = r.tools(steps)
+	// Checked in a preview as well as in a run. A preview whose job is to say
+	// "this is what would happen" must refuse the same requests the run does,
+	// or the user finds out at stage three.
+	if manifest.Roots, err = checkRoots(request, steps); err != nil {
+		return nil, err
+	}
 
 	// Where the user's files would be after the build copied them in, and where
 	// the executor would stage them. Placeholders rather than a real directory:
@@ -395,6 +428,16 @@ func (r *Runner) previewStep(request Request, resolved profile.ResolvedStep, wir
 		for name, path := range local.Executables {
 			executables[name] = path
 		}
+	}
+	// The request's roots, over the binding's, exactly as [Runner.stepRequest]
+	// merges them. Preview and execution therefore resolve to the same argv
+	// after path substitution, which is the property comparePreview checks and
+	// the reason a `-wadpath` shown in a review is the one that runs.
+	for role, path := range request.Roots {
+		if containsString(protectedRoots, role) {
+			continue
+		}
+		roots[role] = path
 	}
 	if roots[profile.RootToolInstall] == "" {
 		roots[profile.RootToolInstall] = "<tool-root>"
@@ -594,16 +637,27 @@ func (r *Runner) stepRequest(request Request, layout layout, resolved profile.Re
 		}
 	}
 
+	// The build directory, so that every file a step reads is inside a root the
+	// executor was told about, plus whatever roots this build was given. The
+	// build root is written LAST and is therefore not overridable — checkRoots
+	// has already refused a request that tried, and this is the second half of
+	// that rule, in the one place the map is assembled.
+	roots := map[string]string{}
+	for role, path := range request.Roots {
+		if containsString(protectedRoots, role) {
+			continue
+		}
+		roots[role] = path
+	}
+	roots[profile.RootBuild] = layout.Dir
+
 	return job.Request{
 		ProfileID: resolved.Profile.Meta.ID,
 		ActionID:  resolved.Action.ID,
 		Inputs:    inputs,
 		Options:   options,
-		// The build directory, so that every file a step reads is inside a root
-		// the executor was told about. Nothing else is added: the tool's own
-		// install root and the user's other roots come from the binding.
-		Roots: map[string]string{profile.RootBuild: layout.Dir},
-		Label: request.Label,
+		Roots:     roots,
+		Label:     request.Label,
 	}, options, records, nil
 }
 
@@ -815,6 +869,12 @@ func (r *Runner) finish(manifest *Manifest) (*Manifest, error) {
 // is recorded separately, which is the part that means something.
 func (r *Runner) generalizeRoots(manifest *Manifest) []string {
 	roots := []string{manifest.Directory, r.options.Service.Store().Root()}
+	// A supplied root is an absolute path on one machine. Its IDENTITY — the
+	// bundle digest, the declaration order, each file's digest — is in the key;
+	// where it happens to be cached is not.
+	for _, root := range manifest.Roots {
+		roots = append(roots, root.Path)
+	}
 	for _, tool := range manifest.Tools {
 		if local, bound := r.binding(tool.Profile.ID); bound {
 			for _, path := range local.Roots {

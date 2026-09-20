@@ -325,3 +325,10 @@ func (e Env) lookup(r ref, source string) (string, error) {
 	sort.Strings(known)
 	return "", &ErrUnresolved{Ref: r.String(), Template: source, Known: known}
 }
+
+// RootRoles is the closed set of root roles, for a caller that has to check one
+// it was handed. A copy is returned: the set is a contract and nothing outside
+// this package extends it.
+func RootRoles() []string {
+	return append([]string(nil), rootRoles...)
+}

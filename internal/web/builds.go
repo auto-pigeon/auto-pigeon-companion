@@ -315,11 +315,49 @@ func inputPayload(inputs []profile.InputSpec, family string) []map[string]any {
 type buildRequestBody struct {
 	Pipeline string `json:"pipeline"`
 	// Inputs maps a declared pipeline input to a path on this machine, or to an
-	// `aub:<type>/<id>@<revision>` reference — see internal/assetref.
-	Inputs  map[string]string            `json:"inputs,omitempty"`
+	// `aub:<type>/<id>@<revision>` reference — see internal/assetref. Each one
+	// is a FILE.
+	Inputs map[string]string `json:"inputs,omitempty"`
+	// Roots maps a root role to a DIRECTORY on this machine, for this build
+	// only — `content_root` is the texture folder EricW's `qbsp` is given with
+	// `-wadpath`. Additive: a page that sends none behaves exactly as before.
+	//
+	// `AUCOM/AUT 246I` classified the Quake 1 texture input as a folder in the
+	// page and in internal/profile and left this request model alone, so the
+	// folder the user chose went through `checkOpenFile` and was rejected as
+	// "not a file". This field is the other half of that fix.
+	Roots   map[string]string            `json:"roots,omitempty"`
 	Options map[string]map[string]string `json:"options,omitempty"`
 	Label   string                       `json:"label,omitempty"`
 	Strict  bool                         `json:"strict,omitempty"`
+}
+
+// resolveRoots checks each supplied root as a DIRECTORY.
+//
+// Checked here, by name, for the reason the inputs are: a message that says
+// which root was wrong is one the user can act on, and the alternative is a
+// failure from inside the build naming a path and not a field.
+//
+// What it does NOT do is invent provenance. A directory a user chose is a
+// directory a user chose; the Build & Run coordinator, which holds a verified
+// bundle, records the bundle itself.
+func (s *Server) resolveRoots(request buildRequestBody) (
+	map[string]string, map[string]build.RootSource, error) {
+	if len(request.Roots) == 0 {
+		return nil, nil, nil
+	}
+	roots := make(map[string]string, len(request.Roots))
+	sources := make(map[string]build.RootSource, len(request.Roots))
+	for role, value := range request.Roots {
+		path, err := checkDirectory(value)
+		if err != nil {
+			return nil, nil, fmt.Errorf("the %q folder: %w", role, err)
+		}
+		roots[role] = path
+		sources[role] = build.RootSource{Kind: build.RootFromLocalDirectory}
+	}
+
+	return roots, sources, nil
 }
 
 // resolveInputs turns the request's inputs into files, fetching from AUB where
@@ -406,13 +444,20 @@ func (s *Server) handleBuildPreview(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	roots, rootSources, err := s.resolveRoots(request)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
 	manifest, err := runner.Preview(build.Request{
-		PipelineID: request.Pipeline,
-		Inputs:     inputs,
-		Sources:    sources,
-		Options:    request.Options,
-		Label:      request.Label,
-		Strict:     request.Strict,
+		PipelineID:  request.Pipeline,
+		Inputs:      inputs,
+		Sources:     sources,
+		Roots:       roots,
+		RootSources: rootSources,
+		Options:     request.Options,
+		Label:       request.Label,
+		Strict:      request.Strict,
 	})
 	if err != nil {
 		writeError(w, jobStatus(err), err)
@@ -445,6 +490,11 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 	inputs, sources, err := s.resolveInputs(r.Context(), request)
 	if err != nil {
 		writeError(w, aubStatus(err), err)
+		return
+	}
+	roots, rootSources, err := s.resolveRoots(request)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
 		return
 	}
 
@@ -480,13 +530,15 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		defer cancel()
 		manifest, err := runner.Run(ctx, build.Request{
-			PipelineID: request.Pipeline,
-			Inputs:     inputs,
-			Sources:    sources,
-			Options:    request.Options,
-			Label:      request.Label,
-			Strict:     request.Strict,
-			Mirror:     run.log,
+			PipelineID:  request.Pipeline,
+			Inputs:      inputs,
+			Sources:     sources,
+			Roots:       roots,
+			RootSources: rootSources,
+			Options:     request.Options,
+			Label:       request.Label,
+			Strict:      request.Strict,
+			Mirror:      run.log,
 		})
 		run.finish(manifest, err)
 		if run.ID == "" {

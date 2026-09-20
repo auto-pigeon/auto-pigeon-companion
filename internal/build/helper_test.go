@@ -67,11 +67,29 @@ func helperMain(args []string) int {
 			}
 			rest = rest[1:]
 		}
+		// `-wadpath <directory>`, the way the real qbsp takes it: the flag and
+		// the directory are two argv elements, and the fixture reads the
+		// directory so a test can prove the compiler was handed the right one.
+		wadpath := ""
+		if len(rest) >= 2 && rest[0] == "-wadpath" {
+			wadpath = rest[1]
+			rest = rest[2:]
+		}
 		if len(rest) != 2 {
 			fmt.Fprintln(os.Stderr, "helper: compile takes a source and a destination")
 			return 2
 		}
 		source, destination := rest[0], rest[1]
+		if wadpath != "" {
+			names, readErr := os.ReadDir(wadpath)
+			if readErr != nil {
+				fmt.Fprintln(os.Stderr, "helper: -wadpath", readErr)
+				return 1
+			}
+			for _, name := range names {
+				fmt.Println("wadpath holds", name.Name())
+			}
+		}
 		contents, err := os.ReadFile(source)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "helper:", err)
@@ -216,7 +234,10 @@ func fixtureTool(t *testing.T, id string, capabilityPrefix string, compileMode s
 	default:
 		compileArgs = []any{helperFlag, compileMode}
 	}
-	compileArgs = append(compileArgs, "{input.source_map}", "{output.bsp}")
+	compileArgs = append(compileArgs,
+		map[string]any{"value": "-wadpath", "when": map[string]any{"root": "content_root"}},
+		map[string]any{"value": "{root.content_root}", "when": map[string]any{"root": "content_root"}},
+		"{input.source_map}", "{output.bsp}")
 
 	document := map[string]any{
 		"schema_version": "aucom.profile/1.1",
@@ -263,7 +284,15 @@ func fixtureTool(t *testing.T, id string, capabilityPrefix string, compileMode s
 					{"id": "leak", "match": "Reached occupant", "severity": "error", "message": "The map leaks."},
 					{"id": "warned", "match": "*** WARNING", "severity": "error", "message": "The compiler warned about something."},
 				},
-				"roots":           []map[string]any{{"role": "workspace", "access": "read_write", "purpose": "compile"}},
+				"roots": []map[string]any{
+					{"role": "workspace", "access": "read_write", "purpose": "compile"},
+					// The EricW `-wadpath` shape: an optional read-only content
+					// root, passed only when one is set. Declared on the
+					// compile action alone, exactly as the real Q1 profile
+					// declares it, so a test can prove the later stages do not
+					// receive it.
+					{"role": "content_root", "access": "read", "optional": true, "purpose": "find the texture WADs the map names"},
+				},
 				"timeout_seconds": 120,
 			},
 			{

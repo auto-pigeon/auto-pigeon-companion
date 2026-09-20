@@ -25,7 +25,7 @@ import (
 // and nothing else.
 
 const buildUsage = `usage:
-  companion build run     --pipeline <id> [--input n=path]... [--option step.name=v]... [--strict] [--json]
+  companion build run     --pipeline <id> [--input n=path]... [--root role=dir]... [--option step.name=v]... [--strict] [--json]
   companion build preview --pipeline <id> [same flags]     resolve every stage, start nothing
   companion build list    [--limit <n>] [--json]
   companion build show    <build-id> [--json]
@@ -143,6 +143,13 @@ func buildRun(env *Env, args []string, previewOnly bool) int {
 	set.Var(inputs, "input",
 		"a pipeline input, as name=path or name=aub:<type>/<asset_id>[@<revision>][#<file>] (repeatable)")
 	set.Var(options, "option", "override a step's option, as step.name=value (repeatable)")
+	// `AUCOM/AUE/AUT 246I1`: a DIRECTORY a step declared, for this build only.
+	// The parity half of the page's texture folder — "everything the page can
+	// do, the CLI can do too" — and the way a verified texture bundle becomes
+	// `-wadpath` without touching the binding the user granted.
+	roots := pairs{}
+	set.Var(roots, "root",
+		"a directory a step declared, as role=path — for example content_root=/path/to/wads (repeatable)")
 	strict := set.Bool("strict", false, "fail the build when any stage reports an error-severity diagnostic")
 	quiet := set.Bool("quiet", false, "do not mirror the tools' output to the terminal")
 	asJSON := set.Bool("json", false, "print the build manifest as JSON")
@@ -188,13 +195,20 @@ func buildRun(env *Env, args []string, previewOnly bool) int {
 		return fail(env, err)
 	}
 
+	requestRoots, rootSources, err := resolveBuildRoots(roots.orNil())
+	if err != nil {
+		return fail(env, err)
+	}
+
 	request := build.Request{
-		PipelineID: *pipeline,
-		Inputs:     resolvedInputs,
-		Sources:    sources,
-		Options:    options.orNil(),
-		Label:      *label,
-		Strict:     *strict,
+		PipelineID:  *pipeline,
+		Inputs:      resolvedInputs,
+		Sources:     sources,
+		Roots:       requestRoots,
+		RootSources: rootSources,
+		Options:     options.orNil(),
+		Label:       *label,
+		Strict:      *strict,
 	}
 	if !previewOnly && !*quiet {
 		request.Mirror = env.Stdout
@@ -427,6 +441,7 @@ func printBuildOutcome(env *Env, m *build.Manifest) {
 	for _, input := range m.Inputs {
 		fmt.Fprintf(env.Stdout, "  input     %-12s %s\n", input.Name, input.SHA256)
 	}
+	printBuildRoots(env, m)
 	for _, step := range m.Steps {
 		state := string(step.State)
 		if step.Skipped {
@@ -518,6 +533,66 @@ func reconcileBuilds(env *Env, manifests ...*build.Manifest) {
 	for _, manifest := range manifests {
 		if manifest.Directory != "" && build.Reconcile(manifest, store.Load, time.Now()) {
 			_ = manifest.Save(manifest.Directory)
+		}
+	}
+}
+
+// resolveBuildRoots turns `--root role=path` pairs into a build request's
+// roots.
+//
+// It records each one as a local directory the user pointed at. A verified AUB
+// texture bundle carries an identity, and the CLI has no way to receive one on
+// a command line — so nothing here invents a [build.BundleRef]. The Build & Run
+// coordinator, which HAS the verified bundle, supplies that record itself; a
+// CLI `--root` is honestly what it is, and `build show` says so.
+func resolveBuildRoots(roots map[string]string) (map[string]string, map[string]build.RootSource, error) {
+	if len(roots) == 0 {
+		return nil, nil, nil
+	}
+	out := make(map[string]string, len(roots))
+	sources := make(map[string]build.RootSource, len(roots))
+	for role, path := range roots {
+		trimmed := strings.TrimSpace(path)
+		if trimmed == "" {
+			return nil, nil, fmt.Errorf("--root %s= has no directory after the `=`", role)
+		}
+		absolute, err := filepath.Abs(trimmed)
+		if err != nil {
+			return nil, nil, fmt.Errorf("--root %s: %w", role, err)
+		}
+		out[role] = absolute
+		sources[role] = build.RootSource{Kind: build.RootFromLocalDirectory}
+	}
+
+	return out, sources, nil
+}
+
+// printBuildRoots says which directories a build was given, and what filled
+// them. A bundle is printed by its identity — map, revision, digest, the
+// declaration in order — because that is the half that means anything to
+// somebody reading this manifest on another machine.
+func printBuildRoots(env *Env, m *build.Manifest) {
+	for _, root := range m.Roots {
+		fmt.Fprintf(env.Stdout, "  root      %-12s %s (%s)\n", root.Role, root.Path, orNone(string(root.Access)))
+		switch {
+		case root.Source == nil:
+			continue
+		case root.Source.Bundle != nil:
+			bundle := root.Source.Bundle
+			ready := "not compiler-ready"
+			if bundle.CompilerReady {
+				ready = "compiler-ready"
+			}
+			fmt.Fprintf(env.Stdout, "            AUB map %s revision %d, bundle %s, %s\n",
+				bundle.MapID, bundle.Revision, bundle.Digest, ready)
+			for order, name := range bundle.WADsDeclared {
+				fmt.Fprintf(env.Stdout, "            wad %d      %s\n", order, name)
+			}
+			for _, refusal := range bundle.CompilerRefusals {
+				fmt.Fprintf(env.Stdout, "            refused   %s\n", refusal)
+			}
+		default:
+			fmt.Fprintf(env.Stdout, "            %s\n", root.Source.Kind)
 		}
 	}
 }
