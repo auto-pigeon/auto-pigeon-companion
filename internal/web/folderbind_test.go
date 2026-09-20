@@ -15,11 +15,21 @@ import (
 // FOLDER, in the page, rather than five separate file pickers — and what that
 // records is a local binding, never a verified download.
 
+// writeEricwLayout lays out a release the way the profile declares it, on the
+// platform the test is running on.
+//
+// The profile declares `bin/qbsp{platform.exe_suffix}`, so on Windows the files
+// it looks for are `qbsp.exe` and friends. Writing POSIX names there made the
+// bind refuse with "missing bin/qbsp.exe, bin/vis.exe, ..." and this test failed
+// on windows/amd64 for a reason that had nothing to do with what it checks:
+// the fixture was wrong, not the binding. Found by AUCOM/AUT 246I running the
+// suite on Windows for the first time.
 func writeEricwLayout(t *testing.T, root string, programs ...string) {
 	t.Helper()
 	for _, program := range programs {
-		writeFixtureFile(t, filepath.Join(root, "bin", program), "#!/bin/sh\n")
-		if err := os.Chmod(filepath.Join(root, "bin", program), 0o755); err != nil {
+		name := program + currentPlatform().ExeSuffix()
+		writeFixtureFile(t, filepath.Join(root, "bin", name), "#!/bin/sh\n")
+		if err := os.Chmod(filepath.Join(root, "bin", name), 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -38,7 +48,8 @@ func TestAFolderBindsEveryDeclaredProgramAsALocalBinding(t *testing.T) {
 		}
 		recorded, _ := body["binding"].(map[string]any)
 		executables, _ := recorded["executables"].(map[string]any)
-		if len(executables) != 5 || executables["vis"] != filepath.Join(root, "bin", "vis") {
+		wantVis := filepath.Join(root, "bin", "vis"+currentPlatform().ExeSuffix())
+		if len(executables) != 5 || executables["vis"] != wantVis {
 			t.Errorf("choosing %s recorded %v", chosen, executables)
 		}
 		if recorded["acquisition"] != string(profile.AcquireUserPath) {
@@ -86,7 +97,7 @@ func TestNamingAProgramReplacesAManagedProvenance(t *testing.T) {
 		t.Fatal(err)
 	}
 	status, body := m.call(http.MethodPost, "/api/v1/profiles/auto-pigeon.ericw-tools.q1/bind",
-		map[string]any{"executables": map[string]string{"qbsp": filepath.Join(root, "bin", "qbsp")}})
+		map[string]any{"executables": map[string]string{"qbsp": filepath.Join(root, "bin", "qbsp"+currentPlatform().ExeSuffix())}})
 	if status != http.StatusOK {
 		t.Fatalf("status = %d %v", status, body)
 	}
