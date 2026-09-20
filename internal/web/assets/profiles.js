@@ -50,13 +50,44 @@
     const summary = el("p", { className: "muted", text: profile.summary || "" });
     const identity = el("p", { className: "muted", text: `Version ${profile.version}` });
 
-    const open = el("button", { text: "Review", attrs: { type: "button" } });
-    open.addEventListener("click", () => openProfile(profile.id));
+    // Configuring a profile and reviewing one are different user tasks, so they
+    // are different words (246I defect 2). An installed profile whose document
+    // has already been approved is a thing you CONFIGURE; "Review" is the
+    // security decision, and it stays on the card only while that decision is
+    // genuinely still outstanding. Nothing about the digest or grant checks
+    // changes here — only which of the two tasks the card offers.
+    const needsReview = !profile.authorized;
+    const open = el("button", {
+      text: needsReview ? "Review" : "Configure",
+      attrs: { type: "button" },
+    });
+    open.addEventListener("click", () => {
+      if (needsReview) {
+        openProfile(profile.id);
+        return;
+      }
+      openConfigureTab(profile.id);
+    });
 
     return el("li", {
       className: "card",
       children: [title, marks, summary, identity, el("div", { className: "row-actions", children: [open] })],
     });
+  }
+
+  // configureURL is one profile's configuration page: a URL that survives a
+  // reload and names the profile and nothing else. The id is the only thing in
+  // it — no API token (the server puts that in the page it renders, so a fresh
+  // tab gets its own) and no local path, because a URL is copied, logged and
+  // pasted, and neither belongs anywhere that happens. `?view=` drops the area
+  // navigation the same way the New profile tab already does; the `#profiles/<id>`
+  // hash is what `app.js` hands back to `refresh(argument)` on load.
+  function configureURL(id) {
+    return window.location.pathname + "?view=profile#profiles/" + encodeURIComponent(id);
+  }
+
+  function openConfigureTab(id) {
+    window.open(configureURL(id), "_blank", "noopener");
   }
 
   async function openProfile(id) {
@@ -707,8 +738,14 @@
 
   window.AUCOM.areas.profiles = {
     open: openProfile,
-    async refresh() {
+    configureURL,
+    async refresh(argument) {
       await refreshList();
+      // `#profiles/<id>` is one profile's configuration page, so a reload comes
+      // back to that profile rather than to the list — the shape `#games/<id>`
+      // already established. The list is refreshed first so the page behind the
+      // detail is the real one if the user leaves single-view.
+      if (argument) await openProfile(argument);
     },
   };
 })();

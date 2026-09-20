@@ -153,20 +153,44 @@
     revisionChosen();
   }
 
-  // inputRow is one declared pipeline input. It offers whichever of the two
-  // sources makes sense: a revision chosen in the Library, or a file on this
-  // machine chosen through the desktop's own chooser.
+  // inputRow is one declared pipeline input, and what it offers is decided by
+  // that input's OWN declared kind rather than by one assumption applied to all
+  // of them. `source_kind` comes from the artifact role the document already
+  // declares, classified once in Go by internal/profile.InputSourceKind — the
+  // browser is not a second implementation of that rule.
+  //
+  // 246I defects 3 and 4: every row used to offer "A file on this machine" and
+  // "A map from My Maps", so a Texture WAD field asked for a single WAD (which
+  // is not what a Quake 1 build reads) and the map field would not present the
+  // revision the user had just downloaded.
   function inputRow(input) {
     const id = "build-input-" + input.name;
+    const kind = input.source_kind || "file";
     const source = el("select", { attrs: { id: id + "-source" } });
-    source.append(el("option", { text: "A file on this machine", attrs: { value: "file" } }));
-    source.append(el("option", { text: "A map from My Maps", attrs: { value: "asset" } }));
+    // `required` is the field the contract actually has. `optional` never
+    // existed on InputSpec, so the one optional input there is — the Quake 1
+    // wad — has never been labelled optional on this page.
+    const optional = input.required === false || input.required === undefined;
+    const titled = `${input.title || input.name}${optional ? " (optional)" : ""}`;
+
+    if (kind === "textures") {
+      // The local choice is a FOLDER: a Quake 1 map reads every WAD it is
+      // connected to, so asking for one file was asking the wrong question.
+      source.append(el("option", { text: "A folder on this machine", attrs: { value: "folder" } }));
+    } else if (kind === "directory") {
+      source.append(el("option", { text: "A folder on this machine", attrs: { value: "folder" } }));
+    } else {
+      source.append(el("option", { text: "A file on this machine", attrs: { value: "file" } }));
+    }
 
     const file = window.AUCOM.pathField({
       id,
-      kind: "open-file",
-      label: `${input.title || input.name}${input.optional ? " (optional)" : ""}`,
-      hint: input.description || "",
+      kind: kind === "textures" || kind === "directory" ? "directory" : "open-file",
+      label: titled,
+      hint:
+        kind === "textures"
+          ? "The folder holding the texture packages this map is connected to."
+          : "",
     });
 
     const assetNote = el("p", { className: "build-chosen", attrs: { id: id + "-asset" } });
@@ -199,7 +223,7 @@
     source.addEventListener("change", apply);
     apply();
 
-    inputFields.set(input.name, { input, source, file, assetNote, fileChoice, fileChoiceField, apply });
+    inputFields.set(input.name, { input, kind, source, file, assetNote, fileChoice, fileChoiceField, apply });
     return wrapper;
   }
 
@@ -272,14 +296,50 @@
     renderSteps();
   }
 
+  // acceptableFiles narrows a revision's files to the ones this input says it
+  // accepts. A revision carries everything that was uploaded to it, so offering
+  // qbsp's map input a `.wad` is offering a build that cannot start. The
+  // extensions are the document's own advisory list, not a guess at the bytes.
+  function acceptableFiles(files, extensions) {
+    const allowed = (extensions || []).map((extension) => extension.toLowerCase());
+    if (allowed.length === 0) return files || [];
+    return (files || []).filter((file) =>
+      allowed.some((extension) => (file.path || "").toLowerCase().endsWith(extension))
+    );
+  }
+
+  // revisionChosen is called by the Library when the user picks a revision.
+  //
+  // It touches MAP inputs and only map inputs (246I defect 3): the old version
+  // walked every row, so choosing a map wrote its revision over the texture row
+  // as well. Selecting or changing the map must not disturb the textures, and
+  // selecting textures must not disturb the map.
   function revisionChosen() {
     const chosen = window.AUCOM.chosenRevision;
     for (const [, row] of inputFields) {
+      if (row.kind !== "map") continue;
+      const already = [...row.source.options].find((option) => option.value === "asset");
       if (!chosen) {
+        // No revision, so there is no concrete choice to offer. The option goes
+        // away rather than sitting there meaning nothing.
+        if (already) already.remove();
         row.assetNote.textContent = "Nothing chosen yet. Pick a map revision in My Maps first.";
         row.fileChoice.replaceChildren();
         row.apply();
         continue;
+      }
+      // The concrete map, named in the selector itself, so "Where Map source
+      // comes from" presents the thing that was just downloaded instead of a
+      // category the user has to translate.
+      const label = `Downloaded map: ${chosen.display_name} — revision ${chosen.revision}`;
+      if (already) {
+        already.textContent = label;
+      } else {
+        const option = el("option", { text: label, attrs: { value: "asset" } });
+        row.source.prepend(option);
+        // It is also the default: a map downloaded a moment ago is the expected
+        // answer, not an alternative to go looking for.
+        row.source.value = "asset";
       }
       // The map the build will read, said plainly and large enough to check
       // at a glance before pressing Build (operator, NEW_244D).
@@ -288,7 +348,7 @@
         el("span", { className: "build-chosen__detail", text: `revision ${chosen.revision}, downloaded to this computer` })
       );
       row.fileChoice.replaceChildren();
-      for (const file of chosen.files || []) {
+      for (const file of acceptableFiles(chosen.files, row.input.extensions)) {
         row.fileChoice.append(el("option", { text: file.path, attrs: { value: file.path } }));
       }
       row.apply();

@@ -335,9 +335,20 @@ function pathField(options) {
     })
   );
 
-  const field = el("div", { className: "field grow", children: [el("label", { text: label, attrs: { for: id } }), input] });
+  // The input and its Browse button are ONE control row, and the hint is a
+  // sibling below that row rather than a child of the box the button aligns
+  // against. That ordering is the whole of 246I's first defect: the hint used
+  // to sit inside `.field`, so `align-items: flex-end` aligned Browse to the
+  // bottom of the HINT, and a field carrying one pushed its button out of line
+  // with every field that did not. Alignment belongs to this component, so no
+  // page re-solves it with a margin of its own.
+  const control = el("div", { className: "path-field__control", children: [input, browse] });
+  const field = el("div", {
+    className: "field grow",
+    children: [el("label", { text: label, attrs: { for: id } }), control],
+  });
   if (hint) field.append(el("span", { className: "hint", text: hint }));
-  const wrapper = el("div", { className: "path-field", children: [field, browse] });
+  const wrapper = el("div", { className: "path-field", children: [field] });
   const container = el("div", { children: [wrapper, status] });
   return { container, input, check };
 }

@@ -537,8 +537,24 @@ button.link {
 .paths dt { font-weight: 600; font-size: 0.85rem; }
 .paths dd { margin: 0; font-family: var(--mono); font-size: 0.8rem; word-break: break-all; }
 
-.path-field { display: flex; gap: 0.4rem; align-items: flex-end; flex-wrap: wrap; }
-.path-field .field { flex: 1 1 18rem; }
+/* One aligned path field, everywhere it is used (AUCOM/AUT 246I defect 1).
+   The input and its Browse button are one control row at `stretch`, so the
+   button is exactly as tall as the input beside it. Matching bottoms was not
+   enough: `button` pins line-height 1.2 while `input` inherits the body's, so
+   the old `align-items: flex-end` lined up two boxes of different heights.
+   No width is fixed here — a long Windows path or a translated label must be
+   able to widen the input rather than be truncated by it. */
+.path-field { display: flex; flex-wrap: wrap; }
+.path-field > .field { flex: 1 1 100%; min-width: 0; }
+.path-field__control { display: flex; align-items: stretch; gap: 0.4rem; flex-wrap: wrap; min-width: 0; }
+/* min-width:0 is what keeps a long path from forcing the page to scroll
+   sideways: an input's intrinsic minimum width would otherwise beat the flex
+   basis. At narrow widths the button wraps onto its own line instead. */
+.path-field__control > input { flex: 1 1 12rem; min-width: 0; }
+/* A hidden Browse leaves no empty alignment column, because a display:none
+   flex item consumes neither space nor gap. That is why this is flex and not
+   the two-column grid it reads like. */
+.path-field__control > button { flex: 0 0 auto; }
 
 .problem {
   border-left: 4px solid var(--bad);

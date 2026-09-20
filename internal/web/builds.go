@@ -278,12 +278,37 @@ func (s *Server) handleBuildPipelines(w http.ResponseWriter, r *http.Request) {
 		items = append(items, map[string]any{
 			"id": meta.ID, "name": meta.Name, "summary": meta.Summary,
 			"version": meta.Version, "trust": entry.Trust, "digest": entry.Digest,
-			"inputs": pipeline.Inputs, "outputs": pipeline.Outputs,
+			"inputs": inputPayload(pipeline.Inputs, family), "outputs": pipeline.Outputs,
 			"steps": steps, "missing_capabilities": missing, "runnable": runnable,
 			"engine_family": family, "maturity": describeMaturity(family),
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+// inputPayload is a pipeline's declared inputs, each carrying the source kind
+// the Build page should ask for.
+//
+// The classification is done HERE and not in the browser: which artifact role is
+// a map source, and which representation a given engine family uses for its
+// textures, is schema knowledge, and a second copy of it in JavaScript is a copy
+// that would eventually disagree. The page renders what this says
+// (AUCOM/AUT 246I). Every existing field is passed through unchanged, so this is
+// an additive payload change and an older page ignores `source_kind`.
+func inputPayload(inputs []profile.InputSpec, family string) []map[string]any {
+	rows := make([]map[string]any, 0, len(inputs))
+	for _, input := range inputs {
+		rows = append(rows, map[string]any{
+			"name":        input.Name,
+			"title":       input.Title,
+			"role":        input.Role,
+			"required":    input.Required,
+			"extensions":  input.Extensions,
+			"stage_with":  input.StageWith,
+			"source_kind": profile.InputSourceKind(input.Role, family),
+		})
+	}
+	return rows
 }
 
 // buildRequestBody is what the Build area sends.

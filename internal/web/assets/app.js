@@ -288,9 +288,13 @@
 
   // --- boot -----------------------------------------------------------------
 
-  // A page opened for one job — New profile, in its own tab — shows that page
-  // and not the area navigation.
-  if (new URLSearchParams(window.location.search).get("view") === "new-profile") {
+  // A page opened for one job — New profile, or one profile's configuration
+  // page, each in its own tab — shows that page and not the area navigation.
+  // `?view=profile#profiles/<id>` is a URL that survives a reload: the query
+  // drops the navigation and the hash names the profile, which `show` hands to
+  // `areas.profiles.refresh(argument)` (AUCOM/AUT 246I defect 2).
+  const view = new URLSearchParams(window.location.search).get("view");
+  if (view === "new-profile" || view === "profile") {
     document.body.classList.add("single-view");
   }
 
