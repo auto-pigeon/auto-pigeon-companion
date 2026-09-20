@@ -3773,6 +3773,32 @@ $ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" \
 {"actions":[…],"authorized":true,"binding":{"executables":{"engine":"/opt/quakespasm/quakespasm"}, …
 ```
 
+Obtaining a tool's programs. Ask first what this machine can actually do: a
+verified download needs a catalogue trust anchor, a catalogue address, the
+network, and a published build for this platform, and when any of those is
+missing the answer says which one rather than offering a download that would
+refuse. The folder route needs none of them, so it is always offered:
+
+```console
+$ curl -s -H "X-AUCOM-Token: $TOKEN"     http://127.0.0.1:8791/api/v1/profiles/auto-pigeon.ericw-tools.q1/acquire
+{"available":false,"reason":"This computer has no catalogue trust anchor configured, so a download
+cannot be verified — and an unverified one is never offered instead.","folder":true,"hint":"choose
+the unpacked ericw-tools folder — the one with bin/qbsp inside it","package":"ericw-tools.q1"}
+
+$ curl -s -X POST -H "X-AUCOM-Token: $TOKEN"     http://127.0.0.1:8791/api/v1/profiles/auto-pigeon.ericw-tools.q1/acquire -d '{}' | head -c 120
+{"error":"this computer has no catalogue trust anchor configured, so a download cannot be verified;
+choose a folder that already holds the programs instead"}
+```
+
+With an anchor configured, the same POST downloads the package the signed
+catalogue names, checks its size and digest against it, unpacks it, finds the
+declared programs and records where they are. A licence that requires a notice
+is refused once with the notice attached — `{"needs_acceptance":true,...}` —
+and accepted on the second call with `{"accept_license":true}`. It grants
+nothing: where a program is and whether you approved what it does are different
+questions, and `POST /api/v1/profiles/{id}/grant` is still the only answer to
+the second.
+
 Writing a profile. The wizard's forms post fields; the Companion composes,
 validates and digests the document and returns it with a normalized diff against
 the template it started from. Nothing is written until you import it, and
@@ -3848,6 +3874,8 @@ is completed rather than abandoned.
 | `/api/v1/profiles/diff` | POST | a normalized diff against the installed document, and whether it escalates |
 | `/api/v1/profiles/import` | POST | write a document into the profile directory. Grants nothing |
 | `/api/v1/profiles/{id}/bind` | POST | where its programs are here, which roots it may reach, and an approval |
+| `/api/v1/profiles/{id}/acquire` | GET | whether a verified download is possible here, and the concrete reason when it is not |
+| `/api/v1/profiles/{id}/acquire` | POST | download, verify, install and record it |
 | `/api/v1/profiles/{id}/unbind` | POST | forget this machine's setup. Deletes no files |
 | `/api/v1/profiles/{id}/grant` | POST | approve what it asks for, against one exact digest |
 | `/api/v1/profiles/{id}/withdraw` | POST | take that approval back. The paths stay |
@@ -3901,6 +3929,8 @@ call the same function — not an equivalent one.
 | `POST /api/v1/profiles/diff` | `companion toolchain diff <a> <b>` | `profile.DiffProfiles` |
 | `POST /api/v1/profiles/import` | copy the file into the profile folder | — (both grant nothing) |
 | `POST /api/v1/profiles/{id}/bind` | `companion engine bind <id>`, `companion acquire resolve --bind` | `binding.Update` |
+| `GET /api/v1/profiles/{id}/acquire` | `companion acquire plan <package>` | `acquire.Acquirer.Plan` |
+| `POST /api/v1/profiles/{id}/acquire` | `companion acquire resolve <profile.json> --mode managed_download --bind` | `acquire.Acquirer.Resolve`, `binding.Update` |
 | `POST /api/v1/profiles/{id}/grant` | `companion toolchain grant <id> --digest=<d> --approve` | `approval.Service.Grant` |
 | `POST /api/v1/profiles/{id}/withdraw` | `companion toolchain withdraw <id> --confirm` | `approval.Service.Withdraw` |
 | `POST /api/v1/profiles/{id}/remove` | delete the file from the profile folder | `binding.Update` |
