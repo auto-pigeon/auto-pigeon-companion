@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -421,7 +420,7 @@ func TestNoSubcommandStartsTheServerAndOpensTheBrowser(t *testing.T) {
 		t.Errorf("status = %d", response.StatusCode)
 	}
 
-	if err := syscall.Kill(os.Getpid(), syscall.SIGTERM); err != nil {
+	if err := terminateSelf(); err != nil {
 		t.Fatal(err)
 	}
 	select {
