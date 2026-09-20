@@ -454,7 +454,10 @@
     // catalogue and no anchor. Revealed in place rather than sending the user
     // to another page to come back from.
     const chooser = window.AUCOM.pathField({
-      id: "build-setup-folder",
+      // Unique per profile: two blocked stages would otherwise put two
+      // elements with the same id on the page, and a label would point at
+      // whichever the browser found first.
+      id: "build-setup-folder-" + String(profile.id).replace(/[^a-zA-Z0-9_-]/g, "-"),
       kind: "directory",
       label: `The folder that holds ${profile.name || profile.id}`,
     });
