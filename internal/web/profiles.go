@@ -67,6 +67,8 @@ func (s *Server) profileAPI() map[string]http.HandlerFunc {
 		"POST /api/v1/profiles/{id}/grant":    s.handleProfileGrant,
 		"POST /api/v1/profiles/{id}/withdraw": s.handleProfileWithdraw,
 		"POST /api/v1/profiles/{id}/remove":   s.handleProfileRemove,
+		"GET /api/v1/profiles/{id}/acquire":   s.handleAcquireOffer,
+		"POST /api/v1/profiles/{id}/acquire":  s.handleAcquireInstall,
 	}
 }
 

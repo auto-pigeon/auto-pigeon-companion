@@ -387,7 +387,7 @@
   // them. The executor's own sentence is the record for the CLI; this is the
   // next step (NEW_244D: a preview used to say "This is
   // what would run" over "(no command resolved)" and hide both).
-  function explain(text) {
+  function explain(text, step) {
     const missingInput =
       /needs "([^"]+)", and nothing supplies/.exec(text || "") ||
       /the required input "([^"]+)" was not supplied/.exec(text || "");
@@ -400,15 +400,158 @@
       return { kind: "input", name: gone[1],
         advice: `The file chosen for ${inputTitle(gone[1])} is not there: ${gone[2]}. Choose it again with Browse….` };
     }
-    if (/is not installed on this machine|root is not configured|not configured on this machine|no program is recorded/.test(text || "")) {
-      return { kind: "setup",
-        advice: "This stage's program is not set up on this machine yet. Say where it is, once, in Profiles." };
+    // These four refusals were one sentence, and they are not one situation.
+    // 246I: the operator met "This stage's program is not set up on this machine
+    // yet. Say where it is, once, in Profiles." when the missing thing was the
+    // EricW qbsp/vis/light toolchain — which this Companion can fetch and verify
+    // itself. The sentence named neither the stage nor the program, and sent
+    // somebody to a form instead of offering the action.
+    //
+    // `step` is the stage this came from, when the caller knows it. The
+    // executor's own sentence carries a profile id, a root-role name and a CLI
+    // command, and none of those belong on the page.
+    if (/is not installed on this machine|no program is recorded/.test(text || "")) {
+      return { kind: "setup", missing: "program", advice: setupSentence(step, "is not installed on this computer") };
+    }
+    // Three spellings of "a folder this machine has not been told about". The
+    // third was found by running a Quake II preview on Windows: the resolver
+    // says `{root.game_root} in "..." has no value (known: build_root,
+    // tool_root, workspace)`, which matched none of the patterns above and so
+    // reached the page whole — a root-role name and a list of internal tokens,
+    // which is precisely what this is supposed to keep off it. The role name is
+    // used to CHOOSE the wording and is never shown.
+    if (/root is not configured|not configured on this machine/.test(text || "") ||
+        /\{root\.[a-z_]+\} in .* has no value/.test(text || "")) {
+      return { kind: "setup", missing: "folder", advice: setupSentence(step, "needs a folder on this computer that has not been chosen yet") };
     }
     return null;
   }
 
-  function problemBlock(text, profile) {
-    const why = explain(text);
+  // setupSentence names the stage and the program, in the user's words.
+  function setupSentence(step, ending) {
+    const stage = step?.title ? `The ${step.title} stage` : "This stage";
+    const program = step?.provider?.name || step?.profile?.name;
+    if (program) return `${stage} needs ${program}, but it ${ending}.`;
+    return `${stage} needs a program that ${ending}.`;
+  }
+
+  // setupActions is 246I's "compiler setup is an action, not an error scavenger
+  // hunt": the three things a person can actually do, drawn on as soon as the
+  // Companion has said which of them are possible.
+  //
+  // Which are possible is the SERVER's answer (GET .../acquire), not a guess
+  // here: whether a verified download can happen depends on a trust anchor, a
+  // catalogue address, the offline flag and the platform, and a page that
+  // worked that out for itself would one day work it out wrong. Nothing here
+  // carries a download URL — the address lives in the signed catalogue, never
+  // in this file.
+  function setupActions(profile) {
+    const row = el("div", { className: "row-actions" });
+    const status = el("p", { className: "message", attrs: { role: "status" } });
+    const wrap = el("div", { children: [row, status] });
+
+    // Always available, because choosing a folder needs no network, no
+    // catalogue and no anchor. Revealed in place rather than sending the user
+    // to another page to come back from.
+    const chooser = window.AUCOM.pathField({
+      id: "build-setup-folder",
+      kind: "directory",
+      label: `The folder that holds ${profile.name || profile.id}`,
+    });
+    chooser.container.hidden = true;
+    const use = el("button", { text: "Use this folder", attrs: { type: "button", class: "primary" } });
+    use.hidden = true;
+
+    const choose = el("button", { text: "Choose an existing folder", attrs: { type: "button", class: "secondary" } });
+    choose.addEventListener("click", () => {
+      chooser.container.hidden = false;
+      use.hidden = false;
+      chooser.input.focus();
+    });
+
+    use.addEventListener("click", () =>
+      withBusy(use, async () => {
+        const folder = chooser.input.value.trim();
+        if (!folder) {
+          setMessage(status, "Choose the folder first.", "error");
+          return;
+        }
+        const { ok, body } = await api(`/api/v1/profiles/${encodeURIComponent(profile.id)}/bind`, {
+          method: "POST",
+          body: { folder },
+        });
+        if (!ok) {
+          // The server names exactly which programs were not in there.
+          setMessage(status, body.error || "that folder could not be used", "error");
+          return;
+        }
+        setMessage(status, "Recorded. It survives a restart.", "ok");
+        record(`Set up ${profile.name || profile.id}`, folder, "ok");
+        choicesChanged();
+        preview($("build-preview"));
+      })
+    );
+
+    const configure = el("button", { text: "Configure", attrs: { type: "button", class: "secondary" } });
+    configure.addEventListener("click", () => {
+      const url = window.AUCOM.areas.profiles?.configureURL?.(profile.id);
+      if (url) window.open(url, "_blank", "noopener");
+    });
+
+    row.append(choose, use, configure);
+    wrap.append(chooser.container);
+
+    // The download button appears only once the Companion has said it can.
+    (async () => {
+      const { ok, body } = await api(`/api/v1/profiles/${encodeURIComponent(profile.id)}/acquire`);
+      if (!ok) return;
+      if (!body.available) {
+        // The concrete condition, in the server's words. Not "unavailable".
+        if (body.reason) setMessage(status, body.reason);
+        return;
+      }
+      const download = el("button", {
+        text: `Download and set up ${body.name || profile.name || profile.id}`,
+        attrs: { type: "button", class: "primary" },
+      });
+      download.addEventListener("click", () =>
+        withBusy(download, async () => {
+          setMessage(status, `Downloading ${body.name} ${body.version} and checking it…`, "busy");
+          const attempt = (accept) =>
+            api(`/api/v1/profiles/${encodeURIComponent(profile.id)}/acquire`, {
+              method: "POST",
+              body: accept ? { accept_license: true } : {},
+            });
+          let { ok: done, body: out } = await attempt(false);
+          if (!done && out?.needs_acceptance) {
+            // A licence nobody was shown is a licence nobody accepted, so the
+            // notice is shown and the answer is asked for before the second try.
+            if (!window.confirm(`${out.notice}
+
+Download and set it up?`)) {
+              setMessage(status, "Nothing was downloaded.");
+              return;
+            }
+            ({ ok: done, body: out } = await attempt(true));
+          }
+          if (!done) {
+            setMessage(status, out?.error || "it could not be set up", "error");
+            return;
+          }
+          setMessage(status, `${out.description || "Set up"}. It survives a restart.`, "ok");
+          record(`Set up ${body.name || profile.id}`, out.tool_root || "", "ok");
+          choicesChanged();
+          preview($("build-preview"));
+        })
+      );
+      row.prepend(download);
+    })();
+
+    return wrap;
+  }
+
+  function problemBlock(text, profile, step) {
+    const why = explain(text, step);
     const block = el("div", { className: "problem" });
     block.append(el("p", { children: [el("strong", { text: why ? why.advice : text })] }));
     // The executor's own sentence names profile ids, root roles and a CLI
@@ -416,12 +559,7 @@
     // repeat it (NEW_244D, operator: no internal ids on the page). A refusal
     // the page cannot explain is still shown whole, because that is all there is.
     if (why?.kind === "setup" && profile?.id) {
-      const setup = el("button", { text: `Set up ${profile.name || profile.id}`, attrs: { type: "button", class: "primary" } });
-      setup.addEventListener("click", async () => {
-        window.AUCOM.showArea("profiles");
-        await window.AUCOM.areas.profiles?.open?.(profile.id);
-      });
-      block.append(el("div", { className: "row-actions", children: [setup] }));
+      block.append(setupActions(profile));
     }
     if (why?.kind === "input") {
       const field = $("build-input-" + why.name);
@@ -497,7 +635,7 @@
             ],
           })
         );
-        if (step.error) block.append(problemBlock(step.error, step.profile));
+        if (step.error) block.append(problemBlock(step.error, step.profile, step));
         if (step.command?.shell) block.append(el("pre", { className: "output", text: step.command.shell }));
         out.append(block);
       }
