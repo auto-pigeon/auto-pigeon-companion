@@ -744,13 +744,10 @@ footer p { margin: 0; font-size: 0.82rem; max-width: 70ch; }
 
 .activity-foot { margin: 0; font-size: 0.85rem; }
 
-/* The opener sits out of the way until there is something to open. */
-.activity-open {
-  position: fixed;
-  inset-block-end: 1rem;
-  inset-inline-end: 1rem;
-  z-index: 49;
-}
+/* The opener lives in the header, beside the account, until there is
+   something to open. It used to float in the bottom-right corner, where it
+   covered each step's primary button. */
+.activity-open { white-space: nowrap; }
 
 /* Below this width a drawer would leave a strip of unusable page behind it, so
    it becomes the whole screen instead. */

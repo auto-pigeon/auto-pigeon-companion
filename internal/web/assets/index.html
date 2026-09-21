@@ -28,6 +28,11 @@
         <p id="identity" class="muted">Starting…</p>
       </div>
       <div class="account">
+        <!-- In the header, not floating over the page: fixed to the corner it
+             sat on top of every step's primary button (246I1.1, seen live). -->
+        <button type="button" id="activity-open" class="activity-open" hidden aria-expanded="false" aria-controls="activity">
+          Activity <span id="activity-count" class="pill"></span>
+        </button>
         <span id="account-signed-out" class="account-email">not signed in</span>
         <button type="button" id="sign-in-open" class="primary" hidden>Sign in</button>
         <!--
@@ -146,7 +151,7 @@
           <li><button type="button" class="area-tab" data-area="library">My Maps<span class="tab-note">from your account</span></button></li>
           <li><button type="button" class="area-tab" data-area="build">Build<span class="tab-note">compile a map</span></button></li>
           <li><button type="button" class="area-tab" data-area="run">Run<span class="tab-note">start a game</span></button></li>
-          <li><button type="button" class="area-tab" data-area="games">Games<span class="tab-note">hosted now</span></button></li>
+          <li><button type="button" class="area-tab" data-area="games">Live Games<span class="tab-note">hosted now</span></button></li>
           <li><button type="button" class="area-tab" data-area="profiles">Profiles<span class="tab-note">tools and engines</span></button></li>
           <li><button type="button" class="area-tab" data-area="jobs">Jobs<span class="tab-note">what has run</span></button></li>
           <li><button type="button" class="area-tab" data-area="settings">Settings<span class="tab-note">where things are</span></button></li>
@@ -287,7 +292,7 @@
               </div>
             </div>
             <div class="field">
-              <label for="play-mod">Game folder to install into</label>
+              <label for="play-mod">Mod folder name <span class="muted">(created beside id1 in the game folder)</span></label>
               <input id="play-mod" type="text" value="auto-pigeon" />
               <p class="hint" id="play-game-root"></p>
             </div>
@@ -1127,9 +1132,6 @@
         which keeps them after this window is closed.
       </p>
     </aside>
-    <button type="button" id="activity-open" class="activity-open" hidden aria-expanded="false" aria-controls="activity">
-      Activity <span id="activity-count" class="pill"></span>
-    </button>
 
     <script src="core.js"></script>
     <script src="library.js"></script>

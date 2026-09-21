@@ -30,7 +30,7 @@
     library: "My Maps",
     build: "Build",
     run: "Run",
-    games: "Games",
+    games: "Live Games",
     profiles: "Profiles",
     "new-profile": "New profile",
     jobs: "Jobs",

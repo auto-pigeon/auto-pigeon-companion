@@ -45,10 +45,67 @@
     planKey: "",
   };
 
+  // --- remembered choices ------------------------------------------------------
+  //
+  // A reload used to empty the wizard (246I1.1, seen live). The choices are kept
+  // in this page's own URL query — exact identities, the map's name in the game
+  // and the mod folder name; never a path, never a token, and nothing in
+  // browser storage (TestThePageStoresNothingItShouldNot) — and restored once,
+  // as the lists they belong to arrive. A remembered revision is used only if
+  // that exact revision is still listed; otherwise the newest is chosen, which
+  // is what a fresh visit does anyway.
+  const REMEMBERED = {
+    map: "asset_id", rev: "revision_id", name: "map_name", build: "pipeline",
+    strict: "strict", engine: "engine", action: "action", mod: "mod", step: "step",
+  };
+  let pendingMap = "";
+  let pendingRevision = "";
+
+  function remember() {
+    const values = {
+      asset_id: state.map?.asset_id || "", revision_id: state.revision?.revision_id || "",
+      map_name: $("play-map-name").value.trim(), pipeline: state.pipeline,
+      strict: state.strict ? "1" : "", engine: state.engine, action: state.action,
+      mod: state.mod === "auto-pigeon" ? "" : state.mod, step: state.step > 1 ? String(state.step) : "",
+    };
+    const query = new URLSearchParams(window.location.search);
+    for (const [key, field] of Object.entries(REMEMBERED)) {
+      if (values[field]) query.set(key, values[field]);
+      else query.delete(key);
+    }
+    const search = query.toString();
+    const url = window.location.pathname + (search ? "?" + search : "") + window.location.hash;
+    if (url !== window.location.pathname + window.location.search + window.location.hash) {
+      window.history.replaceState(window.history.state, "", url);
+    }
+  }
+
+  function restore() {
+    const query = new URLSearchParams(window.location.search);
+    const saved = {};
+    for (const [key, field] of Object.entries(REMEMBERED)) saved[field] = query.get(key) || "";
+    if (!Object.values(saved).some(Boolean)) return;
+    pendingMap = saved.asset_id;
+    pendingRevision = saved.revision_id;
+    state.pipeline = saved.pipeline;
+    state.strict = saved.strict === "1";
+    state.engine = saved.engine;
+    state.action = saved.action;
+    state.mod = saved.mod || "auto-pigeon";
+    state.step = Math.min(5, Math.max(1, Number(saved.step) || 1));
+    if (saved.map_name) {
+      $("play-map-name").value = saved.map_name;
+      state.mapName = saved.map_name;
+    }
+    $("play-mod").value = state.mod;
+    $("play-strict").checked = state.strict;
+  }
+
   // --- step navigation --------------------------------------------------------
 
   function show(step) {
     state.step = step;
+    remember();
     for (const panel of document.querySelectorAll("#area-play .bwiz-panel")) {
       panel.hidden = Number(panel.dataset.step) !== step;
     }
@@ -57,6 +114,8 @@
       tab.setAttribute("aria-current", current ? "step" : "false");
     }
     summarize();
+    // "Started" describes the run that was started, not the next one.
+    if (step !== 5) setMessage("play-start-message", "");
     if (step === 4) refreshPlan();
     if (step === 5) renderFinalSummary();
     const panel = $("play-step-" + step);
@@ -86,6 +145,8 @@
   // Any change to an identity throws the plan away and SAYS SO. A review that
   // silently described the previous choice would be the worst kind of review.
   function invalidate(why) {
+    setMessage("play-start-message", "");
+    remember();
     if (!state.plan) return;
     state.plan = null;
     state.planKey = "";
@@ -116,6 +177,10 @@
         text: map.display_name || map.asset_id,
         attrs: { value: map.asset_id },
       }));
+    }
+    if (!state.map && pendingMap) {
+      state.map = state.maps.find((m) => m.asset_id === pendingMap) || null;
+      pendingMap = "";
     }
     if (state.map) select.value = state.map.asset_id;
   }
@@ -158,8 +223,11 @@
     // The newest, because that is what somebody who has just saved wants. It
     // is still an EXACT revision: nothing here ever sends the word `current`.
     if (state.revisions.length) {
-      select.value = state.revisions[0].revision_id;
-      chooseRevision(state.revisions[0].revision_id);
+      const remembered = state.revisions.find((r) => r.revision_id === pendingRevision);
+      pendingRevision = "";
+      const chosen = (remembered || state.revisions[0]).revision_id;
+      select.value = chosen;
+      chooseRevision(chosen);
     }
   }
 
@@ -268,6 +336,7 @@
     for (const action of engine?.actions || []) {
       select.append(el("option", { text: action.title || action.id, attrs: { value: action.id } }));
     }
+    if (state.action && [...select.options].some((o) => o.value === state.action)) select.value = state.action;
     // A fixed, small set — so these are TABS rather than a dropdown.
     window.AUCOM.tabsFor?.("play-action");
     state.action = select.value || "";
@@ -276,7 +345,14 @@
     $("play-game-root").textContent = root
       ? `The game is at ${root}. The Companion will create ${state.mod} beside it and never write into id1.`
       : "This engine has no game folder set on this machine yet — set one under Profiles first.";
-    setMessage("play-run-message", root ? "" : "Choose this engine's game folder before continuing.", root ? "" : "error");
+    // Only once an engine is chosen: before that there is nothing to be wrong
+    // about, and an error on an untouched form reads as a fault.
+    const missing = Boolean(state.engine) && !root;
+    $("play-game-root").textContent = !state.engine
+      ? "Choose an engine to see where the game is."
+      : $("play-game-root").textContent;
+    setMessage("play-run-message", missing ? "Choose this engine's game folder before continuing." : "",
+      missing ? "error" : "");
   }
 
   // --- step 4: the review -----------------------------------------------------------
@@ -785,8 +861,13 @@
     link.addEventListener("click", () => { window.location.hash = "#" + link.dataset.areaLink; });
   }
 
+  let restored = false;
   window.AUCOM.areas.play = {
     async refresh() {
+      if (!restored) {
+        restored = true;
+        restore();
+      }
       const signedIn = Boolean(window.AUCOM.status?.authenticated);
       $("play-signed-out").hidden = signedIn;
       await Promise.all([loadPipelines(), loadEngines(), signedIn ? loadMaps() : null]);

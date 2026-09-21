@@ -232,6 +232,13 @@ func (r *Runner) Run(ctx context.Context, request Request) (*Manifest, error) {
 			return nil, saveErr
 		}
 		r.options.Announce(manifest)
+		if err != nil && ctx.Err() != nil {
+			// Cancelled by whoever started it: recorded as exactly that, and
+			// finished now, so nothing later mistakes it for a build the
+			// Companion abandoned by crashing.
+			return r.fail(manifest, job.Cancelled,
+				fmt.Errorf("cancelled while the %s step was running", resolved.Step.ID))
+		}
 		if err != nil {
 			// Published anyway, best effort. A failed compile still wrote the
 			// point file that says where the leak is, and leaving it inside the
@@ -705,6 +712,27 @@ func (r *Runner) runStep(ctx context.Context, request Request, layout layout, re
 	r.options.Logf("build %s: step %s is job %s", manifest.BuildID, resolved.Step.ID, submitted.ID)
 
 	finished, err := r.options.Service.Wait(ctx, submitted.ID)
+	if err != nil && ctx.Err() != nil {
+		// The BUILD was cancelled. Wait only stops waiting; the compiler it
+		// started would otherwise run to completion in the background — which
+		// is what a live cancel showed (246I1.1): `vis` finished 1.5 s after
+		// the person pressed Stop, under a dialog that said the compiler is
+		// stopped. So the job is cancelled too, and waited for, briefly.
+		stopped := r.stopJob(submitted.ID)
+		step.State, step.Error = job.Cancelled, "cancelled while this step was running"
+		if stopped != nil {
+			step.Command, step.ExitCode = stopped.Command, stopped.ExitCode
+			step.StartedAt, step.FinishedAt = stopped.StartedAt, stopped.FinishedAt
+			step.DurationMS = stopped.Duration().Milliseconds()
+			if stopped.State == job.Succeeded {
+				// It finished before the signal arrived; say so rather than
+				// claiming it was stopped.
+				step.State, step.Error = job.Succeeded, ""
+			}
+		}
+
+		return step, ctx.Err()
+	}
 	if err != nil {
 		step.Error = err.Error()
 		return step, err
@@ -745,6 +773,29 @@ func (r *Runner) runStep(ctx context.Context, request Request, layout layout, re
 	}
 	return step, nil
 }
+
+// stopJob cancels a job the build no longer wants and waits, bounded, for it
+// to reach a terminal state. It returns the job as it ended, or nil when that
+// could not be read in time.
+func (r *Runner) stopJob(id string) *job.Job {
+	if _, err := r.options.Service.Cancel(id); err != nil {
+		r.options.Logf("build: stopping job %s: %v", id, err)
+	}
+	ctx, done := context.WithTimeout(context.Background(), stopJobTimeout)
+	defer done()
+	stopped, err := r.options.Service.Wait(ctx, id)
+	if err != nil {
+		r.options.Logf("build: job %s did not stop within %s: %v", id, stopJobTimeout, err)
+
+		return nil
+	}
+
+	return stopped
+}
+
+// stopJobTimeout bounds how long a cancelled build waits for its running job to
+// end. The job service's own signal-then-kill escalation is well inside it.
+const stopJobTimeout = 30 * time.Second
 
 // collect copies a step's artifacts into the build directory and records them.
 func (r *Runner) collect(layout layout, resolved profile.ResolvedStep, finished *job.Job, wires map[string]wire) ([]FileRecord, error) {

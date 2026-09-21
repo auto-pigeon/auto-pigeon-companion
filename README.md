@@ -2378,9 +2378,9 @@ carries is AUB's — established from a machine that is not behind the host's ow
 NAT, which is why a check from here would establish only that this computer can
 reach itself.
 
-### Joining — the Games area, and the same thing in a terminal
+### Joining — the Live Games area, and the same thing in a terminal
 
-`AUB/AUG/AUCOM/AUT 244F`. The **Games** area of the Companion lists the games
+`AUB/AUG/AUCOM/AUT 244F`. The **Live Games** area of the Companion lists the games
 being hosted now (public games, or your own), and each game has **one** primary
 action: **Join** when this computer is ready, **Set up to join** when something is
 missing. Setup is a checklist computed fresh every time — never stored — and every

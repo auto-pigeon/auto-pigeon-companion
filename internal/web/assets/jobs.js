@@ -63,12 +63,27 @@
             return;
           }
           record(`Stopped ${jobName(job)}`, "", "cancelled");
-          await refreshJobs();
+          await afterStop(job.id);
         })
       );
       actions.append(cancel);
     }
     return el("li", { children: [head, detail, actions] });
+  }
+
+  // A cancel is a request: the process is signalled and the job is recorded
+  // cancelled a moment later. Refreshing straight away caught it still
+  // `running`, with its Stop button, until somebody pressed Refresh (246I1.1,
+  // seen live). So wait — briefly, and bounded — for the state to change.
+  async function afterStop(id) {
+    const deadline = Date.now() + 10000;
+    while (Date.now() < deadline) {
+      const { ok, body } = await api("/api/v1/jobs/" + encodeURIComponent(id));
+      if (!ok || terminal(body.state)) break;
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+    await refreshJobs();
+    if (watching === id) await renderJob();
   }
 
   async function openJob(id) {
@@ -196,6 +211,7 @@
             return;
           }
           record(`Stopped ${jobName(body)}`, "", "cancelled");
+          await afterStop(body.id);
         })
       );
       actions.append(stop);

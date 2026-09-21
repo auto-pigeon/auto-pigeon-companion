@@ -464,6 +464,72 @@ func TestCancellingABuildStopsItAndSaysSo(t *testing.T) {
 	}
 }
 
+// Build & Run cancels the BUILD'S CONTEXT, not a job. Before 246I1.1 that only
+// stopped the waiting: the compiler ran on to completion in the background and
+// the build was left `running` until something later labelled it as abandoned
+// by a crash. The running job must be stopped, and the build end `cancelled`.
+func TestCancellingTheBuildsContextStopsTheRunningJob(t *testing.T) {
+	document := string(fixtureTool(t, "test.build.toolchain", "test.stage", "compile"))
+	slow := strings.Replace(document, `,"compile",`, `,"sleep",`, 1)
+	if slow == document {
+		t.Fatal("the compile arguments were not replaced; this test is checking nothing")
+	}
+	h := newHarness(t, map[string][]byte{
+		"tool.tool.json":         []byte(slow),
+		"pipeline.pipeline.json": fixturePipeline(t, "test.build.pipeline", "test.stage"),
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan *Manifest, 1)
+	go func() {
+		manifest, _ := h.runner.Run(ctx, Request{
+			PipelineID: "test.build.pipeline",
+			Inputs:     map[string]string{"source_map": h.sourceMap("level.map", "brushes\n")},
+		})
+		done <- manifest
+	}()
+
+	deadline := time.Now().Add(30 * time.Second)
+	var running string
+	for time.Now().Before(deadline) && running == "" {
+		jobs, _ := h.service.List()
+		for _, j := range jobs {
+			if j.State == job.Running {
+				running = j.ID
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if running == "" {
+		t.Fatal("no stage ever started")
+	}
+	cancel()
+
+	var manifest *Manifest
+	select {
+	case manifest = <-done:
+	case <-time.After(60 * time.Second):
+		t.Fatal("the build did not stop")
+	}
+	stopped, err := h.service.Get(running)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stopped.State != job.Cancelled {
+		t.Errorf("the compiler job is %s after the build was cancelled, want %s", stopped.State, job.Cancelled)
+	}
+	if manifest == nil || manifest.State != job.Cancelled {
+		t.Fatalf("the build is %v, want %s", manifest, job.Cancelled)
+	}
+	if !strings.Contains(manifest.Error, "cancelled") || strings.Contains(manifest.Error, InterruptedNote) {
+		t.Errorf("the build's note is %q", manifest.Error)
+	}
+	if compile := stepNamed(t, manifest, "compile"); compile.State != job.Cancelled || compile.DurationMS == 0 {
+		t.Errorf("the stopped step is %s after %d ms", compile.State, compile.DurationMS)
+	}
+}
+
 // --strict is for a gate: a tool that warns and carries on is a build that
 // failed, and the message says which stage and which rule.
 func TestStrictFailsOnAnErrorDiagnosticTheToolItselfIgnored(t *testing.T) {
