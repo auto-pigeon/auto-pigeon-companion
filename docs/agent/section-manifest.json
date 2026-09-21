@@ -1,599 +1,620 @@
 {
- "schema": "aut-agent-section-manifest/1",
- "established_by": "NEW_246G_AUT_AUG_AUCOM_AUTEL_AULIBS_Remaining-Repository-Documentation-Modularization",
- "what_this_is": [
-  "The ACCOUNTING for the split of this repository's AGENTS.md: every heading the pre-split file",
-  "had, every LINE it had, and the ONE live file each now lives in. It exists so the claim `no",
-  "rule was lost` is checkable rather than asserted, and `agent_context_router.py gate` re-derives",
-  "it on every run rather than trusting it."
- ],
- "original_agents_sha256": "dc16c6c72b64a6611a50572b03b571b72a0145928f521fdd76de502db6e32b2b",
- "original_lines": 782,
- "original_words": 7372,
- "headings_total_including_title": 29,
- "headings_accounted": 28,
- "title_heading_note": "`# AGENTS.md — Auto-Pigeon Companion` (original line 1) is the document title rather than a rule, so it is not a section with a destination; it stayed the title of the compacted root file. Line 2 is the blank line under it. Both are in `title_lines`.",
- "sections": [
-  {
-   "original_line": 3,
-   "level": 2,
-   "heading": "Do not read or run `run-sequence.sh`",
-   "destination": "AGENTS.md",
-   "destination_kind": "kept-in-root",
-   "note": "needed for nearly every task, or replaced by the routing table"
-  },
-  {
-   "original_line": 17,
-   "level": 2,
-   "heading": "0. What this repository is",
-   "destination": "AGENTS.md",
-   "destination_kind": "kept-in-root",
-   "note": "needed for nearly every task, or replaced by the routing table"
-  },
-  {
-   "original_line": 36,
-   "level": 3,
-   "heading": "It absorbed the Launcher",
-   "destination": "docs/agent/aucom.launcher-merge.md",
-   "destination_kind": "moved-to-module",
-   "note": "routed, selectively read"
-  },
-  {
-   "original_line": 55,
-   "level": 2,
-   "heading": "1. THE EXTRACTOR IS NOT IN THIS BINARY, AND THERE IS NO THIRD WAY TO ONE (`AUE/AUB/AUCOM 211`)",
-   "destination": "docs/agent/aucom.extractor-acquisition.md",
-   "destination_kind": "moved-to-module",
-   "note": "routed, selectively read"
-  },
-  {
-   "original_line": 75,
-   "level": 3,
-   "heading": "What embedding cost, and why it is three separate faults",
-   "destination": "docs/agent/aucom.extractor-acquisition.md",
-   "destination_kind": "moved-to-module",
-   "note": "routed, selectively read"
-  },
-  {
-   "original_line": 91,
-   "level": 3,
-   "heading": "It reuses the acquisition machinery; it is not a second updater",
-   "destination": "docs/agent/aucom.extractor-acquisition.md",
-   "destination_kind": "moved-to-module",
-   "note": "routed, selectively read"
-  },
-  {
-   "original_line": 99,
-   "level": 3,
-   "heading": "The compatibility manifest is a THIRD signed document, and it carries no digest",
-   "destination": "docs/agent/aucom.extractor-acquisition.md",
-   "destination_kind": "moved-to-module",
-   "note": "routed, selectively read"
-  },
-  {
-   "original_line": 115,
-   "level": 3,
-   "heading": "The protocol handshake, before the executable is used for anything",
-   "destination": "docs/agent/aucom.extractor-execution.md",
-   "destination_kind": "moved-to-module",
-   "note": "routed, selectively read"
-  },
-  {
-   "original_line": 126,
-   "level": 3,
-   "heading": "Offline is a different authority, never a weaker check",
-   "destination": "docs/agent/aucom.extractor-execution.md",
-   "destination_kind": "moved-to-module",
-   "note": "routed, selectively read"
-  },
-  {
-   "original_line": 138,
-   "level": 3,
-   "heading": "Every invocation is bounded, and the bounds are not decoration",
-   "destination": "docs/agent/aucom.extractor-execution.md",
-   "destination_kind": "moved-to-module",
-   "note": "routed, selectively read"
-  },
-  {
-   "original_line": 154,
-   "level": 3,
-   "heading": "Authorization is not verification",
-   "destination": "docs/agent/aucom.extractor-execution.md",
-   "destination_kind": "moved-to-module",
-   "note": "routed, selectively read"
-  },
-  {
-   "original_line": 168,
-   "level": 3,
-   "heading": "Publishing is executable, and holds no key here",
-   "destination": "docs/agent/aucom.extractor-execution.md",
-   "destination_kind": "moved-to-module",
-   "note": "routed, selectively read"
-  },
-  {
-   "original_line": 178,
-   "level": 2,
-   "heading": "2. THE EXPORT GATE IS THE ONLY WAY OUT, AND TRUST DOES NOT TRAVEL IN (`AUB/AUP/AUG/AUCOM 213`)",
-   "destination": "docs/agent/aucom.export-gate.md",
-   "destination_kind": "moved-to-module",
-   "note": "routed, selectively read"
-  },
-  {
-   "original_line": 230,
-   "level": 2,
-   "heading": "3. QUAKE II IS WORK IN PROGRESS, AND NO DOCUMENT MAY SAY OTHERWISE (`AUP/AUCOM 215`)",
-   "destination": "docs/agent/aucom.quake2-maturity.md",
-   "destination_kind": "moved-to-module",
-   "note": "routed, selectively read"
-  },
-  {
-   "original_line": 288,
-   "level": 2,
-   "heading": "4. QUAKE III IS WORK IN PROGRESS TOO, AND IT IS NOT QUAKE II RENUMBERED (`AUP/AUCOM 216`)",
-   "destination": "docs/agent/aucom.quake3-maturity.md",
-   "destination_kind": "moved-to-module",
-   "note": "routed, selectively read"
-  },
-  {
-   "original_line": 369,
-   "level": 2,
-   "heading": "5. THE THREAT MODEL IS CODE, AND THERE IS ONE WRITER (`AUCOM/AUT 218`)",
-   "destination": "docs/agent/aucom.threat-model.md",
-   "destination_kind": "moved-to-module",
-   "note": "routed, selectively read"
-  },
-  {
-   "original_line": 447,
-   "level": 2,
-   "heading": "6. THERE IS ONE WRITER OF AN APPROVAL, AND IT REFUSES (`AUCOM/AUT 228`)",
-   "destination": "docs/agent/aucom.approvals.md",
-   "destination_kind": "moved-to-module",
-   "note": "routed, selectively read"
-  },
-  {
-   "original_line": 500,
-   "level": 2,
-   "heading": "7. A BOUND IS NOT A MEASUREMENT, AND THE BOUND COMES FROM HERE (`AUCOM/AUT 229`)",
-   "destination": "docs/agent/aucom.job-bounds.md",
-   "destination_kind": "moved-to-module",
-   "note": "routed, selectively read"
-  },
-  {
-   "original_line": 549,
-   "level": 2,
-   "heading": "8. A BUILD IS NOT A VERIFICATION, AND FIVE STATES KEEP THEM APART (`AUT/AUCOM 231`)",
-   "destination": "docs/agent/aucom.release-verification.md",
-   "destination_kind": "moved-to-module",
-   "note": "routed, selectively read"
-  },
-  {
-   "original_line": 626,
-   "level": 2,
-   "heading": "9. JOINING IS ONE READINESS MODEL, AND A LINK STARTS NOTHING (`AUB/AUG/AUCOM/AUT 244F`)",
-   "destination": "docs/agent/aucom.join-readiness.md",
-   "destination_kind": "moved-to-module",
-   "note": "routed, selectively read"
-  },
-  {
-   "original_line": 676,
-   "level": 2,
-   "heading": "Cross-repository boundary",
-   "destination": "AGENTS.md",
-   "destination_kind": "kept-in-root",
-   "note": "needed for nearly every task, or replaced by the routing table"
-  },
-  {
-   "original_line": 686,
-   "level": 2,
-   "heading": "Prompt queue and handoff workflow",
-   "destination": "AGENTS.md",
-   "destination_kind": "kept-in-root",
-   "note": "needed for nearly every task, or replaced by the routing table"
-  },
-  {
-   "original_line": 731,
-   "level": 2,
-   "heading": "Session continuity and context-budget safety",
-   "destination": "AGENTS.md",
-   "destination_kind": "kept-in-root",
-   "note": "needed for nearly every task, or replaced by the routing table"
-  },
-  {
-   "original_line": 739,
-   "level": 2,
-   "heading": "Component addresses live in `.env`, never in code",
-   "destination": "docs/agent/aucom.component-addresses.md",
-   "destination_kind": "moved-to-module",
-   "note": "routed, selectively read"
-  },
-  {
-   "original_line": 745,
-   "level": 3,
-   "heading": "Why this is a rule and not a preference",
-   "destination": "docs/agent/aucom.component-addresses.md",
-   "destination_kind": "moved-to-module",
-   "note": "routed, selectively read"
-  },
-  {
-   "original_line": 761,
-   "level": 3,
-   "heading": "What to do instead",
-   "destination": "docs/agent/aucom.component-addresses.md",
-   "destination_kind": "moved-to-module",
-   "note": "routed, selectively read"
-  },
-  {
-   "original_line": 771,
-   "level": 3,
-   "heading": "The one permitted derivation",
-   "destination": "docs/agent/aucom.component-addresses.md",
-   "destination_kind": "moved-to-module",
-   "note": "routed, selectively read"
-  },
-  {
-   "original_line": 778,
-   "level": 3,
-   "heading": "When the address is missing",
-   "destination": "docs/agent/aucom.component-addresses.md",
-   "destination_kind": "moved-to-module",
-   "note": "routed, selectively read"
-  }
- ],
- "modules": [
-  {
-   "id": "aucom.launcher-merge",
-   "path": "docs/agent/aucom.launcher-merge.md",
-   "title": "It absorbed the Launcher (AUL), and there is one implementation of each thing",
-   "authority": [
-    "aucom-launcher-merge"
-   ],
-   "topics": [
-    "launcher",
-    "aul",
-    "merge",
-    "history",
-    "bootstrap",
-    "duplication"
-   ],
-   "original_ranges": [
-    "36-54"
-   ]
-  },
-  {
-   "id": "aucom.extractor-acquisition",
-   "path": "docs/agent/aucom.extractor-acquisition.md",
-   "title": "The extractor is acquired, never embedded — catalogue, updates and the compatibility manifest",
-   "authority": [
-    "aucom-extractor-separation",
-    "aucom-acquisition-machinery",
-    "aucom-compatibility-manifest"
-   ],
-   "topics": [
-    "extractor",
-    "aue",
-    "acquisition",
-    "download",
-    "update",
-    "catalogue",
-    "manifest",
-    "signature",
-    "licence",
-    "provenance",
-    "verification"
-   ],
-   "original_ranges": [
-    "55-114"
-   ]
-  },
-  {
-   "id": "aucom.extractor-execution",
-   "path": "docs/agent/aucom.extractor-execution.md",
-   "title": "Running the extractor — the handshake, offline authority, bounded invocation and what authorization is not",
-   "authority": [
-    "aucom-extractor-handshake",
-    "aucom-offline-authority",
-    "aucom-invocation-bounds",
-    "aucom-authorization-not-verification",
-    "aucom-publishing-executable"
-   ],
-   "topics": [
-    "extractor",
-    "aue",
-    "handshake",
-    "protocol",
-    "offline",
-    "bounds",
-    "timeout",
-    "authorization",
-    "verification",
-    "execution"
-   ],
-   "original_ranges": [
-    "115-177"
-   ]
-  },
-  {
-   "id": "aucom.export-gate",
-   "path": "docs/agent/aucom.export-gate.md",
-   "title": "The export gate is the only way out, and trust does not travel in",
-   "authority": [
-    "aucom-export-gate",
-    "aucom-trust-does-not-travel"
-   ],
-   "topics": [
-    "publish",
-    "export",
-    "profile",
-    "portable",
-    "trust",
-    "community",
-    "install",
-    "confirmation",
-    "deployment",
-    "catalogue"
-   ],
-   "original_ranges": [
-    "178-229"
-   ]
-  },
-  {
-   "id": "aucom.quake2-maturity",
-   "path": "docs/agent/aucom.quake2-maturity.md",
-   "title": "Quake II is work in progress, and no document may say otherwise",
-   "authority": [
-    "aucom-quake2-maturity"
-   ],
-   "topics": [
-    "quake2",
-    "q2",
-    "maturity",
-    "work-in-progress",
-    "engine-family",
-    "capability",
-    "compiler",
-    "toolchain"
-   ],
-   "original_ranges": [
-    "230-287"
-   ]
-  },
-  {
-   "id": "aucom.quake3-maturity",
-   "path": "docs/agent/aucom.quake3-maturity.md",
-   "title": "Quake III is work in progress too, and it is not Quake II renumbered",
-   "authority": [
-    "aucom-quake3-maturity",
-    "aucom-q3map2-no-managed-download"
-   ],
-   "topics": [
-    "quake3",
-    "q3",
-    "q3map2",
-    "maturity",
-    "work-in-progress",
-    "shader",
-    "patch",
-    "toolchain",
-    "dependencies"
-   ],
-   "original_ranges": [
-    "288-368"
-   ]
-  },
-  {
-   "id": "aucom.threat-model",
-   "path": "docs/agent/aucom.threat-model.md",
-   "title": "The threat model is code, and there is one writer of a mutable local file",
-   "authority": [
-    "aucom-threat-model",
-    "aucom-single-writer-lockfile"
-   ],
-   "topics": [
-    "threat",
-    "security",
-    "risk",
-    "matrix",
-    "review-date",
-    "lockfile",
-    "mitigation",
-    "evidence",
-    "adr"
-   ],
-   "original_ranges": [
-    "369-446"
-   ]
-  },
-  {
-   "id": "aucom.approvals",
-   "path": "docs/agent/aucom.approvals.md",
-   "title": "There is one writer of an approval, and it refuses",
-   "authority": [
-    "aucom-approval-service"
-   ],
-   "topics": [
-    "approval",
-    "grant",
-    "binding",
-    "digest",
-    "review",
-    "cli-parity",
-    "api"
-   ],
-   "original_ranges": [
-    "447-499"
-   ]
-  },
-  {
-   "id": "aucom.job-bounds",
-   "path": "docs/agent/aucom.job-bounds.md",
-   "title": "A bound is not a measurement, and the bound comes from here",
-   "authority": [
-    "aucom-job-retention-bounds"
-   ],
-   "topics": [
-    "job",
-    "bounds",
-    "retention",
-    "logbuf",
-    "memory",
-    "disk",
-    "stress",
-    "measurement",
-    "limits"
-   ],
-   "original_ranges": [
-    "500-548"
-   ]
-  },
-  {
-   "id": "aucom.release-verification",
-   "path": "docs/agent/aucom.release-verification.md",
-   "title": "A build is not a verification, and five states keep them apart",
-   "authority": [
-    "aucom-native-support-states",
-    "aucom-release-artifacts"
-   ],
-   "topics": [
-    "release",
-    "build",
-    "artifacts",
-    "native",
-    "platform",
-    "windows",
-    "macos",
-    "matrix",
-    "verification",
-    "bundle",
-    "acceptance"
-   ],
-   "original_ranges": [
-    "549-625"
-   ]
-  },
-  {
-   "id": "aucom.join-readiness",
-   "path": "docs/agent/aucom.join-readiness.md",
-   "title": "Joining is one readiness model, and a link starts nothing",
-   "authority": [
-    "aucom-join-readiness",
-    "aucom-join-content",
-    "aucom-uri-handler"
-   ],
-   "topics": [
-    "join",
-    "game",
-    "live-game",
-    "hosted-game",
-    "readiness",
-    "ticket",
-    "stage",
-    "assetsync",
-    "uri",
-    "autopigeon-scheme",
-    "engine",
-    "host"
-   ],
-   "original_ranges": [
-    "626-675"
-   ]
-  },
-  {
-   "id": "aucom.component-addresses",
-   "path": "docs/agent/aucom.component-addresses.md",
-   "title": "Component addresses live in .env, never in code",
-   "authority": [
-    "aucom.component-addresses"
-   ],
-   "topics": [
-    "addresses",
-    "env",
-    "configuration",
-    "ports",
-    "localhost",
-    "port-contract",
-    "endpoint"
-   ],
-   "original_ranges": [
-    "739-782"
-   ]
-  }
- ],
- "title_lines": [
-  1,
-  2
- ],
- "line_coverage": [
-  {
-   "from": 3,
-   "to": 35,
-   "destination": "AGENTS.md"
-  },
-  {
-   "from": 36,
-   "to": 54,
-   "destination": "docs/agent/aucom.launcher-merge.md"
-  },
-  {
-   "from": 55,
-   "to": 114,
-   "destination": "docs/agent/aucom.extractor-acquisition.md"
-  },
-  {
-   "from": 115,
-   "to": 177,
-   "destination": "docs/agent/aucom.extractor-execution.md"
-  },
-  {
-   "from": 178,
-   "to": 229,
-   "destination": "docs/agent/aucom.export-gate.md"
-  },
-  {
-   "from": 230,
-   "to": 287,
-   "destination": "docs/agent/aucom.quake2-maturity.md"
-  },
-  {
-   "from": 288,
-   "to": 368,
-   "destination": "docs/agent/aucom.quake3-maturity.md"
-  },
-  {
-   "from": 369,
-   "to": 446,
-   "destination": "docs/agent/aucom.threat-model.md"
-  },
-  {
-   "from": 447,
-   "to": 499,
-   "destination": "docs/agent/aucom.approvals.md"
-  },
-  {
-   "from": 500,
-   "to": 548,
-   "destination": "docs/agent/aucom.job-bounds.md"
-  },
-  {
-   "from": 549,
-   "to": 625,
-   "destination": "docs/agent/aucom.release-verification.md"
-  },
-  {
-   "from": 626,
-   "to": 675,
-   "destination": "docs/agent/aucom.join-readiness.md"
-  },
-  {
-   "from": 676,
-   "to": 738,
-   "destination": "AGENTS.md"
-  },
-  {
-   "from": 739,
-   "to": 782,
-   "destination": "docs/agent/aucom.component-addresses.md"
-  }
- ],
- "line_coverage_note": "Every line of the pre-split AGENTS.md is claimed by exactly one live file. The gate re-derives this on every run: a gap, an overlap, or a destination no longer on disk is a failure, which is what stops the accounting rotting into a receipt. One section is split across destinations by LINE rather than by heading — §1, whose acquisition half is `aucom.extractor-acquisition` and whose execution half is `aucom.extractor-execution` — and the split falls on §1's own subsection boundary at line 115, so both halves appear as ordinary heading rows.",
- "rules_without_headings": []
+  "schema": "aut-agent-section-manifest/1",
+  "established_by": "NEW_246G_AUT_AUG_AUCOM_AUTEL_AULIBS_Remaining-Repository-Documentation-Modularization",
+  "what_this_is": [
+    "The ACCOUNTING for the split of this repository's AGENTS.md: every heading the pre-split file",
+    "had, every LINE it had, and the ONE live file each now lives in. It exists so the claim `no",
+    "rule was lost` is checkable rather than asserted, and `agent_context_router.py gate` re-derives",
+    "it on every run rather than trusting it."
+  ],
+  "original_agents_sha256": "dc16c6c72b64a6611a50572b03b571b72a0145928f521fdd76de502db6e32b2b",
+  "original_lines": 782,
+  "original_words": 7372,
+  "headings_total_including_title": 29,
+  "headings_accounted": 28,
+  "title_heading_note": "`# AGENTS.md \u2014 Auto-Pigeon Companion` (original line 1) is the document title rather than a rule, so it is not a section with a destination; it stayed the title of the compacted root file. Line 2 is the blank line under it. Both are in `title_lines`.",
+  "sections": [
+    {
+      "original_line": 3,
+      "level": 2,
+      "heading": "Do not read or run `run-sequence.sh`",
+      "destination": "AGENTS.md",
+      "destination_kind": "kept-in-root",
+      "note": "needed for nearly every task, or replaced by the routing table"
+    },
+    {
+      "original_line": 17,
+      "level": 2,
+      "heading": "0. What this repository is",
+      "destination": "AGENTS.md",
+      "destination_kind": "kept-in-root",
+      "note": "needed for nearly every task, or replaced by the routing table"
+    },
+    {
+      "original_line": 36,
+      "level": 3,
+      "heading": "It absorbed the Launcher",
+      "destination": "docs/agent/aucom.launcher-merge.md",
+      "destination_kind": "moved-to-module",
+      "note": "routed, selectively read"
+    },
+    {
+      "original_line": 55,
+      "level": 2,
+      "heading": "1. THE EXTRACTOR IS NOT IN THIS BINARY, AND THERE IS NO THIRD WAY TO ONE (`AUE/AUB/AUCOM 211`)",
+      "destination": "docs/agent/aucom.extractor-acquisition.md",
+      "destination_kind": "moved-to-module",
+      "note": "routed, selectively read"
+    },
+    {
+      "original_line": 75,
+      "level": 3,
+      "heading": "What embedding cost, and why it is three separate faults",
+      "destination": "docs/agent/aucom.extractor-acquisition.md",
+      "destination_kind": "moved-to-module",
+      "note": "routed, selectively read"
+    },
+    {
+      "original_line": 91,
+      "level": 3,
+      "heading": "It reuses the acquisition machinery; it is not a second updater",
+      "destination": "docs/agent/aucom.extractor-acquisition.md",
+      "destination_kind": "moved-to-module",
+      "note": "routed, selectively read"
+    },
+    {
+      "original_line": 99,
+      "level": 3,
+      "heading": "The compatibility manifest is a THIRD signed document, and it carries no digest",
+      "destination": "docs/agent/aucom.extractor-acquisition.md",
+      "destination_kind": "moved-to-module",
+      "note": "routed, selectively read"
+    },
+    {
+      "original_line": 115,
+      "level": 3,
+      "heading": "The protocol handshake, before the executable is used for anything",
+      "destination": "docs/agent/aucom.extractor-execution.md",
+      "destination_kind": "moved-to-module",
+      "note": "routed, selectively read"
+    },
+    {
+      "original_line": 126,
+      "level": 3,
+      "heading": "Offline is a different authority, never a weaker check",
+      "destination": "docs/agent/aucom.extractor-execution.md",
+      "destination_kind": "moved-to-module",
+      "note": "routed, selectively read"
+    },
+    {
+      "original_line": 138,
+      "level": 3,
+      "heading": "Every invocation is bounded, and the bounds are not decoration",
+      "destination": "docs/agent/aucom.extractor-execution.md",
+      "destination_kind": "moved-to-module",
+      "note": "routed, selectively read"
+    },
+    {
+      "original_line": 154,
+      "level": 3,
+      "heading": "Authorization is not verification",
+      "destination": "docs/agent/aucom.extractor-execution.md",
+      "destination_kind": "moved-to-module",
+      "note": "routed, selectively read"
+    },
+    {
+      "original_line": 168,
+      "level": 3,
+      "heading": "Publishing is executable, and holds no key here",
+      "destination": "docs/agent/aucom.extractor-execution.md",
+      "destination_kind": "moved-to-module",
+      "note": "routed, selectively read"
+    },
+    {
+      "original_line": 178,
+      "level": 2,
+      "heading": "2. THE EXPORT GATE IS THE ONLY WAY OUT, AND TRUST DOES NOT TRAVEL IN (`AUB/AUP/AUG/AUCOM 213`)",
+      "destination": "docs/agent/aucom.export-gate.md",
+      "destination_kind": "moved-to-module",
+      "note": "routed, selectively read"
+    },
+    {
+      "original_line": 230,
+      "level": 2,
+      "heading": "3. QUAKE II IS WORK IN PROGRESS, AND NO DOCUMENT MAY SAY OTHERWISE (`AUP/AUCOM 215`)",
+      "destination": "docs/agent/aucom.quake2-maturity.md",
+      "destination_kind": "moved-to-module",
+      "note": "routed, selectively read"
+    },
+    {
+      "original_line": 288,
+      "level": 2,
+      "heading": "4. QUAKE III IS WORK IN PROGRESS TOO, AND IT IS NOT QUAKE II RENUMBERED (`AUP/AUCOM 216`)",
+      "destination": "docs/agent/aucom.quake3-maturity.md",
+      "destination_kind": "moved-to-module",
+      "note": "routed, selectively read"
+    },
+    {
+      "original_line": 369,
+      "level": 2,
+      "heading": "5. THE THREAT MODEL IS CODE, AND THERE IS ONE WRITER (`AUCOM/AUT 218`)",
+      "destination": "docs/agent/aucom.threat-model.md",
+      "destination_kind": "moved-to-module",
+      "note": "routed, selectively read"
+    },
+    {
+      "original_line": 447,
+      "level": 2,
+      "heading": "6. THERE IS ONE WRITER OF AN APPROVAL, AND IT REFUSES (`AUCOM/AUT 228`)",
+      "destination": "docs/agent/aucom.approvals.md",
+      "destination_kind": "moved-to-module",
+      "note": "routed, selectively read"
+    },
+    {
+      "original_line": 500,
+      "level": 2,
+      "heading": "7. A BOUND IS NOT A MEASUREMENT, AND THE BOUND COMES FROM HERE (`AUCOM/AUT 229`)",
+      "destination": "docs/agent/aucom.job-bounds.md",
+      "destination_kind": "moved-to-module",
+      "note": "routed, selectively read"
+    },
+    {
+      "original_line": 549,
+      "level": 2,
+      "heading": "8. A BUILD IS NOT A VERIFICATION, AND FIVE STATES KEEP THEM APART (`AUT/AUCOM 231`)",
+      "destination": "docs/agent/aucom.release-verification.md",
+      "destination_kind": "moved-to-module",
+      "note": "routed, selectively read"
+    },
+    {
+      "original_line": 626,
+      "level": 2,
+      "heading": "9. JOINING IS ONE READINESS MODEL, AND A LINK STARTS NOTHING (`AUB/AUG/AUCOM/AUT 244F`)",
+      "destination": "docs/agent/aucom.join-readiness.md",
+      "destination_kind": "moved-to-module",
+      "note": "routed, selectively read"
+    },
+    {
+      "original_line": 676,
+      "level": 2,
+      "heading": "Cross-repository boundary",
+      "destination": "AGENTS.md",
+      "destination_kind": "kept-in-root",
+      "note": "needed for nearly every task, or replaced by the routing table"
+    },
+    {
+      "original_line": 686,
+      "level": 2,
+      "heading": "Prompt queue and handoff workflow",
+      "destination": "AGENTS.md",
+      "destination_kind": "kept-in-root",
+      "note": "needed for nearly every task, or replaced by the routing table"
+    },
+    {
+      "original_line": 731,
+      "level": 2,
+      "heading": "Session continuity and context-budget safety",
+      "destination": "AGENTS.md",
+      "destination_kind": "kept-in-root",
+      "note": "needed for nearly every task, or replaced by the routing table"
+    },
+    {
+      "original_line": 739,
+      "level": 2,
+      "heading": "Component addresses live in `.env`, never in code",
+      "destination": "docs/agent/aucom.component-addresses.md",
+      "destination_kind": "moved-to-module",
+      "note": "routed, selectively read"
+    },
+    {
+      "original_line": 745,
+      "level": 3,
+      "heading": "Why this is a rule and not a preference",
+      "destination": "docs/agent/aucom.component-addresses.md",
+      "destination_kind": "moved-to-module",
+      "note": "routed, selectively read"
+    },
+    {
+      "original_line": 761,
+      "level": 3,
+      "heading": "What to do instead",
+      "destination": "docs/agent/aucom.component-addresses.md",
+      "destination_kind": "moved-to-module",
+      "note": "routed, selectively read"
+    },
+    {
+      "original_line": 771,
+      "level": 3,
+      "heading": "The one permitted derivation",
+      "destination": "docs/agent/aucom.component-addresses.md",
+      "destination_kind": "moved-to-module",
+      "note": "routed, selectively read"
+    },
+    {
+      "original_line": 778,
+      "level": 3,
+      "heading": "When the address is missing",
+      "destination": "docs/agent/aucom.component-addresses.md",
+      "destination_kind": "moved-to-module",
+      "note": "routed, selectively read"
+    }
+  ],
+  "modules": [
+    {
+      "id": "aucom.launcher-merge",
+      "path": "docs/agent/aucom.launcher-merge.md",
+      "title": "It absorbed the Launcher (AUL), and there is one implementation of each thing",
+      "authority": [
+        "aucom-launcher-merge"
+      ],
+      "topics": [
+        "launcher",
+        "aul",
+        "merge",
+        "history",
+        "bootstrap",
+        "duplication"
+      ],
+      "original_ranges": [
+        "36-54"
+      ]
+    },
+    {
+      "id": "aucom.extractor-acquisition",
+      "path": "docs/agent/aucom.extractor-acquisition.md",
+      "title": "The extractor is acquired, never embedded \u2014 catalogue, updates and the compatibility manifest",
+      "authority": [
+        "aucom-extractor-separation",
+        "aucom-acquisition-machinery",
+        "aucom-compatibility-manifest"
+      ],
+      "topics": [
+        "extractor",
+        "aue",
+        "acquisition",
+        "download",
+        "update",
+        "catalogue",
+        "manifest",
+        "signature",
+        "licence",
+        "provenance",
+        "verification"
+      ],
+      "original_ranges": [
+        "55-114"
+      ]
+    },
+    {
+      "id": "aucom.extractor-execution",
+      "path": "docs/agent/aucom.extractor-execution.md",
+      "title": "Running the extractor \u2014 the handshake, offline authority, bounded invocation and what authorization is not",
+      "authority": [
+        "aucom-extractor-handshake",
+        "aucom-offline-authority",
+        "aucom-invocation-bounds",
+        "aucom-authorization-not-verification",
+        "aucom-publishing-executable"
+      ],
+      "topics": [
+        "extractor",
+        "aue",
+        "handshake",
+        "protocol",
+        "offline",
+        "bounds",
+        "timeout",
+        "authorization",
+        "verification",
+        "execution"
+      ],
+      "original_ranges": [
+        "115-177"
+      ]
+    },
+    {
+      "id": "aucom.export-gate",
+      "path": "docs/agent/aucom.export-gate.md",
+      "title": "The export gate is the only way out, and trust does not travel in",
+      "authority": [
+        "aucom-export-gate",
+        "aucom-trust-does-not-travel"
+      ],
+      "topics": [
+        "publish",
+        "export",
+        "profile",
+        "portable",
+        "trust",
+        "community",
+        "install",
+        "confirmation",
+        "deployment",
+        "catalogue"
+      ],
+      "original_ranges": [
+        "178-229"
+      ]
+    },
+    {
+      "id": "aucom.quake2-maturity",
+      "path": "docs/agent/aucom.quake2-maturity.md",
+      "title": "Quake II is work in progress, and no document may say otherwise",
+      "authority": [
+        "aucom-quake2-maturity"
+      ],
+      "topics": [
+        "quake2",
+        "q2",
+        "maturity",
+        "work-in-progress",
+        "engine-family",
+        "capability",
+        "compiler",
+        "toolchain"
+      ],
+      "original_ranges": [
+        "230-287"
+      ]
+    },
+    {
+      "id": "aucom.quake3-maturity",
+      "path": "docs/agent/aucom.quake3-maturity.md",
+      "title": "Quake III is work in progress too, and it is not Quake II renumbered",
+      "authority": [
+        "aucom-quake3-maturity",
+        "aucom-q3map2-no-managed-download"
+      ],
+      "topics": [
+        "quake3",
+        "q3",
+        "q3map2",
+        "maturity",
+        "work-in-progress",
+        "shader",
+        "patch",
+        "toolchain",
+        "dependencies"
+      ],
+      "original_ranges": [
+        "288-368"
+      ]
+    },
+    {
+      "id": "aucom.threat-model",
+      "path": "docs/agent/aucom.threat-model.md",
+      "title": "The threat model is code, and there is one writer of a mutable local file",
+      "authority": [
+        "aucom-threat-model",
+        "aucom-single-writer-lockfile"
+      ],
+      "topics": [
+        "threat",
+        "security",
+        "risk",
+        "matrix",
+        "review-date",
+        "lockfile",
+        "mitigation",
+        "evidence",
+        "adr"
+      ],
+      "original_ranges": [
+        "369-446"
+      ]
+    },
+    {
+      "id": "aucom.approvals",
+      "path": "docs/agent/aucom.approvals.md",
+      "title": "There is one writer of an approval, and it refuses",
+      "authority": [
+        "aucom-approval-service"
+      ],
+      "topics": [
+        "approval",
+        "grant",
+        "binding",
+        "digest",
+        "review",
+        "cli-parity",
+        "api"
+      ],
+      "original_ranges": [
+        "447-499"
+      ]
+    },
+    {
+      "id": "aucom.job-bounds",
+      "path": "docs/agent/aucom.job-bounds.md",
+      "title": "A bound is not a measurement, and the bound comes from here",
+      "authority": [
+        "aucom-job-retention-bounds"
+      ],
+      "topics": [
+        "job",
+        "bounds",
+        "retention",
+        "logbuf",
+        "memory",
+        "disk",
+        "stress",
+        "measurement",
+        "limits"
+      ],
+      "original_ranges": [
+        "500-548"
+      ]
+    },
+    {
+      "id": "aucom.release-verification",
+      "path": "docs/agent/aucom.release-verification.md",
+      "title": "A build is not a verification, and five states keep them apart",
+      "authority": [
+        "aucom-native-support-states",
+        "aucom-release-artifacts"
+      ],
+      "topics": [
+        "release",
+        "build",
+        "artifacts",
+        "native",
+        "platform",
+        "windows",
+        "macos",
+        "matrix",
+        "verification",
+        "bundle",
+        "acceptance"
+      ],
+      "original_ranges": [
+        "549-625"
+      ]
+    },
+    {
+      "id": "aucom.join-readiness",
+      "path": "docs/agent/aucom.join-readiness.md",
+      "title": "Joining is one readiness model, and a link starts nothing",
+      "authority": [
+        "aucom-join-readiness",
+        "aucom-join-content",
+        "aucom-uri-handler"
+      ],
+      "topics": [
+        "join",
+        "game",
+        "live-game",
+        "hosted-game",
+        "readiness",
+        "ticket",
+        "stage",
+        "assetsync",
+        "uri",
+        "autopigeon-scheme",
+        "engine",
+        "host"
+      ],
+      "original_ranges": [
+        "626-675"
+      ]
+    },
+    {
+      "id": "aucom.component-addresses",
+      "path": "docs/agent/aucom.component-addresses.md",
+      "title": "Component addresses live in .env, never in code",
+      "authority": [
+        "aucom.component-addresses"
+      ],
+      "topics": [
+        "addresses",
+        "env",
+        "configuration",
+        "ports",
+        "localhost",
+        "port-contract",
+        "endpoint"
+      ],
+      "original_ranges": [
+        "739-782"
+      ]
+    },
+    {
+      "id": "aucom.desktop-shell",
+      "path": "docs/agent/aucom.desktop-shell.md",
+      "title": "The desktop shell is deferred, and the browser is not a fallback for it",
+      "authority": [
+        "aucom-desktop-shell-deferral"
+      ],
+      "topics": [
+        "desktop",
+        "shell",
+        "wails",
+        "webview",
+        "window",
+        "native-ui",
+        "electron",
+        "tauri",
+        "cgo"
+      ],
+      "original_ranges": [],
+      "note": "Added by NEW_246I1_AUCOM_AUE_AUT_One-Click-AUB-Map-WAD-Build-Run-Release-And-Desktop-Shell-Closure. It carries no range of the pre-split AGENTS.md because the rule did not exist then: the desktop shell was proposed by 246I1 and deferred by its own spike. The line accounting above is unchanged."
+    }
+  ],
+  "title_lines": [
+    1,
+    2
+  ],
+  "line_coverage": [
+    {
+      "from": 3,
+      "to": 35,
+      "destination": "AGENTS.md"
+    },
+    {
+      "from": 36,
+      "to": 54,
+      "destination": "docs/agent/aucom.launcher-merge.md"
+    },
+    {
+      "from": 55,
+      "to": 114,
+      "destination": "docs/agent/aucom.extractor-acquisition.md"
+    },
+    {
+      "from": 115,
+      "to": 177,
+      "destination": "docs/agent/aucom.extractor-execution.md"
+    },
+    {
+      "from": 178,
+      "to": 229,
+      "destination": "docs/agent/aucom.export-gate.md"
+    },
+    {
+      "from": 230,
+      "to": 287,
+      "destination": "docs/agent/aucom.quake2-maturity.md"
+    },
+    {
+      "from": 288,
+      "to": 368,
+      "destination": "docs/agent/aucom.quake3-maturity.md"
+    },
+    {
+      "from": 369,
+      "to": 446,
+      "destination": "docs/agent/aucom.threat-model.md"
+    },
+    {
+      "from": 447,
+      "to": 499,
+      "destination": "docs/agent/aucom.approvals.md"
+    },
+    {
+      "from": 500,
+      "to": 548,
+      "destination": "docs/agent/aucom.job-bounds.md"
+    },
+    {
+      "from": 549,
+      "to": 625,
+      "destination": "docs/agent/aucom.release-verification.md"
+    },
+    {
+      "from": 626,
+      "to": 675,
+      "destination": "docs/agent/aucom.join-readiness.md"
+    },
+    {
+      "from": 676,
+      "to": 738,
+      "destination": "AGENTS.md"
+    },
+    {
+      "from": 739,
+      "to": 782,
+      "destination": "docs/agent/aucom.component-addresses.md"
+    }
+  ],
+  "line_coverage_note": "Every line of the pre-split AGENTS.md is claimed by exactly one live file. The gate re-derives this on every run: a gap, an overlap, or a destination no longer on disk is a failure, which is what stops the accounting rotting into a receipt. One section is split across destinations by LINE rather than by heading \u2014 \u00a71, whose acquisition half is `aucom.extractor-acquisition` and whose execution half is `aucom.extractor-execution` \u2014 and the split falls on \u00a71's own subsection boundary at line 115, so both halves appear as ordinary heading rows.",
+  "rules_without_headings": []
 }

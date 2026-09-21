@@ -1,0 +1,222 @@
+name: release
+
+# Building a release and PUBLISHING one are two decisions, and this workflow
+# keeps them two. `build.yml` remains the per-push verification workflow and
+# still publishes nothing and holds no credential; this one is the only place
+# in this repository with `contents: write`, on one job, reached only by an
+# authorized tag or an explicit manual publish.
+#
+# # What this does NOT do
+#
+# It does not sign. There is no Apple Developer ID and no Authenticode
+# certificate for this project, so the artifacts are unsigned, macOS shows a
+# Gatekeeper warning and Windows shows SmartScreen on first run — exactly what
+# `companion security residual` already says, with an owner and a review date.
+# `SHA256SUMS` makes a corrupted or truncated download detectable and is not a
+# signature, and the release notes say so rather than implying more.
+#
+# It does not sign the AUB compatibility catalogue either. That is a publisher's
+# act with a key that is not in CI, and a workflow that could do it from a tag
+# would be a workflow that vouches for whatever a tag contains.
+#
+# # The extractor is not built here and is not IN here
+#
+# `no-embedded-extractor` in `build.yml` is the gate and stays. What this
+# workflow may do is put the two SEPARATELY BUILT programs in one archive, as
+# two files under two licences, and only when `build/sidecar-pin.json` names an
+# exact published extractor version and the exact SHA-256 of each asset. With
+# the pin disabled — which is its state today, because no extractor release has
+# been published to pin — the Companion's assets are published on their own and
+# the signed managed-acquisition path joins them at run time. That is the
+# documented, verified route; the bundle is a convenience over it and never a
+# second way to an executable.
+#
+# # Why the packaging runs on Linux
+#
+# The Companion is pure Go with an embedded frontend, and `build/release.sh`
+# cross-builds all six targets with `CGO_ENABLED=0`. The macOS `.app` layout is
+# made by a shell script, not by Xcode. The two things that WOULD need a native
+# runner — the Inno Setup installer and macOS notarization — are skeletons with
+# no certificate behind them, and are not produced here; `build.yml`'s TODOs say
+# the same. The TESTS do run natively, on all three operating systems, in the
+# `verify` job below, and that is where the native claim is made.
+#
+# # Why no third-party actions
+#
+# Only `actions/checkout` and `actions/setup-go`, both pinned by commit SHA and
+# both the ones `build.yml` already uses. The release is created with the `gh`
+# CLI the runners already carry, so the set of code with write access to this
+# repository's releases is: this file.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Attach the artifacts to a GitHub Release. Off means build and verify only.'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: "1.26.8"
+
+jobs:
+  # Native tests, on the three operating systems, because %AppData%, ~/Library,
+  # the .exe suffix, the Windows process tree and the PowerShell path picker are
+  # not things a Linux runner exercises.
+  verify:
+    name: verify (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: go vet
+        run: go vet ./...
+      - name: go test
+        run: go test ./...
+
+  # The pure-Go six-target cross-build, unchanged and still green. A release
+  # that could not cross-build is a release with a hole in it.
+  cross-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: six targets, no cgo
+        run: |
+          set -euo pipefail
+          for target in windows/amd64 windows/arm64 linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+            GOOS="${target%/*}" GOARCH="${target#*/}" CGO_ENABLED=0 \
+              go build -o /dev/null ./cmd/companion
+            echo "== ${target}"
+          done
+      # Windows test COMPILATION, from Linux, for both Windows architectures.
+      # It is not a native run and is not reported as one: it is the check that
+      # the build tags still split correctly, which is what stopped Unix-only
+      # signals reaching a Windows build.
+      - name: Windows test binaries still compile
+        run: |
+          set -euo pipefail
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go test ./... -run '^$'
+          GOOS=windows GOARCH=arm64 CGO_ENABLED=0 go test ./... -run '^$'
+
+  publish:
+    needs: [verify, cross-build]
+    if: github.ref_type == 'tag' || inputs.publish
+    runs-on: ubuntu-latest
+    permissions:
+      # The one widening in this file, on the one job that needs it.
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # The version is 1.<commit-count>, so the whole history is needed.
+          fetch-depth: 0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - id: version
+        run: echo "version=1.$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Build every target
+        run: ./build/release.sh --out "${RUNNER_TEMP}/dist"
+
+      - name: Assemble one bundle per platform
+        # `build/release.sh` publishes one ARCHIVE per platform — the binary or
+        # the .app, the licences and the native acceptance kit. Each is
+        # unpacked, the bundle manifest and (when pinned) the extractor sidecar
+        # are added, and it is repacked. Unpacked rather than rebuilt, so what
+        # ships is the archive the release script produced and checked.
+        run: |
+          set -euo pipefail
+          version='${{ steps.version.outputs.version }}'
+          mkdir -p "${RUNNER_TEMP}/bundles"
+          for platform in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64 windows-amd64 windows-arm64; do
+            staged="${RUNNER_TEMP}/staged/${platform}"
+            mkdir -p "$staged"
+            archive="${RUNNER_TEMP}/dist/auto-pigeon-companion-${version}-${platform}"
+            if [ -f "${archive}.tar.gz" ]; then
+              tar -xzf "${archive}.tar.gz" -C "$staged"
+            else
+              unzip -q "${archive}.zip" -d "$staged"
+            fi
+            ./build/bundle-sidecar.sh \
+              --platform "$platform" \
+              --version "$version" \
+              --binary-dir "$staged" \
+              --out "${RUNNER_TEMP}/bundles"
+          done
+
+      - name: One archive per platform, plus the operator aggregate
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}/bundles"
+          for bundle in */; do
+            name="${bundle%/}"
+            zip -qr "${name}.zip" "$name"
+            rm -rf "$name"
+          done
+          # Per-platform downloads are the primary artifacts: a user should not
+          # download five irrelevant binaries to run one app. The aggregate is
+          # an operator convenience over the SAME bundles, not six loose
+          # executables with ambiguous names.
+          sha256sum ./*.zip > SHA256SUMS
+          zip -qr "${RUNNER_TEMP}/aucom-release.zip" ./*.zip SHA256SUMS
+          cp "${RUNNER_TEMP}/aucom-release.zip" .
+          sha256sum aucom-release.zip >> SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Attach everything to the Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}/bundles"
+          tag="${GITHUB_REF_NAME}"
+          if [ "${GITHUB_REF_TYPE:-}" != "tag" ]; then
+            tag="v${VERSION}"
+          fi
+          notes="$(cat <<EOF
+          Auto-Pigeon Companion ${VERSION}, built from ${GITHUB_SHA}.
+
+          Download the ONE archive for your machine. \`aucom-release.zip\` is an operator
+          convenience holding all of them and their checksums; it is not what a user needs.
+
+          **These artifacts are not signed.** There is no Apple Developer ID and no Authenticode
+          certificate for this project, so macOS shows a Gatekeeper warning and Windows shows
+          SmartScreen on first run. \`SHA256SUMS\` makes a corrupted or truncated download
+          detectable; it is not a signature, because anybody who can replace the artifacts can
+          replace the checksum file.
+
+          **Auto-Pigeon Extractor is not inside these archives.** It is a separate program under
+          AGPL-3.0. The Companion downloads it against a signed catalogue, at the version a signed
+          compatibility manifest names, verifies its digest and its protocol, and records it as a
+          managed install. \`bundle-manifest.json\` in each archive says this in full.
+          EOF
+          )"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" ./*.zip SHA256SUMS --clobber
+          else
+            gh release create "$tag" ./*.zip SHA256SUMS \
+              --title "Auto-Pigeon Companion ${VERSION}" --notes "$notes"
+          fi

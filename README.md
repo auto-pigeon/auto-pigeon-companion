@@ -342,16 +342,60 @@ Approving a profile was the one exception until `AUCOM/AUT 228`; it is now
 `companion toolchain review`, `grant` and `withdraw`, over the same
 [`approval.Service`](internal/approval) the page's grant route holds.
 
-The page has six areas, and the order is the order of a first run.
+The page has seven areas, and the order is the order of a first run.
 
 | Area | What it is for |
 | --- | --- |
+| **Build & Run** | The whole journey in one page: sign in, choose a map revision, choose a build profile, choose an engine, review, and press one button. Everything after that button happens on this machine's own server and survives closing the tab. |
 | **My Maps** | Your maps in your Auto-Pigeon account, and the exact revisions this machine has downloaded and verified. |
 | **Build** | Compiling, as four steps in a row: **How to build** (the pipeline), **The map**, **Check** (the exact command per stage, and what is missing), **Build** (live output, artifacts). |
 | **Run** | Starting a game: which engine, where it is on this machine, which map or package, and the exact command. |
 | **Profiles** | Reading what a tool or engine asks to be allowed to do, approving it, and writing your own. |
 | **Jobs** | Everything that has run, with its command, its exit status and its output. |
 | **Settings** | Where the backend is, and where the Companion keeps things. |
+
+### Build & Run, in one press
+
+**Build & Run** is the main path, and it exists because doing it by hand was
+eight steps in four places. Five choices, then one button:
+
+1. **Map** — the map, and the exact revision. A revision is one saved version,
+   for ever; saving a newer one in the editor afterwards never changes a build
+   that has already started.
+2. **Build** — which build profile, and its options.
+3. **Run** — which engine, and which folder beside the base game to install
+   into. The default is `auto-pigeon`, a folder of the Companion's own.
+4. **Review** — the WADs this map declares, **in the order it declares them**,
+   the programs that will run, every file that will be written, and the exact
+   command the engine will be given.
+5. **Build & Run** — one confirmation.
+
+After that the Companion, on its own:
+
+- downloads and verifies the exact map revision;
+- downloads and verifies that revision's texture bundle from the server, and
+  stops before anything compiles if the bundle is not compiler-ready — naming
+  every reason the server gave;
+- runs Auto-Pigeon Extractor as a separate program to turn APMap into a Quake
+  `.map`, when the revision needs it;
+- compiles, giving the compiler the verified WAD folder with `-wadpath`;
+- installs the `.bsp`, its `.lit` when one was produced, the WADs and the build
+  manifest into `<game>/auto-pigeon/`;
+- verifies every installed file again; and
+- starts the engine.
+
+**It never writes into `id1`,** or into any other folder a Quake installation
+owns, and it refuses an `auto-pigeon` folder it did not create rather than
+merging into it. A second run replaces only the files it staged the first time;
+anything of yours beside them is left alone.
+
+Progress, results and failures are in the **Activity** panel — a drawer on a
+wide window, the whole screen on a narrow one — and in **Jobs**, which keeps
+them after the window is closed. You can close the tab while it works.
+
+A compiled Quake 1 `.bsp` carries its own textures, so the game does not read
+the staged WADs at run time. They are kept with the map because the build is
+then inspectable and repeatable, and the page says so where it lists them.
 
 ### The default path through it
 
@@ -3910,6 +3954,73 @@ is completed rather than abandoned.
 | `/api/v1/games/pending` | GET | the game a clicked `autopigeon://` link was for; redeems it at most once |
 | `/api/v1/games/pending/dismiss` | POST | forget it |
 
+#### Build & Run
+
+| Route | Method | What it does |
+| --- | --- | --- |
+| `/api/v1/play/plan` | POST | what a Build & Run would do, and start nothing: what is fetched, which programs run, where files are written, the exact argv |
+| `/api/v1/play/runs` | POST | one confirmation starts the whole server-side sequence; answers `202` with the run's id |
+| `/api/v1/play/runs` | GET | every run, newest first |
+| `/api/v1/play/runs/{id}` | GET | one run: its state, every stage with a duration, the bundle, the extractor, the build, the staged files and the argv |
+| `/api/v1/play/runs/{id}/cancel` | POST | stop it. Reaches the running child job, and removes anything already installed |
+| `/api/v1/play/runs/{id}/retry` | POST | a NEW attempt, linked to the old one. Reuses verified cached objects |
+| `/api/v1/play/textures` | GET | `?asset_id=&revision=`: the ordered WAD declaration, whether it is compiler-ready, and the refusals |
+
+A run, end to end, from a terminal — the same sequence the page drives:
+
+```console
+$ TOKEN=$(cat ~/.config/auto-pigeon-companion/api-token)
+$ AUCOM=http://127.0.0.1:8791
+
+$ cat > /tmp/run.json <<'JSON'
+{"asset_type":"map","asset_id":"map0000000001",
+ "revision_id":"rev0000000007","revision_number":7,
+ "pipeline":"auto-pigeon.q1-normal",
+ "engine":"auto-pigeon.vkquake","action":"play_map",
+ "mod":"auto-pigeon","map":"dm1"}
+JSON
+
+$ curl -s -H "X-AUCOM-Token: $TOKEN" -H 'Content-Type: application/json'     --data @/tmp/run.json "$AUCOM/api/v1/play/plan" | jq '.writes, .launch.args'
+{
+  "directory": "/home/you/games/quake/auto-pigeon",
+  "files": ["auto-pigeon/maps/dm1.bsp", "…"],
+  "never_writes": "id1, and every other directory a Quake installation owns"
+}
+["-basedir", "/home/you/games/quake", "-game", "auto-pigeon", "+map", "dm1"]
+
+$ ID=$(curl -s -H "X-AUCOM-Token: $TOKEN" -H 'Content-Type: application/json'     --data @/tmp/run.json "$AUCOM/api/v1/play/runs" | jq -r .id)
+
+$ curl -s -H "X-AUCOM-Token: $TOKEN" "$AUCOM/api/v1/play/runs/$ID"     | jq '{state, title, stages: [.stages[] | {state, duration_ms}]}'
+{
+  "state": "succeeded",
+  "title": "Finished",
+  "stages": [
+    {"state": "downloading_map", "duration_ms": 412},
+    {"state": "downloading_textures", "duration_ms": 1183},
+    {"state": "converting", "duration_ms": 2207},
+    {"state": "compiling", "duration_ms": 18840},
+    {"state": "installing", "duration_ms": 96},
+    {"state": "launching", "duration_ms": 140},
+    {"state": "running", "duration_ms": 0}
+  ]
+}
+
+$ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" "$AUCOM/api/v1/play/runs/$ID/cancel"
+{"cancelling":true}
+```
+
+A bundle the server could not complete stops the run before the extractor or a
+compiler starts, and says which sources it could not redistribute:
+
+```console
+$ curl -s -H "X-AUCOM-Token: $TOKEN"     "$AUCOM/api/v1/play/textures?asset_id=map0000000001&revision=7"     | jq '{compiler_ready, wads_declared, compiler_refusals}'
+{
+  "compiler_ready": false,
+  "wads_declared": ["first.wad", "quake101.wad"],
+  "compiler_refusals": ["wad_bytes_not_carried: quake101.wad"]
+}
+```
+
 The `/api/v1` routes are versioned because `companion job` and your own scripts
 drive them; the unversioned `/api` routes are the page's own and are not a
 contract.
@@ -3939,6 +4050,7 @@ call the same function — not an equivalent one.
 | `POST /api/v1/jobs/{id}/cancel` | `companion job cancel <id>` | `job.Service.Cancel` |
 | `GET /api/v1/build/pipelines` | `companion build pipelines` | `build.Runner` |
 | `POST /api/v1/build/runs` | `companion build run` | `build.Runner` |
+| `POST /api/v1/build/preview` (`roots`) | `companion build preview --root content_root=<dir>` | `build.checkRoots`, `profile.Resolve` |
 | `GET /api/v1/library/catalog` | `companion aub catalog` | `aub.Client` |
 | `POST /api/v1/library/sync` | `companion aub sync` | `assetsync.Store` |
 | `GET /api/v1/games` | `companion game list` | `aub.Client.HostedGames` |
@@ -4128,6 +4240,63 @@ run-acceptance.sh: OK
 ``` It finishes by
 printing `companion release support`, so the last thing a release run says is
 what the release actually claims.
+
+### Publishing a release
+
+`.github/workflows/release.yml` is the only place in this repository with
+`contents: write`, on one job, reached only by a version tag or by an explicit
+manual publish. `build.yml` remains the per-push verification workflow and still
+publishes nothing and reads no secret.
+
+```console
+$ git tag -a v1.90 -m "Auto-Pigeon Companion 1.90" && git push origin v1.90
+```
+
+The `verify` jobs run `go vet` and `go test` natively on Ubuntu, Windows and
+macOS — that is where the native claim is made — and the `cross-build` job
+proves all six targets still compile pure-Go and that the Windows test binaries
+still compile for both Windows architectures from Linux. Only then does
+`publish` build the artifacts, assemble one archive per platform, and attach
+them.
+
+**Per-platform downloads are the artifacts.** A user should not download five
+irrelevant binaries to run one app. `aucom-release.zip` is an operator
+convenience holding the per-platform archives and their checksums.
+
+**Auto-Pigeon Extractor is not inside those archives, today.** It is a separate
+AGPL-3.0 program, and this repository's release may put the two *separately
+built* programs into one archive only when `build/sidecar-pin.json` names an
+exact published extractor version and the exact SHA-256 of each asset.
+`build/bundle-sidecar.sh` implements that, digest check and all, and the pin is
+currently **disabled**: no extractor release has been published to pin, and a
+pin filled in from a branch head or a `latest` URL would be a bundle whose
+contents nobody can state in advance. Until then the Companion obtains the
+extractor the way it always has — against the signed catalogue, at the version a
+signed compatibility manifest names, verified, as a managed install — and every
+archive's `bundle-manifest.json` says so in full.
+
+```console
+$ unzip -p auto-pigeon-companion-1.90-linux-amd64.zip     auto-pigeon-companion-1.90-linux-amd64/bundle-manifest.json | jq '.extractor, .extractor_absent.reason'
+null
+"No Auto-Pigeon Extractor release has been published yet, so there is no immutable version and no digest to pin. …"
+```
+
+Nothing in either workflow signs anything. There is no Apple Developer ID and no
+Authenticode certificate for this project, so the artifacts are unsigned, macOS
+shows a Gatekeeper warning and Windows shows SmartScreen on first run —
+`companion security residual` says so, with an owner and a review date.
+
+### The desktop window
+
+There is not one yet, and the reason is measured rather than assumed.
+`AUCOM/AUE/AUT 246I1` spiked Wails v2.16.0: it **compiles** with
+`CGO_ENABLED=0` for all six of this project's targets, and the program it
+produces prints *"Wails applications will not build without the correct build
+tags"* and exits. A build is not a verification. Adding a real desktop shell
+means moving those six targets to native runners with each platform's WebView
+SDK, which is a task of its own; `docs/agent/aucom.desktop-shell.md` and
+`$MAPPER_ROOT/LLM/docs/adr/0026-*.md` record the decision and what a future task
+inherits.
 
 ## What is built, and what has been run
 

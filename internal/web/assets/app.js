@@ -268,7 +268,11 @@
     setMessage("sign-in-message", body.warning || `Signed in as ${body.email}.`, body.warning ? "" : "ok");
     record(`Signed in as ${body.email}`, "", "ok");
     await refreshStatus();
-    show("library");
+    // The journey the program is for, not the list of things it could do.
+    // `defaultArea` is the ONE place that decides where a window opens, so
+    // signing in and reloading cannot disagree about it (`AUCOM/AUE/AUT 246I1`
+    // moved it to Build & Run; before that it was My Maps, hard-coded here).
+    show(defaultArea());
   });
 
   $("sign-out").addEventListener("click", async (event) => {

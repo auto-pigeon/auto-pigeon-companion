@@ -391,7 +391,9 @@ func TestTheRecipeKeyContainsNoMachinePath(t *testing.T) {
 
 func TestCancellingABuildStopsItAndSaysSo(t *testing.T) {
 	document := string(fixtureTool(t, "test.build.toolchain", "test.stage", "compile"))
-	slow := strings.Replace(document, `"compile","{input.source_map}","{output.bsp}"]`, `"sleep","{input.source_map}","{output.bsp}"]`, 1)
+	// The mode word only, so this keeps working as the compile action's argv
+	// grows — it gained `-wadpath` in `AUCOM/AUE/AUT 246I1`.
+	slow := strings.Replace(document, `,"compile",`, `,"sleep",`, 1)
 	if slow == document {
 		t.Fatal("the compile arguments were not replaced; this test is checking nothing")
 	}

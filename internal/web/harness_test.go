@@ -466,7 +466,6 @@ func newMachine(t *testing.T) *machine {
 	m.writeProfile("aucom.fixture.q1-engine.json", enginefixture.ProfileJSON)
 	m.writeProfile("aucom.fixture.toolchain.json", fixtureToolJSON(self))
 	m.writeProfile("aucom.fixture.pipeline.json", fixturePipelineJSON())
-	m.writeProfile("aucom.fixture.q1-pipeline.json", fixtureQ1PipelineJSON())
 
 	settings := config.Default()
 	settings.AUBBaseURL = m.backend.url()
@@ -582,15 +581,18 @@ func fixtureToolJSON(self string) []byte {
 		"acquisition": []map[string]any{
 			{"mode": "user_path", "title": "Point at a copy you already have", "hint": "choose the test binary"},
 		},
+		// The roles are the REAL Quake 1 ones, not invented `fixture.*` ones.
+		//
+		// `AUCOM/AUT 246I` made the Build page classify an input from its
+		// declared role — `q1.map.source` is a map, `q1.wad` is a texture
+		// collection — and left this fixture declaring `fixture.map`, which
+		// classifies as an ordinary file. The page then offered no "a map from
+		// My Maps" option for it, and the browser journey's attempt to choose
+		// one silently did nothing: it timed out at the command preview with no
+		// input supplied. The fixture was the thing that was wrong.
 		"capabilities": []map[string]any{
-			{"id": "fixture.compile", "title": "Compile", "consumes": []string{"fixture.map"},
-				"produces": []string{"fixture.bsp"}},
-			// The Quake 1 shape, for the Build & Run journey: a real map source
-			// role, and the optional texture root EricW's `qbsp` is given with
-			// `-wadpath`. A second capability rather than a changed one, so the
-			// fixtures the older journeys drive are untouched.
-			{"id": "fixture.q1.compile", "title": "Compile a Quake 1 map",
-				"consumes": []string{"q1.map.source"}, "produces": []string{"q1.bsp"}},
+			{"id": "fixture.compile", "title": "Compile", "consumes": []string{"q1.map.source"},
+				"produces": []string{"q1.bsp"}},
 		},
 		"executables": []map[string]any{
 			{"name": "tool", "title": "The fixture program", "file": "tool{platform.exe_suffix}"},
@@ -605,35 +607,9 @@ func fixtureToolJSON(self string) []byte {
 					// compiler that works and the compiler that fails — and so
 					// the command preview shows which arguments a build chose.
 					map[string]any{"value": "--fail", "when": map[string]any{"option": "fail"}},
-					"{input.source_map}", "{output.bsp}",
-				},
-				"working_dir": map[string]any{"root": "workspace"},
-				"inputs": []map[string]any{
-					{"name": "source_map", "title": "Source", "role": "fixture.map",
-						"required": true, "extensions": []string{".map"}},
-				},
-				"outputs": []map[string]any{
-					{"name": "bsp", "title": "BSP", "role": "fixture.bsp", "path": "{option.basename}.bsp"},
-				},
-				"options": []map[string]any{
-					{"name": "basename", "title": "Name", "type": "text", "default": "level", "max_length": 64},
-					{"name": "fail", "title": "Fail on purpose", "type": "bool", "default": "false"},
-				},
-				"diagnostics": []map[string]any{
-					{"id": "wad", "match": "*** ERROR", "severity": "error",
-						"message": "The compiler could not read something it needed."},
-				},
-				"roots":           []map[string]any{{"role": "workspace", "access": "read_write", "purpose": "compile"}},
-				"timeout_seconds": 120,
-			},
-			{
-				"id": "q1compile", "title": "Compile a Quake 1 map", "capability": "fixture.q1.compile",
-				"executable": "tool",
-				"args": []any{
-					buildHelperFlag,
-					// Passed only when a texture folder is set, and as two argv
-					// elements — the flag, then the directory — exactly as the
-					// real `qbsp` takes it.
+					// `-wadpath <directory>`, passed only when a texture folder
+					// is set and as two argv elements, exactly as the real
+					// `qbsp` takes it (`AUCOM/AUE/AUT 246I1`).
 					map[string]any{"value": "-wadpath", "when": map[string]any{"root": "content_root"}},
 					map[string]any{"value": "{root.content_root}", "when": map[string]any{"root": "content_root"}},
 					"{input.source_map}", "{output.bsp}",
@@ -648,6 +624,11 @@ func fixtureToolJSON(self string) []byte {
 				},
 				"options": []map[string]any{
 					{"name": "basename", "title": "Name", "type": "text", "default": "level", "max_length": 64},
+					{"name": "fail", "title": "Fail on purpose", "type": "bool", "default": "false"},
+				},
+				"diagnostics": []map[string]any{
+					{"id": "wad", "match": "*** ERROR", "severity": "error",
+						"message": "The compiler could not read something it needed."},
 				},
 				"roots": []map[string]any{
 					{"role": "workspace", "access": "read_write", "purpose": "compile"},
@@ -656,34 +637,6 @@ func fixtureToolJSON(self string) []byte {
 				},
 				"timeout_seconds": 120,
 			},
-		},
-	})
-}
-
-// fixtureQ1PipelineJSON is the Build & Run journey's pipeline: a Quake 1 map
-// source, so internal/profile classifies it as a MAP rather than an ordinary
-// file, and the family the coordinator and the page both key on.
-func fixtureQ1PipelineJSON() []byte {
-	return encodeFixture(map[string]any{
-		"schema_version": "aucom.profile/1.1",
-		"kind":           "pipeline",
-		"id":             "aucom.fixture.q1-pipeline",
-		"version":        "1.0.0",
-		"name":           "Fixture Quake 1 build",
-		"summary":        "One stage: compile a Quake 1 map source into a BSP, with its texture folder.",
-		"publisher":      map[string]any{"name": "Auto-Pigeon tests"},
-		"license":        map[string]any{"spdx": "MIT", "name": "MIT"},
-		"game_profile":   map[string]any{"slug": "quake1", "engine_family": "quake1"},
-		"inputs": []map[string]any{
-			{"name": "source_map", "title": "Map source", "role": "q1.map.source",
-				"required": true, "extensions": []string{".map"}},
-		},
-		"steps": []map[string]any{
-			{"id": "q1compile", "title": "Compile", "capability": "fixture.q1.compile",
-				"inputs": []map[string]any{{"name": "source_map", "from": "pipeline.source_map"}}},
-		},
-		"outputs": []map[string]any{
-			{"name": "bsp", "title": "The compiled map", "role": "q1.bsp", "from": "q1compile.bsp"},
 		},
 	})
 }
@@ -698,8 +651,13 @@ func fixturePipelineJSON() []byte {
 		"summary":        "One stage: compile a map source into a BSP.",
 		"publisher":      map[string]any{"name": "Auto-Pigeon tests"},
 		"license":        map[string]any{"spdx": "MIT", "name": "MIT"},
+		// The family, so internal/profile classifies `q1.map.source` as a map
+		// and `q1.wad` as a texture collection. Without it the Build page
+		// offers an ordinary file picker for a map, which is what 246I fixed in
+		// the classifier and left unfixed in this fixture.
+		"game_profile": map[string]any{"slug": "quake1", "engine_family": "quake1"},
 		"inputs": []map[string]any{
-			{"name": "source_map", "title": "Map source", "role": "fixture.map",
+			{"name": "source_map", "title": "Map source", "role": "q1.map.source",
 				"required": true, "extensions": []string{".map"}},
 		},
 		"steps": []map[string]any{
@@ -707,7 +665,7 @@ func fixturePipelineJSON() []byte {
 				"inputs": []map[string]any{{"name": "source_map", "from": "pipeline.source_map"}}},
 		},
 		"outputs": []map[string]any{
-			{"name": "bsp", "title": "The compiled map", "role": "fixture.bsp", "from": "compile.bsp"},
+			{"name": "bsp", "title": "The compiled map", "role": "q1.bsp", "from": "compile.bsp"},
 		},
 	})
 }

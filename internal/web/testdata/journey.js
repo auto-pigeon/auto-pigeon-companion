@@ -140,7 +140,9 @@
     // Named rather than counted: a bare number told the next person that
     // something changed, not what. The About area joined this list when the
     // gallery's About prose became a global area (AUP/AUCOM 243E §B).
-    const AREAS = ["library", "build", "run", "games", "profiles", "jobs", "settings", "about"];
+    // Build & Run joined the list first, because it is the journey the program
+    // is for (`AUCOM/AUE/AUT 246I1`), and a signed-in window opens on it.
+    const AREAS = ["play", "library", "build", "run", "games", "profiles", "jobs", "settings", "about"];
     const tabs = [...document.querySelectorAll(".area-tab")];
     const named = tabs.map((tab) => tab.dataset.area);
     record(
@@ -207,6 +209,11 @@
     record("a revision can be chosen for a build", Boolean(window.AUCOM.chosenRevision),
       window.AUCOM.chosenRevision ? window.AUCOM.chosenRevision.revision_id : "nothing chosen");
     await waitFor("Build to open on the chosen map", () => visible($("area-build")) && visible($("build-step-2")));
+    // The inputs render after the pipeline list resolves, so the field is
+    // waited for rather than read the instant the panel appears. A machine with
+    // more than one installed pipeline takes longer to get here, which is the
+    // ordinary case rather than a special one.
+    await waitFor("the map field", () => $("build-input-source_map-source"));
     record(
       "Use in a build opens Build at the map step with the revision in the map field",
       $("build-input-source_map-source")?.value === "asset" && textOf($("build-step-2")).includes("downloaded to this computer"),

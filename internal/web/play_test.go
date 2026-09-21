@@ -56,7 +56,7 @@ func playBody(m *machine) map[string]any {
 		"revision_id":     m.backend.asset.revisionID,
 		"revision_number": m.backend.asset.revision,
 		"source_file":     m.backend.asset.fileName,
-		"pipeline":        "aucom.fixture.q1-pipeline",
+		"pipeline":        "aucom.fixture.pipeline",
 		"engine":          "aucom.fixture.q1-engine",
 		"action":          "play_map",
 		"mod":             "auto-pigeon",

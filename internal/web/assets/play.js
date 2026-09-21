@@ -283,6 +283,27 @@
     setMessage("play-review-message", "");
     renderReview(body);
     summarize();
+
+    // The ordered WAD set is part of what the review is FOR, and the plan does
+    // not download anything — so when this machine holds no verified bundle for
+    // the revision yet, the review fetches and verifies one now. It is the same
+    // bundle the build will read, cached by its own digest, so pressing Build &
+    // Run afterwards costs nothing extra. What is never done is INVENTING the
+    // list: until this returns, the review says the textures will be fetched.
+    if (body.textures && body.textures.known === false && window.AUCOM.status?.authenticated) {
+      const { ok: gotTextures, body: textures } = await api(
+        `/api/v1/play/textures?asset_id=${encodeURIComponent(state.map.asset_id)}` +
+        `&revision=${encodeURIComponent(state.revision.revision)}`
+      );
+      // A plan that changed underneath this is one whose textures are not these.
+      if (state.planKey !== key) return;
+      if (gotTextures && textures.known) {
+        state.plan.textures = textures;
+        renderReview(state.plan);
+      } else if (!gotTextures) {
+        setMessage("play-review-message", textures.error, "error");
+      }
+    }
   }
 
   function requestBody() {
