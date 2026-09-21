@@ -245,7 +245,10 @@
     // nobody's business: the AUB session token, the API token in the URL, and
     // the Companion's own cache, where the verified bundles and the job
     // workspaces live.
-    const page = document.body.innerHTML;
+    // Scoped to the Build & Run page and the Activity drawer. The Settings
+    // area's whole job is to tell you where the Companion keeps things, so
+    // scanning the entire document would be asserting that a feature is a leak.
+    const page = ($("area-play")?.innerHTML || "") + ($("activity")?.innerHTML || "");
     const leaks = [];
     if (settings.token && page.includes(settings.token)) leaks.push("the AUB session token");
     if (settings.api_token && page.includes(settings.api_token)) leaks.push("the API token in the DOM");
@@ -278,7 +281,11 @@
       "the refusal",
       () => textOf($("play-review")).includes("cannot be compiled yet"),
       40000
-    );
+    ).catch((err) => {
+      throw new Error(`${err.message}; revision=${$("play-revision").value}, ` +
+        `message=${textOf($("play-review-message"))}, ` +
+        `review=${textOf($("play-review")).replace(/\s+/g, " ").slice(0, 260)}`);
+    });
     record(
       "a bundle the server could not complete names its refusals",
       textOf($("play-review")).includes("quake101.wad"),

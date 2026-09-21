@@ -120,13 +120,25 @@
     if (state.map) select.value = state.map.asset_id;
   }
 
+  // Two changes of the map in quick succession are two requests, and the one
+  // that answers second is not necessarily the one that was asked last. Each
+  // load carries the map it was asked about; an answer for a map that is no
+  // longer chosen is dropped rather than written over the current one.
+  //
+  // Without this the select could hold one revision while `state.revision` held
+  // another — or nothing — and the request built from it would name no
+  // revision at all, which the coordinator correctly refuses.
+  let revisionRequest = 0;
+
   async function loadRevisions(assetID) {
+    const request = ++revisionRequest;
     const select = $("play-revision");
     select.replaceChildren();
     state.revisions = [];
     state.revision = null;
     if (!assetID) return;
     const { ok, body } = await api(`/api/v1/library/assets/map/${encodeURIComponent(assetID)}`);
+    if (request !== revisionRequest) return;
     if (!ok) {
       setMessage("play-map-message", body.error, "error");
       return;
@@ -158,7 +170,10 @@
     summarize();
   }
 
+  let sourceFileRequest = 0;
+
   async function loadSourceFiles() {
+    const request = ++sourceFileRequest;
     const field = $("play-source-file-field");
     const select = $("play-source-file");
     select.replaceChildren();
@@ -168,7 +183,7 @@
     const path = `/api/v1/library/assets/map/${encodeURIComponent(state.map.asset_id)}` +
       `/${encodeURIComponent(state.revision.revision_id)}`;
     const { ok, body } = await api(path);
-    if (!ok) return;
+    if (request !== sourceFileRequest || !ok) return;
     const files = body.files || [];
     if (files.length <= 1) {
       state.sourceFile = files[0]?.path || "";
@@ -631,8 +646,13 @@
     button.addEventListener("click", () => show(Number(button.dataset.go)));
   }
 
+  // `change` only. An `input` event on a <select> fires alongside it, and
+  // reloading on both would start two loads for one choice — see
+  // revisionRequest.
   $("play-map").addEventListener("change", (event) => {
-    state.map = state.maps.find((m) => m.asset_id === event.target.value) || null;
+    const chosen = state.maps.find((m) => m.asset_id === event.target.value) || null;
+    if (chosen?.asset_id === state.map?.asset_id && state.revisions.length) return;
+    state.map = chosen;
     invalidate("You changed the map, so its textures have to be checked again.");
     loadRevisions(event.target.value);
   });
