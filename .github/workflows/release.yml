@@ -112,11 +112,16 @@ jobs:
       # It is not a native run and is not reported as one: it is the check that
       # the build tags still split correctly, which is what stopped Unix-only
       # signals reaching a Windows build.
-      - name: Windows test binaries still compile
+      #
+      # `go vet` rather than `go test -run '^$'`: vet type-checks the _test.go
+      # files too, and `go test` would BUILD the Windows test binaries and then
+      # try to execute them on the Linux runner, which fails with `exec format
+      # error` — a failure about the runner rather than about the code.
+      - name: Windows test files still type-check
         run: |
           set -euo pipefail
-          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go test ./... -run '^$'
-          GOOS=windows GOARCH=arm64 CGO_ENABLED=0 go test ./... -run '^$'
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go vet ./...
+          GOOS=windows GOARCH=arm64 CGO_ENABLED=0 go vet ./...
 
   publish:
     needs: [verify, cross-build]
