@@ -142,6 +142,7 @@
     <div class="app-body">
       <nav class="areas" aria-label="Areas">
         <ul>
+          <li><button type="button" class="area-tab" data-area="play">Build &amp; Run<span class="tab-note">map to game, in one</span></button></li>
           <li><button type="button" class="area-tab" data-area="library">My Maps<span class="tab-note">from your account</span></button></li>
           <li><button type="button" class="area-tab" data-area="build">Build<span class="tab-note">compile a map</span></button></li>
           <li><button type="button" class="area-tab" data-area="run">Run<span class="tab-note">start a game</span></button></li>
@@ -160,6 +161,169 @@
                the profile creator in a new browser tab (NEW_244D, operator). -->
           <button type="button" id="profiles-new" class="primary" hidden>New profile</button>
         </div>
+
+        <!-- Build & Run ---------------------------------------------------
+             The main product journey, in one page: sign in, choose an exact map
+             revision, choose a Build profile, choose a Run profile, review, and
+             press one button. Everything after that button is server-side and
+             durable — the Activity drawer shows it, the Jobs page keeps it, and
+             closing this tab does not stop it. `AUCOM/AUE/AUT 246I1`.
+
+             Tabs for the small fixed choices; searchable selects for the
+             unbounded ones. Fifty maps are not fifty tabs. -->
+        <section id="area-play" class="area" aria-labelledby="area-heading" hidden>
+          <p class="lede">
+            Five steps, and nothing starts until the last one. The Companion
+            downloads the exact map revision you choose and that revision's
+            texture WADs, converts, compiles, installs them into a folder of its
+            own beside <code>id1</code>, and starts the game. It never writes
+            into <code>id1</code>.
+          </p>
+
+          <div id="play-signed-out" class="panel notice" hidden>
+            <p>
+              <strong>Build &amp; Run needs your Auto-Pigeon account.</strong>
+              The map and its textures come from the server, at the exact
+              revision you pick. Sign in at the top of the window to begin.
+            </p>
+          </div>
+
+          <nav class="bwiz" aria-label="Build and run steps">
+            <ol class="bwiz-steps" id="play-steps">
+              <li><button type="button" class="bwiz-step" data-step="1" id="play-step-tab-1">
+                <span class="bwiz-step__n" aria-hidden="true">1</span>
+                <span class="bwiz-step__text"><span class="bwiz-step__label">Map</span>
+                <span class="bwiz-step__summary" id="play-step-summary-1"></span></span>
+              </button></li>
+              <li><button type="button" class="bwiz-step" data-step="2" id="play-step-tab-2">
+                <span class="bwiz-step__n" aria-hidden="true">2</span>
+                <span class="bwiz-step__text"><span class="bwiz-step__label">Build</span>
+                <span class="bwiz-step__summary" id="play-step-summary-2"></span></span>
+              </button></li>
+              <li><button type="button" class="bwiz-step" data-step="3" id="play-step-tab-3">
+                <span class="bwiz-step__n" aria-hidden="true">3</span>
+                <span class="bwiz-step__text"><span class="bwiz-step__label">Run</span>
+                <span class="bwiz-step__summary" id="play-step-summary-3"></span></span>
+              </button></li>
+              <li><button type="button" class="bwiz-step" data-step="4" id="play-step-tab-4">
+                <span class="bwiz-step__n" aria-hidden="true">4</span>
+                <span class="bwiz-step__text"><span class="bwiz-step__label">Review</span>
+                <span class="bwiz-step__summary" id="play-step-summary-4"></span></span>
+              </button></li>
+              <li><button type="button" class="bwiz-step" data-step="5" id="play-step-tab-5">
+                <span class="bwiz-step__n" aria-hidden="true">5</span>
+                <span class="bwiz-step__text"><span class="bwiz-step__label">Build &amp; Run</span>
+                <span class="bwiz-step__summary" id="play-step-summary-5"></span></span>
+              </button></li>
+            </ol>
+          </nav>
+
+          <div class="panel bwiz-panel" id="play-step-1" data-step="1">
+            <h3>1. The map</h3>
+            <p class="muted">
+              A revision is one saved version, for ever. The build keeps the one
+              you choose here: saving a newer version in the editor afterwards
+              never changes a build that is already running.
+            </p>
+            <div class="row">
+              <div class="field">
+                <label for="play-map">Map</label>
+                <select id="play-map"></select>
+              </div>
+              <div class="field">
+                <label for="play-revision">Revision</label>
+                <select id="play-revision"></select>
+              </div>
+            </div>
+            <div class="field" id="play-source-file-field" hidden>
+              <label for="play-source-file">Map file in this revision</label>
+              <select id="play-source-file"></select>
+            </div>
+            <div class="field">
+              <label for="play-map-name">Name in the game <span class="hint">(what <code>+map</code> is given)</span></label>
+              <input id="play-map-name" type="text" placeholder="dm1" />
+            </div>
+            <p id="play-map-message" class="message" role="status"></p>
+            <div class="bwiz-nav">
+              <span></span>
+              <button type="button" class="primary" data-go="2">Next: how to build</button>
+            </div>
+          </div>
+
+          <div class="panel bwiz-panel" id="play-step-2" data-step="2" hidden>
+            <h3>2. How to build</h3>
+            <p class="muted">A build profile is the programs that run, in order, and the settings they are given.</p>
+            <div class="field">
+              <label for="play-pipeline">Build profile</label>
+              <select id="play-pipeline"></select>
+            </div>
+            <p id="play-pipeline-note" class="muted"></p>
+            <ol id="play-stages" class="stages" aria-label="Stages of this build profile"></ol>
+            <label class="check">
+              <input type="checkbox" id="play-strict" />
+              Fail on any error-severity warning, even when the tool exits successfully
+            </label>
+            <div class="bwiz-nav">
+              <button type="button" data-go="1">Back</button>
+              <button type="button" class="primary" data-go="3">Next: how to run it</button>
+            </div>
+          </div>
+
+          <div class="panel bwiz-panel" id="play-step-3" data-step="3" hidden>
+            <h3>3. How to run it</h3>
+            <p class="muted">
+              The engine, and the folder it will read from. The Companion
+              installs into a folder of its own beside the base game and leaves
+              every folder the game already owns alone.
+            </p>
+            <div class="row">
+              <div class="field">
+                <label for="play-engine">Engine</label>
+                <select id="play-engine"></select>
+              </div>
+              <div class="field">
+                <label for="play-action">What to do</label>
+                <select id="play-action"></select>
+              </div>
+            </div>
+            <div class="field">
+              <label for="play-mod">Game folder to install into</label>
+              <input id="play-mod" type="text" value="auto-pigeon" />
+              <p class="hint" id="play-game-root"></p>
+            </div>
+            <p id="play-run-message" class="message" role="status"></p>
+            <div class="bwiz-nav">
+              <button type="button" data-go="2">Back</button>
+              <button type="button" class="primary" data-go="4">Next: review</button>
+            </div>
+          </div>
+
+          <div class="panel bwiz-panel" id="play-step-4" data-step="4" hidden>
+            <h3>4. Review</h3>
+            <p class="muted">Everything that will happen, before anything happens.</p>
+            <div id="play-review"></div>
+            <p id="play-review-message" class="message" role="status"></p>
+            <div class="bwiz-nav">
+              <button type="button" data-go="3">Back</button>
+              <button type="button" class="primary" data-go="5">Next: build and run</button>
+            </div>
+          </div>
+
+          <div class="panel bwiz-panel" id="play-step-5" data-step="5" hidden>
+            <h3>5. Build &amp; Run</h3>
+            <p class="muted">
+              One button. The Companion does the rest on its own, and this tab
+              may be closed while it works — the Activity panel and the Jobs
+              page both come back to the same run.
+            </p>
+            <div id="play-final-summary" class="summary-list"></div>
+            <p id="play-start-message" class="message" role="status"></p>
+            <div class="bwiz-nav">
+              <button type="button" data-go="4">Back</button>
+              <button type="button" class="primary" id="play-start">Build &amp; Run</button>
+            </div>
+          </div>
+        </section>
 
         <!-- Library ------------------------------------------------------ -->
         <section id="area-library" class="area" aria-labelledby="area-heading">
@@ -949,9 +1113,28 @@
     -->
     <p id="live-region" class="visually-hidden" role="status" aria-live="polite"></p>
 
+    <!-- Activity: one drawer on a wide window, one full-screen pane on a
+         narrow one. Live progress and detailed results live here, so no page
+         ends in a dump of logs. The durable history is the Jobs page. -->
+    <aside id="activity" class="activity" aria-labelledby="activity-heading" hidden>
+      <div class="activity-head">
+        <h2 id="activity-heading" tabindex="-1">Activity</h2>
+        <button type="button" id="activity-close" class="icon-button" aria-label="Close Activity">&times;</button>
+      </div>
+      <div id="activity-body" class="activity-body" role="region" aria-live="polite"></div>
+      <p class="activity-foot muted">
+        Every run here is also on the <button type="button" class="linkish" data-area-link="jobs">Jobs</button> page,
+        which keeps them after this window is closed.
+      </p>
+    </aside>
+    <button type="button" id="activity-open" class="activity-open" hidden aria-expanded="false" aria-controls="activity">
+      Activity <span id="activity-count" class="pill"></span>
+    </button>
+
     <script src="core.js"></script>
     <script src="library.js"></script>
     <script src="build.js"></script>
+    <script src="play.js"></script>
     <script src="run.js"></script>
     <script src="games.js"></script>
     <script src="profiles.js"></script>

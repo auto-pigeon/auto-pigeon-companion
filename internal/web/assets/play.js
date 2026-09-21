@@ -1,0 +1,682 @@
+// Build & Run — the main product journey, and the Activity surface.
+//
+// Five steps, one confirmation, and everything after that confirmation happens
+// on the server. This file does NOT sequence the work: it collects the exact
+// identities, asks the server what it would do, sends one request, and then
+// reads a durable record back. A browser tab that orchestrated eight stages
+// would be a tab whose being closed lost the run.
+//
+// Three rules from `AUCOM/AUE/AUT 246I1` are visible here:
+//
+//   - tabs for small fixed choices, searchable selects for unbounded ones. Maps,
+//     revisions, build profiles and engines are lists that grow; turning fifty
+//     maps into fifty tabs is not an improvement.
+//   - short confirmations are a status line; decisions and destructive
+//     conflicts are a modal; live progress and detail are the Activity drawer.
+//   - nothing is appended to the bottom of a working page, and no job result
+//     ever opens a new browser tab.
+
+"use strict";
+
+(() => {
+  const { $, el, api, setMessage, announce, when, bytes } = window.AUCOM;
+
+  // The whole of this page's state. Exact identities, never display labels: a
+  // request carrying "dm1, latest" would mean something different tomorrow.
+  const state = {
+    step: 1,
+    maps: [],
+    revisions: [],
+    pipelines: [],
+    engines: [],
+    map: null,
+    revision: null,
+    sourceFile: "",
+    mapName: "",
+    pipeline: "",
+    strict: false,
+    engine: "",
+    action: "",
+    mod: "auto-pigeon",
+    gameRoot: "",
+    plan: null,
+    // planKey is what the plan was computed for. Any change to an identity
+    // invalidates it, and the page says so rather than reviewing a stale one.
+    planKey: "",
+  };
+
+  // --- step navigation --------------------------------------------------------
+
+  function show(step) {
+    state.step = step;
+    for (const panel of document.querySelectorAll("#area-play .bwiz-panel")) {
+      panel.hidden = Number(panel.dataset.step) !== step;
+    }
+    for (const tab of document.querySelectorAll("#play-steps .bwiz-step")) {
+      const current = Number(tab.dataset.step) === step;
+      tab.setAttribute("aria-current", current ? "step" : "false");
+    }
+    summarize();
+    if (step === 4) refreshPlan();
+    if (step === 5) renderFinalSummary();
+    const panel = $("play-step-" + step);
+    panel?.querySelector("h3")?.focus?.();
+  }
+
+  function summarize() {
+    $("play-step-summary-1").textContent = state.revision
+      ? `${state.map?.display_name || state.map?.asset_id || ""} · revision ${state.revision.revision}`
+      : "";
+    $("play-step-summary-2").textContent = nameOfPipeline(state.pipeline);
+    $("play-step-summary-3").textContent = state.engine
+      ? `${nameOfEngine(state.engine)} → ${state.mod}`
+      : "";
+    $("play-step-summary-4").textContent = state.plan ? "checked" : "";
+    $("play-step-summary-5").textContent = "";
+  }
+
+  function nameOfPipeline(id) {
+    return state.pipelines.find((p) => p.id === id)?.name || id || "";
+  }
+
+  function nameOfEngine(id) {
+    return state.engines.find((e) => e.id === id)?.name || id || "";
+  }
+
+  // Any change to an identity throws the plan away and SAYS SO. A review that
+  // silently described the previous choice would be the worst kind of review.
+  function invalidate(why) {
+    if (!state.plan) return;
+    state.plan = null;
+    state.planKey = "";
+    setMessage("play-review-message", why);
+    announce(why);
+  }
+
+  function planKey() {
+    return [
+      state.map?.asset_id, state.revision?.revision_id, state.sourceFile, state.mapName,
+      state.pipeline, String(state.strict), state.engine, state.action, state.mod,
+    ].join("|");
+  }
+
+  // --- step 1: the map ---------------------------------------------------------
+
+  async function loadMaps() {
+    const { ok, body } = await api("/api/v1/library/catalog?type=map&limit=200");
+    if (!ok) {
+      setMessage("play-map-message", body.error, "error");
+      return;
+    }
+    state.maps = body.items || [];
+    const select = $("play-map");
+    select.replaceChildren(el("option", { text: "Choose a map…", attrs: { value: "" } }));
+    for (const map of state.maps) {
+      select.append(el("option", {
+        text: map.display_name || map.asset_id,
+        attrs: { value: map.asset_id },
+      }));
+    }
+    if (state.map) select.value = state.map.asset_id;
+  }
+
+  async function loadRevisions(assetID) {
+    const select = $("play-revision");
+    select.replaceChildren();
+    state.revisions = [];
+    state.revision = null;
+    if (!assetID) return;
+    const { ok, body } = await api(`/api/v1/library/assets/map/${encodeURIComponent(assetID)}`);
+    if (!ok) {
+      setMessage("play-map-message", body.error, "error");
+      return;
+    }
+    state.revisions = body.revisions || [];
+    if (body.history_error) {
+      setMessage("play-map-message",
+        "This server keeps no per-version history for maps, so an exact revision cannot be pinned: " +
+        body.history_error, "error");
+    }
+    for (const revision of state.revisions) {
+      select.append(el("option", {
+        text: `${revision.revision} — ${when(revision.created_at)}${revision.immutable ? "" : " (not pinnable)"}`,
+        attrs: { value: revision.revision_id },
+      }));
+    }
+    // The newest, because that is what somebody who has just saved wants. It
+    // is still an EXACT revision: nothing here ever sends the word `current`.
+    if (state.revisions.length) {
+      select.value = state.revisions[0].revision_id;
+      chooseRevision(state.revisions[0].revision_id);
+    }
+  }
+
+  function chooseRevision(revisionID) {
+    state.revision = state.revisions.find((r) => r.revision_id === revisionID) || null;
+    invalidate("You changed the revision, so the textures this build would use have to be checked again.");
+    loadSourceFiles();
+    summarize();
+  }
+
+  async function loadSourceFiles() {
+    const field = $("play-source-file-field");
+    const select = $("play-source-file");
+    select.replaceChildren();
+    state.sourceFile = "";
+    field.hidden = true;
+    if (!state.map || !state.revision) return;
+    const path = `/api/v1/library/assets/map/${encodeURIComponent(state.map.asset_id)}` +
+      `/${encodeURIComponent(state.revision.revision_id)}`;
+    const { ok, body } = await api(path);
+    if (!ok) return;
+    const files = body.files || [];
+    if (files.length <= 1) {
+      state.sourceFile = files[0]?.path || "";
+      suggestMapName();
+      return;
+    }
+    // More than one compatible file: the person names which, because a build
+    // that silently took the first file of a package is a build nobody could
+    // explain.
+    field.hidden = false;
+    for (const file of files) {
+      select.append(el("option", { text: file.path, attrs: { value: file.path } }));
+    }
+    select.value = files[0].path;
+    state.sourceFile = files[0].path;
+    suggestMapName();
+  }
+
+  // A suggestion, not a rule: the engine's own sanitizing rules are the
+  // authority, and the field is editable because a person may want another name.
+  function suggestMapName() {
+    if ($("play-map-name").value.trim()) return;
+    const stem = (state.sourceFile || state.map?.display_name || "")
+      .replace(/\.[^.]*$/, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+    if (!stem) return;
+    $("play-map-name").value = stem.slice(0, 64);
+    state.mapName = $("play-map-name").value;
+  }
+
+  // --- step 2: the build profile -------------------------------------------------
+
+  async function loadPipelines() {
+    const { ok, body } = await api("/api/v1/build/pipelines");
+    if (!ok) return;
+    state.pipelines = body.items || [];
+    const select = $("play-pipeline");
+    select.replaceChildren(el("option", { text: "Choose a build profile…", attrs: { value: "" } }));
+    for (const pipeline of state.pipelines) {
+      select.append(el("option", {
+        text: pipeline.name + (pipeline.runnable ? "" : " — not installed on this machine"),
+        attrs: { value: pipeline.id, disabled: pipeline.runnable ? null : "disabled" },
+      }));
+    }
+    if (state.pipeline) select.value = state.pipeline;
+    renderStages();
+  }
+
+  function renderStages() {
+    const list = $("play-stages");
+    list.replaceChildren();
+    const pipeline = state.pipelines.find((p) => p.id === state.pipeline);
+    $("play-pipeline-note").textContent = pipeline?.summary || "";
+    for (const step of pipeline?.steps || []) {
+      list.append(el("li", {
+        text: `${step.title || step.id} — ${step.provider?.name || step.capability}`,
+      }));
+    }
+  }
+
+  // --- step 3: the engine ---------------------------------------------------------
+
+  async function loadEngines() {
+    const { ok, body } = await api("/api/v1/engines");
+    if (!ok) return;
+    state.engines = body.items || [];
+    const select = $("play-engine");
+    select.replaceChildren(el("option", { text: "Choose an engine…", attrs: { value: "" } }));
+    for (const engine of state.engines) {
+      select.append(el("option", { text: engine.name, attrs: { value: engine.id } }));
+    }
+    if (state.engine) select.value = state.engine;
+    renderActions();
+  }
+
+  function renderActions() {
+    const select = $("play-action");
+    select.replaceChildren();
+    const engine = state.engines.find((e) => e.id === state.engine);
+    for (const action of engine?.actions || []) {
+      select.append(el("option", { text: action.title || action.id, attrs: { value: action.id } }));
+    }
+    // A fixed, small set — so these are TABS rather than a dropdown.
+    window.AUCOM.tabsFor?.("play-action");
+    state.action = select.value || "";
+    const root = engine?.binding?.roots?.game_root || "";
+    state.gameRoot = root;
+    $("play-game-root").textContent = root
+      ? `The game is at ${root}. The Companion will create ${state.mod} beside it and never write into id1.`
+      : "This engine has no game folder set on this machine yet — set one under Profiles first.";
+    setMessage("play-run-message", root ? "" : "Choose this engine's game folder before continuing.", root ? "" : "error");
+  }
+
+  // --- step 4: the review -----------------------------------------------------------
+
+  async function refreshPlan() {
+    const key = planKey();
+    if (state.plan && state.planKey === key) return;
+    const review = $("play-review");
+    review.replaceChildren(el("p", { className: "muted", text: "Working out what this would do…" }));
+    const { ok, body } = await api("/api/v1/play/plan", { method: "POST", body: requestBody() });
+    if (!ok) {
+      state.plan = null;
+      review.replaceChildren();
+      setMessage("play-review-message", body.error, "error");
+      return;
+    }
+    state.plan = body;
+    state.planKey = key;
+    setMessage("play-review-message", "");
+    renderReview(body);
+    summarize();
+  }
+
+  function requestBody() {
+    return {
+      asset_type: "map",
+      asset_id: state.map?.asset_id || "",
+      revision_id: state.revision?.revision_id || "",
+      revision_number: state.revision?.revision || 0,
+      source_file: state.sourceFile,
+      pipeline: state.pipeline,
+      strict: state.strict,
+      engine: state.engine,
+      action: state.action,
+      mod: state.mod,
+      map: $("play-map-name").value.trim(),
+    };
+  }
+
+  function renderReview(plan) {
+    const review = $("play-review");
+    review.replaceChildren();
+
+    review.append(section("What will be downloaded", [
+      line("Map", `${plan.map.asset_id}, revision ${plan.map.revision}`),
+      line("Map file", plan.map.source_file || "the revision's only file"),
+    ]));
+
+    review.append(texturesSection(plan.textures));
+
+    const programs = [line("Build profile", nameOfPipeline(plan.build.pipeline))];
+    const pipeline = state.pipelines.find((p) => p.id === plan.build.pipeline);
+    for (const step of pipeline?.steps || []) {
+      programs.push(line(step.title || step.id,
+        `${step.provider?.name || step.capability} ${step.provider?.version || ""}`.trim()));
+    }
+    programs.push(line("Extractor",
+      "Auto-Pigeon Extractor, started as a separate program, when the map needs converting"));
+    review.append(section("Which programs will run", programs));
+
+    const writes = plan.writes.files.map((file) => el("li", { children: [el("code", { text: file })] }));
+    review.append(el("section", {
+      className: "panel",
+      children: [
+        el("h4", { text: "Where files will be written" }),
+        el("p", { className: "muted", text: plan.writes.directory }),
+        el("ul", { className: "plain", children: writes }),
+        el("p", {
+          className: "muted",
+          text: "Never written to: " + plan.writes.never_writes + ".",
+        }),
+      ],
+    }));
+
+    review.append(launchSection(plan.launch));
+    review.append(el("p", { className: "muted", text: plan.build_preview_note }));
+  }
+
+  function texturesSection(textures) {
+    if (!textures) return el("section", { className: "panel", children: [el("h4", { text: "Textures" })] });
+    const children = [el("h4", { text: "The texture WADs, in the order the map declares them" })];
+    if (!textures.known) {
+      children.push(el("p", { className: "muted", text: textures.message }));
+      return el("section", { className: "panel", children });
+    }
+    const rows = (textures.wads || []).map((wad) => {
+      const carried = wad.included
+        ? (wad.files || []).map((f) => `${f.path} · ${bytes(f.bytes)}`).join(", ")
+        : wad.note || "not in this bundle";
+      return el("li", {
+        children: [
+          el("strong", { text: `${wad.order + 1}. ${wad.name}` }),
+          el("span", { className: "muted", text: " — " + carried }),
+        ],
+      });
+    });
+    children.push(el("ol", { className: "plain", children: rows }));
+    children.push(el("p", {
+      className: "muted",
+      text: "Later declarations win a name two WADs both hold. A compiled Quake 1 BSP carries its " +
+        "own textures, so the game does not read these files at run time — they are kept with the " +
+        "map so the build can be inspected and repeated.",
+    }));
+    if (!textures.compiler_ready) {
+      children.push(el("div", {
+        className: "panel notice error",
+        children: [
+          el("p", { children: [el("strong", { text: "This map cannot be compiled yet." })] }),
+          el("ul", {
+            className: "plain",
+            children: (textures.compiler_refusals || []).map((r) => el("li", { text: r })),
+          }),
+          el("p", {
+            className: "muted",
+            text: "The Companion will not start the extractor or a compiler, and will not quietly " +
+              "use a similarly named WAD from your own game folder.",
+          }),
+        ],
+      }));
+    }
+    return el("section", { className: "panel", children });
+  }
+
+  function launchSection(launch) {
+    const children = [el("h4", { text: "The exact command" })];
+    if (!launch?.known) {
+      children.push(el("p", { className: "muted", text: launch?.message || "Not resolvable yet." }));
+      return el("section", { className: "panel", children });
+    }
+    // Element by element, because that is how the operating system receives it
+    // and how a person checks it. Never a shell string.
+    children.push(el("ol", {
+      className: "argv",
+      children: [launch.executable, ...(launch.args || [])].map((part) =>
+        el("li", { children: [el("code", { text: part })] })),
+    }));
+    return el("section", { className: "panel", children });
+  }
+
+  function section(title, lines) {
+    return el("section", {
+      className: "panel",
+      children: [el("h4", { text: title }), el("dl", { className: "summary-list", children: lines.flat() })],
+    });
+  }
+
+  function line(term, value) {
+    return [el("dt", { text: term }), el("dd", { text: value })];
+  }
+
+  // --- step 5: one confirmation -------------------------------------------------------
+
+  function renderFinalSummary() {
+    const summary = $("play-final-summary");
+    summary.replaceChildren(
+      ...line("Map", `${state.map?.display_name || ""} revision ${state.revision?.revision ?? ""}`),
+      ...line("Build", nameOfPipeline(state.pipeline)),
+      ...line("Run", `${nameOfEngine(state.engine)} → ${state.gameRoot}/${state.mod}`),
+      ...line("Map name", $("play-map-name").value.trim()),
+    );
+    const ready = state.plan?.textures?.compiler_ready !== false;
+    $("play-start").disabled = !ready;
+    setMessage("play-start-message", ready ? "" :
+      "This map's textures are not complete enough to compile — see step 4.", ready ? "" : "error");
+  }
+
+  async function start() {
+    setMessage("play-start-message", "");
+    const { ok, body } = await api("/api/v1/play/runs", { method: "POST", body: requestBody() });
+    if (!ok) {
+      setMessage("play-start-message", body.error, "error");
+      return;
+    }
+    // A short confirmation is a status line; the DETAIL is in Activity, which
+    // opens on its own because that is where the run now lives.
+    setMessage("play-start-message", "Started. Progress is in the Activity panel.");
+    announce("Build and run started.");
+    openActivity();
+    watch(body.id);
+  }
+
+  // --- Activity ---------------------------------------------------------------------
+
+  let pollTimer = null;
+  let watching = null;
+
+  function openActivity() {
+    $("activity").hidden = false;
+    $("activity-open").setAttribute("aria-expanded", "true");
+    $("activity-heading").focus();
+  }
+
+  function closeActivity() {
+    $("activity").hidden = true;
+    $("activity-open").setAttribute("aria-expanded", "false");
+    $("activity-open").focus();
+  }
+
+  function watch(id) {
+    watching = id;
+    poll();
+  }
+
+  async function poll() {
+    clearTimeout(pollTimer);
+    const { ok, body } = await api("/api/v1/play/runs");
+    if (ok) renderActivity(body.items || []);
+    const active = (body.items || []).some((run) => run.active);
+    $("activity-open").hidden = !(body.items || []).length;
+    $("activity-count").textContent = active ? "running" : "";
+    // Polled rather than streamed: one small request a second while something
+    // is running, and a slow one while nothing is. A server-sent stream would
+    // be a second transport for a page that already has one.
+    pollTimer = setTimeout(poll, active ? 1000 : 15000);
+  }
+
+  function renderActivity(runs) {
+    const body = $("activity-body");
+    body.replaceChildren();
+    if (!runs.length) {
+      body.append(el("p", { className: "muted", text: "Nothing has been built and run yet." }));
+      return;
+    }
+    for (const run of runs.slice(0, 20)) body.append(runCard(run));
+  }
+
+  function runCard(run) {
+    const head = el("div", {
+      className: "activity-run__head",
+      children: [
+        el("strong", { text: `${run.map || run.asset_id} — ${run.title}` }),
+        el("span", { className: "muted", text: elapsed(run.elapsed_ms) }),
+      ],
+    });
+    const stages = el("ol", {
+      className: "activity-stages",
+      children: (run.stages || []).map((stage) => el("li", {
+        className: stage.error ? "failed" : stage.finished_at ? "done" : "running",
+        children: [
+          el("span", { text: stage.title }),
+          el("span", { className: "muted", text: stage.duration_ms ? " " + elapsed(stage.duration_ms) : "" }),
+        ],
+      })),
+    });
+
+    const children = [head, stages];
+    if (run.error) {
+      children.push(el("p", {
+        className: "message error",
+        text: `${run.failed_at_title || "It stopped"}: ${run.error}`,
+      }));
+    }
+    if (run.remedy) children.push(el("p", { className: "muted", text: run.remedy }));
+
+    const actions = el("div", { className: "activity-run__actions" });
+    if (run.can_cancel) {
+      const cancel = el("button", { text: "Cancel", attrs: { type: "button" } });
+      cancel.addEventListener("click", () => cancelRun(run));
+      actions.append(cancel);
+    }
+    if (run.can_retry) {
+      const retry = el("button", { text: "Try again", attrs: { type: "button" } });
+      retry.addEventListener("click", () => retryRun(run.id));
+      actions.append(retry);
+    }
+    if (run.build_id) {
+      const jobs = el("button", { text: "Open in Jobs", attrs: { type: "button" } });
+      // Never a new browser tab: the Jobs page is in this window.
+      jobs.addEventListener("click", () => { window.location.hash = "#jobs"; });
+      actions.append(jobs);
+    }
+    children.push(actions);
+
+    // The technical facts, behind a disclosure. Present for whoever needs them
+    // and not in the way of whoever does not.
+    children.push(details(run));
+
+    return el("section", { className: "panel activity-run", children });
+  }
+
+  function details(run) {
+    const rows = [];
+    if (run.revision) rows.push(...line("Map revision", String(run.revision)));
+    if (run.bundle) {
+      rows.push(...line("Texture bundle", run.bundle.digest));
+      rows.push(...line("WADs, in order", (run.bundle.wads_declared || []).join(", ")));
+    }
+    if (run.extractor) {
+      rows.push(...line("Extractor",
+        `${run.extractor.version}${run.extractor.verified ? ", verified" : ", a local override and NOT verified"}`));
+    }
+    if (run.build_id) rows.push(...line("Build", run.build_id));
+    if (run.current_job) rows.push(...line("Running job", `${run.current_step} · ${run.current_job}`));
+    if (run.installed_dir) rows.push(...line("Installed into", run.installed_dir));
+    for (const file of run.installed || []) rows.push(...line(file.path, file.sha256));
+    if (run.launch) {
+      rows.push(...line("Command", [run.launch.executable, ...(run.launch.args || [])].join(" ")));
+    }
+    return el("details", {
+      children: [
+        el("summary", { text: "Technical details" }),
+        el("dl", { className: "summary-list", children: rows }),
+      ],
+    });
+  }
+
+  function elapsed(ms) {
+    if (!ms) return "";
+    const seconds = Math.round(ms / 1000);
+    if (seconds < 60) return `${seconds}s`;
+    return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+  }
+
+  // Cancelling is a decision with a consequence, so it is a modal question and
+  // not a button that just acts.
+  async function cancelRun(run) {
+    const confirmed = await window.AUCOM.confirmModal?.({
+      title: "Stop this build and run?",
+      body: "The compiler is stopped and anything already installed is removed, so the game folder " +
+        "is left as it was. Everything already downloaded stays in the cache.",
+      confirm: "Stop it",
+    });
+    if (confirmed === false) return;
+    const { ok, body } = await api(`/api/v1/play/runs/${encodeURIComponent(run.id)}/cancel`, { method: "POST" });
+    if (!ok) announce(body.error);
+    poll();
+  }
+
+  async function retryRun(id) {
+    const { ok, body } = await api(`/api/v1/play/runs/${encodeURIComponent(id)}/retry`, { method: "POST" });
+    if (!ok) {
+      announce(body.error);
+      return;
+    }
+    announce("Trying again.");
+    watch(body.id);
+    poll();
+  }
+
+  // --- wiring ------------------------------------------------------------------------
+
+  for (const tab of document.querySelectorAll("#play-steps .bwiz-step")) {
+    tab.addEventListener("click", () => show(Number(tab.dataset.step)));
+  }
+  for (const button of document.querySelectorAll("#area-play [data-go]")) {
+    button.addEventListener("click", () => show(Number(button.dataset.go)));
+  }
+
+  $("play-map").addEventListener("change", (event) => {
+    state.map = state.maps.find((m) => m.asset_id === event.target.value) || null;
+    invalidate("You changed the map, so its textures have to be checked again.");
+    loadRevisions(event.target.value);
+  });
+  $("play-revision").addEventListener("change", (event) => chooseRevision(event.target.value));
+  $("play-source-file").addEventListener("change", (event) => {
+    state.sourceFile = event.target.value;
+    invalidate("You changed which file is built.");
+  });
+  $("play-map-name").addEventListener("input", (event) => {
+    state.mapName = event.target.value.trim();
+    invalidate("You changed the map's name in the game.");
+  });
+  $("play-pipeline").addEventListener("change", (event) => {
+    state.pipeline = event.target.value;
+    invalidate("You changed the build profile, so what it would run has to be worked out again.");
+    renderStages();
+    summarize();
+  });
+  $("play-strict").addEventListener("change", (event) => {
+    state.strict = event.target.checked;
+    invalidate("You changed how strict the build is.");
+  });
+  $("play-engine").addEventListener("change", (event) => {
+    state.engine = event.target.value;
+    invalidate("You changed the engine, so the command it would run has to be worked out again.");
+    renderActions();
+    summarize();
+  });
+  $("play-action").addEventListener("change", (event) => {
+    state.action = event.target.value;
+    invalidate("You changed what the engine does.");
+  });
+  $("play-mod").addEventListener("input", (event) => {
+    state.mod = event.target.value.trim() || "auto-pigeon";
+    invalidate("You changed the folder this installs into.");
+    renderActions();
+  });
+  $("play-start").addEventListener("click", start);
+
+  $("activity-open").addEventListener("click", () => {
+    if ($("activity").hidden) openActivity();
+    else closeActivity();
+  });
+  $("activity-close").addEventListener("click", closeActivity);
+  // Escape closes a non-destructive panel. It does not stop the run.
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !$("activity").hidden) closeActivity();
+  });
+  for (const link of document.querySelectorAll("[data-area-link]")) {
+    link.addEventListener("click", () => { window.location.hash = "#" + link.dataset.areaLink; });
+  }
+
+  window.AUCOM.areas.play = {
+    async refresh() {
+      const signedIn = Boolean(window.AUCOM.status?.authenticated);
+      $("play-signed-out").hidden = signedIn;
+      await Promise.all([loadPipelines(), loadEngines(), signedIn ? loadMaps() : null]);
+      if (signedIn && state.map) await loadRevisions(state.map.asset_id);
+      show(state.step);
+      poll();
+    },
+  };
+
+  // Activity is not an area: it belongs to the window, and a run started here
+  // is still running when somebody is looking at Profiles. So the poll starts
+  // as soon as the page does.
+  poll();
+})();

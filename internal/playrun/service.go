@@ -175,6 +175,13 @@ func (s *Service) Store() *Store { return s.store }
 // back from the record, which is what makes a reload recover the same run
 // rather than an empty page.
 func (s *Service) Start(request Request) (*Record, error) {
+	return s.start(request, "")
+}
+
+// start is Start, with the attempt this one repeats. Set BEFORE the goroutine
+// exists: a caller that wrote it afterwards would be writing to a record
+// another goroutine already owns, and the two saves would race for the file.
+func (s *Service) start(request Request, retryOf string) (*Record, error) {
 	if err := request.Normalize(); err != nil {
 		return nil, err
 	}
@@ -189,10 +196,18 @@ func (s *Service) Start(request Request) (*Record, error) {
 		Request:       request,
 		State:         Queued,
 		CreatedAt:     now,
+		RetryOf:       retryOf,
 	}
 	if err = s.store.Save(record); err != nil {
 		return nil, err
 	}
+
+	// The copy the caller gets, taken BEFORE the goroutine exists. From the
+	// moment it does, that goroutine owns the record, and a caller holding the
+	// same pointer would be reading fields it is writing. Everything a caller
+	// wants after this is in the store, which is the whole point of the record
+	// being durable.
+	snapshot := *record
 
 	// Not the request's context: the sequence must survive the response.
 	ctx, cancel := context.WithCancel(context.Background())
@@ -210,7 +225,7 @@ func (s *Service) Start(request Request) (*Record, error) {
 		s.execute(ctx, record)
 	}()
 
-	return record, nil
+	return &snapshot, nil
 }
 
 // Get reads one run.
@@ -268,16 +283,7 @@ func (s *Service) Retry(id string) (*Record, error) {
 		return nil, fmt.Errorf("playrun: run %s is %s, and only a failed or cancelled run is retried",
 			id, previous.State)
 	}
-	record, err := s.Start(previous.Request)
-	if err != nil {
-		return nil, err
-	}
-	record.RetryOf = previous.ID
-	if err = s.store.Save(record); err != nil {
-		return nil, err
-	}
-
-	return record, nil
+	return s.start(previous.Request, previous.ID)
 }
 
 // Recover marks a run that a stopped Companion left active.

@@ -634,3 +634,147 @@ footer p { margin: 0; font-size: 0.82rem; max-width: 70ch; }
 @media (max-width: 40rem) {
   .facts { grid-template-columns: 1fr; }
 }
+
+/* --- Activity, and the modal -------------------------------------------------
+
+   One drawer on a wide window; one full-screen pane on a narrow one. It is the
+   single place live progress and detailed results live, which is what replaced
+   the page-bottom dumps of log text (`AUCOM/AUE/AUT 246I1`).
+
+   It is `position: fixed` rather than part of the page flow on purpose: a run
+   started on Build & Run is still running when somebody is looking at
+   Profiles, and a panel that scrolled away with one area would be a panel
+   nobody could watch. */
+
+.activity {
+  position: fixed;
+  inset-block: 0;
+  inset-inline-end: 0;
+  inline-size: min(28rem, 100vw);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  overflow-y: auto;
+  background: var(--panel, #fff);
+  border-inline-start: 1px solid var(--line, #d8d8d8);
+  box-shadow: -8px 0 24px rgb(0 0 0 / 12%);
+}
+
+.activity-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.activity-head h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.activity-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.activity-run__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.activity-run__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-block-start: 0.5rem;
+}
+
+.activity-stages {
+  margin: 0.5rem 0 0;
+  padding-inline-start: 1.1rem;
+}
+
+.activity-stages li { margin-block: 0.15rem; }
+.activity-stages li.done { color: var(--muted, #555); }
+.activity-stages li.running { font-weight: 600; }
+.activity-stages li.failed { color: var(--error, #a11); }
+
+.activity-foot { margin: 0; font-size: 0.85rem; }
+
+/* The opener sits out of the way until there is something to open. */
+.activity-open {
+  position: fixed;
+  inset-block-end: 1rem;
+  inset-inline-end: 1rem;
+  z-index: 49;
+}
+
+/* Below this width a drawer would leave a strip of unusable page behind it, so
+   it becomes the whole screen instead. */
+@media (max-width: 52rem) {
+  .activity {
+    inline-size: 100vw;
+    border-inline-start: 0;
+  }
+}
+
+/* The argv, element by element — which is how a person checks a command and
+   how the operating system receives it. */
+.argv {
+  margin: 0;
+  padding-inline-start: 1.4rem;
+}
+
+.argv li { margin-block: 0.1rem; }
+
+ul.plain, ol.plain { padding-inline-start: 1.2rem; }
+
+.linkish {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.icon-button {
+  padding: 0.15rem 0.5rem;
+  border: 1px solid transparent;
+  background: none;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.icon-button:focus-visible { border-color: currentColor; }
+
+.modal {
+  max-inline-size: min(32rem, 92vw);
+  padding: 1.25rem;
+  border: 1px solid var(--line, #d8d8d8);
+  border-radius: 0.5rem;
+}
+
+.modal::backdrop { background: rgb(0 0 0 / 40%); }
+
+.modal h2 { margin-block-start: 0; font-size: 1.1rem; }
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-block-start: 1rem;
+}
+
+/* A person who has asked their system for less motion gets less motion. */
+@media (prefers-reduced-motion: reduce) {
+  .activity, .modal { transition: none; animation: none; }
+}

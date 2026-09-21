@@ -92,6 +92,7 @@ type Server struct {
 	picker  *pathpick.Picker
 	scanner engine.Scanner
 	builds  *buildRuns
+	logf    func(format string, args ...any)
 	// games is the Games area's process-wide state: download and launch
 	// coordination, and the reviews waiting for an approval.
 	games  *gameState
@@ -157,6 +158,10 @@ type Options struct {
 	Token *Token
 	// Paths is where this run keeps its state. See [Paths].
 	Paths Paths
+	// Logf receives the lines this server has to say outside a response — a
+	// run a stopped Companion left unfinished, a swept temporary directory.
+	// Nil discards them, which is what a test wants.
+	Logf func(format string, args ...any)
 	// Picker opens native file dialogs on the user's desktop. Nil means a
 	// default one, which is what `serve` wants; a test supplies its own so no
 	// window ever opens.
@@ -221,6 +226,10 @@ func NewServer(options Options) (*Server, error) {
 	if picker == nil {
 		picker = &pathpick.Picker{}
 	}
+	logf := options.Logf
+	if logf == nil {
+		logf = func(string, ...any) {}
+	}
 
 	server := &Server{
 		version:      options.Version,
@@ -231,6 +240,7 @@ func NewServer(options Options) (*Server, error) {
 		picker:       picker,
 		scanner:      options.Scanner,
 		builds:       newBuildRuns(),
+		logf:         logf,
 		games:        newGameState(),
 		newAUB:       newAUB,
 		token:        token,
@@ -245,6 +255,13 @@ func NewServer(options Options) (*Server, error) {
 	}
 	server.index = index
 	server.handler = server.routes()
+
+	// Records a previous Companion left mid-run, and the temporary directories
+	// a killed extraction left behind. Both are states a durable record can be
+	// wrong in, and both are cheap to put right exactly once, here.
+	server.recoverPlayRuns()
+	server.sweepTextureBundles()
+
 	return server, nil
 }
 
@@ -341,7 +358,7 @@ func (s *Server) api() map[string]http.HandlerFunc {
 	}
 	for _, table := range []map[string]http.HandlerFunc{
 		s.jobAPI(), s.profileAPI(), s.libraryAPI(),
-		s.engineAPI(), s.buildAPI(), s.settingsAPI(), s.pathAPI(),
+		s.engineAPI(), s.buildAPI(), s.playAPI(), s.settingsAPI(), s.pathAPI(),
 		s.feedbackAPI(), s.aboutAPI(), s.accountAPI(), s.gamesAPI(),
 	} {
 		for pattern, handler := range table {

@@ -1,6 +1,8 @@
 package web
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -22,6 +24,7 @@ import (
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/enginefixture"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/pathpick"
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/texturebundle"
 )
 
 // A whole fixture machine: a backend with one map on it, a toolchain, an
@@ -60,6 +63,25 @@ func buildHelperMain(args []string) int {
 	failing := false
 	if len(args) > 0 && args[0] == "--fail" {
 		failing, args = true, args[1:]
+	}
+	// `-wadpath <directory>`: the flag and the directory as two argv elements,
+	// which is how the real `qbsp` takes it. The fixture LISTS the directory,
+	// so a test can prove the compiler was handed the verified bundle rather
+	// than merely that an argument appeared in a preview.
+	wadpath := ""
+	if len(args) >= 2 && args[0] == "-wadpath" {
+		wadpath, args = args[1], args[2:]
+	}
+	if wadpath != "" {
+		names, err := os.ReadDir(wadpath)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "helper: -wadpath", err)
+
+			return 1
+		}
+		for _, name := range names {
+			fmt.Println("wadpath holds", name.Name())
+		}
 	}
 	if len(args) != 2 {
 		fmt.Fprintln(os.Stderr, "helper: compile takes a source and a destination")
@@ -125,6 +147,10 @@ type fixtureBackend struct {
 	// games, when set, answers the hosted-game, game-profile and profile
 	// catalogue routes (244F). See games_test.go.
 	games http.Handler
+
+	// textures, when set, is the bundle the texture-export route serves
+	// instead of the default two-WAD one.
+	textures []byte
 }
 
 func (b *fixtureBackend) count() int {
@@ -172,6 +198,15 @@ func (b *fixtureBackend) serve(w http.ResponseWriter, r *http.Request) {
 			"token":  b.token,
 			"record": map[string]any{"id": "user1", "email": b.email},
 		})
+		return
+	}
+
+	// The map texture export (`AUCOM/AUE/AUT 246I1`). Outside the Companion
+	// prefix, because AUB serves it under the map routes, and pinned to the
+	// exact revision the caller asked for: a mismatch is the refusal the real
+	// deployment makes, not a bundle for a different revision.
+	if strings.HasPrefix(path, "/api/maps/") && strings.HasSuffix(path, "/texture-export") {
+		b.serveTextureExport(w, r)
 		return
 	}
 
@@ -263,6 +298,103 @@ func (b *fixtureBackend) serve(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// textures, when set, replaces the default two-WAD bundle. A test that wants a
+// refusal or a wrong revision sets it.
+func (b *fixtureBackend) serveTextureExport(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("Authorization") == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]any{"code": "unauthorized", "message": "no session"})
+
+		return
+	}
+	mapID := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/maps/"), "/texture-export")
+	if mapID != b.asset.assetID {
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{"reason": map[string]any{"code": "map_not_found"}},
+		})
+
+		return
+	}
+	if raw := r.URL.Query().Get("revision"); raw != "" && raw != fmt.Sprint(b.asset.revision) {
+		w.WriteHeader(http.StatusConflict)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"message": "This map's texture export is built from its current saved document.",
+			"data":    map[string]any{"reason": map[string]any{"code": "revision_not_exportable"}},
+		})
+
+		return
+	}
+	bundle := b.textures
+	if bundle == nil {
+		bundle = fixtureTextureBundle(b.asset.assetID, b.asset.revision, true)
+	}
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", `attachment; filename="fixture-textures.zip"`)
+	_, _ = w.Write(bundle)
+}
+
+// fixtureTextureBundle builds a bundle the way AUB builds one: two declared
+// WADs in the map's own order, each carried with its declared digest, plus the
+// manifest and the licences document.
+func fixtureTextureBundle(mapID string, revision int, ready bool) []byte {
+	first := []byte("WAD2" + "first-wall-texture")
+	second := []byte("WAD2" + "second-wall-texture")
+	digest := func(body []byte) string {
+		sum := sha256.Sum256(body)
+
+		return hex.EncodeToString(sum[:])
+	}
+	files := []map[string]any{
+		{"path": "first.wad", "source": "first.wad", "sha256": digest(first), "bytes": len(first)},
+		{"path": "second.wad", "source": "second.wad", "sha256": digest(second), "bytes": len(second)},
+	}
+	manifest := map[string]any{
+		"schema_version": texturebundle.Schema,
+		"map_id":         mapID, "map_name": "First Coast", "revision": revision, "game": "quake1",
+		"exported_at":   "2026-09-21T00:00:00Z",
+		"wads_declared": []string{"first.wad", "second.wad"},
+		"requirements": []map[string]any{
+			{"order": 0, "name": "first.wad", "game": "quake1", "kind": "wad", "status": "resolved",
+				"included": true, "files": files[0:1]},
+			{"order": 1, "name": "second.wad", "game": "quake1", "kind": "wad", "status": "resolved",
+				"included": true, "files": files[1:2]},
+		},
+		"files":             files,
+		"compiler_ready":    ready,
+		"compiler_refusals": []string{},
+	}
+	if !ready {
+		manifest["compiler_refusals"] = []string{"wad_bytes_not_carried: quake101.wad"}
+		manifest["unresolved"] = []string{"texture_source_installed: quake101.wad"}
+	}
+
+	buffer := &bytes.Buffer{}
+	writer := zip.NewWriter(buffer)
+	add := func(name string, body []byte) {
+		out, err := writer.Create(name)
+		if err != nil {
+			panic(err)
+		}
+		if _, err = out.Write(body); err != nil {
+			panic(err)
+		}
+	}
+	add("first.wad", first)
+	add("second.wad", second)
+	add(texturebundle.LicensesName, []byte("# Attribution\n"))
+	encoded, err := json.Marshal(manifest)
+	if err != nil {
+		panic(err)
+	}
+	add(texturebundle.ManifestName, encoded)
+	if err = writer.Close(); err != nil {
+		panic(err)
+	}
+
+	return buffer.Bytes()
+}
+
 func (b *fixtureBackend) assetPath() string {
 	return "/assets/" + b.asset.assetType + "/" + b.asset.assetID
 }
@@ -334,6 +466,7 @@ func newMachine(t *testing.T) *machine {
 	m.writeProfile("aucom.fixture.q1-engine.json", enginefixture.ProfileJSON)
 	m.writeProfile("aucom.fixture.toolchain.json", fixtureToolJSON(self))
 	m.writeProfile("aucom.fixture.pipeline.json", fixturePipelineJSON())
+	m.writeProfile("aucom.fixture.q1-pipeline.json", fixtureQ1PipelineJSON())
 
 	settings := config.Default()
 	settings.AUBBaseURL = m.backend.url()
@@ -452,6 +585,12 @@ func fixtureToolJSON(self string) []byte {
 		"capabilities": []map[string]any{
 			{"id": "fixture.compile", "title": "Compile", "consumes": []string{"fixture.map"},
 				"produces": []string{"fixture.bsp"}},
+			// The Quake 1 shape, for the Build & Run journey: a real map source
+			// role, and the optional texture root EricW's `qbsp` is given with
+			// `-wadpath`. A second capability rather than a changed one, so the
+			// fixtures the older journeys drive are untouched.
+			{"id": "fixture.q1.compile", "title": "Compile a Quake 1 map",
+				"consumes": []string{"q1.map.source"}, "produces": []string{"q1.bsp"}},
 		},
 		"executables": []map[string]any{
 			{"name": "tool", "title": "The fixture program", "file": "tool{platform.exe_suffix}"},
@@ -487,6 +626,64 @@ func fixtureToolJSON(self string) []byte {
 				"roots":           []map[string]any{{"role": "workspace", "access": "read_write", "purpose": "compile"}},
 				"timeout_seconds": 120,
 			},
+			{
+				"id": "q1compile", "title": "Compile a Quake 1 map", "capability": "fixture.q1.compile",
+				"executable": "tool",
+				"args": []any{
+					buildHelperFlag,
+					// Passed only when a texture folder is set, and as two argv
+					// elements — the flag, then the directory — exactly as the
+					// real `qbsp` takes it.
+					map[string]any{"value": "-wadpath", "when": map[string]any{"root": "content_root"}},
+					map[string]any{"value": "{root.content_root}", "when": map[string]any{"root": "content_root"}},
+					"{input.source_map}", "{output.bsp}",
+				},
+				"working_dir": map[string]any{"root": "workspace"},
+				"inputs": []map[string]any{
+					{"name": "source_map", "title": "Source", "role": "q1.map.source",
+						"required": true, "extensions": []string{".map"}},
+				},
+				"outputs": []map[string]any{
+					{"name": "bsp", "title": "BSP", "role": "q1.bsp", "path": "{option.basename}.bsp"},
+				},
+				"options": []map[string]any{
+					{"name": "basename", "title": "Name", "type": "text", "default": "level", "max_length": 64},
+				},
+				"roots": []map[string]any{
+					{"role": "workspace", "access": "read_write", "purpose": "compile"},
+					{"role": "content_root", "access": "read", "optional": true,
+						"purpose": "find the texture WADs the map names"},
+				},
+				"timeout_seconds": 120,
+			},
+		},
+	})
+}
+
+// fixtureQ1PipelineJSON is the Build & Run journey's pipeline: a Quake 1 map
+// source, so internal/profile classifies it as a MAP rather than an ordinary
+// file, and the family the coordinator and the page both key on.
+func fixtureQ1PipelineJSON() []byte {
+	return encodeFixture(map[string]any{
+		"schema_version": "aucom.profile/1.1",
+		"kind":           "pipeline",
+		"id":             "aucom.fixture.q1-pipeline",
+		"version":        "1.0.0",
+		"name":           "Fixture Quake 1 build",
+		"summary":        "One stage: compile a Quake 1 map source into a BSP, with its texture folder.",
+		"publisher":      map[string]any{"name": "Auto-Pigeon tests"},
+		"license":        map[string]any{"spdx": "MIT", "name": "MIT"},
+		"game_profile":   map[string]any{"slug": "quake1", "engine_family": "quake1"},
+		"inputs": []map[string]any{
+			{"name": "source_map", "title": "Map source", "role": "q1.map.source",
+				"required": true, "extensions": []string{".map"}},
+		},
+		"steps": []map[string]any{
+			{"id": "q1compile", "title": "Compile", "capability": "fixture.q1.compile",
+				"inputs": []map[string]any{{"name": "source_map", "from": "pipeline.source_map"}}},
+		},
+		"outputs": []map[string]any{
+			{"name": "bsp", "title": "The compiled map", "role": "q1.bsp", "from": "q1compile.bsp"},
 		},
 	})
 }

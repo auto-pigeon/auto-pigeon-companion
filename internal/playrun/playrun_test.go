@@ -549,39 +549,53 @@ func TestAnIncompletePlanIsRefusedBeforeAnythingIsDownloaded(t *testing.T) {
 // A record left active by a stopped Companion is marked, not left claiming
 // forever that a build is running.
 func TestARunLeftByAStoppedCompanionIsRecovered(t *testing.T) {
-	h := newHarness(t)
-	reached := make(chan struct{})
-	h.buildRun = func(ctx context.Context, _ build.Request, _ func(*build.Manifest)) (*build.Manifest, error) {
-		close(reached)
-		<-ctx.Done()
-
-		return nil, ctx.Err()
-	}
-	started, _ := h.service.Start(goodRequest())
-	<-reached
-
-	// A new service over the same store, as a restarted process has.
-	reopened, err := playrun.OpenStore(h.store.Root())
+	// A record exactly as a killed process leaves one: `compiling`, with no
+	// process anywhere finishing it. Written directly rather than by running
+	// one, because "the Companion stopped" is precisely the state in which
+	// nothing is still executing it.
+	store, err := playrun.OpenStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	fresh, err := playrun.NewService(reopened, minimalDeps())
+	id, err := playrun.NewID(time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
-	count, err := fresh.Recover()
+	abandoned := &playrun.Record{
+		SchemaVersion: playrun.SchemaVersion, ID: id, Request: goodRequest(),
+		State: playrun.Compiling, CreatedAt: time.Now().UTC(), StartedAt: time.Now().UTC(),
+		Stages: []playrun.Stage{{State: playrun.Compiling, StartedAt: time.Now().UTC()}},
+	}
+	if err = store.Save(abandoned); err != nil {
+		t.Fatal(err)
+	}
+
+	service, err := playrun.NewService(store, minimalDeps())
+	if err != nil {
+		t.Fatal(err)
+	}
+	count, err := service.Recover()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if count != 1 {
 		t.Fatalf("recovered %d run(s), want 1", count)
 	}
-	record, err := fresh.Get(started.ID)
+	record, err := service.Get(id)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if record.State != playrun.Failed || record.Remedy == "" {
-		t.Errorf("recovered record = %s / %q", record.State, record.Remedy)
+	switch {
+	case record.State != playrun.Failed:
+		t.Errorf("state = %s, want failed", record.State)
+	case record.FailedAt != playrun.Compiling:
+		t.Errorf("failed_at = %s, want the stage it was in", record.FailedAt)
+	case record.Remedy == "":
+		t.Error("a recovered run offered no next action")
+	}
+	// And a second Recover changes nothing: the run is terminal now.
+	if again, _ := service.Recover(); again != 0 {
+		t.Errorf("a second recovery touched %d run(s)", again)
 	}
 }
 

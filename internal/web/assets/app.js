@@ -24,8 +24,9 @@
   // `about` is last because it is the one area that is not a task: somebody
   // looking for a job should never have to pass the prose about the program to
   // reach it.
-  const areaNames = ["library", "build", "run", "games", "profiles", "new-profile", "jobs", "settings", "about"];
+  const areaNames = ["play", "library", "build", "run", "games", "profiles", "new-profile", "jobs", "settings", "about"];
   const titles = {
+    play: "Build & Run",
     library: "My Maps",
     build: "Build",
     run: "Run",
@@ -40,8 +41,11 @@
   // The area a fresh page opens on. Signed out, that is Build: local work needs
   // no account, and opening on the one area that does told a first-time user
   // otherwise (NEW_244D).
+  // Build & Run is the journey the program is for, so a signed-in window opens
+  // on it. Signed out it is not usable — the map comes from the account — and
+  // Build still is, so that is where a first run lands (NEW_244D).
   function defaultArea() {
-    return window.AUCOM.status?.authenticated ? "library" : "build";
+    return window.AUCOM.status?.authenticated ? "play" : "build";
   }
 
   function show(area, { focus = true } = {}) {

@@ -469,3 +469,13 @@ func digestFile(path string) (digest string, size int64, err error) {
 	}
 	return "sha256:" + hex.EncodeToString(hash.Sum(nil)), written, nil
 }
+
+// DigestFile is [digestFile] for a caller outside this package that has to ask
+// "is this staged file still the one that was staged".
+//
+// Exported rather than copied: a second implementation of "hash this file"
+// would be a second answer to that question, and the two would agree until the
+// day one of them was changed.
+func DigestFile(path string) (digest string, size int64, err error) {
+	return digestFile(path)
+}

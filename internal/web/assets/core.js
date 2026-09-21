@@ -601,8 +601,54 @@ function terminal(state) {
   return ["succeeded", "failed", "cancelled", "interrupted"].includes(state);
 }
 
+// confirmModal asks a question that has a consequence.
+//
+// `AUCOM/AUE/AUT 246I1` draws the line: a short confirmation of something that
+// has already happened is a status line, and a DECISION — a permission, a
+// licence acknowledgement, a destructive conflict — is a modal. A modal takes
+// focus, traps it, returns it, and closes on Escape only when closing is not
+// itself the destructive answer.
+//
+// Built on <dialog>, which the operating system's own accessibility layer
+// already understands, rather than on a div pretending to be one.
+function confirmModal({ title, body, confirm = "Continue", cancel = "Cancel" }) {
+  return new Promise((resolve) => {
+    const opener = document.activeElement;
+    const confirmButton = el("button", { text: confirm, className: "primary", attrs: { type: "button" } });
+    const cancelButton = el("button", { text: cancel, attrs: { type: "button" } });
+    const dialog = el("dialog", {
+      className: "modal",
+      attrs: { "aria-labelledby": "modal-title" },
+      children: [
+        el("h2", { text: title, attrs: { id: "modal-title", tabindex: "-1" } }),
+        el("p", { text: body }),
+        el("div", { className: "modal-actions", children: [cancelButton, confirmButton] }),
+      ],
+    });
+    const finish = (answer) => {
+      dialog.close();
+      dialog.remove();
+      // Focus goes back where it came from. Without this a keyboard user is
+      // left at the top of the document, in a page whose content changed
+      // underneath them.
+      opener?.focus?.();
+      resolve(answer);
+    };
+    confirmButton.addEventListener("click", () => finish(true));
+    cancelButton.addEventListener("click", () => finish(false));
+    // Escape means cancel, which is the non-destructive answer.
+    dialog.addEventListener("cancel", (event) => {
+      event.preventDefault();
+      finish(false);
+    });
+    document.body.append(dialog);
+    dialog.showModal();
+    dialog.querySelector("h2").focus();
+  });
+}
+
 Object.assign(AUCOM, {
-  $, el, api, announce, setMessage, busy, withBusy,
+  $, el, api, announce, setMessage, busy, withBusy, confirmModal,
   record, renderActivity, clearActivity, pathField, downloadButton, tabsFor,
   badge, maturityBadge, maturityNote, bytes, when, terminal, permissionBlock, programFileName, folderTitle,
   openCompatibilityReport, wireCompatibilityReport,

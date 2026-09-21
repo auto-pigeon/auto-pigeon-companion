@@ -242,6 +242,9 @@ func runServe(env *Env, args []string) int {
 		AUE:     runner,
 		Jobs:    service,
 		Token:   token,
+		Logf: func(format string, args ...any) {
+			fmt.Fprintf(env.Stderr, format+"\n", args...)
+		},
 		Paths: web.Paths{
 			Profiles:   profilesDir,
 			Bindings:   bindingsPath,
