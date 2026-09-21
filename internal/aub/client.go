@@ -18,6 +18,7 @@ package aub
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -108,6 +109,38 @@ func (c *Client) SetToken(token string) { c.token = token }
 // Authenticated reports whether a token is set. It says nothing about whether
 // AUB still accepts it; only a request can establish that.
 func (c *Client) Authenticated() bool { return c.token != "" }
+
+// SessionExpired reports whether the stored session token says it has expired.
+//
+// Authenticated only knows a token is present. `AUCOM/AUE/AUB 246I1.1` found
+// the page saying "signed in" on a token that had expired the day before, and
+// every AUB call then refused it. This reads the token's own `exp` claim —
+// no signature is checked, because AUB checks that; it only answers "is it
+// worth sending". A token that is not a JWT, or carries no `exp`, is not
+// reported expired: the server remains the authority on those.
+func (c *Client) SessionExpired(now time.Time) bool {
+	return TokenExpired(c.token, now)
+}
+
+// TokenExpired is SessionExpired for a bare token.
+func TokenExpired(token string, now time.Time) bool {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return false
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(strings.TrimRight(parts[1], "="))
+	if err != nil {
+		return false
+	}
+	var claims struct {
+		Exp int64 `json:"exp"`
+	}
+	if json.Unmarshal(payload, &claims) != nil || claims.Exp == 0 {
+		return false
+	}
+
+	return !now.Before(time.Unix(claims.Exp, 0))
+}
 
 // APIError is a non-2xx response from AUB, carrying enough to tell the user
 // what went wrong without dumping a raw body into the UI.

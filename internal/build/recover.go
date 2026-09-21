@@ -42,7 +42,14 @@ func Reconcile(m *Manifest, lookup func(id string) (*job.Job, error), now time.T
 		}
 		step.State = record.State
 		step.Error = record.Error
-		step.FinishedAt = record.FinishedAt
+		// Everything the job measured, not only how it ended: a step read back
+		// with its state and no duration printed `vis succeeded 0ms` for a vis
+		// that ran 1.5 s (246I1.1, a build cancelled between two steps).
+		step.StartedAt, step.FinishedAt = record.StartedAt, record.FinishedAt
+		if !record.FinishedAt.IsZero() {
+			step.DurationMS = record.Duration().Milliseconds()
+		}
+		step.ExitCode = record.ExitCode
 		changed = true
 	}
 	if !changed {

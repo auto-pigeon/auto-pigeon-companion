@@ -372,8 +372,7 @@ func remedyFor(state State, cause error) string {
 		return "Check you are still signed in. If the map has been saved since you chose its revision, " +
 			"reload the map and choose the current one."
 	case Converting:
-		return "The extractor could not read this map. Open it in Auto-Pigeon and save it again, " +
-			"or report the map to its author."
+		return convertRemedy(cause)
 	case Compiling:
 		return "Open the build in Jobs to read the compiler's output; the failing step names what it could not do."
 	case Installing:

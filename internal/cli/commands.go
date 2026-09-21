@@ -432,6 +432,11 @@ func runAuthStatus(env *Env, args []string) int {
 		fmt.Fprintln(env.Stdout, "signed in: no")
 		return 0
 	}
+	if aub.TokenExpired(settings.Session.Token, time.Now()) {
+		fmt.Fprintf(env.Stdout, "signed in: no — the session for %s has expired; run `companion auth login`\n",
+			settings.Session.Email)
+		return 0
+	}
 	fmt.Fprintf(env.Stdout, "signed in: yes (%s)\n", settings.Session.Email)
 	if !settings.Session.Expires.IsZero() {
 		fmt.Fprintf(env.Stdout, "expires: %s (local estimate)\n", settings.Session.Expires.Format("2006-01-02 15:04"))

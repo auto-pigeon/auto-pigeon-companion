@@ -514,11 +514,15 @@ type statusBody struct {
 	Version       string `json:"version"`
 	AUBBaseURL    string `json:"aub_base_url"`
 	Authenticated bool   `json:"authenticated"`
-	Email         string `json:"email,omitempty"`
-	Platform      string `json:"platform"`
-	ToolCacheDir  string `json:"tool_cache_dir"`
-	JobsDir       string `json:"jobs_dir"`
-	AUEAvailable  bool   `json:"aue_available"`
+	// SessionExpired says a session is stored and its token has expired, so
+	// the page asks for a sign-in instead of showing "signed in" on a session
+	// every AUB call would refuse.
+	SessionExpired bool   `json:"session_expired,omitempty"`
+	Email          string `json:"email,omitempty"`
+	Platform       string `json:"platform"`
+	ToolCacheDir   string `json:"tool_cache_dir"`
+	JobsDir        string `json:"jobs_dir"`
+	AUEAvailable   bool   `json:"aue_available"`
 	// AUEVerified says whether the extractor this build would run was verified
 	// against the signed catalogue, or is an unverified developer override. It
 	// is a separate field from AUEAvailable because "there is one" and "it is
@@ -547,10 +551,13 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		jobs = ""
 	}
 	baseURL := ""
-	authenticated := false
+	authenticated, expired := false, false
 	if client := s.aubClient(); client != nil {
 		baseURL = client.BaseURL()
 		authenticated = client.Authenticated()
+		if authenticated && client.SessionExpired(time.Now()) {
+			authenticated, expired = false, true
+		}
 	}
 	verified, provenance := false, ""
 	if aue.Available(s.runner) {
@@ -558,19 +565,20 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		verified, provenance = record.Verified, record.Mode
 	}
 	writeJSON(w, http.StatusOK, statusBody{
-		Version:       s.version,
-		AUBBaseURL:    baseURL,
-		Authenticated: authenticated,
-		Email:         settings.Session.Email,
-		Platform:      runtime.GOOS + "/" + runtime.GOARCH,
-		ToolCacheDir:  cache,
-		JobsDir:       jobs,
-		AUEAvailable:  aue.Available(s.runner),
-		AUEVerified:   verified,
-		AUEProvenance: provenance,
-		Debug:         s.debug,
-		Backends:      config.OfficialBackends,
-		BackendLabel:  backendLabel(baseURL),
+		Version:        s.version,
+		AUBBaseURL:     baseURL,
+		Authenticated:  authenticated,
+		SessionExpired: expired,
+		Email:          settings.Session.Email,
+		Platform:       runtime.GOOS + "/" + runtime.GOARCH,
+		ToolCacheDir:   cache,
+		JobsDir:        jobs,
+		AUEAvailable:   aue.Available(s.runner),
+		AUEVerified:    verified,
+		AUEProvenance:  provenance,
+		Debug:          s.debug,
+		Backends:       config.OfficialBackends,
+		BackendLabel:   backendLabel(baseURL),
 	})
 }
 

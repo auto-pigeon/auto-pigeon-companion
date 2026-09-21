@@ -39,3 +39,20 @@ func TestABuildAnotherCompanionIsRunningIsLeftAlone(t *testing.T) {
 		t.Errorf("a build whose job is live or unreadable was changed: %s", m.State)
 	}
 }
+
+// A step read back from its job keeps what the job measured.
+func TestAReconciledStepKeepsItsDuration(t *testing.T) {
+	started := time.Date(2026, 9, 21, 19, 9, 21, 0, time.UTC)
+	exit := 0
+	m := &Manifest{State: job.Running, Steps: []Step{{ID: "vis", JobID: "j1", State: job.Running}}}
+	record := &job.Job{State: job.Succeeded, StartedAt: started,
+		FinishedAt: started.Add(1486 * time.Millisecond), ExitCode: &exit}
+	lookup := func(string) (*job.Job, error) { return record, nil }
+	if !Reconcile(m, lookup, time.Now()) {
+		t.Fatal("not reconciled")
+	}
+	step := m.Steps[0]
+	if step.DurationMS != 1486 || !step.StartedAt.Equal(started) || step.ExitCode == nil || *step.ExitCode != 0 {
+		t.Fatalf("step = duration %d, started %v, exit %v", step.DurationMS, step.StartedAt, step.ExitCode)
+	}
+}

@@ -106,6 +106,7 @@
     $("identity").className = "muted";
     $("account-email").textContent = body.authenticated ? body.email || "signed in" : "";
     $("account-signed-out").hidden = Boolean(body.authenticated);
+    $("account-signed-out").textContent = body.session_expired ? "session expired" : "not signed in";
     $("account-menu").hidden = !body.authenticated;
     window.AUCOM.account?.statusChanged?.(body);
 
@@ -115,11 +116,15 @@
       closeSignIn({ restoreFocus: false });
     } else {
       const site = officialSite(body);
-      $("first-run-why").textContent = site
-        ? `Sign in to your account on ${site.host}.`
-        : body.aub_base_url
-          ? "Sign in to your account on the development server."
-          : "Choose which Auto-Pigeon your account is on, then sign in.";
+      // An expired session is said as such: "sign in" alone reads like the
+      // Companion forgot you, when it is the server's session that ran out.
+      $("first-run-why").textContent = body.session_expired
+        ? `Your session${body.email ? ` for ${body.email}` : ""} has expired. Sign in again.`
+        : site
+          ? `Sign in to your account on ${site.host}.`
+          : body.aub_base_url
+            ? "Sign in to your account on the development server."
+            : "Choose which Auto-Pigeon your account is on, then sign in.";
       renderSignInHelp(site);
     }
 

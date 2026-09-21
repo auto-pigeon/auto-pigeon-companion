@@ -392,6 +392,11 @@ anything of yours beside them is left alone.
 Progress, results and failures are in the **Activity** panel — a drawer on a
 wide window, the whole screen on a narrow one — and in **Jobs**, which keeps
 them after the window is closed. You can close the tab while it works.
+Activity shows what is running now (or the latest run) in full and folds older
+runs under **Earlier runs**, one line each. A failure is one sentence and a
+remedy that says whether the problem is the map or this computer; the tool's
+complete output is under **Technical details**. A run you cancelled says which
+stage you stopped it in and that nothing was installed.
 
 A compiled Quake 1 `.bsp` carries its own textures, so the game does not read
 the staged WADs at run time. They are kept with the map because the build is
@@ -623,6 +628,15 @@ expires: 2026-09-20 21:14 (local estimate)
 
 $ companion auth logout
 signed out locally (the token stays valid at AUB until it expires)
+```
+
+A stored session whose token has expired is reported as such, by the CLI and by
+the page (which then asks you to sign in again instead of showing "signed in"):
+
+```console
+$ companion auth status
+aub: https://aub.example
+signed in: no — the session for you@example has expired; run `companion auth login`
 ```
 
 `AUCOM_PASSWORD` is the alternative to a pipe. There is no terminal-echo

@@ -296,6 +296,9 @@ fieldset { min-width: 0; }
   grid-template-columns: repeat(4, minmax(8.5rem, 1fr)); counter-reset: none;
 }
 .bwiz-steps > li { min-width: 0; }
+/* Build & Run has FIVE steps; in the four-column grid the fifth wrapped onto a
+   row of its own (246I1.1, seen live). */
+#play-steps { grid-template-columns: repeat(5, minmax(7rem, 1fr)); }
 .bwiz-step {
   width: 100%; display: flex; align-items: flex-start; gap: 0.6rem; text-align: left;
   background: transparent; border: none; border-radius: 0; border-top: 3px solid var(--line-strong);
@@ -332,6 +335,7 @@ fieldset { min-width: 0; }
   /* Four equal columns that always fit: the number and the step's name, and
      what was chosen only under the step on screen. */
   .bwiz-steps { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  #play-steps { grid-template-columns: repeat(5, minmax(0, 1fr)); }
   .bwiz-step { flex-direction: column; gap: 0.3rem; padding-right: 0.25rem; }
   .bwiz-step__label { font-size: 0.8rem; }
   .bwiz-step:not(.current) .bwiz-step__summary { display: none; }
@@ -718,6 +722,25 @@ footer p { margin: 0; font-size: 0.82rem; max-width: 70ch; }
 .activity-stages li.done { color: var(--ink-muted); }
 .activity-stages li.running { font-weight: 600; }
 .activity-stages li.failed { color: var(--bad); }
+/* History, folded: one line per earlier run, its card on demand. */
+.activity-earlier > summary { cursor: pointer; font-weight: 600; padding-block: 0.25rem; }
+.activity-earlier__run { margin-block: 0.35rem; }
+.activity-earlier__run > summary { cursor: pointer; padding: 0.35rem 0.5rem; background: var(--surface-2); border-radius: var(--radius); }
+.activity-earlier__run > .activity-run { margin-block-start: 0.35rem; }
+/* Stopped on purpose: not an error, so not red. */
+.activity-stages li.cancelled { color: var(--warn); }
+.activity-raw {
+  max-block-size: 14rem;
+  overflow: auto;
+  margin: 0;
+  padding: 0.5rem;
+  background: var(--inset);
+  border-radius: var(--radius);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 
 .activity-foot { margin: 0; font-size: 0.85rem; }
 

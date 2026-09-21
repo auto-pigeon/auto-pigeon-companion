@@ -584,11 +584,21 @@ func playView(record *playrun.Record, now time.Time) map[string]any {
 	}
 	if record.Error != "" {
 		out["error"] = record.Error
+		// One sentence for the Activity card; the whole text stays in
+		// "error" for Technical details and Jobs.
+		out["error_summary"] = playrun.Summary(record.Error)
 		out["failed_at"] = record.FailedAt
 		out["failed_at_title"] = record.FailedAt.Title()
 	}
-	if record.Remedy != "" {
-		out["remedy"] = record.Remedy
+	// A cancelled run names the stage it was stopped in, so the page can say
+	// "you cancelled this during Compiling" instead of painting it as a failure.
+	if record.State == playrun.Cancelled && len(record.Stages) > 0 {
+		last := record.Stages[len(record.Stages)-1]
+		out["cancelled_at_title"] = last.State.Title()
+		out["installed_nothing"] = len(record.Installed) == 0
+	}
+	if remedy := playrun.CurrentRemedy(record); remedy != "" {
+		out["remedy"] = remedy
 	}
 	if record.RetryOf != "" {
 		out["retry_of"] = record.RetryOf
@@ -610,6 +620,9 @@ func playView(record *playrun.Record, now time.Time) map[string]any {
 		}
 		if stage.Error != "" {
 			row["error"] = stage.Error
+			if record.State == playrun.Cancelled {
+				row["cancelled"] = true
+			}
 		}
 		stages = append(stages, row)
 	}

@@ -342,7 +342,8 @@
     review.replaceChildren();
 
     review.append(section("What will be downloaded", [
-      line("Map", `${plan.map.asset_id}, revision ${plan.map.revision}`),
+      line("Map", `${state.map?.display_name ? `${state.map.display_name} (${plan.map.asset_id})` : plan.map.asset_id}, ` +
+        `revision ${plan.map.revision}`),
       line("Map file", plan.map.source_file || "the revision's only file"),
     ]));
 
@@ -358,7 +359,16 @@
       "Auto-Pigeon Extractor, started as a separate program, when the map needs converting"));
     review.append(section("Which programs will run", programs));
 
-    const writes = plan.writes.files.map((file) => el("li", { children: [el("code", { text: file })] }));
+    // Once the verified bundle is known, the WAD line names the actual files
+    // rather than a placeholder for them.
+    const carried = (plan.textures?.known ? plan.textures.wads || [] : [])
+      .filter((wad) => wad.included)
+      .flatMap((wad) => (wad.files || []).map((file) => file.path));
+    const files = plan.writes.files.flatMap((file) =>
+      carried.length && file.includes("<the map's declared WADs")
+        ? carried.map((path) => `${plan.run.mod}/wads/${path}`)
+        : [file]);
+    const writes = files.map((file) => el("li", { children: [el("code", { text: file })] }));
     review.append(el("section", {
       className: "panel",
       children: [
@@ -514,14 +524,64 @@
     pollTimer = setTimeout(poll, active ? 1000 : 15000);
   }
 
+  // Activity is re-rendered on every poll — once a second while a run is
+  // active — so whatever a person opened (Technical details, the earlier runs)
+  // is remembered by key and opened again, rather than snapping shut under them.
+  function openKeys(root) {
+    return new Set([...root.querySelectorAll("details[data-open-key]")]
+      .filter((node) => node.open).map((node) => node.dataset.openKey));
+  }
+
+  function reopen(root, keys) {
+    for (const node of root.querySelectorAll("details[data-open-key]")) {
+      if (keys.has(node.dataset.openKey)) node.open = true;
+    }
+  }
+
+  // What is happening now is the card; history is one line each, folded, and
+  // in full on the Jobs page. Before 246I1.1 every run of the last twenty was a
+  // full card, so the drawer was mostly the past.
   function renderActivity(runs) {
     const body = $("activity-body");
+    const keep = openKeys(body);
     body.replaceChildren();
     if (!runs.length) {
       body.append(el("p", { className: "muted", text: "Nothing has been built and run yet." }));
       return;
     }
-    for (const run of runs.slice(0, 20)) body.append(runCard(run));
+    const recent = runs.slice(0, 20);
+    const active = recent.filter((run) => run.active);
+    const current = active.length ? active : recent.slice(0, 1);
+    const earlier = recent.filter((run) => !current.includes(run));
+    for (const run of current) body.append(runCard(run));
+    if (earlier.length) {
+      body.append(el("details", {
+        className: "activity-earlier",
+        attrs: { "data-open-key": "earlier" },
+        children: [
+          el("summary", { text: `Earlier runs (${earlier.length})` }),
+          ...earlier.map((run) => el("details", {
+            className: "activity-earlier__run",
+            attrs: { "data-open-key": `run:${run.id}` },
+            children: [
+              el("summary", { children: [
+                el("strong", { text: `${run.map || run.asset_id} — ${run.title}` }),
+                el("span", { className: "muted", text: ` · ${elapsed(run.elapsed_ms) || "<1s"} · ${clock(run.created_at)}` }),
+              ] }),
+              runCard(run),
+            ],
+          })),
+        ],
+      }));
+    }
+    reopen(body, keep);
+  }
+
+  function clock(iso) {
+    const date = new Date(iso);
+    return Number.isNaN(date.getTime()) ? "" : date.toLocaleString([], {
+      month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+    });
   }
 
   function runCard(run) {
@@ -535,19 +595,28 @@
     const stages = el("ol", {
       className: "activity-stages",
       children: (run.stages || []).map((stage) => el("li", {
-        className: stage.error ? "failed" : stage.finished_at ? "done" : "running",
+        // A cancelled stage is not a failed one: it is neutral, not red.
+        className: stage.cancelled ? "cancelled" : stage.error ? "failed" : stage.finished_at ? "done" : "running",
         children: [
           el("span", { text: stage.title }),
-          el("span", { className: "muted", text: stage.duration_ms ? " " + elapsed(stage.duration_ms) : "" }),
+          el("span", { className: "muted", text: stage.finished_at ? " " + duration(stage.duration_ms) : "" }),
         ],
       })),
     });
 
     const children = [head, stages];
-    if (run.error) {
+    if (run.state === "cancelled") {
+      children.push(el("p", {
+        className: "message",
+        text: `You cancelled this during ${(run.cancelled_at_title || "the run").toLowerCase()}.` +
+          (run.installed_nothing ? " Nothing was installed." : ""),
+      }));
+    } else if (run.error) {
+      // One sentence here; the extractor's or compiler's whole output is in
+      // Technical details, not painted across the card.
       children.push(el("p", {
         className: "message error",
-        text: `${run.failed_at_title || "It stopped"}: ${run.error}`,
+        text: `${run.failed_at_title || "It stopped"}: ${run.error_summary || run.error}`,
       }));
     }
     if (run.remedy) children.push(el("p", { className: "muted", text: run.remedy }));
@@ -596,12 +665,24 @@
     if (run.launch) {
       rows.push(...line("Command", [run.launch.executable, ...(run.launch.args || [])].join(" ")));
     }
+    if (run.error && run.state !== "cancelled") {
+      rows.push(el("dt", { text: "What it reported, in full" }),
+        el("dd", { children: [el("pre", { className: "activity-raw", text: run.error })] }));
+    }
     return el("details", {
+      attrs: { "data-open-key": `tech:${run.id}` },
       children: [
         el("summary", { text: "Technical details" }),
         el("dl", { className: "summary-list", children: rows }),
       ],
     });
+  }
+
+  // A finished stage always shows a duration. Under a second is "<1s", not
+  // "0s" — a stage that took 400 ms did not take nothing.
+  function duration(ms) {
+    if (!ms || ms < 1000) return "<1s";
+    return elapsed(ms);
   }
 
   function elapsed(ms) {
