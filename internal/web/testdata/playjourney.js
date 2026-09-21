@@ -268,12 +268,10 @@
     // The backend is switched to a bundle it cannot complete, and the page must
     // list the actual refusals and refuse to start anything.
     await fetch("/journey/break-textures", { method: "POST" });
-    await go("play");
+    // Coming back to the area re-reads everything, which is what a person who
+    // has just saved in the editor does.
+    await window.AUCOM.areas.play.refresh();
     stepButton(1).click();
-    // Re-read the map, so the newly saved revision is the one chosen. This is
-    // what a person does: they saved in the editor and came back.
-    setValue($("play-map"), "");
-    setValue($("play-map"), settings.asset_id);
     await waitFor("the new revision", () => $("play-revision").value !== settings.revision_id, 20000);
     setValue($("play-map-name"), "dm2");
     stepButton(4).click();

@@ -646,13 +646,12 @@
     button.addEventListener("click", () => show(Number(button.dataset.go)));
   }
 
-  // `change` only. An `input` event on a <select> fires alongside it, and
-  // reloading on both would start two loads for one choice — see
-  // revisionRequest.
+  // `change` only, and every change re-reads the revisions — including a
+  // re-selection of the same map, which is how somebody who has just saved in
+  // the editor gets the version they saved. Overlapping loads are handled by
+  // revisionRequest rather than by refusing to start one.
   $("play-map").addEventListener("change", (event) => {
-    const chosen = state.maps.find((m) => m.asset_id === event.target.value) || null;
-    if (chosen?.asset_id === state.map?.asset_id && state.revisions.length) return;
-    state.map = chosen;
+    state.map = state.maps.find((m) => m.asset_id === event.target.value) || null;
     invalidate("You changed the map, so its textures have to be checked again.");
     loadRevisions(event.target.value);
   });
