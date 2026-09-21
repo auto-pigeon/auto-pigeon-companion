@@ -394,7 +394,7 @@
         ],
       });
     });
-    children.push(el("ol", { className: "plain", children: rows }));
+    children.push(el("ol", { className: "plain numbered", children: rows }));
     children.push(el("p", {
       className: "muted",
       text: "Later declarations win a name two WADs both hold. A compiled Quake 1 BSP carries its " +

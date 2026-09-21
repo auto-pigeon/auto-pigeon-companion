@@ -32,6 +32,16 @@
     log(`${ok ? "ok  " : "FAIL"} ${step} — ${detail || ""}`);
   };
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  // A screenshot of the page as it is now. The test captures it only when
+  // AUCOM_JOURNEY_SCREENSHOTS is set; otherwise this answers at once.
+  const snap = async (name) => {
+    await sleep(250);
+    await fetch("/journey/snap", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    }).catch(() => {});
+  };
 
   // A script error in the page is the failure, not the timeout it causes.
   window.addEventListener("error", (event) => {
@@ -114,6 +124,7 @@
       $("play-revision").value
     );
     setValue($("play-map-name"), "dm1");
+    await snap("map-and-exact-revision");
 
     // --- 2. the build profile ----------------------------------------------
     stepButton(2).click();
@@ -173,6 +184,15 @@
       argv.includes("-game") && argv.includes("auto-pigeon") && argv.includes("+map") && argv.includes("dm1"),
       argv.join(" | ").slice(0, 140)
     );
+    await snap("review");
+    $("play-review").querySelector(".argv")?.scrollIntoView({ block: "center" });
+    await snap("review-wads-and-argv");
+    // A long path must wrap rather than push the page sideways (246I1.1).
+    record(
+      "the review fits the window without scrolling sideways",
+      document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
+      `${document.documentElement.scrollWidth}px of content in ${document.documentElement.clientWidth}px`
+    );
 
     // Changing the revision throws the review away AND says so.
     setValue($("play-revision"), $("play-revision").value);
@@ -183,6 +203,7 @@
       textOf($("play-review-message")).toLowerCase().includes("you changed"),
       textOf($("play-review-message")).slice(0, 110)
     );
+    await snap("review-invalidated");
     // And the review comes back when the step is opened again.
     stepButton(4).click();
     await waitFor("the review again", () => textOf($("play-review")).includes("Where files will be written"), 40000);
@@ -211,6 +232,22 @@
       throw new Error(`${err.message}; the page said: ${textOf($("play-start-message"))}`);
     });
     record("Activity opens when a run starts", true, "open");
+    record(
+      "Activity keeps its padding on screen",
+      $("activity").getBoundingClientRect().left >= 0,
+      `left edge at ${Math.round($("activity").getBoundingClientRect().left)}px`
+    );
+    await snap("activity-running");
+    // The drawer is part of the dark page, not a white sheet over it (246I1.1).
+    {
+      const bg = getComputedStyle($("activity")).backgroundColor;
+      const channels = (bg.match(/\d+/g) || []).slice(0, 3).map(Number);
+      record(
+        "Activity is drawn in the page's own dark palette",
+        channels.length === 3 && channels.every((c) => c < 80),
+        bg
+      );
+    }
     await waitFor(
       "the run to finish",
       () => textOf($("activity-body")).includes("Finished"),
@@ -225,6 +262,7 @@
         .every((stage) => activity.includes(stage)),
       activity.replace(/\s+/g, " ").slice(0, 200)
     );
+    await snap("activity-finished-launched");
 
     // Escape closes Activity and does not stop the run.
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
@@ -267,6 +305,7 @@
     // --- the refusal path ---------------------------------------------------
     // The backend is switched to a bundle it cannot complete, and the page must
     // list the actual refusals and refuse to start anything.
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     await fetch("/journey/break-textures", { method: "POST" });
     // Coming back to the area re-reads everything, which is what a person who
     // has just saved in the editor does.
@@ -289,6 +328,8 @@
       textOf($("play-review")).includes("quake101.wad"),
       textOf($("play-review")).replace(/\s+/g, " ").slice(-200)
     );
+    $("play-review").querySelector(".notice.error")?.scrollIntoView({ block: "center" });
+    await snap("compiler-ready-refusal");
     stepButton(5).click();
     await waitFor("the final step again", () => visible($("play-step-5")));
     record(
@@ -296,6 +337,11 @@
       $("play-start").disabled === true,
       String($("play-start").disabled)
     );
+    await snap("refusal-button-disabled");
+    // Jobs keeps the finished run.
+    await go("jobs");
+    await sleep(600);
+    await snap("jobs-history");
   } catch (err) {
     fatal = err && err.message ? err.message : String(err);
     log("fatal: " + fatal);

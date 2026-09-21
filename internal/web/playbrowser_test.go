@@ -1,6 +1,7 @@
 package web
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -30,9 +31,28 @@ import (
 type playDriveHandler struct {
 	*driveHandler
 	backend *fixtureBackend
+	// shots is nil unless AUCOM_JOURNEY_SCREENSHOTS is set; see screenshot_test.go.
+	shots *screenshotter
 }
 
 func (d *playDriveHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/journey/snap" {
+		var request struct {
+			Name string `json:"name"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&request)
+		if d.shots != nil {
+			if err := d.shots.snap(request.Name); err != nil {
+				select {
+				case d.logs <- "screenshot " + request.Name + " failed: " + err.Error():
+				default:
+				}
+			}
+		}
+		w.WriteHeader(http.StatusNoContent)
+
+		return
+	}
 	if r.URL.Path == "/journey/break-textures" {
 		// The map is SAVED, and the new revision's textures are incomplete.
 		//
@@ -61,20 +81,21 @@ func TestBuildAndRunJourneyInABrowser(t *testing.T) {
 	for _, size := range []struct {
 		name   string
 		window string
+		label  string
 	}{
 		// Both are the FULL journey. "A narrow window remains usable" is a
 		// claim about whether somebody can finish the work in one, not about
 		// whether the boxes line up.
-		{"a desktop window", "1280,900"},
-		{"a narrow window", "420,900"},
+		{"a desktop window", "1280,900", "desktop"},
+		{"a narrow window", "420,900", "narrow"},
 	} {
 		t.Run(size.name, func(t *testing.T) {
-			runPlayJourney(t, browser, size.window)
+			runPlayJourney(t, browser, size.window, size.label)
 		})
 	}
 }
 
-func runPlayJourney(t *testing.T, browser, window string) {
+func runPlayJourney(t *testing.T, browser, window, label string) {
 	m := newMachine(t)
 	// The toolchain and the engine are approved and bound before the journey:
 	// `TestFirstRunJourneyInABrowser` already drives that half through the
@@ -120,18 +141,47 @@ func runPlayJourney(t *testing.T, browser, window string) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	command := exec.CommandContext(ctx, browser,
+	arguments := []string{
 		"--headless=new", "--disable-gpu", "--no-sandbox", "--disable-dev-shm-usage",
 		"--no-first-run", "--no-default-browser-check", "--disable-extensions",
 		"--disable-background-networking", "--disable-component-update",
-		"--window-size="+window, "--user-data-dir="+profileDir,
-		front.URL+"/",
-	)
+		"--window-size=" + window, "--user-data-dir=" + profileDir,
+	}
+	shotDir := os.Getenv(screenshotEnv)
+	var toChromeR, toChromeW, fromChromeR, fromChromeW *os.File
+	if shotDir != "" {
+		if err = os.MkdirAll(shotDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if toChromeR, toChromeW, err = os.Pipe(); err != nil {
+			t.Fatal(err)
+		}
+		if fromChromeR, fromChromeW, err = os.Pipe(); err != nil {
+			t.Fatal(err)
+		}
+		defer toChromeW.Close()
+		defer fromChromeR.Close()
+		arguments = append(arguments, "--remote-debugging-pipe")
+		handler.shots = &screenshotter{
+			pipe:   &cdpPipe{toCh: toChromeW, fromCh: bufio.NewReader(fromChromeR), origin: front.URL},
+			dir:    shotDir,
+			prefix: label,
+		}
+	}
+	command := exec.CommandContext(ctx, browser, append(arguments, front.URL+"/")...)
+	if shotDir != "" {
+		// fd 3 is what the browser reads, fd 4 what it writes.
+		command.ExtraFiles = []*os.File{toChromeR, fromChromeW}
+	}
 	var browserOutput strings.Builder
 	command.Stdout = &browserOutput
 	command.Stderr = &browserOutput
 	if err := command.Start(); err != nil {
 		t.Skipf("could not start %s: %v", browser, err)
+	}
+	if shotDir != "" {
+		toChromeR.Close()
+		fromChromeW.Close()
 	}
 	defer func() {
 		_ = command.Process.Kill()
@@ -183,5 +233,8 @@ collect:
 	}
 	if len(report.Steps) == 0 {
 		t.Fatalf("the driver reported no steps at all. Browser output:\n%s", browserOutput.String())
+	}
+	if handler.shots != nil {
+		t.Logf("screenshots in %s: %s", shotDir, strings.Join(handler.shots.taken, ", "))
 	}
 }

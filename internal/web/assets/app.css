@@ -68,6 +68,13 @@
    revision showed under a file on this machine (NEW_244D). */
 [hidden] { display: none !important; }
 
+/* A path or an argv element is one unbroken word, and one long enough pushed
+   the narrow page sideways (the 246I1.1 screenshots). A path may break
+   anywhere; nothing else in <code> is long. */
+code { overflow-wrap: anywhere; }
+/* And a path written as plain text in a sentence breaks when it cannot fit. */
+main, .activity { overflow-wrap: break-word; }
+
 body {
   margin: 0;
   font-family: var(--font);
@@ -584,7 +591,10 @@ footer p { margin: 0; font-size: 0.82rem; max-width: 70ch; }
 /* Narrow windows: the navigation becomes a row above the content, and nothing
    scrolls sideways. */
 @media (max-width: 46rem) {
-  .app-body { flex-direction: column; }
+  /* Stretch, not the wide layout's flex-start: in a column, flex-start sizes
+     <main> to its content, so one long line made the narrow page scroll
+     sideways (246I1.1). */
+  .app-body { flex-direction: column; align-items: stretch; }
   .areas { flex: none; width: 100%; border-right: none; border-bottom: 1px solid var(--line); min-height: 0; }
   .areas ul { display: flex; flex-wrap: wrap; gap: 0.3rem; }
   .areas li { flex: 1 1 8rem; }
@@ -657,9 +667,13 @@ footer p { margin: 0; font-size: 0.82rem; max-width: 70ch; }
   gap: 0.75rem;
   padding: 1rem;
   overflow-y: auto;
-  background: var(--panel, #fff);
-  border-inline-start: 1px solid var(--line, #d8d8d8);
-  box-shadow: -8px 0 24px rgb(0 0 0 / 12%);
+  /* This sheet's own tokens. It named `--panel`, `--muted` and `--error`,
+     which it never defines, so the dark page opened a WHITE drawer with a
+     near-invisible heading (seen in the 246I1.1 screenshots). */
+  background: var(--surface);
+  color: var(--ink);
+  border-inline-start: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-lg);
 }
 
 .activity-head {
@@ -701,9 +715,9 @@ footer p { margin: 0; font-size: 0.82rem; max-width: 70ch; }
 }
 
 .activity-stages li { margin-block: 0.15rem; }
-.activity-stages li.done { color: var(--muted, #555); }
+.activity-stages li.done { color: var(--ink-muted); }
 .activity-stages li.running { font-weight: 600; }
-.activity-stages li.failed { color: var(--error, #a11); }
+.activity-stages li.failed { color: var(--bad); }
 
 .activity-foot { margin: 0; font-size: 0.85rem; }
 
@@ -718,8 +732,11 @@ footer p { margin: 0; font-size: 0.82rem; max-width: 70ch; }
 /* Below this width a drawer would leave a strip of unusable page behind it, so
    it becomes the whole screen instead. */
 @media (max-width: 52rem) {
+  /* Both edges pinned rather than `100vw`: 100vw includes the page's
+     scrollbar, which pushed the pane's left padding off-screen (246I1.1). */
   .activity {
-    inline-size: 100vw;
+    inset-inline-start: 0;
+    inline-size: auto;
     border-inline-start: 0;
   }
 }
@@ -734,6 +751,9 @@ footer p { margin: 0; font-size: 0.82rem; max-width: 70ch; }
 .argv li { margin-block: 0.1rem; }
 
 ul.plain, ol.plain { padding-inline-start: 1.2rem; }
+/* A list whose items already carry their number — the WADs, numbered by AUB's
+   declaration order — would otherwise read "1. 1. first.wad". */
+ol.numbered { list-style: none; padding-inline-start: 0; }
 
 .linkish {
   padding: 0;
@@ -759,8 +779,10 @@ ul.plain, ol.plain { padding-inline-start: 1.2rem; }
 .modal {
   max-inline-size: min(32rem, 92vw);
   padding: 1.25rem;
-  border: 1px solid var(--line, #d8d8d8);
-  border-radius: 0.5rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-panel);
+  background: var(--overlay);
+  color: var(--ink);
 }
 
 .modal::backdrop { background: rgb(0 0 0 / 40%); }

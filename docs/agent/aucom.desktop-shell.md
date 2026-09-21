@@ -26,8 +26,8 @@ paths:
 unless a short written spike proved a concrete blocker in the live code, and
 said in the same breath that the shell must not block Phase A. The spike was
 run. It found a blocker, and the decision is recorded in
-`$MAPPER_ROOT/LLM/docs/adr/0001-aucom-desktop-shell.md`, which is the authority
-on the reasoning. What binds a task here is below.
+`$MAPPER_ROOT/LLM/docs/adr/0026-the-companion-desktop-shell-is-deferred-behind-a-measured-cgo-blocker.md`,
+which is the authority on the reasoning. What binds a task here is below.
 
 ## The measured finding, in one sentence
 

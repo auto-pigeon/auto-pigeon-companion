@@ -531,6 +531,18 @@ Chrome will open, and neither one scrolls sideways. Animation is confined to one
 spinner, which stops moving under `prefers-reduced-motion` and always has text
 beside it saying what is happening.
 
+So is the whole Build & Run journey, including the Activity pane and the
+compiler-ready refusal, and it can photograph each state it checks. Set
+`AUCOM_JOURNEY_SCREENSHOTS` to a directory outside the checkout and the test
+writes one PNG per state for each window size (the images come from the
+fixture backend the test runs, not from a live AUB):
+
+```console
+$ AUCOM_JOURNEY_SCREENSHOTS="$MAPPER_ROOT/LLM/reports/shots" \
+    go test ./internal/web/ -run TestBuildAndRunJourneyInABrowser -v
+    playbrowser_test.go:238: screenshots in …/shots: desktop-01-map-and-exact-revision.png, …
+```
+
 ## Usage
 
 Launching with **no subcommand** is GUI mode — it starts the server and opens
@@ -4295,8 +4307,8 @@ produces prints *"Wails applications will not build without the correct build
 tags"* and exits. A build is not a verification. Adding a real desktop shell
 means moving those six targets to native runners with each platform's WebView
 SDK, which is a task of its own; `docs/agent/aucom.desktop-shell.md` and
-`$MAPPER_ROOT/LLM/docs/adr/0026-*.md` record the decision and what a future task
-inherits.
+`$MAPPER_ROOT/LLM/docs/adr/0026-the-companion-desktop-shell-is-deferred-behind-a-measured-cgo-blocker.md`
+record the decision and what a future task inherits.
 
 ## What is built, and what has been run
 
