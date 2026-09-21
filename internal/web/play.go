@@ -111,6 +111,7 @@ func (s *Server) playService() (*playrun.Service, error) {
 		Launch:          s.playLaunch,
 		Unstage:         s.playUnstage,
 		Logf:            s.logf,
+		Live:            s.playLive,
 	})
 }
 

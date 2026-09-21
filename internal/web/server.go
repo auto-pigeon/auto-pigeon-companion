@@ -54,6 +54,7 @@ import (
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/engine"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/pathpick"
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/playrun"
 )
 
 // DrainTimeout is how long a shutdown waits for in-flight requests.
@@ -87,12 +88,16 @@ type Server struct {
 	version string
 	debug   bool
 	jobs    *job.Service
-	runner  aue.Runner
-	paths   Paths
-	picker  *pathpick.Picker
-	scanner engine.Scanner
-	builds  *buildRuns
-	logf    func(format string, args ...any)
+	// playLive is the one registry of Build & Run sequences this process is
+	// executing. playService builds a coordinator per request, and every one of
+	// them must share this, or a cancel cannot reach the run it names.
+	playLive *playrun.Live
+	runner   aue.Runner
+	paths    Paths
+	picker   *pathpick.Picker
+	scanner  engine.Scanner
+	builds   *buildRuns
+	logf     func(format string, args ...any)
 	// games is the Games area's process-wide state: download and launch
 	// coordination, and the reviews waiting for an approval.
 	games  *gameState
@@ -232,6 +237,7 @@ func NewServer(options Options) (*Server, error) {
 	}
 
 	server := &Server{
+		playLive:     playrun.NewLive(),
 		version:      options.Version,
 		debug:        options.Debug,
 		jobs:         options.Jobs,

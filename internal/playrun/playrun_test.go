@@ -22,6 +22,9 @@ type harness struct {
 	t       *testing.T
 	service *playrun.Service
 	store   *playrun.Store
+	// deps is what service was built from, with one shared Live, so a test can
+	// build a SECOND coordinator the way internal/web does per request.
+	deps playrun.Deps
 
 	mu     sync.Mutex
 	called []string
@@ -90,7 +93,8 @@ func newHarness(t *testing.T) *harness {
 		}, nil
 	}
 
-	service, err := playrun.NewService(store, playrun.Deps{
+	h.deps = playrun.Deps{
+		Live: playrun.NewLive(),
 		FetchMap: func(ctx context.Context, r playrun.Request) (playrun.MapResult, error) {
 			h.record("fetch-map")
 
@@ -142,7 +146,8 @@ func newHarness(t *testing.T) *harness {
 			return nil
 		},
 		Logf: func(format string, args ...any) { t.Logf("playrun: "+format, args...) },
-	})
+	}
+	service, err := playrun.NewService(store, h.deps)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -442,6 +447,53 @@ func TestCancellingDuringTheCompileLeavesNothingInstalled(t *testing.T) {
 	for _, called := range h.calls() {
 		if called == "install" || called == "launch" {
 			t.Errorf("%s ran after a cancellation", called)
+		}
+	}
+}
+
+// internal/web builds a coordinator per request, so the Cancel arrives on a
+// DIFFERENT Service from the one executing the run. Live, 246I1.1, that Cancel
+// found nothing in its own registry, wrote `cancelled` as if a dead process had
+// left the run behind, and the executor went on to install, launch and rewrite
+// the record as `succeeded`.
+func TestACancelOnAnotherCoordinatorStopsTheRun(t *testing.T) {
+	h := newHarness(t)
+	reached := make(chan struct{})
+	stopped := make(chan struct{})
+	h.buildRun = func(ctx context.Context, _ build.Request, _ func(*build.Manifest)) (*build.Manifest, error) {
+		close(reached)
+		<-ctx.Done()
+		close(stopped)
+
+		return nil, ctx.Err()
+	}
+
+	started, err := h.service.Start(goodRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-reached
+	other, err := playrun.NewService(h.store, h.deps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = other.Cancel(started.ID); err != nil {
+		t.Fatal(err)
+	}
+	// The COMPILER must be stopped — not merely a record on disk saying so.
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the cancel never reached the running build")
+	}
+	record := h.await(started.ID)
+
+	if record.State != playrun.Cancelled {
+		t.Fatalf("state = %s: %s", record.State, record.Error)
+	}
+	for _, called := range h.calls() {
+		if called == "install" || called == "launch" {
+			t.Errorf("%s ran after a cancellation from another coordinator", called)
 		}
 	}
 }

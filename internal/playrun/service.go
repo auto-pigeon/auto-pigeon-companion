@@ -71,6 +71,13 @@ type Deps struct {
 	Now func() time.Time
 	// Logf receives one line per transition. Nil discards them.
 	Logf func(format string, args ...any)
+
+	// Live is the registry of runs executing in THIS process. A caller that
+	// builds a Service per request must pass the same one every time, or a
+	// cancel arriving on one Service cannot reach the run another is executing
+	// (246I1.1: the cancel then recorded `cancelled` while the compile went on
+	// to install and launch). Nil gives the Service a registry of its own.
+	Live *Live
 }
 
 // MapResult is what [Deps.FetchMap] produced.
@@ -131,13 +138,40 @@ type InstallResult struct {
 // or to a similarly named local file.
 var ErrNotCompilerReady = errors.New("playrun: this map's texture bundle is not compiler-ready")
 
+// Live is the set of runs this process is executing, and how to stop each.
+type Live struct {
+	mu      sync.Mutex
+	running map[string]context.CancelFunc
+}
+
+// NewLive returns an empty registry. One per process, shared by every Service.
+func NewLive() *Live { return &Live{running: map[string]context.CancelFunc{}} }
+
+func (l *Live) add(id string, cancel context.CancelFunc) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.running[id] = cancel
+}
+
+func (l *Live) remove(id string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	delete(l.running, id)
+}
+
+func (l *Live) lookup(id string) (context.CancelFunc, bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	cancel, ok := l.running[id]
+
+	return cancel, ok
+}
+
 // Service runs and records Build & Run sequences.
 type Service struct {
 	store *Store
 	deps  Deps
-
-	mu      sync.Mutex
-	running map[string]context.CancelFunc
+	live  *Live
 }
 
 // NewService builds a coordinator.
@@ -163,7 +197,12 @@ func NewService(store *Store, deps Deps) (*Service, error) {
 		deps.Unstage = func(Request) error { return nil }
 	}
 
-	return &Service{store: store, deps: deps, running: map[string]context.CancelFunc{}}, nil
+	live := deps.Live
+	if live == nil {
+		live = NewLive()
+	}
+
+	return &Service{store: store, deps: deps, live: live}, nil
 }
 
 // Store is where records live.
@@ -211,17 +250,11 @@ func (s *Service) start(request Request, retryOf string) (*Record, error) {
 
 	// Not the request's context: the sequence must survive the response.
 	ctx, cancel := context.WithCancel(context.Background())
-	s.mu.Lock()
-	s.running[id] = cancel
-	s.mu.Unlock()
+	s.live.add(id, cancel)
 
 	go func() {
 		defer cancel()
-		defer func() {
-			s.mu.Lock()
-			delete(s.running, id)
-			s.mu.Unlock()
-		}()
+		defer s.live.remove(id)
 		s.execute(ctx, record)
 	}()
 
@@ -249,10 +282,7 @@ func (s *Service) Cancel(id string) error {
 	if record.State.Terminal() {
 		return fmt.Errorf("playrun: run %s already %s", id, record.State)
 	}
-	s.mu.Lock()
-	cancel, live := s.running[id]
-	s.mu.Unlock()
-	if live {
+	if cancel, live := s.live.lookup(id); live {
 		cancel()
 
 		return nil
