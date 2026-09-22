@@ -87,7 +87,10 @@ type Paths struct {
 type Server struct {
 	version string
 	debug   bool
-	jobs    *job.Service
+	// siteLinks caches AUB's answer to where the gallery is (the footer's
+	// News link). See sitelinks.go.
+	siteLinks siteLinksCache
+	jobs      *job.Service
 	// playLive is the one registry of Build & Run sequences this process is
 	// executing. playService builds a coordinator per request, and every one of
 	// them must share this, or a cancel cannot reach the run it names.
@@ -364,7 +367,7 @@ func (s *Server) api() map[string]http.HandlerFunc {
 	}
 	for _, table := range []map[string]http.HandlerFunc{
 		s.jobAPI(), s.profileAPI(), s.libraryAPI(),
-		s.engineAPI(), s.buildAPI(), s.playAPI(), s.settingsAPI(), s.pathAPI(),
+		s.engineAPI(), s.buildAPI(), s.playAPI(), s.settingsAPI(), s.siteLinksRoutes(), s.pathAPI(),
 		s.feedbackAPI(), s.aboutAPI(), s.accountAPI(), s.gamesAPI(), s.noticesAPI(),
 	} {
 		for pattern, handler := range table {
@@ -430,6 +433,10 @@ func moduleTypes(next http.Handler) http.Handler {
 			w.Header().Set("Content-Type", "application/json")
 		}
 		w.Header().Set("X-Content-Type-Options", "nosniff")
+		// Revalidated on every load: the embedded files carry no modification
+		// time, so a browser that cached them heuristically kept the previous
+		// build's script beside this build's page after an update.
+		w.Header().Set("Cache-Control", "no-cache")
 		next.ServeHTTP(w, r)
 	})
 }

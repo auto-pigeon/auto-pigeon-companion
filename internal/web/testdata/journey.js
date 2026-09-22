@@ -142,7 +142,9 @@
     // gallery's About prose became a global area (AUP/AUCOM 243E §B).
     // Build & Run joined the list first, because it is the journey the program
     // is for (`AUCOM/AUE/AUT 246I1`), and a signed-in window opens on it.
-    const AREAS = ["play", "library", "build", "run", "games", "profiles", "jobs", "settings", "about"];
+    // Settings moved behind the cog and About into the footer (operator,
+    // 2026-09-22), so the sidebar names the areas a person works in.
+    const AREAS = ["play", "library", "build", "run", "games", "profiles", "jobs"];
     const tabs = [...document.querySelectorAll(".area-tab")];
     const named = tabs.map((tab) => tab.dataset.area);
     record(
@@ -532,27 +534,28 @@
     );
     $("build-step-tab-1").click();
 
-    // --- the About area -----------------------------------------------------
+    // --- About, and Settings behind the cog ---------------------------------
     //
-    // The words are the gallery's, compiled into the artefact this binary
-    // serves; what a browser can add is that the area fills in at all, and that
-    // a link this program cannot honour is NAMED rather than pointed at an
-    // origin it was never told about — nothing here has a built-in address for
-    // another component, so a route link would have to be a guess.
-    await go("about");
-    await waitFor("the About content", () => $("about-body").children.length > 0);
-    const aboutText = textOf($("about-body"));
+    // About is a dialog opened from the footer, in the Companion's own words;
+    // News is a separate footer link built only from the address the server
+    // gives out. Settings is reached from the cog, top right.
+    $("about-open").click();
+    await waitFor("the About dialog", () => $("about-dialog").open);
     record(
-      "the About area renders the published prose",
-      aboutText.includes("Auto-Pigeon is a level editor") && aboutText.includes("Published digest"),
-      aboutText.slice(0, 80)
+      "About opens from the footer and says what the Companion is",
+      textOf($("about-dialog")).includes("turns the maps you make in Auto-Pigeon into maps you can play"),
+      textOf($("about-dialog")).slice(0, 80)
     );
-    const aboutLinks = [...$("about-body").querySelectorAll("a")].map((a) => a.getAttribute("href"));
+    $("about-close").click();
     record(
-      "no link in the About area leaves for a host this program was not told about",
-      aboutLinks.every((href) => href.startsWith("#about-") || /^https?:/i.test(href)),
-      aboutLinks.join(", ") || "no links"
+      "News links nowhere the server did not name",
+      !visible($("news-link")) || /^https?:\/\/[^/]+\/news$/.test($("news-link").getAttribute("href") || ""),
+      $("news-link").getAttribute("href") || "no gallery address: News says it is unavailable"
     );
+    $("settings-button").click();
+    $("settings-open").click();
+    await waitFor("the settings area", () => visible($("area-settings")));
+    record("Settings opens from the cog", true, "area-settings");
 
     // Switching area moves focus to the heading, so a keyboard user lands on
     // the content that just changed rather than being left behind in it.

@@ -111,7 +111,9 @@ func TestTheAboutPageCannotReachAnotherOrigin(t *testing.T) {
 	}
 }
 
-func TestTheAboutAreaIsWiredIntoThePage(t *testing.T) {
+// About is in the footer now, as a dialog written for the Companion, and News
+// is a separate footer link to the gallery (operator, 2026-09-22).
+func TestTheAboutDialogIsWiredIntoTheFooter(t *testing.T) {
 	server, _ := newTestServer(t, nil)
 
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -120,32 +122,26 @@ func TestTheAboutAreaIsWiredIntoThePage(t *testing.T) {
 	server.ServeHTTP(recorder, r)
 	page := recorder.Body.String()
 
-	// A tab that navigates nowhere and a section nothing draws into are the two
-	// halves of "the area is missing", and each is a one-line omission.
-	for _, want := range []string{`data-area="about"`, `id="area-about"`, `id="about-body"`,
-		`src="about.js"`} {
+	for _, want := range []string{`id="about-open"`, `id="about-dialog"`, `id="news-link"`,
+		`id="bug-report-open"`, `src="footer.js"`} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the served page does not contain %s", want)
 		}
 	}
-
-	// And the renderer registers itself, which is how `app.js` reaches it.
-	renderer, err := fs.ReadFile(assetsFS(), "about.js")
+	footer := page[strings.Index(page, `<footer`):]
+	if !strings.Contains(footer[:strings.Index(footer, `</footer>`)], `id="about-open"`) {
+		t.Error("About is not in the footer")
+	}
+	if strings.Contains(page, `data-area="about"`) {
+		t.Error("About is still an area in the sidebar")
+	}
+	script, err := fs.ReadFile(assetsFS(), "footer.js")
 	if err != nil {
-		t.Fatalf("about.js is not embedded: %v", err)
+		t.Fatalf("footer.js is not embedded: %v", err)
 	}
-	if !strings.Contains(string(renderer), "window.AUCOM.areas.about") {
-		t.Error("about.js does not register window.AUCOM.areas.about, so navigating there would " +
-			"show an empty section")
-	}
-	// The area list in app.js has to know the name, or the tab press falls back
-	// to Library.
-	app, err := fs.ReadFile(assetsFS(), "app.js")
-	if err != nil {
-		t.Fatalf("app.js is not embedded: %v", err)
-	}
-	if !strings.Contains(string(app), `"about"`) {
-		t.Error(`app.js does not list "about" in areaNames, so #about would land on Library`)
+	// News comes from the address the server gives out, and nothing else.
+	if !strings.Contains(string(script), `/api/v1/site-links`) || !strings.Contains(string(script), "body.gallery_url") {
+		t.Error("the News link is not built from the gallery address the server gives out")
 	}
 }
 

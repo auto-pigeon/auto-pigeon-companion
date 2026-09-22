@@ -15,16 +15,15 @@
 "use strict";
 
 (() => {
-  const { $, el, api, setMessage, announce, record, wireCompatibilityReport } = window.AUCOM;
+  const { $, el, api, setMessage, announce, record, wireCompatibilityReport, t } = window.AUCOM;
 
   // The compatibility-report panel is wired once and lives outside the areas,
   // because every area can open it. See core.js.
   wireCompatibilityReport();
 
-  // `about` is last because it is the one area that is not a task: somebody
-  // looking for a job should never have to pass the prose about the program to
-  // reach it.
-  const areaNames = ["play", "library", "build", "run", "games", "profiles", "new-profile", "jobs", "settings", "about"];
+  // About is not an area any more: it opens from the footer (operator,
+  // 2026-09-22), and Settings is reached from the cog, top right.
+  const areaNames = ["play", "library", "build", "run", "games", "profiles", "new-profile", "jobs", "settings"];
   const titles = {
     play: "Build & Run",
     library: "My Maps",
@@ -35,7 +34,6 @@
     "new-profile": "New profile",
     jobs: "Jobs",
     settings: "Settings",
-    about: "About",
   };
 
   // The area a fresh page opens on. Signed out, that is Build: local work needs
@@ -68,7 +66,7 @@
     // can no longer see.
     const feedback = $("feedback-panel");
     if (feedback) feedback.hidden = true;
-    $("area-heading").textContent = titles[area];
+    $("area-heading").textContent = t(titles[area]);
     $("profiles-new").hidden = area !== "profiles";
     if (focus) $("area-heading").focus();
     const hash = "#" + area + (argument ? "/" + argument : "");
@@ -95,19 +93,15 @@
       return;
     }
     window.AUCOM.status = body;
-    const site = officialSite(body);
-    const backend = site ? site.host : body.aub_base_url ? "development server" : "no Auto-Pigeon server chosen";
-    // The version is shown only in its frozen `1.<commit-count>` shape, as AUP
-    // and AUG show it: an unstamped build's "unknown" is not a version anybody
-    // should read out, so that segment is simply absent.
-    const version = /^1\.\d+$/.test(body.version || "") ? `Version ${body.version} · ` : "";
-    $("identity").textContent = `${version}${body.platform} · ${backend}${body.debug ? " · debug mode" : ""}`;
+    // The version and the platform are the footer's, bottom right.
+    window.AUCOM.footer?.statusChanged?.(body);
+    $("identity").className = "site-footer__version";
     renderBackendChoice($("sign-in-backend"), body);
-    $("identity").className = "muted";
     $("account-email").textContent = body.authenticated ? body.email || "signed in" : "";
     $("account-signed-out").hidden = Boolean(body.authenticated);
     $("account-signed-out").textContent = body.session_expired ? "session expired" : "not signed in";
     $("account-menu").hidden = !body.authenticated;
+    $("sync-help").hidden = !body.authenticated;
     window.AUCOM.account?.statusChanged?.(body);
     // The notice banner (notices.mjs, a module) re-evaluates at once on a
     // sign-in or a sign-out, rather than at its next poll.
@@ -324,6 +318,7 @@
     // chooser, and a field drawn before that answer arrives would offer a
     // Browse button that opens nothing.
     await window.AUCOM.areas.settings.refresh();
+    window.AUCOM.applySavedLanguage?.();
     await refreshStatus();
     window.AUCOM.renderActivity();
     show(window.location.hash.replace(/^#/, "") || defaultArea(), { focus: false });

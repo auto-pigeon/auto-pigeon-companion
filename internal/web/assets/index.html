@@ -23,9 +23,9 @@
     <header class="app-header">
       <div class="brand">
         <!-- AUG's brand: the mark on the name's line, decorative because the name
-             beside it is what a screen reader should hear. -->
+             beside it is what a screen reader should hear. The version and the
+             platform are in the footer, bottom right, as AUG prints them. -->
         <h1 class="brand-name"><img class="brand-mark" src="brand/auto-pigeon-long-tail-transparent-no-padding-128x128.png" alt="" aria-hidden="true" draggable="false" width="128" height="128" />Auto-Pigeon Companion</h1>
-        <p id="identity" class="muted">Starting…</p>
       </div>
       <div class="account">
         <!-- In the header, not floating over the page: fixed to the corner it
@@ -54,6 +54,32 @@
             <button type="button" role="menuitem" id="account-check">Check connection</button>
             <a role="menuitem" id="account-site" target="_blank" rel="noopener noreferrer" hidden>Open Auto-Pigeon</a>
             <button type="button" role="menuitem" id="sign-out">Sign out</button>
+          </div>
+        </div>
+        <!-- What "Sync needed" means, in plain words: AUP's HelpBubble, a
+             circled question mark that opens a small panel on click. -->
+        <span class="help-bubble" id="sync-help" hidden>
+          <button type="button" class="icon-button icon-button--sm" id="sync-help-button" aria-label="What is sync?" title="What is sync?" aria-expanded="false" aria-controls="sync-help-panel">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/><path d="M12 16v.01"/><path d="M12 13a2 2 0 0 0 .914 -3.782a1.98 1.98 0 0 0 -2.414 .483"/></svg>
+          </button>
+          <div class="help-bubble__panel" id="sync-help-panel" role="group" aria-label="What is sync?" hidden>
+            <p><strong>Sync keeps your profiles the same everywhere.</strong></p>
+            <p>A profile is how the Companion runs one tool or engine. Profiles you write or install can be kept in your Auto-Pigeon account, so every computer you sign in on has the same ones.</p>
+            <p><strong>Sync needed</strong> means some profiles on this computer and in your account are different. Press <strong>Sync to cloud</strong> in this menu to see exactly what would change; nothing is sent or installed until you confirm.</p>
+            <p class="muted">Where programs are installed on this computer, and what you approved here, never leave it.</p>
+          </div>
+        </span>
+        <!-- Settings behind a cog, top right, as in AUP and AUG. -->
+        <div class="site-settings" id="site-settings">
+          <button type="button" class="site-icon-button" id="settings-button" aria-haspopup="menu" aria-expanded="false" aria-controls="settings-menu" aria-label="Settings" title="Settings">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065z"/><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/></svg>
+          </button>
+          <div class="menu" id="settings-menu" role="menu" hidden>
+            <button type="button" role="menuitem" id="settings-open">Settings</button>
+            <div class="menu-field">
+              <label for="language-select">Language</label>
+              <select id="language-select"></select>
+            </div>
           </div>
         </div>
       </div>
@@ -160,18 +186,37 @@
     </div>
 
     <div class="app-body">
+      <!-- Build & Run is the program's one main journey and stands on its
+           own; everything else is a sub-action, drawn lighter, in three small
+           groups: things to do, things to set up, and what has happened
+           (operator, 2026-09-22). Settings is behind the cog and About is in
+           the footer. -->
       <nav class="areas" aria-label="Areas">
-        <ul>
-          <li><button type="button" class="area-tab" data-area="play">Build &amp; Run<span class="tab-note">map to game, in one</span></button></li>
-          <li><button type="button" class="area-tab" data-area="library">My Maps<span class="tab-note">from your account</span></button></li>
-          <li><button type="button" class="area-tab" data-area="build">Build<span class="tab-note">compile a map</span></button></li>
-          <li><button type="button" class="area-tab" data-area="run">Run<span class="tab-note">start a game</span></button></li>
-          <li><button type="button" class="area-tab" data-area="games">Live Games<span class="tab-note">hosted now</span></button></li>
-          <li><button type="button" class="area-tab" data-area="profiles">Profiles<span class="tab-note">tools and engines</span></button></li>
-          <li><button type="button" class="area-tab" data-area="jobs">Jobs<span class="tab-note">what has run</span></button></li>
-          <li><button type="button" class="area-tab" data-area="settings">Settings<span class="tab-note">where things are</span></button></li>
-          <li><button type="button" class="area-tab" data-area="about">About<span class="tab-note">what this is</span></button></li>
-        </ul>
+        <button type="button" class="area-tab area-tab--main" data-area="play">
+          <span class="area-tab__label">Build &amp; Run</span>
+          <span class="tab-note">your map, built and in the game</span>
+        </button>
+        <div class="areas-group">
+          <p class="areas-group__title" id="areas-actions">Actions</p>
+          <ul aria-labelledby="areas-actions">
+            <li><button type="button" class="area-tab area-tab--sub" data-area="library">My Maps</button></li>
+            <li><button type="button" class="area-tab area-tab--sub" data-area="build">Build</button></li>
+            <li><button type="button" class="area-tab area-tab--sub" data-area="run">Run</button></li>
+            <li><button type="button" class="area-tab area-tab--sub" data-area="games">Live Games</button></li>
+          </ul>
+        </div>
+        <div class="areas-group">
+          <p class="areas-group__title" id="areas-setup">Setup</p>
+          <ul aria-labelledby="areas-setup">
+            <li><button type="button" class="area-tab area-tab--sub" data-area="profiles">Profiles</button></li>
+          </ul>
+        </div>
+        <div class="areas-group">
+          <p class="areas-group__title" id="areas-history">History</p>
+          <ul aria-labelledby="areas-history">
+            <li><button type="button" class="area-tab area-tab--sub" data-area="jobs">Jobs</button></li>
+          </ul>
+        </div>
       </nav>
 
       <main id="main">
@@ -296,16 +341,19 @@
               installs into a folder of its own beside the base game and leaves
               every folder the game already owns alone.
             </p>
-            <div class="row">
-              <div class="field">
-                <label for="play-engine">Engine</label>
-                <select id="play-engine"></select>
-              </div>
-              <div class="field">
-                <label for="play-action">What to do</label>
-                <select id="play-action"></select>
-              </div>
+            <div class="field">
+              <label for="play-engine">Engine</label>
+              <select id="play-engine"></select>
             </div>
+            <!-- What the engine does with the map just built. Only the actions
+                 that make sense for ONE freshly built map are offered, each
+                 with a sentence saying what it means; the hidden select stays
+                 the one holder of the value. -->
+            <fieldset class="play-actions" id="play-action-fieldset">
+              <legend>How to play it</legend>
+              <div id="play-action-choices" class="choice-cards"></div>
+              <select id="play-action" hidden aria-hidden="true" tabindex="-1"></select>
+            </fieldset>
             <div class="field">
               <label for="play-mod">Mod folder name <span class="muted">(created beside id1 in the game folder)</span></label>
               <input id="play-mod" type="text" value="auto-pigeon" />
@@ -1102,28 +1150,69 @@
             <div class="row" id="feedback-actions"></div>
           </div>
         </section>
-        <section id="area-about" class="area" aria-labelledby="area-heading" hidden>
-          <p class="lede">
-            What Auto-Pigeon is, in the words the web site and the editor use.
-            The text is written once, in the gallery's own
-            <code>content/about.md</code>, and this page reads the artefact that
-            file was compiled into — so the three applications cannot drift
-            apart about what this project is.
-          </p>
-
-          <div id="about-body" class="panel"></div>
-          <p id="about-message" class="message" role="alert"></p>
-        </section>
       </main>
     </div>
 
-    <footer>
-      <p class="muted">
-        External map-building tools and game engines are separate programs under
-        their own licences, downloaded and run as their own processes. See
-        THIRD_PARTY_NOTICES.md.
-      </p>
+    <!-- AUG's footer: a line on the left, the links in the middle, and the
+         version bottom right — here with the platform after it. News is a page
+         on the gallery, whose address the Auto-Pigeon server gives out; About
+         and Report a bug open over the page. -->
+    <footer class="site-footer">
+      <span class="site-footer__note">Tools and game engines are separate programs, under their own licences.</span>
+      <nav class="site-footer__links" aria-label="About the Companion">
+        <button type="button" class="site-footer__link site-footer__about" id="about-open">About</button>
+        <a class="site-footer__link" id="news-link" target="_blank" rel="noopener noreferrer" hidden>News</a>
+        <button type="button" class="site-footer__link" id="news-unavailable" hidden>News</button>
+        <button type="button" class="site-footer__link" id="bug-report-open">Report a bug</button>
+      </nav>
+      <span class="site-footer__version" id="identity">Starting…</span>
     </footer>
+
+    <!-- About the Companion: what it is, in a few plain sentences. -->
+    <dialog class="modal about-dialog" id="about-dialog" aria-labelledby="about-title">
+      <div class="modal-head">
+        <h2 id="about-title">About Auto-Pigeon Companion</h2>
+        <button type="button" class="icon-button" id="about-close" aria-label="Close">&times;</button>
+      </div>
+      <p>
+        <strong>The Companion turns the maps you make in Auto-Pigeon into maps you can play.</strong>
+        It runs on your own computer, next to the game you already have.
+      </p>
+      <p>
+        Choose a map from your account and press <strong>Build &amp; Run</strong>: the Companion
+        downloads that exact version and its textures, compiles it with the map tools you choose,
+        installs it in a folder of its own beside the game, and starts the game on it.
+      </p>
+      <ul class="plain">
+        <li><strong>Your game stays yours.</strong> The Companion never changes the game's own folders and never ships a game or its data.</li>
+        <li><strong>Nothing runs without your say.</strong> Every tool and engine is described by a profile you read and approve before it can start.</li>
+        <li><strong>Everything is on the record.</strong> Every program it runs, with its exact command and output, is kept under Jobs.</li>
+        <li><strong>Play together.</strong> Host a map and it shows in Live Games, where others can join it.</li>
+      </ul>
+      <p class="muted">
+        Map-building tools and game engines are separate programs under their own licences,
+        downloaded and run as their own processes — see <code>THIRD_PARTY_NOTICES.md</code>.
+        The Companion itself is MIT-licensed.
+      </p>
+      <p class="muted" id="about-version"></p>
+    </dialog>
+
+    <!-- Report a bug: AUG's report, from the shared bug-report contract. -->
+    <dialog class="modal bug-dialog" id="bug-dialog" aria-labelledby="bug-title">
+      <div class="modal-head">
+        <h2 id="bug-title">Report a bug</h2>
+        <button type="button" class="icon-button" id="bug-close" aria-label="Close">&times;</button>
+      </div>
+      <div id="bug-body"></div>
+    </dialog>
+
+    <!-- News is on the gallery, and the Auto-Pigeon server has not said where
+         that is: said here rather than guessed. -->
+    <dialog class="modal" id="news-dialog" aria-labelledby="news-title">
+      <h2 id="news-title">News is not available</h2>
+      <p id="news-reason"></p>
+      <div class="modal-actions"><button type="button" class="primary" id="news-close">Close</button></div>
+    </dialog>
 
     <!--
       The screen-reader announcement channel. Polite, so it never interrupts,
@@ -1148,6 +1237,15 @@
       </p>
     </aside>
 
+    <!-- Translations first: i18n.js observes the page from the start, and
+         each locale file is one dictionary from English to that language. -->
+    <script src="i18n.js"></script>
+    <script src="locales/it.js"></script>
+    <script src="locales/fr.js"></script>
+    <script src="locales/de.js"></script>
+    <script src="locales/es.js"></script>
+    <script src="locales/ja.js"></script>
+    <script src="locales/zh.js"></script>
     <script src="core.js"></script>
     <script src="library.js"></script>
     <script src="build.js"></script>
@@ -1158,7 +1256,7 @@
     <script src="scratch.js"></script>
     <script src="jobs.js"></script>
     <script src="settings.js"></script>
-    <script src="about.js"></script>
+    <script src="footer.js"></script>
     <script src="account.js"></script>
     <script src="app.js"></script>
     <!-- An ES module: it imports the vendored notice contract, which imports

@@ -74,15 +74,21 @@ func TestNoResultDumpAndNoNewTab(t *testing.T) {
 	}
 }
 
-// Tabs for small fixed choices, searchable selects for the ones that grow.
-// Fifty maps are not fifty tabs.
-func TestModesAreTabsAndResourcesAreSelects(t *testing.T) {
+// Small fixed choices are shown all at once, searchable selects are for the
+// ones that grow. Fifty maps are not fifty tabs.
+func TestModesAreChoicesAndResourcesAreSelects(t *testing.T) {
 	play := asset(t, "play.js")
 	page := asset(t, "index.html")
 
-	// The action — a small fixed set an engine declares — is a tab bar.
-	if !strings.Contains(play, `tabsFor?.("play-action")`) {
-		t.Error("the engine's action is not offered as tabs, and it is a small fixed set")
+	// The action — a small fixed set — is a row of radio cards, each saying in
+	// words what it does (operator, 2026-09-22: four tabs nobody could read).
+	if !strings.Contains(page, `id="play-action-choices"`) || !strings.Contains(play, `type: "radio"`) {
+		t.Error("the engine's action is not offered as a set of explained choices")
+	}
+	for _, id := range []string{"play_map", "host_listen", "host_dedicated"} {
+		if !strings.Contains(play, id+": {") {
+			t.Errorf("Build & Run does not explain the %s action", id)
+		}
 	}
 	// Maps, revisions, pipelines and engines stay selects.
 	for _, id := range []string{"play-map", "play-revision", "play-pipeline", "play-engine"} {

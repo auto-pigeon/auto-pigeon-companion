@@ -369,29 +369,57 @@ fieldset { min-width: 0; }
 
 .app-body { display: flex; align-items: flex-start; gap: 0; }
 
+/*
+  The sidebar (operator, 2026-09-22): Build & Run stands alone at the top as
+  the program's main journey — larger, framed, with its own line of what it
+  does — and every other area is a sub-action beneath it, lighter and smaller,
+  in three titled groups. The current area always carries the left bar as well
+  as the colour, so it reads without colour too.
+*/
 .areas {
-  flex: 0 0 13rem;
+  flex: 0 0 13.5rem;
+  display: flex; flex-direction: column; gap: 1.1rem;
+  padding: 0.85rem 0.65rem 1.25rem;
   border-right: 1px solid var(--line);
   background: var(--surface);
-  min-height: 60vh;
+  min-height: calc(100vh - 7rem);
+  position: sticky; top: 0; align-self: flex-start;
 }
-.areas ul { list-style: none; margin: 0; padding: 0.5rem; }
+.areas ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.1rem; }
 .areas li { margin: 0; }
 .area-tab {
   display: block; width: 100%; text-align: left;
-  padding: 0.5rem 0.6rem; margin: 0 0 0.15rem;
   background: transparent; color: var(--ink);
   border: 1px solid transparent; border-radius: var(--radius);
-  font: inherit; font-weight: 600; cursor: pointer;
+  font: inherit; cursor: pointer;
 }
-.area-tab:hover { background: var(--surface-2); border-color: var(--line-strong); }
-.area-tab[aria-current="page"] {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-  color: var(--accent-strong);
-  /* A left bar as well as the background, so the current area is legible
-     without colour. */
-  box-shadow: inset 3px 0 0 var(--accent);
+.area-tab--main {
+  display: grid; gap: 0.2rem;
+  padding: 0.8rem 0.85rem;
+  border: 1px solid var(--line-strong); border-radius: var(--radius-panel);
+  background: var(--surface-2);
+}
+.area-tab__label { font-family: var(--font-display); font-size: 1.08rem; font-weight: 700; letter-spacing: -.01em; }
+.area-tab--main .tab-note { font-size: 0.78rem; color: var(--ink-muted); }
+.area-tab--main:hover { border-color: var(--accent); background: var(--overlay); }
+.area-tab--main[aria-current="page"] {
+  background: var(--accent-soft); border-color: var(--accent); color: var(--accent-strong);
+  box-shadow: inset 4px 0 0 var(--accent);
+}
+.area-tab--main[aria-current="page"] .tab-note { color: var(--ink); }
+.areas-group__title {
+  margin: 0 0 0.3rem; padding: 0 0.6rem;
+  font-size: 0.68rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.area-tab--sub {
+  padding: 0.38rem 0.6rem 0.38rem 0.75rem;
+  font-size: 0.875rem; font-weight: 500; color: var(--ink-muted);
+  border-left: 2px solid transparent; border-radius: 0 var(--radius) var(--radius) 0;
+}
+.area-tab--sub:hover { color: var(--ink); background: var(--surface-2); }
+.area-tab--sub[aria-current="page"] {
+  color: var(--accent-strong); background: var(--accent-soft); border-left-color: var(--accent); font-weight: 600;
 }
 .tab-note { display: block; font-weight: normal; font-size: 0.78rem; color: var(--ink-muted); }
 
@@ -598,8 +626,31 @@ button.link {
 .diff-remove { color: var(--bad); }
 .diff-change { color: var(--warn); }
 
-footer { padding: 1rem 1.25rem 2rem; border-top: 1px solid var(--line); }
-footer p { margin: 0; font-size: 0.82rem; max-width: 70ch; }
+/* AUG's footer (`.site-footer`): a note on the left, the links centred, the
+   version bottom right — here followed by the platform, after a bar. */
+.site-footer {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center;
+  gap: 0.25rem 1rem; padding: 0.9rem 1.25rem;
+  background: var(--surface); border-top: 1px solid var(--line);
+  color: var(--ink-muted); font-size: 0.8125rem;
+}
+.site-footer__note { justify-self: start; color: var(--ink-faint); }
+.site-footer__links { display: flex; flex-wrap: wrap; justify-content: center; column-gap: 1.1rem; }
+.site-footer__link {
+  display: inline-flex; align-items: center; min-block-size: 24px; padding: 0;
+  background: none; border: none; border-radius: 0; color: var(--ink-muted);
+  font: inherit; text-decoration: none; cursor: pointer;
+}
+.site-footer__link:hover:not(:disabled) { background: none; color: var(--accent-strong); }
+.site-footer__about { color: var(--accent-strong); font-weight: 600; }
+.site-footer__version { justify-self: end; color: var(--ink-faint); display: inline-flex; flex-wrap: wrap; gap: 0.5rem; justify-content: flex-end; }
+.site-footer__version.message.error { color: var(--bad); }
+.site-footer__ver { color: var(--ink-muted); }
+.site-footer__sep { color: var(--line-strong); }
+@media (max-width: 900px) {
+  .site-footer { grid-template-columns: minmax(0, 1fr); justify-items: center; text-align: center; }
+  .site-footer__note, .site-footer__version { justify-self: center; }
+}
 
 .spinner {
   display: inline-block; width: 0.8em; height: 0.8em; margin-right: 0.35em;
@@ -616,11 +667,16 @@ footer p { margin: 0; font-size: 0.82rem; max-width: 70ch; }
      <main> to its content, so one long line made the narrow page scroll
      sideways (246I1.1). */
   .app-body { flex-direction: column; align-items: stretch; }
-  .areas { flex: none; width: 100%; border-right: none; border-bottom: 1px solid var(--line); min-height: 0; }
-  .areas ul { display: flex; flex-wrap: wrap; gap: 0.3rem; }
-  .areas li { flex: 1 1 8rem; }
-  .area-tab { text-align: center; }
-  .tab-note { display: none; }
+  .areas {
+    flex: none; width: 100%; border-right: none; border-bottom: 1px solid var(--line); min-height: 0;
+    position: static; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.75rem; padding: 0.6rem;
+  }
+  .area-tab--main { flex: 1 1 100%; }
+  .areas-group { display: flex; align-items: center; gap: 0.35rem; }
+  .areas-group__title { display: none; }
+  .areas ul { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+  .area-tab--sub { border-left: none; border-bottom: 2px solid transparent; border-radius: var(--radius); }
+  .area-tab--sub[aria-current="page"] { border-bottom-color: var(--accent); }
   main { padding: 0.85rem; }
   .cards { grid-template-columns: 1fr; }
   .paths { grid-template-columns: 1fr; }
@@ -837,3 +893,121 @@ ol.numbered { list-style: none; padding-inline-start: 0; }
 @media (prefers-reduced-motion: reduce) {
   .activity, .modal { transition: none; animation: none; }
 }
+
+
+/* --- The header's icon buttons: the cog and the help bubble ------------------
+   AUG's `.site-icon-button` and AUP's `.icon-button` / `HelpBubble`, with the
+   Tabler glyphs inlined (the page loads nothing from anywhere else). */
+.account { flex-wrap: wrap; justify-content: flex-end; }
+.site-settings { position: relative; flex: 0 0 auto; }
+.site-icon-button {
+  display: inline-grid; place-items: center; inline-size: 36px; block-size: 36px; padding: 0;
+  background: transparent; border-color: transparent; color: var(--ink-muted);
+}
+.site-icon-button:hover:not(:disabled) { color: var(--ink); background: var(--overlay); border-color: transparent; }
+.site-icon-button[aria-expanded="true"] { color: var(--accent-strong); border-color: var(--accent); }
+.icon-button--sm { inline-size: 28px; block-size: 28px; display: inline-grid; place-items: center; padding: 0; color: var(--ink-muted); border-radius: var(--radius); }
+.icon-button--sm:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); border-color: transparent; }
+.icon-button--sm[aria-expanded="true"] { color: var(--accent-strong); }
+.help-bubble { position: relative; display: inline-flex; margin-left: -0.5rem; }
+.help-bubble__panel {
+  position: absolute; z-index: 160; inset-block-start: calc(100% + 4px); inset-inline-end: 0;
+  inline-size: min(24rem, 90vw); padding: 0.75rem 0.9rem;
+  background: var(--overlay); border: 1px solid var(--line-strong);
+  border-radius: var(--radius-panel); box-shadow: var(--shadow-lg);
+  font-size: 0.85rem; line-height: 1.5;
+  animation: tooltip-in 180ms cubic-bezier(.2,.6,.2,1);
+}
+.help-bubble__panel p { margin: 0 0 0.5rem; }
+.help-bubble__panel p:last-child { margin: 0; }
+@keyframes tooltip-in { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: translateY(0); } }
+.menu-field { display: grid; gap: 0.3rem; padding: 0.5rem 0.6rem 0.35rem; border-top: 1px solid var(--line); margin-top: 0.25rem; }
+.menu-field label { font-size: 0.75rem; color: var(--ink-muted); font-weight: 500; }
+
+/* --- Dialogs opened from the footer -------------------------------------- */
+.modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem; }
+.modal-head h2 { margin: 0; }
+.modal-head .icon-button { color: var(--ink-faint); }
+.modal-head .icon-button:hover { color: var(--accent-strong); background: none; }
+.about-dialog { max-inline-size: min(38rem, 94vw); line-height: 1.55; }
+.about-dialog ul.plain { display: grid; gap: 0.45rem; margin: 0.75rem 0 1rem; }
+.bug-dialog { max-inline-size: min(44rem, 94vw); inline-size: 100%; }
+
+/* --- Build & Run --------------------------------------------------------------
+   The program's core (operator, 2026-09-22): the step a person is on is
+   unmistakable, and what each step chose is the brightest text on the page. */
+#area-play .bwiz { margin-bottom: 1.5rem; }
+#play-steps { gap: 0 0.5rem; }
+#play-steps .bwiz-step { padding: 0.75rem 0.5rem 0.6rem; border-top-width: 4px; border-radius: 0 0 var(--radius) var(--radius); }
+#play-steps .bwiz-step:hover { background: var(--surface); }
+#play-steps .bwiz-step.current { background: var(--accent-soft); }
+#play-steps .bwiz-step.current .bwiz-step__label { color: var(--accent-strong); }
+.bwiz-step__label { text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.72rem; color: var(--ink-muted); }
+#play-steps .bwiz-step__summary { display: grid; gap: 0.1rem; margin-top: 0.15rem; }
+.bwiz-step__value { font-size: 1rem; font-weight: 700; color: var(--ink); line-height: 1.25; overflow-wrap: anywhere; }
+.bwiz-step.current .bwiz-step__value { color: var(--accent-strong); }
+.bwiz-step__detail { font-size: 0.78rem; color: var(--ink-muted); }
+.bwiz-step__empty { font-size: 0.8rem; color: var(--ink-faint); font-style: italic; }
+#area-play > .bwiz-panel { padding: 1.25rem 1.4rem 1.1rem; }
+#area-play > .bwiz-panel > h3 { font-size: 1.2rem; margin: 0 0 0.3rem; }
+#area-play > .bwiz-panel > p.muted:first-of-type { margin: 0 0 1.1rem; max-width: 70ch; }
+#area-play .field { margin: 0 0 1rem; gap: 0.35rem; }
+#area-play .field > label { font-size: 0.8rem; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+/* The choices themselves are the thing to read: larger, bolder, brighter. */
+#area-play select, #area-play input[type="text"] {
+  font-size: 1rem; font-weight: 600; padding: 0.55rem 0.7rem; color: var(--ink);
+}
+#area-play .row { gap: 1rem; }
+#area-play .row > .field { flex: 1 1 14rem; }
+.play-actions { border: none; margin: 0 0 1rem; padding: 0; }
+.play-actions legend { padding: 0; margin-bottom: 0.45rem; font-size: 0.8rem; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+.choice-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 0.6rem; }
+.choice-card {
+  position: relative; display: grid; gap: 0.25rem; align-content: start;
+  padding: 0.75rem 0.85rem 0.8rem 2.4rem; cursor: pointer;
+  background: var(--inset); border: 1px solid var(--line-strong); border-radius: var(--radius-panel);
+  font-weight: normal;
+}
+.choice-card:hover { border-color: var(--accent); }
+.choice-card input { position: absolute; left: 0.85rem; top: 0.95rem; accent-color: var(--accent); margin: 0; }
+.choice-card__title { font-weight: 700; font-size: 0.95rem; color: var(--ink); }
+.choice-card__text { font-size: 0.82rem; color: var(--ink-muted); line-height: 1.45; }
+.choice-card:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.choice-card:has(input:checked) .choice-card__title { color: var(--accent-strong); }
+.choice-card:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+/* Step 4, the review: cards two to a row, the command across the width. */
+.review-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); gap: 0.85rem; align-items: start; }
+.review-card { margin: 0; background: var(--inset); padding: 0.9rem 1rem; }
+.review-card h4 { margin: 0 0 0.6rem; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-muted); }
+.review-card--wide, .review-note { grid-column: 1 / -1; }
+.review-note { margin: 0; }
+.summary-list { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 0.35rem 0.9rem; margin: 0; align-items: baseline; }
+.summary-list dt { color: var(--ink-muted); font-size: 0.85rem; }
+.summary-list dt::after { content: ":"; }
+.summary-list dd { margin: 0; font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+#play-final-summary { padding: 0.9rem 1rem; background: var(--inset); border: 1px solid var(--line); border-radius: var(--radius-panel); }
+#play-final-summary dd { font-size: 1rem; }
+.small { font-size: 0.8rem; }
+.review-card .muted.small { margin: 0.6rem 0 0; }
+.wad-list { list-style: none; margin: 0.25rem 0 0; padding: 0; display: grid; gap: 0.3rem; }
+.wad-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem 0.6rem; }
+.wad-order {
+  display: inline-grid; place-items: center; min-inline-size: 1.4rem; block-size: 1.4rem; border-radius: 50%;
+  background: var(--surface-2); font-size: 0.72rem; font-weight: 700; color: var(--ink-muted);
+}
+.wad-name { font-weight: 600; font-family: var(--mono); font-size: 0.85rem; }
+.file-list { list-style: none; margin: 0.6rem 0 0; padding: 0; display: grid; gap: 0.2rem; }
+.file-list code { font-size: 0.8rem; color: var(--ink); }
+/* A command, drawn as a terminal line: monospace on the inset, a prompt, and a
+   Copy button — as a ```shell block reads in Markdown. */
+.shell { position: relative; margin-top: 0.5rem; }
+.shell__code {
+  margin: 0; padding: 0.8rem 5.5rem 0.8rem 0.9rem;
+  background: #07090c; border: 1px solid var(--line-strong); border-radius: var(--radius);
+  font-family: var(--mono); font-size: 0.82rem; line-height: 1.6; color: #d7f5ef;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.shell__code code { font-family: inherit; }
+.shell__prompt { color: var(--accent); user-select: none; }
+.shell__copy { position: absolute; top: 0.45rem; right: 0.45rem; font-size: 0.75rem; padding: 0.25rem 0.55rem; }

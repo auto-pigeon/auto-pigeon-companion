@@ -7,7 +7,7 @@
 // What it checks that nothing else can:
 //
 //   - the five steps are reachable and going back does not lose a choice;
-//   - the review shows the ordered WADs, the writes and the exact argv;
+//   - the review shows the ordered WADs, the writes and the exact command;
 //   - changing the revision CLEARS the review and says so;
 //   - Activity shows the run, recovers it after a reload, and offers Retry;
 //   - a not-compiler-ready bundle disables the button and names the refusals;
@@ -147,11 +147,12 @@
     await waitFor("the engines", () => $("play-engine").options.length > 1);
     setValue($("play-engine"), settings.engine_id);
     await waitFor("the actions", () => $("play-action").options.length > 0);
-    // A small fixed set is offered as tabs, not as a dropdown.
+    // A small fixed set is offered as explained choices, not as a dropdown.
+    const choices = [...document.querySelectorAll("#play-action-choices .choice-card")];
     record(
-      "the engine's action is a tab bar, not a dropdown",
-      Boolean(document.getElementById("play-action-tabs")),
-      document.getElementById("play-action-tabs") ? "tabs" : "still a select"
+      "the engine's action is a set of explained choices, not a dropdown",
+      choices.length > 0 && choices.every((card) => card.querySelector("input[type=radio]") && textOf(card).length > 20),
+      choices.map((card) => textOf(card.querySelector(".choice-card__title"))).join(", ") || "no choices"
     );
     record(
       "the page says where it will write and that it leaves the game alone",
@@ -165,12 +166,13 @@
     // The bundle is fetched and verified BY the review, so the ordered WAD set
     // it shows is the real one rather than a guess. Waited for, because it is
     // a second request after the plan.
-    await waitFor("the verified WAD list", () => /1\.\s*first\.wad/.test(textOf($("play-review"))), 40000)
+    const wads = () => [...document.querySelectorAll("#play-review .wad-list li")].map((li) => textOf(li).replace(/\s+/g, ""));
+    await waitFor("the verified WAD list", () => wads().some((text) => /^1first\.wad/.test(text)), 40000)
       .catch((err) => { throw new Error(`${err.message}; the review said: ${textOf($("play-review")).replace(/\s+/g, " ").slice(0, 300)}`); });
     const review = textOf($("play-review"));
     record(
       "the review lists the WADs in the order the map declares them",
-      /1\.\s*first\.wad/.test(review) && /2\.\s*second\.wad/.test(review),
+      /^1first\.wad/.test(wads()[0] || "") && /^2second\.wad/.test(wads()[1] || ""),
       review.replace(/\s+/g, " ").slice(0, 160)
     );
     record(
@@ -178,14 +180,16 @@
       review.includes("id1"),
       review.includes("id1") ? "named" : "not named"
     );
-    const argv = [...$("play-review").querySelectorAll(".argv li")].map((li) => textOf(li).trim());
+    // Shown as one terminal line, as a ```shell block reads (operator,
+    // 2026-09-22); each word is quoted when the shell would need it.
+    const command = textOf($("play-review").querySelector(".shell__code code") || document.createElement("i"));
     record(
-      "the exact command is shown element by element, not as a shell string",
-      argv.includes("-game") && argv.includes("auto-pigeon") && argv.includes("+map") && argv.includes("dm1"),
-      argv.join(" | ").slice(0, 140)
+      "the exact command is shown as a command line",
+      /(^| )-game auto-pigeon( |$)/.test(command) && /(^| )\+map dm1( |$)/.test(command),
+      command.slice(0, 140)
     );
     await snap("review");
-    $("play-review").querySelector(".argv")?.scrollIntoView({ block: "center" });
+    $("play-review").querySelector(".shell")?.scrollIntoView({ block: "center" });
     await snap("review-wads-and-argv");
     // A long path must wrap rather than push the page sideways (246I1.1).
     record(

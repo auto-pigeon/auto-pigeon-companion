@@ -118,7 +118,7 @@ func TestServesTheEmbeddedFrontend(t *testing.T) {
 	// The page and the assets are reachable without a token: a browser has none
 	// until it has loaded the page that carries it.
 	for _, path := range []string{"/", "/app.js", "/app.css", "/core.js", "/library.js",
-		"/build.js", "/run.js", "/profiles.js", "/jobs.js", "/settings.js", "/about.js"} {
+		"/build.js", "/run.js", "/profiles.js", "/jobs.js", "/settings.js", "/footer.js", "/i18n.js", "/locales/it.js"} {
 		r := httptest.NewRequest(http.MethodGet, path, nil)
 		r.Host = testHost
 		recorder := httptest.NewRecorder()

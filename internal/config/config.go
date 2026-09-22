@@ -127,6 +127,10 @@ type Config struct {
 	// filling the {game_root} placeholder in a launch config's executable
 	// pattern. See internal/launch.
 	GameRoots map[string]string `json:"game_roots,omitempty"`
+	// Language is the page's language, as a code the page offers ("en",
+	// "it", …). Empty means automatic: the browser's own, when it is a
+	// translated one.
+	Language string `json:"language,omitempty"`
 	// AssetCacheDir overrides where AUB assets are cached. Empty means
 	// DefaultAssetCacheDir.
 	AssetCacheDir string `json:"asset_cache_dir,omitempty"`

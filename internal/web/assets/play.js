@@ -19,7 +19,25 @@
 "use strict";
 
 (() => {
-  const { $, el, api, setMessage, announce, when, bytes } = window.AUCOM;
+  const { $, el, api, setMessage, announce, when, bytes, t } = window.AUCOM;
+
+  // The engine actions Build & Run offers, in the order they are shown, with
+  // what each means in plain words. An engine's profile names the actions it
+  // has; these are the ones that make sense for a map that was just built.
+  const ACTIONS = {
+    play_map: {
+      title: "Play it",
+      text: "Start the game on your map, just you. The quickest way to walk round what you built.",
+    },
+    host_listen: {
+      title: "Host it and play",
+      text: "Start a game others can join, and play in it yourself. It shows in Live Games while it runs.",
+    },
+    host_dedicated: {
+      title: "Dedicated server",
+      text: "Run a server for others without playing in it yourself. It keeps going until you stop it.",
+    },
+  };
 
   // The whole of this page's state. Exact identities, never display labels: a
   // request carrying "dm1, latest" would mean something different tomorrow.
@@ -109,10 +127,7 @@
     for (const panel of document.querySelectorAll("#area-play .bwiz-panel")) {
       panel.hidden = Number(panel.dataset.step) !== step;
     }
-    for (const tab of document.querySelectorAll("#play-steps .bwiz-step")) {
-      const current = Number(tab.dataset.step) === step;
-      tab.setAttribute("aria-current", current ? "step" : "false");
-    }
+    markSteps();
     summarize();
     // "Started" describes the run that was started, not the next one.
     if (step !== 5) setMessage("play-start-message", "");
@@ -122,16 +137,62 @@
     panel?.querySelector("h3")?.focus?.();
   }
 
+  // What each step chose, written under its name in the step bar: the value
+  // itself large and bright, its qualifier small beneath it. The step bar is
+  // the one place a person can read the whole journey at a glance, so what was
+  // chosen must stand out from the labels around it.
   function summarize() {
-    $("play-step-summary-1").textContent = state.revision
-      ? `${state.map?.display_name || state.map?.asset_id || ""} · revision ${state.revision.revision}`
-      : "";
-    $("play-step-summary-2").textContent = nameOfPipeline(state.pipeline);
-    $("play-step-summary-3").textContent = state.engine
-      ? `${nameOfEngine(state.engine)} → ${state.mod}`
-      : "";
-    $("play-step-summary-4").textContent = state.plan ? "checked" : "";
-    $("play-step-summary-5").textContent = "";
+    const put = (n, value, detail, empty = t("not chosen yet")) => {
+      const node = $("play-step-summary-" + n);
+      node.replaceChildren();
+      if (!value) {
+        if (empty) node.append(el("span", { className: "bwiz-step__empty", text: empty }));
+        return;
+      }
+      node.append(el("span", { className: "bwiz-step__value", text: value }));
+      if (detail) node.append(el("span", { className: "bwiz-step__detail", text: detail }));
+    };
+    put(1, state.revision ? state.map?.display_name || state.map?.asset_id || "" : "",
+      state.revision ? t("revision {n}", { n: state.revision.revision }) +
+        ($("play-map-name").value.trim() ? ` · +map ${$("play-map-name").value.trim()}` : "") : "");
+    put(2, nameOfPipeline(state.pipeline), state.strict ? t("strict") : "");
+    put(3, state.engine ? nameOfEngine(state.engine) : "",
+      state.engine ? [actionTitle(state.action), state.mod].filter(Boolean).join(" · ") : "");
+    put(4, state.plan ? t("checked") : "", "", t("not checked yet"));
+    const node5 = $("play-step-summary-5");
+    node5.replaceChildren();
+    markSteps();
+  }
+
+  // The current step is teal, a step whose choice is made carries a tick, and a
+  // step that would stop the run is red — the same three states the Build
+  // wizard draws. Before this only aria-current was set, and the stylesheet
+  // styles classes, so the step a person was on looked like every other.
+  function markSteps() {
+    const done = {
+      1: Boolean(state.revision),
+      2: Boolean(state.pipeline),
+      3: Boolean(state.engine && state.action && state.gameRoot),
+      4: Boolean(state.plan),
+      5: false,
+    };
+    const attention = {
+      3: Boolean(state.engine) && !state.gameRoot,
+      4: state.plan?.textures?.compiler_ready === false,
+    };
+    for (const tab of document.querySelectorAll("#play-steps .bwiz-step")) {
+      const n = Number(tab.dataset.step);
+      const current = n === state.step;
+      tab.classList.toggle("current", current);
+      tab.classList.toggle("done", !current && done[n]);
+      tab.classList.toggle("attention", !current && Boolean(attention[n]));
+      if (current) tab.setAttribute("aria-current", "step");
+      else tab.removeAttribute("aria-current");
+    }
+  }
+
+  function actionTitle(id) {
+    return ACTIONS[id]?.title ? t(ACTIONS[id].title) : "";
   }
 
   function nameOfPipeline(id) {
@@ -331,15 +392,48 @@
 
   function renderActions() {
     const select = $("play-action");
+    const choices = $("play-action-choices");
     select.replaceChildren();
+    choices.replaceChildren();
     const engine = state.engines.find((e) => e.id === state.engine);
-    for (const action of engine?.actions || []) {
+    // Only what makes sense for one freshly built map, in the order a person
+    // would pick them. "Join a server" and "Play a mod or package" belong to
+    // Live Games and Run: offered here, as they were, they were four tabs whose
+    // meaning nobody could guess (operator, 2026-09-22).
+    const offered = Object.keys(ACTIONS)
+      .map((id) => (engine?.actions || []).find((action) => action.id === id))
+      .filter(Boolean);
+    for (const action of offered) {
       select.append(el("option", { text: action.title || action.id, attrs: { value: action.id } }));
     }
-    if (state.action && [...select.options].some((o) => o.value === state.action)) select.value = state.action;
-    // A fixed, small set — so these are TABS rather than a dropdown.
-    window.AUCOM.tabsFor?.("play-action");
+    if (state.action && offered.some((a) => a.id === state.action)) select.value = state.action;
+    else select.value = offered[0]?.id || "";
     state.action = select.value || "";
+    for (const action of offered) {
+      const meaning = ACTIONS[action.id];
+      const input = el("input", {
+        attrs: { type: "radio", name: "play-action-choice", value: action.id, id: "play-action-" + action.id },
+      });
+      input.checked = action.id === state.action;
+      input.addEventListener("change", () => {
+        if (!input.checked) return;
+        select.value = action.id;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      choices.append(el("label", {
+        className: "choice-card",
+        attrs: { for: input.id },
+        children: [
+          input,
+          el("span", { className: "choice-card__title", text: t(meaning.title) }),
+          el("span", { className: "choice-card__text", text: t(meaning.text) }),
+        ],
+      }));
+    }
+    $("play-action-fieldset").hidden = !engine;
+    if (engine && !offered.length) {
+      choices.append(el("p", { className: "muted", text: t("This engine's profile offers no way to play a single map.") }));
+    }
     const root = engine?.binding?.roots?.game_root || "";
     state.gameRoot = root;
     $("play-game-root").textContent = root
@@ -413,27 +507,33 @@
     };
   }
 
+  // The review is a grid of cards, two to a row on a wide window: what is
+  // downloaded beside its textures, the programs beside where files go, and
+  // the command across the whole width at the bottom (operator, 2026-09-22:
+  // "the right side of the page is always empty").
   function renderReview(plan) {
     const review = $("play-review");
     review.replaceChildren();
+    review.className = "review-grid";
 
-    review.append(section("What will be downloaded", [
-      line("Map", `${state.map?.display_name ? `${state.map.display_name} (${plan.map.asset_id})` : plan.map.asset_id}, ` +
-        `revision ${plan.map.revision}`),
-      line("Map file", plan.map.source_file || "the revision's only file"),
+    review.append(section(t("What will be downloaded"), [
+      line(t("Map"), state.map?.display_name || plan.map.asset_id),
+      line(t("Revision"), String(plan.map.revision)),
+      line(t("Map file"), plan.map.source_file || t("the revision's only file")),
+      line(t("Name in the game"), plan.run?.map || $("play-map-name").value.trim()),
     ]));
 
     review.append(texturesSection(plan.textures));
 
-    const programs = [line("Build profile", nameOfPipeline(plan.build.pipeline))];
+    const programs = [line(t("Build profile"), nameOfPipeline(plan.build.pipeline))];
     const pipeline = state.pipelines.find((p) => p.id === plan.build.pipeline);
     for (const step of pipeline?.steps || []) {
       programs.push(line(step.title || step.id,
         `${step.provider?.name || step.capability} ${step.provider?.version || ""}`.trim()));
     }
-    programs.push(line("Extractor",
-      "Auto-Pigeon Extractor, started as a separate program, when the map needs converting"));
-    review.append(section("Which programs will run", programs));
+    programs.push(line(t("Extractor"), t("Auto-Pigeon Extractor, when the map needs converting")));
+    programs.push(line(t("Engine"), `${nameOfEngine(state.engine)} · ${actionTitle(state.action)}`));
+    review.append(section(t("Which programs will run"), programs));
 
     // Once the verified bundle is known, the WAD line names the actual files
     // rather than a placeholder for them.
@@ -444,88 +544,120 @@
       carried.length && file.includes("<the map's declared WADs")
         ? carried.map((path) => `${plan.run.mod}/wads/${path}`)
         : [file]);
-    const writes = files.map((file) => el("li", { children: [el("code", { text: file })] }));
     review.append(el("section", {
-      className: "panel",
+      className: "panel review-card",
       children: [
-        el("h4", { text: "Where files will be written" }),
-        el("p", { className: "muted", text: plan.writes.directory }),
-        el("ul", { className: "plain", children: writes }),
-        el("p", {
-          className: "muted",
-          text: "Never written to: " + plan.writes.never_writes + ".",
-        }),
+        el("h4", { text: t("Where files will be written") }),
+        el("dl", { className: "summary-list", children: line(t("Folder"), plan.writes.directory).flat() }),
+        el("ul", { className: "file-list", children: files.map((file) => el("li", { children: [el("code", { text: file })] })) }),
+        el("p", { className: "muted small", text: t("Never written to: {what}.", { what: plan.writes.never_writes }) }),
       ],
     }));
 
     review.append(launchSection(plan.launch));
-    review.append(el("p", { className: "muted", text: plan.build_preview_note }));
+    if (plan.build_preview_note) {
+      review.append(el("p", { className: "muted small review-note", text: plan.build_preview_note }));
+    }
   }
 
   function texturesSection(textures) {
-    if (!textures) return el("section", { className: "panel", children: [el("h4", { text: "Textures" })] });
-    const children = [el("h4", { text: "The texture WADs, in the order the map declares them" })];
+    const children = [el("h4", { text: t("Textures") })];
+    if (!textures) return el("section", { className: "panel review-card", children });
     if (!textures.known) {
       children.push(el("p", { className: "muted", text: textures.message }));
-      return el("section", { className: "panel", children });
+      return el("section", { className: "panel review-card", children });
     }
+    children.push(el("p", { className: "muted small", text: t("The texture WADs, in the order the map declares them.") }));
     const rows = (textures.wads || []).map((wad) => {
-      const carried = wad.included
-        ? (wad.files || []).map((f) => `${f.path} · ${bytes(f.bytes)}`).join(", ")
-        : wad.note || "not in this bundle";
+      const files = wad.included ? (wad.files || []) : [];
       return el("li", {
         children: [
-          el("strong", { text: `${wad.order + 1}. ${wad.name}` }),
-          el("span", { className: "muted", text: " — " + carried }),
+          el("span", { className: "wad-order", text: String(wad.order + 1) }),
+          el("span", { className: "wad-name", text: wad.name }),
+          el("span", {
+            className: "muted",
+            text: files.length
+              ? files.map((f) => bytes(f.bytes)).join(", ")
+              : wad.note || t("not in this bundle"),
+          }),
         ],
       });
     });
-    children.push(el("ol", { className: "plain numbered", children: rows }));
+    children.push(el("ol", { className: "wad-list", children: rows }));
     children.push(el("p", {
-      className: "muted",
-      text: "Later declarations win a name two WADs both hold. A compiled Quake 1 BSP carries its " +
-        "own textures, so the game does not read these files at run time — they are kept with the " +
-        "map so the build can be inspected and repeated.",
+      className: "muted small",
+      text: t("Later declarations win a name two WADs both hold. The compiler reads these files; a compiled Quake 1 map carries its own textures, so the game does not read these files at run time — they are kept with the map so the build can be inspected and repeated."),
     }));
     if (!textures.compiler_ready) {
       children.push(el("div", {
         className: "panel notice error",
         children: [
-          el("p", { children: [el("strong", { text: "This map cannot be compiled yet." })] }),
+          el("p", { children: [el("strong", { text: t("This map cannot be compiled yet.") })] }),
           el("ul", {
             className: "plain",
             children: (textures.compiler_refusals || []).map((r) => el("li", { text: r })),
           }),
           el("p", {
             className: "muted",
-            text: "The Companion will not start the extractor or a compiler, and will not quietly " +
-              "use a similarly named WAD from your own game folder.",
+            text: t("The Companion will not start the extractor or a compiler, and will not quietly use a similarly named WAD from your own game folder."),
           }),
         ],
       }));
     }
-    return el("section", { className: "panel", children });
+    return el("section", { className: "panel review-card", children });
+  }
+
+  // POSIX shell quoting, for DISPLAY: the command is still sent to the
+  // operating system element by element, never as a string. A word with
+  // nothing special in it is shown bare; anything else in single quotes.
+  function shellQuote(word) {
+    const text = String(word);
+    if (text && /^[A-Za-z0-9_@%+=:,./-]+$/.test(text)) return text;
+    return "'" + text.replace(/'/g, "'\\''") + "'";
+  }
+
+  function commandBlock(argv) {
+    const text = argv.map(shellQuote).join(" ");
+    const copy = el("button", { text: t("Copy"), className: "secondary shell__copy", attrs: { type: "button" } });
+    copy.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(text);
+        copy.textContent = t("Copied");
+      } catch {
+        copy.textContent = t("Select and copy it");
+      }
+      window.setTimeout(() => { copy.textContent = t("Copy"); }, 1600);
+    });
+    return el("div", {
+      className: "shell",
+      children: [
+        copy,
+        el("pre", {
+          className: "shell__code",
+          attrs: { "aria-label": t("The exact command") },
+          children: [el("span", { className: "shell__prompt", text: "$ ", attrs: { "aria-hidden": "true" } }), el("code", { text })],
+        }),
+      ],
+    });
   }
 
   function launchSection(launch) {
-    const children = [el("h4", { text: "The exact command" })];
+    const children = [el("h4", { text: t("The exact command") })];
     if (!launch?.known) {
-      children.push(el("p", { className: "muted", text: launch?.message || "Not resolvable yet." }));
-      return el("section", { className: "panel", children });
+      children.push(el("p", { className: "muted", text: launch?.message || t("Not resolvable yet.") }));
+      return el("section", { className: "panel review-card review-card--wide", children });
     }
-    // Element by element, because that is how the operating system receives it
-    // and how a person checks it. Never a shell string.
-    children.push(el("ol", {
-      className: "argv",
-      children: [launch.executable, ...(launch.args || [])].map((part) =>
-        el("li", { children: [el("code", { text: part })] })),
+    children.push(el("p", {
+      className: "muted small",
+      text: t("What the Companion will start once the map is built. The program is given these words exactly, one by one; it is shown here as you would type it in a terminal."),
     }));
-    return el("section", { className: "panel", children });
+    children.push(commandBlock([launch.executable, ...(launch.args || [])]));
+    return el("section", { className: "panel review-card review-card--wide", children });
   }
 
   function section(title, lines) {
     return el("section", {
-      className: "panel",
+      className: "panel review-card",
       children: [el("h4", { text: title }), el("dl", { className: "summary-list", children: lines.flat() })],
     });
   }

@@ -652,4 +652,6 @@ Object.assign(AUCOM, {
   record, renderActivity, clearActivity, pathField, downloadButton, tabsFor,
   badge, maturityBadge, maturityNote, bytes, when, terminal, permissionBlock, programFileName, folderTitle,
   openCompatibilityReport, wireCompatibilityReport,
+  // Translation (i18n.js, loaded first). `t("English {slot}", {slot})`.
+  t: (english, values) => window.AUCOM_I18N.t(english, values),
 });

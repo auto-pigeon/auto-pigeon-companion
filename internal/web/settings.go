@@ -43,6 +43,9 @@ type settingsBody struct {
 	Port           int               `json:"port"`
 	JobConcurrency int               `json:"job_concurrency"`
 	GameRoots      map[string]string `json:"game_roots,omitempty"`
+	// Language is reported here and written only by its own route, so a Save
+	// of the form never changes the page's language.
+	Language string `json:"language,omitempty"`
 
 	// Everything below is reported and never accepted. Marshalled into the
 	// same object because a settings page needs to show a user where their
@@ -77,6 +80,7 @@ func (s *Server) settingsAPI() map[string]http.HandlerFunc {
 	return map[string]http.HandlerFunc{
 		"GET /api/v1/settings": s.handleSettingsGet,
 		"PUT /api/v1/settings": s.handleSettingsPut,
+		"PUT /api/v1/settings/language": s.handleLanguagePut,
 	}
 }
 
@@ -91,6 +95,7 @@ func (s *Server) describeSettings() settingsBody {
 		Port:               settings.Port,
 		JobConcurrency:     settings.JobConcurrency,
 		GameRoots:          settings.GameRoots,
+		Language:           settings.Language,
 		CatalogBaseURL:     settings.CatalogBaseURL,
 		CatalogAnchorsPath: settings.CatalogAnchorsPath,
 		Offline:            config.Offline(),
@@ -292,4 +297,33 @@ func backendLabel(address string) string {
 		}
 	}
 	return ""
+}
+
+// pageLanguages are the language codes the page offers (assets/i18n.js).
+// "" is automatic.
+var pageLanguages = map[string]bool{"": true, "en": true, "it": true, "fr": true, "de": true, "es": true, "ja": true, "zh": true}
+
+// handleLanguagePut records the page's language. It is its own route because
+// it is chosen from the header, not from the Settings form, and a form Save
+// must not be able to undo it.
+func (s *Server) handleLanguagePut(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Language string `json:"language"`
+	}
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	language := strings.TrimSpace(request.Language)
+	if !pageLanguages[language] {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("%q is not a language this page offers", language))
+		return
+	}
+	if _, err := s.updateConfig(func(current *config.Config) error {
+		current.Language = language
+		return nil
+	}); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.describeSettings())
 }
