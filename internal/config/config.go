@@ -131,6 +131,16 @@ type Config struct {
 	// DefaultAssetCacheDir.
 	AssetCacheDir string `json:"asset_cache_dir,omitempty"`
 
+	// IncidentDSN is where incident reports go, when the environment's
+	// AUCOM_INCIDENT_DSN does not say. Empty — the ordinary case — means
+	// nothing is sent. See internal/incident. The file is 0600, and the value
+	// is never printed.
+	IncidentDSN string `json:"incident_dsn,omitempty"`
+	// IncidentEnvironment is the deployment incidents are filed under
+	// (development, production, test), when AUCOM_INCIDENT_ENVIRONMENT does
+	// not say.
+	IncidentEnvironment string `json:"incident_environment,omitempty"`
+
 	// Session is the current AUB login, if any.
 	Session Session `json:"session,omitempty"`
 	// MigratedFromLauncher records that the retired Auto-Pigeon Launcher's

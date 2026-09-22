@@ -89,6 +89,10 @@ type Env struct {
 	// change which application opens a scheme on the machine running the test.
 	// That is somebody's desktop, not a temporary directory.
 	URIRegistrar *urischeme.Registrar
+
+	// incidentState is this invocation's incident reporter, built on first
+	// need and flushed when the command returns. See incident.go.
+	incidentState *incidentHolder
 }
 
 // uriRegistrar is the handler registrar this invocation uses.
@@ -237,6 +241,11 @@ var commands = []Command{
 		Run:     runAcceptance,
 	},
 	{
+		Name: "dev", Usage: "fault job|readiness [--correlation-id <id>] [--aub <url>] [--bound <duration>]",
+		Summary: "end-to-end test controls; refused unless AUCOM_E2E_FAULTS=1",
+		Run:     runDev,
+	},
+	{
 		Name:    "migrate",
 		Summary: "fold Launcher and older Companion configuration into the current one",
 		Run:     runMigrate,
@@ -290,6 +299,14 @@ func Names() []string {
 
 // Run executes one invocation and returns the process exit code.
 func Run(env *Env, args []string) int {
+	// One incident reporter per invocation, flushed on the way out so a
+	// one-shot command's report is not lost when the process exits. A copy of
+	// the caller's Env, as below, so nothing a test hands in is mutated.
+	withIncidents := *env
+	withIncidents.incidentState = &incidentHolder{}
+	defer withIncidents.flushIncidents()
+	env = &withIncidents
+
 	if len(args) == 0 {
 		// GUI mode: no subcommand starts the server and opens the browser.
 		return runServe(env, []string{"--open"})
@@ -317,7 +334,9 @@ func Run(env *Env, args []string) int {
 	// copy shares every one of them, which is what is wanted — only Group differs.
 	invoked := *env
 	invoked.Group = args[0]
-	return command.Run(&invoked, args[1:])
+	code := command.Run(&invoked, args[1:])
+	env.incidentState = invoked.incidentState
+	return code
 }
 
 // UsageText is the help output, generated from the registry so a new subcommand

@@ -109,6 +109,9 @@
     $("account-signed-out").textContent = body.session_expired ? "session expired" : "not signed in";
     $("account-menu").hidden = !body.authenticated;
     window.AUCOM.account?.statusChanged?.(body);
+    // The notice banner (notices.mjs, a module) re-evaluates at once on a
+    // sign-in or a sign-out, rather than at its next poll.
+    document.dispatchEvent(new CustomEvent("aucom:status", { detail: { authenticated: Boolean(body.authenticated) } }));
 
     $("sign-in-open").hidden = Boolean(body.authenticated);
     $("library-signed-out").hidden = Boolean(body.authenticated);

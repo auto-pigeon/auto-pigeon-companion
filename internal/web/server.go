@@ -336,7 +336,7 @@ func (s *Server) routes() http.Handler {
 	// the stylesheet, the script — is static.
 	mux.Handle("GET /{$}", http.HandlerFunc(s.handleIndex))
 	mux.Handle("GET /index.html", http.HandlerFunc(s.handleIndex))
-	mux.Handle("GET /", s.hostGuard(http.FileServerFS(assetsFS())))
+	mux.Handle("GET /", s.hostGuard(moduleTypes(http.FileServerFS(assetsFS()))))
 
 	// One table, one registration loop. Every guarded route in this package
 	// comes from [Server.api], so a route cannot be added without the guard,
@@ -365,7 +365,7 @@ func (s *Server) api() map[string]http.HandlerFunc {
 	for _, table := range []map[string]http.HandlerFunc{
 		s.jobAPI(), s.profileAPI(), s.libraryAPI(),
 		s.engineAPI(), s.buildAPI(), s.playAPI(), s.settingsAPI(), s.pathAPI(),
-		s.feedbackAPI(), s.aboutAPI(), s.accountAPI(), s.gamesAPI(),
+		s.feedbackAPI(), s.aboutAPI(), s.accountAPI(), s.gamesAPI(), s.noticesAPI(),
 	} {
 		for pattern, handler := range table {
 			if _, clash := routes[pattern]; clash {
@@ -408,6 +408,29 @@ func (s *Server) hostGuard(handler http.Handler) http.Handler {
 			return
 		}
 		handler.ServeHTTP(w, r)
+	})
+}
+
+// moduleTypes states the media type of the two asset kinds a module graph
+// depends on, rather than leaving it to the platform's MIME table.
+//
+// The notice banner is an ES module that imports the vendored contract, which
+// imports its rules with `import … with { type: "json" }`. A browser refuses a
+// module script whose type is not JavaScript and a JSON module whose type is
+// not JSON, and `mime.TypeByExtension` consults the operating system's own
+// table first — so a machine whose table says something odd about `.mjs` or
+// `.json` would get a page with no banner and nothing in the log. nosniff
+// makes the browser hold us to what we said.
+func moduleTypes(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, ".mjs"), strings.HasSuffix(r.URL.Path, ".js"):
+			w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+		case strings.HasSuffix(r.URL.Path, ".json"):
+			w.Header().Set("Content-Type", "application/json")
+		}
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		next.ServeHTTP(w, r)
 	})
 }
 

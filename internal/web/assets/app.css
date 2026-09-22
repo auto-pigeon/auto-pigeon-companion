@@ -204,6 +204,23 @@ details.more > button { margin-top: 0.35rem; }
   padding: 0.6rem 1rem; background: var(--accent-soft); border-bottom: 1px solid var(--accent);
 }
 .reconnect-banner p { margin: 0; }
+/* Operational notices: the reconnect banner's compact shape, one row per
+   notice, the severity carried by the left rule and a word, never colour alone. */
+.notice-banner { border-bottom: 1px solid var(--line); background: var(--surface); }
+.notice-list { list-style: none; margin: 0; padding: 0; }
+.notice {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem var(--gap);
+  padding: 0.5rem 1rem; border-left: 3px solid var(--accent); background: var(--accent-soft);
+}
+.notice + .notice { border-top: 1px solid var(--line); }
+.notice--critical { border-left-color: var(--bad); background: var(--bad-soft); }
+.notice--maintenance, .notice--warning { border-left-color: var(--warn); background: var(--warn-soft); }
+.notice__severity { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-muted); }
+.notice__title { margin: 0; font-weight: 600; }
+.notice__when { font-size: 0.8125rem; color: var(--ink-muted); }
+.notice__body { flex-basis: 100%; margin: 0; white-space: pre-line; font-size: 0.875rem; }
+.notice__dismiss { margin-left: auto; }
+.notice-limit { margin: 0; padding: 0.25rem 1rem 0.4rem; font-size: 0.75rem; color: var(--ink-faint); }
 .sync-dialog { width: min(40rem, 100%); }
 .auth-dialog__help { margin: 0; padding-left: 1.1rem; display: grid; gap: 0.3rem; font-size: 0.8125rem; color: var(--ink-muted); }
 /* AUP's tab treatment (AUG's `.auth-dialog__tabs [role=tab]`): transparent,

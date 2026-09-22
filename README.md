@@ -195,9 +195,16 @@ a job record, to a build manifest or to any log line, and the GUI's own
   "catalog_anchors_path": "/etc/auto-pigeon/anchors.json",
   "job_concurrency": 0,
   "game_roots": { "quake": "/games/quake" },
+  "incident_dsn": "",
+  "incident_environment": "",
   "session": { "token": "…", "email": "you@example", "expires": "…" }
 }
 ```
+
+`incident_dsn` and `incident_environment` say where incident reports go and under
+which environment, when `AUCOM_INCIDENT_DSN` / `AUCOM_INCIDENT_ENVIRONMENT` do not
+— see [Operational notices and incident reports](#operational-notices-and-incident-reports).
+Both are empty by default, and empty means nothing is sent anywhere.
 
 Three more files sit beside it, and each is somewhere different for a reason:
 
@@ -275,7 +282,9 @@ $ AUCOM_ENV_FILE=/path/to/stack.env companion serve   # a file somewhere else
 
 It is optional and read only from the working directory or the file
 `AUCOM_ENV_FILE` names; a released Companion on a clean machine has neither and
-needs neither. **It may set `AUCOM_AUB_BASE_URL` and nothing else** — a `.env`
+needs neither. **It may set `AUCOM_AUB_BASE_URL`, `AUCOM_INCIDENT_DSN` and
+`AUCOM_INCIDENT_ENVIRONMENT` and nothing else** — two addresses and a label a
+local stack's launcher writes — and a `.env`
 lying in whatever directory a terminal happened to be in must not be able to
 move the catalogue's trust anchors, point at an unverified extractor or relocate
 the job store, so any other key is named in a warning and ignored. The real
@@ -298,6 +307,9 @@ supplied this way, and is still where a person without a checkout sets it.
 | `AUCOM_CATALOG_URL` | `internal/config` | where the signed acquisition catalogue is fetched from |
 | `AUCOM_CATALOG_ANCHORS` | `internal/config` | the file holding the catalogue's trust anchors |
 | `AUCOM_OFFLINE` | `internal/config` | forbid every network access; installed packages stay usable |
+| `AUCOM_INCIDENT_DSN` | `internal/incident` | where incident reports go (a GlitchTip DSN); unset means nothing is sent |
+| `AUCOM_INCIDENT_ENVIRONMENT` | `internal/incident` | `development`, `production` or `test`; unset is `production` for a stamped release, `development` otherwise |
+| `AUCOM_E2E_FAULTS` | `companion dev` | `1` unlocks the controlled faults the end-to-end telemetry test uses; never read from a `.env` |
 
 `AUL_PASSWORD` and `AUC_AUE_BINARY`, the retired names, are still read.
 `AUL_PASSWORD` warns when it is used.
@@ -581,6 +593,7 @@ commands:
   release sbom | checksums                                                                              the documents a release ships beside its binaries
   uninstall [--purge --confirm]                                                                         show what this program keeps on this machine, and delete it
   acceptance run | verify | lanes | schema | fixture | noise                                            the native operator acceptance kit, on the machine an artifact is for
+  dev fault job|readiness [--correlation-id <id>] [--aub <url>] [--bound <duration>]                    end-to-end test controls; refused unless AUCOM_E2E_FAULTS=1
   migrate                                                                                               fold Launcher and older Companion configuration into the current one
   version                                                                                               print the build version
 ```
@@ -3679,6 +3692,105 @@ on use.
 The test keys under `internal/catalog/testdata` are fixtures. They sign nothing
 outside `go test`, and there is no production catalogue key in this repository at
 all.
+
+## Operational notices and incident reports
+
+### Notices in the page
+
+When the operator schedules maintenance (or publishes another operational
+notice) in auto-pigeon-backend, the page shows it in a compact banner at the
+top — signed in or not. It is fetched through the local server, which relays
+AUB's public `GET /api/operational-notices?surface=aucom` and presents your
+session when you are signed in, so notices meant only for signed-in accounts
+are shown to you and to nobody else:
+
+```console
+$ curl -s -i -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/notices
+HTTP/1.1 200 OK
+Etag: "n1-3b0c…"
+X-Auto-Pigeon-Server-Time: 2026-09-22T12:00:00.000Z
+X-Aucom-Notice-Account: u:k2x9…
+{"schema":"auto-pigeon-operational-notices/1.0","server_time":"2026-09-22T12:00:00.000Z",
+ "surface":"aucom","visibility":"authenticated","poll_after_seconds":90,"notices":[…]}
+
+$ curl -s -o /dev/null -w '%{http_code}\n' -H "X-AUCOM-Token: $TOKEN" \
+    -H 'If-None-Match: "n1-3b0c…"' http://127.0.0.1:8791/api/v1/notices
+304
+```
+
+A server that cannot be reached answers `502 {"code":"notices_unavailable"}`;
+no server chosen is `503 {"code":"aub_not_configured"}`. What is shown, and when,
+is decided by the shared AULIBS contract the page runs
+(`internal/web/assets/vendor/operational-notice-contract`, a byte-for-byte copy
+checked by `TestVendoredNoticeContractIsExactlyAULIBS`): the phase comes from the
+**server's** clock, not this machine's; the banner is re-checked every second and
+fetched again every 60–120 seconds, with backoff after a failure; a notice can be
+dismissed per account (a *critical* one cannot); signing out removes account-only
+notices at once. Title and body are shown as plain text. Only the public part of
+the last answer is kept, in the page's own storage, so a planned-downtime notice
+stays up while the server is down; the Companion itself writes nothing about
+notices to disk.
+
+**The limit, as the banner states it:** notices announce *planned* maintenance,
+and one already shown stays visible while the server is down. They cannot warn a
+first-time or offline Companion about an *unplanned* outage.
+
+### Incident reports
+
+The Companion reports two things to the stack's incident backend (GlitchTip), and
+only when `AUCOM_INCIDENT_DSN` (or `incident_dsn` in `config.json`) names one:
+
+| Code | When | What travels |
+| --- | --- | --- |
+| `aucom.job_failed` | a supervised job ends **failed** (not cancelled, not interrupted) | subsystem `job.tool` or `job.engine`; operation `job.exit_nonzero`, `job.timeout` or `job.start_failed`; the exit status or time bound; the duration |
+| `aucom.readiness_failed` | at `serve` start, the configured AUB does not answer `GET /api/health` within 10 seconds | subsystem `aub.link`; operation `readiness.timeout`, `readiness.refused` or `readiness.unreachable` |
+
+Every event carries the release (`1.<n>`, or `unknown`), the environment,
+component `AUCOM` and a correlation id — the one the request carried in
+`X-Auto-Pigeon-Correlation-Id`, or a fresh one tagged `correlation_origin: minted`.
+It **never** carries a command line, an argument, an owned-game or any other
+path, a profile id, an account, an address or a token: the envelope has no field
+for them, the job's own error text is not used, and AULIBS' central redaction
+runs over the event on its way out (`internal/incident`, which embeds AULIBS'
+`incident-codes.json` and `redaction-rules.json` byte for byte). There is no
+SDK and nothing is attached by default; the queue is bounded, and a backend that
+is down produces one `reporting.telemetry_unavailable` line in the Companion's
+own log and nothing else.
+
+```console
+$ AUCOM_INCIDENT_DSN=http://<public key>@localhost:<glitchtip port>/<project> companion serve
+$ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" \
+    -H 'X-Auto-Pigeon-Correlation-Id: 0123456789abcdef0123456789abcdef' \
+    http://127.0.0.1:8791/api/v1/jobs -d '{"profile":"…","action":"…"}'
+```
+
+### Controlled faults, for the end-to-end test
+
+`companion dev fault` makes those two reports happen for real, through the same
+code: `job` runs a genuinely failing supervised job (a real profile, a real
+grant, a real process that exits 3) in a temporary store, and `readiness` runs the
+readiness check against a backend nothing answers on. Both are **refused unless
+`AUCOM_E2E_FAULTS=1` is in the environment** — a `.env` cannot set it — and each
+prints the incident it raised:
+
+```console
+$ companion dev fault job
+error: companion dev is for end-to-end tests and is refused unless AUCOM_E2E_FAULTS=1
+
+$ AUCOM_E2E_FAULTS=1 AUCOM_INCIDENT_DSN=… companion dev fault job \
+    --correlation-id 0123456789abcdef0123456789abcdef
+{"fault":"job","code":"aucom.job_failed","incident_id":"93438d09…","correlation_id":"0123456789abcdef0123456789abcdef",
+ "correlation_origin":"inherited","operation":"job.exit_nonzero","release":"1.412","environment":"test","sent":true,
+ "job_id":"20260922T132612Z-cedc8eec423b"}
+
+$ AUCOM_E2E_FAULTS=1 AUCOM_INCIDENT_DSN=… companion dev fault readiness \
+    --aub http://127.0.0.1:1 --bound 2s
+{"fault":"readiness","code":"aucom.readiness_failed","incident_id":"b90db5d8…",…,"operation":"readiness.unreachable",…,"sent":true}
+```
+
+`--aub` defaults to the configured server, so pointing `AUCOM_AUB_BASE_URL` at an
+unreachable address works too. A backend that answers cannot produce the fault,
+and the command says so and exits 1.
 
 ## HTTP API
 

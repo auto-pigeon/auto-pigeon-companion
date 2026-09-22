@@ -1,0 +1,156 @@
+{
+  "schema_version": "1.0",
+  "description": "The canonical Auto-Pigeon incident taxonomy. A user-impacting error path maps to one of these codes or ADDS one here; a component-local string invented at a call site is what this file exists to stop. JSON rather than TypeScript because AUB and AUE are Go, the observability tooling is Python, and three hand-maintained copies of one list is the failure mode this whole package is a reaction to.",
+  "codes": [
+    {
+      "code": "render.3d.slow",
+      "component": "AUP",
+      "recoverable": true,
+      "summary": "A 3D redraw is still running long after the operation that triggered it."
+    },
+    {
+      "code": "render.3d.context_lost",
+      "component": "AUP",
+      "recoverable": true,
+      "summary": "The WebGL context was lost. Recoverable while the context comes back on its own; render.3d.fatal is the one that does not."
+    },
+    {
+      "code": "render.3d.fatal",
+      "component": "AUP",
+      "recoverable": false,
+      "summary": "The 3D renderer failed unrecoverably and this editor session can no longer be trusted to draw."
+    },
+    {
+      "code": "render.2d.slow",
+      "component": "AUP",
+      "recoverable": true,
+      "summary": "A 2D viewport redraw is abnormally slow."
+    },
+    {
+      "code": "render.2d.fatal",
+      "component": "AUP",
+      "recoverable": false,
+      "summary": "The 2D renderer failed unrecoverably."
+    },
+    {
+      "code": "editor.main_thread_stall",
+      "component": "AUP",
+      "recoverable": true,
+      "summary": "The browser main thread stopped responding. Detected by the worker heartbeat, because a blocked main thread cannot paint the dialog that would report it."
+    },
+    {
+      "code": "editor.transform.slow",
+      "component": "AUP",
+      "recoverable": true,
+      "summary": "A transform is still running past the stall threshold."
+    },
+    {
+      "code": "editor.transform.failed",
+      "component": "AUP",
+      "recoverable": false,
+      "summary": "A transform failed part-way and the consistency of the working state is unknown."
+    },
+    {
+      "code": "editor.operation.failed",
+      "component": "AUP",
+      "recoverable": true,
+      "summary": "An editor operation failed and was not applied."
+    },
+    {
+      "code": "aub.unavailable",
+      "component": "AUP",
+      "recoverable": true,
+      "summary": "auto-pigeon-backend could not be reached at all."
+    },
+    {
+      "code": "aub.timeout",
+      "component": "AUP",
+      "recoverable": true,
+      "summary": "auto-pigeon-backend accepted the request and did not answer in time."
+    },
+    {
+      "code": "aub.error",
+      "component": "AUB",
+      "recoverable": true,
+      "summary": "auto-pigeon-backend refused or failed a request."
+    },
+    {
+      "code": "auc.disconnected",
+      "component": "AUC",
+      "recoverable": true,
+      "summary": "The collaboration connection dropped and a reconnect is in progress."
+    },
+    {
+      "code": "auc.reconnect_failed",
+      "component": "AUC",
+      "recoverable": false,
+      "summary": "Reconnection to the collaboration session did not succeed and shared working state may be behind."
+    },
+    {
+      "code": "auc.backpressure",
+      "component": "AUC",
+      "recoverable": true,
+      "summary": "A client or room is producing faster than it can be served and messages are being deferred or dropped."
+    },
+    {
+      "code": "auc.error",
+      "component": "AUC",
+      "recoverable": true,
+      "summary": "The collaboration server refused or failed a message."
+    },
+    {
+      "code": "aue.unavailable",
+      "component": "AUB",
+      "recoverable": true,
+      "summary": "The extractor is not configured or has no way to run."
+    },
+    {
+      "code": "aue.timeout",
+      "component": "AUB",
+      "recoverable": true,
+      "summary": "An extraction job exceeded its time budget."
+    },
+    {
+      "code": "aue.job_failed",
+      "component": "AUE",
+      "recoverable": true,
+      "summary": "An extraction job failed and reported a reason."
+    },
+    {
+      "code": "aue.worker_failed",
+      "component": "AUE",
+      "recoverable": true,
+      "summary": "An extractor worker died without reporting a job result."
+    },
+    {
+      "code": "aug.error",
+      "component": "AUG",
+      "recoverable": true,
+      "summary": "The gallery failed to load or render what was asked for."
+    },
+    {
+      "code": "reporting.telemetry_unavailable",
+      "component": "AUT",
+      "recoverable": true,
+      "summary": "The incident backend itself could not be reached. Reported locally and never escalated to the user: a monitor that raises a modal about its own absence is a monitor causing the outage it exists to observe."
+    },
+    {
+      "code": "aucom.job_failed",
+      "component": "AUCOM",
+      "recoverable": true,
+      "summary": "A job the companion supervises (an owned-game tool run, an extraction hand-off) failed. Which one travels on `subsystem`; the command line, the arguments and every owned-game path stay local."
+    },
+    {
+      "code": "aucom.readiness_failed",
+      "component": "AUCOM",
+      "recoverable": true,
+      "summary": "The companion could not become ready: its AUB account link, a configured backend or its own local service did not answer within its bound."
+    },
+    {
+      "code": "aut.launch_failed",
+      "component": "AUT",
+      "recoverable": false,
+      "summary": "The launcher could not bring a stack up: a step, a readiness wait or a child process failed. `subsystem` names which (compose, readiness, child), `operation` names the component; the launch stopped and tore down what it had started."
+    }
+  ]
+}

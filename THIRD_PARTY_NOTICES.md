@@ -15,6 +15,8 @@ kept apart here on purpose.
 | This repository's code | MIT | is the product | yes |
 | Go standard library | BSD-3-Clause | compiled in | yes, as part of the binary |
 | Go module dependencies | — | none exist | — |
+| `@auto-pigeon/operational-notice-contract` 1.0.0 (`src/index.mjs`, two schema files), from auto-pigeon-libraries | Apache-2.0 | vendored byte for byte into the embedded page (`internal/web/assets/vendor/operational-notice-contract/`) | yes, inside the binary |
+| `@auto-pigeon/incident-contract` data (`incident-codes.json`, `redaction-rules.json`), from auto-pigeon-libraries | Apache-2.0 | embedded byte for byte (`internal/incident/contract/`) | yes, inside the binary |
 | auto-pigeon-extractor (AUE) | **AGPL-3.0-only** | separate process, downloaded at runtime against a signed catalogue | no |
 | ericw-tools 0.18.1 (qbsp, vis, light, bspinfo, bsputil) | **GPL-3.0-or-later** as distributed (GPL-2.0-or-later source) | separate process, downloaded at runtime | no |
 | ericw-tools 2.0.0-alpha7 (the Quake II line) | **GPL-3.0-or-later** as distributed (GPL-2.0-or-later source) | separate process, downloaded at runtime | no |
@@ -50,6 +52,20 @@ A release publishes it as a CycloneDX SBOM
 every external program the Companion can obtain — each with the relationship it
 has to the artifact, because a component somebody downloads later is not a
 component nobody should be told about.
+
+## Auto-Pigeon contract files from auto-pigeon-libraries — Apache-2.0
+
+Two sets of files from the Auto-Pigeon project's own shared library,
+`auto-pigeon-libraries` (Apache License, Version 2.0), are compiled into the
+binary unmodified: the operational-notice contract's `src/index.mjs`,
+`schema/notice-rules.json` and `schema/operational-notices-response-1.0.schema.json`,
+which the page runs to decide which notices to show; and the incident contract's
+`schema/incident-codes.json` and `schema/redaction-rules.json`, which
+`internal/incident` reads. They are not Go modules and are not in the module graph.
+Tests compare each copy with its source (`TestVendoredNoticeContractIsExactlyAULIBS`,
+`TestEmbeddedContractIsExactlyAULIBS`), so a copy cannot be edited here. Apache-2.0
+is compatible with MIT redistribution; its text is at
+https://www.apache.org/licenses/LICENSE-2.0.
 
 ## auto-pigeon-extractor (AUE) — AGPL-3.0-only, and why no release contains it
 

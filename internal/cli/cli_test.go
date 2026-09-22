@@ -32,6 +32,12 @@ func TestMain(m *testing.M) {
 		fmt.Println(strings.Join(os.Args[3:], " "))
 		os.Exit(0)
 	}
+	// `companion dev fault job` runs os.Executable() as its failing program,
+	// which under `go test` is this binary: dispatch to the real command so the
+	// job fails the way it does in a release.
+	if len(os.Args) > 3 && os.Args[1] == "dev" && os.Args[2] == "fault" && os.Args[3] == "exit" {
+		os.Exit(Run(&Env{Stdout: os.Stdout, Stderr: os.Stderr}, os.Args[1:]))
+	}
 	// The engine fixture, so `companion engine run` can be tested against a
 	// program that writes down the command line it was given. One
 	// implementation of it, in internal/enginefixture, dispatched to from here.

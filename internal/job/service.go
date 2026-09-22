@@ -69,6 +69,12 @@ type Options struct {
 	KeepWorkspace bool
 	// Logf receives one line per lifecycle event. Nil discards them.
 	Logf func(format string, args ...any)
+	// OnFinished is told about every job that reaches a terminal state, with a
+	// copy of the record and the correlation id its submitter carried ("" when
+	// none). It is how a failure is reported as an incident without this
+	// package knowing incidents exist. Called synchronously from the worker,
+	// so it must not block; nil means nobody is listening.
+	OnFinished func(j *Job, correlationID string)
 }
 
 // Service is the job runtime.
@@ -83,6 +89,7 @@ type Service struct {
 	now         func() time.Time
 	keep        bool
 	logf        func(string, ...any)
+	onFinished  func(*Job, string)
 
 	queue chan string
 
@@ -94,8 +101,11 @@ type Service struct {
 	// heartbeat walks this rather than the store: a store with a thousand
 	// finished jobs would otherwise be re-read from disk every two seconds to
 	// find the two that are running.
-	owned  map[string]bool
-	closed bool
+	owned map[string]bool
+	// correlations holds the correlation id a submission carried, by job id,
+	// until the job finishes. Memory only: see Request.CorrelationID.
+	correlations map[string]string
+	closed       bool
 
 	workers sync.WaitGroup
 	ctx     context.Context
@@ -126,19 +136,21 @@ func NewService(options Options) (*Service, error) {
 		depth = defaultQueueDepth
 	}
 	service := &Service{
-		store:       options.Store,
-		catalog:     options.Catalog,
-		bindings:    options.Bindings,
-		concurrency: concurrency,
-		maxTimeout:  options.MaxTimeout,
-		secrets:     options.Secrets,
-		lookupEnv:   options.LookupEnv,
-		now:         options.Now,
-		keep:        options.KeepWorkspace,
-		logf:        options.Logf,
-		queue:       make(chan string, depth),
-		mirrors:     map[string]io.Writer{},
-		owned:       map[string]bool{},
+		store:        options.Store,
+		catalog:      options.Catalog,
+		bindings:     options.Bindings,
+		concurrency:  concurrency,
+		maxTimeout:   options.MaxTimeout,
+		secrets:      options.Secrets,
+		lookupEnv:    options.LookupEnv,
+		now:          options.Now,
+		keep:         options.KeepWorkspace,
+		logf:         options.Logf,
+		onFinished:   options.OnFinished,
+		queue:        make(chan string, depth),
+		mirrors:      map[string]io.Writer{},
+		owned:        map[string]bool{},
+		correlations: map[string]string{},
 	}
 	if service.lookupEnv == nil {
 		service.lookupEnv = os.LookupEnv
@@ -326,6 +338,9 @@ func (s *Service) Submit(request Request) (*Job, error) {
 	}
 	s.mu.Lock()
 	s.owned[id] = true
+	if request.CorrelationID != "" {
+		s.correlations[id] = request.CorrelationID
+	}
 	s.mu.Unlock()
 
 	select {
@@ -896,4 +911,11 @@ func (s *Service) finish(j *Job, state State, message string, after func()) {
 		after()
 	}
 	s.logf("job %s %s", j.ID, state)
+	s.mu.Lock()
+	correlation := s.correlations[j.ID]
+	delete(s.correlations, j.ID)
+	s.mu.Unlock()
+	if s.onFinished != nil {
+		s.onFinished(j.Clone(), correlation)
+	}
 }

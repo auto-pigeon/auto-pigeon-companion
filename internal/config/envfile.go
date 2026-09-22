@@ -44,8 +44,11 @@ const EnvFileVariable = "AUCOM_ENV_FILE"
 // DefaultEnvFile is the file read from the working directory.
 const DefaultEnvFile = ".env"
 
-// DevEnvKeys are the only keys a `.env` file may supply.
-var DevEnvKeys = []string{EnvAUBBaseURL}
+// DevEnvKeys are the only keys a `.env` file may supply: where AUB is, and
+// where incident reports go and under which environment (internal/incident).
+// Each is an address or a label a local stack's launcher writes; none of them
+// can widen what this program trusts or runs.
+var DevEnvKeys = []string{EnvAUBBaseURL, "AUCOM_INCIDENT_DSN", "AUCOM_INCIDENT_ENVIRONMENT"}
 
 // EnvFileReport says what a `.env` read did.
 type EnvFileReport struct {

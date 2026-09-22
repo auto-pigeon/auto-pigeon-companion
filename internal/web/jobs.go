@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/incident"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
 )
@@ -124,7 +125,12 @@ func (s *Server) handleJobSubmit(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &body) {
 		return
 	}
-	submitted, err := service.Submit(body.toRequest())
+	request := body.toRequest()
+	// A caller that carries a correlation id (X-Auto-Pigeon-Correlation-Id)
+	// has it on the job's failure report; a malformed one is ignored, never
+	// forwarded. Held in memory only — the job record does not change.
+	request.CorrelationID = incident.CorrelationFromHeader(r.Header.Get(incident.CorrelationHeader))
+	submitted, err := service.Submit(request)
 	if err != nil {
 		writeError(w, jobStatus(err), err)
 		return

@@ -73,6 +73,21 @@
       <button type="button" id="stale-page-reload" class="primary">Reload</button>
     </div>
 
+    <!--
+      Operational notices (241): planned maintenance and similar statements the
+      operator published in the Auto-Pigeon server, shown whether or not anybody
+      is signed in. Rendered by notices.mjs as TEXT only, with the shared AULIBS
+      contract (vendor/operational-notice-contract) deciding what is shown and
+      when, from the server's clock rather than this machine's.
+    -->
+    <section id="notice-banner" class="notice-banner" aria-label="Service notices" hidden>
+      <ul id="notice-list" class="notice-list"></ul>
+      <p id="notice-limit" class="notice-limit">
+        Notices announce planned maintenance, and one already shown stays visible while the
+        server is down. They cannot warn about an unplanned outage.
+      </p>
+    </section>
+
     <!-- Back online with something to sync: said once, where the person is. -->
     <div id="reconnect-banner" class="reconnect-banner" role="status" hidden>
       <p id="reconnect-text"></p>
@@ -1146,5 +1161,8 @@
     <script src="about.js"></script>
     <script src="account.js"></script>
     <script src="app.js"></script>
+    <!-- An ES module: it imports the vendored notice contract, which imports
+         its rules as JSON modules. See internal/web/notices.go. -->
+    <script type="module" src="notices.mjs"></script>
   </body>
 </html>

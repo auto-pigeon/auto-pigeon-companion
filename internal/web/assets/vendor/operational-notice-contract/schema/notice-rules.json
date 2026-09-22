@@ -1,0 +1,125 @@
+{
+  "schema_version": "1.0",
+  "response_schema": "auto-pigeon-operational-notices/1.0",
+  "description": "The rules of the operational-notice contract, as DATA: AUB's Go store and read route, the JavaScript reference implementation every client runs (AUP, AUG, AUCOM's page) and the operator CLI in auto-pigeon-tools all read these numbers rather than restating them.",
+  "severities": [
+    "critical",
+    "maintenance",
+    "warning",
+    "info"
+  ],
+  "severity_rank": {
+    "critical": 0,
+    "maintenance": 1,
+    "warning": 2,
+    "info": 3
+  },
+  "surfaces": [
+    "aup",
+    "aug",
+    "aucom"
+  ],
+  "visibilities": [
+    "public",
+    "authenticated"
+  ],
+  "limits": {
+    "title": 80,
+    "body": 600,
+    "max_notices": 20,
+    "max_rows": 500,
+    "lookahead_seconds": 900,
+    "max_lead_seconds": 2592000,
+    "max_duration_seconds": 1209600,
+    "max_future_seconds": 34560000
+  },
+  "poll": {
+    "notes": "A client fetches at start-up and then every `poll_after_seconds` the server published, clamped to [min_seconds, max_seconds], with ±`jitter_fraction` of random spread (the result is clamped back into the window) so a fleet of clients does not synchronise. After a failure it backs off exponentially from `backoff_base_seconds` to `backoff_max_seconds`, again with jitter. One request is in flight at a time, and every repeat is conditional (If-None-Match).",
+    "min_seconds": 60,
+    "max_seconds": 120,
+    "default_seconds": 90,
+    "jitter_fraction": 0.1,
+    "backoff_base_seconds": 60,
+    "backoff_max_seconds": 900
+  },
+  "text": {
+    "notes": [
+      "Notices are PLAIN TEXT. A client renders them as text nodes, never as HTML or Markdown, so markup is inert wherever it is shown. The store additionally REFUSES text that looks like markup (`refused_patterns`), so an operator is told at write time rather than a user seeing angle brackets later; links, if ever needed, are a new schema version.",
+      "`removed_ranges` are code points a client deletes and the store refuses: C0/C1 controls (except LF in a body), bidi overrides and isolates, zero-width characters and the byte-order mark."
+    ],
+    "removed_ranges": [
+      [
+        "0000",
+        "0009"
+      ],
+      [
+        "000B",
+        "001F"
+      ],
+      [
+        "007F",
+        "009F"
+      ],
+      [
+        "061C",
+        "061C"
+      ],
+      [
+        "200B",
+        "200F"
+      ],
+      [
+        "202A",
+        "202E"
+      ],
+      [
+        "2028",
+        "2029"
+      ],
+      [
+        "2060",
+        "2064"
+      ],
+      [
+        "2066",
+        "2069"
+      ],
+      [
+        "FEFF",
+        "FEFF"
+      ],
+      [
+        "FFF9",
+        "FFFB"
+      ]
+    ],
+    "refused_patterns": [
+      "<[A-Za-z/!?]",
+      "\\]\\(",
+      "[Jj][Aa][Vv][Aa][Ss][Cc][Rr][Ii][Pp][Tt]:"
+    ]
+  },
+  "patterns": {
+    "id": "^[a-z0-9]{15}$",
+    "instant": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+  },
+  "telemetry": {
+    "notes": "The ONLY events a client may emit about notices. Low cardinality by construction: no notice id, title, body, account or dismissal choice.",
+    "events": [
+      "notices.fetch_failed",
+      "notices.response_invalid",
+      "notices.stale_cache_used"
+    ]
+  },
+  "operator_time": {
+    "notes": "An operator may type a local wall-clock time in an IANA REGION zone (Area/Location, e.g. Europe/Copenhagen) or UTC. Abbreviations such as CET, CEST or EST5EDT are refused: `CET` is not a year-round synonym for Copenhagen, and a tool that accepted it would be wrong for half the year. A nonexistent local time (spring-forward gap) is refused; an ambiguous one (autumn fall-back) is refused unless the operator chooses fold 0 (the first, summer-time occurrence) or fold 1 (the second). The resulting UTC instant is always shown back.",
+    "zone_pattern": "^(UTC|[A-Z][A-Za-z_+-]*(/[A-Za-z0-9_+-]+){1,2})$",
+    "refusals": [
+      "zone_not_iana_region",
+      "zone_unknown",
+      "local_time_invalid",
+      "nonexistent_local_time",
+      "ambiguous_local_time"
+    ]
+  }
+}

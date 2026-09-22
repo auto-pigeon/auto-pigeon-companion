@@ -10,6 +10,7 @@ import (
 
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/aub"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/incident"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/joinintent"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/release"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/web"
@@ -170,6 +171,13 @@ func runServe(env *Env, args []string) int {
 		return code
 	}
 
+	// A server's incident transcript goes to its log whether or not a backend
+	// is configured: there the operator has no other view of what happened.
+	if env.incidentState == nil {
+		env.incidentState = &incidentHolder{}
+	}
+	env.incidentState.transcript = true
+
 	// The extractor runner is built here and resolves LAZILY, so a process that
 	// never touches the extractor never fetches a catalogue — and a server does
 	// not have to reach the network before it can listen. See
@@ -274,6 +282,21 @@ func runServe(env *Env, args []string) int {
 	listener, err := web.Listen(chosen)
 	if err != nil {
 		return fail(env, err)
+	}
+	// Readiness: does the configured AUB answer within its bound? Checked once,
+	// in the background — the page works offline, so a server that is down
+	// must not delay it — and a failure is reported as
+	// `aucom.readiness_failed`. No server chosen is not a failure; the page
+	// asks for one.
+	if address, err := settings.AUB(); err == nil {
+		if client, err := aub.New(address, nil); err == nil {
+			reporter := env.incidents(settings)
+			go func() {
+				if _, err := incident.CheckReadiness(ctx, client, aub.ReadinessBound, reporter, ""); err != nil && ctx.Err() == nil {
+					fmt.Fprintln(env.Stderr, "warning: the Auto-Pigeon server did not pass its readiness check; the page works offline until it answers")
+				}
+			}()
+		}
 	}
 	url := web.URL(listener)
 	fmt.Fprintf(env.Stdout, "companion %s listening on %s\n", env.Version, url)

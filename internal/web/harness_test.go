@@ -151,6 +151,10 @@ type fixtureBackend struct {
 	// textures, when set, is the bundle the texture-export route serves
 	// instead of the default two-WAD one.
 	textures []byte
+
+	// notices, when set, answers AUB's operational-notice route (241).
+	// Unset, the route is a 404, as on a deployment that predates it.
+	notices http.Handler
 }
 
 func (b *fixtureBackend) count() int {
@@ -210,6 +214,10 @@ func (b *fixtureBackend) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if b.notices != nil && path == aub.NoticesPath {
+		b.notices.ServeHTTP(w, r)
+		return
+	}
 	if b.games != nil && (strings.HasPrefix(path, aub.HostedGamePrefix) ||
 		strings.HasPrefix(path, "/api/game-profiles") || strings.HasPrefix(path, aub.ProfileCatalogPrefix)) {
 		b.games.ServeHTTP(w, r)

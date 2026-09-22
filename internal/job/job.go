@@ -71,6 +71,11 @@ type Request struct {
 	// an interrupted job is never re-run in place, it is copied into a new one
 	// so the record of what happened the first time survives.
 	RetryOf string `json:"retry_of,omitempty"`
+	// CorrelationID is the cross-stack correlation id the submitter carried
+	// (header X-Auto-Pigeon-Correlation-Id), if any. NOT persisted — `json:"-"`
+	// — so the record format is unchanged: it lives in the running service
+	// only, long enough for a failure report to carry it.
+	CorrelationID string `json:"-"`
 }
 
 // EnvSource says where one environment variable's value came from.

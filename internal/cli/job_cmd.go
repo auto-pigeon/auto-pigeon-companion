@@ -12,6 +12,7 @@ import (
 
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/binding"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/incident"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
 )
@@ -190,6 +191,10 @@ func openJobs(ctx context.Context, env *Env, started bool, logf func(string, ...
 		// words; `serve` passes a real one, because there the operator has no
 		// other view of what the executor is doing.
 		Logf: logf,
+		// A failed job is reported as `aucom.job_failed` — kind and outcome
+		// only, never the command, its arguments or a path. See
+		// internal/incident/job.go.
+		OnFinished: incident.JobHook(env.incidents(settings), nil),
 	})
 	if err != nil {
 		return nil, settings, err
