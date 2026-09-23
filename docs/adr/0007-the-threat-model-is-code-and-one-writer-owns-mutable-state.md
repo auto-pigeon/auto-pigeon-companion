@@ -5,6 +5,12 @@
 - Affected components: AUCOM
 - Decision owners: `AUCOM/AUT 218`
 
+> **Note, 2026-09-23 ([ADR-0008](0008-the-companion-downloads-no-program.md)):** `catalog-state.json`,
+> `catalog.SaveState` and `internal/catalog` no longer exist — the Companion
+> downloads no program. Section 4 and the `internal/catalog` evidence below are
+> history; the one-writer rule for `config.json` and every other mutable file
+> stands.
+
 ## Context
 
 Two problems arrived together in the hardening pass, and they turn out to be the

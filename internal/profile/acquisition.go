@@ -4,13 +4,9 @@ import "strings"
 
 // How a profile's executables get onto the machine.
 //
-// A profile declares the *choices*, in the order it recommends them. It does
-// not carry a URL, a size or a digest: those belong to the signed acquisition
-// catalogue, which is versioned and revocable independently of the profile. If
-// the download location were in the document, then rotating a mirror or
-// revoking a compromised artifact would mean republishing every profile that
-// pointed at it, and a profile a user had already granted would keep pointing
-// at the old one.
+// A profile declares the *choices*, in the order it recommends them. Every one
+// of them is a program the person already has: the Companion downloads no
+// program (operator, 2026-09-23). See internal/acquire.
 
 // AcquisitionMode is one way to obtain a tool.
 type AcquisitionMode string
@@ -22,8 +18,10 @@ const (
 	AcquireUserPath AcquisitionMode = "user_path"
 	// AcquireSystemPath: found on PATH, by one of the names declared here.
 	AcquireSystemPath AcquisitionMode = "system_path"
-	// AcquireManagedDownload: fetched by the Companion from the signed
-	// catalogue, digest-verified before it is ever executable.
+	// AcquireManagedDownload is LEGACY: a route through the signed catalogue
+	// this Companion no longer has. A document that still lists it is read —
+	// published documents carry it — and the route is never offered or taken;
+	// internal/acquire answers it with ErrNoDownloads.
 	AcquireManagedDownload AcquisitionMode = "managed_download"
 	// AcquireAlreadyInstalled: shipped with a game or another package, found
 	// at a known place relative to a root the user has already configured.
@@ -41,10 +39,8 @@ type AcquisitionOption struct {
 	Title string          `json:"title" aucom:"required"`
 	// Platforms restricts the option. Empty means all of the profile's.
 	Platforms []Platform `json:"platforms,omitempty"`
-	// CatalogPackage names the entry in the signed acquisition catalogue, for
-	// `managed_download`. The catalogue holds the URL, size, digest, signer,
-	// upstream source and corresponding-source offer; the profile holds only
-	// the name of the thing to look up.
+	// CatalogPackage is LEGACY, with `managed_download`: the catalogue entry an
+	// older document named. Read and checked, never looked up.
 	CatalogPackage string `json:"catalog_package,omitempty"`
 	// Commands are the executable names to look for on PATH, for
 	// `system_path`.
@@ -117,14 +113,11 @@ func (a AcquisitionOption) validate(c *collector) {
 	c.child(field("note"), func(c *collector) { checkText(c, a.Note, maxTextLength, false) })
 }
 
-// Permissions returns the permission this acquisition route asks for. Only a
-// managed download asks for anything: the other three routes use something the
-// user already has.
+// permission returns the permission this acquisition route asks for. None
+// does: every route uses something the user already has, and the legacy
+// managed download is never taken.
 func (a AcquisitionOption) permission() (string, Risk, string, bool) {
-	if a.Mode != AcquireManagedDownload {
-		return "", "", "", false
-	}
-	return PermDownload, RiskHigh, "Download a program from the Auto-Pigeon catalogue and run it on your machine.", true
+	return "", "", "", false
 }
 
 // VersionProbe is how the Companion asks an installed tool what version it is.

@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/binding"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
 )
@@ -149,10 +148,8 @@ type ExecutableRecord struct {
 // A tool profile may declare a `version_probe`, and running it would mean
 // starting a process outside the job executor — which ADR-0003 says nothing in
 // this repository does. So the question "which version ran" is answered by
-// evidence instead: the digest of the executable that was started, the
-// catalogue package and version it was installed from, and that package's
-// artifact digest, which a signed catalogue vouched for. That is a stronger
-// answer than a banner string, and it is one nobody can print.
+// evidence instead: the digest of the executable that was started. That is a
+// stronger answer than a banner string, and it is one nobody can print.
 type ToolRecord struct {
 	Profile DocumentRef `json:"profile"`
 	// ToolVersion is the upstream version the *document* describes.
@@ -162,8 +159,6 @@ type ToolRecord struct {
 	ResolvedVersion string `json:"resolved_version,omitempty"`
 	// Acquisition is how the executables got onto this machine.
 	Acquisition profile.AcquisitionMode `json:"acquisition,omitempty"`
-	// Installs is the managed downloads this profile is pinned to.
-	Installs    []binding.PinnedInstall `json:"installs,omitempty"`
 	Executables []ExecutableRecord      `json:"executables,omitempty"`
 }
 

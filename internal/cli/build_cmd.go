@@ -431,9 +431,6 @@ func printBuildOutcome(env *Env, m *build.Manifest) {
 	}
 	for _, tool := range m.Tools {
 		fmt.Fprintf(env.Stdout, "  tool      %s %s via %s\n", tool.Profile.Name, tool.ToolVersion, orNone(string(tool.Acquisition)))
-		for _, install := range tool.Installs {
-			fmt.Fprintf(env.Stdout, "            pinned %s %s %s\n", install.PackageID, install.Version, install.Digest)
-		}
 		for _, exe := range tool.Executables {
 			fmt.Fprintf(env.Stdout, "            %-9s %s\n", exe.Name, orNone(exe.SHA256))
 		}

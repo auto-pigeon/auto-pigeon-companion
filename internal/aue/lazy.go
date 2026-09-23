@@ -9,18 +9,15 @@ import (
 //
 // # Why the server does not resolve at startup
 //
-// Resolving reaches the network: it verifies a catalogue and a compatibility
-// manifest. A local server that did that before it would listen would be a
-// server that starts slowly on a good connection and not at all on a bad one,
-// for a feature the user may never touch in that session. So the server holds
-// one of these, answers "is there an extractor" from [Resolver.Status] — which
-// reads the local cache and the recorded pin and touches nothing — and resolves
-// on the first real invocation.
+// Resolving hashes the bundled executable and runs it once for the protocol
+// handshake. A server that did that before it would listen would pay it for a
+// feature the user may never touch in that session. So the server holds one of
+// these, answers "is there an extractor" from [Resolver.Status] — which runs
+// nothing — and resolves on the first real invocation.
 //
 // The resolution is memoised, including its failure. A server whose extractor
 // could not be resolved must not try again on every request: the failure is a
-// property of this machine's configuration, not of the request, and retrying it
-// per request turns one clear error into a repeated network call.
+// property of this installation, not of the request.
 type LazyRunner struct {
 	Resolver *Resolver
 
@@ -49,18 +46,17 @@ func (l *LazyRunner) Run(ctx context.Context, subcommand string, args ...string)
 }
 
 // Provenance is the resolved runner's, or — before anything has been resolved —
-// what the local status says. It never triggers a resolution: a caller asking
-// where an extractor came from must not cause one to be fetched.
+// what the local status says. It never triggers a resolution.
 func (l *LazyRunner) Provenance() Provenance {
 	if l.runner != nil {
 		return l.runner.Provenance()
 	}
 	status := l.Resolver.Status()
 
-	return Provenance{Mode: status.Mode, Verified: status.Verified, Version: status.Version, Note: status.Note}
+	return Provenance{Mode: status.Mode, Verified: status.Verified, Path: status.Path, Note: status.Note}
 }
 
-// Status is the local, network-free answer.
+// Status is the answer that runs nothing.
 func (l *LazyRunner) Status() Status { return l.Resolver.Status() }
 
 // Available reports whether this Companion has an extractor it could run,

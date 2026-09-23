@@ -3,21 +3,22 @@
 //
 // # What this program is, from an attacker's point of view
 //
-// It downloads programs somebody else wrote, from a catalogue somebody else
-// publishes, and runs them on the user's machine, against files the user
+// It runs programs somebody else wrote — ones the user installed, and the
+// extractor shipped beside it — on the user's machine, against files the user
 // points it at, described by documents the user may have got from a stranger.
-// Then it serves a local HTTP API that can start those programs. Every one of
-// those clauses is an attack surface, and the trust boundaries between them are
-// the whole design.
+// It downloads maps and textures, and no program. Then it serves a local HTTP
+// API that can start those programs. Every one of those clauses is an attack
+// surface, and the trust boundaries between them are the whole design.
 //
 //	the user            trusted. Any process running as them can already read
 //	                    config.json. Nothing here defends against them.
 //	AUB                 authenticates and authorises. It is NOT trusted to
-//	                    decide what runs: it hands out URLs and asset ids, and
-//	                    every byte is verified against a signature chain this
-//	                    machine anchors.
-//	the catalogue       signed, and only as trustworthy as the anchor. Its
-//	                    serials ratchet and its revocations stick, locally.
+//	                    decide what runs: it hands out asset ids and content,
+//	                    never a program, and synced bytes are verified before
+//	                    they are published anywhere.
+//	the extractor       shipped beside the Companion; its digest is checked
+//	                    against the release's bundle manifest, and it must
+//	                    speak a protocol this build drives.
 //	a profile document  UNTRUSTED text. It declares a command; it cannot BE a
 //	                    command. There is no shell anywhere in the executor.
 //	an archive          UNTRUSTED bytes. Every name and every size is checked
@@ -119,7 +120,8 @@ func (r Row) Covered() bool { return len(r.Evidence) > 0 || r.Manual != "" }
 //
 // Ordered by category and then by id, which is display order and also the order
 // somebody reads them in: a document arrives, it names a program, the program is
-// downloaded, an archive is unpacked, a process runs, the API is served.
+// found on this machine, an archive is unpacked, a process runs, the API is
+// served.
 func Matrix() []Row { return append([]Row(nil), rows...) }
 
 // Find returns one row.

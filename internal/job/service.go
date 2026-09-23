@@ -324,7 +324,6 @@ func (s *Service) Submit(request Request) (*Job, error) {
 		ActionTitle:    action.Title,
 		Trust:          entry.Trust,
 		SessionRole:    action.SessionRole,
-		Installs:       s.installs(request.ProfileID),
 		TimeoutSeconds: action.TimeoutSeconds,
 		CreatedAt:      now,
 		Owner:          Owner{PID: os.Getpid()},
@@ -409,7 +408,6 @@ func (s *Service) Preview(request Request) (*Job, error) {
 		ActionTitle:    action.Title,
 		Trust:          entry.Trust,
 		SessionRole:    invocation.SessionRole,
-		Installs:       s.installs(request.ProfileID),
 		TimeoutSeconds: invocation.TimeoutSeconds,
 		Workspace:      s.store.layout(id).Workspace,
 		CreatedAt:      now,
@@ -591,27 +589,6 @@ func (s *Service) authorize(entry CatalogEntry, request Request) error {
 		grant = local.Grant
 	}
 	return profile.Authorize(entry.Profile, entry.Trust, entry.Digest, grant)
-}
-
-// installs is which downloaded packages a job depends on, copied onto the
-// record when it is created.
-//
-// Copied rather than looked up later, for the same reason the profile digest
-// is: the question the record answers is "what did this job run", and a binding
-// can be re-pointed at a different version tomorrow. It is also what keeps a
-// retained job's toolchain out of the cache collector's reach — a record that
-// named nothing would let the evidence for a build outlive the compiler that
-// produced it.
-func (s *Service) installs(profileID string) []string {
-	local, found := s.binding(profileID)
-	if !found || len(local.Installs) == 0 {
-		return nil
-	}
-	digests := make([]string, 0, len(local.Installs))
-	for _, install := range local.Installs {
-		digests = append(digests, install.Digest)
-	}
-	return digests
 }
 
 func (s *Service) binding(profileID string) (binding.LocalBinding, bool) {

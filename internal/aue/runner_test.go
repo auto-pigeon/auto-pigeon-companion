@@ -196,14 +196,12 @@ func TestAnOverrideThatIsNotExecutableIsRefusedWithASentence(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	f := newFixture(t)
 	for name, path := range map[string]string{
 		"absent":         filepath.Join(dir, "nothing-here"),
 		"not executable": notExecutable,
 		"a directory":    dir,
 	} {
-		resolver := f.resolver(nil)
-		resolver.Override = path
+		resolver := &aue.Resolver{Dir: t.TempDir(), Override: path}
 		if _, err := resolver.Resolve(context.Background()); err == nil {
 			t.Errorf("%s: accepted", name)
 		}

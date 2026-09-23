@@ -23,7 +23,7 @@ func (r *run) laneCompile(ctx context.Context) Lane {
 	if !r.compilersBound {
 		lane.State = NotAvailable
 		lane.Reason = "no EricW build is bound on this machine, so there is nothing to compile with. " +
-			"Name one with --tool-path, or run where a managed artifact can be installed."
+			"Name one with --tool-path."
 		return lane
 	}
 

@@ -151,5 +151,8 @@ and a deliberately differently-spelled user-authored equivalent and compares
   `internal/tools` and `internal/launch` onto it rather than beside it.
 - `AUCOM 206` adds the signed acquisition catalogue the `managed_download`
   mode names.
+
+> **Note, 2026-09-23 ([ADR-0008](0008-the-companion-downloads-no-program.md)):** that catalogue was
+> later removed; `managed_download` is a legacy mode, read and never taken.
 - `AUCOM 207` and `AUCOM 209` replace the built-in samples with qualified
   EricW and engine profiles.

@@ -169,8 +169,8 @@ func (s Service) Grant(id, digest string) (Decision, error) {
 		local.ProfileDigest = entry.Digest
 		local.Trust = entry.Trust
 		if local.Acquisition == "" {
-			// The document is here and nobody downloaded it against the
-			// catalogue, which is what `user_path` means. Recorded rather than
+			// The program is one the person has, which is what `user_path`
+			// means — and nothing else exists any more. Recorded rather than
 			// left empty so a binding written by an approval is the same shape
 			// as one written by a bind.
 			local.Acquisition = profile.AcquireUserPath

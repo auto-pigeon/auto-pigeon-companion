@@ -24,9 +24,9 @@ func TestAChangeByAnotherInstanceIsNotUndoneByThisOne(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A terminal, which read the file before that and knows nothing about it,
-	// points the machine at a catalogue.
+	// changes the job concurrency.
 	settings, err := Update(path, func(current *Config) error {
-		current.CatalogBaseURL = "https://catalogue.invalid/aucom/"
+		current.JobConcurrency = 3
 		return nil
 	})
 	if err != nil {
@@ -35,7 +35,7 @@ func TestAChangeByAnotherInstanceIsNotUndoneByThisOne(t *testing.T) {
 	if settings.Session.Token == "" {
 		t.Error("the session another instance stored was erased")
 	}
-	if settings.CatalogBaseURL == "" {
+	if settings.JobConcurrency != 3 {
 		t.Error("this instance's own change was not written")
 	}
 
@@ -43,7 +43,7 @@ func TestAChangeByAnotherInstanceIsNotUndoneByThisOne(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.Session.Email != "user@example.invalid" || loaded.CatalogBaseURL == "" {
+	if loaded.Session.Email != "user@example.invalid" || loaded.JobConcurrency != 3 {
 		t.Errorf("the file on disk lost one of the two changes: %+v", loaded)
 	}
 }

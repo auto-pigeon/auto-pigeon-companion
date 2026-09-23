@@ -44,11 +44,10 @@ func TestAUBResolution(t *testing.T) {
 func TestSaveLoadRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nested", "config.json")
 	want := Config{
-		AUBBaseURL:   "https://aub.example",
-		Port:         9000,
-		ToolCacheDir: filepath.Join("/tmp", "tools"),
-		GameRoots:    map[string]string{"quake": "/games/quake"},
-		Session:      Session{Token: "token", Email: "a@example", Expires: time.Now().Add(time.Hour).Round(time.Second)},
+		AUBBaseURL: "https://aub.example",
+		Port:       9000,
+		GameRoots:  map[string]string{"quake": "/games/quake"},
+		Session:    Session{Token: "token", Email: "a@example", Expires: time.Now().Add(time.Hour).Round(time.Second)},
 	}
 
 	if err := SaveTo(path, want); err != nil {
@@ -58,7 +57,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadFrom: %v", err)
 	}
-	if got.AUBBaseURL != want.AUBBaseURL || got.Port != want.Port || got.ToolCacheDir != want.ToolCacheDir {
+	if got.AUBBaseURL != want.AUBBaseURL || got.Port != want.Port {
 		t.Errorf("round trip lost fields: %+v", got)
 	}
 	if got.GameRoots["quake"] != "/games/quake" {
@@ -117,28 +116,6 @@ func TestSessionValid(t *testing.T) {
 		if got := testCase.session.Valid(); got != testCase.want {
 			t.Errorf("%s: Valid() = %v, want %v", name, got, testCase.want)
 		}
-	}
-}
-
-func TestToolCacheHonoursTheOverride(t *testing.T) {
-	settings := Default()
-	settings.ToolCacheDir = "/custom/tools"
-	got, err := settings.ToolCache()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != "/custom/tools" {
-		t.Errorf("ToolCache() = %q", got)
-	}
-
-	defaulted, err := Default().ToolCache()
-	if err != nil {
-		t.Fatal(err)
-	}
-	// The tool cache belongs under the OS cache directory, not the config
-	// directory — downloaded tool binaries are re-fetchable content.
-	if base, err := os.UserCacheDir(); err == nil && filepath.Dir(filepath.Dir(defaulted)) != base {
-		t.Errorf("default tool cache %q is not under %q", defaulted, base)
 	}
 }
 

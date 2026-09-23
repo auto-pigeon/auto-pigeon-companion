@@ -2,9 +2,9 @@
 
 The local Auto-Pigeon runtime: one MIT-licensed desktop application that signs
 in against **AUB** ([auto-pigeon-backend][aub], a PocketBase instance), builds
-Quake maps with external map-building tools, inspects them by downloading,
-verifying and driving **AUE** ([auto-pigeon-extractor][aue]) as a separate
-process, and launches games.
+Quake maps with external map-building tools you install yourself, inspects them
+by driving **AUE** ([auto-pigeon-extractor][aue]) — shipped beside it in a
+release, verified, and run as a separate process — and launches games.
 
 It runs as a local web app in the browser you already have, or headless from
 the command line. Both surfaces are the same binary.
@@ -15,14 +15,15 @@ the command line. Both surfaces are the same binary.
 > action becomes a supervised process with a workspace, bounded logs, collected
 > artifacts and a record that survives a crash.
 >
-> **A Quake 1 toolchain is qualified and acquirable.** `catalog/` pins
-> ericw-tools **v0.18.1** — four archives, each by size and SHA-256 — and
-> `companion acquire install ericw-tools.q1` downloads, verifies and installs
-> it against the signed catalogue. The Linux archive's digest is the same one
-> `auto-pigeon-tools` pinned as its own compiler oracle, so what the Companion
-> downloads and what the acceptance gates are measured against are the same
-> bytes. The Quake II package in that document is a **2.0.0-alpha7
-> pre-release**, because Quake II support exists nowhere else.
+> **The Companion downloads no program** (operator decision, 2026-09-23). A
+> Quake 1 toolchain is qualified — ericw-tools **v0.18.1**, the version
+> `auto-pigeon-tools` measures its acceptance gates against — but you get it
+> from its homepage, unpack it, and point the profile at the folder
+> (`companion acquire resolve … --bind`, or Profiles › Configure). The Quake II
+> profile names ericw-tools **2.0.0-alpha7**, a pre-release, because Quake II
+> support exists nowhere else. The extractor (AUE) ships **beside** the
+> Companion in its release instead of being downloaded — see
+> [Extractor](#extractor).
 >
 > **The launch-configuration stub is retired** (`NEW_244D`). `companion launch`
 > and the page's `/api/launch` routes read a placeholder configuration that
@@ -48,8 +49,8 @@ There is no GUI toolkit and no embedded browser engine. The binary:
 - serves a frontend of plain HTML/CSS/JS compiled in with `//go:embed` — no
   npm, no bundler, no build step;
 - opens that URL in whatever browser the user already has installed;
-- obtains those programs by one of four declared routes, of which the only one
-  that downloads anything goes through a signed, revocable catalogue — see
+- finds those programs by one of three declared routes — a folder you chose,
+  your `PATH`, or a game's own copy — and downloads none of them — see
   [Acquiring tools](#acquiring-tools);
 - runs every external program through one supervised job runtime, which the
   page and the command line both drive — see [Jobs](#jobs);
@@ -74,8 +75,9 @@ Dependencies: none. `go.mod` lists no third-party modules and there is no
 CLI dispatcher and the AUB REST client.
 
 Neither AUE nor any map-building tool is imported as a Go library, and neither
-is compiled into this binary. Both are separate programs, obtained separately
-against a signed catalogue and reached through `os/exec`. That is an
+is compiled into this binary. Both are separate programs reached through
+`os/exec`: the extractor is shipped beside the Companion as its own file in a
+release bundle, and the map tools are ones you install yourself. That is an
 architectural boundary, not an implementation detail: it is what keeps this
 repository MIT while AUE is AGPL-3.0 and the map tools are GPL-2.0. See
 [THIRD_PARTY_NOTICES.md][notices].
@@ -187,12 +189,9 @@ a job record, to a build manifest or to any log line, and the GUI's own
 {
   "aub_base_url": "https://aub.example",
   "port": 8789,
-  "tool_cache_dir": "",
   "jobs_dir": "",
   "profiles_dir": "",
   "asset_cache_dir": "",
-  "catalog_url": "https://catalog.example/auto-pigeon/",
-  "catalog_anchors_path": "/etc/auto-pigeon/anchors.json",
   "job_concurrency": 0,
   "game_roots": { "quake": "/games/quake" },
   "incident_dsn": "",
@@ -206,6 +205,10 @@ which environment, when `AUCOM_INCIDENT_DSN` / `AUCOM_INCIDENT_ENVIRONMENT` do n
 — see [Operational notices and incident reports](#operational-notices-and-incident-reports).
 Both are empty by default, and empty means nothing is sent anywhere.
 
+An older `config.json` may still carry `tool_cache_dir`, `catalog_url` and
+`catalog_anchors_path`. They are read and ignored: the Companion downloads no
+program, so it has no tool cache and no acquisition catalogue to point them at.
+
 Three more files sit beside it, and each is somewhere different for a reason:
 
 | What | Where | Why there |
@@ -214,9 +217,6 @@ Three more files sit beside it, and each is somewhere different for a reason:
 | `profiles/` | the config directory | an imported profile is something you chose and reviewed |
 | `jobs/` | the *cache* directory | job records, logs and published artifacts are reproducible; clearing caches loses build history, not work |
 | `api-token` | the config directory, while a server runs | mode 0600, deleted on shutdown — see [HTTP API](#http-api) |
-| `catalog-state.json` | the config directory | the highest catalogue serial accepted and every revocation ever seen — see [Acquiring tools](#acquiring-tools) |
-| `license-acceptance.json` | the config directory | which licence notices you have been shown |
-| `tools/` | the *cache* directory | downloaded packages, re-fetchable by definition |
 | `assets/` | the *cache* directory | verified copies of AUB assets — re-fetchable, and a build that pinned one names it in its manifest |
 
 `jobs_dir` and `profiles_dir` override the first two paths, as do
@@ -286,7 +286,7 @@ needs neither. **It may set `AUCOM_AUB_BASE_URL`, `AUCOM_INCIDENT_DSN` and
 `AUCOM_INCIDENT_ENVIRONMENT` and nothing else** — two addresses and a label a
 local stack's launcher writes — and a `.env`
 lying in whatever directory a terminal happened to be in must not be able to
-move the catalogue's trust anchors, point at an unverified extractor or relocate
+point at an unverified extractor or relocate
 the job store, so any other key is named in a warning and ignored. The real
 environment wins over the file. Nothing in it is expanded or executed. The GUI's
 **Settings** area shows the address as coming from the environment when it was
@@ -300,13 +300,11 @@ supplied this way, and is still where a person without a checkout sets it.
 | `AUCOM_PORT` | `companion serve` | the GUI port when `--port` is not given; set by the `config.json` beside the executable |
 | `AUCOM_ENV_FILE` | `cmd/companion` | an optional development `.env` to read instead of `./.env` — see above |
 | `AUCOM_PASSWORD` | `companion auth login` | password for a scripted login |
-| `AUCOM_AUE_BINARY` | `internal/aue` | an on-disk AUE to use instead of the verified one — a local, **unverified** development override |
+| `AUCOM_AUE_BINARY` | `internal/aue` | a development build's extractor, used instead of the one shipped beside the Companion — a local, **unverified** override with no digest or protocol check; see [Extractor](#extractor) |
 | `AUCOM_JOBS_DIR` | `internal/config` | where job records, logs and artifacts live |
 | `AUCOM_PROFILES_DIR` | `internal/config` | where imported profile documents are read from |
 | `AUCOM_ASSET_CACHE_DIR` | `internal/config` | where assets synced from AUB are cached |
-| `AUCOM_CATALOG_URL` | `internal/config` | where the signed acquisition catalogue is fetched from |
-| `AUCOM_CATALOG_ANCHORS` | `internal/config` | the file holding the catalogue's trust anchors |
-| `AUCOM_OFFLINE` | `internal/config` | forbid every network access; installed packages stay usable |
+| `AUCOM_OFFLINE` | `internal/config` | forbid every network access (shown in **Settings**); installed tools stay usable, because nothing the Companion runs is downloaded |
 | `AUCOM_INCIDENT_DSN` | `internal/incident` | where incident reports go (a GlitchTip DSN); unset means nothing is sent |
 | `AUCOM_INCIDENT_ENVIRONMENT` | `internal/incident` | `development`, `production` or `test`; unset is `production` for a stamped release, `development` otherwise |
 | `AUCOM_E2E_FAULTS` | `companion dev` | `1` unlocks the controlled faults the end-to-end telemetry test uses; never read from a `.env` |
@@ -572,7 +570,7 @@ than as a colour:
 | Badge | What it means |
 | --- | --- |
 | `builtin` | Shipped inside this build of the Companion. Trusting it is the same act as trusting the program. |
-| `verified` | Signed by an Auto-Pigeon catalogue key, covering this document's exact digest. |
+| `verified` | Signed by an Auto-Pigeon catalogue key, covering this document's exact digest. The catalogue was removed on 2026-09-23 and this build checks no such signature, so today it awards this state to nothing; the state stays so records that carry it still read. |
 | `community` | Came from somewhere else. It may be excellent; nothing here knows. |
 | `local` | Written or edited on this machine, or found in your profile folder. Not a synonym for safe. |
 
@@ -601,6 +599,63 @@ template**, which is how you see what you changed rather than what you meant to.
 That view is also the import and export path: paste a profile somebody sent you,
 press *Check this document*, read what it asks for, and install it. Setting up an
 engine nobody anticipated needs no change to this program's source.
+
+#### Homepage
+
+Engine and build-tool cards in **Profiles** carry a **Homepage** button, top
+right, that opens the program's own site — where you get the program, since the
+Companion downloads none. It is the document's `source.homepage`, so a card
+without one shows no button. Step 2 of **New profile** has a **Homepage** field,
+prefilled from the template and editable; it must be an `https://` URL, and the
+Companion refuses anything else rather than storing it. The same field over HTTP:
+
+```console
+$ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/profiles/compose \
+    -d '{"template":"auto-pigeon.engine.quakespasm","id":"me.engine.my-quake",
+         "name":"My Quake build","version":"1.0.0","runtime":"my-quake",
+         "engine_version":"1.2.3","executables":{"engine":"my-quake{platform.exe_suffix}"},
+         "actions":["play_map","play_package"],
+         "homepage":"https://example.org/my-quake"}' | grep -o '"homepage":"[^"]*"'
+"homepage":"https://example.org/my-quake"
+
+$ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/profiles/compose \
+    -d '{"template":"auto-pigeon.engine.quakespasm","homepage":"ftp://example.org/"}' | grep -o '"error":"[^"]*"'
+"error":"profile: source.homepage: is not an https URL — use an https:// URL"
+```
+
+`GET /api/v1/profiles` and `GET /api/v1/profiles/templates` carry `homepage` on
+every item that has one — for the built-in ericw-tools profiles that is
+`https://ericwa.github.io/ericw-tools/`.
+
+**Changing it later.** A profile's own page (**Profiles › Configure › <name>**)
+has a **Homepage** section. For a profile of your own it is a field and **Save
+homepage**. Saving writes `source.homepage` and moves the patch version on
+(1.0.0 → 1.0.1), because a document's bytes may not change under the same
+version. The new version has a new digest, so it has to be **approved again**
+before it runs. Nothing it may do changes, and the review shows that. A built-in
+profile is part of the program and cannot be edited. Its section shows the
+homepage and **Make your own copy**, which opens New profile on that template
+(`?view=new-profile#new-profile/<id>`) with the Homepage field ready to change.
+The same, from a terminal and over HTTP:
+
+```console
+$ companion toolchain homepage example.andrea.q1-compile https://example.org/q1-compile
+example.andrea.q1-compile 0.3.0 → 0.3.1: homepage https://example.org/q1-compile
+The document changed, so it has to be approved again before it runs:
+  companion toolchain review example.andrea.q1-compile
+  companion toolchain grant example.andrea.q1-compile --digest=sha256:b1c0ce5a… --approve
+
+$ companion toolchain homepage example.andrea.q1-compile --clear       # remove it
+
+$ companion toolchain homepage auto-pigeon.engine.vkquake https://example.org/x
+error: auto-pigeon.engine.vkquake shipped with the Companion, so its document cannot be edited; make your own toolchain from it (New profile) and give that one a homepage
+
+$ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/profiles/me.engine.my-quake/homepage \
+    -d '{"homepage":"https://example.org/my-quake"}' | grep -o '"version":"[^"]*"\|"was_version":"[^"]*"\|"authorized":[a-z]*'
+"authorized":false
+"version":"1.0.1"
+"was_version":"1.0.0"
+```
 
 ### Choosing files without giving the browser your disk
 
@@ -710,28 +765,27 @@ usage:
   companion <command> [arguments]
 
 commands:
-  serve [--port <n>] [--open] [--debug]                                                                 run the local GUI server without opening a browser
-  auth login [--email <address>] | status | logout                                                      authenticate against auto-pigeon-backend
-  aub capabilities | catalog | show | revisions | sync | cached | verify | export | clean               browse auto-pigeon-backend's assets and sync exact revisions to this machine
-  job run | preview | list | show | logs | cancel | retry | artifacts | profiles                        run a profile action as a supervised job, and inspect what ran
-  build run | preview | list | show | pipelines                                                         build a map through a pipeline: several supervised jobs, wired, with a manifest
-  package targets | preview | create | inspect | verify | extract                                       build a PAK or PK3 from what a build produced, and read one somebody else made
-  toolchain validate | show | canonicalize | digest | diff | list | schema | review | grant | withdraw  read, check and compare tool, engine and pipeline toolchains, and approve one to run
-  acquire plan | install | accept | list | verify | use | gc | resolve                                  obtain a toolchain's programs from the signed catalogue, and manage the cache
-  catalog keygen | sign | verify | show | status | release                                              sign, verify and inspect the acquisition catalogue, its keyring and its compatibility manifest
-  engine list | show | detect | bind | check | preview | run | stage | unstage                          set up a Quake engine you already have, and start it as a supervised job
-  game list | show | link | join | preview | host | stop                                                find a game somebody is hosting and join it, or advertise one of your own
-  launch (retired)                                                                                      retired: it read a placeholder launch config; use `engine run <profile> --action play_map`
-  extractor status | plan | install | version                                                           obtain and run the separately licensed auto-pigeon-extractor (AUE)
-  feedback compatibility --game <family> --summary <text> [--share <what>]                              report that a work-in-progress game did not do what you expected — nothing is attached unless you say so
-  uri status | register | unregister                                                                    see, set or remove this machine's handler for autopigeon:// links
-  security matrix | residual | audit                                                                    the threat model, the risks accepted with it, and what this build is made of
-  release sbom | checksums                                                                              the documents a release ships beside its binaries
-  uninstall [--purge --confirm]                                                                         show what this program keeps on this machine, and delete it
-  acceptance run | verify | lanes | schema | fixture | noise                                            the native operator acceptance kit, on the machine an artifact is for
-  dev fault job|readiness [--correlation-id <id>] [--aub <url>] [--bound <duration>]                    end-to-end test controls; refused unless AUCOM_E2E_FAULTS=1
-  migrate                                                                                               fold Launcher and older Companion configuration into the current one
-  version                                                                                               print the build version
+  serve [--port <n>] [--open] [--debug]                                                                            run the local GUI server without opening a browser
+  auth login [--email <address>] | status | logout                                                                 authenticate against auto-pigeon-backend
+  aub capabilities | catalog | show | revisions | sync | cached | verify | export | clean                          browse auto-pigeon-backend's assets and sync exact revisions to this machine
+  job run | preview | list | show | logs | cancel | retry | artifacts | profiles                                   run a profile action as a supervised job, and inspect what ran
+  build run | preview | list | show | pipelines                                                                    build a map through a pipeline: several supervised jobs, wired, with a manifest
+  package targets | preview | create | inspect | verify | extract                                                  build a PAK or PK3 from what a build produced, and read one somebody else made
+  toolchain validate | show | canonicalize | digest | diff | list | schema | review | grant | withdraw | homepage  read, check and compare tool, engine and pipeline toolchains, and approve one to run
+  acquire resolve                                                                                                  find a toolchain's programs on this machine (a folder, PATH, or a game's own copy); nothing is downloaded
+  engine list | show | detect | bind | check | preview | run | stage | unstage                                     set up a Quake engine you already have, and start it as a supervised job
+  game list | show | link | join | preview | host | stop                                                           find a game somebody is hosting and join it, or advertise one of your own
+  launch (retired)                                                                                                 retired: it read a placeholder launch config; use `engine run <profile> --action play_map`
+  extractor status | version                                                                                       the separately licensed auto-pigeon-extractor (AUE) shipped beside this program
+  feedback compatibility --game <family> --summary <text> [--share <what>]                                         report that a work-in-progress game did not do what you expected — nothing is attached unless you say so
+  uri status | register | unregister                                                                               see, set or remove this machine's handler for autopigeon:// links
+  security matrix | residual | audit                                                                               the threat model, the risks accepted with it, and what this build is made of
+  release sbom | checksums                                                                                         the documents a release ships beside its binaries
+  uninstall [--purge --confirm]                                                                                    show what this program keeps on this machine, and delete it
+  acceptance run | verify | lanes | schema | fixture | noise                                                       the native operator acceptance kit, on the machine an artifact is for
+  dev fault job|readiness [--correlation-id <id>] [--aub <url>] [--bound <duration>]                               end-to-end test controls; refused unless AUCOM_E2E_FAULTS=1
+  migrate                                                                                                          fold Launcher and older Companion configuration into the current one
+  version                                                                                                          print the build version
 ```
 
 Exit codes: `0` success, `1` the operation failed, `2` the invocation was wrong.
@@ -1097,8 +1151,7 @@ $ companion build run --pipeline auto-pigeon.q1.normal \
 
 build 20260907T020638Z-6a2b0ee8 — succeeded
   pipeline  auto-pigeon.q1.normal 1.0.0 (builtin)
-  tool      ericw-tools 0.18.1 (Quake 1) 0.18.1 via managed_download
-            pinned ericw-tools.q1 0.18.1 sha256:986531ff66d692fa732b7f75a6c871dcbd152b98721d1c2475b76d3367f040e2
+  tool      ericw-tools 0.18.1 (Quake 1) 0.18.1 via user_path
             qbsp      sha256:8000b646b0af045974ca3997354227d215bd4ea384603d93545d72a34f15839b
             vis       sha256:4aef44413b7c6fd63411d8b32e1d4ad6a10944194b972754f69e80cd901a64c3
             light     sha256:bb150b6a105eff3adf843280676efb8b6341fc743dd8f2ca97656fb9064c3350
@@ -1499,9 +1552,8 @@ under *Quake III — work in progress*.
 
 `q1tools` and QPakMan are perfectly good **interactive** PAK tools, and if you
 want to browse an archive, drag files around and rebuild it by hand, use one of
-them. (Neither is bundled, and neither is pinned here: this repository does not
-carry a URL for a tool it does not download. `AUCOM 217` is the task that gives
-external community tools a catalogue entry of their own.) No q1tools or QPakMan
+them. (Neither is bundled, and neither is pinned here: the Companion downloads no
+program, so it carries no URL to fetch one from.) No q1tools or QPakMan
 code was copied or translated into this repository; the formats here are
 implemented from their published structures.
 
@@ -1909,9 +1961,9 @@ started either way is a job, listed, cancellable and recorded like a compile.
 
 **Auto-Pigeon Extractor is a separate program under its own licence (AGPL-3.0).**
 It is not part of this application, it is not inside this binary, and this
-repository claims no licence over it. It is downloaded against the signed
-catalogue, at the version a signed compatibility manifest names for this
-Companion on this platform, and run as its own process.
+repository claims no licence over it. A release bundle ships it **beside** the
+Companion, as its own file named `auto-pigeon-extractor` (`auto-pigeon-extractor.exe`
+on Windows), and the Companion runs it as its own process. Nothing downloads it.
 
 It used to be embedded — the build copied a platform's AUE binary into
 `internal/aue/embedded/` and `//go:embed` compiled it in. Three things were
@@ -1923,49 +1975,82 @@ wrong with that, and they are different kinds of wrong:
 2. **Verification.** Nothing checked the staged binary. `//go:embed` resolves at
    compile time, so a stale or wrong-platform file shipped silently and failed
    on the user's machine.
-3. **Coupling.** A patched extractor needed a new Companion release.
+3. **Coupling.** The two programs could not be told apart, listed, or replaced
+   separately.
+
+For a while after that it was downloaded at run time against a signed
+catalogue. The operator removed that on 2026-09-23 — *"AUE binary should be
+(will be) built in github CI of AUCOM, inserted in AUCOM and this will appear
+in the github releases … So all the download mechanisms should disappear"* —
+so now it is two files in one release, under two licences, and the release's
+bundle manifest says which is which. See
+[ADR-0008](docs/adr/0008-the-companion-downloads-no-program.md).
 
 ```console
 $ companion extractor status
-extractor: Auto-Pigeon Extractor 1.171, verified
-  required: 1.171 (invocation protocol 1.0 or later)
-
-$ companion extractor plan
-Auto-Pigeon Extractor 1.171, protocol 1.0 or later
-already installed: 1.171 (sha256:49170ba6ee5d2200…)
-
-$ companion extractor install
-Auto-Pigeon Extractor 1.171 (linux/amd64), verified
-/home/you/.cache/auto-pigeon-companion/packages/sha256-49170ba6…/files/auto-pigeon-extractor
-digest  sha256:49170ba6ee5d220011c08ab010eaa84d784190878db5e8b28d311728f12a75f6
-signed by k-9f2a… in catalogue auto-pigeon serial 7
-invocation protocol 1.0 (this build requires at least 1.0)
-licence AGPL-3.0-only — corresponding source: https://github.com/andrea-dintino/auto-pigeon-extractor
-Auto-Pigeon Extractor is a separate program under its own licence. Running it as a subprocess does not make it part of the program that ran it, and does not relicense either one.
+extractor: shipped with this Companion, checked against its bundle manifest
+  /opt/auto-pigeon-companion/auto-pigeon-extractor
 
 $ companion extractor version
-1.171
+0.1.0-dev
 ```
+
+> **Release archives do not carry an extractor yet.** The release workflow does
+> not build AUE: that job is deferred until the repositories move from
+> `andrea-dintino` to the `auto-pigeon` GitHub organisation, because the
+> extractor's repository is private and reading it from this repository's CI
+> needs a token that would have to be replaced after the move. Until then a
+> release bundle's manifest records `"extractor": null` and says why, and on
+> such a machine `companion extractor status` says there is none — see
+> [Releasing](#releasing).
 
 #### There are exactly two ways to an executable
 
 ```text
-managed             a verified cache entry, at the version the manifest names
+bundled             auto-pigeon-extractor[.exe] in the same directory as the Companion's own executable
 developer override  AUCOM_AUE_BINARY, unverified, local, and labelled so
 ```
 
-There is **no third, and no fallback between them.** A managed resolution that
-fails is an error you read; it never quietly becomes an override, and an
-override is never quietly treated as verified.
+There is **no third, and no fallback between them.** A bundled extractor that
+fails its checks is an error you read; it never quietly becomes an override, and
+an override is never quietly treated as verified.
+
+**Bundled.** When a `bundle-manifest.json` beside the Companion lists the
+extractor, its SHA-256 must match the listed digest, and then it is *verified*.
+A mismatch is refused, and so is a manifest that is there but cannot be read — a
+release whose inventory cannot be read is not one to vouch for. A bundled
+extractor that no manifest lists still runs, **unverified**, and says so:
 
 ```console
 $ companion extractor status
-extractor: none — Auto-Pigeon Extractor 1.171 is required and is not installed
+extractor: shipped with this Companion
+  /home/you/companion/auto-pigeon-extractor
+  No bundle manifest beside this Companion lists this extractor, so nothing checked its digest. It still had to pass the protocol check.
 
+$ companion extractor version
+error: aue: /opt/auto-pigeon-companion/auto-pigeon-extractor hashes to sha256:a12e1c42… and this release's bundle manifest lists sha256:0000…; it is not the extractor this release shipped, and it is not run
+```
+
+With no extractor beside it and no override, there is nothing to run, and the
+Companion says what would fix it:
+
+```console
+$ companion extractor status
+extractor: none — no Auto-Pigeon Extractor was shipped beside this Companion (aue: /home/you/companion/auto-pigeon-extractor is not there). A release bundle carries it as auto-pigeon-extractor; a development build can name one with AUCOM_AUE_BINARY
+```
+
+**Developer override.** A development build has no extractor beside it. Point
+at one you built:
+
+```console
 $ AUCOM_AUE_BINARY=../auto-pigeon-extractor/bin/auto-pigeon-extractor companion extractor status
 extractor: UNVERIFIED developer override
   ../auto-pigeon-extractor/bin/auto-pigeon-extractor
-  This extractor was named by AUCOM_AUE_BINARY. Nothing verified it: no catalogue signature, no digest, no compatibility rule. It is a local development override, it is never uploaded or published, and results produced with it are not results a managed extractor produced.
+  This extractor was named by AUCOM_AUE_BINARY. Nothing verified it: no release manifest, no digest, no protocol check. It is a local development override, it is never uploaded or published, and results produced with it are not results the bundled extractor produced.
+
+$ AUCOM_AUE_BINARY=../auto-pigeon-extractor/bin/auto-pigeon-extractor companion extractor version
+warning: This extractor was named by AUCOM_AUE_BINARY. Nothing verified it: no release manifest, no digest, no protocol check. It is a local development override, it is never uploaded or published, and results produced with it are not results the bundled extractor produced.
+0.1.0-dev
 ```
 
 The override exists for development and for a support case where somebody must
@@ -1975,18 +2060,25 @@ it is unverified — including `/api/status`, which carries `aue_verified`
 alongside `aue_available` because *there is one* and *it is the one we vouch for*
 are different facts.
 
+`companion extractor plan` and `companion extractor install` were removed with
+the download. They exit `2` and say why:
+
+```console
+$ companion extractor install
+error: `companion extractor install` was removed: the extractor ships beside the Companion in its release, and nothing downloads it.
+```
+
 #### The protocol handshake, before anything else
 
-A verified executable is not automatically one this build can talk to. The first
+A bundled executable is not automatically one this build can talk to. The first
 thing a resolved runner does is ask it `protocol --json` and compare what it
-reports against the minimum the compatibility manifest declared: **the majors
-must be equal and the minor at least the required one.** A later major is a
-different contract, not a newer version of this one, and running it would mean
-parsing its output against a contract that has been replaced.
-
-That is why the manifest carries `min_protocol` at all. Without it the Companion
-would be trusting a version *number* to imply a contract — exactly the
-assumption a rebuilt or forked extractor breaks.
+reports against the protocol this build drives, compiled in as
+`aue.RequiredProtocol` (`1.0`): **the majors must be equal and the minor at
+least the required one.** A later major is a different contract, not a newer
+version of this one, and running it would mean parsing its output against a
+contract that has been replaced. A digest proves the file is the one the release
+listed; only the handshake proves this Companion can drive it. The developer
+override skips it, which is one of the reasons it is labelled unverified.
 
 #### Every invocation is bounded
 
@@ -2000,23 +2092,9 @@ subprocess is not a trusted producer of unbounded output.
 
 #### Offline
 
-Offline means no network and **no fewer checks**. The requirement comes from
-`extractor-pin.json` — the last one this machine verified, recorded beside
-`config.json` with the catalogue state — and the executable comes from the
-cache, which is re-hashed against its install record on every use. The protocol
-handshake still runs, against the recorded minimum.
-
-A machine that has never resolved a requirement online says so rather than
-guessing:
-
-```console
-$ companion extractor version --offline
-error: catalog: offline: offline, and this machine has no recorded requirement for auto-pigeon.extractor on linux/amd64; run once with the network to resolve one
-```
-
-The fallback to the recorded answer happens **only** because you said
-`--offline`. A verification that failed, a rollback attempt, an expired document
-or an unreachable server is a refusal, and never becomes "use the older answer".
+Nothing about the extractor needs the network: it is a file beside the
+Companion, its digest is checked against a file beside the Companion, and the
+protocol requirement is compiled in. Offline runs every check it runs online.
 
 ## Quake II — work in progress
 
@@ -2039,7 +2117,7 @@ built-in one is.
 
 | | |
 | --- | --- |
-| **Compiler** | `auto-pigeon.ericw-tools.q2` — ericw-tools **2.0.0-alpha7**, a pre-release, pinned by digest in the signed catalogue |
+| **Compiler** | `auto-pigeon.ericw-tools.q2` — ericw-tools **2.0.0-alpha7**, a pre-release — you get it from its homepage and point the profile at it |
 | **Pipelines** | `auto-pigeon.q2.fast-preview`, `auto-pigeon.q2.normal` |
 | **Engines** | `auto-pigeon.engine.yamagi-quake2`, `auto-pigeon.engine.q2-generic`, `auto-pigeon.engine.fteqw-q2` |
 | **Packaging** | the existing `quake2-pak` target |
@@ -2143,9 +2221,10 @@ $ companion build run --pipeline auto-pigeon.q2.normal \
     --input source_map=aub:map/map0000000000001@rev0000000000002#level.map
 ```
 
-The compiler is bound the way any tool is — `companion acquire resolve` for a
-copy you already have, or `companion acquire install` for the pinned
-pre-release — with `game_root` and `content_root` set to your Quake II data and
+The compiler is bound the way any tool is — download the pre-release from
+ericw-tools' homepage yourself, unpack it, and run `companion acquire resolve
+<document> --user-path <dir> --bind` (or choose its folder under Profiles) —
+with `game_root` and `content_root` set to your Quake II data and
 your mod. Then package and launch exactly as for Quake 1:
 
 ```console
@@ -2280,8 +2359,9 @@ it, and it cannot satisfy theirs. Tests fail if either becomes possible.
 
 ### There is no managed download, and that is the answer rather than a gap
 
-Every other tool here is fetched from the signed catalogue and verified before it
-runs. Q3Map2 is not, and the reason is what upstream publishes:
+The Companion downloads no program at all any more — every tool, ericw-tools
+included, is one you install yourself and point a profile at. For Q3Map2 that
+was already true before, and the reason is what upstream publishes:
 
 - the Linux release for `20260114` is a **`.7z` holding exactly one file** — an
   AppImage of the whole NetRadiant editor;
@@ -2292,9 +2372,9 @@ runs. Q3Map2 is not, and the reason is what upstream publishes:
   piece to take.
 
 `AUP/AUCOM 216` says not to install a map editor merely because the release
-bundles one, and this program unpacks zip and tar.gz — not 7z. Rather than
-pretend, the document declares no managed download and says why where you read
-it. Point it at a copy instead:
+bundles one, and the old downloader unpacked zip and tar.gz — not 7z. Rather
+than pretend, the document never declared a managed download and says why where
+you read it. Point it at a copy instead:
 
 ```console
 $ ./NetRadiant-Custom-x86_64.AppImage --appimage-extract      # unpacks; installs nothing
@@ -2388,9 +2468,9 @@ ioquake3 documents: `dedicated 1` for a LAN server and `2` for one listed on the
 public master servers, `net_port`, `sv_pure` and `sv_allowDownload` — the last of
 which is how somebody who does not have your PK3 gets it.
 
-Neither has a managed download. ioquake3 publishes no release and no tag; its
-builds are rolling zips at fixed URLs, and a catalogue entry names a size and a
-digest that a changing URL does not have. Both profiles were written from
+Neither is downloaded — the Companion downloads no program — and ioquake3 could
+not have been pinned anyway: it publishes no release and no tag, and its builds
+are rolling zips at fixed URLs, with no size or digest that stays true. Both profiles were written from
 published documentation; no build of either has been run here, because playing
 Quake III needs a copy of Quake III. **Auto-Pigeon never ships, downloads or
 fabricates it.**
@@ -2570,8 +2650,10 @@ active only once its step has what it needs, and says what is missing when not.
 menu), Build's blocked stage offers **Setup** to the tool's page, and a Live Games
 card whose engine is not set up says **Setup**. That page is where programs are
 named or a folder chosen, where **Look for installed games** fills in the game
-folder, where a catalogue tool is **Downloaded and set up**, and where a profile
-is approved.
+folder, and where a profile is approved. Nothing there downloads a program: a
+tool you do not have yet shows *"Don't have it yet? Get it from its homepage,
+install or unpack it, then choose its folder below"* with a link to the
+profile's homepage.
 
 Live Games is one small card per game with one button — **Join**, or **Setup**
 when this computer cannot play it yet — and no second panel. A card shows the
@@ -3041,8 +3123,9 @@ pipeline auto-pigeon.q1.normal              1.0.0    builtin
 
 **Qualified means two different things here, and the documents say which.** The
 four Q1 tool and pipeline documents are qualified by *measurement*: the version
-is the one this workspace's compiler oracle pinned, the download archives are
-pinned by digest in the catalogue, and what each program does was established by
+is the one this workspace's compiler oracle pinned, the upstream release archives
+it was measured from are recorded by digest in
+[THIRD_PARTY_NOTICES.md][notices], and what each program does was established by
 running it. The seven engine documents are qualified by *documentation* — their
 command lines come from each engine's own published usage, and no build of any
 of them has been run by this project. That is not a footnote: every platform in
@@ -3376,7 +3459,7 @@ The policy:
   obligations. Tying them together would force a migration of your settings
   every time the published format moved. A build reads every binding version it
   lists — 1.0 and 1.1 today, 1.1 having added the record of which downloads a
-  binding depends on — and rewrites a file at the current version the next time
+  binding depends on, a field that is now legacy: read, never written — and rewrites a file at the current version the next time
   it saves one.
 
 ### Profiles configure independent programs; they do not relicense them
@@ -3392,8 +3475,8 @@ and does not distribute. Describing a program is not distributing it.
   not extend to a tool a profile describes, and it is not extended by one. A
   profile's `license` block states the described program's licence, carries its
   notice, and carries the corresponding-source link a copyleft licence needs
-  when a binary is offered for download — so the acquisition path can show all
-  of it before anything is fetched.
+  when a binary is distributed — so the profile page can show all of it
+  beside the program's homepage, before you go and get it.
 - **Approving a profile is not a licence grant and does not change your
   obligations** under the described program's licence. It is your decision to
   let this program run that one.
@@ -3504,375 +3587,92 @@ listing.
 
 ## Acquiring tools
 
-A profile says *how* a tool can be obtained — from `PATH`, from a folder you
-point at, from a copy that came with a game, or by a managed download — and
-never *where from*. If the download location were in the document, then
-withdrawing a compromised build would mean republishing every profile that
-pointed at it, and a profile you had already reviewed and granted would keep
-pointing at the old bytes. Withdrawal has to be faster than republication, so
-the two are separate documents.
+**The Companion downloads no program.** Compilers and engines are programs you
+install yourself — from the project's homepage, a distribution package, a copy
+that came with a game, or your own build — and a profile says where the
+Companion should look for them. The one program a release carries is the
+extractor, and it ships beside the Companion rather than being fetched (see
+[Extractor](#extractor)). This was an operator decision on 2026-09-23, and it
+replaced a signed, revocable acquisition catalogue, managed downloads, a tool
+cache and its garbage collector; see
+[ADR-0008](docs/adr/0008-the-companion-downloads-no-program.md), which
+supersedes [ADR-0004](docs/adr/0004-acquisition-is-verified-or-it-does-not-happen.md).
 
-Where from is the **acquisition catalogue**: a signed, versioned, revocable map
-from a package, a version and a platform to an immutable URL, an exact size, a
-SHA-256 digest, a signer, the upstream project, the licence and the
-corresponding-source offer.
+What the Companion *does* download is content, not programs: maps, textures and
+WADs you sync from auto-pigeon-backend (see [Assets from auto-pigeon-backend](#assets-from-auto-pigeon-backend)),
+and the content a game you join needs. Each of those is checked against the
+digest AUB published for it before anything uses it, and none of it is executed.
 
-The catalogue this project publishes is in [`catalog/`](catalog/), and today it
-carries one package: `ericw-tools.q1` 0.18.1, for linux/amd64, windows/amd64,
-windows/386 and darwin/amd64. There is no arm64 entry on any operating system,
-because upstream published no arm64 build — the profile offers `user_path` there
-instead, which is the honest answer. Inventing a URL for a download nobody
-published would be worse than saying so.
-
-### The four routes
+### The three routes
 
 | Mode | What it trusts | What is checked |
 | --- | --- | --- |
 | `user_path` | you | the files are there, are regular files, and are executable |
 | `system_path` | whoever installed it | the same, after a `PATH` lookup of the names the profile declares |
 | `already_installed` | the game or package that shipped it | the same, under a root you configured, with no escaping it |
-| `managed_download` | the signed catalogue | everything below |
 
-The first three are a *resolution*, not an acquisition: nothing is downloaded,
-so there is nothing to verify against, and saying so is better than theatre.
-`managed_download` is the only route where the Companion decides what to put on
-your disk, and it is the only one with a verification chain.
+All three are a *resolution*, not an acquisition: nothing is downloaded, so
+there is nothing to verify against, and saying so is better than theatre.
 
-```console
-$ companion acquire resolve qbsp.tool.json --mode system_path
-example.qbsp 1.0.0 via system_path
-  found on PATH; whoever installed it is who this machine already trusts
-  qbsp             /usr/local/bin/qbsp
-
-Nothing was recorded. Add --bind to write this into bindings.json.
-```
-
-`--bind` writes the result into `bindings.json`, which is also what records that
-a profile depends on a downloaded package — see [Cache cleanup](#cache-cleanup).
-
-### Trust anchors, keyring, catalogue
-
-Three documents, and only the first is not itself signed:
-
-1. **Trust anchors** — Ed25519 public keys this installation accepts as the root
-   of the catalogue. They come from a file you install: `AUCOM_CATALOG_ANCHORS`,
-   or `"catalog_anchors_path"` in `config.json`.
-2. **The keyring**, signed by the anchors. It says which keys may sign a
-   catalogue, for how long, and which keys are revoked.
-3. **The catalogue**, signed by keys the keyring names.
-
-Two levels rather than one because the two have different lifetimes. A catalogue
-changes whenever a tool is published; a keyring changes when a key does. Signing
-every catalogue with the anchor would mean the anchor's private key is online,
-and an anchor whose private key is online is not something to fall back to.
-
-**No private key is in this repository and none is compiled into this build.** A
-Companion with no anchors configured refuses every managed download and says so,
-rather than performing one unverified:
+`managed_download` — and a route's `catalog_package` — are **legacy**. A profile
+that still declares them, published or written before 2026-09-23, still loads
+and validates, so nothing you already have stops opening; the route is never
+offered, and asking for it is refused:
 
 ```console
-$ companion acquire install example.qbsp
-error: no catalogue trust anchor is configured: set AUCOM_CATALOG_ANCHORS or the "catalog_anchors_path" field in config.json to a keys file, or use an acquisition mode that does not download
-
-Managed downloads are refused until both are configured. Nothing is downloaded
-unverified in the meantime, and the other acquisition modes — a path you choose,
-a command on PATH, a copy that came with a game — do not need either.
+$ companion acquire resolve ericw-tools-q1.tool.json --mode managed_download
+error: auto-pigeon.ericw-tools.q1 offers no "managed_download" route for linux/amd64; it offers: user_path, system_path
 $ echo $?
-1
+2
 ```
 
-### What verification checks
+A document that does still list one gets `acquire: the Companion does not
+download programs; choose the folder you installed it in, or put it on PATH`.
 
-In order, and all of them, every time:
+### Getting ericw-tools
 
-1. **The payload is exactly its own canonical re-encoding.** A document two JSON
-   parsers read differently — a duplicated member, say — is one whose signature
-   covers one reading and whose behaviour is the other.
-2. **At least one signature is by a key permitted to sign this kind of
-   document**, inside its validity window, and not revoked.
-3. **The document has not expired.**
-4. **Its serial is not lower than the highest this machine has accepted.** A
-   correctly signed older catalogue is a replay, not an update.
-5. **Nothing it names is revoked** — including by a revocation this machine saw
-   once and has remembered ever since.
-
-There is no path from a failure at any of those to a download that happens
-anyway, and no flag that turns one off.
-
-### Seeing what a download involves, before it happens
+The built-in `auto-pigeon.ericw-tools.q1` and `auto-pigeon.ericw-tools.q2`
+profiles name their homepage, <https://ericwa.github.io/ericw-tools/>, and it is
+the **Homepage** button on their cards. Download the release for your platform
+there (0.18.1 for Quake 1 — the version the acceptance gates were measured
+against — and the 2.0.0-alpha7 pre-release for Quake II), unpack it, and point
+the profile at the folder: **Profiles › Configure › ericw-tools**, *choose its
+folder*, or from a terminal:
 
 ```console
-$ companion acquire plan example.qbsp
-Example qbsp 1.0.0 (example.qbsp)
-  A stand-in for a real map compiler.
-  licence:  GPL-2.0-or-later — GNU General Public License v2.0 or later
-  terms:    https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
-  source for this binary: https://example.invalid/qbsp/source/1.0.0.tar.gz
-  project:  https://example.invalid/qbsp
-  download: https://catalog.example/example-qbsp-1.0.0-linux-amd64.tar.gz
-  platform: linux/amd64, 144 bytes, tar.gz
-  digest:   sha256:e2df479f8f3071e5c06d0f75aad4257cee9732279b26aa07fd4dd19c5894677d
-  vouched:  key 8a333faed43ed1b9, catalogue example serial 1
+$ companion acquire resolve internal/profile/builtin/ericw-tools-q1.tool.json \
+    --mode user_path --user-path ~/tools/ericw-tools-v0.18.1 --bind
+auto-pigeon.ericw-tools.q1 1.0.0 via user_path
+  a location you chose; nothing has verified it
+  bspinfo          /home/you/tools/ericw-tools-v0.18.1/bin/bspinfo
+  bsputil          /home/you/tools/ericw-tools-v0.18.1/bin/bsputil
+  light            /home/you/tools/ericw-tools-v0.18.1/bin/light
+  qbsp             /home/you/tools/ericw-tools-v0.18.1/bin/qbsp
+  vis              /home/you/tools/ericw-tools-v0.18.1/bin/vis
 
-  Downloaded programs are separate works, obtained from their own publishers and run as separate processes. They are not part of Auto-Pigeon Companion, are not covered by its MIT licence, and keep their own licence and copyright.
+recorded in bindings.json
 ```
 
-Planning fetches and verifies the catalogue and downloads nothing. The URL is
-shown with its query string removed: a pre-signed URL's query string *is* a
-credential, and it never reaches a log, an error, or the stored install record.
+Without `--bind` the same command only reports what it found and records
+nothing. A distribution package that puts the programs on `PATH` is
+`--mode system_path`; a copy under a game's own folder is
+`--mode already_installed --root game_root=<dir>`. Where a program is and
+whether you approved what it does are different questions: `--bind` grants
+nothing, and `companion toolchain grant` is still the only answer to the second.
 
-Where a licence requires that a notice be shown before the program is obtained,
-the plan carries the notice and the install refuses until you have said you read
-it:
+`companion acquire plan`, `install`, `accept`, `list`, `verify`, `use` and `gc`,
+and the whole `companion catalog` command, were removed with the downloads. The
+`acquire` ones exit `2` and say why:
 
 ```console
-$ companion acquire accept example.qbsp
-recorded that you were shown the GPL-2.0-or-later notice for example.qbsp 1.0.0
-
-This is a local note that the notice was shown. It is not a licence, it grants you
-nothing, and it does not change what the licence requires of anyone.
+$ companion acquire install ericw-tools.q1
+error: `companion acquire install` was removed: the Companion downloads no program.
+Install the tool yourself, then point its profile at it (Profiles › Configure, or `acquire resolve`).
 ```
 
-### Installing
-
-```console
-$ companion acquire install example.qbsp
-installed example.qbsp 1.0.0 for linux/amd64
-  digest    sha256:e2df479f8f3071e5c06d0f75aad4257cee9732279b26aa07fd4dd19c5894677d
-  vouched   key 8a333faed43ed1b9, catalogue example serial 1
-  licence   GPL-2.0-or-later
-  tool root ~/.cache/auto-pigeon-companion/tools/entries/sha256-e2df479f…/files/qbsp-1.0.0
-
-Downloaded programs are separate works, obtained from their own publishers and run as separate processes. They are not part of Auto-Pigeon Companion, are not covered by its MIT licence, and keep their own licence and copyright.
-```
-
-What happens between those two lines:
-
-- the download lands in a private staging directory, on nobody's `PATH`, under a
-  size limit and a ten-minute deadline;
-- the exact length is enforced *while* reading, so an unbounded or over-long
-  response is stopped rather than truncated;
-- the digest is checked before anything is opened;
-- an archive is **refused, not sanitized**, if it carries a path that escapes it,
-  an absolute path, a symbolic or hard link, a device or a pipe, a setuid bit, a
-  duplicated member, or more expansion than it declared. An archive that names
-  `../../../.ssh/authorized_keys` meant it; writing it somewhere else would be
-  acting on it anyway;
-- the whole entry is renamed into place in one operation, so a cache entry never
-  exists half-written. Two processes installing the same bytes race for that
-  rename and both end up correct.
-
-The cache is content-addressed by the artifact's digest, which is what lets two
-pinned versions coexist without colliding and makes a rebuilt release published
-under the same version number a *different* entry.
-
-### Verification does not stop at install
-
-The declared executables are re-hashed against the install record every time an
-entry is used, and `companion acquire verify` re-hashes everything, including
-noticing a file that has *appeared*:
-
-```console
-$ companion acquire verify
-example.qbsp 1.0.0: 1 file, unchanged since installation
-```
-
-A cache lives in a directory your own account can write to, and so does
-everything else running as you:
-
-```console
-$ companion acquire use example.qbsp
-error: acquire: a cached file has changed since it was installed: ~/.cache/…/bin/qbsp is 25 bytes and was installed at 34
-
-The cached copy is not the one that was installed. It has not been replaced
-automatically: re-downloading over it would erase the only evidence of what changed.
-Remove the entry deliberately, or investigate it first.
-```
-
-### Rollback and revocation
-
-The highest serial this machine has accepted, and every revocation it has ever
-seen, are kept in `catalog-state.json` — beside `config.json`, **not** in the
-cache. The cache is re-downloadable by definition and clearing it should lose
-nothing but time; this file is a ratchet, and losing it would restore exactly the
-state a replayed old catalogue needs.
-
-```console
-$ companion catalog status
-trust state ~/.config/auto-pigeon-companion/catalog-state.json
-  keyring   example: highest serial accepted 1
-  catalogue example: highest serial accepted 2
-
-Serials only go up and revocations are never forgotten. Deleting this file
-would restore exactly the state a replayed old catalogue needs.
-
-$ companion acquire plan example.qbsp
-error: catalog: rolled back: catalogue example is serial 1 and this machine has already accepted 2; a correctly signed older document is a replay, not an update
-
-This is what a replay of a withdrawn catalogue looks like. It is worth finding out
-where the answer came from before doing anything about it.
-```
-
-Revocation is **sticky**: a revoked key or a withdrawn artifact is recorded the
-first time it is seen and is never forgotten. A later signed document cannot
-un-revoke either, because a revocation that a newer document could reverse would
-be undone by exactly the party you are revoking against. It is also what makes
-revocation reach a tool that is already on disk, and what makes it work with the
-network unplugged.
-
-### Offline
-
-`--offline`, or `AUCOM_OFFLINE=1`, forbids every network access. It changes what
-is *available*, never what is checked. An install record carries what was
-verified and by whom, so using an installed package needs no catalogue at all —
-the digest and revocation checks run exactly as they do online. What offline
-cannot do is obtain something that is not already there, and it says so.
-
-Catalogue expiry is the one rule that reads differently offline, deliberately: it
-bounds how long *new* content may be accepted on a catalogue's word. It is not a
-licence that runs out on a compiler you already have. Refusing to run an
-already-verified tool because the machine has been off the network for a month
-would cost you an afternoon and buy nothing — revocation, which is the mechanism
-that actually withdraws something, keeps working.
-
-### Cache cleanup
-
-`companion acquire gc` removes cache entries that **nothing refers to**, and
-nothing else. Not "older than", not "over a size budget", not "not the newest
-version": every one of those eventually deletes something you deliberately
-pinned.
-
-References come from two places, and both matter. A **binding** is a live
-dependency — a profile bound to a downloaded toolchain stops working the moment
-it is collected — and every version it pins is a reference, which is what
-"preserve multiple pinned versions" means in practice. A **job record** is
-evidence: it says what ran, and a record whose toolchain has been deleted can no
-longer answer the question it was kept for.
-
-```console
-$ companion acquire gc --dry-run
-Nothing was removed: this was a dry run.
-
-keep    example.qbsp 2.0.0 (sha256:…)
-          held by binding example.qbsp
-keep    example.qbsp 1.0.0 (sha256:…)
-          held by binding example.qbsp
-would remove example.other 1.0.0 (sha256:…) — nothing refers to it
-```
-
-### Publishing a catalogue
-
-`companion catalog` is the publisher's side. It is in the shipped binary rather
-than in a script because a signing procedure that is only a paragraph in a README
-stops being true; every rule the verifier enforces is one a publisher has to
-satisfy, and both halves are this program's problem.
-
-**Creating the keys.** Do this once. The anchor key belongs offline — on a
-machine that does not sign catalogues — and the catalogue key on whatever signs
-a release.
-
-```console
-$ companion catalog keygen --role anchor --out anchor.key.json
-wrote anchor.key.json — anchor key 5d97670e1db855a6, private, mode 0600
-
-the public entry to publish (in an anchor file for an anchor key, in the keyring for a catalogue key):
-
-{
-  "key_id": "5d97670e1db855a6",
-  "algorithm": "ed25519",
-  "public_key": "sl2afg2ZixrvdIxfhq66BcZhGX5gIoTCx2NgDjEBSJo=",
-  "role": "anchor",
-  "status": "active",
-  "not_before": "2026-09-07T00:47:28Z",
-  "not_after": "2028-09-07T00:47:28Z"
-}
-```
-
-A key id is **derived** from the key — the first eight bytes of its SHA-256 — and
-never chosen, so a key cannot be published under two names and an entry that
-claims one can be checked against the key it carries. `keygen` refuses to
-overwrite an existing key file: replacing a signing key is never what anybody
-meant.
-
-**Writing the documents.** `keyring.json` names the catalogue keys; `catalog.json`
-names the packages. Put the anchor's public entry in an `anchors.json` and the
-catalogue key's in the keyring.
-
-Each artifact's `signer` names the key id that vouches for it, and an entry
-attributed to a key that did not sign the document it is in is refused. An
-artifact that leaves `signer` out means *whoever signs this*: a key id is
-derived from the key, so a catalogue kept in a repository cannot know one, and
-`catalog sign` fills it in with the signing key. With more than one `--key` it
-refuses instead, because "several keys signed this, and one of them vouches for
-this entry" is a question the publisher has to answer.
-
-This repository's own catalogue lives in [`catalog/`](catalog/) —
-`ericw-tools.catalog.json` pins two packages. `ericw-tools.q1` is the four
-archives upstream published for v0.18.1; `ericw-tools.q2` is the three it
-published for the **2.0.0-alpha7 pre-release**, which is where Quake II support
-lives. Every size and digest was measured by downloading the archive from the
-URL beside it. It is the payload a person reviews in a pull request; the signed
-document is what `catalog sign` makes of it.
-
-The file used to be `ericw-tools-q1.catalog.json` with the id `auto-pigeon.q1`,
-and both were renamed when the Quake II package joined it: the Companion fetches
-**one** catalogue, from one address, so both packages have to live in one
-document, and a document called `q1` that carries a Quake II compiler is a
-document whose name is wrong. The serial ratchet is per id, so the old id's
-history is untouched and an old `auto-pigeon.q1` document is still refused under
-its own name.
-
-**Signing.**
-
-```console
-$ companion catalog sign --key anchor.key.json --out pub/keyring.json keyring.unsigned.json
-wrote pub/keyring.json — a keyring signed by the anchor key, digest sha256:…
-$ companion catalog sign --key catalog.key.json --out pub/catalog.json catalog.unsigned.json
-wrote pub/catalog.json — a catalogue signed by the catalog key, digest sha256:…
-```
-
-The signed payload is canonical bytes carried as base64, because embedded JSON
-does not survive being re-encoded and a signature over a document a proxy
-reformatted covers something else. Signing the wrong kind of document with the
-wrong key is refused here rather than on somebody else's machine:
-
-```console
-$ companion catalog sign --key catalog.key.json keyring.unsigned.json
-error: catalog.key.json holds a catalog key, and this document must be signed by the anchor key
-```
-
-**Checking it before anyone else does.**
-
-```console
-$ companion catalog verify --anchors anchors.json --keyring pub/keyring.json --catalog pub/catalog.json
-keyring   example serial 1, expires 2027-01-01T00:00:00Z
-          signed by bf94be80e19d6d1d
-          keys: 8a333faed43ed1b9
-catalogue example serial 1, expires 2027-01-01T00:00:00Z
-          signed by 8a333faed43ed1b9
-          1 packages, 0 revocations
-  example.qbsp 1.0.0 — Example qbsp [GPL-2.0-or-later] for linux/amd64
-```
-
-Serve both files, plus the artifacts, under one https address, and point clients
-at it with `AUCOM_CATALOG_URL`. The two documents are `keyring.json` and
-`catalog.json` under that address.
-
-**Rotating a key.** Publish a keyring with the old key `retired` and the new one
-`active`, and a higher serial. Retired means superseded, not compromised:
-everything it signed stays signed, it simply stops signing new documents. Keep
-both listed for as long as anything might still be verifying an old catalogue.
-
-**Revoking one.** Publish a keyring with the key `revoked`, a `revoked_at` and a
-`reason`, and a higher serial. Every client that sees it records the revocation
-permanently. To withdraw a *build* rather than a key, add its digest to the
-catalogue's `revocations` with a reason and a date, and raise the serial; that
-reaches machines that already have it installed, because the revocation applies
-on use.
-
-The test keys under `internal/catalog/testdata` are fixtures. They sign nothing
-outside `go test`, and there is no production catalogue key in this repository at
-all.
+Bindings and job records written by an older Companion may carry an `installs`
+field naming a downloaded package. It is still read, so they load, and it is
+never written; build manifests no longer record one.
 
 ## Operational notices and incident reports
 
@@ -4005,7 +3805,7 @@ $ TOKEN=$(cat ~/.config/auto-pigeon-companion/api-token)
 
 $ curl -s -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/status
 {"version":"0.1.0-dev","aub_base_url":"","authenticated":false,
- "platform":"linux/amd64","tool_cache_dir":"/home/you/.cache/auto-pigeon-companion/tools",
+ "platform":"linux/amd64",
  "jobs_dir":"/home/you/.cache/auto-pigeon-companion/jobs","aue_available":false,
  "aue_verified":false}
 
@@ -4052,7 +3852,6 @@ address configured can be given one without editing a file and restarting:
 $ curl -s -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/settings
 {"aub_base_url":"","port":8791,"job_concurrency":0,"aub_effective_url":"",
  "config_path":"/home/you/.config/auto-pigeon-companion/config.json",
- "tool_cache_dir":"/home/you/.cache/auto-pigeon-companion/tools",
  "jobs_dir":"/home/you/.cache/auto-pigeon-companion/jobs",
  "profiles_dir":"/home/you/.config/auto-pigeon-companion/profiles",
  "builds_dir":"/home/you/.cache/auto-pigeon-companion/builds",
@@ -4141,31 +3940,27 @@ $ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" \
 {"actions":[…],"authorized":true,"binding":{"executables":{"engine":"/opt/quakespasm/quakespasm"}, …
 ```
 
-Obtaining a tool's programs. Ask first what this machine can actually do: a
-verified download needs a catalogue trust anchor, a catalogue address, the
-network, and a published build for this platform, and when any of those is
-missing the answer says which one rather than offering a download that would
-refuse. The folder route needs none of them, so it is always offered:
+Pointing a tool at its programs. The Companion downloads none, so this is the
+folder you unpacked from the tool's homepage: `bind` with a `folder` finds every
+program the profile declares under it and records where they are, and a folder
+that is missing one says which. It grants nothing — where a program is and
+whether you approved what it does are different questions, and
+`POST /api/v1/profiles/{id}/grant` is still the only answer to the second:
 
 ```console
-$ curl -s -H "X-AUCOM-Token: $TOKEN"     http://127.0.0.1:8791/api/v1/profiles/auto-pigeon.ericw-tools.q1/acquire
-{"available":false,"reason":"This computer has no catalogue trust anchor configured, so a download
-cannot be verified — and an unverified one is never offered instead.","folder":true,"hint":"choose
-the unpacked ericw-tools folder — the one with bin/qbsp inside it","package":"ericw-tools.q1"}
+$ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" \
+    http://127.0.0.1:8791/api/v1/profiles/auto-pigeon.ericw-tools.q1/bind \
+    -d '{"folder":"/home/you/tools/ericw-tools-v0.18.1"}' | head -c 60
+{"actions":[{"capability":"q1.bsp.compile","description":"qb
 
-$ curl -s -X POST -H "X-AUCOM-Token: $TOKEN"     http://127.0.0.1:8791/api/v1/profiles/auto-pigeon.ericw-tools.q1/acquire -d '{}' | head -c 120
-{"error":"this computer has no catalogue trust anchor configured, so a download cannot be verified;
-choose a folder that already holds the programs instead"}
+$ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" \
+    http://127.0.0.1:8791/api/v1/profiles/auto-pigeon.ericw-tools.q1/bind \
+    -d '{"folder":"/home/you/Downloads"}'
+{"error":"/home/you/Downloads does not hold this profile's programs: missing bin/qbsp, bin/vis, bin/light, bin/bspinfo, bin/bsputil"}
 ```
 
-With an anchor configured, the same POST downloads the package the signed
-catalogue names, checks its size and digest against it, unpacks it, finds the
-declared programs and records where they are. A licence that requires a notice
-is refused once with the notice attached — `{"needs_acceptance":true,...}` —
-and accepted on the second call with `{"accept_license":true}`. It grants
-nothing: where a program is and whether you approved what it does are different
-questions, and `POST /api/v1/profiles/{id}/grant` is still the only answer to
-the second.
+The `/api/v1/profiles/{id}/acquire` routes that used to download and install a
+tool were removed with the downloads, and answer `404`.
 
 Writing a profile. The wizard's forms post fields; the Companion composes,
 validates and digests the document and returns it with a normalized diff against
@@ -4238,16 +4033,15 @@ is completed rather than abandoned.
 | `/api/v1/profiles/{id}` | GET | one profile, its permissions, and this machine's binding |
 | `/api/v1/profiles/{id}/document` | GET | export: the canonical bytes its digest covers |
 | `/api/v1/profiles/validate` | POST | check a document without importing it |
-| `/api/v1/profiles/compose` | POST | apply the wizard's fields to a template, validate, digest, diff |
+| `/api/v1/profiles/compose` | POST | apply the wizard's fields to a template (including `homepage`, written as `source.homepage`), validate, digest, diff |
 | `/api/v1/profiles/diff` | POST | a normalized diff against the installed document, and whether it escalates |
 | `/api/v1/profiles/import` | POST | write a document into the profile directory. Grants nothing |
-| `/api/v1/profiles/{id}/bind` | POST | where its programs are here, which roots it may reach, and an approval |
-| `/api/v1/profiles/{id}/acquire` | GET | whether a verified download is possible here, and the concrete reason when it is not |
-| `/api/v1/profiles/{id}/acquire` | POST | download, verify, install and record it |
+| `/api/v1/profiles/{id}/bind` | POST | where its programs are here (named one by one, or a `folder` that holds them), which roots it may reach, and an approval |
 | `/api/v1/profiles/{id}/unbind` | POST | forget this machine's setup. Deletes no files |
 | `/api/v1/profiles/{id}/grant` | POST | approve what it asks for, against one exact digest |
 | `/api/v1/profiles/{id}/withdraw` | POST | take that approval back. The paths stay |
 | `/api/v1/profiles/{id}/remove` | POST | delete an imported document. Built-in ones are refused |
+| `/api/v1/profiles/{id}/homepage` | POST | set or clear an imported document's `source.homepage`; the patch version moves and it must be approved again. Built-in ones are refused |
 | `/api/v1/engines` | GET | engine profiles, each with its binding and what is stopping it, per action |
 | `/api/v1/engines/{id}` | GET | one of them |
 | `/api/v1/engines/detect` | GET | game directories that look installed. Proposals; it writes nothing |
@@ -4361,11 +4155,10 @@ call the same function — not an equivalent one.
 | `GET /api/v1/profiles/{id}` | `companion toolchain review <id>` | `job.Catalog`, `profile.Authorize` |
 | `GET /api/v1/profiles/{id}/document` | `companion toolchain canonicalize <file>` | `profile.Canonical` |
 | `POST /api/v1/profiles/validate` | `companion toolchain validate <file>` | `profile.Decode` |
+| `POST /api/v1/profiles/{id}/homepage` | `companion toolchain homepage <id> <url>` | `profile.WithHomepage` |
 | `POST /api/v1/profiles/diff` | `companion toolchain diff <a> <b>` | `profile.DiffProfiles` |
 | `POST /api/v1/profiles/import` | copy the file into the profile folder | — (both grant nothing) |
-| `POST /api/v1/profiles/{id}/bind` | `companion engine bind <id>`, `companion acquire resolve --bind` | `binding.Update` |
-| `GET /api/v1/profiles/{id}/acquire` | `companion acquire plan <package>` | `acquire.Acquirer.Plan` |
-| `POST /api/v1/profiles/{id}/acquire` | `companion acquire resolve <profile.json> --mode managed_download --bind` | `acquire.Acquirer.Resolve`, `binding.Update` |
+| `POST /api/v1/profiles/{id}/bind` | `companion engine bind <id>`, `companion acquire resolve <profile.json> --mode user_path --user-path <dir> --bind` | `binding.Update`, `acquire.Resolve` |
 | `POST /api/v1/profiles/{id}/grant` | `companion toolchain grant <id> --digest=<d> --approve` | `approval.Service.Grant` |
 | `POST /api/v1/profiles/{id}/withdraw` | `companion toolchain withdraw <id> --confirm` | `approval.Service.Withdraw` |
 | `POST /api/v1/profiles/{id}/remove` | delete the file from the profile folder | `binding.Update` |
@@ -4404,8 +4197,8 @@ page, on some other origin, driving the executor.
 
 ## Security, and what it does not solve
 
-This program downloads other people's programs, from a catalogue somebody else
-publishes, and runs them on your machine, against files you point it at,
+This program runs other people's programs on your machine — ones you installed,
+and an extractor shipped beside it under its own licence — against files you point it at,
 described by documents you may have got from a stranger. Then it serves a local
 HTTP API that can start those programs. Every clause there is an attack surface,
 and the threat model is a command rather than a file, because a document nothing
@@ -4417,20 +4210,19 @@ $ ./companion security matrix --category concurrency
 == concurrency ==
 
 T35  Two instances write the same local state and one change disappears
-     at stake:   the catalogue trust state, which is where revocations live
+     at stake:   the binding store, which is where approvals live, and config.json
      vector:     The GUI server and a `companion` invocation in a terminal both read
-                 catalog-state.json, each records a different revocation, both write. Atomic
-                 writes make both succeed and one revocation is gone, with no error anywhere.
-     mitigation: A cross-process lock, and for the trust state a monotone merge under it:
-                 serials take the max, revocations take the union. The window between reading
-                 that file and writing it back spans a network fetch, so a lock alone would not
-                 have been enough.
+                 bindings.json, each changes a different binding, both write. Atomic writes make
+                 both succeed and one change is gone, with no error anywhere — an approval
+                 lost, or one somebody withdrew resurrected.
+     mitigation: A cross-process lock, and every write reads inside it: every write to the
+                 binding store goes through binding.Update, and config.json through
+                 config.Update.
      evidence:  internal/lockfile.TestOnlyOneWriterIsEverInsideTheCriticalSection
+                internal/approval.TestConcurrentGrantsAndWithdrawalsLoseNoUnrelatedBinding
                 internal/config.TestAChangeByAnotherInstanceIsNotUndoneByThisOne
                 internal/config.TestConcurrentUpdatesAllLand
-                internal/catalog.TestARevocationRecordedByAnotherInstanceIsNotOverwritten
-                internal/catalog.TestConcurrentWritersLoseNoRevocation
-                internal/catalog.TestAnOlderSerialCannotBeWrittenBackOverANewerOne
+...
 ```
 
 Every row names the tests that are its evidence, and the build **fails** when a
@@ -4449,8 +4241,8 @@ survives a refactor.
 | | |
 | --- | --- |
 | you | trusted. Any process running as you can already read `config.json`. Nothing here defends against that. |
-| auto-pigeon-backend | authenticates and authorises. **Not** trusted to decide what runs: it hands out URLs and asset ids, and every byte is verified against a signature chain this machine anchors. |
-| the catalogue | signed, and only as trustworthy as the anchor. Its serials ratchet and its revocations stick, locally. |
+| auto-pigeon-backend | authenticates and authorises. **Not** trusted to decide what runs: it hands out URLs and asset ids for content — maps, textures, WADs — never programs, and every byte it sends is checked against the digest it published before anything uses it. |
+| the extractor beside the Companion | a separate program under its own licence. Trusted only when this release's bundle manifest lists its digest and it passes the protocol handshake; the `AUCOM_AUE_BINARY` override is labelled unverified everywhere. |
 | a profile document | **untrusted text.** It declares a command; it cannot *be* one. There is no shell anywhere in the executor. |
 | an archive | **untrusted bytes.** Every name and size is checked against the destination before anything is written. |
 | a tool's output | **untrusted bytes.** Bounded, never re-executed, stripped of control characters before you read it. |
@@ -4481,7 +4273,8 @@ T27  The AUB session token reaches a place a tool or a stranger can read it
 The other three: a join's **endpoint host and port come from AUB** and are not
 independently verified, because there is nothing here to check them against —
 what *is* checked is everything that decides what runs; **no antivirus scanner
-can be driven from CI**, so that row carries a manual procedure with an expected
+can be driven from CI** — the one that matters is the one that holds or
+quarantines the extractor shipped beside the Companion — so that row carries a manual procedure with an expected
 observation instead of a fake; and **releases are unsigned**, which the next
 section is about.
 
@@ -4502,13 +4295,11 @@ an MIT artifact is an honest description of it.
 In this artifact (1)
   auto-pigeon-companion                    MIT
 
-Downloaded at run time, verified against the signed catalogue, run as its own process (2)
-  auto-pigeon.ericw-tools.q1               GPL-3.0-or-later
-                                           source: https://github.com/ericwa/ericw-tools/tree/v0.18.1
-  auto-pigeon.ericw-tools.q2               GPL-3.0-or-later
-                                           source: https://github.com/ericwa/ericw-tools/tree/2.0.0-alpha7
+Shipped beside it in the release, under its own licence, run as its own process (1)
+  auto-pigeon-extractor                    AGPL-3.0-only
+                                           source: https://github.com/andrea-dintino/auto-pigeon-extractor
 
-Programs you already have, which this only configures (13)
+Programs you already have, which this only configures (15)
   auto-pigeon.engine.darkplaces            GPL-2.0-or-later
   ...
 ```
@@ -4587,23 +4378,44 @@ them.
 irrelevant binaries to run one app. `aucom-release.zip` is an operator
 convenience holding the per-platform archives and their checksums.
 
-**Auto-Pigeon Extractor is not inside those archives, today.** It is a separate
-AGPL-3.0 program, and this repository's release may put the two *separately
-built* programs into one archive only when `build/sidecar-pin.json` names an
-exact published extractor version and the exact SHA-256 of each asset.
-`build/bundle-sidecar.sh` implements that, digest check and all, and the pin is
-currently **disabled**: no extractor release has been published to pin, and a
-pin filled in from a branch head or a `latest` URL would be a bundle whose
-contents nobody can state in advance. Until then the Companion obtains the
-extractor the way it always has — against the signed catalogue, at the version a
-signed compatibility manifest names, verified, as a managed install — and every
-archive's `bundle-manifest.json` says so in full.
+**Auto-Pigeon Extractor ships beside the Companion — and is not in these
+archives yet.** It is a separate AGPL-3.0 program, and a release puts the two
+*separately built* programs side by side in one archive: never one inside the
+other. `build/bundle-sidecar.sh` takes an extractor that was **already built**,
+for exactly that platform, from the extractor's own repository, copies it in as
+`auto-pigeon-extractor` (`auto-pigeon-extractor.exe` on Windows) — the name the
+Companion looks for beside itself — and `build/bundle-manifest.py` lists it with
+its SHA-256, its version and licence (`AGPL-3.0-only`) and where its
+corresponding source is. That digest is what the Companion checks before it runs
+the file. Nothing in either script downloads anything:
 
 ```console
-$ unzip -p auto-pigeon-companion-1.90-linux-amd64.zip     auto-pigeon-companion-1.90-linux-amd64/bundle-manifest.json | jq '.extractor, .extractor_absent.reason'
-null
-"No Auto-Pigeon Extractor release has been published yet, so there is no immutable version and no digest to pin. …"
+$ build/bundle-sidecar.sh --platform linux-amd64 --version 1.90 \
+    --binary-dir dist/bin/linux-amd64 --out dist/bundles \
+    --extractor ../auto-pigeon-extractor/dist/auto-pigeon-extractor-linux-amd64 \
+    --extractor-version 0.4.0 \
+    --extractor-source https://github.com/andrea-dintino/auto-pigeon-extractor
 ```
+
+Without `--extractor` the bundle is complete, carries no extractor, and its
+manifest says so. **That is what every release built today looks like**,
+because the release workflow does not build the extractor yet. It is
+deliberately deferred until the repositories move from `andrea-dintino` to the
+`auto-pigeon` GitHub organisation: the extractor's repository is private, and
+reading it from this repository's CI needs a token that would have to be
+replaced after the move. The TODO is at the top of
+`.github/workflows/release.yml`.
+
+```console
+$ tar -xOzf auto-pigeon-companion-1.90-linux-amd64.tar.gz \
+    auto-pigeon-companion-1.90-linux-amd64/bundle-manifest.json | jq '.extractor, .extractor_absent.reason'
+null
+"This bundle was assembled without an Auto-Pigeon Extractor build."
+```
+
+On such a machine `companion extractor status` says there is no extractor, and
+map inspection needs one: a developer can name a build with `AUCOM_AUE_BINARY`
+(see [Extractor](#extractor)).
 
 Nothing in either workflow signs anything. There is no Apple Developer ID and no
 Authenticode certificate for this project, so the artifacts are unsigned, macOS
@@ -4732,14 +4544,9 @@ This user's Auto-Pigeon Companion state:
 
   configuration
     ~/.config/auto-pigeon-companion
-    holds: config.json and the AUB session, the catalogue trust state and its revocations,
-           bindings and grants, licence acknowledgements, imported profiles
+    holds: config.json and the AUB session, bindings and grants, imported profiles (and, from an
+           older version, its catalogue trust state and licence acknowledgements)
     41 files, 184.2 kB
-
-  downloaded tools
-    ~/.cache/auto-pigeon-companion/tools
-    holds: external compilers obtained from the signed catalogue
-    62 files, 148.9 MB
   ...
 
 The program itself is never removed by this command: whatever installed it owns it.
@@ -4747,8 +4554,8 @@ The program itself is never removed by this command: whatever installed it owns 
 Nothing has been deleted. `companion uninstall --purge --confirm` deletes what is listed above.
 ```
 
-What is lost is **decisions as well as content** — granted profiles, the
-catalogue's revocation ratchet, licence acknowledgements — so removing it and
+What is lost is **decisions as well as content** — granted profiles and where
+you told it your tools are — so removing it and
 reinstalling gives you a genuinely fresh machine rather than the same one with a
 cleared cache.
 
@@ -4766,7 +4573,7 @@ $ ./companion uninstall --purge --confirm
 
 removed the autopigeon:// handler
 removed ~/.config/auto-pigeon-companion
-removed ~/.cache/auto-pigeon-companion/tools
+removed ~/.cache/auto-pigeon-companion/assets
 
 3 directories removed. The program itself was not touched.
 ```
@@ -4777,7 +4584,7 @@ removed ~/.cache/auto-pigeon-companion/tools
 $ gofmt -l .
 $ go vet ./...
 $ go test ./...
-$ go test -race ./internal/lockfile/ ./internal/config/ ./internal/catalog/ ./internal/job/
+$ go test -race ./internal/lockfile/ ./internal/config/ ./internal/approval/ ./internal/job/
 $ GOOS=windows GOARCH=arm64 CGO_ENABLED=0 go build ./cmd/companion
 ```
 
@@ -4795,7 +4602,6 @@ $ ../auto-pigeon-tools/scripts/aucom-security.sh check
 == supply-chain ==
   ok   nothing outside the standard library is linked in
   ok   only the Companion is in the artifact, and it is MIT
-  ok   every downloaded copyleft component offers its source — 2 downloaded
 ...
 29 passed, 0 failed, 0 skipped.
 
@@ -4813,16 +4619,17 @@ CI runs the tests on Linux, Windows and macOS, checks `gofmt`, and
 cross-compiles all six targets. It publishes no releases.
 
 CI additionally proves three things about the extractor boundary, because they
-are the ones a change could undo quietly: that nothing stages an extractor
-binary or embeds one, that no executable is committed anywhere in the tree, and
-that the publishing path composes a catalogue package and a compatibility
-component from a release manifest and refuses one offering no corresponding
-source. It reads **no secrets** — the check that keeps it that way is a job of
-its own — because signing a catalogue is a publisher's act performed with a key
-that is not in CI, and a workflow that could do it from a pull request would be
-a workflow that publishes whatever a pull request contains.
+are the ones a change could undo quietly: that nothing embeds an extractor
+in the Companion's own binary, that no executable is committed anywhere in the
+tree, and that the bundling path works both ways — a bundle without an extractor
+says none is inside, and one with an extractor carries it beside the Companion as
+its own file, listed with its digest. It reads **no secrets** — the check that
+keeps it that way is a job of its own — because a workflow that could publish
+from a pull request would be a workflow that publishes whatever a pull request
+contains. That is also why the release workflow does not build the extractor
+yet: see [Publishing a release](#publishing-a-release).
 
-A development build has no extractor installed. Point at a locally built one
+A development build has no extractor beside it. Point at a locally built one
 instead, and note what it says about itself:
 
 ```console
@@ -4840,10 +4647,12 @@ AUE is AGPL-3.0-only and the external map-building tools are GPL — ericw-tools
 binaries are distributed, because they link Embree. All of them are separate
 programs, and none is relicensed by anything here.
 
-**No release of this program contains any of them.** They are obtained from
-their own publishers, verified against a signed catalogue, and run as separate
-processes; the catalogue refuses a copyleft package that offers no
-corresponding source, so the offer travels with every one of them.
+**The map-building tools are never in a release, and the Companion never
+downloads them**: you get them from their own publishers and the Companion runs
+them as separate processes. **AUE is shipped beside the Companion** in a release
+bundle — as its own file, under its own licence, listed in the bundle manifest
+with its corresponding source — and never inside the Companion's binary. (No
+release carries it yet; see [Publishing a release](#publishing-a-release).)
 [THIRD_PARTY_NOTICES.md][notices] sets out what is compiled in, what is run as a
 separate process, and what a release redistributes.
 

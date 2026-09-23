@@ -68,9 +68,7 @@ narrower republication of the same version run unreviewed, which is why
 `TestAChangedDocumentInvalidatesTheGrantEvenWhenItAsksForLess` asserts the
 narrowness first and then the refusal.
 
-**A wrapped `*url.Error` no longer escapes a quote into the address.**
-`catalog.redactField` separates the punctuation from the address before parsing
-and puts it back afterwards, so `…/keyring.json%22:` reads `…/keyring.json:`.
-`RedactURL` still takes an address and still drops userinfo, query and fragment
-unconditionally — do not make it lenient about its input, and do not weaken the
-redaction to tidy a message.
+**The catalogue's URL redaction went with the catalogue (2026-09-23).**
+`catalog.redactField` and `RedactURL` were deleted when the Companion stopped
+downloading programs. Addresses and secrets that reach a job's output are
+redacted by `job.Redactor`; do not weaken it to tidy a message.

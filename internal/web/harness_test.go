@@ -493,7 +493,6 @@ func newMachine(t *testing.T) *machine {
 	settings.JobsDir = filepath.Join(dir, "jobs")
 	settings.ProfilesDir = m.profiles
 	settings.AssetCacheDir = m.assets
-	settings.ToolCacheDir = filepath.Join(dir, "tools")
 	m.settings = settings
 
 	store, err := job.OpenStore(settings.JobsDir)

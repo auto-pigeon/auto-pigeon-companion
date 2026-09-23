@@ -36,20 +36,10 @@ type Override struct {
 	SetAt  time.Time `json:"set_at"`
 }
 
-// PinnedInstall is one managed download this binding depends on.
-//
-// It is recorded for two reasons, and the second is the one that is easy to
-// leave out. The first is provenance: which exact bytes, from which catalogue
-// package and version, this profile is currently bound to. The second is that
-// the cache's garbage collector has to know what is still in use, and the only
-// honest source for that is the set of things that say they are using it. A
-// collector that worked out references by looking at which paths happen to be
-// inside the cache directory would be a collector that deleted a pinned
-// toolchain the day somebody moved their cache.
-//
-// Several may be recorded. The first is the one currently bound; the rest are
-// versions the user asked to keep, and they are references too — that is what
-// "preserve multiple pinned versions" means in practice.
+// PinnedInstall is LEGACY: a managed download a binding written before
+// 2026-09-23 depended on. The Companion downloads nothing any more; the field is
+// still read, because bindings.json is decoded strictly and an existing file
+// must keep loading, and it is never written.
 type PinnedInstall struct {
 	PackageID string `json:"package_id"`
 	Version   string `json:"version"`
@@ -86,8 +76,7 @@ type LocalBinding struct {
 	// by slug. Resolving the slug is an account-and-deployment question, which
 	// is why the answer lives here and the question lives in the document.
 	GameProfileID string `json:"game_profile_id,omitempty"`
-	// Installs is every managed download this binding depends on. See
-	// [PinnedInstall].
+	// Installs is LEGACY and never written. See [PinnedInstall].
 	Installs []PinnedInstall `json:"installs,omitempty"`
 	// Grant is what the user approved, against ProfileDigest.
 	Grant     *profile.Grant `json:"grant,omitempty"`
@@ -261,23 +250,6 @@ func (s *Set) Marshal() ([]byte, error) {
 		s.Bindings[i].SchemaVersion = SchemaVersion
 	}
 	return json.MarshalIndent(s, "", "  ")
-}
-
-// PinnedDigests is every cache entry any binding in this set depends on. It is
-// what the cache's garbage collector asks for.
-func (s *Set) PinnedDigests() []string {
-	var digests []string
-	seen := map[string]bool{}
-	for _, b := range s.Bindings {
-		for _, install := range b.Installs {
-			if !seen[install.Digest] {
-				seen[install.Digest] = true
-				digests = append(digests, install.Digest)
-			}
-		}
-	}
-	sort.Strings(digests)
-	return digests
 }
 
 // Load reads a stored set, refusing unknown members: a binding file this build

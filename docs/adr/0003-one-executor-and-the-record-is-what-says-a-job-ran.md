@@ -156,7 +156,8 @@ page reads from its own markup and a second process reads from a 0600 file.
 
 ## Follow-up work
 
-- `AUCOM 206` gives acquisition a signed catalog; `internal/tools` is the half
+- `AUCOM 206` gives acquisition a signed catalog (removed again by
+  [ADR-0008](0008-the-companion-downloads-no-program.md)); `internal/tools` is the half
   this record left in place.
 - `AUCOM 209` replaces the generated launch profiles with curated engine
   profiles. When it lands, `internal/launch/profile.go` should go, not stay.

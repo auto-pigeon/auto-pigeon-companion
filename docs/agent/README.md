@@ -60,10 +60,15 @@ description of the day it was written, which is the same reason the manifest hol
   `aucom.component-addresses.md`, which is a POINTER: `diff` of that section against the
   workspace-root section of the same name reported **one difference, a trailing blank line**, so
   the module names the authority instead of keeping a second copy.
+  That was true at the split. On 2026-09-23 the operator removed every download mechanism, and the
+  prose under the extractor headings in `aucom.extractor-acquisition` and `aucom.extractor-execution`
+  was rewritten to match — heading lines still verbatim, retired rules marked **Retired
+  2026-09-23** rather than deleted, so a citation still lands somewhere that says what happened.
 - **One section is split by LINE rather than by heading**, and the split falls on its own
-  subsection boundary: §1's acquisition half (the catalogue, the update machinery, the
-  compatibility manifest) is `aucom.extractor-acquisition`, and its execution half (the handshake,
-  offline authority, the invocation bounds, authorization-is-not-verification, publishing) is
+  subsection boundary: §1's acquisition half (originally the catalogue, the update machinery and
+  the compatibility manifest; since 2026-09-23 how the extractor ships beside the Companion and why
+  nothing downloads it) is `aucom.extractor-acquisition`, and its execution half (the handshake,
+  the invocation bounds, and the retired offline/authorization/publishing rules) is
   `aucom.extractor-execution`, which declares the first a prerequisite because a question about
   running an extractor is half answered without knowing how it got here.
 - **The work-in-progress truth for Quake II and Quake III is preserved exactly**, in two modules
@@ -89,7 +94,7 @@ version; this is the shape of the set.
 
 | group | modules |
 | --- | --- |
-| acquiring and running somebody else's program | `aucom.extractor-acquisition`, `aucom.extractor-execution`, `aucom.job-bounds` |
+| finding and running somebody else's program | `aucom.extractor-acquisition`, `aucom.extractor-execution`, `aucom.job-bounds` |
 | profiles, approvals and trust | `aucom.export-gate`, `aucom.approvals`, `aucom.threat-model` |
 | game families and joining | `aucom.quake2-maturity`, `aucom.quake3-maturity`, `aucom.join-readiness` |
 | shipping it | `aucom.release-verification`, `aucom.launcher-merge`, `aucom.component-addresses` |

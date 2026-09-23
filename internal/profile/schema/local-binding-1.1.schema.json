@@ -36,7 +36,7 @@
     },
     "pinnedInstall": {
       "type": "object",
-      "description": "One managed download this binding depends on. The cache's garbage collector keeps every entry any binding names, which is what lets several versions stay pinned at once.",
+      "description": "Legacy: a managed download a binding written before 2026-09-23 depended on. Still read so an existing file loads; never written, because the Companion downloads no program.",
       "additionalProperties": false,
       "required": ["package_id", "version", "digest", "pinned_at"],
       "properties": {

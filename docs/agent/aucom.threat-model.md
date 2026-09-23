@@ -61,12 +61,12 @@ declares the fields it owns. `AUCOM/AUT 228` extended the same rule to
 that file holds the GRANTS, and a lost update there costs an approval or brings
 back one somebody withdrew.
 
-**`catalog.SaveState` merges, and the merge is not optional.** Serials take the
-max, revocations take the union. That is the same ratchet the file already is,
-not a policy on top of it, and it exists because the read-to-write window spans a
-network fetch — a lock alone would either block every instance behind one slow
-server or be released before the write. A corrupt state file fails the WRITE as
-well as the read.
+**`catalog.SaveState` is gone with the catalogue (2026-09-23)**, and with it the
+serial ratchet and the revocation list it merged — the Companion downloads no
+program, so it keeps no catalogue trust state. The lesson it carried still
+binds: a read-modify-write of local state takes the lock and re-reads inside it
+(`config.Update`, `binding.Update`), and threat row T35 is now about exactly
+those two files.
 
 **Zero external Go dependencies is a security property, not an aesthetic.**
 `release.TestThisProgramLinksNoExternalModule` reads the module graph out of the

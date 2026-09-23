@@ -179,9 +179,8 @@ func runServe(env *Env, args []string) int {
 	env.incidentState.transcript = true
 
 	// The extractor runner is built here and resolves LAZILY, so a process that
-	// never touches the extractor never fetches a catalogue — and a server does
-	// not have to reach the network before it can listen. See
-	// internal/aue.LazyRunner.
+	// never touches the extractor never hashes or runs it — and a server does
+	// not have to before it can listen. See internal/aue.LazyRunner.
 	runner := extractorRunner(env, func(format string, args ...any) {
 		fmt.Fprintf(env.Stderr, format+"\n", args...)
 	})

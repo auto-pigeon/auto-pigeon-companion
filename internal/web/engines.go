@@ -151,7 +151,6 @@ func describeBinding(local binding.LocalBinding) map[string]any {
 		"roots":               local.Roots,
 		"resolved_version":    local.ResolvedVersion,
 		"version_checked_at":  local.VersionCheckedAt,
-		"installs":            local.Installs,
 		"overrides":           local.Overrides,
 		"granted":             granted,
 		"granted_at":          grantedAt(local),

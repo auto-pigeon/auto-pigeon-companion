@@ -43,13 +43,16 @@ already reads it, and a surface that had to be told about a new game is a
 surface that would one day not be told.
 
 **There is no managed download for Q3Map2, and that is the decision, not a gap.**
-Upstream's Linux release is a `.7z` holding one AppImage of the whole NetRadiant
-editor; Windows is a 43 MB zip of the same; macOS has nothing; and `q3map2`
-resolves libassimp, libdraco, libminizip and libicu out of the bundle's own
-`../lib`, so there is no smaller artifact to prefer. `internal/acquire` unpacks
-zip and tar.gz. A prompt that adds a `managed_download` here has to add a
-catalogue entry for a map editor first, and `TestQ3Map2DeclaresNoManagedDownloadAndSaysWhy`
-is where it is asked to think about that.
+Since 2026-09-23 there is no managed download for anything — the Companion
+downloads no program, and a `managed_download` route is legacy, read and refused
+(`acquire.ErrNoDownloads`). The Q3-specific reason still stands and still
+matters to a prompt that wants to point users at an artifact: upstream's Linux
+release is a `.7z` holding one AppImage of the whole NetRadiant editor; Windows
+is a 43 MB zip of the same; macOS has nothing; and `q3map2` resolves libassimp,
+libdraco, libminizip and libicu out of the bundle's own `../lib`, so there is no
+smaller artifact to prefer. Users install it themselves and point the profile at
+it (`user_path`, `system_path`). `TestQ3Map2DeclaresNoManagedDownloadAndSaysWhy`
+still fails a document that declares one.
 
 **Q3Map2 is one program with three stage switches**, where the EricW documents
 are several programs. Its capability ids are `q3.bsp.compile`, `q3.bsp.vis` and

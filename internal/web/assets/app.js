@@ -133,12 +133,13 @@
     }
 
     $("extractor-state").textContent = !body.aue_available
-      ? "Map inspection is not installed on this machine. It is a separate, optional program." +
+      ? "Map inspection is not available: no extractor was shipped beside this Companion. It is a separate program in the release." +
         (body.debug ? " Debug mode: set AUCOM_AUE_BINARY to a local build." : "")
       : body.aue_verified
-        ? `An extractor is available and was verified against the signed catalogue (${body.aue_provenance}).`
-        : `An extractor is available but is an UNVERIFIED developer override (${body.aue_provenance}). ` +
-          "Nothing has checked these bytes.";
+        ? "The extractor shipped with this Companion is available, and matches its release's bundle manifest."
+        : body.aue_provenance === "developer_override"
+          ? "An extractor is available but is an UNVERIFIED developer override. Nothing has checked these bytes."
+          : "The extractor shipped beside this Companion is available; no bundle manifest lists it, so nothing checked its bytes.";
     $("extractor-version").disabled = !body.aue_available;
   }
   window.AUCOM.refreshStatus = refreshStatus;

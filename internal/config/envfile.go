@@ -29,8 +29,8 @@ import (
 //     here changes when neither exists.
 //   - **Not a way to set anything.** Only the keys in [DevEnvKeys] are honoured.
 //     A `.env` sitting in whatever directory a terminal happened to be in must
-//     not be able to swap the catalogue's trust anchors, point the extractor at
-//     an unverified binary or relocate the job store; every other key is
+//     not be able to point the extractor at an unverified binary or relocate
+//     the job store; every other key is
 //     reported as ignored, by name, and never applied.
 //   - **Not stronger than the real environment.** A variable already set in the
 //     process wins, so `AUCOM_AUB_BASE_URL=… companion` still means what it

@@ -131,6 +131,9 @@ principle: see below.
 Everything below was measured against the pinned `ericw-tools v0.18.1` Linux
 build, downloaded through the signed catalogue and run through the Companion.
 
+> **Note, 2026-09-23 ([ADR-0008](0008-the-companion-downloads-no-program.md)):** the Companion no longer downloads
+> anything; the same build is now one the user installs and points a profile at.
+
 - **`light` is not bit-reproducible above one thread.** Three runs of one map at
   `-threads 4` produced three different BSPs and three different `.lit` files;
   `-threads 1` produced the same pair three times, and the digest matched the one
@@ -161,10 +164,10 @@ build, downloaded through the signed catalogue and run through the Companion.
 - A tool profile may declare a `version_probe`, and nothing runs one. The
   manifest answers "which version ran" with the executable's digest and the
   catalogue package it was installed from, which is stronger evidence than a
-  banner string — but a probe that never runs is a declared feature that does
+  banner string (build manifests no longer record the catalogue package — ADR-0008) — but a probe that never runs is a declared feature that does
   nothing, and running it means either a second execution path or a way to
   express a probe as an action.
 - There is no HTTP or GUI surface for builds. `companion build` is the whole of
   it.
-- A build directory is never collected. `companion acquire gc` knows about the
-  tool cache; nothing prunes `builds/`.
+- A build directory is never collected; nothing prunes `builds/`. (`companion acquire gc`
+  and the tool cache it pruned were removed by ADR-0008.)

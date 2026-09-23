@@ -188,7 +188,7 @@ func securityAudit(env *Env, args []string) int {
 		byDistribution[component.Distribution] = append(byDistribution[component.Distribution], component)
 	}
 	for _, distribution := range []release.Distribution{
-		release.InArtifact, release.Downloaded, release.UserSupplied,
+		release.InArtifact, release.ShippedBeside, release.UserSupplied,
 	} {
 		group := byDistribution[distribution]
 		if len(group) == 0 {
@@ -210,8 +210,8 @@ func distributionHeading(distribution release.Distribution) string {
 	switch distribution {
 	case release.InArtifact:
 		return "In this artifact"
-	case release.Downloaded:
-		return "Downloaded at run time, verified against the signed catalogue, run as its own process"
+	case release.ShippedBeside:
+		return "Shipped beside it in the release, under its own licence, run as its own process"
 	default:
 		return "Programs you already have, which this only configures"
 	}

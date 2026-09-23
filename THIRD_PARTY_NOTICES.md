@@ -17,9 +17,9 @@ kept apart here on purpose.
 | Go module dependencies | — | none exist | — |
 | `@auto-pigeon/operational-notice-contract` 1.0.0 (`src/index.mjs`, two schema files), from auto-pigeon-libraries | Apache-2.0 | vendored byte for byte into the embedded page (`internal/web/assets/vendor/operational-notice-contract/`) | yes, inside the binary |
 | `@auto-pigeon/incident-contract` data (`incident-codes.json`, `redaction-rules.json`), from auto-pigeon-libraries | Apache-2.0 | embedded byte for byte (`internal/incident/contract/`) | yes, inside the binary |
-| auto-pigeon-extractor (AUE) | **AGPL-3.0-only** | separate process, downloaded at runtime against a signed catalogue | no |
-| ericw-tools 0.18.1 (qbsp, vis, light, bspinfo, bsputil) | **GPL-3.0-or-later** as distributed (GPL-2.0-or-later source) | separate process, downloaded at runtime | no |
-| ericw-tools 2.0.0-alpha7 (the Quake II line) | **GPL-3.0-or-later** as distributed (GPL-2.0-or-later source) | separate process, downloaded at runtime | no |
+| auto-pigeon-extractor (AUE) | **AGPL-3.0-only** | separate process, shipped as its own file (`auto-pigeon-extractor[.exe]`) beside the Companion in a release bundle; today's releases carry none | yes, beside the binary, when a bundle carries it |
+| ericw-tools 0.18.1 (qbsp, vis, light, bspinfo, bsputil) | **GPL-3.0-or-later** as distributed (GPL-2.0-or-later source) | separate process, **obtained by the user** from its homepage; nothing is downloaded | no |
+| ericw-tools 2.0.0-alpha7 (the Quake II line) | **GPL-3.0-or-later** as distributed (GPL-2.0-or-later source) | separate process, **obtained by the user** from its homepage; nothing is downloaded | no |
 | Q3Map2 2.5.17n (NetRadiant-custom `20260114`) | **GPL-2.0-or-later** | separate process, **found by the user**; nothing is downloaded | no |
 | ioquake3, and any id Tech 3 engine | **GPL-2.0-or-later** | separate process, already installed | no |
 | Games the user launches | the user's own | separate process, already installed | no |
@@ -49,9 +49,10 @@ Go module dependencies: none.
 
 A release publishes it as a CycloneDX SBOM
 (`companion release sbom`), listing this module, its empty module graph, and
-every external program the Companion can obtain — each with the relationship it
-has to the artifact, because a component somebody downloads later is not a
-component nobody should be told about.
+every external program the Companion runs or ships beside itself — each with
+the relationship it has to the artifact, because a component shipped beside the
+binary, or installed separately and run by it, is not a component nobody should
+be told about.
 
 ## Auto-Pigeon contract files from auto-pigeon-libraries — Apache-2.0
 
@@ -67,14 +68,26 @@ Tests compare each copy with its source (`TestVendoredNoticeContractIsExactlyAUL
 is compatible with MIT redistribution; its text is at
 https://www.apache.org/licenses/LICENSE-2.0.
 
-## auto-pigeon-extractor (AUE) — AGPL-3.0-only, and why no release contains it
+## auto-pigeon-extractor (AUE) — AGPL-3.0-only, shipped beside the Companion and never inside it
 
 AUE is a **separate program under the GNU Affero General Public License,
 version 3**. It is not part of this codebase, this repository's MIT licence does
 not apply to it, does not relicense it, and cannot.
 
-**No release of the Companion contains it.** That is the answer to what used to
-be an open decision here, and it was settled by `AUE/AUB/AUCOM 211`.
+**A release carries it as its own file, beside the Companion — never inside the
+Companion's executable, and never downloaded.** The operator settled that on
+2026-09-23: *"AUE binary should be (will be) built in github CI of AUCOM,
+inserted in AUCOM and this will appear in the github releases ... So all the
+download mechanisms should disappear."* See
+[ADR-0008](docs/adr/0008-the-companion-downloads-no-program.md).
+
+**Today's release archives contain no extractor, and their manifests say so.**
+Building AUE in this repository's release workflow is deferred until the
+repositories move from `andrea-dintino` to the `auto-pigeon` GitHub
+organisation: the extractor's repository is private, and reading it from this
+repository's CI needs a token that would have to be replaced after the move. A
+bundle assembled without one has `"extractor": null` and an `extractor_absent`
+entry in its `bundle-manifest.json`.
 
 ### The identifier is `AGPL-3.0-only`
 
@@ -88,9 +101,13 @@ claim, the copy goes stale, and the stale copy is the one a user reads.
 
 ### How it is used
 
-The Companion **downloads** it, against the same signed, revocable catalogue the
-map-building tools come through, at the version a signed compatibility manifest
-names for this Companion on this platform — and then invokes it as a **separate
+A release bundle places a **prebuilt** extractor beside the Companion as
+`auto-pigeon-extractor` (`auto-pigeon-extractor.exe` on Windows), and
+`bundle-manifest.json` lists it with its SHA-256, its version, its licence and
+its corresponding source — see [`build/bundle-sidecar.sh`](build/bundle-sidecar.sh)
+and [`build/bundle-manifest.py`](build/bundle-manifest.py). The Companion finds
+it in the directory of its own executable, checks the digest when the manifest
+lists it, asks it `protocol --json`, and then invokes it as a **separate
 operating-system process** through `os/exec` and reads its stdout. See
 [`internal/aue`](internal/aue/doc.go).
 
@@ -101,21 +118,34 @@ by accident, and AUE never appears in `go.mod`.
 
 ### What that means for distribution, precisely
 
-**Downloading redistributes nothing.** The bytes come from their publisher to
-the user's machine; this program is not in the chain of distribution any more
-than a package manager's index is. The obligations of AGPL-3.0 section 6 fall on
-whoever publishes the artifacts, which is that project.
+**Shipping it beside the Companion IS a redistribution of AGPL-3.0 software**,
+and whoever publishes a bundle that carries it takes on AGPL-3.0 section 6: its
+licence text and copyright notice, and the corresponding source for exactly the
+build shipped. It is **not** a combined work — two programs in one archive, one
+running the other as a separate process, share no address space and link
+nothing — so AUE's copyleft does not reach this repository's code, and the
+Companion stays MIT.
 
-Two things are nevertheless enforced here rather than assumed:
+Three things are enforced here rather than assumed:
 
-1. **The corresponding-source offer travels with the entry.** The catalogue
-   refuses an `AGPL-`/`GPL-` package that names no corresponding source, in
-   `catalog.Package.validate`. So a user who is about to download it is shown
-   where the source for exactly that build is, before anything is fetched.
-2. **The licence is shown, and the aggregation sentence with it.**
-   `companion extractor install` prints the SPDX identifier, the
-   corresponding-source URL, and the fixed sentence saying that running a
-   program as a subprocess does not make it part of the program that ran it.
+1. **A bundle cannot carry it without naming its source.**
+   `build/bundle-manifest.py` refuses `--extractor` without `--extractor-version`
+   and `--extractor-source`, and writes the licence (`AGPL-3.0-only`) and the
+   corresponding-source URL into the manifest's `licenses` list beside the file.
+2. **The release's component list names it.** `companion release sbom` lists
+   `auto-pigeon-extractor` with `distribution: shipped-beside-in-the-release`,
+   its licence and its corresponding source
+   (<https://github.com/andrea-dintino/auto-pigeon-extractor>), and
+   `release.TestEveryShippedCopyleftComponentOffersItsSource` fails a shipped
+   copyleft component with no source offer.
+3. **This file names it.** `TestNoticesCoverEveryRedistributedComponent` fails
+   if this document stops naming `auto-pigeon-extractor` and its licence.
+
+**One obligation is not yet met by the bundle scripts:** the manifest names the
+licence and the source, but the bundle does not yet carry the AGPL-3.0 licence
+text and the extractor's copyright notice as a file. No release carries an
+extractor today, so nothing has been distributed without them; the CI job that
+first puts one in a release must put them in too.
 
 ### What was wrong with embedding it, since the code for that existed
 
@@ -123,27 +153,27 @@ Two things are nevertheless enforced here rather than assumed:
 Companion executable with `//go:embed`, and a release built that way would have
 redistributed AGPL-3.0 software inside an MIT-licensed binary. It was never
 released — `internal/aue/embedded/` only ever contained `.gitkeep` — and the
-mechanism is now gone, along with the build steps that staged it. CI fails if it
+mechanism is gone, along with the build steps that staged it. CI fails if it
 comes back: see the `no-embedded-extractor` job.
 
-Two facts about that arrangement, kept separate because they are separate and
-because they still describe the boundary correctly:
+Embedding would not have made a combined work either — the bytes were written
+to a temporary file and run as their own process. What was wrong with it is that
+the extractor's bytes sat inside another program's artifact, under that
+program's licence, with nothing checking them and nothing carrying the AGPL's
+notice and source offer. A separate file listed in a manifest fixes all three.
 
-1. **It would not have been a combined work.** Embedded bytes written to a
-   temporary file and executed as their own process are at the same arm's length
-   as two programs shipped in one archive. Nothing links, and nothing shares an
-   address space. AUE's copyleft did not reach this repository's code, and the
-   Companion stayed MIT.
-2. **The distribution obligations would have applied, in full.** Shipping an
-   AGPL-3.0 program means carrying its full licence text and copyright notice,
-   and offering the corresponding source for exactly the build shipped —
-   AGPL-3.0 section 6 — together with its own third-party notices. Nothing here
-   did that, which is the second reason the arrangement had to go.
+### It is not downloaded any more, either
+
+Between those two arrangements the Companion fetched the extractor at run time
+against a signed, revocable catalogue, at the version a signed compatibility
+manifest named. That mechanism is removed with every other download mechanism
+(`internal/catalog`, `companion extractor install`, `companion catalog …`).
+There is no route by which the Companion puts an extractor on a machine.
 
 ### The developer override redistributes nothing
 
 `AUCOM_AUE_BINARY` points at a build the developer already has. It is local, it
-is labelled unverified everywhere it appears, and nothing produced with it is
+is labelled UNVERIFIED everywhere it appears, and nothing produced with it is
 uploaded or published.
 
 ## External map-building tools (GPL)
@@ -157,10 +187,12 @@ assumed one, and the two halves differ — see the per-tool section below.
 
 ### How they are used
 
-They are downloaded as **independent, prebuilt binaries** and invoked as
-**separate operating-system processes** via `os/exec`. Communication is
-process-level only: command-line arguments, environment, working directory,
-standard input and output, exit status, and files on disk.
+They are **obtained by the user** — from each project's homepage, a package
+manager, or a copy that came with a game — as **independent, prebuilt
+binaries**, and invoked as **separate operating-system processes** via
+`os/exec`. The Companion downloads none of them. Communication is process-level
+only: command-line arguments, environment, working directory, standard input
+and output, exit status, and files on disk.
 
 They are never:
 
@@ -168,21 +200,21 @@ They are never:
 - statically or dynamically linked against this binary,
 - vendored into this repository,
 - embedded with `//go:embed`,
+- shipped in a release archive,
 - or reached through any in-process calling convention.
 
 No Go dependency may pull a GPL tool's source or object code into this
 module. This is an architectural constraint, split across two packages that
 each restate it in their own documentation:
-[`internal/catalog`](internal/catalog/doc.go) says which bytes a tool is,
-[`internal/acquire`](internal/acquire/doc.go) obtains and verifies them, and
-[`internal/job`](internal/job/exec.go) runs the result — as an executable path
-and an argument array handed to `os/exec`, never through a shell and never
-through an in-process call. Acquisition and execution are separate packages on
-purpose: neither can grow into the other, and `internal/acquire` has no way to
-start a process.
+[`internal/acquire`](internal/acquire/acquire.go) finds a tool's executables in
+a folder the user chose, on PATH, or under a configured root, and downloads
+nothing; [`internal/job`](internal/job/exec.go) runs the result — as an
+executable path and an argument array handed to `os/exec`, never through a shell
+and never through an in-process call. Finding and running are separate packages
+on purpose: `internal/acquire` has no way to start a process.
 
-Each tool keeps its own copyright and its own licence. Downloading and running a
-GPL program from an MIT-licensed program is ordinary use of that program; it
+Each tool keeps its own copyright and its own licence. Running a GPL program the
+user installed from an MIT-licensed program is ordinary use of that program; it
 does not create a combined work, and it places no GPL obligations on this
 repository's code.
 
@@ -190,10 +222,10 @@ repository's code.
 
 A **profile** ([README](README.md#profiles)) is a JSON document in this
 repository's own format that says which programs a tool provides, what arguments
-they take and where to obtain them. It contains no third-party code: no source,
-no object code, no binary, no vendored fragment. Describing a program is not
-distributing it, and a profile is data the Companion reads, not the program it
-describes.
+they take and where its project lives. It contains no third-party code: no
+source, no object code, no binary, no vendored fragment. Describing a program is
+not distributing it, and a profile is data the Companion reads, not the program
+it describes.
 
 Consequently:
 
@@ -201,23 +233,21 @@ Consequently:
   work**, under its MIT licence, whatever the licence of the programs they
   describe. They are compiled in with `//go:embed`; the programs are not.
 - **A profile's `license` block states the described program's licence**, not
-  this one, and carries that program's notice and — where a copyleft licence
-  requires it for a binary offered for download — the corresponding-source link.
+  this one, and carries that program's notice and its corresponding-source link.
   It is carried in the document so that no code path can handle a tool without
-  the licence being visible, and so the acquisition path can show it before
-  anything is fetched.
+  the licence being visible.
 - **A user approving a profile is not receiving a licence grant** and their
   obligations under the described program's licence are unchanged. Approval is
   a decision to let this program run that one.
-- **No profile carries a download URL.** Managed downloads name an entry in a
-  signed acquisition catalogue, which holds the URL, size, digest, upstream
-  source, licence and corresponding-source offer. That keeps the redistribution
-  question in one place rather than scattered across every document that points
-  at a build.
+- **No profile carries a download URL.** A profile may carry the project's
+  homepage (`source.homepage`), which the Companion shows as a link for the user
+  to follow; it never fetches from it. The `managed_download` route and
+  `catalog_package` field of older documents are still read, so those documents
+  load, and are never taken.
 
 ### ericw-tools 0.18.1
 
-The one tool this project publishes a catalogue entry for.
+The tool the built-in Quake 1 profile describes.
 
 | | |
 | --- | --- |
@@ -243,22 +273,23 @@ then, four lines further down:
 Every official v0.18.1 binary links Embree — `libembree.so.2` on Linux,
 `embree.dll` on Windows, `libembree.2.dylib` on macOS — and every archive ships
 `gpl_v3.txt` beside `LICENSE-embree.txt`. So the **project's source** is
-GPL-2.0-or-later and the **build this catalogue points at** is conveyed under
+GPL-2.0-or-later and the **official build** is conveyed under
 GPL-3.0-or-later. `auto-pigeon-tools` recorded the same conclusion
 independently, from the files beside its own installation, as
 `GPL-3.0-or-later (conveyed with Apache-2.0 components)`.
 
-Both facts are carried in the documents rather than in prose here: the profile's
-and the catalogue entry's `license.spdx` is `GPL-3.0-or-later`, and their
-`license.notice` — which a user is shown, and must acknowledge, before anything
-is downloaded — names the GPL-2.0-or-later source terms, Embree, and the exact
-version tag the corresponding source is at.
+Both facts are carried in the document rather than in prose here: the profile's
+`license.spdx` is `GPL-3.0-or-later`, and its `license.notice` — which a user
+is shown where the profile is read — names the GPL-2.0-or-later source terms,
+Embree, and the exact version tag the corresponding source is at.
 
 #### The published artifacts
 
-Four archives, pinned by exact size and SHA-256 in
-[`catalog/ericw-tools.catalog.json`](catalog/ericw-tools.catalog.json).
-Each digest was measured by downloading the archive from the URL beside it.
+Four archives, published by upstream. The Companion does not download them; a
+user gets one from the project's homepage and points the profile at the folder
+it unpacked to. The sizes and digests below were measured by downloading each
+archive from upstream's release page, and are recorded here as the builds the
+profile's claims were measured against.
 
 | Platform | Archive | Size | SHA-256 |
 | --- | --- | --- | --- |
@@ -275,27 +306,27 @@ arm64 build on any operating system, because upstream published none.
 
 v0.18.1 is the newest release upstream has **not** marked a pre-release: the
 whole 2.0 line is published as `prerelease: true`. It is also the build
-`auto-pigeon-tools` pinned as its compiler oracle, so what the Companion
-downloads and what this workspace's acceptance gates are measured against are
+`auto-pigeon-tools` pinned as its compiler oracle, so what the Quake 1 profile
+describes and what this workspace's acceptance gates are measured against are
 the same bytes — the Linux archive's digest above is the archive that
 installation was unpacked from.
 
-#### And a second entry, for Quake II: 2.0.0-alpha7
+#### And a second profile, for Quake II: 2.0.0-alpha7
 
 Quake II support exists only in the 2.x line, so there is no non-pre-release to
-pin for it. `AUP/AUCOM 215` made that a separate document and a separate
-decision rather than moving the Quake 1 line onto a pre-release: the two entries
-are two packages in one catalogue, two profiles, and two sets of capability ids.
+describe for it. `AUP/AUCOM 215` made that a separate document and a separate
+decision rather than moving the Quake 1 line onto a pre-release: two profiles,
+and two sets of capability ids.
 
-The pinned version is **2.0.0-alpha7** (2024-03-17) rather than the newest
+The described version is **2.0.0-alpha7** (2024-03-17) rather than the newest
 alpha, and the reason is the one this repository keeps giving: alpha7 is the
 build that was unpacked and run here — `qbsp`, `vis`, `light`, `bspinfo` and
 `bsputil`, on a synthetic Quake II map — and every claim the Quake II profile
-makes about how those programs behave came from that run. Pinning a build
+makes about how those programs behave came from that run. Describing a build
 nobody had run would have made the claims about nothing.
 
-Three archives, pinned by exact size and SHA-256 in the same catalogue. Each
-digest was computed from the archive downloaded from the URL beside it.
+Three archives, published by upstream. Each digest was computed from the archive
+downloaded from the URL beside it.
 
 | Platform | Archive | Size | SHA-256 |
 | --- | --- | --- | --- |
@@ -310,32 +341,20 @@ published none for this line.
 
 The licence conclusion is the same and was reached the same way: the archives
 ship `gpl_v3.txt` beside `LICENSE-embree.txt`, and upstream's README says builds
-using Embree are GPLv3+. The notice a user acknowledges before downloading names
-the GPL-2.0-or-later source terms, Embree, the `2.0.0-alpha7` tag the
-corresponding source is at, and — in those words — that this is a
-**PRE-RELEASE**.
+using Embree are GPLv3+. The profile's notice names the GPL-2.0-or-later source
+terms, Embree, the `2.0.0-alpha7` tag the corresponding source is at, and — in
+those words — that this is a **PRE-RELEASE**.
 
 #### Licence text is not copied here
 
 No GPL or Apache text is vendored into this repository. `gpl_v3.txt` and
-`LICENSE-embree.txt` ship inside every archive and land in the tool cache with
-the binaries; the catalogue links the canonical text and the corresponding
-source, and the notice a user acknowledges names both. Copying licence text in
-here would be a fourth copy that can go stale, and this repository's habit is to
-name where the authoritative one is.
+`LICENSE-embree.txt` ship inside every archive and land beside the binaries in
+the folder the user unpacks; the profile links the canonical text and the
+corresponding source. Copying licence text in here would be another copy that
+can go stale, and this repository's habit is to name where the authoritative one
+is.
 
-#### There is still no signing key
-
-The catalogue payload is in the repository; **no catalogue signing key exists
-and no signed catalogue is published**, so nothing downloads by default. The
-acquisition path is exercised end to end against an in-process HTTPS fixture
-serving archives the tests build themselves — this repository's own bytes, under
-its own licence — and, for the real chain, against a locally signed copy of the
-payload above. The test signing keys under
-[`internal/catalog/testdata`](internal/catalog/testdata) are generated fixtures
-and sign nothing outside the tests.
-
-### Q3Map2 2.5.17n — described, run, and deliberately not downloaded
+### Q3Map2 2.5.17n — described, run, and not downloaded
 
 The Quake III compiler is `q3map2`, from **NetRadiant-custom**'s `20260114`
 release. Its own source files carry the GtkRadiant header — *"either version 2
@@ -346,10 +365,9 @@ detector reports the repository as `Other`; the corresponding source for the
 build described here is
 `https://github.com/Garux/netradiant-custom/tree/20260114`.
 
-**Nothing about it is in the acquisition catalogue, and that is the notable
-part.** Both EricW entries are pinned by digest and downloaded on demand. This
-one is not, and the reason is what upstream publishes rather than a policy
-difference:
+The Companion downloads no program, so this is no longer what sets Q3Map2 apart.
+What upstream publishes is still worth recording, because it is why the profile
+tells the user to find the program inside the editor they already have:
 
 | Platform | What upstream publishes for `20260114` |
 | --- | --- |
@@ -360,10 +378,9 @@ difference:
 `AUP/AUCOM 216` says not to install another map editor merely because a release
 bundles one, and there is no smaller artifact to prefer: `q3map2` resolves
 libassimp, libdraco, libminizip, libpugixml, libicu, libxml2 and libglib out of
-the bundle's own `../lib`, so it cannot be lifted out on its own. This program
-also unpacks zip and tar.gz only, not 7z. So the profile declares `user_path`
-and `system_path`, says all of that where a user reads it, and **this project
-neither downloads nor redistributes any of those bytes.**
+the bundle's own `../lib`, so it cannot be lifted out on its own. So the profile
+declares `user_path` and `system_path`, says all of that where a user reads it,
+and **this project neither downloads nor redistributes any of those bytes.**
 
 Two further facts, both established by looking rather than assuming:
 
@@ -384,11 +401,9 @@ profile describes whatever id-Tech-3-derived engine a user already has, and id
 Software's own Quake III Arena engine source is where that vocabulary comes
 from.
 
-There is nothing to pin for ioquake3 either, and again for a reason of
-upstream's: it publishes no GitHub release and no tag, and its builds are
-unversioned rolling zips at `files.ioquake3.org`. A catalogue entry names a size
-and a digest, and a URL whose contents change has neither. Both profiles are
-`user_path`.
+ioquake3 publishes no GitHub release and no tag, and its builds are unversioned
+rolling zips at `files.ioquake3.org`, so there is no single build to describe by
+digest either. Both profiles are `user_path`.
 
 **Game data is not covered by any of this.** Quake III Arena's `pak0.pk3` and
 the patch `pak1`–`pak8` are id Software's commercial data, not free software,
@@ -398,23 +413,25 @@ to use the data and play Quake 3 with ioquake3."* The Companion never copies,
 downloads, fabricates or redistributes it — including in tests, which stand up a
 game directory out of a placeholder file of this repository's own.
 
-### Requirement to revisit: bundling versus downloading
+### Requirement to revisit: bundling a GPL tool
 
-Today the design is **download on first run**: no tool binary is shipped in any
-release archive, installer, or package, so no GPL material is redistributed by
-this project.
+Today **no map-building tool or engine binary is downloaded by the Companion or
+shipped in any release archive, installer, or package**, so no GPL material is
+redistributed by this project. The one third-party program a release may carry
+is the AGPL-3.0 extractor, above, whose licence and corresponding source the
+bundle manifest names.
 
-**If that decision changes** — if a tool's prebuilt binary is ever bundled
-directly inside a release archive, installer, `.deb`/`.rpm`, or `.app` bundle —
-then that release becomes a redistribution of GPL software, and it must carry:
+**If that changes for a GPL tool** — if its prebuilt binary is ever bundled
+inside a release archive, installer, `.deb`/`.rpm`, or `.app` bundle — then that
+release becomes a redistribution of GPL software, and it must carry:
 
 - the tool's full licence text and copyright notice, in the same archive,
 - a written offer of, or accompanying, corresponding source, per GPL-3.0
   section 6 for the ericw-tools builds above.
 
-This affects [`internal/acquire`](internal/acquire/doc.go) and every packaging
-script under [`build/`](build/). **This is flagged as a decision to
-make, not one made here.**
+The extractor's path through [`build/bundle-manifest.py`](build/bundle-manifest.py)
+is the model for it. **This is flagged as a decision to make, not one made
+here.**
 
 ## Games launched by this application
 

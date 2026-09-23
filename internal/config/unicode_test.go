@@ -23,7 +23,6 @@ func TestANonASCIIPathRoundTripsThroughTheConfigFile(t *testing.T) {
 
 	written, err := Update(path, func(current *Config) error {
 		current.JobsDir = filepath.Join(dir, "jobs")
-		current.ToolCacheDir = filepath.Join(dir, "tools")
 		current.GameRoots = map[string]string{"quake": filepath.Join(dir, "Quake II — Ω")}
 		return nil
 	})
@@ -35,7 +34,7 @@ func TestANonASCIIPathRoundTripsThroughTheConfigFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.JobsDir != written.JobsDir || loaded.ToolCacheDir != written.ToolCacheDir {
+	if loaded.JobsDir != written.JobsDir {
 		t.Errorf("a path did not survive the round trip:\n%+v\n%+v", loaded, written)
 	}
 	if loaded.GameRoots["quake"] != written.GameRoots["quake"] {

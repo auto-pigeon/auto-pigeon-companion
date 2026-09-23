@@ -67,8 +67,7 @@ func (s *Server) profileAPI() map[string]http.HandlerFunc {
 		"POST /api/v1/profiles/{id}/grant":    s.handleProfileGrant,
 		"POST /api/v1/profiles/{id}/withdraw": s.handleProfileWithdraw,
 		"POST /api/v1/profiles/{id}/remove":   s.handleProfileRemove,
-		"GET /api/v1/profiles/{id}/acquire":   s.handleAcquireOffer,
-		"POST /api/v1/profiles/{id}/acquire":  s.handleAcquireInstall,
+		"POST /api/v1/profiles/{id}/homepage": s.handleProfileHomepage,
 	}
 }
 
@@ -272,9 +271,9 @@ type composeRequest struct {
 	PublisherName string `json:"publisher_name,omitempty"`
 	PublisherURL  string `json:"publisher_url,omitempty"`
 	// Homepage is the described program's own site: `source.homepage`.
-	Homepage string `json:"homepage,omitempty"`
-	LicenseSPDX   string `json:"license_spdx,omitempty"`
-	LicenseName   string `json:"license_name,omitempty"`
+	Homepage    string `json:"homepage,omitempty"`
+	LicenseSPDX string `json:"license_spdx,omitempty"`
+	LicenseName string `json:"license_name,omitempty"`
 
 	Runtime       string `json:"runtime,omitempty"`
 	EngineVersion string `json:"engine_version,omitempty"`
@@ -937,6 +936,56 @@ func describeProfile(entry job.CatalogEntry) map[string]any {
 	}
 }
 
+// handleProfileHomepage sets or clears one of this machine's own profiles'
+// homepage: `source.homepage`, with the patch version bumped because a
+// document's bytes may not change under the same version.
+//
+// Only a document in the profile directory. A built-in one is part of this
+// program — the answer there is a copy of one's own, made with New profile —
+// and the refusal says so. The edited document has a new digest, so an approval
+// of the old one does not carry over: the response says it has to be approved
+// again, and the approval is the one writer's, not this route's.
+func (s *Server) handleProfileHomepage(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Homepage string `json:"homepage"`
+	}
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	entry, _, err := s.profileEntry(r.PathValue("id"))
+	if err != nil {
+		writeError(w, jobStatus(err), err)
+		return
+	}
+	if !strings.HasPrefix(entry.Source, s.profilesPrefix()) {
+		writeError(w, http.StatusConflict, fmt.Errorf("%s shipped with the Companion, so its document cannot be "+
+			"edited here; make your own profile from it with New profile and give that one the homepage you want",
+			entry.Profile.Metadata().ID))
+		return
+	}
+	edited, err := profile.WithHomepage(entry.Profile, request.Homepage)
+	if errors.Is(err, profile.ErrHomepageUnchanged) {
+		writeError(w, http.StatusConflict, err)
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, err)
+		return
+	}
+	if err := profile.WriteCanonical(entry.Source, edited); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	updated, local, err := s.profileEntry(edited.Metadata().ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	body := s.describeCatalogEntry(updated, local)
+	body["was_version"] = entry.Profile.Metadata().Version
+	writeJSON(w, http.StatusOK, body)
+}
+
 // homepageOf is the program's homepage, "" when the document names none. The
 // document's validation has already refused anything but an http(s) URL.
 func homepageOf(meta profile.Meta) string {
@@ -1132,9 +1181,8 @@ func (s *Server) handleProfileBind(w http.ResponseWriter, r *http.Request) {
 			local.Acquisition = profile.AcquireUserPath
 		}
 		// A program the user named is a program the user named, whatever put
-		// the previous paths here. Leaving `managed_download` on a binding
-		// whose paths a person has just replaced would describe bytes nothing
-		// verified as verified (NEW_244D).
+		// the previous paths here — including a legacy `managed_download`
+		// binding from before 2026-09-23 (NEW_244D).
 		if len(executables) > 0 && local.Acquisition != profile.AcquireUserPath {
 			local.Acquisition = profile.AcquireUserPath
 			local.Installs = nil

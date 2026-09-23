@@ -47,13 +47,12 @@ const uninstallUsage = `usage:
   companion uninstall --purge --confirm
                                      delete it
 
---purge removes this user's configuration, cache, downloaded tools and build
-history. It does NOT remove the program: whatever installed that owns it.
+--purge removes this user's configuration, cache and build history. It does NOT
+remove the program: whatever installed that owns it.
 
-What is deleted holds decisions as well as content — granted profiles, the
-catalogue's revocation ratchet, licence acknowledgements — so removing it and
-reinstalling starts a genuinely fresh machine, not the same one with a cleared
-cache.
+What is deleted holds decisions as well as content — granted profiles and their
+bindings — so removing it and reinstalling starts a genuinely fresh machine, not
+the same one with a cleared cache.
 `
 
 // removable is one directory the uninstaller considered.
@@ -150,14 +149,13 @@ func uninstallTargets(env *Env) ([]removable, error) {
 	targets := []removable{{
 		Label: "configuration",
 		Path:  configDir,
-		Holds: "config.json and the AUB session, the catalogue trust state and its revocations, " +
-			"bindings and grants, licence acknowledgements, imported profiles",
+		Holds: "config.json and the AUB session, bindings and grants, imported profiles " +
+			"(and, from an older version, its catalogue trust state and licence acknowledgements)",
 	}}
 	for _, resolve := range []struct {
 		label, holds string
 		fn           func() (string, error)
 	}{
-		{"downloaded tools", "external compilers obtained from the signed catalogue", settings.ToolCache},
 		{"build history", "job records, logs and published artifacts", settings.Jobs},
 		{"asset cache", "maps and other assets synced from auto-pigeon-backend", settings.AssetCache},
 	} {

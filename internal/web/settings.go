@@ -59,18 +59,15 @@ type settingsBody struct {
 	AUBFromEnvironment bool   `json:"aub_from_environment,omitempty"`
 	// Debug and Backends mirror /api/status, so Settings can draw its chooser
 	// from one response.
-	Debug              bool             `json:"debug"`
-	Backends           []config.Backend `json:"backends,omitempty"`
-	ConfigPath         string           `json:"config_path,omitempty"`
-	ToolCacheDir       string           `json:"tool_cache_dir,omitempty"`
-	JobsDir            string           `json:"jobs_dir,omitempty"`
-	ProfilesDir        string           `json:"profiles_dir,omitempty"`
-	BuildsDir          string           `json:"builds_dir,omitempty"`
-	AssetCacheDir      string           `json:"asset_cache_dir,omitempty"`
-	BindingsPath       string           `json:"bindings_path,omitempty"`
-	CatalogBaseURL     string           `json:"catalog_url,omitempty"`
-	CatalogAnchorsPath string           `json:"catalog_anchors_path,omitempty"`
-	Offline            bool             `json:"offline"`
+	Debug         bool             `json:"debug"`
+	Backends      []config.Backend `json:"backends,omitempty"`
+	ConfigPath    string           `json:"config_path,omitempty"`
+	JobsDir       string           `json:"jobs_dir,omitempty"`
+	ProfilesDir   string           `json:"profiles_dir,omitempty"`
+	BuildsDir     string           `json:"builds_dir,omitempty"`
+	AssetCacheDir string           `json:"asset_cache_dir,omitempty"`
+	BindingsPath  string           `json:"bindings_path,omitempty"`
+	Offline       bool             `json:"offline"`
 	// PathHelper is the native file chooser this machine has, or "" when it
 	// has none and the page must fall back to a text field.
 	PathHelper string `json:"path_helper,omitempty"`
@@ -91,17 +88,15 @@ func (s *Server) handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 func (s *Server) describeSettings() settingsBody {
 	settings := s.config()
 	body := settingsBody{
-		AUBBaseURL:         settings.AUBBaseURL,
-		Port:               settings.Port,
-		JobConcurrency:     settings.JobConcurrency,
-		GameRoots:          settings.GameRoots,
-		Language:           settings.Language,
-		CatalogBaseURL:     settings.CatalogBaseURL,
-		CatalogAnchorsPath: settings.CatalogAnchorsPath,
-		Offline:            config.Offline(),
-		PathHelper:         s.picker.Available(),
-		Debug:              s.debug,
-		Backends:           config.OfficialBackends,
+		AUBBaseURL:     settings.AUBBaseURL,
+		Port:           settings.Port,
+		JobConcurrency: settings.JobConcurrency,
+		GameRoots:      settings.GameRoots,
+		Language:       settings.Language,
+		Offline:        config.Offline(),
+		PathHelper:     s.picker.Available(),
+		Debug:          s.debug,
+		Backends:       config.OfficialBackends,
 	}
 	// The environment wins over the file — see config.EnvAUBBaseURL — so a user
 	// editing the field has to be told when what they type will not take
@@ -115,9 +110,6 @@ func (s *Server) describeSettings() settingsBody {
 	}
 	if path, err := config.Path(); err == nil {
 		body.ConfigPath = path
-	}
-	if dir, err := settings.ToolCache(); err == nil {
-		body.ToolCacheDir = dir
 	}
 	if dir, err := s.jobsDir(); err == nil {
 		body.JobsDir = dir
@@ -186,7 +178,7 @@ func (s *Server) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 
 	// Only the four fields this form owns. Everything else in the file is
 	// carried forward from whatever is on disk when the lock is taken, so a
-	// settings save cannot undo a catalogue address or a session another
+	// settings save cannot undo a job directory or a session another
 	// instance wrote while this page was open.
 	updated, err := s.updateConfig(func(current *config.Config) error {
 		current.AUBBaseURL = baseURL

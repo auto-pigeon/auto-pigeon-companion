@@ -357,6 +357,7 @@
       ],
       "properties": {
         "mode": {
+          "description": "`managed_download` is legacy: still read, never offered or taken — the Companion downloads no program.",
           "enum": [
             "user_path",
             "system_path",
@@ -376,6 +377,7 @@
           }
         },
         "catalog_package": {
+          "description": "Legacy, with `managed_download`: read and checked, never looked up.",
           "$ref": "#/$defs/profileId"
         },
         "commands": {

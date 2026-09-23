@@ -15,21 +15,22 @@ name: release
 # `SHA256SUMS` makes a corrupted or truncated download detectable and is not a
 # signature, and the release notes say so rather than implying more.
 #
-# It does not sign the AUB compatibility catalogue either. That is a publisher's
-# act with a key that is not in CI, and a workflow that could do it from a tag
-# would be a workflow that vouches for whatever a tag contains.
-#
 # # The extractor is not built here and is not IN here
 #
-# `no-embedded-extractor` in `build.yml` is the gate and stays. What this
-# workflow may do is put the two SEPARATELY BUILT programs in one archive, as
-# two files under two licences, and only when `build/sidecar-pin.json` names an
-# exact published extractor version and the exact SHA-256 of each asset. With
-# the pin disabled — which is its state today, because no extractor release has
-# been published to pin — the Companion's assets are published on their own and
-# the signed managed-acquisition path joins them at run time. That is the
-# documented, verified route; the bundle is a convenience over it and never a
-# second way to an executable.
+# `no-embedded-extractor` in `build.yml` is the gate and stays. What a release
+# does is put the two SEPARATELY BUILT programs in one archive, as two files
+# under two licences: `build/bundle-sidecar.sh --extractor <file>` places an
+# Auto-Pigeon Extractor build beside the Companion and lists its digest in
+# `bundle-manifest.json`, which the Companion checks before running it. The
+# Companion downloads no program, so the bundle is the only way a user gets it.
+#
+# TODO (after the repositories move to the `auto-pigeon` organisation): a job
+# here that checks out the extractor's repository at a pinned tag, builds it
+# with its own scripts/build-release.sh for each platform, and passes each
+# binary to the bundle step below. Not wired yet because the extractor
+# repository is private and reading it from this workflow needs an access
+# token that would have to be replaced when the repositories move. Until then
+# these bundles carry no extractor, and their manifests say so.
 #
 # # Why the packaging runs on Linux
 #
@@ -148,8 +149,8 @@ jobs:
       - name: Assemble one bundle per platform
         # `build/release.sh` publishes one ARCHIVE per platform — the binary or
         # the .app, the licences and the native acceptance kit. Each is
-        # unpacked, the bundle manifest and (when pinned) the extractor sidecar
-        # are added, and it is repacked. Unpacked rather than rebuilt, so what
+        # unpacked, the bundle manifest (and, once this workflow builds one, the
+        # extractor beside the Companion) are added, and it is repacked. Unpacked rather than rebuilt, so what
         # ships is the archive the release script produced and checked.
         run: |
           set -euo pipefail
@@ -213,10 +214,10 @@ jobs:
           detectable; it is not a signature, because anybody who can replace the artifacts can
           replace the checksum file.
 
-          **Auto-Pigeon Extractor is not inside these archives.** It is a separate program under
-          AGPL-3.0. The Companion downloads it against a signed catalogue, at the version a signed
-          compatibility manifest names, verifies its digest and its protocol, and records it as a
-          managed install. \`bundle-manifest.json\` in each archive says this in full.
+          **Auto-Pigeon Extractor is not inside these archives yet.** It is a separate program under
+          AGPL-3.0 that a release carries beside the Companion; this workflow does not build it yet,
+          so map inspection and APMap conversion are unavailable in these archives. The Companion
+          downloads no program. \`bundle-manifest.json\` in each archive says this in full.
           EOF
           )"
           if gh release view "$tag" >/dev/null 2>&1; then

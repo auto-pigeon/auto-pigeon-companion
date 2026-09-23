@@ -30,8 +30,9 @@ like the cause of whatever you are investigating, say so and stop.
 
 This repository is **Auto-Pigeon Companion**, abbreviated **AUCOM**. Its expected location is
 `mapper-code/auto-pigeon-companion/`. It is the program that runs on a user's own machine: it
-acquires and runs the toolchains a map needs, holds the profiles and approvals that say what may
-run, publishes and installs portable profiles, and joins a hosted game with verified content.
+finds and runs the toolchains a map needs (it downloads no program — the user installs them, and the
+extractor ships beside it in the release), holds the profiles and approvals that say what may run,
+publishes and installs portable profiles, and joins a hosted game with verified content.
 
 It is one of the repositories under `mapper-code/` and follows the same mapper-wide prompt/handoff
 workflow as every sibling. `README.md` is the user-facing manual for what the program does — it is
@@ -140,12 +141,12 @@ Every module is `docs/agent/<id>.md`. Nothing below is loaded at startup: read t
 names. `topics` is what `--topic` matches; each module also declares the file globs it governs, and
 the router resolves those for you rather than making you read the table.
 
-**Acquiring and running somebody else's program**
+**Finding and running somebody else's program**
 
 | module | the authority on | topics |
 | --- | --- | --- |
-| `aucom.extractor-acquisition` | The extractor is acquired, never embedded — catalogue, updates and the compatibility manifest | extractor, aue, acquisition, download, update, catalogue, manifest, signature, licence |
-| `aucom.extractor-execution` | Running it — the handshake, offline authority, bounded invocation, and what authorization is not | extractor, handshake, protocol, offline, bounds, timeout, authorization, verification |
+| `aucom.extractor-acquisition` | The extractor ships beside the Companion — never embedded, never downloaded | extractor, aue, acquisition, bundle, bundled, release, manifest, download, licence |
+| `aucom.extractor-execution` | Running it — the handshake, bounded invocation, and what was retired with the downloads | extractor, handshake, protocol, offline, bounds, timeout, authorization, verification |
 | `aucom.job-bounds` | A bound is not a measurement, and the bound comes from here | job, bounds, retention, logbuf, memory, disk, stress, limits |
 
 **Profiles, approvals and trust**

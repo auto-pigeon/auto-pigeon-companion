@@ -1,9 +1,16 @@
 # ADR-0004: Acquisition is verified, or it does not happen
 
-- Status: Accepted
+- Status: Superseded by [ADR-0008](0008-the-companion-downloads-no-program.md)
 - Date: 2026-09-07
 - Affected components: AUCOM
 - Decision owners: `AUCOM 206`
+
+> **Superseded 2026-09-23 by operator decision: the Companion downloads no
+> program.** Everything below describes a mechanism that was removed — the
+> signed catalogue, trust anchors, keyring, ratchet, revocation, tool cache and
+> managed downloads. See
+> [ADR-0008](0008-the-companion-downloads-no-program.md).
+> This record is kept unchanged as the history of that decision.
 
 ## Context
 

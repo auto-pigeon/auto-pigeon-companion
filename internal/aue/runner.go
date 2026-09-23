@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-// EnvBinaryOverride names an on-disk extractor to use instead of the managed
+// EnvBinaryOverride names an on-disk extractor to use instead of the bundled
 // one.
 //
 // It exists for development — building the extractor from a checkout and
@@ -55,7 +55,7 @@ const DefaultGrace = 5 * time.Second
 const maxOutputBytes = 64 << 20
 
 // ErrNoExtractor reports that this Companion has no extractor it may run.
-var ErrNoExtractor = errors.New("aue: no verified extractor is installed and " + EnvBinaryOverride + " is not set")
+var ErrNoExtractor = errors.New("aue: no extractor was shipped beside this Companion and " + EnvBinaryOverride + " is not set")
 
 // ErrOutputNotJSON reports a subcommand that was asked for JSON and produced
 // something else.
@@ -284,8 +284,8 @@ func (r *ProcessRunner) environment(timeout time.Duration) []string {
 
 // NewOverrideRunner returns a runner for an on-disk executable the user named.
 //
-// It is a separate constructor rather than a mode of the managed one, so that
-// nothing can arrive at an unverified executable by falling through a managed
+// It is a separate constructor rather than a mode of the bundled one, so that
+// nothing can arrive at an unverified executable by falling through a bundled
 // path that failed. Every caller of this function is a caller that read the
 // environment variable and decided, and the provenance it produces says so.
 func NewOverrideRunner(path string) *ProcessRunner {

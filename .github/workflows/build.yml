@@ -11,18 +11,18 @@
 #
 # No release, no durable upload, no signing, and it reads no `secrets` anywhere —
 # `grep -c secrets` on this file is zero and the `no-credentials` job below keeps
-# it that way. Signing a catalogue is a publisher's act performed deliberately
-# with a key that is not in CI, and a workflow that could do it from a pull
-# request would be a workflow that publishes whatever a pull request contains.
+# it that way. A workflow that could publish from a pull request would be a
+# workflow that publishes whatever a pull request contains.
 # Packaging skeletons live under build/ and are run by hand — see README.md.
 #
 # # The extractor is not built here, and is not IN here
 #
 # Auto-Pigeon Extractor is a separate program under its own licence (AGPL-3.0).
 # It used to be staged into `internal/aue/embedded/` and compiled into this
-# binary; it is now downloaded against a signed catalogue at run time
-# (`AUE/AUB/AUCOM 211`). Nothing in this workflow fetches, stages or embeds it,
-# and the `no-embedded-extractor` job fails if that ever comes back.
+# binary. A release now ships it as its own file BESIDE the Companion
+# (build/bundle-sidecar.sh), and nothing ever downloads it. Nothing in this
+# workflow embeds it, and the `no-embedded-extractor` job fails if that ever
+# comes back.
 
 name: build
 
@@ -150,7 +150,7 @@ jobs:
         run: |
           if [ -e internal/aue/embedded ]; then
             echo "internal/aue/embedded exists. The extractor is a separate AGPL-3.0" >&2
-            echo "program obtained at run time against a signed catalogue; embedding it" >&2
+            echo "program shipped beside the Companion in a release; embedding it" >&2
             echo "puts its bytes inside this repository's MIT artifact. See internal/aue." >&2
             exit 1
           fi
@@ -176,7 +176,7 @@ jobs:
           exit "$found"
 
   release-contract:
-    name: the release contract composes
+    name: the release bundle composes
     needs: [test, gofmt]
     runs-on: ubuntu-latest
     steps:
@@ -185,43 +185,25 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      # The publishing path, exercised end to end and publishing nothing: a
-      # release manifest of the shape the extractor's build script writes goes
-      # in, and a catalogue package and a compatibility component come out, both
-      # validated against the rules a signature would otherwise make permanent —
-      # including the copyleft rule that refuses a package offering no
-      # corresponding source.
-      #
-      # The fixture has fabricated digests and version 0.0.0-example. It is not
-      # a release, nothing signs it, and no key exists in this workflow to sign
-      # it with.
-      - name: compose catalogue entries from a release manifest
+      # The bundling path, exercised both ways and publishing nothing: without
+      # an extractor the bundle says none is inside; with one it sits beside the
+      # Companion as its own file, listed with its digest — which the Companion
+      # then checks before running it. The "extractor" here is a stand-in file;
+      # nothing is downloaded.
+      - name: assemble a bundle without and with an extractor
         run: |
-          go run ./cmd/companion catalog release \
-            --manifest internal/catalog/testdata/example-release-manifest.json \
-            --base-url https://releases.invalid/aue/0.0.0-example/ \
-            --signer ci-example-key \
-            --min-companion 0.1.0 \
-            --out-package "$RUNNER_TEMP/package.json" \
-            --out-component "$RUNNER_TEMP/component.json"
-          test -s "$RUNNER_TEMP/package.json"
-          test -s "$RUNNER_TEMP/component.json"
-
-      - name: it refuses a release with no corresponding source
-        run: |
-          python3 - <<'PY'
-          import json, pathlib
-          document = json.loads(pathlib.Path("internal/catalog/testdata/example-release-manifest.json").read_text())
-          document["source"]["corresponding_source"] = ""
-          pathlib.Path("no-source.json").write_text(json.dumps(document))
-          PY
-          if go run ./cmd/companion catalog release \
-               --manifest no-source.json \
-               --base-url https://releases.invalid/aue/0.0.0-example/ \
-               --signer ci-example-key --min-companion 0.1.0 >/dev/null; then
-            echo "a copyleft release offering no corresponding source was accepted" >&2
-            exit 1
-          fi
+          mkdir -p "$RUNNER_TEMP/bin"
+          go build -o "$RUNNER_TEMP/bin/companion" ./cmd/companion
+          build/bundle-sidecar.sh --platform linux-amd64 --version 0.0.0-ci \
+            --binary-dir "$RUNNER_TEMP/bin" --out "$RUNNER_TEMP/without"
+          python3 -c 'import json,sys; m=json.load(open(sys.argv[1])); assert m["extractor"] is None and "extractor_absent" in m' \
+            "$RUNNER_TEMP/without/auto-pigeon-companion-0.0.0-ci-linux-amd64/bundle-manifest.json"
+          printf '#!/bin/sh\n' > "$RUNNER_TEMP/aue"
+          build/bundle-sidecar.sh --platform linux-amd64 --version 0.0.0-ci \
+            --binary-dir "$RUNNER_TEMP/bin" --out "$RUNNER_TEMP/with" \
+            --extractor "$RUNNER_TEMP/aue" --extractor-version 0.0.0-ci \
+            --extractor-source https://example.invalid/aue-source
+          test -x "$RUNNER_TEMP/with/auto-pigeon-companion-0.0.0-ci-linux-amd64/auto-pigeon-extractor"
 
   security-contract:
     name: the threat model states itself
@@ -262,12 +244,13 @@ jobs:
           audit = json.load(open(sys.argv[1]))
           count = audit["go_module_dep_count"]
           assert count == 0, f"{count} external module(s): {audit['go_module_deps']}"
-          missing = [c["name"] for c in audit["components"]
-                     if c["distribution"] == "downloaded-at-run-time"
-                     and c["spdx"].startswith(("GPL", "AGPL", "LGPL"))
+          shipped = [c for c in audit["components"] if c["distribution"] == "shipped-beside-in-the-release"]
+          assert shipped, "no component is shipped beside the Companion; the extractor is missing from the audit"
+          missing = [c["name"] for c in shipped
+                     if c["spdx"].startswith(("GPL", "AGPL", "LGPL"))
                      and not c.get("corresponding_source")]
-          assert not missing, f"copyleft downloads offering no source: {missing}"
-          print("no external modules; every copyleft download offers its source")
+          assert not missing, f"copyleft components shipped beside the Companion offering no source: {missing}"
+          print("no external modules; every copyleft component shipped beside it offers its source")
           PY
 
       # The SBOM has to be the same bytes twice, or it cannot be published

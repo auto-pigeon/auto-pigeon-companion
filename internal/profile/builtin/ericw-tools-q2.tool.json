@@ -32,29 +32,18 @@
   "tool_version": "2.0.0-alpha7",
   "platforms": [
     { "platform": { "os": "linux", "arch": "amd64" }, "status": "supported", "note": "the five programs were run here on a synthetic Quake II map: compile, areaportals, visibility, hearability, lighting. A claim about these programs on this platform, not that Quake II is finished." },
-    { "platform": { "os": "windows", "arch": "amd64" }, "status": "unverified", "note": "the official win64 pre-release is pinned in the catalogue; nobody here has run it" },
-    { "platform": { "os": "darwin", "arch": "amd64" }, "status": "unverified", "note": "the official Darwin pre-release is pinned in the catalogue; it is unsigned and unnotarized, and recent macOS will refuse it until the user allows it" },
+    { "platform": { "os": "windows", "arch": "amd64" }, "status": "unverified", "note": "the official win64 pre-release exists upstream; nobody here has run it" },
+    { "platform": { "os": "darwin", "arch": "amd64" }, "status": "unverified", "note": "the official Darwin pre-release exists upstream; it is unsigned and unnotarized, and recent macOS will refuse it until the user allows it" },
     { "platform": { "os": "darwin", "arch": "arm64" }, "status": "unverified", "note": "no arm64 build exists upstream; the amd64 build runs under Rosetta 2, or point the Companion at your own" },
     { "platform": { "os": "linux", "arch": "arm64" }, "status": "unverified", "note": "no arm64 build exists upstream; build it from the tagged source or point the Companion at your own" },
-    { "platform": { "os": "windows", "arch": "386" }, "status": "unsupported", "note": "upstream published no 32-bit build of the 2.x line; there is nothing to pin and nothing to point at" }
+    { "platform": { "os": "windows", "arch": "386" }, "status": "unsupported", "note": "upstream published no 32-bit build of the 2.x line; there is nothing to point at" }
   ],
   "acquisition": [
-    {
-      "mode": "managed_download",
-      "title": "Download the official 2.0.0-alpha7 pre-release",
-      "catalog_package": "ericw-tools.q2",
-      "platforms": [
-        { "os": "linux", "arch": "amd64" },
-        { "os": "windows", "arch": "amd64" },
-        { "os": "darwin", "arch": "amd64" }
-      ],
-      "note": "The three archives upstream published for 2.0.0-alpha7, each pinned by size and SHA-256 in the signed catalogue. This is a pre-release: upstream marks it as one, and so does this profile."
-    },
     {
       "mode": "user_path",
       "title": "Use a copy you already have",
       "hint": "choose the unpacked ericw-tools 2.x folder — the one with qbsp directly inside it, not inside bin/",
-      "note": "The route for arm64, for a newer alpha, and for a build you made yourself. Nothing verifies it against the catalogue: you are the authority for what you pointed at, and a different alpha may behave differently from the one this document measured."
+      "note": "Download the 2.0.0-alpha7 pre-release for your platform from the ericw-tools homepage and unpack it, or use a newer alpha or your own build. You are the authority for what you pointed at, and a different alpha may behave differently from the one this document measured."
     },
     {
       "mode": "system_path",

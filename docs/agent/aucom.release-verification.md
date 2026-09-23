@@ -92,10 +92,9 @@ launch are separate rows because they are separate claims: a preview that
 printed a command is not evidence that an engine started.
 
 **The run is isolated, and the purge lane is why.** Every lane runs against a
-HOME the run made. `uninstall --purge` deletes configuration, granted profiles,
-the catalogue's revocation ratchet and licence acknowledgements — an acceptance
-run that did that to the operator's own machine would cost them the decisions
-they had made. The two things no environment variable moves are reported as
+HOME the run made. `uninstall --purge` deletes configuration, granted profiles
+and build history — an acceptance run that did that to the operator's own
+machine would cost them the decisions they had made. The two things no environment variable moves are reported as
 `not_applicable` with the reason rather than performed: a Windows HKCU
 registration, which the installer owns, and a macOS bundle, which a loose binary
 does not have.

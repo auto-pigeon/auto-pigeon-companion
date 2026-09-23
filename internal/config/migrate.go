@@ -88,7 +88,6 @@ type document struct {
 	AUBBaseURL           string            `json:"aub_base_url"`
 	Port                 int               `json:"port"`
 	ServerAddr           string            `json:"server_addr"`
-	ToolCacheDir         string            `json:"tool_cache_dir"`
 	GameRoots            map[string]string `json:"game_roots"`
 	MigratedFromLauncher bool              `json:"migrated_from_launcher"`
 	Session              struct {
@@ -113,10 +112,9 @@ func (d document) config() Config {
 		port = portOf(d.ServerAddr)
 	}
 	return Config{
-		AUBBaseURL:   d.AUBBaseURL,
-		Port:         port,
-		ToolCacheDir: d.ToolCacheDir,
-		GameRoots:    d.GameRoots,
+		AUBBaseURL: d.AUBBaseURL,
+		Port:       port,
+		GameRoots:  d.GameRoots,
 		Session: Session{
 			Token:  d.Session.Token,
 			UserID: d.Session.UserID,
@@ -281,7 +279,6 @@ func fold(into, from Config, intoExists bool) (Config, []Conflict, []string) {
 	}
 
 	keepString("aub_base_url", &into.AUBBaseURL, from.AUBBaseURL)
-	keepString("tool_cache_dir", &into.ToolCacheDir, from.ToolCacheDir)
 
 	if from.Port != 0 {
 		switch {

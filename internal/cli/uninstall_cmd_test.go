@@ -19,7 +19,6 @@ func uninstallEnv(t *testing.T) (*Env, map[string]string) {
 	base := t.TempDir()
 	dirs := map[string]string{
 		"config": filepath.Join(base, "config", config.AppDirName),
-		"tools":  filepath.Join(base, "cache", config.AppDirName, "tools"),
 		"jobs":   filepath.Join(base, "cache", config.AppDirName, "jobs"),
 		"assets": filepath.Join(base, "cache", config.AppDirName, "assets"),
 	}
@@ -43,7 +42,6 @@ func uninstallEnv(t *testing.T) (*Env, map[string]string) {
 	}
 	if err := config.SaveTo(env.ConfigPath, config.Config{
 		Port:          config.DefaultPort,
-		ToolCacheDir:  dirs["tools"],
 		JobsDir:       dirs["jobs"],
 		AssetCacheDir: dirs["assets"],
 	}); err != nil {
@@ -74,7 +72,7 @@ func TestUninstallShowsWhatItWouldDeleteAndDeletesNothingWithoutConfirmation(t *
 		"--purge --confirm",
 		// What is lost is decisions as well as bytes, and a person deciding
 		// needs to be told that.
-		"revocations",
+		"bindings and grants",
 		"The program itself is never removed",
 	} {
 		if !strings.Contains(out, want) {
@@ -137,7 +135,7 @@ func TestUninstallPurgeRemovesOnlyThisProgramsDirectories(t *testing.T) {
 	if !strings.Contains(out, "NOT REMOVED") {
 		t.Errorf("the run does not say a directory was left alone:\n%s", out)
 	}
-	for _, name := range []string{"config", "tools", "assets"} {
+	for _, name := range []string{"config", "assets"} {
 		if _, err := os.Stat(dirs[name]); !os.IsNotExist(err) {
 			t.Errorf("%s survived --purge: %v", dirs[name], err)
 		}

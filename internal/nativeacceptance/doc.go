@@ -47,10 +47,9 @@
 // # The run is isolated, and that is not a convenience
 //
 // Every lane runs against a HOME this run made. The purge lane deletes
-// configuration, granted profiles, the catalogue's revocation ratchet and
-// licence acknowledgements; an acceptance run that did that to the operator's
-// own machine would cost them the decisions they had made, which is a high
-// price for a check. An isolated home is also the only way to observe a
+// configuration, granted profiles and their bindings; an acceptance run that
+// did that to the operator's own machine would cost them the decisions they had
+// made, which is a high price for a check. An isolated home is also the only way to observe a
 // PORTABLE FIRST START at all: a second run on a machine that already has a
 // configured Companion would be observing the second run.
 //

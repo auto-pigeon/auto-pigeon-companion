@@ -11,13 +11,14 @@
 //     binary with [debug.ReadBuildInfo] rather than out of `go.mod` — what is
 //     linked in is what matters, and a build with a `replace` or a tool
 //     dependency would say so there and not there.
-//  2. **The GPL compilers and engines are separate programs**, downloaded at
-//     run time or already on the user's machine, run as their own processes.
+//  2. **The GPL compilers and engines are separate programs** the user already
+//     has on their machine, run as their own processes. Nothing downloads them.
 //     [Components] derives them from the built-in profiles, so a toolchain
 //     added without a licence and a corresponding-source URL cannot become
 //     invisible here.
 //  3. **The extractor is a third thing again** — AGPL-3.0, separately
-//     licensed, obtained against a signed catalogue, never in this artifact.
+//     licensed, shipped as its own file beside the Companion in the release
+//     bundle, never inside the Companion's binary.
 //
 // A release therefore ships an SBOM and a checksum file that are *generated
 // from* the program, not written beside it.
@@ -26,9 +27,9 @@
 //
 // It lists this module and its module graph, which for this program is empty,
 // and it lists the external components with the relationship each has to the
-// artifact. A component the user downloads later is in the document with
-// `distribution: downloaded-at-run-time`, because pretending it is not
-// mentioned at all would be as misleading as listing it as contents.
+// artifact. The extractor is in the document with
+// `distribution: shipped-beside-in-the-release`: listing it as the Companion's
+// contents would be as misleading as leaving it out.
 package release
 
 import (
@@ -62,9 +63,10 @@ type Distribution string
 const (
 	// InArtifact means the component's bytes are inside what is shipped.
 	InArtifact Distribution = "in-artifact"
-	// Downloaded means the user's machine fetches it later, verified against
-	// the signed catalogue, and runs it as its own process.
-	Downloaded Distribution = "downloaded-at-run-time"
+	// ShippedBeside means the release bundle carries it as its own file next
+	// to the Companion, under its own licence, and the Companion runs it as its
+	// own process. The copyleft corresponding-source obligation attaches here.
+	ShippedBeside Distribution = "shipped-beside-in-the-release"
 	// UserSupplied means the user already has it and points the Companion at
 	// it. Nothing is fetched and nothing is distributed.
 	UserSupplied Distribution = "user-supplied"
@@ -81,9 +83,8 @@ type Component struct {
 	LicenseName  string       `json:"license_name,omitempty"`
 	LicenseURL   string       `json:"license_url,omitempty"`
 	// CorrespondingSource is where the source for exactly this binary is. The
-	// strong copyleft licences require it whenever a binary is offered for
-	// download, which is why the catalogue's own composer refuses a package
-	// that has none.
+	// strong copyleft licences require it whenever a binary is distributed,
+	// which is why a component shipped beside the Companion must carry it.
 	CorrespondingSource string `json:"corresponding_source,omitempty"`
 	Homepage            string `json:"homepage,omitempty"`
 	Repository          string `json:"repository,omitempty"`
@@ -155,9 +156,8 @@ func Components(version string) ([]Component, error) {
 		LicenseName:  "MIT License",
 		Repository:   "https://" + ModulePath,
 		Notice: "Auto-Pigeon Companion is MIT licensed. It contains no GPL tool, " +
-			"no engine and no extractor: each of those is a separate program obtained " +
-			"separately and run as its own process.",
-	}}
+			"no engine and no extractor: each of those is a separate program, run as its own process.",
+	}, Extractor}
 
 	entries, err := builtin.Load()
 	if err != nil {
@@ -193,27 +193,31 @@ func Components(version string) ([]Component, error) {
 	return components, nil
 }
 
-// distributionFor decides how a profile's program reaches the user's machine.
-//
-// A managed download is the only case where this project's own infrastructure
-// hands somebody a binary, and it is the case the copyleft
-// corresponding-source obligation attaches to. Everything else is a program
-// the user already has.
-func distributionFor(entry builtin.Entry) Distribution {
-	tool, ok := entry.Profile.(*profile.ToolProfile)
-	if !ok {
-		// Engine profiles declare no acquisition at all: an engine is always a
-		// program the user already has, which is exactly why every curated
-		// engine profile has to say what it does not do.
-		return UserSupplied
-	}
-	for _, route := range tool.Acquisition {
-		if route.Mode == profile.AcquireManagedDownload {
-			return Downloaded
-		}
-	}
+// distributionFor decides how a profile's program reaches the user's machine:
+// always a program the user already has. The Companion downloads none
+// (operator, 2026-09-23), and a built-in profile's legacy route would not
+// change that.
+func distributionFor(builtin.Entry) Distribution {
 	return UserSupplied
 }
+
+// Extractor is Auto-Pigeon Extractor as a release carries it: its own file
+// beside the Companion (build/bundle-sidecar.sh), AGPL-3.0-only as its own
+// `protocol` document declares.
+var Extractor = Component{
+	Name:                "auto-pigeon-extractor",
+	Kind:                "tool",
+	Distribution:        ShippedBeside,
+	SPDX:                "AGPL-3.0-only",
+	LicenseName:         "GNU Affero General Public License v3.0 only",
+	CorrespondingSource: ExtractorSource,
+	Repository:          ExtractorSource,
+	Notice: "A separate program under its own licence, shipped as its own file beside the Companion " +
+		"and run as its own process. The Companion does not link, embed or relicense it.",
+}
+
+// ExtractorSource is where the extractor's source is published.
+const ExtractorSource = "https://github.com/andrea-dintino/auto-pigeon-extractor"
 
 // --- SBOM -----------------------------------------------------------------
 

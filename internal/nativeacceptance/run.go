@@ -67,9 +67,9 @@ type Options struct {
 // LaneIDs is every lane, in the order a run performs them.
 //
 // The order is load-bearing at exactly one point: `purge` is last, because it
-// deletes the configuration, the cache, the downloaded tools and the build
-// history — everything the lanes above it produced. A purge in the middle would
-// make every lane after it a test of a fresh machine again.
+// deletes the configuration, the cache and the build history — everything the
+// lanes above it produced. A purge in the middle would make every lane after it
+// a test of a fresh machine again.
 var LaneIDs = []string{
 	"artifact", "first-start", "uri", "profile", "toolchain",
 	"compile", "engine", "jobs", "purge",
@@ -80,7 +80,7 @@ var laneTitles = map[string]string{
 	"first-start": "a portable first start, a migration, and an uninstall that preserves",
 	"uri":         "the autopigeon:// handler, where this package owns it",
 	"profile":     "a tool profile somebody wrote: import, bind, review, grant, withdraw",
-	"toolchain":   "an EricW build, managed where one exists and named where it does not",
+	"toolchain":   "an EricW build the operator names with --tool-path",
 	"compile":     "a real Quake 1 compile, VIS, LIGHT and a deterministic PAK",
 	"engine":      "the engine command, previewed without game data",
 	"jobs":        "cancellation, retry, and the log bound this build publishes",
@@ -130,11 +130,10 @@ func Run(ctx context.Context, options Options) (*Bundle, error) {
 	}
 
 	// The whole run happens in a HOME this run made, and that is not a
-	// convenience. The purge lane deletes configuration, granted profiles, the
-	// catalogue's revocation ratchet and licence acknowledgements; an
-	// acceptance run that did that to the operator's own machine would cost
-	// them the decisions they had made. An isolated home is also what makes
-	// "portable first start" a thing this can observe at all.
+	// convenience. The purge lane deletes configuration, granted profiles and
+	// their bindings; an acceptance run that did that to the operator's own
+	// machine would cost them the decisions they had made. An isolated home is
+	// also what makes "portable first start" a thing this can observe at all.
 	home := filepath.Join(work, "home")
 	state := &run{
 		executable:  executable,

@@ -92,4 +92,3 @@ func TestOnlyAToolTextureMissingIsNotAWarning(t *testing.T) {
 		t.Fatalf("state = %s, warnings = %q; want succeeded with none", record.State, record.Warnings)
 	}
 }
-

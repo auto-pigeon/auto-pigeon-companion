@@ -552,11 +552,11 @@ type statusBody struct {
 	SessionExpired bool   `json:"session_expired,omitempty"`
 	Email          string `json:"email,omitempty"`
 	Platform       string `json:"platform"`
-	ToolCacheDir   string `json:"tool_cache_dir"`
 	JobsDir        string `json:"jobs_dir"`
 	AUEAvailable   bool   `json:"aue_available"`
-	// AUEVerified says whether the extractor this build would run was verified
-	// against the signed catalogue, or is an unverified developer override. It
+	// AUEVerified says whether the extractor this build would run was checked
+	// against the release's bundle manifest, or is an unverified one — a
+	// developer override, or a copy no manifest lists. It
 	// is a separate field from AUEAvailable because "there is one" and "it is
 	// the one we vouch for" are different facts, and a page that showed only
 	// the first would show a development override exactly as it shows a
@@ -574,10 +574,6 @@ type statusBody struct {
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	s.adoptSessionFromDisk()
 	settings := s.config()
-	cache, err := settings.ToolCache()
-	if err != nil {
-		cache = ""
-	}
 	jobs, err := settings.Jobs()
 	if err != nil {
 		jobs = ""
@@ -603,7 +599,6 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		SessionExpired: expired,
 		Email:          settings.Session.Email,
 		Platform:       runtime.GOOS + "/" + runtime.GOARCH,
-		ToolCacheDir:   cache,
 		JobsDir:        jobs,
 		AUEAvailable:   aue.Available(s.runner),
 		AUEVerified:    verified,

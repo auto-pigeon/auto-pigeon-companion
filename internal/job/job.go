@@ -23,11 +23,9 @@ const SchemaVersion = "aucom.job/1.2"
 // SupportedSchemaVersions is every job record format this build reads, oldest
 // first.
 //
-// 1.1 added `installs`: which downloaded packages a job ran. A job record is
-// evidence, and evidence that names a cache entry is what stops the cache's
-// garbage collector from deleting the toolchain a retained build used. An older
-// record names none, which is read as "none" and is true — nothing had been
-// downloaded by a build that predates the download mechanism.
+// 1.1 added `installs`: which downloaded packages a job ran. The Companion has
+// downloaded no program since 2026-09-23, so nothing writes it; it is still
+// read, because the store is decoded strictly and an old record must load.
 // 1.2 added `session_role`: whether the job is a client, a listen server or a
 // dedicated server. A record without it is a record from before engine
 // profiles distinguished them, and reading it as "unknown" is true — but a
@@ -211,10 +209,9 @@ type Job struct {
 	// job, which is not a session at all.
 	SessionRole profile.SessionRole `json:"session_role,omitempty"`
 
-	// Installs is every managed download this job ran, by cache digest. It is
-	// recorded so that the record of what ran stays complete after the
-	// catalogue has moved on, and so that cache cleanup can tell a toolchain
-	// nothing refers to from one a retained job is the evidence for.
+	// Installs is LEGACY: the managed downloads a job recorded before
+	// 2026-09-23, by cache digest. Read, because the store is decoded strictly
+	// and an old record must keep loading; never written.
 	Installs []string `json:"installs,omitempty"`
 
 	Command   *CommandPreview `json:"command,omitempty"`

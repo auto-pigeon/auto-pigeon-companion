@@ -104,9 +104,6 @@ func TestMigrateLauncherOnly(t *testing.T) {
 	if got.GameRoots["quake"] != "/games/quake" || got.GameRoots["quake2"] != "/games/quake2" {
 		t.Errorf("game roots not carried over: %v", got.GameRoots)
 	}
-	if got.ToolCacheDir != "/cache/launcher-tools" {
-		t.Errorf("tool cache dir = %q", got.ToolCacheDir)
-	}
 
 	// The Launcher's own file is another installed program's configuration and
 	// is never touched.
@@ -204,9 +201,6 @@ func TestMigrateResolvesConflictsExplicitly(t *testing.T) {
 		t.Errorf("Session = %+v, want the Companion's", got.Session)
 	}
 	// Fields only the Launcher set are carried over rather than dropped.
-	if got.ToolCacheDir != "/cache/launcher-tools" {
-		t.Errorf("ToolCacheDir = %q, want the Launcher's, which the Companion had none of", got.ToolCacheDir)
-	}
 	if got.GameRoots["quake"] != "/games/quake" || len(got.GameRoots) != 2 {
 		t.Errorf("GameRoots = %v, want both games from the Launcher", got.GameRoots)
 	}

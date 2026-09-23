@@ -105,6 +105,63 @@
     });
   }
 
+  // homepageSection is where a profile's homepage is read and — for a profile
+  // of this machine's own — changed (operator, 2026-09-23). A built-in document
+  // is part of the program, so its answer is a copy of one's own, made in New
+  // profile from it. An edit is a new document version with a new digest, so
+  // it has to be approved again; the page says so before and after.
+  function homepageSection(body) {
+    const section = el("div", { className: "profile-homepage" });
+    section.append(el("h4", { text: t("Homepage") }));
+    if (!body.editable) {
+      const line = el("p", { className: "muted" });
+      if (body.homepage) {
+        line.append(el("a", { text: body.homepage, attrs: { href: body.homepage, target: "_blank", rel: "noopener noreferrer" } }));
+        line.append(document.createTextNode(" "));
+      } else {
+        line.append(document.createTextNode(t("This profile names no homepage.") + " "));
+      }
+      line.append(document.createTextNode(t("It shipped with the Companion, so it cannot be edited here; make your own profile from it to set a different homepage.")));
+      section.append(line);
+      const copy = el("button", { text: t("Make your own copy"), attrs: { type: "button", class: "secondary" } });
+      copy.addEventListener("click", () => {
+        window.open(window.location.pathname + "?view=new-profile#new-profile/" + encodeURIComponent(body.id), "_blank", "noopener");
+      });
+      section.append(el("div", { className: "row-actions", children: [copy] }));
+      return section;
+    }
+    const input = el("input", {
+      attrs: { type: "url", id: "profile-homepage", spellcheck: "false", "aria-label": t("Homepage") },
+    });
+    input.value = body.homepage || "";
+    const status = el("p", { className: "message", attrs: { role: "status" } });
+    const save = el("button", { text: t("Save homepage"), attrs: { type: "button", class: "primary" } });
+    const refreshSave = () => { save.disabled = input.value.trim() === (body.homepage || ""); };
+    input.addEventListener("input", refreshSave);
+    refreshSave();
+    save.addEventListener("click", () =>
+      withBusy(save, async () => {
+        const { ok, body: out } = await api(`/api/v1/profiles/${encodeURIComponent(body.id)}/homepage`, {
+          method: "POST", body: { homepage: input.value.trim() },
+        });
+        if (!ok) {
+          setMessage(status, out.error, "error");
+          return;
+        }
+        record(`Homepage of ${body.name} saved (version ${out.was_version} → ${out.version})`, input.value.trim(), "ok");
+        await openProfile(body.id);
+        await refreshList();
+      })
+    );
+    section.append(
+      el("p", { className: "muted small", text: t("Saving makes a new version of this profile, which has to be approved again before it runs.") }),
+      el("div", { className: "field", children: [input] }),
+      el("div", { className: "row-actions", children: [save] }),
+      status,
+    );
+    return section;
+  }
+
   // configure opens one profile's configuration page IN this window, under
   // Profiles: `#profiles/<id>`, a hash that survives a reload and names the
   // profile and nothing else. It used to open a new tab without the area
@@ -175,6 +232,7 @@
       );
     }
     detail.append(actions);
+    if (body.kind === "engine" || body.kind === "tool") detail.append(homepageSection(body));
 
     // The approval. It is the whole reason this panel exists, and it is
     // deliberately not something the page can do on somebody's behalf: the
@@ -286,56 +344,23 @@
       if (named === 0) {
         provenance.append(badge("not set up", "blocked"),
           document.createTextNode(" Nothing is recorded yet, so a build that needs these programs cannot start."));
-      } else if (acquisition === "managed_download") {
-        provenance.append(badge("verified download", "verified"),
-          document.createTextNode(" Downloaded and checked against the signed Auto-Pigeon catalogue."));
       } else {
         provenance.append(badge("local binding", "local"),
-          document.createTextNode(" " + t("Programs you named on this machine. Nothing has checked these files against a catalogue.") +
+          document.createTextNode(" " + t("Programs you named on this machine. The Companion runs what you pointed at and downloads nothing.") +
             (body.trust === "builtin" ? " " + t("The profile's builtin badge is about the document, not about these bytes.") : "")));
       }
     };
     describeProvenance(body.binding);
     detail.append(provenance);
 
-    // A verified download, when the catalogue offers one — moved here from the
-    // Build page, because setup happens in Profiles only (operator, 2026-09-23).
-    // Whether it is possible is the server's answer; no address is in this file.
-    const acquireRow = el("div", { className: "row-actions" });
-    const acquireStatus = el("p", { className: "message", attrs: { role: "status" } });
-    detail.append(acquireRow, acquireStatus);
-    (async () => {
-      const { ok, body: offer } = await api(`/api/v1/profiles/${encodeURIComponent(body.id)}/acquire`);
-      if (!ok || !offer.available) return;
-      const download = el("button", {
-        text: t("Download and set up {name}", { name: offer.name || body.name }),
-        attrs: { type: "button", class: "primary" },
-      });
-      download.addEventListener("click", () =>
-        withBusy(download, async () => {
-          setMessage(acquireStatus, `Downloading ${offer.name} ${offer.version} and checking it…`, "busy");
-          const attempt = (accept) =>
-            api(`/api/v1/profiles/${encodeURIComponent(body.id)}/acquire`, { method: "POST", body: accept ? { accept_license: true } : {} });
-          let { ok: done, body: out } = await attempt(false);
-          if (!done && out?.needs_acceptance) {
-            // A licence nobody was shown is a licence nobody accepted.
-            if (!window.confirm(`${out.notice}\n\nDownload and set it up?`)) {
-              setMessage(acquireStatus, "Nothing was downloaded.");
-              return;
-            }
-            ({ ok: done, body: out } = await attempt(true));
-          }
-          if (!done) {
-            setMessage(acquireStatus, out?.error || "it could not be set up", "error");
-            return;
-          }
-          setMessage(acquireStatus, `${out.description || "Set up"}. It survives a restart.`, "ok");
-          record(`Set up ${offer.name || body.id}`, out.tool_root || "", "ok");
-          describeProvenance(out.binding);
-        })
-      );
-      acquireRow.append(download);
-    })();
+    // The Companion downloads no program (operator, 2026-09-23): the way to a
+    // program nobody has installed yet is its own homepage.
+    if (body.homepage) {
+      const get = el("p", { className: "muted" });
+      get.append(document.createTextNode(t("Don't have it yet? Get it from its homepage, install or unpack it, then choose its folder below:") + " "));
+      get.append(el("a", { text: body.homepage, attrs: { href: body.homepage, target: "_blank", rel: "noopener noreferrer" } }));
+      detail.append(get);
+    }
 
     const folder = window.AUCOM.pathField({
       id: "profile-folder",
@@ -490,6 +515,9 @@
     $("wizard-engine-fields").hidden = $("wizard-kind").value !== "engine";
   }
 
+  // pinnedTemplate is the template a `#new-profile/<id>` link asked for.
+  let pinnedTemplate = "";
+
   async function refreshTemplates() {
     const kind = $("wizard-kind").value;
     const { ok, body } = await api("/api/v1/profiles/templates?kind=" + encodeURIComponent(kind));
@@ -503,6 +531,7 @@
     for (const template of templates) {
       select.append(el("option", { text: `${template.name} — ${template.summary}`, attrs: { value: template.id } }));
     }
+    if (pinnedTemplate && templates.some((template) => template.id === pinnedTemplate)) select.value = pinnedTemplate;
     describeTemplate();
   }
 
@@ -813,7 +842,20 @@
   });
 
   window.AUCOM.areas["new-profile"] = {
-    async refresh() {
+    // `#new-profile/<template id>` opens the creator on that template — the
+    // "Make your own copy" of a built-in profile's page.
+    async refresh(argument) {
+      pinnedTemplate = argument ? decodeURIComponent(argument) : "";
+      if (pinnedTemplate) {
+        const kind = pinnedTemplate.includes(".engine.") ? "engine" : "tool";
+        if ($("wizard-kind").value !== kind) {
+          // Through the same change a person makes, so the kind tabs redraw;
+          // refreshTemplates honours the pinned template.
+          $("wizard-kind").value = kind;
+          $("wizard-kind").dispatchEvent(new Event("change", { bubbles: true }));
+          templates = [];
+        }
+      }
       if (templates.length === 0) await refreshTemplates();
       setStep(step);
       await window.AUCOM.scratch?.refresh?.();

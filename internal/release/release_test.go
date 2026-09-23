@@ -71,17 +71,16 @@ func TestOnlyTheCompanionIsInTheArtifact(t *testing.T) {
 	}
 }
 
-// A GPL program this project hands somebody has to carry a corresponding-source
-// offer. That is the obligation the catalogue composer already refuses a release
-// without; this is the same rule stated over what a release DESCRIBES.
-func TestEveryDownloadedCopyleftComponentOffersItsSource(t *testing.T) {
+// A copyleft program this project ships has to carry a corresponding-source
+// offer; this states the rule over what a release DESCRIBES.
+func TestEveryShippedCopyleftComponentOffersItsSource(t *testing.T) {
 	components, err := Components("1.2.3")
 	if err != nil {
 		t.Fatal(err)
 	}
 	seen := 0
 	for _, component := range components {
-		if component.Distribution != Downloaded {
+		if component.Distribution != ShippedBeside {
 			continue
 		}
 		seen++
@@ -90,12 +89,12 @@ func TestEveryDownloadedCopyleftComponentOffersItsSource(t *testing.T) {
 			continue
 		}
 		if component.CorrespondingSource == "" {
-			t.Errorf("%s is %s and is downloaded by this program, but offers no corresponding source",
+			t.Errorf("%s is %s and is shipped beside this program, but offers no corresponding source",
 				component.Name, component.SPDX)
 		}
 	}
 	if seen == 0 {
-		t.Error("no component is downloaded at run time; the built-in toolchains are not being read")
+		t.Error("no component is shipped beside the Companion; the extractor is missing from the list")
 	}
 }
 
@@ -109,7 +108,7 @@ func TestEveryComponentDeclaresHowItReachesTheUser(t *testing.T) {
 	}
 	for _, component := range components {
 		switch component.Distribution {
-		case InArtifact, Downloaded, UserSupplied:
+		case InArtifact, ShippedBeside, UserSupplied:
 		default:
 			t.Errorf("%s has distribution %q", component.Name, component.Distribution)
 		}

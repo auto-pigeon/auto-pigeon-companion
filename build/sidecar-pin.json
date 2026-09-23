@@ -1,9 +1,0 @@
-{
-  "schema_version": "aucom.sidecar-pin/1.0",
-  "enabled": false,
-  "why_disabled": "No Auto-Pigeon Extractor release has been published yet, so there is no immutable version and no digest to pin. A pin filled in from a branch head or from a `latest` URL would be the exact thing NEW_246I1 forbids: a bundle whose contents nobody can state in advance. Until a published AUE release exists, the Companion's release assets are published on their own and the signed managed-acquisition path joins the two at run time — which is the documented, verified route and not a second one.",
-  "product": "auto-pigeon-extractor",
-  "version": "",
-  "release_base_url": "",
-  "artifacts": []
-}

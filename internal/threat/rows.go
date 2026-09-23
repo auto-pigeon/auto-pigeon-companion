@@ -1,9 +1,9 @@
 package threat
 
 // rows is the matrix. Read it as a story: a document arrives, it names a
-// program, the program is downloaded, an archive is unpacked, a process runs,
-// an API is served, a link is clicked, two instances race, a machine crashes,
-// a release ships.
+// program, the program is found on this machine, an archive is unpacked, a
+// process runs, an API is served, a link is clicked, two instances race, a
+// machine crashes, a release ships.
 //
 // Every Evidence entry names a test that exists. [Check] proves that, so a
 // renamed or deleted test fails the build rather than leaving a row asserting
@@ -83,85 +83,74 @@ var rows = []Row{
 		},
 	},
 
-	// --- the program is obtained -------------------------------------------
+	// --- the program is found, never downloaded ------------------------------
 	{
 		ID: "T05", Category: CatSupply,
-		Title:      "A correctly signed older catalogue is replayed to undo a withdrawal",
-		Asset:      "the ability to withdraw a bad or backdoored build",
-		Vector:     "Somebody who can serve stale bytes — a cache, a mirror, a network position — answers with yesterday's signed catalogue, in which the revoked artifact is still current.",
-		Mitigation: "Serials ratchet, per document id, in state beside config.json rather than in the cache. Revocations are recorded the first time they are seen and are never removed, by any later document or by going offline.",
+		Title:      "Something makes the Companion fetch a program and run it",
+		Asset:      "every executable this machine runs",
+		Vector:     "A profile that still lists a `managed_download` route, a command that used to install a toolchain, or a future change that adds a download path back. Each would put this program in the position of deciding what bytes land on somebody's disk.",
+		Mitigation: "There is no such path (operator, 2026-09-23). The packages that find programs import no HTTP client; a legacy `managed_download` route is read and refused with what to do instead; `acquire install` and `extractor install` are gone and say so. Every program is one the person installed, or the extractor shipped beside the Companion.",
 		Evidence: []Evidence{
-			{"internal/catalog", "TestARolledBackSerialIsRefused"},
-			{"internal/catalog", "TestARevokedKeyIsRefusedAndStaysRefusedForever"},
-			{"internal/catalog", "TestARevokedArtifactIsRefusedAndTheMachineRemembersIt"},
-			{"internal/acquire", "TestADowngradedCatalogueIsRefused"},
-			{"internal/aue", "TestAReplayedCompatibilityManifestIsRefused"},
+			{"internal/acquire", "TestNothingThatFindsAProgramCanDownloadOne"},
+			{"internal/acquire", "TestAManagedDownloadRouteIsRefusedWithTheWayAround"},
+			{"internal/cli", "TestAcquireDownloadCommandsAreGoneAndSaySo"},
+			{"internal/cli", "TestExtractorInstallSaysNothingDownloadsIt"},
 		},
 	},
 	{
 		ID: "T06", Category: CatSupply,
-		Title:      "The bytes are not the bytes: tampering in transit, or in the cache afterwards",
-		Asset:      "every external program this machine runs",
-		Vector:     "A modified download; or a cache entry edited after installation, which is the version of this attack that a check-on-install-only design misses entirely.",
-		Mitigation: "Size before digest before use, and the digest is checked again on USE, not only on install. A file added to a cache entry is noticed as well as a file changed.",
+		Title:      "The extractor beside the Companion is not the one the release shipped",
+		Asset:      "the extractor, which reads every map a user converts",
+		Vector:     "A file replaced after the release was unpacked, or a bundle assembled with the wrong platform's build; or a synced asset whose bytes changed in transit.",
+		Mitigation: "When the release's bundle manifest lists the extractor, its SHA-256 must match before it is run; a mismatch is a refusal, not a warning. Synced assets are verified before they are published anywhere.",
 		Evidence: []Evidence{
-			{"internal/acquire", "TestAValidInstallVerifiesBeforeItExtracts"},
-			{"internal/acquire", "TestAWrongDigestIsRefusedAndNothingIsInstalled"},
-			{"internal/acquire", "TestTamperingIsDetectedOnUseAndNotOnlyOnInstall"},
-			{"internal/acquire", "TestAFileAddedToACacheEntryIsDetected"},
-			{"internal/aue", "TestAnEditedCacheEntryIsRefused"},
+			{"internal/aue", "TestABundledExtractorWhoseDigestDisagreesIsRefused"},
+			{"internal/aue", "TestABundledExtractorListedInTheManifestIsVerified"},
 			{"internal/assetsync", "TestTamperedBytesArePublishedNowhere"},
 		},
 	},
 	{
 		ID: "T07", Category: CatSupply,
-		Title:      "A server sends more than it promised, or a download is cut off half-installed",
-		Asset:      "the machine's disk, and the integrity of the cache",
-		Vector:     "A response longer than the declared size, filling the disk before a digest can even be computed; or a connection dropped mid-write leaving a partial entry that a later run treats as installed.",
-		Mitigation: "The declared size bounds the read and is checked first. Nothing is published into the cache until it has verified, so an interrupted download leaves nothing and the retry succeeds.",
+		Title:      "A server sends more than it promised, or a map download is cut off half-written",
+		Asset:      "the machine's disk, and the integrity of the asset cache",
+		Vector:     "A response longer than the declared size, or a connection dropped mid-write leaving a partial file that a later run treats as complete.",
+		Mitigation: "Asset sync reads against the declared size and publishes nothing until it has verified, so an interrupted sync leaves nothing half-done and is cheap to finish.",
 		Evidence: []Evidence{
-			{"internal/acquire", "TestAWrongSizeIsRefusedBeforeTheDigestIsEvenComputed"},
-			{"internal/acquire", "TestAServerThatSendsMoreThanItPromisedIsRefused"},
-			{"internal/acquire", "TestAnInterruptedDownloadLeavesNothingAndTheRetrySucceeds"},
 			{"internal/assetsync", "TestATruncatedTransferIsRefused"},
 			{"internal/assetsync", "TestAnInterruptedSyncIsCheapToFinishAndReadsNothingHalfDone"},
 		},
 	},
 	{
 		ID: "T08", Category: CatSupply,
-		Title:      "A verification that could not run is treated as one that passed",
-		Asset:      "the whole trust chain",
-		Vector:     "No trust anchor configured, an expired document, an unreachable server, a failed signature. Each is a moment where a program that wants to be helpful installs anyway.",
-		Mitigation: "Every one of them is a refusal with no path to a download. Offline is a different authority, not a weaker check: it uses only content already verified and recorded, and it says what it cannot do.",
+		Title:      "A check on the extractor that could not run is treated as one that passed",
+		Asset:      "the decision to run the extractor at all",
+		Vector:     "No extractor beside the Companion, an unreadable bundle manifest, a `protocol` answer that is not one document or names a contract this build cannot drive. Each is a moment where a program that wants to be helpful runs something anyway.",
+		Mitigation: "Every one of them is a refusal. No extractor is an error naming the file and the override, never a fall-back to one; an unreadable manifest vouches for nothing; a malformed or incompatible protocol answer stops the run before the extractor is used.",
 		Evidence: []Evidence{
-			{"internal/acquire", "TestNothingFallsBackToAnUnverifiedInstall"},
-			{"internal/catalog", "TestAnUnconfiguredTrustAnchorRefusesEverything"},
-			{"internal/acquire", "TestAnExpiredCatalogueRefusesToInstallAnything"},
-			{"internal/aue", "TestAFailedManagedResolutionDoesNotFallBackToAnything"},
-			{"internal/acquire", "TestOfflineUsesOnlyAlreadyVerifiedPinnedContent"},
+			{"internal/aue", "TestNoBundledExtractorIsASentenceNamingTheOverride"},
+			{"internal/aue", "TestAnUnreadableBundleManifestIsARefusal"},
+			{"internal/aue", "TestMalformedProtocolOutputIsRefused"},
+			{"internal/aue", "TestAnIncompatibleProtocolIsRefusedBeforeTheBuildIsUsed"},
 		},
 	},
 	{
 		ID: "T09", Category: CatSupply,
-		Title:      "A compromised backend authorises a download of something else",
-		Asset:      "the distinction between who may fetch and what the bytes are",
-		Vector:     "The authorization hook rewrites the URL immediately before the fetch. A backend that returned a URL to its own artifact would be choosing what this program runs.",
-		Mitigation: "Authorization changes the URL and nothing else. Size, digest and the signature chain are checked exactly as for a public URL, against the catalogue this machine anchors.",
+		Title:      "A developer's own extractor is mistaken for the one the release shipped",
+		Asset:      "the meaning of \"verified\" wherever an extractor is shown",
+		Vector:     "AUCOM_AUE_BINARY names a local build. If it were reported like the bundled copy, results produced with an unreviewed program would look like results the release produced.",
+		Mitigation: "The override is its own constructor and its own mode. It is labelled UNVERIFIED on every surface that shows an extractor, and nothing arrives at it by falling through a bundled resolution that failed.",
 		Evidence: []Evidence{
-			{"internal/aue", "TestAnAuthorizedDownloadVerifiesExactlyAsAPublicOneDoes"},
-			{"internal/aue", "TestABackendThatWillNotAuthorizeIsARefusalAndInstallsNothing"},
-			{"internal/catalog", "TestACatalogueURLMustBeHTTPSAndCarryNoCredentials"},
-			{"internal/catalog", "TestAnArtifactAttributedToAKeyThatDidNotSignIsRefused"},
+			{"internal/aue", "TestTheDeveloperOverrideIsUnverifiedAndSaysSo"},
+			{"internal/cli", "TestExtractorStatusReportsAnOverrideAsUnverified"},
 		},
 	},
 	{
 		ID: "T10", Category: CatSupply,
-		Title:      "A profile points at a file nothing vouched for, or at one outside the directory it named",
+		Title:      "A profile points at a file outside the directory it named, or at one that is not a program",
 		Asset:      "the executable that actually runs",
-		Vector:     "A managed route naming a catalogue package that does not exist; a user-path route whose relative path climbs out of the directory the user chose; a data file presented as a program.",
-		Mitigation: "A managed route resolves only through the verified catalogue. A user path is resolved against the chosen directory and refused if it leaves it. A file that is not executable is refused by name.",
+		Vector:     "A user-path route whose relative path climbs out of the directory the user chose; a PATH route that looks up a name the profile never declared; a data file presented as a program.",
+		Mitigation: "A user path is resolved against the chosen directory and refused if it leaves it. A PATH lookup finds only the commands the route names. A file that is not executable is refused by name.",
 		Evidence: []Evidence{
-			{"internal/acquire", "TestAProfileCannotNameAFileTheCatalogueNeverVouchedFor"},
 			{"internal/acquire", "TestAUserPathCannotReachOutsideTheDirectoryItNames"},
 			{"internal/acquire", "TestANonExecutableFileIsRefused"},
 			{"internal/acquire", "TestASystemPathResolutionLooksUpOnlyTheCommandsTheOptionNames"},
@@ -181,7 +170,6 @@ var rows = []Row{
 			{"internal/pack", "TestReplacingAnExtractedFileDoesNotWriteThroughAHardLink"},
 			{"internal/pack", "TestReadPK3RefusesUnsafeNames"},
 			{"internal/pack", "TestReadPK3RefusesADirectoryMemberThatEscapes"},
-			{"internal/catalog", "TestAnArchivePathThatEscapesOrIsAbsoluteIsRefused"},
 			{"internal/assetsync", "TestMaterializeKeepsNestedPathsAndRefusesEscapingOnes"},
 		},
 	},
@@ -196,7 +184,6 @@ var rows = []Row{
 			{"internal/pack", "TestReadPAKRefusesAnOffsetBomb"},
 			{"internal/pack", "TestExtractStopsAtTheBudget"},
 			{"internal/pack", "TestReadPK3RefusesTooManyMembersForTheBudget"},
-			{"internal/acquire", "TestMaliciousArchivesAreRefusedBeforeAnythingIsPublished"},
 		},
 	},
 	{
@@ -390,7 +377,6 @@ var rows = []Row{
 		Evidence: []Evidence{
 			{"internal/web", "TestUnknownFieldsAreRejected"},
 			{"internal/profile", "TestUnknownMemberIsReportedWithItsPath"},
-			{"internal/catalog", "TestAnUnknownMemberIsRefused"},
 			{"internal/aub", "TestAnUnknownSchemaVersionIsRefused"},
 		},
 	},
@@ -427,18 +413,6 @@ var rows = []Row{
 		Evidence: []Evidence{
 			{"internal/job", "TestACredentialDoesNotSurviveIntoWhatAUserReads"},
 			{"internal/job", "TestAShortValueIsNotTreatedAsASecret"},
-		},
-	},
-	{
-		ID: "T29", Category: CatCredential,
-		Title:      "A pre-signed URL or a credential in a query string is written into an error or a record",
-		Asset:      "a capability that is valid for minutes and is enough to fetch an artifact",
-		Vector:     "An authorized download URL carries a signature in its query. An error message quoting the URL, or a record storing it, publishes it.",
-		Mitigation: "Errors and records carry a redacted URL — scheme, host and path — through one function, and the catalogue address itself must be HTTPS and carry no credentials.",
-		Evidence: []Evidence{
-			{"internal/acquire", "TestAnErrorNeverCarriesADownloadQueryString"},
-			{"internal/catalog", "TestRedactURLKeepsOnlyWhatAPersonNeeds"},
-			{"internal/catalog", "TestACatalogueURLMustBeHTTPSAndCarryNoCredentials"},
 		},
 	},
 	{
@@ -534,17 +508,14 @@ var rows = []Row{
 	{
 		ID: "T35", Category: CatRace,
 		Title:      "Two instances write the same local state and one change disappears",
-		Asset:      "the catalogue trust state, which is where revocations live, and the binding store, which is where approvals live",
-		Vector:     "The GUI server and a `companion` invocation in a terminal both read catalog-state.json, each records a different revocation, both write. Atomic writes make both succeed and one revocation is gone, with no error anywhere. The same shape over bindings.json costs an approval, or resurrects one somebody withdrew.",
-		Mitigation: "A cross-process lock, and for the trust state a monotone merge under it: serials take the max, revocations take the union. The window between reading that file and writing it back spans a network fetch, so a lock alone would not have been enough. Every write to the binding store goes through binding.Update, which reads inside the same lock.",
+		Asset:      "the binding store, which is where approvals live, and config.json",
+		Vector:     "The GUI server and a `companion` invocation in a terminal both read bindings.json, each changes a different binding, both write. Atomic writes make both succeed and one change is gone, with no error anywhere — an approval lost, or one somebody withdrew resurrected.",
+		Mitigation: "A cross-process lock, and every write reads inside it: every write to the binding store goes through binding.Update, and config.json through config.Update.",
 		Evidence: []Evidence{
 			{"internal/lockfile", "TestOnlyOneWriterIsEverInsideTheCriticalSection"},
 			{"internal/approval", "TestConcurrentGrantsAndWithdrawalsLoseNoUnrelatedBinding"},
 			{"internal/config", "TestAChangeByAnotherInstanceIsNotUndoneByThisOne"},
 			{"internal/config", "TestConcurrentUpdatesAllLand"},
-			{"internal/catalog", "TestARevocationRecordedByAnotherInstanceIsNotOverwritten"},
-			{"internal/catalog", "TestConcurrentWritersLoseNoRevocation"},
-			{"internal/catalog", "TestAnOlderSerialCannotBeWrittenBackOverANewerOne"},
 		},
 	},
 	{
@@ -565,12 +536,11 @@ var rows = []Row{
 		Title:      "Concurrent jobs share a workspace, collide over artifacts, or leak processes",
 		Asset:      "the correctness of every build running at once",
 		Vector:     "Two builds of the same map writing into one directory; two jobs publishing an artifact of the same name; a soak that leaves goroutines or processes behind.",
-		Mitigation: "One directory per job, artifacts namespaced by job, concurrency bounded, and installs of one artifact deduplicated into a single cache entry.",
+		Mitigation: "One directory per job, artifacts namespaced by job, concurrency bounded, and one native file chooser at a time.",
 		Evidence: []Evidence{
 			{"internal/job", "TestConcurrentJobsAreBoundedAndDoNotShareAWorkspace"},
 			{"internal/job", "TestArtifactsOfDifferentJobsDoNotCollide"},
 			{"internal/job", "TestNoGoroutinesOrProcessesSurviveASoak"},
-			{"internal/acquire", "TestConcurrentInstallsOfTheSameArtifactProduceOneEntry"},
 			{"internal/pathpick", "TestSecondDialogIsRefusedWhileOneIsOpen"},
 		},
 	},
@@ -593,12 +563,10 @@ var rows = []Row{
 	{
 		ID: "T39", Category: CatRecovery,
 		Title:      "A state file is corrupt, and reading it as empty resets a security decision",
-		Asset:      "the serial ratchet and the sticky revocations",
-		Vector:     "A file truncated by a crash or a full disk. A program that treats an unreadable ratchet as an absent one has been talked into exactly the state a replay needs.",
-		Mitigation: "A missing file is empty state and no error; a file that exists and cannot be read is an error. A corrupt trust state fails a WRITE too, rather than being replaced with a fresh one.",
+		Asset:      "the configuration and the verified asset cache",
+		Vector:     "A file truncated by a crash or a full disk. A program that treats an unreadable file as an absent one resets whatever it recorded.",
+		Mitigation: "A missing file is empty state and no error; a file that exists and cannot be read is an error, and an asset cache that lost or changed bytes is caught on verify.",
 		Evidence: []Evidence{
-			{"internal/catalog", "TestAMissingTrustStateIsEmptyAndACorruptOneIsAnError"},
-			{"internal/catalog", "TestACorruptStateFileIsNotSilentlyReplaced"},
 			{"internal/config", "TestLoadFromMalformedFileIsAnError"},
 			{"internal/config", "TestMigrateRefusesAMalformedFile"},
 			{"internal/assetsync", "TestVerifyCatchesACacheThatLostOrChangedBytes"},
@@ -655,32 +623,29 @@ var rows = []Row{
 		Title:      "The network goes away mid-operation, or the machine sleeps and wakes elsewhere",
 		Asset:      "the ability to keep working, and the integrity of what was half-done",
 		Vector:     "A laptop suspended during a sync; a VPN that changes which hosts resolve; an offline machine asked to build.",
-		Mitigation: "An interrupted sync is cheap to finish and reads nothing half-done. Offline uses only already-verified pinned content, still checks the protocol handshake, and says what it cannot do rather than doing less of it.",
+		Mitigation: "An interrupted sync is cheap to finish and reads nothing half-done. Offline, the Companion says what it cannot resolve rather than doing less of it; nothing it runs needs the network, because nothing it runs is downloaded.",
 		Evidence: []Evidence{
-			{"internal/acquire", "TestOfflineUsesOnlyAlreadyVerifiedPinnedContent"},
-			{"internal/aue", "TestOfflineRunsTheCachedBuildAndStillChecksTheProtocol"},
-			{"internal/aue", "TestOfflineWithNoRecordedRequirementRefuses"},
 			{"internal/assetsync", "TestResolvingCurrentOfflineSaysWhatIsMissing"},
 			{"internal/assetsync", "TestAnInterruptedSyncIsCheapToFinishAndReadsNothingHalfDone"},
 		},
 	},
 	{
 		ID: "T44", Category: CatRecovery,
-		Title:      "Antivirus holds or quarantines a freshly downloaded executable",
+		Title:      "Antivirus holds or quarantines the extractor shipped beside the Companion",
 		Asset:      "the first run on a Windows machine",
-		Vector:     "Defender or a third-party scanner opens a newly written .exe, and the rename or the exec fails with a sharing violation for a second or two — or the file is quarantined and never appears.",
-		Mitigation: "Nothing is published into the cache until it has verified, so a failure at this point leaves no partial entry and the retry succeeds. A missing executable is reported by name with what to do about it, rather than as a generic exec failure.",
+		Vector:     "Defender or a third-party scanner opens the freshly unpacked auto-pigeon-extractor.exe, and the exec fails with a sharing violation for a second or two — or the file is quarantined and never appears.",
+		Mitigation: "A missing extractor or program is reported by name with what to do about it, rather than as a generic exec failure, and resolution is retried on the next start.",
 		Evidence: []Evidence{
-			{"internal/acquire", "TestAnInterruptedDownloadLeavesNothingAndTheRetrySucceeds"},
+			{"internal/aue", "TestNoBundledExtractorIsASentenceNamingTheOverride"},
 			{"internal/job", "TestAMissingExecutableSaysWhatToDoAboutIt"},
 		},
-		Manual: "On a Windows machine with Defender real-time protection ON: `companion acquire install --package auto-pigeon.ericw-tools.q1`, " +
-			"then immediately `companion build run --pipeline auto-pigeon.pipeline.q1-fast-preview --map <a map>`. " +
-			"Expected: either it works, or it fails naming the executable and the retry succeeds. " +
-			"Not expected: a half-installed cache entry that a later run treats as installed, or an error that does not name a file.",
+		Manual: "On a Windows machine with Defender real-time protection ON: unpack a release bundle, then immediately run " +
+			"`companion extractor version`. " +
+			"Expected: either it prints the extractor's version, or it fails naming auto-pigeon-extractor.exe and a second run succeeds. " +
+			"Not expected: an error that does not name a file.",
 		Residual: &Residual{
 			What: "No automated test exercises a real antivirus scanner holding a file open. The evidence above is the " +
-				"structural property — nothing partial is ever published — not an observation of Defender.",
+				"structural property — a missing file is named — not an observation of Defender.",
 			Why: "A scanner cannot be driven from CI, and a fake one that returns a sharing violation would be testing the " +
 				"fake. The manual procedure above is the observation, run before a Windows release.",
 			Owner:  "andrea-dintino (maintainer)",
@@ -707,13 +672,11 @@ var rows = []Row{
 		ID: "T46", Category: CatRelease,
 		Title:      "A copyleft binary is handed out with no offer of its source",
 		Asset:      "compliance with the licences of the programs this project distributes",
-		Vector:     "A catalogue entry for a GPL tool published without a corresponding-source URL, or a component list that quietly omits one.",
-		Mitigation: "The release composer refuses a copyleft package offering no corresponding source, before anything can sign it. The component list is derived from the built-in profiles, so a toolchain added without a licence cannot become invisible.",
+		Vector:     "The AGPL extractor shipped beside the Companion without a corresponding-source offer, or a component list or notices file that quietly omits it.",
+		Mitigation: "The one component this project distributes besides itself — the extractor, shipped beside it — must carry a corresponding-source URL, and the notices file must name it and its licence. The rest of the component list is derived from the built-in profiles, so a toolchain added without a licence cannot become invisible.",
 		Evidence: []Evidence{
-			{"internal/release", "TestEveryDownloadedCopyleftComponentOffersItsSource"},
-			{"internal/catalog", "TestAReleaseWithNoCorrespondingSourceIsRefusedBeforeSigning"},
-			{"internal/catalog", "TestTheGPLNoticeSaysWhatIsActuallyBeingConveyed"},
-			{"internal/cli", "TestCatalogReleaseRefusesAReleaseWithNoCorrespondingSource"},
+			{"internal/release", "TestEveryShippedCopyleftComponentOffersItsSource"},
+			{"cmd/companion", "TestNoticesCoverEveryRedistributedComponent"},
 		},
 	},
 	{
@@ -753,7 +716,7 @@ var rows = []Row{
 	{
 		ID: "T49", Category: CatRelease,
 		Title:      "An uninstall takes the user's work with it, or leaves the machine changed",
-		Asset:      "build history, granted profiles, the catalogue ratchet, and downloaded third-party binaries",
+		Asset:      "build history, granted profiles and their bindings",
 		Vector:     "A package script that deletes ~/.config and ~/.cache; or one that leaves an autopigeon:// handler pointing at a deleted binary.",
 		Mitigation: "Package scripts touch nothing under any user's home: they run as root and cannot know whose files those are. Removing user data is a per-user command the person runs themselves, which says exactly what it will delete and requires confirmation. The Windows handler key carries uninsdeletekey and the Linux one is a file the package owns.",
 		Evidence: []Evidence{

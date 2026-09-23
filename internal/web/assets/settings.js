@@ -47,9 +47,6 @@
       ["Profiles", body.profiles_dir],
       ["Local setups", body.bindings_path],
       ["Downloaded assets", body.asset_cache_dir],
-      ["Downloaded tools", body.tool_cache_dir],
-      ["Acquisition catalogue", body.catalog_url],
-      ["Catalogue trust anchors", body.catalog_anchors_path],
       ["File chooser", body.path_helper || "none on this machine — paths are typed"],
       ["Offline mode", body.offline ? "on" : "off"],
     ];

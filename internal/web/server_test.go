@@ -32,7 +32,6 @@ const testHost = "127.0.0.1:8789"
 func newTestServer(t *testing.T, client *aub.Client) (*Server, *config.Config) {
 	t.Helper()
 	settings := config.Default()
-	settings.ToolCacheDir = t.TempDir()
 
 	saved := settings
 	server, err := NewServer(Options{

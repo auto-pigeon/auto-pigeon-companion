@@ -6,7 +6,7 @@
 // Turning a compiled map into something another person can install means
 // putting it in the archive the engine reads. That is a small job, and it is
 // the last one, which is exactly why it is worth owning: everything upstream of
-// it — the signed catalogue, the supervised executor, the build manifest — has
+// it — the approvals, the supervised executor, the build manifest — has
 // been about knowing what happened, and handing the result to an unaudited
 // third-party packer at the final step would throw that away. Nothing here
 // shells out. No q1tools or QPakMan code was copied or translated; the formats

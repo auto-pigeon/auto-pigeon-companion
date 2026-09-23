@@ -32,30 +32,18 @@
   "tool_version": "0.18.1",
   "platforms": [
     { "platform": { "os": "linux", "arch": "amd64" }, "status": "supported" },
-    { "platform": { "os": "windows", "arch": "amd64" }, "status": "unverified", "note": "the official win64 build is pinned in the catalogue; nobody here has run it" },
-    { "platform": { "os": "windows", "arch": "386" }, "status": "unverified", "note": "the official win32 build is pinned in the catalogue; nobody here has run it" },
+    { "platform": { "os": "windows", "arch": "amd64" }, "status": "unverified", "note": "the official win64 build exists upstream; nobody here has run it" },
+    { "platform": { "os": "windows", "arch": "386" }, "status": "unverified", "note": "the official win32 build exists upstream; nobody here has run it" },
     { "platform": { "os": "darwin", "arch": "amd64" }, "status": "unverified", "note": "the 2018 Darwin build is unsigned and unnotarized; recent macOS will refuse it until the user allows it" },
     { "platform": { "os": "darwin", "arch": "arm64" }, "status": "unverified", "note": "no arm64 build exists upstream; the amd64 build runs under Rosetta 2, or point the Companion at your own" },
     { "platform": { "os": "linux", "arch": "arm64" }, "status": "unverified", "note": "no arm64 build exists upstream; build it from the tagged source or point the Companion at your own" }
   ],
   "acquisition": [
     {
-      "mode": "managed_download",
-      "title": "Download the official v0.18.1 release",
-      "catalog_package": "ericw-tools.q1",
-      "platforms": [
-        { "os": "linux", "arch": "amd64" },
-        { "os": "windows", "arch": "amd64" },
-        { "os": "windows", "arch": "386" },
-        { "os": "darwin", "arch": "amd64" }
-      ],
-      "note": "The four archives upstream published for v0.18.1, each pinned by size and SHA-256 in the signed catalogue. There is no arm64 build to pin, on any operating system, so arm64 is not offered here."
-    },
-    {
       "mode": "user_path",
       "title": "Use a copy you already have",
       "hint": "choose the unpacked ericw-tools folder — the one with bin/qbsp inside it",
-      "note": "The route for arm64, for a distribution package, and for a build you made yourself from the v0.18.1 tag. Nothing verifies it against the catalogue: you are the authority for what you pointed at."
+      "note": "Download the release for your platform from the ericw-tools homepage and unpack it, or use a distribution package or your own build of the v0.18.1 tag. You are the authority for what you pointed at."
     },
     {
       "mode": "system_path",

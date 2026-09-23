@@ -573,7 +573,6 @@ func (r *Runner) tools(steps []profile.ResolvedStep) []ToolRecord {
 		if bound {
 			record.ResolvedVersion = local.ResolvedVersion
 			record.Acquisition = local.Acquisition
-			record.Installs = local.Installs
 			for _, declared := range resolved.Profile.Executables {
 				path, resolvedPath := local.Executables[declared.Name]
 				if !resolvedPath {
@@ -913,11 +912,10 @@ func (r *Runner) finish(manifest *Manifest) (*Manifest, error) {
 // rather than about the build: where the build put its files, where the
 // executor put its jobs, and where each tool is installed.
 //
-// The tool roots matter more than they look. A managed download lands in a
-// content-addressed directory whose name contains the artifact's digest, so
-// leaving it in the argv would put the same digest in the key twice and, worse,
-// would make the key depend on where the cache is. The executable's own digest
-// is recorded separately, which is the part that means something.
+// The tool roots matter more than they look: leaving where a tool is installed
+// in the argv would make the key depend on this machine's layout. The
+// executable's own digest is recorded separately, which is the part that means
+// something.
 func (r *Runner) generalizeRoots(manifest *Manifest) []string {
 	roots := []string{manifest.Directory, r.options.Service.Store().Root()}
 	// A supplied root is an absolute path on one machine. Its IDENTITY — the

@@ -1,33 +1,32 @@
 #!/usr/bin/env python3
-"""Write one platform bundle's manifest, and fetch the pinned extractor.
+"""Write one platform bundle's manifest, and place the extractor in it.
 
 The manifest maps EVERY member of the bundle to product, version, platform,
 size and SHA-256. Built by walking the directory rather than from a list
 somebody maintained beside it: a manifest assembled from a list is a manifest
 that is wrong the first time a file is added and nobody updates it.
 
-The sidecar rules, in one place:
+The extractor rules, in one place:
 
-  * A pinned extractor is fetched from the EXACT url the pin names, and its
-    bytes must hash to the EXACT digest the pin names. A mismatch is an error
-    and nothing is written; there is no flag that accepts it.
-  * With no pin the bundle is complete and carries no extractor, and says so.
-    The Companion then obtains one against the signed catalogue, verified, as a
-    managed install — the same route it has always had.
-  * The extractor is a SEPARATE FILE beside the Companion, never renamed,
-    never linked, never inside it.
-
-`AUCOM/AUE/AUT 246I1`.
+  * The extractor is an Auto-Pigeon Extractor binary BUILT BEFOREHAND — by the
+    release workflow from the extractor's own repository, or by hand — and
+    passed in with --extractor. Nothing here downloads anything.
+  * It is copied in as `auto-pigeon-extractor[.exe]`, a SEPARATE FILE beside
+    the Companion, which is where the Companion looks for it and checks its
+    digest against this manifest. Never linked, never inside the Companion.
+  * With no --extractor the bundle is complete and carries no extractor, and
+    says so; the Companion then reports that map inspection is unavailable.
 """
 
 import argparse
 import hashlib
 import json
 import os
+import shutil
 import sys
-import urllib.request
 
 SCHEMA = "aucom.bundle-manifest/1.0"
+EXTRACTOR_SPDX = "AGPL-3.0-only"
 
 
 def digest_of(path):
@@ -40,52 +39,29 @@ def digest_of(path):
     return size, "sha256:" + sha.hexdigest()
 
 
-def fetch_sidecar(pin, platform, bundle):
-    """Download the pinned extractor for this platform, verified."""
-    if not pin.get("enabled"):
-        return None, pin.get("why_disabled", "")
-    version = pin.get("version", "").strip()
-    base = pin.get("release_base_url", "").strip()
-    if not version or not base:
+def place_extractor(source, version, platform, bundle, corresponding_source):
+    """Copy the prebuilt extractor into the bundle under the name the Companion reads."""
+    if not version:
+        raise SystemExit("error: --extractor needs --extractor-version: a bundle must say which build it carries")
+    if not corresponding_source:
         raise SystemExit(
-            "error: the sidecar pin is enabled and names no version or no release url. "
-            "A pin without both is not a pin."
+            "error: --extractor needs --extractor-source: the extractor is AGPL-3.0, and a bundle that "
+            "carries it must say where its corresponding source is"
         )
-    if "latest" in base:
-        raise SystemExit(
-            "error: the sidecar pin's release url contains `latest`. An asset behind a "
-            "mutable url is an asset nobody can state the contents of in advance."
-        )
-    for artifact in pin.get("artifacts", []):
-        if artifact.get("platform") != platform:
-            continue
-        name = artifact["file"]
-        expected = artifact["sha256"]
-        url = base.rstrip("/") + "/" + name
-        target = os.path.join(bundle, name)
-        with urllib.request.urlopen(url) as response, open(target, "wb") as out:
-            while True:
-                block = response.read(1 << 20)
-                if not block:
-                    break
-                out.write(block)
-        _, actual = digest_of(target)
-        if actual != expected:
-            os.remove(target)
-            raise SystemExit(
-                f"error: {name} hashes to {actual} and the pin says {expected}. "
-                "Nothing is bundled."
-            )
-        return {
-            "product": "auto-pigeon-extractor",
-            "version": version,
-            "platform": platform,
-            "file": name,
-            "license": "AGPL-3.0-or-later",
-            "corresponding_source": pin.get("corresponding_source", ""),
-            "verified": "the pin's sha256, checked against the downloaded bytes",
-        }, ""
-    raise SystemExit(f"error: the sidecar pin is enabled and names no artifact for {platform}")
+    if not os.path.isfile(source):
+        raise SystemExit(f"error: the extractor {source} is not a file")
+    name = "auto-pigeon-extractor" + (".exe" if platform.startswith("windows-") else "")
+    target = os.path.join(bundle, name)
+    shutil.copyfile(source, target)
+    os.chmod(target, 0o755)
+    return {
+        "product": "auto-pigeon-extractor",
+        "version": version,
+        "platform": platform,
+        "file": name,
+        "license": EXTRACTOR_SPDX,
+        "corresponding_source": corresponding_source,
+    }
 
 
 def main():
@@ -93,13 +69,15 @@ def main():
     parser.add_argument("--platform", required=True)
     parser.add_argument("--version", required=True)
     parser.add_argument("--bundle", required=True)
-    parser.add_argument("--pin", required=True)
+    parser.add_argument("--extractor", default="", help="a prebuilt auto-pigeon-extractor for this platform")
+    parser.add_argument("--extractor-version", default="")
+    parser.add_argument("--extractor-source", default="", help="where its corresponding source is")
     args = parser.parse_args()
 
-    with open(args.pin, encoding="utf-8") as handle:
-        pin = json.load(handle)
-
-    sidecar, why_absent = fetch_sidecar(pin, args.platform, args.bundle)
+    sidecar = None
+    if args.extractor:
+        sidecar = place_extractor(args.extractor, args.extractor_version, args.platform, args.bundle,
+                                  args.extractor_source)
 
     members = []
     for root, _, names in os.walk(args.bundle):
@@ -139,18 +117,16 @@ def main():
     }
     if sidecar is None:
         manifest["extractor_absent"] = {
-            "reason": why_absent,
-            "how_it_is_obtained": (
-                "Auto-Pigeon Companion downloads the extractor against a signed catalogue, at the "
-                "version a signed compatibility manifest names, verifies its digest and its "
-                "protocol handshake, and records it as a managed install. That is one of exactly "
-                "two ways this program will ever reach an extractor; the other is an explicit "
-                "local developer override, which is labelled unverified wherever it is shown."
+            "reason": "This bundle was assembled without an Auto-Pigeon Extractor build.",
+            "consequence": (
+                "Map inspection and APMap conversion are unavailable in this bundle. The Companion "
+                "downloads no program: an extractor reaches it only in a release bundle, beside it, "
+                "or through the AUCOM_AUE_BINARY developer override, which is labelled unverified."
             ),
         }
     else:
         manifest["licenses"].append(
-            {"product": "auto-pigeon-extractor", "spdx": "AGPL-3.0-or-later",
+            {"product": "auto-pigeon-extractor", "spdx": EXTRACTOR_SPDX,
              "corresponding_source": sidecar["corresponding_source"]}
         )
 
@@ -158,9 +134,12 @@ def main():
     with open(out, "w", encoding="utf-8") as handle:
         json.dump(manifest, handle, indent=2, sort_keys=False)
         handle.write("\n")
-    print(f"== {out} ({len(members)} member(s), extractor: "
-          f"{sidecar['version'] if sidecar else 'not bundled'})", file=sys.stderr)
+    if sidecar is None:
+        print(f"bundle {args.platform}: no extractor inside")
+    else:
+        print(f"bundle {args.platform}: extractor {sidecar['version']} beside the Companion as {sidecar['file']}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -173,6 +173,7 @@ explanation rather than ignored.
 ## Follow-up work
 
 - `AUCOM 217` gives external community tools, `q1tools` among them, a catalogue
-  entry of their own.
+  entry of their own. (Moot since [ADR-0008](0008-the-companion-downloads-no-program.md):
+  there is no catalogue; users install such tools themselves.)
 - A real known-asset corpus, computed from media somebody actually holds, is a
   data task and not a code one. The format and the loader are in place.

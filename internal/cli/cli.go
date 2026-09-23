@@ -176,19 +176,14 @@ var commands = []Command{
 		// /companion-profiles routes are unchanged — a rename chased into a stable
 		// contract is a break, not a clarification.
 		Name: "toolchain", Aliases: []string{"profile"},
-		Usage:   "validate | show | canonicalize | digest | diff | list | schema | review | grant | withdraw",
+		Usage:   "validate | show | canonicalize | digest | diff | list | schema | review | grant | withdraw | homepage",
 		Summary: "read, check and compare tool, engine and pipeline toolchains, and approve one to run",
 		Run:     runToolchain,
 	},
 	{
-		Name: "acquire", Usage: "plan | install | accept | list | verify | use | gc | resolve",
-		Summary: "obtain a toolchain's programs from the signed catalogue, and manage the cache",
+		Name: "acquire", Usage: "resolve",
+		Summary: "find a toolchain's programs on this machine (a folder, PATH, or a game's own copy); nothing is downloaded",
 		Run:     runAcquire,
-	},
-	{
-		Name: "catalog", Usage: "keygen | sign | verify | show | status | release",
-		Summary: "sign, verify and inspect the acquisition catalogue, its keyring and its compatibility manifest",
-		Run:     runCatalog,
 	},
 	{
 		Name: "engine", Usage: "list | show | detect | bind | check | preview | run | stage | unstage",
@@ -206,8 +201,8 @@ var commands = []Command{
 		Run:     runLaunch,
 	},
 	{
-		Name: "extractor", Usage: "status | plan | install | version",
-		Summary: "obtain and run the separately licensed auto-pigeon-extractor (AUE)",
+		Name: "extractor", Usage: "status | version",
+		Summary: "the separately licensed auto-pigeon-extractor (AUE) shipped beside this program",
 		Run:     runExtractor,
 	},
 	{

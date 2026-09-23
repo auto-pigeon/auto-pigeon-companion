@@ -241,7 +241,7 @@ func (r *stubRunner) Available() bool { return r.available }
 // extractor has to show whether anything verified it, and a caller holding a
 // Runner must not have to type-assert to find out.
 func (r *stubRunner) Provenance() aue.Provenance {
-	mode := aue.ModeManaged
+	mode := aue.ModeBundled
 	if !r.verified {
 		mode = aue.ModeDeveloperOverride
 	}
@@ -252,7 +252,6 @@ func (r *stubRunner) Provenance() aue.Provenance {
 func serverWithRunner(t *testing.T, runner aue.Runner) *Server {
 	t.Helper()
 	settings := config.Default()
-	settings.ToolCacheDir = t.TempDir()
 	server, err := NewServer(Options{
 		Version: "test",
 		Config:  settings,

@@ -340,43 +340,22 @@ func (r *run) laneToolchain(ctx context.Context) Lane {
 	add(pass("the built-in compiler profile is written out of this binary",
 		"canonical bytes, digest "+shortDigest(entry.Digest)))
 
-	if r.options.ToolPath != "" {
-		bind := r.exec(ctx, 300*time.Second, "acquire", "resolve", document,
-			"--mode", "user_path", "--user-path", r.options.ToolPath, "--bind")
-		if bind.code == 0 {
-			r.compilersBound = true
-			add(pass("an EricW build the operator already has is bound by user_path",
-				"the operator named the directory; nothing was downloaded"))
-		} else {
-			add(failed("an EricW build the operator already has is bound by user_path",
-				r.redact.Line(bind.output())))
-		}
-		add(inapplicable("a managed download installs a compatible artifact",
-			"the operator named a build with --tool-path, so nothing was downloaded"))
-		return lane
-	}
-
-	plan := r.exec(ctx, 300*time.Second, "acquire", "plan", Q1ToolProfileID)
-	if plan.code != 0 {
-		add(unavailable("a managed download installs a compatible artifact",
-			"this machine has no compatible managed artifact and no network answer: "+
-				r.redact.Line(firstLine(plan.output()))))
+	// The Companion downloads no program (operator, 2026-09-23): the only way
+	// to a compiler is one the operator already has.
+	if r.options.ToolPath == "" {
 		add(unavailable("an EricW build the operator already has is bound by user_path",
 			"no --tool-path was given, so there is no build to bind"))
 		return lane
 	}
-	add(pass("a managed download is planned before anything is downloaded",
-		r.redact.Line(firstLine(plan.stdout))))
-
-	bind := r.exec(ctx, 900*time.Second, "acquire", "resolve", document,
-		"--mode", "managed_download", "--bind")
+	bind := r.exec(ctx, 300*time.Second, "acquire", "resolve", document,
+		"--mode", "user_path", "--user-path", r.options.ToolPath, "--bind")
 	if bind.code == 0 {
 		r.compilersBound = true
-		add(pass("a managed download installs a compatible artifact and binds it",
-			r.redact.Line(firstLine(bind.stdout))))
+		add(pass("an EricW build the operator already has is bound by user_path",
+			"the operator named the directory; nothing was downloaded"))
 	} else {
-		add(unavailable("a managed download installs a compatible artifact and binds it",
-			r.redact.Line(firstLine(bind.output()))))
+		add(failed("an EricW build the operator already has is bound by user_path",
+			r.redact.Line(bind.output())))
 	}
 	return lane
 }

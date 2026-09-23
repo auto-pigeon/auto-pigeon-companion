@@ -4,9 +4,9 @@
 // # What belongs here
 //
 // Only settings the user or a previous run established: which AUB instance to
-// talk to, which port the local GUI server prefers, where downloaded external
-// tools are cached, and the current AUB session. Anything derived at runtime
-// stays in memory.
+// talk to, which port the local GUI server prefers, where jobs and assets are
+// kept, and the current AUB session. Anything derived at runtime stays in
+// memory.
 //
 // # Why the directories come from the standard library
 //
@@ -16,12 +16,6 @@
 // single "auto-pigeon-companion" element under each and nothing more. Hand-rolled
 // path logic would be six branches of the same answer with more ways to be
 // wrong on a machine where XDG_CONFIG_HOME is set.
-//
-// The tool cache is deliberately under the *cache* directory rather than the
-// config directory: downloaded GPL-2.0 tool binaries are reproducible content
-// that the Companion can re-fetch at any time, and putting them there means a user
-// clearing caches loses nothing but download time. See THIRD_PARTY_NOTICES.md
-// for why those binaries live outside this repository's own license.
 //
 // # Token storage — a known gap
 //
@@ -43,7 +37,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/catalog"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/lockfile"
 )
 
@@ -102,24 +95,12 @@ type Config struct {
 	AUBBaseURL string `json:"aub_base_url"`
 	// Port is the preferred loopback port for the GUI server.
 	Port int `json:"port"`
-	// ToolCacheDir overrides the default external-tool cache location. Empty
-	// means DefaultToolCacheDir.
-	ToolCacheDir string `json:"tool_cache_dir,omitempty"`
 	// JobsDir overrides where the job store lives. Empty means
 	// DefaultJobsDir.
 	JobsDir string `json:"jobs_dir,omitempty"`
 	// ProfilesDir overrides where imported profile documents are read from.
 	// Empty means DefaultProfilesDir.
 	ProfilesDir string `json:"profiles_dir,omitempty"`
-	// CatalogBaseURL is where the signed acquisition catalogue and its keyring
-	// are fetched from. Empty means managed downloads are refused, by name —
-	// see [catalog.ErrNoCatalogURL]. There is no default: no component in this
-	// program compiles in where another one lives.
-	CatalogBaseURL string `json:"catalog_url,omitempty"`
-	// CatalogAnchorsPath is the file holding the catalogue's trust anchors.
-	// Empty means this installation has no trust root, and every managed
-	// download is refused rather than performed unverified.
-	CatalogAnchorsPath string `json:"catalog_anchors_path,omitempty"`
 	// JobConcurrency is how many jobs run at once. Zero lets the executor
 	// choose from the machine.
 	JobConcurrency int `json:"job_concurrency,omitempty"`
@@ -216,24 +197,6 @@ func Path() (string, error) {
 	return filepath.Join(dir, "config.json"), nil
 }
 
-// DefaultToolCacheDir is where downloaded external tool binaries are kept when
-// Config.ToolCacheDir is empty.
-func DefaultToolCacheDir() (string, error) {
-	base, err := os.UserCacheDir()
-	if err != nil {
-		return "", fmt.Errorf("config: locating the user cache directory: %w", err)
-	}
-	return filepath.Join(base, AppDirName, "tools"), nil
-}
-
-// ToolCache resolves the effective tool cache directory for this config.
-func (c Config) ToolCache() (string, error) {
-	if c.ToolCacheDir != "" {
-		return c.ToolCacheDir, nil
-	}
-	return DefaultToolCacheDir()
-}
-
 // EnvJobsDir and EnvProfilesDir override the two directories the executor
 // uses. They exist for two real cases: a machine whose home directory is on a
 // small disk, and a test that must not touch the developer's own state.
@@ -299,29 +262,6 @@ func (c Config) Profiles() (string, error) {
 // cannot do is install something new, and it says so.
 const EnvOffline = "AUCOM_OFFLINE"
 
-// Catalog resolves the effective catalogue address: the environment variable if
-// set, otherwise config.json, otherwise [catalog.ErrNoCatalogURL].
-func (c Config) Catalog() (string, error) {
-	if fromEnv := strings.TrimSpace(os.Getenv(catalog.EnvCatalogURL)); fromEnv != "" {
-		return fromEnv, nil
-	}
-	if trimmed := strings.TrimSpace(c.CatalogBaseURL); trimmed != "" {
-		return trimmed, nil
-	}
-	return "", catalog.ErrNoCatalogURL
-}
-
-// CatalogAnchors resolves the effective trust anchor file.
-func (c Config) CatalogAnchors() (string, error) {
-	if fromEnv := strings.TrimSpace(os.Getenv(catalog.EnvAnchorsPath)); fromEnv != "" {
-		return fromEnv, nil
-	}
-	if trimmed := strings.TrimSpace(c.CatalogAnchorsPath); trimmed != "" {
-		return trimmed, nil
-	}
-	return "", catalog.ErrNoAnchors
-}
-
 // Offline reports whether the environment forbids network access.
 func Offline() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv(EnvOffline))) {
@@ -329,48 +269,6 @@ func Offline() bool {
 		return false
 	}
 	return true
-}
-
-// CatalogStatePath is the catalogue trust state: the highest serials this
-// machine has accepted and every revocation it has ever seen.
-//
-// Beside config.json rather than in the cache, and that placement is the whole
-// point. The cache is re-downloadable by definition and a user clearing it
-// loses only time; this file is a ratchet, and losing it silently would restore
-// exactly the state a replay of an old signed catalogue needs.
-func CatalogStatePath() (string, error) {
-	dir, err := Dir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "catalog-state.json"), nil
-}
-
-// ExtractorPinPath is the record of the last compatibility requirement this
-// machine verified for the extractor.
-//
-// Beside config.json for the same reason as the catalogue state: it records a
-// decision — which build a signed manifest said goes with this Companion — and
-// it is what makes an offline run able to check a protocol minimum instead of
-// skipping the check. Clearing a cache must not erase it.
-func ExtractorPinPath() (string, error) {
-	dir, err := Dir()
-	if err != nil {
-		return "", err
-	}
-
-	return filepath.Join(dir, "extractor-pin.json"), nil
-}
-
-// LicenseAcceptancePath is the record of which licence notices have been shown
-// and acknowledged on this machine. Configuration, not cache, for the same
-// reason: it records a decision.
-func LicenseAcceptancePath() (string, error) {
-	dir, err := Dir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "license-acceptance.json"), nil
 }
 
 // BindingsPath is the file recording what is installed on this machine and
