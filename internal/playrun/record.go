@@ -166,6 +166,24 @@ type Request struct {
 	// every one is recorded. Empty means none: a bundle that is not
 	// compiler-ready stops the run, as it always did. See ownwads.go.
 	OwnWADsDir string `json:"own_wads_dir,omitempty"`
+
+	// Listing, when set, lists a hosted game in Live Games once the engine is
+	// running — the listing the person saw previewed in the review. Nil for a
+	// game nobody else can join, and for a host who chose not to list it.
+	Listing *Listing `json:"listing,omitempty"`
+}
+
+// Listing is how a hosted Build & Run appears in Live Games.
+type Listing struct {
+	// Title is what the game is called in the listing.
+	Title string `json:"title"`
+	// Visibility is AUB's: public, unlisted or private. AUB, not this
+	// program, decides what an address on a home network may be.
+	Visibility string `json:"visibility"`
+	// EndpointHost and EndpointPort are where players connect, as the person
+	// saw and confirmed them in step 3.
+	EndpointHost string `json:"endpoint_host"`
+	EndpointPort int    `json:"endpoint_port"`
 }
 
 // DefaultMod is the game directory a Build & Run installs into.
@@ -213,6 +231,8 @@ func (r *Request) Normalize() error {
 		return fmt.Errorf("playrun: this engine has no game folder set on this machine yet")
 	case r.MapName == "":
 		return fmt.Errorf("playrun: a run needs a map name; it is what the engine is given for +map")
+	case r.Listing != nil && strings.TrimSpace(r.Listing.Title) == "":
+		return fmt.Errorf("playrun: a listed game needs a title; it is what Live Games calls it")
 	case r.OwnWADsDir != "" && !filepath.IsAbs(r.OwnWADsDir):
 		return fmt.Errorf("playrun: the folder with your own WADs must be written as an absolute path")
 	}

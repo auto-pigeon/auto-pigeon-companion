@@ -354,6 +354,45 @@
               <div id="play-action-choices" class="choice-cards"></div>
               <select id="play-action" hidden aria-hidden="true" tabindex="-1"></select>
             </fieldset>
+            <!-- A hosted game can be listed in Live Games — the listing AUG's
+                 Games page shows too. The address is shown and editable here,
+                 and step 4 previews exactly what the listing will say. -->
+            <fieldset class="play-listing" id="play-listing" hidden>
+              <legend>Live Games</legend>
+              <label class="check"><input type="checkbox" id="play-list-it" checked /> List this game in Live Games, so others can find it and join</label>
+              <div id="play-listing-fields">
+                <div class="row">
+                  <div class="field grow">
+                    <label for="play-listing-title">Title in the listing</label>
+                    <input id="play-listing-title" type="text" maxlength="80" />
+                  </div>
+                  <div class="field">
+                    <label for="play-listing-visibility">Who can see it</label>
+                    <select id="play-listing-visibility">
+                      <option value="public">Everyone</option>
+                      <option value="unlisted">People with the link</option>
+                      <option value="private">Only you</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="row">
+                  <div class="field grow">
+                    <label for="play-listing-host">Address players connect to</label>
+                    <input id="play-listing-host" type="text" spellcheck="false" />
+                  </div>
+                  <div class="field">
+                    <label for="play-listing-port">Port</label>
+                    <input id="play-listing-port" type="number" min="1" max="65535" />
+                  </div>
+                </div>
+                <p class="hint" id="play-listing-hint"></p>
+                <p class="hint listing-local" id="play-listing-local" hidden>
+                  This address is on your own network, so the game is listed for you only — it shows
+                  under <strong>My games</strong> in Live Games, here and on the Auto-Pigeon site.
+                  To list it for everyone, enter your public address and forward the port to this computer.
+                </p>
+              </div>
+            </fieldset>
             <div class="field">
               <label for="play-mod">Mod folder name <span class="muted">(created beside id1 in the game folder)</span></label>
               <input id="play-mod" type="text" value="auto-pigeon" />

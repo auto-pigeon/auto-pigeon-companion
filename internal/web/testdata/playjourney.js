@@ -10,7 +10,8 @@
 //   - the review shows the ordered WADs, the writes and the exact command;
 //   - changing the revision CLEARS the review and says so;
 //   - Activity shows the run, recovers it after a reload, and offers Retry;
-//   - a not-compiler-ready bundle disables the button and names the refusals;
+//   - a not-compiler-ready bundle disables the button and names the refusals
+//     (for a WAD that may not be redistributed, it offers "use your own copy");
 //   - nothing in the DOM, the URL or the visible text carries the token, a
 //     private download URL or a path on this machine.
 
@@ -318,9 +319,12 @@
     await waitFor("the new revision", () => $("play-revision").value !== settings.revision_id, 20000);
     setValue($("play-map-name"), "dm2");
     stepButton(4).click();
+    // The fixture's only refusal is a WAD the server may not redistribute, so
+    // the review offers "use your own copy" rather than a dead end; the button
+    // stays disabled until a folder holding it is confirmed.
     await waitFor(
       "the refusal",
-      () => textOf($("play-review")).includes("cannot be compiled yet"),
+      () => /cannot be compiled yet|may not hand out/.test(textOf($("play-review"))),
       40000
     ).catch((err) => {
       throw new Error(`${err.message}; revision=${$("play-revision").value}, ` +
@@ -332,7 +336,8 @@
       textOf($("play-review")).includes("quake101.wad"),
       textOf($("play-review")).replace(/\s+/g, " ").slice(-200)
     );
-    $("play-review").querySelector(".notice.error")?.scrollIntoView({ block: "center" });
+    ($("play-review").querySelector(".own-wads") || $("play-review").querySelector(".notice.error"))
+      ?.scrollIntoView({ block: "center" });
     await snap("compiler-ready-refusal");
     stepButton(5).click();
     await waitFor("the final step again", () => visible($("play-step-5")));

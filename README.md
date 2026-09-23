@@ -413,6 +413,32 @@ remedy that says whether the problem is the map or this computer; the tool's
 complete output is under **Technical details**. A run you cancelled says which
 stage you stopped it in and that nothing was installed.
 
+**Hosting from Build & Run lists the game in Live Games.** Choosing **Host it
+and play** or **Dedicated server** in step 3 shows a **Live Games** block: a
+title, who can see it, and the address and port players connect to. The address
+is suggested from this machine's route to the Auto-Pigeon server (its network
+address when the server is on this machine) and the port from the engine's
+profile, or the game's own default (26000 for Quake) — both editable, neither
+used until you confirm. An address on your own network can only be listed for
+you: the server never publishes it, so it appears under **My games** here and on
+the Auto-Pigeon site's Games page. Step 4 shows the server's own preview of
+everything the listing will say. Pressing **Build & Run** is the confirmation:
+once the engine is running, the built map is uploaded for people who join, the
+game is listed, and it is kept listed while the engine runs — Activity says so —
+and the listing ends when the game stops. It is the same lease
+`companion game host --build` keeps; the preview over HTTP is:
+
+```console
+$ curl -s -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/play/listing-defaults'?engine=auto-pigeon.engine.vkquake&action=host_listen'
+{"host":"192.168.0.33","hosting":true,"port":26000,"port_source":"game_default"}
+$ curl -s -H "X-AUCOM-Token: $TOKEN" -X POST http://127.0.0.1:8791/api/v1/play/listing-preview -d '{
+    "asset_id": "3413lsl7yi1qfrt", "revision_id": "0w5b06cnvzrn3nc", "revision_number": 4,
+    "pipeline": "auto-pigeon.q1.normal", "engine": "auto-pigeon.engine.vkquake", "action": "host_listen",
+    "map": "dm2", "listing": {"title": "dm2", "visibility": "private",
+    "endpoint_host": "192.168.0.33", "endpoint_port": 26000}}' | jq .reachability
+"local"
+```
+
 **Your own copy of a WAD the server may not hand out.** Most Quake maps name one
 of id Software's texture WADs (`metal.wad`, `base.wad`), which an Auto-Pigeon
 server may not redistribute, so the bundle arrives without it and the map is not

@@ -62,6 +62,8 @@
     // Auto-Pigeon may not redistribute. Never remembered in the URL: it is a
     // path on this machine.
     ownWadsDir: "",
+    // listing is how a hosted game appears in Live Games (step 3).
+    listing: { enabled: true, title: "", visibility: "public", host: "", port: "" },
     // planKey is what the plan was computed for. Any change to an identity
     // invalidates it, and the page says so rather than reviewing a stale one.
     planKey: "",
@@ -225,6 +227,7 @@
     return [
       state.map?.asset_id, state.revision?.revision_id, state.sourceFile, state.mapName,
       state.pipeline, String(state.strict), state.engine, state.action, state.mod, state.ownWadsDir,
+      JSON.stringify(listingBody() || null),
     ].join("|");
   }
 
@@ -477,6 +480,125 @@
       : $("play-game-root").textContent;
     setMessage("play-run-message", missing ? "Choose this engine's game folder before continuing." : "",
       missing ? "error" : "");
+    renderListing();
+  }
+
+  // --- step 3: the listing of a hosted game ------------------------------------
+
+  function hosting() {
+    return state.action === "host_listen" || state.action === "host_dedicated";
+  }
+
+  // The listing the request carries, or nothing: only a hosted game, and only
+  // when the person left "List this game" ticked.
+  function listingBody() {
+    if (!hosting() || !state.listing.enabled) return undefined;
+    return {
+      title: state.listing.title.trim() || state.map?.display_name || state.mapName || "",
+      visibility: state.listing.visibility,
+      endpoint_host: state.listing.host.trim(),
+      endpoint_port: Number(state.listing.port) || 0,
+    };
+  }
+
+  // An address only this network can reach. The Auto-Pigeon server lists such
+  // a game privately and never publishes the address, so the page offers only
+  // what the server will accept rather than a choice it would refuse.
+  function localAddress(host) {
+    const text = String(host || "").trim().toLowerCase();
+    if (!text || text === "localhost" || text.endsWith(".local") || text.endsWith(".lan")) return true;
+    const parts = text.split(".").map(Number);
+    if (parts.length === 4 && parts.every((n) => Number.isInteger(n) && n >= 0 && n <= 255)) {
+      const [a, b] = parts;
+      return a === 10 || a === 127 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) ||
+        (a === 169 && b === 254) || (a === 100 && b >= 64 && b <= 127);
+    }
+    return text === "::1" || text.startsWith("fe80:") || text.startsWith("fc") || text.startsWith("fd");
+  }
+
+  function applyAddressRule() {
+    const local = localAddress(state.listing.host);
+    const select = $("play-listing-visibility");
+    for (const option of select.options) option.disabled = local && option.value !== "private";
+    if (local && state.listing.visibility !== "private") state.listing.visibility = "private";
+    select.value = state.listing.visibility;
+    $("play-listing-local").hidden = !local;
+  }
+
+  let listingDefaultsFor = "";
+  async function renderListing() {
+    const box = $("play-listing");
+    box.hidden = !hosting();
+    if (box.hidden) return;
+    $("play-list-it").checked = state.listing.enabled;
+    $("play-listing-fields").hidden = !state.listing.enabled;
+    if (!state.listing.title) $("play-listing-title").placeholder = state.map?.display_name || "";
+    $("play-listing-title").value = state.listing.title;
+    $("play-listing-visibility").value = state.listing.visibility;
+    // The suggestions, once per engine and action: this machine's address on
+    // the way to the Auto-Pigeon server, and the port the engine's profile or
+    // its game uses. Suggestions only — both fields stay the person's.
+    const key = state.engine + "|" + state.action;
+    if (listingDefaultsFor !== key) {
+      listingDefaultsFor = key;
+      const { ok, body } = await api(`/api/v1/play/listing-defaults?engine=${encodeURIComponent(state.engine)}` +
+        `&action=${encodeURIComponent(state.action)}`);
+      if (ok) {
+        if (!state.listing.host && body.host) state.listing.host = body.host;
+        if (!state.listing.port && body.port) state.listing.port = String(body.port);
+        $("play-listing-hint").textContent = body.port_source === "game_default"
+          ? t("The port is this game's own default. Change it if your engine is set to listen on another one.")
+          : body.port_source === "profile" ? t("The port is the one this engine's profile starts the server on.") : "";
+      }
+    }
+    $("play-listing-host").value = state.listing.host;
+    $("play-listing-port").value = state.listing.port;
+    applyAddressRule();
+  }
+
+  // The review's listing card: AUB's own preview of what will be published.
+  async function listingCard() {
+    const card = el("section", { className: "panel review-card review-card--wide" });
+    card.append(el("h4", { text: t("Live Games listing") }));
+    const body = listingBody();
+    if (!body) {
+      card.append(el("p", { className: "muted", text: t("Not listed: nobody else will see this game in Live Games.") }));
+      return card;
+    }
+    card.append(el("p", { className: "muted small", text: t("Checking what the listing will say…") }));
+    const { ok, body: preview } = await api("/api/v1/play/listing-preview", { method: "POST", body: requestBody() });
+    card.replaceChildren(el("h4", { text: t("Live Games listing") }));
+    if (!ok) {
+      card.append(el("p", { className: "message error", text: preview.error }));
+      return card;
+    }
+    card.append(el("dl", {
+      className: "summary-list",
+      children: [
+        ...line(t("Title"), body.title),
+        ...line(t("Seen by"), preview.audience || preview.visibility),
+        ...line(t("Players connect to"), preview.endpoint || `${body.endpoint_host}:${body.endpoint_port}`),
+        ...line(t("Reachable"), preview.reachability || ""),
+      ].flat(),
+    }));
+    if ((preview.exposed_fields || []).length) {
+      card.append(el("p", { className: "muted small", text: t("Everything the listing will say about you:") }));
+      card.append(el("ul", {
+        className: "plain exposed-list",
+        children: preview.exposed_fields.map((field) => el("li", {
+          className: field.withheld ? "muted" : "",
+          text: `${field.field}: ${field.value || "—"} · ${t("seen by {who}", { who: field.seen_by })}` +
+            (field.withheld ? " · " + t("withheld") : ""),
+        })),
+      }));
+    }
+    for (const line_ of preview.network_guidance || []) card.append(el("p", { className: "muted small", text: line_ }));
+    if (preview.map_warning) card.append(el("p", { className: "message", text: preview.map_warning }));
+    card.append(el("p", {
+      className: "muted small",
+      text: t("Pressing Build & Run lists the game once it is running, with the map uploaded for people who join. The listing ends when the game stops."),
+    }));
+    return card;
   }
 
   // --- step 4: the review -----------------------------------------------------------
@@ -535,6 +657,7 @@
       mod: state.mod,
       map: $("play-map-name").value.trim(),
       own_wads_dir: state.ownWadsDir || undefined,
+      listing: listingBody(),
     };
   }
 
@@ -586,6 +709,11 @@
     }));
 
     review.append(launchSection(plan.launch));
+    if (hosting()) {
+      const placeholder = el("section", { className: "panel review-card review-card--wide" });
+      review.append(placeholder);
+      listingCard().then((card) => placeholder.replaceWith(card));
+    }
     if (plan.build_preview_note) {
       review.append(el("p", { className: "muted small review-note", text: plan.build_preview_note }));
     }
@@ -811,6 +939,8 @@
       ...line(t("Run"), `${nameOfEngine(state.engine)} · ${actionTitle(state.action)} → ${state.gameRoot}/${state.mod}`),
       ...line(t("Name in the game"), $("play-map-name").value.trim()),
       ...(own ? line(t("Your own WADs"), `${(textures.own_wads_needed || []).join(", ")} ← ${state.ownWadsDir}`) : []),
+      ...(listingBody() ? line(t("Live Games"), `${listingBody().title} · ${$("play-listing-visibility").selectedOptions[0]?.textContent || ""}` +
+        ` · ${listingBody().endpoint_host}:${listingBody().endpoint_port}`) : []),
     );
     const ready = textures?.compiler_ready !== false ||
       Boolean(textures?.ready_with_own_wads && textures.own_wads_dir === state.ownWadsDir);
@@ -965,6 +1095,19 @@
       }));
     }
     if (run.remedy) children.push(el("p", { className: "muted", text: run.remedy }));
+    if (run.listing) {
+      const listing = run.listing;
+      const label = {
+        registering: t("Listing in Live Games…"),
+        listed: t("Listed in Live Games as “{title}” ({visibility}).", { title: listing.title, visibility: listing.visibility }),
+        failed: t("Not listed in Live Games."),
+        ended: t("Its Live Games listing has ended."),
+      }[listing.state] || listing.state;
+      children.push(el("p", {
+        className: "message" + (listing.state === "listed" ? " ok" : listing.state === "failed" ? " error" : ""),
+        text: label + (listing.message ? " " + listing.message : ""),
+      }));
+    }
 
     const actions = el("div", { className: "activity-run__actions" });
     if (run.can_cancel) {
@@ -1109,7 +1252,22 @@
   $("play-action").addEventListener("change", (event) => {
     state.action = event.target.value;
     invalidate("You changed what the engine does.");
+    renderListing();
+    summarize();
   });
+  $("play-list-it").addEventListener("change", (event) => {
+    state.listing.enabled = event.target.checked;
+    $("play-listing-fields").hidden = !state.listing.enabled;
+    invalidate("You changed whether the game is listed.");
+  });
+  for (const [id, field] of [["play-listing-title", "title"], ["play-listing-visibility", "visibility"],
+    ["play-listing-host", "host"], ["play-listing-port", "port"]]) {
+    $(id).addEventListener(id.endsWith("visibility") ? "change" : "input", (event) => {
+      state.listing[field] = event.target.value;
+      if (field === "host") applyAddressRule();
+      invalidate("You changed the Live Games listing.");
+    });
+  }
   $("play-mod").addEventListener("input", (event) => {
     state.mod = event.target.value.trim() || "auto-pigeon";
     invalidate("You changed the folder this installs into.");

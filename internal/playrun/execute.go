@@ -298,6 +298,9 @@ func (s *Service) launch(ctx context.Context, record *Record) error {
 	}
 	record.Launch = &launched
 	s.detail(record, describeLaunch(launched))
+	if s.deps.Launched != nil {
+		s.deps.Launched(*record)
+	}
 
 	return nil
 }

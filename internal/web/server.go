@@ -90,7 +90,9 @@ type Server struct {
 	// siteLinks caches AUB's answer to where the gallery is (the footer's
 	// News link). See sitelinks.go.
 	siteLinks siteLinksCache
-	jobs      *job.Service
+	// hosting lists games hosted from Build & Run in Live Games. See hosting.go.
+	hosting hostingState
+	jobs    *job.Service
 	// playLive is the one registry of Build & Run sequences this process is
 	// executing. playService builds a coordinator per request, and every one of
 	// them must share this, or a cancel cannot reach the run it names.
@@ -367,7 +369,7 @@ func (s *Server) api() map[string]http.HandlerFunc {
 	}
 	for _, table := range []map[string]http.HandlerFunc{
 		s.jobAPI(), s.profileAPI(), s.libraryAPI(),
-		s.engineAPI(), s.buildAPI(), s.playAPI(), s.settingsAPI(), s.siteLinksRoutes(), s.pathAPI(),
+		s.engineAPI(), s.buildAPI(), s.playAPI(), s.settingsAPI(), s.siteLinksRoutes(), s.hostingRoutes(), s.pathAPI(),
 		s.feedbackAPI(), s.aboutAPI(), s.accountAPI(), s.gamesAPI(), s.noticesAPI(),
 	} {
 		for pattern, handler := range table {

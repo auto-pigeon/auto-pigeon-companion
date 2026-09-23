@@ -61,6 +61,10 @@ type Deps struct {
 	// Launch starts the engine and returns as soon as it has started. A
 	// long-running engine being alive is a successful launch.
 	Launch func(ctx context.Context, request Request) (LaunchRecord, error)
+	// Launched, when set, is told a run's engine has started — with a copy of
+	// the record, so it can outlive the coordinator. It is how a hosted game is
+	// listed in Live Games; it must not block.
+	Launched func(record Record)
 
 	// Unstage removes what a cancelled or failed install left, so a run never
 	// leaves a half-installed mod. It is the same ownership-respecting removal

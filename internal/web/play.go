@@ -109,6 +109,7 @@ func (s *Server) playService() (*playrun.Service, error) {
 		Install:         s.playInstall,
 		VerifyInstalled: s.playVerifyInstalled,
 		Launch:          s.playLaunch,
+		Launched:        s.playLaunched,
 		Unstage:         s.playUnstage,
 		Logf:            s.logf,
 		Live:            s.playLive,
@@ -438,10 +439,26 @@ type playRequestBody struct {
 	// OwnWADsDir is the folder the person named in the review for WADs
 	// Auto-Pigeon may not redistribute. See playrun/ownwads.go.
 	OwnWADsDir string `json:"own_wads_dir,omitempty"`
+	// Listing lists a hosted game in Live Games. See hosting.go.
+	Listing *playListingBody `json:"listing,omitempty"`
+}
+
+// playListingBody is the listing the page confirmed in step 3.
+type playListingBody struct {
+	Title        string `json:"title"`
+	Visibility   string `json:"visibility"`
+	EndpointHost string `json:"endpoint_host"`
+	EndpointPort int    `json:"endpoint_port"`
 }
 
 func (b playRequestBody) request(gameRoot string) playrun.Request {
+	var listing *playrun.Listing
+	if b.Listing != nil {
+		listing = &playrun.Listing{Title: b.Listing.Title, Visibility: b.Listing.Visibility,
+			EndpointHost: b.Listing.EndpointHost, EndpointPort: b.Listing.EndpointPort}
+	}
 	return playrun.Request{
+		Listing:   listing,
 		AssetType: b.AssetType, AssetID: b.AssetID,
 		RevisionID: b.RevisionID, RevisionNumber: b.RevisionNumber, SourceFile: b.SourceFile,
 		PipelineID: b.Pipeline, Options: b.Options, Strict: b.Strict,
@@ -521,7 +538,11 @@ func (s *Server) handlePlayList(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
 	items := make([]map[string]any, 0, len(records))
 	for _, record := range records {
-		items = append(items, playView(record, now))
+		view := playView(record, now)
+		if listing := s.hosting.view(record.ID); listing != nil {
+			view["listing"] = listing
+		}
+		items = append(items, view)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
