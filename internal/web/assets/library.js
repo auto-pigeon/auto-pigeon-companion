@@ -209,6 +209,30 @@
       list.append(el("li", { className: "wad-chip", text: wad.replace(/^.*[\\/]/, ""), attrs: { title: wad } }));
     }
     node.append(list);
+    // The chips never grow the card (operator, 2026-09-23): one line, and when
+    // they do not fit, a "…" that lists them all as a dropdown.
+    window.requestAnimationFrame(() => {
+      if (list.scrollWidth <= list.clientWidth + 1) return;
+      const more = el("button", {
+        text: "…",
+        attrs: { type: "button", class: "secondary wad-more", "aria-haspopup": "menu", "aria-expanded": "false",
+          "aria-label": t("All {n} texture WADs", { n: wads.length }), title: t("All {n} texture WADs", { n: wads.length }) },
+      });
+      const menu = el("div", { className: "menu wad-menu", attrs: { role: "menu" } });
+      menu.hidden = true;
+      menu.append(el("ul", { className: "wad-menu__list", children: wads.map((wad) => el("li", { text: wad.replace(/^.*[\\/]/, ""), attrs: { title: wad } })) }));
+      const close = () => { menu.hidden = true; more.setAttribute("aria-expanded", "false"); };
+      more.addEventListener("click", () => {
+        if (!menu.hidden) return close();
+        menu.hidden = false;
+        more.setAttribute("aria-expanded", "true");
+      });
+      document.addEventListener("pointerdown", (event) => {
+        if (!menu.hidden && !menu.contains(event.target) && !more.contains(event.target)) close();
+      });
+      menu.addEventListener("keydown", (event) => { if (event.key === "Escape") { close(); more.focus(); } });
+      node.append(el("div", { className: "wad-more__wrap", children: [more, menu] }));
+    });
   }
 
   // downloadRevision fetches and verifies one revision — the latest unless
@@ -333,37 +357,49 @@
         ? "Nothing downloaded yet."
         : t("{n} downloaded to this computer.", { n: items.length })
     );
+    // A card like the ones in Your maps: name, revision and size, the WADs it
+    // uses, and its actions bottom right (operator, 2026-09-23).
     for (const item of items) {
       const record_ = item.record;
-      const head = el("div", { className: "row-head" });
       // A record made before the name was known still gets one from the
       // account's own listing, when this page has read it.
       const known = assets.find((asset) => asset.asset_id === record_.asset_id);
       const name = record_.display_name || known?.display_name || "Untitled " + typeName(record_.asset_type).toLowerCase();
-      head.append(el("strong", { text: name }));
-      head.append(badge(typeName(record_.asset_type), "ok"));
-      const detail = el("p", { className: "muted" });
-      detail.textContent = [
-        t("revision {n}", { n: record_.revision }),
-        bytes(record_.total_bytes),
-        t("downloaded {when}", { when: when(record_.synced_at) }),
-      ]
-        .filter(Boolean)
-        .join(" · ");
+      const head = el("div", { className: "map-card__head", children: [el("h4", { text: name }), badge(t("downloaded"), "ok")] });
+      const meta = el("p", {
+        className: "map-card__meta muted",
+        text: [t("Revision {n}", { n: record_.revision }), bytes(record_.total_bytes), when(record_.synced_at)].filter(Boolean).join(" · "),
+      });
+      const textures = el("div", { className: "map-card__textures" });
+      queueTextures(record_.asset_id, textures);
+      const status = el("p", { className: "message small", attrs: { role: "status" } });
 
-      const use = el("button", { text: "Use in a build", attrs: { type: "button", class: "secondary" } });
+      const use = el("button", { text: t("Use in a build"), attrs: { type: "button", class: "secondary" } });
       use.addEventListener("click", () => {
-        chooseRevision(
-          { asset_type: record_.asset_type, asset_id: record_.asset_id, display_name: name },
-          record_,
-          item.key
-        );
-        setMessage("cached-message", "Chosen. Build is open on it.", "ok");
+        chooseRevision({ asset_type: record_.asset_type, asset_id: record_.asset_id, display_name: name }, record_, item.key);
+        setMessage(status, "Chosen. Build is open on it.", "ok");
         openBuildOnChosen();
       });
-      list.append(el("li", { children: [head, detail, el("div", { className: "row-actions", children: [use] })] }));
+      const play = el("button", { text: t("Build & Run"), attrs: { type: "button", class: "primary" } });
+      play.addEventListener("click", () => {
+        const query = new URLSearchParams(window.location.search);
+        for (const key of ["rev", "name", "step"]) query.delete(key);
+        query.set("map", record_.asset_id);
+        if (record_.revision_id) query.set("rev", record_.revision_id);
+        window.location.assign("?" + query.toString() + "#play");
+      });
+      list.append(el("li", {
+        className: "card map-card",
+        children: [head, meta, textures, status, el("div", { className: "map-card__actions row-actions", children: [use, play] })],
+      }));
     }
   }
+
+  $("library-view").addEventListener("change", () => {
+    const local = $("library-view").value === "local";
+    $("library-account-panel").hidden = local;
+    $("library-local-panel").hidden = !local;
+  });
 
   $("library-refresh").addEventListener("click", (event) => withBusy(event.currentTarget, refreshCatalog));
   $("library-more").addEventListener("click", (event) => showMore(event.currentTarget));

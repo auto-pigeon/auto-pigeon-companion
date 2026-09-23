@@ -210,6 +210,7 @@
           <ul aria-labelledby="areas-actions">
             <li><button type="button" class="area-tab area-tab--sub" data-area="library">My Maps</button></li>
             <li><button type="button" class="area-tab area-tab--sub" data-area="build">Build</button></li>
+            <li><button type="button" class="area-tab area-tab--sub area-tab--child" data-area="builds" id="builds-tab" hidden>Builds on this machine</button></li>
             <li><button type="button" class="area-tab area-tab--sub" data-area="run">Run</button></li>
             <li><button type="button" class="area-tab area-tab--sub" data-area="games">Live Games</button></li>
           </ul>
@@ -460,7 +461,16 @@
             </div>
           </div>
 
-          <div class="panel">
+          <!-- Two tabs, one list each (operator, 2026-09-23). -->
+          <div class="field">
+            <label for="library-view">Show</label>
+            <select id="library-view">
+              <option value="account">Your maps</option>
+              <option value="local">On this computer</option>
+            </select>
+          </div>
+
+          <div class="panel" id="library-account-panel">
             <div class="panel-head">
               <h3>Your maps</h3>
               <div class="panel-head__tools">
@@ -476,7 +486,7 @@
             </div>
           </div>
 
-          <div class="panel">
+          <div class="panel" id="library-local-panel" hidden>
             <div class="panel-head">
               <h3>Maps downloaded to this computer</h3>
               <button type="button" id="cached-refresh" class="secondary">Refresh</button>
@@ -486,7 +496,7 @@
               restart.
             </p>
             <p id="cached-message" class="message" role="status"></p>
-            <ul id="cached-list" class="rows" aria-label="Revisions cached on this machine"></ul>
+            <ul id="cached-list" class="cards map-cards" aria-label="Maps downloaded to this computer"></ul>
           </div>
         </section>
 
@@ -589,6 +599,11 @@
             </div>
           </div>
 
+        </section>
+
+        <!-- Builds on this machine: its own page, reached from the side menu
+             under Build while Build is open (operator, 2026-09-23). -->
+        <section id="area-builds" class="area" aria-labelledby="area-heading" hidden>
           <div class="panel">
             <div class="panel-head">
               <h3>Builds on this machine</h3>
@@ -661,32 +676,16 @@
             <p id="run-message" class="message" role="alert"></p>
             <div id="run-preview-out" class="preview" hidden></div>
           </div>
-          <details class="panel run-setup" id="run-setup-panel" open>
-            <summary><h3>Set up this engine on this machine</h3></summary>
-            <p class="muted">
-              These are the parts that are about <em>your</em> computer. They are
-              recorded separately from the profile, and are never part of a
-              profile you export.
-            </p>
-            <div id="run-binding-fields"></div>
-            <div class="row">
-              <button type="button" id="run-detect">Look for installed games</button>
-              <button type="button" id="run-save-binding" class="primary">Save setup</button>
-              <button type="button" id="run-forget" class="danger">Forget this setup</button>
-            </div>
-            <ul id="run-detected" class="rows" aria-label="Detected game directories"></ul>
-            <p id="run-setup-message" class="message" role="alert"></p>
-          </details>
 
         </section>
 
         <!-- Games (244F) ------------------------------------------------ -->
         <!--
           Games people are hosting now, from your account's listing on
-          Auto-Pigeon. One primary action per game: Join when this computer is
-          ready, Set up to join when something is missing. The review always
-          shows the exact command before anything starts, and a clicked
-          autopigeon:// link lands here without starting anything.
+          Auto-Pigeon. One small card per game and one button: Join when this
+          computer can play it (one press: download, check, start), Setup —
+          the engine in Profiles — when it cannot yet. A clicked autopigeon://
+          link puts that game's card first without starting anything.
         -->
         <section id="area-games" class="area" aria-labelledby="area-heading" hidden>
           <p class="lede">
@@ -750,27 +749,6 @@
             </div>
           </div>
 
-          <div class="panel" id="games-detail" hidden>
-            <div class="panel-head">
-              <h3 id="games-detail-title">Game</h3>
-              <button type="button" id="games-detail-close" class="secondary">All games</button>
-            </div>
-            <div id="games-facts" class="game-summary"></div>
-            <h4 class="games-subhead">Joining from this computer</h4>
-            <ol id="games-steps" class="join-steps" aria-label="What joining needs"></ol>
-            <div id="games-action" class="games-action" hidden></div>
-            <p id="games-detail-message" class="message" role="alert"></p>
-            <details id="games-provenance-box" class="games-provenance">
-              <summary>Details</summary>
-              <dl id="games-provenance" class="facts"></dl>
-            </details>
-            <!-- The one next action, bottom right; active only when it can do
-                 something (operator, 2026-09-23). -->
-            <div class="row-actions games-detail__actions">
-              <button type="button" id="games-recheck" class="secondary">Check again</button>
-              <button type="button" id="games-primary" class="primary">Join</button>
-            </div>
-          </div>
         </section>
 
         <!-- Profiles ----------------------------------------------------- -->

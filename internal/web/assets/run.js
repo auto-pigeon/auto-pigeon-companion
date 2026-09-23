@@ -12,7 +12,6 @@
     maturityBadge, maturityNote, openCompatibilityReport, t } = window.AUCOM;
 
   let engines = [];
-  let bindingInputs = new Map();
 
   function current() {
     return engines.find((engine) => engine.id === $("run-engine").value);
@@ -49,9 +48,6 @@
     const engine = current();
     const detail = $("run-engine-detail");
     detail.replaceChildren();
-    bindingInputs = new Map();
-    $("run-binding-fields").replaceChildren();
-    $("run-detected").replaceChildren();
     if (!engine) return;
 
     // The engine at a glance: its name and trust, one sentence, and whether it
@@ -77,12 +73,9 @@
       text: t("Setup"),
       attrs: { type: "button", class: ready ? "secondary engine-card__setup" : "primary engine-card__setup" },
     });
-    setupButton.addEventListener("click", () => {
-      const panel = $("run-setup-panel");
-      panel.open = true;
-      panel.scrollIntoView({ block: "start", behavior: "smooth" });
-      panel.querySelector("input, select, button")?.focus({ preventScroll: true });
-    });
+    // Setup happens in Profiles and nowhere else (operator, 2026-09-23): the
+    // engine's own page, with Profiles lit in the side menu.
+    setupButton.addEventListener("click", () => window.AUCOM.showArea("profiles/" + encodeURIComponent(engine.id)));
     head.append(setupButton);
     card.append(head);
     if (engine.summary) card.append(el("p", { className: "engine-card__summary", text: engine.summary }));
@@ -135,7 +128,7 @@
     const local = el("details", { className: "engine-more" });
     local.append(el("summary", { text: "What this machine has recorded" }));
     if (!engine.binding) {
-      local.append(el("p", { className: "muted", text: "Nothing yet. Fill in the setup below." }));
+      local.append(el("p", { className: "muted", text: "Nothing yet. Press Setup to set it up in Profiles." }));
       local.open = true;
     } else {
       const rows = el("dl", { className: "paths" });
@@ -155,10 +148,6 @@
     }
     card.append(local);
     detail.append(card);
-    // Setup is folded away once the engine can start: it is where a person
-    // goes to change something, not a step on the way to Start.
-    const setup = $("run-setup-panel");
-    if (setup && setup.tagName === "DETAILS") setup.open = !ready;
 
     // --- what is stopping it
     const problems = el("div");
@@ -180,7 +169,6 @@
     detail.append(problems);
 
     renderActions(engine);
-    renderBindingFields(engine);
   }
 
   // The engine preflight writes each remedy for the terminal
@@ -189,17 +177,17 @@
   // (NEW_244D rehearsal: Run told a person to type commands naming profile
   // ids, and a stale setup's summary quoted two document digests).
   const PAGE_FIX = {
-    missing_engine: "Choose the program under “Set up this engine on this machine” below, then press Save setup.",
-    unbound_root: "Choose the folder under “Set up this engine on this machine” below, then press Save setup.",
-    missing_root: "It was moved or removed. Choose it again below, then press Save setup.",
-    not_authorized: "Read what it asks for below, tick the approval, then press Save setup.",
-    stale_binding: "Read what it asks for below, tick the approval, then press Save setup again.",
-    missing_game_data: "Choose your own installed copy as the game directory below — “Look for installed games” lists the likely places. The Companion never downloads or copies game data.",
+    missing_engine: "Press Setup and choose where the program is.",
+    unbound_root: "Press Setup and choose the folder.",
+    missing_root: "It was moved or removed. Press Setup and choose it again.",
+    not_authorized: "Press Setup and approve it.",
+    stale_binding: "It changed since it was approved. Press Setup and approve it again.",
+    missing_game_data: "Press Setup and choose your own installed copy as the game directory — “Look for installed games” lists the likely places. The Companion never downloads or copies game data.",
     unsupported_platform: "Choose an engine whose profile supports this computer.",
   };
 
   function pageFix(problem) {
-    return PAGE_FIX[problem.fault] || (/`companion /.test(problem.fix || "") ? "Set it up below, then press Save setup." : problem.fix);
+    return PAGE_FIX[problem.fault] || (/`companion /.test(problem.fix || "") ? "Press Setup to set it up in Profiles." : problem.fix);
   }
 
   function pageSummary(problem, engine) {
@@ -244,163 +232,6 @@
     }[role];
     $("run-session-note").textContent = text || "";
     $("run-server-row").hidden = $("run-action").value !== "join_server";
-  }
-
-  function renderBindingFields(engine) {
-    const container = $("run-binding-fields");
-    container.replaceChildren();
-    const binding = engine.binding || {};
-
-    for (const executable of engine.executables || []) {
-      const field = window.AUCOM.pathField({
-        id: "run-exe-" + executable.name,
-        kind: "open-file",
-        label: `${executable.title || executable.name} program`,
-        value: (binding.executables || {})[executable.name] || "",
-        hint: `The profile looks for a file named ${window.AUCOM.programFileName(executable.file)}.`,
-      });
-      bindingInputs.set("executable:" + executable.name, field);
-      container.append(field.container);
-    }
-
-    // Every root the profile's actions declare, not a fixed list of two: a
-    // profile may name a root this page has never heard of, and a form built
-    // around the common ones would be a form that cannot set that one up.
-    const roles = new Set();
-    for (const action of engine.actions || []) {
-      for (const root of action.roots || []) {
-        if (root.role && root.role !== "workspace") roles.add(root.role);
-      }
-    }
-    for (const role of [...roles].sort()) {
-      const field = window.AUCOM.pathField({
-        id: "run-root-" + role,
-        kind: "directory",
-        label: rootLabel(role),
-        value: (binding.roots || {})[role] || "",
-      });
-      bindingInputs.set("root:" + role, field);
-      container.append(field.container);
-    }
-
-    const approve = el("label", { className: "check" });
-    const box = el("input", { attrs: { type: "checkbox", id: "run-approve" } });
-    if (engine.binding?.granted) box.checked = true;
-    approve.append(box);
-    approve.append(
-      document.createTextNode(
-        engine.trust === "builtin"
-          ? "Approve what this profile asks for (a built-in profile arrived inside the Companion and needs no approval; recording one does no harm)"
-          : "I have read what this profile asks for and I approve it"
-      )
-    );
-    container.append(approve);
-  }
-
-  function rootLabel(role) {
-    return (
-      {
-        game_root: "Game directory (the folder that contains id1)",
-        content_root: "Your project directory",
-        project_root: "Your project directory",
-      }[role] || role.replace(/_/g, " ")
-    );
-  }
-
-  async function saveBinding(button) {
-    const engine = current();
-    if (!engine) return;
-    await withBusy(button, async () => {
-      const executables = {};
-      const roots = {};
-      for (const [key, field] of bindingInputs) {
-        const [kind, name] = key.split(":");
-        const value = field.input.value.trim();
-        if (kind === "executable") executables[name] = value;
-        else roots[name] = value;
-      }
-      const approve = $("run-approve")?.checked || false;
-      busy("run-setup-message", "Recording…");
-      const { ok, body } = await api(`/api/v1/profiles/${encodeURIComponent(engine.id)}/bind`, {
-        method: "POST",
-        body: { executables, roots, approve, digest: approve ? engine.digest : undefined },
-      });
-      if (!ok) {
-        setMessage("run-setup-message", body.error || "could not record this setup", "error");
-        return;
-      }
-      setMessage("run-setup-message", "Recorded. It is in the list above and survives a restart.", "ok");
-      record(`Set up ${engine.name}`, Object.values(executables).filter(Boolean).join(", "), "ok");
-      await refreshEngines();
-    });
-  }
-
-  async function forgetBinding(button) {
-    const engine = current();
-    if (!engine || !engine.binding) return;
-    await withBusy(button, async () => {
-      const { ok, body } = await api(`/api/v1/profiles/${encodeURIComponent(engine.id)}/unbind`, {
-        method: "POST",
-      });
-      if (!ok) {
-        setMessage("run-setup-message", body.error || "could not forget this setup", "error");
-        return;
-      }
-      // Said explicitly, because "forget" is the kind of word people expect to
-      // delete something.
-      setMessage(
-        "run-setup-message",
-        "Forgotten. Nothing on disk was deleted: the engine, the game data and anything staged into it are yours.",
-        "ok"
-      );
-      record(`Forgot the setup for ${engine.name}`, "no files were removed", "ok");
-      await refreshEngines();
-    });
-  }
-
-  async function detect(button) {
-    await withBusy(button, async () => {
-      const list = $("run-detected");
-      list.replaceChildren(el("li", { className: "muted", text: "Looking…" }));
-      const near = bindingInputs.get("executable:engine")?.input.value.trim();
-      const query = near ? "?near=" + encodeURIComponent(near.replace(/[^/\\]*$/, "")) : "";
-      const { ok, body } = await api("/api/v1/engines/detect" + query);
-      list.replaceChildren();
-      if (!ok) {
-        list.append(el("li", { className: "muted", text: body.error || "nothing could be scanned" }));
-        return;
-      }
-      const items = body.items || [];
-      if (items.length === 0) {
-        list.append(
-          el("li", {
-            className: "muted",
-            text: "No installed game was found in the usual places. Choose the folder yourself above.",
-          })
-        );
-        return;
-      }
-      for (const candidate of items) {
-        const head = el("div", { className: "row-head" });
-        head.append(el("strong", { text: candidate.path }));
-        head.append(badge(candidate.source, "queued"));
-        const detail = el("p", { className: "muted" });
-        detail.textContent =
-          `found ${candidate.evidence} in ${candidate.base_dir}` + (candidate.note ? " — " + candidate.note : "");
-        const use = el("button", { text: "Use this folder", attrs: { type: "button" } });
-        use.addEventListener("click", () => {
-          // A candidate is a proposal. It fills the field in; nothing is
-          // recorded until the person presses Save.
-          const field = bindingInputs.get("root:game_root");
-          if (field) {
-            field.input.value = candidate.path;
-            field.input.focus();
-            setMessage("run-setup-message", "Filled in. Press Save setup to record it.", "");
-          }
-        });
-        list.append(el("li", { children: [head, detail, el("div", { className: "row-actions", children: [use] })] }));
-      }
-    });
   }
 
   // The runtime value names are the profile schema's, not this page's: an
@@ -538,9 +369,6 @@
     renderEngine();
   });
   $("run-refresh").addEventListener("click", (event) => withBusy(event.currentTarget, refreshEngines));
-  $("run-detect").addEventListener("click", (event) => detect(event.currentTarget));
-  $("run-save-binding").addEventListener("click", (event) => saveBinding(event.currentTarget));
-  $("run-forget").addEventListener("click", (event) => forgetBinding(event.currentTarget));
   $("run-preview").addEventListener("click", (event) => previewLaunch(event.currentTarget));
   $("run-launch").addEventListener("click", (event) => launch(event.currentTarget));
 

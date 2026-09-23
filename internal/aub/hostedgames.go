@@ -101,10 +101,13 @@ type HostedGame struct {
 	EndpointWithheld bool   `json:"endpoint_withheld,omitempty"`
 	Reachability     string `json:"reachability"`
 
-	PlayersCurrent    int    `json:"players_current"`
-	PlayersMax        int    `json:"players_max"`
-	PlayersObservable bool   `json:"players_observable"`
-	PlayersSource     string `json:"players_source"`
+	PlayersCurrent    int  `json:"players_current"`
+	PlayersMax        int  `json:"players_max"`
+	PlayersObservable bool `json:"players_observable"`
+	// Joined is how many accounts joined through Auto-Pigeon, counted by AUB
+	// once each (AUB ADR 0028 follow-up). Not "connected now".
+	Joined        int    `json:"joined"`
+	PlayersSource string `json:"players_source"`
 
 	CreatedAt     time.Time  `json:"created_at"`
 	HeartbeatAt   time.Time  `json:"last_heartbeat_at"`

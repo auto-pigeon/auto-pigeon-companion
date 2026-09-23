@@ -144,7 +144,8 @@
     // is for (`AUCOM/AUE/AUT 246I1`), and a signed-in window opens on it.
     // Settings moved behind the cog and About into the footer (operator,
     // 2026-09-22), so the sidebar names the areas a person works in.
-    const AREAS = ["play", "library", "build", "run", "games", "profiles", "jobs"];
+    // Builds on this machine is a sub-item of Build, drawn only while in Build.
+    const AREAS = ["play", "library", "build", "builds", "run", "games", "profiles", "jobs"];
     const tabs = [...document.querySelectorAll(".area-tab")];
     const named = tabs.map((tab) => tab.dataset.area);
     record(
@@ -381,14 +382,30 @@
       (runText.match(new RegExp(".{0,80}(`companion |\\{platform\\.|" + settings.engine_id.replace(/\./g, "\\.") + ").{0,40}")) || ["clean"])[0]
     );
 
-    setValue(await waitFor("the engine path field", () => $("run-exe-engine")), settings.tool_path);
-    setValue(await waitFor("the game root field", () => $("run-root-game_root")), settings.game_root);
-    setValue(await waitFor("the content root field", () => $("run-root-content_root")), settings.content);
-    $("run-approve").checked = true;
-    $("run-save-binding").click();
-    await waitFor("the setup to be recorded", () => $("run-setup-message").classList.contains("ok"));
-    record("recording the engine setup", true, textOf($("run-setup-message")));
-
+    // Setup happens in Profiles only (operator, 2026-09-23): Run's Setup opens
+    // the engine's page there, with Profiles lit in the side menu.
+    buttonIn($("run-engine-detail"), "Setup").click();
+    await waitFor("the engine's page in Profiles", () =>
+      visible($("area-profiles")) && visible($("profile-detail-panel")) && $("profile-exe-engine"));
+    record(
+      "Setup opens the engine under Profiles, with Profiles current in the side menu",
+      document.querySelector('.area-tab[data-area="profiles"]').getAttribute("aria-current") === "page" &&
+        window.location.hash.startsWith("#profiles/") && !document.getElementById("run-setup-panel"),
+      window.location.hash
+    );
+    setValue($("profile-exe-engine"), settings.tool_path);
+    setValue(await waitFor("the game root field", () => $("profile-root-game_root")), settings.game_root);
+    if ($("profile-root-content_root")) setValue($("profile-root-content_root"), settings.content);
+    buttonIn($("profile-detail"), "Save these paths").click();
+    await waitFor("the paths to be recorded", () => textOf($("profile-detail")).includes("Recorded. It survives a restart."));
+    const approveEngine = buttonIn($("profile-detail"), "approve it");
+    if (approveEngine) {
+      approveEngine.click();
+      await waitFor("the engine to be approved", () => !buttonIn($("profile-detail"), "approve it"));
+    }
+    record("recording the engine setup in Profiles", true, "paths saved and approved");
+    await go("run");
+    setValue($("run-engine"), settings.engine_id);
     await waitFor("the engine to become ready", () =>
       !textOf($("run-engine-detail")).includes("Before this can start")
     );
@@ -489,7 +506,7 @@
     // them was made unreachable by a negative tabindex or a div-with-a-click.
     const controls = [
       "sign-in", "library-refresh", "build-pipeline", "build-preview", "build-start",
-      "run-engine", "run-action", "run-save-binding", "run-launch", "jobs-refresh",
+      "run-engine", "run-action", "run-launch", "jobs-refresh",
     ].map((id) => $(id));
     const unreachable = controls.filter(
       (node) => !node || node.tabIndex < 0 || !["BUTTON", "INPUT", "SELECT", "TEXTAREA"].includes(node.tagName)
@@ -538,7 +555,8 @@
     record(
       "the build wizard is reachable by tabbing, in the order it is used",
       positions.every((index, i) => index >= 0 && (i === 0 || index > positions[i - 1])) &&
-        third.indexOf("build-preview") >= 0 && third.indexOf("build-preview") < third.indexOf("build-history-refresh"),
+        // The builds list is its own page now (Builds on this machine).
+        third.indexOf("build-preview") >= 0,
       `step buttons ${positions.slice(0, 2).join("→")}, pipeline @${positions[2]}; check again @${third.indexOf("build-preview")}`
     );
     $("build-step-tab-1").click();

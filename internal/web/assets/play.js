@@ -203,7 +203,7 @@
       3: !state.pipeline ? t("Choose a build profile first.") : "",
       4: !state.engine ? t("Choose an engine first.")
         : !state.action ? t("Choose how to play it first.")
-        : !state.gameRoot ? t("Set up where the game is first (Setup in Run).")
+        : !state.gameRoot ? t("Set up where the game is first: Setup, in Profiles.")
         : !listed ? t("Give the address and port players connect to first.") : "",
       5: !state.plan ? t("The review is not ready yet.")
         : attention[4] ? t("Some textures are missing: use your own copy first.") : "",

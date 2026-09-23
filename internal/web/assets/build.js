@@ -460,121 +460,14 @@
     return null;
   }
 
-  // setupActions is 246I's "compiler setup is an action, not an error scavenger
-  // hunt": the three things a person can actually do, drawn on as soon as the
-  // Companion has said which of them are possible.
-  //
-  // Which are possible is the SERVER's answer (GET .../acquire), not a guess
-  // here: whether a verified download can happen depends on a trust anchor, a
-  // catalogue address, the offline flag and the platform, and a page that
-  // worked that out for itself would one day work it out wrong. Nothing here
-  // carries a download URL — the address lives in the signed catalogue, never
-  // in this file.
+  // setupActions is the one thing a blocked stage offers: Setup, which opens
+  // the tool's page in Profiles. Setup happens there and nowhere else
+  // (operator, 2026-09-23) — the folder chooser and the verified download that
+  // used to be drawn here are on that page.
   function setupActions(profile) {
-    const row = el("div", { className: "row-actions" });
-    const status = el("p", { className: "message", attrs: { role: "status" } });
-    const wrap = el("div", { children: [row, status] });
-
-    // Always available, because choosing a folder needs no network, no
-    // catalogue and no anchor. Revealed in place rather than sending the user
-    // to another page to come back from.
-    const chooser = window.AUCOM.pathField({
-      // Unique per profile: two blocked stages would otherwise put two
-      // elements with the same id on the page, and a label would point at
-      // whichever the browser found first.
-      id: "build-setup-folder-" + String(profile.id).replace(/[^a-zA-Z0-9_-]/g, "-"),
-      kind: "directory",
-      label: t("The folder that holds {name}", { name: profile.name || profile.id }),
-    });
-    chooser.container.hidden = true;
-    const use = el("button", { text: "Use this folder", attrs: { type: "button", class: "primary" } });
-    use.hidden = true;
-
-    const choose = el("button", { text: "Choose an existing folder", attrs: { type: "button", class: "secondary" } });
-    choose.addEventListener("click", () => {
-      chooser.container.hidden = false;
-      use.hidden = false;
-      chooser.input.focus();
-    });
-
-    use.addEventListener("click", () =>
-      withBusy(use, async () => {
-        const folder = chooser.input.value.trim();
-        if (!folder) {
-          setMessage(status, "Choose the folder first.", "error");
-          return;
-        }
-        const { ok, body } = await api(`/api/v1/profiles/${encodeURIComponent(profile.id)}/bind`, {
-          method: "POST",
-          body: { folder },
-        });
-        if (!ok) {
-          // The server names exactly which programs were not in there.
-          setMessage(status, body.error || "that folder could not be used", "error");
-          return;
-        }
-        setMessage(status, "Recorded. It survives a restart.", "ok");
-        record(`Set up ${profile.name || profile.id}`, folder, "ok");
-        choicesChanged();
-        preview($("build-preview"));
-      })
-    );
-
-    const configure = el("button", { text: "Configure", attrs: { type: "button", class: "secondary" } });
-    configure.addEventListener("click", () => {
-      window.AUCOM.areas.profiles?.configure?.(profile.id);
-    });
-
-    row.append(choose, use, configure);
-    wrap.append(chooser.container);
-
-    // The download button appears only once the Companion has said it can.
-    (async () => {
-      const { ok, body } = await api(`/api/v1/profiles/${encodeURIComponent(profile.id)}/acquire`);
-      if (!ok) return;
-      if (!body.available) {
-        // The concrete condition, in the server's words. Not "unavailable".
-        if (body.reason) setMessage(status, body.reason);
-        return;
-      }
-      const download = el("button", {
-        text: t("Download and set up {name}", { name: body.name || profile.name || profile.id }),
-        attrs: { type: "button", class: "primary" },
-      });
-      download.addEventListener("click", () =>
-        withBusy(download, async () => {
-          setMessage(status, `Downloading ${body.name} ${body.version} and checking it…`, "busy");
-          const attempt = (accept) =>
-            api(`/api/v1/profiles/${encodeURIComponent(profile.id)}/acquire`, {
-              method: "POST",
-              body: accept ? { accept_license: true } : {},
-            });
-          let { ok: done, body: out } = await attempt(false);
-          if (!done && out?.needs_acceptance) {
-            // A licence nobody was shown is a licence nobody accepted, so the
-            // notice is shown and the answer is asked for before the second try.
-            if (!window.confirm(`${out.notice}
-
-Download and set it up?`)) {
-              setMessage(status, "Nothing was downloaded.");
-              return;
-            }
-            ({ ok: done, body: out } = await attempt(true));
-          }
-          if (!done) {
-            setMessage(status, out?.error || "it could not be set up", "error");
-            return;
-          }
-          setMessage(status, `${out.description || "Set up"}. It survives a restart.`, "ok");
-          record(`Set up ${body.name || profile.id}`, out.tool_root || "", "ok");
-          choicesChanged();
-          preview($("build-preview"));
-        })
-      );
-      row.prepend(download);
-    })();
-
-    return wrap;
+    const setup = el("button", { text: t("Setup"), attrs: { type: "button", class: "primary" } });
+    setup.addEventListener("click", () => window.AUCOM.areas.profiles?.configure?.(profile.id));
+    return el("div", { className: "row-actions", children: [setup] });
   }
 
   function problemBlock(text, profile, step) {
@@ -878,6 +771,8 @@ Download and set it up?`)) {
         .join(" · ");
       const open = el("button", { text: "Open", attrs: { type: "button", class: "secondary" } });
       open.addEventListener("click", () => {
+        // Opened from Builds on this machine: the build is watched in Build.
+        if ($("area-build").hidden) window.AUCOM.showArea("build");
         currentBuild = manifest.build_id;
         $("build-current-panel").hidden = false;
         outcome = manifest.state;
@@ -972,4 +867,5 @@ Download and set it up?`)) {
     },
     showStep,
   };
+  window.AUCOM.areas.builds = { refresh: refreshHistory };
 })();

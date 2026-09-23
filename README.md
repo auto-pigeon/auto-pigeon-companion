@@ -2557,8 +2557,21 @@ their cards line up row by row, and a profile's page has no export button. In
 button beside it — the call to action while something is missing — and Build &
 Run's engine list says the same for every engine. A Build & Run **Next** is
 active only once its step has what it needs, and says what is missing when not.
-A game's **Join** is at the bottom right of its card and its page, and is active
-only when joining can do something (it reads *Running* once the game started).
+**Setup happens in Profiles, and only there** (operator, 2026-09-23): Run's
+**Setup** opens the engine's own page (`#profiles/<id>`, Profiles lit in the side
+menu), Build's blocked stage offers **Setup** to the tool's page, and a Live Games
+card whose engine is not set up says **Setup**. That page is where programs are
+named or a folder chosen, where **Look for installed games** fills in the game
+folder, where a catalogue tool is **Downloaded and set up**, and where a profile
+is approved.
+
+Live Games is one small card per game with one button — **Join**, or **Setup**
+when this computer cannot play it yet — and no second panel. A card shows the
+engine's own player count when the engine reports one, and otherwise how many
+people joined through Auto-Pigeon (AUB's `joined`). My Maps has two tabs, **Your
+maps** and **On this computer**, with the same cards in both; a card's WADs stay
+on one line and a **…** lists them all. **Builds on this machine** is its own
+page, a side-menu item under Build shown while Build is open.
 
 The Companion never downloads an engine or game data. The map files a host shares
 are staged under your asset cache, in a directory the engine is started in and

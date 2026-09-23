@@ -286,6 +286,45 @@
     describeProvenance(body.binding);
     detail.append(provenance);
 
+    // A verified download, when the catalogue offers one — moved here from the
+    // Build page, because setup happens in Profiles only (operator, 2026-09-23).
+    // Whether it is possible is the server's answer; no address is in this file.
+    const acquireRow = el("div", { className: "row-actions" });
+    const acquireStatus = el("p", { className: "message", attrs: { role: "status" } });
+    detail.append(acquireRow, acquireStatus);
+    (async () => {
+      const { ok, body: offer } = await api(`/api/v1/profiles/${encodeURIComponent(body.id)}/acquire`);
+      if (!ok || !offer.available) return;
+      const download = el("button", {
+        text: t("Download and set up {name}", { name: offer.name || body.name }),
+        attrs: { type: "button", class: "primary" },
+      });
+      download.addEventListener("click", () =>
+        withBusy(download, async () => {
+          setMessage(acquireStatus, `Downloading ${offer.name} ${offer.version} and checking it…`, "busy");
+          const attempt = (accept) =>
+            api(`/api/v1/profiles/${encodeURIComponent(body.id)}/acquire`, { method: "POST", body: accept ? { accept_license: true } : {} });
+          let { ok: done, body: out } = await attempt(false);
+          if (!done && out?.needs_acceptance) {
+            // A licence nobody was shown is a licence nobody accepted.
+            if (!window.confirm(`${out.notice}\n\nDownload and set it up?`)) {
+              setMessage(acquireStatus, "Nothing was downloaded.");
+              return;
+            }
+            ({ ok: done, body: out } = await attempt(true));
+          }
+          if (!done) {
+            setMessage(acquireStatus, out?.error || "it could not be set up", "error");
+            return;
+          }
+          setMessage(acquireStatus, `${out.description || "Set up"}. It survives a restart.`, "ok");
+          record(`Set up ${offer.name || body.id}`, out.tool_root || "", "ok");
+          describeProvenance(out.binding);
+        })
+      );
+      acquireRow.append(download);
+    })();
+
     const folder = window.AUCOM.pathField({
       id: "profile-folder",
       kind: "directory",
@@ -332,6 +371,41 @@
       });
       rootFields.set(role, field);
       detail.append(field.container);
+    }
+
+    // "Look for installed games" fills the game folder in from the usual
+    // places — moved here from Run, because setup happens in Profiles only
+    // (operator, 2026-09-23). A candidate only fills the field; Save records it.
+    if (rootFields.has("game_root")) {
+      const look = el("button", { text: t("Look for installed games"), attrs: { type: "button", class: "secondary" } });
+      const found = el("ul", { className: "rows", attrs: { "aria-label": t("Installed games found") } });
+      look.addEventListener("click", () =>
+        withBusy(look, async () => {
+          found.replaceChildren(el("li", { className: "muted", text: t("Looking…") }));
+          const near = (fields.get("engine")?.input.value || "").trim();
+          const query = near ? "?near=" + encodeURIComponent(near.replace(/[^/\\]*$/, "")) : "";
+          const { ok, body: out } = await api("/api/v1/engines/detect" + query);
+          found.replaceChildren();
+          const items = ok ? out.items || [] : [];
+          if (!ok || items.length === 0) {
+            found.append(el("li", { className: "muted", text: ok ? t("No installed game was found in the usual places. Choose the folder yourself.") : out.error }));
+            return;
+          }
+          for (const candidate of items) {
+            const use = el("button", { text: t("Use this folder"), attrs: { type: "button" } });
+            use.addEventListener("click", () => {
+              rootFields.get("game_root").input.value = candidate.path;
+              setMessage(saveStatus, t("Filled in. Press Save these paths to record it."), "");
+            });
+            found.append(el("li", { children: [
+              el("div", { className: "row-head", children: [el("strong", { text: candidate.path }), badge(candidate.source, "queued")] }),
+              el("p", { className: "muted", text: `found ${candidate.evidence} in ${candidate.base_dir}` + (candidate.note ? " — " + candidate.note : "") }),
+              el("div", { className: "row-actions", children: [use] }),
+            ] }));
+          }
+        })
+      );
+      detail.append(el("div", { className: "row-actions", children: [look] }), found);
     }
 
     const save = el("button", { text: "Save these paths", attrs: { type: "button", class: "primary" } });

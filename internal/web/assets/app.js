@@ -23,11 +23,12 @@
 
   // About is not an area any more: it opens from the footer (operator,
   // 2026-09-22), and Settings is reached from the cog, top right.
-  const areaNames = ["play", "library", "build", "run", "games", "profiles", "new-profile", "jobs", "settings"];
+  const areaNames = ["play", "library", "build", "builds", "run", "games", "profiles", "new-profile", "jobs", "settings"];
   const titles = {
     play: "Build & Run",
     library: "My Maps",
     build: "Build",
+    builds: "Builds on this machine",
     run: "Run",
     games: "Live Games",
     profiles: "Profiles",
@@ -61,6 +62,8 @@
       if (tab.dataset.area === area) tab.setAttribute("aria-current", "page");
       else tab.removeAttribute("aria-current");
     }
+    // Builds on this machine is a sub-item of Build, shown only while in Build.
+    $("builds-tab").hidden = area !== "build" && area !== "builds";
     // A report opened from the Build area is about the Build area. Leaving it
     // on screen after a move to Settings would be a form whose context the user
     // can no longer see.
@@ -317,7 +320,7 @@
   }
 
   // Categories that decide what is drawn below them are tabs.
-  for (const id of ["profiles-kind", "wizard-kind", "scratch-kind", "jobs-state"]) {
+  for (const id of ["library-view", "profiles-kind", "wizard-kind", "scratch-kind", "jobs-state"]) {
     window.AUCOM.tabsFor(id);
   }
 
