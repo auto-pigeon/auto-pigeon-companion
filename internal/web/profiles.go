@@ -210,7 +210,7 @@ func (s *Server) handleProfileTemplates(w http.ResponseWriter, r *http.Request) 
 		}
 		item := map[string]any{
 			"id": meta.ID, "kind": meta.Kind, "name": meta.Name,
-			"summary": meta.Summary, "version": meta.Version,
+			"summary": meta.Summary, "version": meta.Version, "homepage": homepageOf(meta),
 			"digest": entry.Digest, "file": entry.File,
 			"capabilities": capabilitiesOf(entry.Profile),
 			"actions":      actionIDs(entry.Profile),
@@ -271,6 +271,8 @@ type composeRequest struct {
 
 	PublisherName string `json:"publisher_name,omitempty"`
 	PublisherURL  string `json:"publisher_url,omitempty"`
+	// Homepage is the described program's own site: `source.homepage`.
+	Homepage string `json:"homepage,omitempty"`
 	LicenseSPDX   string `json:"license_spdx,omitempty"`
 	LicenseName   string `json:"license_name,omitempty"`
 
@@ -457,6 +459,14 @@ func applyComposeFields(tree map[string]any, request composeRequest) (map[string
 			delete(publisher, "url")
 		}
 		tree["publisher"] = publisher
+	}
+	if homepage := strings.TrimSpace(request.Homepage); homepage != "" {
+		source, _ := tree["source"].(map[string]any)
+		if source == nil {
+			source = map[string]any{}
+		}
+		source["homepage"] = homepage
+		tree["source"] = source
 	}
 	if request.LicenseSPDX != "" || request.LicenseName != "" {
 		license, _ := tree["license"].(map[string]any)
@@ -911,6 +921,8 @@ func describeProfile(entry job.CatalogEntry) map[string]any {
 		"description": meta.Description,
 		"publisher":   meta.Publisher,
 		"license":     meta.License,
+		// The described program's own site, for the card's Homepage link.
+		"homepage":    homepageOf(meta),
 		"trust":       entry.Trust,
 		"digest":      entry.Digest,
 		"source":      entry.Source,
@@ -923,6 +935,15 @@ func describeProfile(entry job.CatalogEntry) map[string]any {
 		"engine_family": family,
 		"maturity":      describeMaturity(family),
 	}
+}
+
+// homepageOf is the program's homepage, "" when the document names none. The
+// document's validation has already refused anything but an http(s) URL.
+func homepageOf(meta profile.Meta) string {
+	if meta.Source == nil {
+		return ""
+	}
+	return meta.Source.Homepage
 }
 
 // derivedProfileID names a new document after its name when the author left

@@ -87,9 +87,21 @@
     // Either task is the profile's own page, a step below Profiles.
     open.addEventListener("click", () => configure(profile.id));
 
+    // Homepage opens another site, so it sits top right (operator,
+    // 2026-09-23); only for the programs a person installs — engines and
+    // build tools — and only when the document names one.
+    const head = el("div", { className: "profile-card__head", children: [title] });
+    if (profile.homepage && (profile.kind === "engine" || profile.kind === "tool")) {
+      head.append(el("a", {
+        className: "profile-card__homepage",
+        text: t("Homepage"),
+        attrs: { href: profile.homepage, target: "_blank", rel: "noopener noreferrer", title: profile.homepage },
+      }));
+    }
+
     return el("li", {
       className: "card profile-card",
-      children: [title, marks, summary, identity, el("div", { className: "row-actions", children: [open] })],
+      children: [head, marks, summary, identity, el("div", { className: "row-actions", children: [open] })],
     });
   }
 
@@ -539,6 +551,9 @@
       actions.append(label);
     }
     if (!$("wizard-runtime").value && template.runtime) $("wizard-runtime").value = template.runtime;
+    // A profile made from a template usually describes the same program, so
+    // its homepage is offered; the field stays editable.
+    if (!$("wizard-homepage").value && template.homepage) $("wizard-homepage").value = template.homepage;
     if (!$("wizard-engine-version").value && template.engine_version) {
       $("wizard-engine-version").value = template.engine_version;
     }
@@ -562,6 +577,7 @@
       summary: $("wizard-summary").value.trim() || undefined,
       publisher_name: $("wizard-publisher").value.trim() || undefined,
       license_spdx: $("wizard-license").value.trim() || undefined,
+      homepage: $("wizard-homepage").value.trim() || undefined,
       executables: Object.keys(executables).length ? executables : undefined,
       actions: actions.length ? actions : undefined,
     };

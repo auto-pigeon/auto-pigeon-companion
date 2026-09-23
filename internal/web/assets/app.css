@@ -1077,6 +1077,15 @@ ol.numbered { list-style: none; padding-inline-start: 0; }
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden;
 }
 .profile-card__version { font-size: 0.78rem; }
+/* The title row carries the Homepage link top right; the link opens another
+   site, so it is a link dressed as a secondary button (AUP UI-DESIGN §3). */
+.profile-card__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.5rem; }
+.profile-card__head .profile-card__title { flex: 1 1 auto; min-width: 0; }
+.profile-card__homepage {
+  flex: none; padding: .3rem .6rem; border: 1px solid var(--line-strong); border-radius: var(--radius);
+  color: var(--ink-muted); font-size: 0.78rem; font-weight: 500; line-height: 1.2; text-decoration: none;
+}
+.profile-card__homepage:hover { border-color: var(--accent); color: var(--accent-strong); }
 .profile-card .row-actions { margin-top: auto; }
 
 /* "Use my own copy" in the Build & Run review. */
