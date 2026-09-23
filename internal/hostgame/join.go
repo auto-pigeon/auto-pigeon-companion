@@ -34,9 +34,10 @@ type Runner interface {
 
 // Errors a join can produce. Each one is a different thing for the user to do.
 var (
-	// ErrMapUnreadable is AUB saying this account may not have the map, and so
-	// may not have its compiled files either.
-	ErrMapUnreadable = errors.New("hostgame: this account cannot download the map this game is playing")
+	// ErrContentUnreadable is AUB saying this account may not download the files
+	// this game shares. Since AUB ADR 0028 that follows seeing the game, not
+	// reading the map: a joiner gets the compiled map without its source.
+	ErrContentUnreadable = errors.New("hostgame: this account cannot download the files this game shares")
 
 	// ErrNoEngine is no engine profile implementing the runtime the host declared.
 	ErrNoEngine = errors.New("hostgame: no installed engine profile can join this game")
@@ -229,7 +230,7 @@ func (j *Joiner) DownloadContent(ctx context.Context, gameID string, progress fu
 	case joinready.ContentStaged, joinready.ContentNotRequired, joinready.ContentUndeclared:
 		return report, nil
 	case joinready.ContentUnreadable:
-		return report, fmt.Errorf("%w: %s", ErrMapUnreadable, step.Detail)
+		return report, fmt.Errorf("%w: %s", ErrContentUnreadable, step.Detail)
 	case joinready.ContentDownloading:
 		return report, ErrAlreadyDownloading
 	case joinready.ContentRequired, joinready.ContentVerified:
@@ -316,13 +317,16 @@ func (j *Joiner) Resolve(ctx context.Context, link string) (Plan, error) {
 	if err != nil {
 		return Plan{}, err
 	}
-	if !resolution.Assets.Readable {
-		reason := resolution.Assets.Reason
+	// Whether this account may download what the game shares — the compiled map
+	// and its files — not whether it may read the map's source (`assets`), which
+	// joining does not need (AUB ADR 0028).
+	if content := resolution.JoinContent; content.Readable != nil && !*content.Readable {
+		reason := content.Reason
 		if reason == "" {
 			reason = "The host has not shared it with you."
 		}
 
-		return Plan{Resolution: resolution}, fmt.Errorf("%w: %s", ErrMapUnreadable, reason)
+		return Plan{Resolution: resolution}, fmt.Errorf("%w: %s", ErrContentUnreadable, reason)
 	}
 	report, err := j.Assess(ctx, resolution.GameID)
 	if err != nil {
@@ -441,7 +445,7 @@ func readyOrError(report joinready.Report) error {
 	case step.ID == joinready.StepEngineProfile && step.State == joinready.EngineMissing:
 		return fmt.Errorf("%w: the host is running %q. %s", ErrNoEngine, report.Game.EngineRuntime, step.Detail)
 	case step.ID == joinready.StepJoinContent && step.State == joinready.ContentUnreadable:
-		return fmt.Errorf("%w: %s", ErrMapUnreadable, step.Detail)
+		return fmt.Errorf("%w: %s", ErrContentUnreadable, step.Detail)
 	}
 
 	return fmt.Errorf("%w: %s — %s", ErrNotReady, step.Title, step.Detail)

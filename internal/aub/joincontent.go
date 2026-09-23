@@ -20,8 +20,8 @@ import (
 //
 // A hosted game's runtime-ready client files for ONE build: the compiled BSP, an
 // optional `.lit`, and anything its host declared redistributable. AUB stores the
-// bytes and serves them to a reader only through a live lease they can see and a
-// map they can read; this is the client half, and it holds no opinion about what
+// bytes and serves them to a reader only through a live lease they can see (AUB
+// ADR 0028: not the map's read rule); this is the client half, and it holds no opinion about what
 // is safe to stage — internal/joincontent re-checks every rule AUB applied,
 // because the bytes are about to land on THIS machine.
 

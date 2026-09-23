@@ -439,7 +439,12 @@ address when the server is on this machine) and the port from the engine's
 profile, or the game's own default (26000 for Quake) — both editable, neither
 used until you confirm. An address on your own network can only be listed for
 you: the server never publishes it, so it appears under **My games** here and on
-the Auto-Pigeon site's Games page. Step 4 shows the server's own preview of
+the Auto-Pigeon site's Games page — unless the Auto-Pigeon server is a development
+one that lists LAN games for everyone (`AUB_HOSTED_GAME_LAN_LISTINGS=true` on AUB,
+reported as `lan_listings` below), where every visibility is offered. People who
+join download the compiled map you share, never its source. The Auto-Pigeon server
+keeps those files only while your game runs and deletes them when it ends; the next
+game you host uploads them again. Step 4 shows the server's own preview of
 everything the listing will say. Pressing **Build & Run** is the confirmation:
 once the engine is running, the built map is uploaded for people who join, the
 game is listed, and it is kept listed while the engine runs — Activity says so —
@@ -457,7 +462,7 @@ later one with its real version; the Companion's log says which source was used.
 
 ```console
 $ curl -s -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/play/listing-defaults'?engine=auto-pigeon.engine.vkquake&action=host_listen'
-{"host":"192.168.0.33","hosting":true,"port":26000,"port_source":"game_default"}
+{"host":"192.168.0.33","hosting":true,"lan_listings":false,"port":26000,"port_source":"game_default"}
 $ curl -s -H "X-AUCOM-Token: $TOKEN" -X POST http://127.0.0.1:8791/api/v1/play/listing-preview -d '{
     "asset_id": "3413lsl7yi1qfrt", "revision_id": "0w5b06cnvzrn3nc", "revision_number": 4,
     "pipeline": "auto-pigeon.q1.normal", "engine": "auto-pigeon.engine.vkquake", "action": "host_listen",
@@ -2631,7 +2636,8 @@ gme000000000001  Friday deathmatch  public  live  Vera
 
 **Share the map files people need to join.** A join-content package is the
 compiled level your build produced — the `.bsp` and, when there is one, its
-`.lit` — uploaded to AUB and served only to people who can read the map. Name the
+`.lit` — uploaded to AUB and served to everybody who can see the game (they get the compiled
+level, never your `.map` source; AUB ADR 0028). Name the
 build and the upload happens as part of the preview or the registration:
 
 ```console
@@ -2640,7 +2646,7 @@ $ companion game host --job=$JOB --confirm --map=$MAP --build=$BUILD \
 
 $ companion game package --build=$BUILD --map=$MAP      # just the upload; prints the digest
 sha256:4c6d0b0d0f4d…
-  2 file(s), 1245184 bytes, for revision 7; readable only by people who can read the map
+  2 file(s), 1245184 bytes, for revision 7; readable only by people who can see the game
 ```
 
 A game that genuinely needs nothing beyond each player's own copy of the game says

@@ -146,6 +146,10 @@ type HostedGameVocabulary struct {
 	ClientReasons  []string `json:"client_reportable_reasons"`
 	EndpointScopes []string `json:"endpoint_scopes"`
 	Regions        []string `json:"regions"`
+	// LANListings is whether this deployment lists a LAN-address game like a
+	// routable one — a development deployment's choice (AUB ADR 0028). False on
+	// a deployment that predates the field, which is that deployment's rule.
+	LANListings bool `json:"lan_listings"`
 
 	HeartbeatIntervalSeconds int `json:"heartbeat_interval_seconds"`
 	LeaseTTLSeconds          int `json:"lease_ttl_seconds"`

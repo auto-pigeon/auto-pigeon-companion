@@ -62,6 +62,10 @@
     // Auto-Pigeon may not redistribute. Never remembered in the URL: it is a
     // path on this machine.
     ownWadsDir: "",
+    // lanListings is the Auto-Pigeon server's answer, not a choice: whether it
+    // lists a game on a LAN address for everyone (a development server) or only
+    // for its host. Never remembered — it is read from the server each time.
+    lanListings: false,
     // listing is how a hosted game appears in Live Games (step 3).
     listing: { enabled: true, title: "", visibility: "public", host: "", port: "" },
     // planKey is what the plan was computed for. Any change to an identity
@@ -501,9 +505,11 @@
     };
   }
 
-  // An address only this network can reach. The Auto-Pigeon server lists such
-  // a game privately and never publishes the address, so the page offers only
-  // what the server will accept rather than a choice it would refuse.
+  // An address only this network can reach. A production Auto-Pigeon server
+  // lists such a game privately and never publishes the address, so the page
+  // offers only what the server will accept rather than a choice it would
+  // refuse. A development server may list LAN games for everyone
+  // (`lan_listings` in the listing defaults), and then every choice is offered.
   function localAddress(host) {
     const text = String(host || "").trim().toLowerCase();
     if (!text || text === "localhost" || text.endsWith(".local") || text.endsWith(".lan")) return true;
@@ -517,7 +523,9 @@
   }
 
   function applyAddressRule() {
-    const local = localAddress(state.listing.host);
+    const host = String(state.listing.host || "").trim().toLowerCase();
+    const loopback = host === "localhost" || host === "::1" || /^127\./.test(host);
+    const local = localAddress(host) && (loopback || !state.lanListings);
     const select = $("play-listing-visibility");
     for (const option of select.options) option.disabled = local && option.value !== "private";
     if (local && state.listing.visibility !== "private") state.listing.visibility = "private";
@@ -544,6 +552,7 @@
       const { ok, body } = await api(`/api/v1/play/listing-defaults?engine=${encodeURIComponent(state.engine)}` +
         `&action=${encodeURIComponent(state.action)}`);
       if (ok) {
+        state.lanListings = body.lan_listings === true;
         if (!state.listing.host && body.host) state.listing.host = body.host;
         if (!state.listing.port && body.port) state.listing.port = String(body.port);
         $("play-listing-hint").textContent = body.port_source === "game_default"
@@ -593,7 +602,6 @@
       }));
     }
     for (const line_ of preview.network_guidance || []) card.append(el("p", { className: "muted small", text: line_ }));
-    if (preview.map_warning) card.append(el("p", { className: "message", text: preview.map_warning }));
     card.append(el("p", {
       className: "muted small",
       text: t("Pressing Build & Run lists the game once it is running, with the map uploaded for people who join. The listing ends when the game stops."),

@@ -166,8 +166,8 @@ func joinStatus(err error) (int, string) {
 		return http.StatusConflict, "game_changed"
 	case errors.Is(err, hostgame.ErrAlreadyDownloading):
 		return http.StatusConflict, "already_downloading"
-	case errors.Is(err, hostgame.ErrMapUnreadable):
-		return http.StatusForbidden, "map_unreadable"
+	case errors.Is(err, hostgame.ErrContentUnreadable):
+		return http.StatusForbidden, "join_content_unreadable"
 	case errors.Is(err, hostgame.ErrNoEngine), errors.Is(err, hostgame.ErrNotReady):
 		return http.StatusConflict, "not_ready"
 	case errors.Is(err, assetsync.ErrDigestMismatch), errors.Is(err, hostgame.ErrDigestMismatch),

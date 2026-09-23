@@ -6,7 +6,8 @@
 // The runtime-ready client files for ONE hosted build: the compiled BSP, an
 // optional `.lit`, and anything its host explicitly declared redistributable.
 // AUB stores them and serves them to a reader only through a live lease they can
-// see and a map they can read. This package builds one for a host, and fetches,
+// see — seeing the game is enough, reading the map's source is not needed (AUB
+// ADR 0028). This package builds one for a host, and fetches,
 // verifies and stages one for a joiner.
 //
 // # Four rules, and each one is a test

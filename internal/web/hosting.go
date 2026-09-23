@@ -142,6 +142,14 @@ func (s *Server) handleListingDefaults(w http.ResponseWriter, r *http.Request) {
 		if host := outboundHost(client.BaseURL()); host != "" {
 			body["host"] = host
 		}
+		// Whether this Auto-Pigeon server lists a game on a LAN address for
+		// everyone, or only for its host. Unknown is "only for its host", the
+		// rule every production deployment keeps.
+		if client.Authenticated() {
+			if vocabulary, err := client.HostedGameVocabularyDoc(r.Context()); err == nil {
+				body["lan_listings"] = vocabulary.LANListings
+			}
+		}
 	}
 	writeJSON(w, http.StatusOK, body)
 }

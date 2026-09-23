@@ -330,7 +330,7 @@ func printGamePreview(env *Env, preview aub.HostedGamePreview) int {
 	fmt.Fprintf(env.Stdout, "reachable   %s\n", preview.Reachability)
 	switch preview.JoinContent.State {
 	case aub.JoinContentRequired:
-		fmt.Fprintf(env.Stdout, "map files   %d file(s), %d bytes, for people who can read the map\n",
+		fmt.Fprintf(env.Stdout, "map files   %d file(s), %d bytes, for people who can see the game\n",
 			preview.JoinContent.FileCount, preview.JoinContent.TotalBytes)
 	case aub.JoinContentNotRequired:
 		fmt.Fprintf(env.Stdout, "map files   none needed (%s)\n", preview.JoinContent.ContentIdentity)
@@ -548,8 +548,8 @@ func gameShow(env *Env, args []string) int {
 		fmt.Fprintln(env.Stdout, "  address    withheld — it is on the host's own network")
 	}
 	fmt.Fprintf(env.Stdout, "  heard from %s ago\n", (time.Duration(game.StaleForMS) * time.Millisecond).Round(time.Second))
-	if detail.Assets != nil && !detail.Assets.Readable {
-		fmt.Fprintf(env.Stdout, "\n  you cannot download this map: %s\n", detail.Assets.Reason)
+	if content := detail.Game.JoinContent; content.Readable != nil && !*content.Readable {
+		fmt.Fprintf(env.Stdout, "\n  you cannot download this game's files: %s\n", content.Reason)
 	}
 	for _, line := range detail.Guidance {
 		fmt.Fprintf(env.Stdout, "\n  %s\n", line)

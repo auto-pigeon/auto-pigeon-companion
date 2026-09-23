@@ -415,7 +415,7 @@ func gamePackage(env *Env, args []string) int {
 		return printJSON(env, pkg)
 	}
 	fmt.Fprintln(env.Stdout, pkg.PackageSHA256)
-	fmt.Fprintf(env.Stdout, "  %d file(s), %d bytes, for revision %d; readable only by people who can read the map\n",
+	fmt.Fprintf(env.Stdout, "  %d file(s), %d bytes, for revision %d; readable only by people who can see the game\n",
 		pkg.FileCount, pkg.TotalBytes, pkg.MapRevision)
 
 	return 0

@@ -502,11 +502,11 @@ var rows = []Row{
 		ID: "T34", Category: CatDeepLink,
 		Title:      "A forged hosted game sends a player somewhere, or hands them a different map",
 		Asset:      "what the player connects to and what they run",
-		Vector:     "A resolution naming a map this account may not read, join-content files that are not the package the game names, a manifest that stages outside the game directory, a game that changed between setup and launch, or an engine the machine does not have.",
+		Vector:     "A resolution naming files this account may not download, join-content files that are not the package the game names, a manifest that stages outside the game directory, a game that changed between setup and launch, or an engine the machine does not have.",
 		Mitigation: "One readiness model (internal/joinready) decides, in order: the game is live and joinable, there is an engine for its runtime (the host's runtime never picks an executable), the owned program and game folder are bound, and the join content is readable, re-checked against AUB's manifest rules on this machine, verified file by file through assetsync against the package digest the lease names, and staged atomically into a managed base directory that only links the owned game. Ready is reported only after the job service previewed the command. A fresh ticket is spent only immediately before the review, and the revision, package and endpoint are revalidated against the setup; the person then approves the exact command, once.",
 		Evidence: []Evidence{
 			{"internal/hostgame", "TestABytesMismatchIsRefused"},
-			{"internal/hostgame", "TestAJoinIsRefusedBeforeADownloadWhenTheMapIsNotThisAccountsToHave"},
+			{"internal/hostgame", "TestAJoinIsRefusedBeforeADownloadWhenTheContentIsNotThisAccountsToHave"},
 			{"internal/hostgame", "TestAMissingEngineIsRefusedByNameAndBeforeTheDownload"},
 			{"internal/hostgame", "TestAPortIsNeverInvented"},
 			{"internal/hostgame", "TestAUBsWarningsReachThePerson"},

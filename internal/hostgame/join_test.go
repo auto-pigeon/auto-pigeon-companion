@@ -336,25 +336,38 @@ func TestAnOldReviewCannotBeApproved(t *testing.T) {
 	}
 }
 
-// A map this account cannot have is refused BEFORE anything is downloaded.
-func TestAJoinIsRefusedBeforeADownloadWhenTheMapIsNotThisAccountsToHave(t *testing.T) {
+// Files this account may not download are refused BEFORE anything is fetched.
+func TestAJoinIsRefusedBeforeADownloadWhenTheContentIsNotThisAccountsToHave(t *testing.T) {
 	w := newWorld(t)
 	w.withPackage(t)
 	unreadable := false
 	w.remote.detail.Game.JoinContent.Readable = &unreadable
-	w.remote.resolution.Assets = aub.AssetProspect{Readable: false,
-		Reason: "You do not hold a role on this map and it is not public."}
+	w.remote.resolution.JoinContent.Readable = &unreadable
+	w.remote.resolution.JoinContent.Reason = "The host has not shared this game's files with you."
 
 	joiner := w.joiner()
-	if _, err := joiner.DownloadContent(context.Background(), "gme1", nil); !errors.Is(err, hostgame.ErrMapUnreadable) {
+	if _, err := joiner.DownloadContent(context.Background(), "gme1", nil); !errors.Is(err, hostgame.ErrContentUnreadable) {
 		t.Fatalf("download: %v", err)
 	}
 	_, err := joiner.Resolve(context.Background(), "autopigeon://join/tkt1")
-	if !errors.Is(err, hostgame.ErrMapUnreadable) || !strings.Contains(err.Error(), "role on this map") {
+	if !errors.Is(err, hostgame.ErrContentUnreadable) || !strings.Contains(err.Error(), "not shared") {
 		t.Fatalf("resolve: %v", err)
 	}
 	if w.remote.downloaded != 0 {
-		t.Fatal("bytes were fetched for a map AUB had already said this account cannot have")
+		t.Fatal("bytes were fetched for files AUB had already said this account cannot have")
+	}
+}
+
+// A joiner who cannot read the map's SOURCE still joins: what they download is
+// the compiled map the host shared with the game (AUB ADR 0028).
+func TestAJoinerWithoutTheMapsSourceStillJoins(t *testing.T) {
+	w := newWorld(t)
+	w.withPackage(t)
+	w.remote.resolution.Assets = aub.AssetProspect{Readable: false,
+		Reason: "You do not hold a role on this map and it is not public."}
+
+	if _, err := w.joiner().Resolve(context.Background(), "autopigeon://join/tkt1"); errors.Is(err, hostgame.ErrContentUnreadable) {
+		t.Fatalf("resolve refused a joiner for the map's source: %v", err)
 	}
 }
 
