@@ -770,10 +770,5 @@ func (s *Server) handleBuildOutput(w http.ResponseWriter, r *http.Request) {
 	http.ServeContent(w, r, "", info.ModTime(), file)
 }
 
-// Close stops every build this process is running. Called by the server's own
-// shutdown, so a Companion that is quitting does not leave a compiler behind.
-func (s *Server) Close() {
-	for _, run := range s.builds.active() {
-		run.cancel()
-	}
-}
+// Server.Close, which stops every build this process is running, is in
+// lifecycle_api.go beside the rest of what a stopping Companion does.

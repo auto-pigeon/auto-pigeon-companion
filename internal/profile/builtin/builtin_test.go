@@ -915,3 +915,30 @@ func TestAQuake1JoinPutsNoFolderOnTheCommandLine(t *testing.T) {
 		}
 	}
 }
+
+// NEW_247B: the DarkPlaces executable is found under the name its own Linux
+// release uses, after the name the profile declares, and nowhere else.
+func TestTheDarkPlacesExecutableHasItsUpstreamLinuxSpellings(t *testing.T) {
+	entries, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var engine *profile.EngineProfile
+	for _, entry := range entries {
+		if typed, ok := entry.Profile.(*profile.EngineProfile); ok && typed.Metadata().ID == DarkPlaces {
+			engine = typed
+		}
+	}
+	if engine == nil || len(engine.Executables) != 1 {
+		t.Fatalf("the built-in DarkPlaces profile declares %v", engine)
+	}
+	executable := engine.Executables[0]
+	linux := executable.FileCandidates(profile.Platform{OS: "linux", Arch: "amd64"})
+	if len(linux) < 2 || linux[0] != "darkplaces-sdl" || linux[1] != "darkplaces-linux-x86_64-sdl" {
+		t.Errorf("linux/amd64 candidates %q: the declared name first, then upstream's SDL build", linux)
+	}
+	windows := executable.FileCandidates(profile.Platform{OS: "windows", Arch: "amd64"})
+	if len(windows) != 1 || windows[0] != "darkplaces-sdl.exe" {
+		t.Errorf("windows/amd64 candidates %q: a Linux spelling must not reach another platform", windows)
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -145,16 +146,27 @@ var ErrNotCompilerReady = errors.New("playrun: this map's texture bundle is not 
 // Live is the set of runs this process is executing, and how to stop each.
 type Live struct {
 	mu      sync.Mutex
-	running map[string]context.CancelFunc
+	running map[string]liveRun
+}
+
+type liveRun struct {
+	cancel context.CancelFunc
+	label  string
+}
+
+// LiveRun is one run this process is executing, as the lifecycle names it.
+type LiveRun struct {
+	ID    string
+	Label string
 }
 
 // NewLive returns an empty registry. One per process, shared by every Service.
-func NewLive() *Live { return &Live{running: map[string]context.CancelFunc{}} }
+func NewLive() *Live { return &Live{running: map[string]liveRun{}} }
 
-func (l *Live) add(id string, cancel context.CancelFunc) {
+func (l *Live) add(id, label string, cancel context.CancelFunc) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.running[id] = cancel
+	l.running[id] = liveRun{cancel: cancel, label: label}
 }
 
 func (l *Live) remove(id string) {
@@ -166,9 +178,54 @@ func (l *Live) remove(id string) {
 func (l *Live) lookup(id string) (context.CancelFunc, bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	cancel, ok := l.running[id]
+	run, ok := l.running[id]
 
-	return cancel, ok
+	return run.cancel, ok
+}
+
+// Running lists the runs this process is executing, by id.
+func (l *Live) Running() []LiveRun {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	out := make([]LiveRun, 0, len(l.running))
+	for id, run := range l.running {
+		out = append(out, LiveRun{ID: id, Label: run.label})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+
+	return out
+}
+
+// CancelAll stops every run this process is executing, the way [Service.Cancel]
+// stops one: each sequence unstages what it had installed on its way out.
+func (l *Live) CancelAll() {
+	l.mu.Lock()
+	cancels := make([]context.CancelFunc, 0, len(l.running))
+	for _, run := range l.running {
+		cancels = append(cancels, run.cancel)
+	}
+	l.mu.Unlock()
+	for _, cancel := range cancels {
+		cancel()
+	}
+}
+
+// WaitIdle waits until no run is executing, or the timeout passes. It reports
+// whether every run ended.
+func (l *Live) WaitIdle(timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for {
+		l.mu.Lock()
+		idle := len(l.running) == 0
+		l.mu.Unlock()
+		if idle {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }
 
 // Service runs and records Build & Run sequences.
@@ -254,7 +311,7 @@ func (s *Service) start(request Request, retryOf string) (*Record, error) {
 
 	// Not the request's context: the sequence must survive the response.
 	ctx, cancel := context.WithCancel(context.Background())
-	s.live.add(id, cancel)
+	s.live.add(id, "Build & Run "+request.MapName, cancel)
 
 	go func() {
 		defer cancel()

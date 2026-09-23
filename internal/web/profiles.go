@@ -1357,14 +1357,19 @@ func executablesInFolder(document profile.Profile, folder string) (map[string]st
 		found := map[string]string{}
 		var missing []string
 		for _, executable := range declared {
-			relative := strings.ReplaceAll(executable.File, "{platform.exe_suffix}", suffix)
-			path := filepath.Join(base, filepath.FromSlash(relative))
-			info, err := os.Stat(path)
-			if err != nil || !info.Mode().IsRegular() {
-				missing = append(missing, relative)
-				continue
+			// The profile's own name first, then the names upstream's
+			// archives use for the same program (profile.FileCandidates).
+			candidates := executable.FileCandidates(currentPlatform())
+			for _, relative := range candidates {
+				path := filepath.Join(base, filepath.FromSlash(relative))
+				if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() {
+					found[executable.Name] = path
+					break
+				}
 			}
-			found[executable.Name] = path
+			if found[executable.Name] == "" {
+				missing = append(missing, candidates[0])
+			}
 		}
 		return found, missing
 	}

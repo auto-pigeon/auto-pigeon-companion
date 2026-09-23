@@ -51,6 +51,10 @@
     settingsMenu.close();
     window.AUCOM.showArea("settings");
   });
+  $("quit-open").addEventListener("click", () => {
+    settingsMenu.close();
+    window.AUCOM.openQuit($("settings-button"));
+  });
 
   // --- language ---------------------------------------------------------------
 

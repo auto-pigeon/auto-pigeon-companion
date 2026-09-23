@@ -23,16 +23,24 @@ release as a user receives it.
      subprocess path
   6. a TAMPERED extractor is refused before it runs
   7. a MISSING extractor is named by its path, and nothing fetches one
+  8. INTERACTIVE CLOSE (NEW_247B): the unpacked Companion in application mode
+     holds one page's lease; closing that page stops the process after its
+     grace period, with the causal line, no listener left and no token file
 """
 
 import argparse
+import base64
 import json
 import os
 import platform as host
+import re
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # No __pycache__ beside the scripts: an untracked file in the checkout makes the
@@ -80,6 +88,79 @@ def files_named(root, prefix):
     for directory, _, names in os.walk(root):
         found += [os.path.join(directory, name) for name in names if name.startswith(prefix)]
     return sorted(found)
+
+
+def interactive_close(run, companion, grace_seconds=2):
+    """Start the Companion in application mode, hold one lease the way a page
+    does (a WebSocket carrying this run's token as a subprotocol), close it,
+    and measure what the process does. Returns (ok, detail)."""
+    child = subprocess.Popen([companion, "serve", "--interactive", f"--close-grace={grace_seconds}s",
+                              "--startup-window=60s"], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                             text=True, env=run.env())
+    lines = []
+
+    def read():
+        for line in child.stdout:
+            lines.append(line)
+
+    reader = threading.Thread(target=read, daemon=True)
+    reader.start()
+    try:
+        deadline = time.monotonic() + 60
+        address = None
+        while time.monotonic() < deadline and address is None and child.poll() is None:
+            for line in list(lines):
+                found = re.search(r"is running at http://([0-9.]+:[0-9]+)/", line)
+                if found:
+                    address = found.group(1)
+            time.sleep(0.05)
+        if address is None:
+            return False, f"no address printed: {lines!r}"
+        tokens = files_named(run.home, "api-token")
+        if not tokens:
+            return False, "no api-token file under the run's home"
+        token = open(tokens[0], encoding="utf-8").read().strip()
+        host_, port = address.split(":")
+        page = socket.create_connection((host_, int(port)), timeout=10)
+        key = base64.b64encode(os.urandom(16)).decode()
+        page.sendall((f"GET /api/lifecycle/lease HTTP/1.1\r\nHost: {address}\r\nOrigin: http://{address}\r\n"
+                      "Upgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\n"
+                      f"Sec-WebSocket-Key: {key}\r\n"
+                      f"Sec-WebSocket-Protocol: aucom.lease.v1, aucom.token.{token}\r\n\r\n").encode())
+        answer = b""
+        while b"hello" not in answer:
+            chunk = page.recv(4096)
+            if not chunk:
+                break
+            answer += chunk
+        if not answer.startswith(b"HTTP/1.1 101") or b'"hello"' not in answer:
+            return False, f"lease refused: {answer[:200]!r}"
+        if child.poll() is not None:
+            return False, f"exited while its page was open (exit {child.returncode})"
+        closed = time.monotonic()
+        page.close()
+        try:
+            code = child.wait(timeout=grace_seconds + 30)
+        except subprocess.TimeoutExpired:
+            return False, f"still running {grace_seconds + 30}s after its only page closed"
+        waited = time.monotonic() - closed
+        reader.join(timeout=5)
+        said = "".join(lines)
+        listening = True
+        try:
+            socket.create_connection((host_, int(port)), timeout=2).close()
+        except OSError:
+            listening = False
+        token_left = bool(files_named(run.home, "api-token"))
+        ok = (code == 0 and waited >= grace_seconds and "its last browser window was closed" in said
+              and not listening and not token_left)
+        return ok, (f"exit {code} {waited:.1f}s after the close (grace {grace_seconds}s); "
+                    f"listener {'STILL OPEN' if listening else 'closed'}; token file "
+                    f"{'LEFT' if token_left else 'removed'}; said {said.strip().splitlines()[-1:]!r}")
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.wait()
 
 
 def main():
@@ -185,6 +266,10 @@ def main():
     run.check("missing: version refused", code != 0 and "no extractor" in err.lower(), f"exit {code}, {err.strip()!r}")
     appeared = files_named(removed, "auto-pigeon-extractor") + files_named(run.home, "auto-pigeon-extractor")
     run.check("missing: nothing fetched one", not appeared, f"extractor files after the run: {appeared}")
+
+    # 8. The application lifecycle, on the release as a user receives it.
+    ok, detail = interactive_close(run, companion)
+    run.check("interactive close", ok, detail)
 
     failed = [result for result in run.results if result["result"] != "pass"]
     report = {

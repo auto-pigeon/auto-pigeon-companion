@@ -2,8 +2,10 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strings"
 	"time"
@@ -161,14 +163,62 @@ func runVersion(env *Env, args []string) int {
 
 // runServe starts the local GUI server. With --open it also opens the default
 // browser, which is what the no-subcommand invocation does.
+//
+// Two modes (see internal/web/lifecycle.go). SERVER mode is `serve`'s default
+// and `--stay-running`: the process runs until it is interrupted or Quit is
+// chosen in the page, whether or not any browser is attached — what scripts,
+// harnesses and operators have always started. INTERACTIVE mode
+// (`--interactive`, and the no-subcommand launch) is the application: it stops
+// once its last page has been closed for the grace period and nothing it
+// started is still running.
 func runServe(env *Env, args []string) int {
 	set := newFlagSet(env, "serve")
 	port := set.Int("port", 0, "loopback port to bind; 0 uses the configured port")
 	open := set.Bool("open", false, "open the page in the default browser")
 	debug := set.Bool("debug", false, "unlock the developer controls: typing any server address in Settings")
 	openArea := set.String("open-area", "", "with --open, the area to show first (games)")
+	interactive := set.Bool("interactive", false,
+		"application mode: stop once the last page has closed and nothing is running")
+	stayRunning := set.Bool("stay-running", false,
+		"server mode (the default for serve): keep running when every page is closed")
+	closeGrace := set.Duration("close-grace", web.DefaultCloseGrace,
+		"interactive: how long to wait after the last page closed, for a reload or a crashed tab to come back")
+	startupWindow := set.Duration("startup-window", web.DefaultStartupWindow,
+		"interactive: how long to wait for the first page before stopping")
 	if _, code, ok := parseFlags(env, set, args); !ok {
 		return code
+	}
+	if *interactive && *stayRunning {
+		fmt.Fprintln(env.Stderr, "error: --interactive and --stay-running are the two modes; choose one")
+		return 2
+	}
+	if *closeGrace <= 0 || *startupWindow <= 0 {
+		fmt.Fprintln(env.Stderr, "error: --close-grace and --startup-window must be positive durations, such as 15s or 3m")
+		return 2
+	}
+
+	tokenPath, err := tokenFilePath(env)
+	if err != nil {
+		return fail(env, err)
+	}
+	configDir := filepath.Dir(tokenPath)
+
+	// Where the server's own lines go. Server mode: stderr, as always.
+	// Interactive: the log file, so the terminal keeps to what a person reads.
+	var detail io.Writer = env.Stderr
+	detailPath := ""
+	if *interactive {
+		log, path, err := openDetailLog(configDir)
+		if err != nil {
+			fmt.Fprintf(env.Stderr, "warning: the log file could not be opened (%v); details go to this terminal\n", err)
+		} else {
+			defer log.Close()
+			detail, detailPath = log, path
+		}
+	}
+	logf := timestamped(detail)
+	if !*interactive {
+		logf = func(format string, args ...any) { fmt.Fprintf(env.Stderr, format+"\n", args...) }
 	}
 
 	// A server's incident transcript goes to its log whether or not a backend
@@ -177,13 +227,14 @@ func runServe(env *Env, args []string) int {
 		env.incidentState = &incidentHolder{}
 	}
 	env.incidentState.transcript = true
+	if *interactive {
+		env.incidentState.detail = detail
+	}
 
 	// The extractor runner is built here and resolves LAZILY, so a process that
 	// never touches the extractor never hashes or runs it — and a server does
 	// not have to before it can listen. See internal/aue.LazyRunner.
-	runner := extractorRunner(env, func(format string, args ...any) {
-		fmt.Fprintf(env.Stderr, format+"\n", args...)
-	})
+	runner := extractorRunner(env, logf)
 
 	ctx, stop := signalContext()
 	defer stop()
@@ -191,8 +242,7 @@ func runServe(env *Env, args []string) int {
 	// The executor. Started here, so the server's recovery pass runs before it
 	// accepts a request and a job left running by a previous crash is marked
 	// interrupted rather than reported as still going.
-	service, settings, err := openJobs(ctx, env, true,
-		func(format string, args ...any) { fmt.Fprintf(env.Stderr, format+"\n", args...) })
+	service, settings, err := openJobs(ctx, env, true, logf)
 	if err != nil {
 		return fail(env, err)
 	}
@@ -207,10 +257,6 @@ func runServe(env *Env, args []string) int {
 	}
 
 	token, err := web.NewToken()
-	if err != nil {
-		return fail(env, err)
-	}
-	tokenPath, err := tokenFilePath(env)
 	if err != nil {
 		return fail(env, err)
 	}
@@ -242,22 +288,35 @@ func runServe(env *Env, args []string) int {
 		return fail(env, err)
 	}
 
-	server, err := web.NewServer(web.Options{
-		Version: env.Version,
-		Debug:   *debug,
-		Config:  settings,
-		AUE:     runner,
-		Jobs:    service,
-		Token:   token,
-		Logf: func(format string, args ...any) {
-			fmt.Fprintf(env.Stderr, format+"\n", args...)
+	// The address is only known after Listen; the notice needs it, so it reads
+	// it through this variable.
+	var url string
+	lifecycle := web.NewLifecycle(web.LifecycleOptions{
+		Interactive:   *interactive,
+		CloseGrace:    *closeGrace,
+		StartupWindow: *startupWindow,
+		Notify: func(summary string) {
+			logf("lifecycle: no page is open; still running: %s", summary)
+			fmt.Fprintf(env.Stdout, "The page is closed. Auto-Pigeon Companion keeps running until this finishes: %s.\n"+
+				"Open %s to see it, or press Ctrl+C to stop it now.\n", summary, url)
 		},
+	})
+
+	server, err := web.NewServer(web.Options{
+		Version:   env.Version,
+		Debug:     *debug,
+		Config:    settings,
+		AUE:       runner,
+		Jobs:      service,
+		Token:     token,
+		Lifecycle: lifecycle,
+		Logf:      logf,
 		Paths: web.Paths{
 			Profiles:   profilesDir,
 			Bindings:   bindingsPath,
 			Builds:     buildsPath,
 			AssetCache: assetCache,
-			ConfigDir:  filepath.Dir(tokenPath),
+			ConfigDir:  configDir,
 		},
 		UpdateConfig: func(mutate func(*config.Config) error) (config.Config, error) {
 			return updateSettings(env, mutate)
@@ -273,9 +332,11 @@ func runServe(env *Env, args []string) int {
 	if err != nil {
 		return fail(env, err)
 	}
-	// Every build this process started stops with it. A Companion that quits
-	// leaving a compiler running is a Companion that has lost track of a
-	// process the user cannot see.
+	// Every build, Build & Run and hosted listing this process started stops
+	// with it; the job service's own Close (deferred above, so it runs after
+	// this) then stops the processes. A Companion that quits leaving a
+	// compiler running is a Companion that has lost track of a process the
+	// user cannot see.
 	defer server.Close()
 
 	listener, err := web.Listen(chosen)
@@ -292,42 +353,114 @@ func runServe(env *Env, args []string) int {
 			reporter := env.incidents(settings)
 			go func() {
 				if _, err := incident.CheckReadiness(ctx, client, aub.ReadinessBound, reporter, ""); err != nil && ctx.Err() == nil {
-					fmt.Fprintln(env.Stderr, "warning: the Auto-Pigeon server did not pass its readiness check; the page works offline until it answers")
+					logf("warning: the Auto-Pigeon server did not pass its readiness check; the page works offline until it answers")
 				}
 			}()
 		}
 	}
-	url := web.URL(listener)
-	fmt.Fprintf(env.Stdout, "companion %s listening on %s\n", env.Version, url)
-	fmt.Fprintf(env.Stderr, "API token written to %s\n", tokenPath)
+	url = web.URL(listener)
+	if *interactive {
+		logf("companion %s listening on %s", env.Version, url)
+	} else {
+		fmt.Fprintf(env.Stdout, "companion %s listening on %s\n", env.Version, url)
+	}
+	logf("API token written to %s", tokenPath)
 	// The address this run actually bound, beside the token, so a clicked
 	// `autopigeon://` link raises THIS page instead of starting a second server.
-	urlPath := web.URLPath(filepath.Dir(tokenPath))
+	urlPath := web.URLPath(configDir)
 	if err := web.WriteURL(urlPath, url); err != nil {
-		fmt.Fprintf(env.Stderr, "warning: %v\n", err)
+		logf("warning: %v", err)
 	}
 	defer web.RemoveURL(urlPath)
-	_ = joinintent.Prune(joinintent.Path(filepath.Dir(tokenPath)), time.Now().UTC())
+	_ = joinintent.Prune(joinintent.Path(configDir), time.Now().UTC())
 
+	opened := false
 	if *open {
 		opener := env.OpenBrowser
 		if opener == nil {
 			opener = web.OpenBrowser
 		}
-		// Never fatal: the URL is already printed, and a machine with no
-		// browser handler should still be able to use the server.
+		// Never fatal: the URL is printed, and a machine with no browser
+		// handler should still be able to use the server.
 		page := url
 		if *openArea == "games" {
 			page = url + "#games"
 		}
 		if err := opener(page); err != nil {
-			fmt.Fprintf(env.Stderr, "warning: %v\n", err)
-			fmt.Fprintf(env.Stderr, "open %s manually\n", url)
+			logf("warning: %v", err)
+			if !*interactive {
+				fmt.Fprintf(env.Stderr, "warning: %v\n", err)
+				fmt.Fprintf(env.Stderr, "open %s manually\n", url)
+			}
+		} else {
+			opened = true
 		}
 	}
 
-	if err := web.Serve(ctx, listener, server); err != nil {
-		return fail(env, err)
+	if *interactive {
+		switch {
+		case opened:
+			fmt.Fprintf(env.Stdout, "Auto-Pigeon Companion %s is open in your browser.\n", env.Version)
+			fmt.Fprintln(env.Stdout, "Close its last window to stop it, or press Ctrl+C.")
+			// A browser command that "succeeded" is not a window: `xdg-open`
+			// and `start` return before anything appears, and a browser that
+			// joined an existing process leaves no handle to watch. The lease
+			// is the authority, so if none has arrived, say where the page is.
+			go func() {
+				select {
+				case <-time.After(noPageHint):
+					if !lifecycle.EverConnected() {
+						fmt.Fprintf(env.Stdout, "No page has opened yet. If your browser did not open it, go to %s\n", url)
+					}
+				case <-lifecycle.Done():
+				}
+			}()
+		case *open:
+			fmt.Fprintf(env.Stdout, "Auto-Pigeon Companion %s could not open your browser.\n", env.Version)
+			fmt.Fprintf(env.Stdout, "Open %s within %s. Close its last window to stop it, or press Ctrl+C.\n",
+				url, *startupWindow)
+		default:
+			fmt.Fprintf(env.Stdout, "Auto-Pigeon Companion %s is running at %s\n", env.Version, url)
+			fmt.Fprintf(env.Stdout, "Open it within %s. Close its last window to stop it, or press Ctrl+C.\n", *startupWindow)
+		}
+	}
+
+	// The lifecycle decides; web.Serve stops when it has.
+	go lifecycle.Run(ctx, server.ActiveWork)
+	serveCtx, stopServing := context.WithCancel(ctx)
+	defer stopServing()
+	go func() {
+		select {
+		case <-lifecycle.Done():
+			stopServing()
+		case <-serveCtx.Done():
+		}
+	}()
+
+	serveErr := web.Serve(serveCtx, listener, server)
+	// An interrupt that arrived while nothing else had decided.
+	lifecycle.Stop(web.ExitInterrupted)
+	cause := lifecycle.Cause()
+	logf("lifecycle: stopping, cause %s", cause)
+	if serveErr != nil {
+		return fail(env, serveErr)
+	}
+	if *interactive {
+		// Printed after the deferred shutdown work, so "stopped" is true when
+		// it is read. Registered last, so it runs first among the defers —
+		// hence the explicit Close calls here, which the defers then repeat
+		// harmlessly.
+		server.Close()
+		service.Close()
+		fmt.Fprintln(env.Stdout, web.ExitLine(cause, *startupWindow))
+		if detailPath != "" && cause == web.ExitStartupTimeout {
+			fmt.Fprintf(env.Stdout, "Details: %s\n", detailPath)
+		}
+		return 0
+	}
+	if cause == web.ExitQuit {
+		fmt.Fprintln(env.Stdout, "stopped: Quit was chosen in the page")
+		return 0
 	}
 	fmt.Fprintln(env.Stdout, "stopped")
 	return 0

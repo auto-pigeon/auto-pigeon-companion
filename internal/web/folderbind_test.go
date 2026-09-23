@@ -106,3 +106,32 @@ func TestNamingAProgramReplacesAManagedProvenance(t *testing.T) {
 		t.Errorf("recorded %v / installs %v, want a local binding with no managed install", recorded["acquisition"], recorded["installs"])
 	}
 }
+
+// NEW_247B: DarkPlaces's own Linux archive names its SDL client
+// darkplaces-linux-x86_64-sdl, not the darkplaces-sdl distributions ship, and
+// choosing the unpacked folder refused it as "missing darkplaces-sdl".
+func TestTheDarkPlacesFolderUpstreamPublishesIsFound(t *testing.T) {
+	if platform := currentPlatform(); platform.OS != "linux" || platform.Arch != "amd64" {
+		t.Skip("the upstream spelling under test is DarkPlaces's linux/amd64 one")
+	}
+	m := newMachine(t)
+	root := filepath.Join(m.dir, "darkplacesengine")
+	for _, name := range []string{"darkplaces-linux-x86_64-glx", "darkplaces-linux-x86_64-sdl", "darkplaces-linux-x86_64-dedicated"} {
+		writeFixtureFile(t, filepath.Join(root, name), "#!/bin/sh\n")
+		if err := os.Chmod(filepath.Join(root, name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	status, body := m.call(http.MethodPost, "/api/v1/profiles/auto-pigeon.engine.darkplaces/bind",
+		map[string]any{"folder": root})
+	if status != http.StatusOK {
+		t.Fatalf("binding %s = %d %v", root, status, body)
+	}
+	recorded, _ := body["binding"].(map[string]any)
+	executables, _ := recorded["executables"].(map[string]any)
+	// The SDL client, which is what the profile names — not the GLX one that
+	// sorts first in the directory.
+	if want := filepath.Join(root, "darkplaces-linux-x86_64-sdl"); executables["engine"] != want {
+		t.Errorf("recorded %v, want engine = %s", executables, want)
+	}
+}

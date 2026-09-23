@@ -3,6 +3,7 @@ package profile
 import (
 	"encoding/json"
 	"fmt"
+	"path"
 	"strconv"
 	"strings"
 )
@@ -29,6 +30,42 @@ type Executable struct {
 	// root would turn "run the program this profile installed" into "run any
 	// program on the machine".
 	File string `json:"file" aucom:"required"`
+}
+
+// upstreamSpellings are the names a program's own releases give an
+// executable that a profile names differently, by the profile's file name and
+// then by platform. The profile's name is always tried first; these are what a
+// person who unpacked the upstream archive actually has.
+//
+// It is a table of facts about other people's archives, not a profile field,
+// on purpose: an `alternatives` key in the document would be a schema change
+// every older Companion refuses (profiles decode strictly), for something only
+// discovery needs. Discovery records the path it found in the binding, so
+// what runs is still exactly one file the person can see.
+var upstreamSpellings = map[string]map[string][]string{
+	// DarkPlaces's Linux builds are published as
+	// darkplaces-linux-x86_64-{sdl,glx,dedicated} (and -686- for 32-bit);
+	// distributions ship darkplaces-sdl / darkplaces-glx. The SDL client is
+	// what the profile names; the GLX client is the same engine with the same
+	// command line, accepted only when no SDL build is present.
+	"darkplaces-sdl": {
+		"linux/amd64": {"darkplaces-linux-x86_64-sdl", "darkplaces-glx", "darkplaces-linux-x86_64-glx"},
+		"linux/386":   {"darkplaces-linux-686-sdl", "darkplaces-glx", "darkplaces-linux-686-glx"},
+		"linux/arm64": {"darkplaces-glx"},
+	},
+}
+
+// FileCandidates is where a declared executable may be found under an install
+// directory, in the order to try: the profile's own file first, then the
+// upstream spellings for this platform, each in the same directory.
+func (e Executable) FileCandidates(platform Platform) []string {
+	file := strings.ReplaceAll(e.File, "{platform.exe_suffix}", platform.ExeSuffix())
+	candidates := []string{file}
+	dir, base := path.Split(file)
+	for _, alias := range upstreamSpellings[strings.TrimSuffix(base, platform.ExeSuffix())][platform.OS+"/"+platform.Arch] {
+		candidates = append(candidates, dir+alias+platform.ExeSuffix())
+	}
+	return candidates
 }
 
 func (e Executable) validate(c *collector) {

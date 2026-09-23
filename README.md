@@ -364,6 +364,52 @@ The page has seven areas, and the order is the order of a first run.
 | **Jobs** | Everything that has run, with its command, its exit status and its output. |
 | **Settings** | Where the backend is, and where the Companion keeps things. |
 
+### Starting and stopping
+
+Opening the program is opening the page, and closing the page closes the
+program:
+
+```console
+$ companion
+Auto-Pigeon Companion 1.150 is open in your browser.
+Close its last window to stop it, or press Ctrl+C.
+Auto-Pigeon Companion stopped: its last browser window was closed.
+```
+
+- **A reload does not stop it**, nor does a second tab closing while another is
+  open. The Companion stops **15 seconds** after its *last* page went away,
+  which is long enough for a reload, a crashed tab's own Reload button, or the
+  browser restoring its session.
+- **Work outlives the page.** A compile, a Build & Run, a join download or a
+  game you started keeps it running after the page closes, and the terminal
+  says what it is waiting for. When the last of them ends and no page has come
+  back, it stops (`… the work it kept running for has finished, and no page is
+  open.`).
+- **Quit Auto-Pigeon Companion…** in the cog menu stops it from the page. If
+  something is still running it lists it first and asks: **Cancel them and
+  quit**, or **Keep running**. Quitting ends any game you are listing in Live
+  Games straight away, removes anything half-installed, and stops the games
+  it started (they get the chance to shut down cleanly first). Ctrl+C does the same.
+- **If no browser opens**, it prints the address once and waits three minutes
+  for a page; if nobody comes it stops and says so. If the browser command
+  succeeded but no window appeared, the address is printed after 20 seconds.
+- **`companion --stay-running`** is the same launch that keeps running when
+  every page is closed; `companion serve` has always behaved that way and still
+  does.
+
+How it knows: each open page holds one connection to the Companion (a
+WebSocket, authenticated with the same per-run token as every other request),
+and the Companion counts them. Closing a tab, a crashed tab and a killed
+browser all end that connection at once; a reload ends it and opens the next a
+moment later. Nothing depends on the browser's "page is closing" event, which
+cannot tell a reload from a close. A tab your browser *discards* to save memory
+counts as closed. The decision is recorded in
+`$MAPPER_ROOT/LLM/docs/adr/0030-the-companion-stops-when-its-last-page-lease-ends.md`.
+
+The terminal keeps to the lines above. Everything a server has always printed
+— the token path, job lines, the readiness warning — goes to `companion.log`
+beside `config.json`, rewritten at each start and capped at 8 MiB.
+
 ### Languages
 
 The page speaks the languages AUP does: **English** (the source), **Italian**,
@@ -753,19 +799,22 @@ $ AUCOM_JOURNEY_SCREENSHOTS="$MAPPER_ROOT/LLM/reports/shots" \
 
 ## Usage
 
-Launching with **no subcommand** is GUI mode — it starts the server and opens
-the browser. Named subcommands run headless.
+Launching with **no subcommand** is GUI mode — it starts the server, opens
+the browser, and stops once its last window is closed (see
+[Starting and stopping](#starting-and-stopping)). Named subcommands run headless.
 
 ```console
 $ companion --help
 companion — Auto-Pigeon Companion: build Quake maps, inspect them, and launch games
 
 usage:
-  companion                 start the local GUI and open a browser
+  companion                 start the local GUI and open a browser; closing its last window stops it
+  companion --stay-running  the same, but keep running when every window is closed
+  companion --debug         the GUI with the developer controls unlocked
   companion <command> [arguments]
 
 commands:
-  serve [--port <n>] [--open] [--debug]                                                                            run the local GUI server without opening a browser
+  serve [--port <n>] [--open] [--debug] [--interactive | --stay-running]                                           run the local GUI server; it keeps running until stopped unless --interactive
   auth login [--email <address>] | status | logout                                                                 authenticate against auto-pigeon-backend
   aub capabilities | catalog | show | revisions | sync | cached | verify | export | clean                          browse auto-pigeon-backend's assets and sync exact revisions to this machine
   job run | preview | list | show | logs | cancel | retry | artifacts | profiles                                   run a profile action as a supervised job, and inspect what ran
@@ -796,6 +845,21 @@ Exit codes: `0` success, `1` the operation failed, `2` the invocation was wrong.
 $ companion serve --port 8791
 companion 0.1.0-dev listening on http://127.0.0.1:8791/
 ```
+
+`serve` is **server mode**: it keeps running until it is interrupted or somebody
+chooses **Quit** in the page, whether or not any browser is attached — what a
+script, a harness or an operator wants. `serve --interactive` is the
+application mode the no-subcommand launch uses, without opening a browser; its
+two timings are flags:
+
+```console
+$ companion serve --interactive --close-grace 15s --startup-window 3m
+Auto-Pigeon Companion 1.150 is running at http://127.0.0.1:8791/
+Open it within 3m0s. Close its last window to stop it, or press Ctrl+C.
+```
+
+`--interactive` and `--stay-running` are the two modes; giving both is exit
+code 2.
 
 The port is a preference, not a requirement: one already in use falls back to
 an ephemeral one, so a stale instance cannot stop the app from starting. The
@@ -1626,6 +1690,21 @@ be a button that starts something else. QuakeSpasm-Spiked has one — the FTE
 networking is the reason it exists as a separate project. An engine profile says
 what its engine does by declaring it, and says what it does not by leaving it
 out.
+
+**An executable is found under the name its own release uses, too.** The
+DarkPlaces profile names the SDL client `darkplaces-sdl`, which is what
+distributions install; DarkPlaces's own Linux archive calls it
+`darkplaces-linux-x86_64-sdl`. Choosing the unpacked folder finds either — the
+profile's name first, then upstream's, then the GLX client as a last resort —
+and records the exact file it found. That is the page's **Choose folder**, and
+the same route from a terminal (`companion engine bind <id> --engine <file>`
+takes the file itself):
+
+```console
+$ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" -d '{"folder":"/home/you/games/darkplacesengine"}' \
+    http://127.0.0.1:8791/api/v1/profiles/auto-pigeon.engine.darkplaces/bind
+{"binding":{…,"executables":{"engine":"/home/you/games/darkplacesengine/darkplaces-linux-x86_64-sdl"},…}}
+```
 
 `companion engine show` is the long form, including what a profile will not
 claim:
@@ -4154,6 +4233,31 @@ The `/api/v1` routes are versioned because `companion job` and your own scripts
 drive them; the unversioned `/api` routes are the page's own and are not a
 contract.
 
+### The lifecycle routes
+
+The page's own, and unversioned, but a script may use them: `GET
+/api/lifecycle` says the mode, how many pages hold a lease and what is still
+running; `POST /api/lifecycle/quit` is the page's Quit.
+
+```console
+$ curl -s -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/lifecycle
+{"mode":"server","grace_seconds":15,"leases":1,"active":[]}
+
+$ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" -d '{"cancel_active":false}' \
+    http://127.0.0.1:8791/api/lifecycle/quit
+{"active":[{"kind":"job","id":"20260923T120501Z-4f2a","label":"Compile BSP — auto-pigeon.ericw-tools.q1","state":"running"}],
+ "code":"work_active","error":"Something is still running. Cancel it and quit, or keep the Companion running."}
+
+$ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" -d '{"cancel_active":true}' \
+    http://127.0.0.1:8791/api/lifecycle/quit
+{"cancelled":[…],"stopping":true}
+```
+
+`GET /api/lifecycle/lease` is the page's lease: a WebSocket that offers the
+subprotocols `aucom.lease.v1` and `aucom.token.<token>`. The token is read from
+there only on a WebSocket upgrade, and the server selects `aucom.lease.v1` —
+it never echoes the token.
+
 ### The parity inventory
 
 *"Everything the page can do, the CLI can do too"* is a claim, so here is the
@@ -4188,6 +4292,7 @@ call the same function — not an equivalent one.
 | `POST /api/v1/games/{id}/engine-profile/approve` | `companion toolchain grant <id> --digest=<d> --approve` | `approval.Service.Grant` |
 | `POST /api/v1/games/{id}/review`, `/launch` | `companion game join --game=<id> [--approve]` | `hostgame.Joiner.Prepare`, `.Launch` |
 | `GET /api/v1/games/pending` | `companion game open <link>` records what this reads | `joinintent` |
+| `POST /api/lifecycle/quit` | Ctrl+C in the Companion's terminal, or the `curl` under [The lifecycle routes](#the-lifecycle-routes) | `web.Lifecycle.Stop`, `web.Server.Close` |
 
 Two rows have no command and are not meant to: importing a document is copying a
 file, and removing one is deleting it. Nothing else on the page is unreachable

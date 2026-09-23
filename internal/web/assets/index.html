@@ -76,6 +76,10 @@
               <label for="language-select">Language</label>
               <select id="language-select"></select>
             </div>
+            <!-- Quit (NEW_247B): the page's way to stop the program. It says
+                 what is still running first, and nothing is cancelled unless
+                 the person chooses to. See lifecycle.js. -->
+            <button type="button" role="menuitem" id="quit-open">Quit Auto-Pigeon Companion…</button>
           </div>
         </div>
         <!-- The account, top right, as in AUP and AUG (operator, 2026-09-23):
@@ -153,6 +157,42 @@
             <button type="button" id="sync-cancel" class="secondary">Cancel</button>
           </div>
           <p id="sync-message" class="message" role="alert"></p>
+        </section>
+      </div>
+    </div>
+
+    <!-- Quit Auto-Pigeon Companion: what is still running, and the choice to
+         cancel it and quit or to keep the Companion running. -->
+    <div id="quit-modal" class="auth-modal" hidden>
+      <div class="auth-overlay" data-dismiss="quit"></div>
+      <div class="auth-dialog__layer">
+        <section id="quit-dialog" class="auth-dialog" role="dialog" aria-modal="true" aria-labelledby="quit-heading" aria-describedby="quit-intro">
+          <div class="auth-dialog__head">
+            <h2 id="quit-heading">Quit Auto-Pigeon Companion</h2>
+            <p id="quit-intro">Checking what is still running…</p>
+            <button type="button" id="quit-close" class="auth-dialog__close" aria-label="Close">×</button>
+          </div>
+          <ul id="quit-list" class="rows" aria-label="Still running"></ul>
+          <div class="row">
+            <button type="button" id="quit-confirm" class="primary" disabled>Quit</button>
+            <button type="button" id="quit-keep" class="secondary">Keep running</button>
+          </div>
+          <p id="quit-message" class="message" role="alert"></p>
+        </section>
+      </div>
+    </div>
+
+    <!-- The Companion has stopped: this page can no longer do anything, and it
+         says why rather than failing every button. Not dismissible. -->
+    <div id="stopped-modal" class="auth-modal" hidden>
+      <div class="auth-overlay"></div>
+      <div class="auth-dialog__layer">
+        <section id="stopped-dialog" class="auth-dialog" role="alertdialog" aria-modal="true" aria-labelledby="stopped-heading" aria-describedby="stopped-text">
+          <div class="auth-dialog__head">
+            <h2 id="stopped-heading">Auto-Pigeon Companion has stopped</h2>
+            <p id="stopped-text"></p>
+          </div>
+          <p class="muted">You can close this tab. Start Auto-Pigeon Companion again to continue; everything it recorded is kept.</p>
         </section>
       </div>
     </div>
@@ -1276,6 +1316,7 @@
     <script src="settings.js"></script>
     <script src="footer.js"></script>
     <script src="account.js"></script>
+    <script src="lifecycle.js"></script>
     <script src="app.js"></script>
     <!-- An ES module: it imports the vendored notice contract, which imports
          its rules as JSON modules. See internal/web/notices.go. -->

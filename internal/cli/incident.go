@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
@@ -27,6 +28,10 @@ type incidentHolder struct {
 	// view of what happened. A one-shot command prints them only when a
 	// backend is configured, because the person already saw the job fail.
 	transcript bool
+	// detail, when set, is where those lines go instead of stderr: an
+	// interactive Companion keeps its terminal to two lines and writes the
+	// rest to its log file (serve_lifecycle.go).
+	detail io.Writer
 }
 
 // incidents is this invocation's reporter.
@@ -39,7 +44,11 @@ func (e *Env) incidents(settings config.Config) *incident.Reporter {
 		cfg := incident.LoadConfig(e.lookenv, settings.IncidentDSN, settings.IncidentEnvironment, e.Version)
 		var logf func(string, ...any)
 		if holder.transcript || cfg.Enabled() {
-			logf = func(format string, args ...any) { fmt.Fprintf(e.Stderr, format+"\n", args...) }
+			out := e.Stderr
+			if holder.detail != nil {
+				out = holder.detail
+			}
+			logf = func(format string, args ...any) { fmt.Fprintf(out, format+"\n", args...) }
 		}
 		holder.reporter = incident.NewReporter(cfg, incident.Options{Logf: logf})
 	})

@@ -25,8 +25,11 @@
 // This is the one place the dispatcher differs from a plain CLI: an empty
 // argument list is not an error, it is the GUI. Running the binary with no
 // arguments — which is what double-clicking it does — starts the local server
-// and opens the page in the default browser. Named subcommands run headless for
-// scripting.
+// and opens the page in the default browser, in INTERACTIVE mode: it stops once
+// its last page has closed and nothing it started is running (see
+// internal/web/lifecycle.go). `companion --stay-running` is the same launch in
+// server mode, which keeps running. Named subcommands run headless for
+// scripting, and `serve` stays running unless asked otherwise.
 //
 // # Exit codes
 //
@@ -139,8 +142,8 @@ type Command struct {
 // commands is the registry. Order here is display order in the usage text.
 var commands = []Command{
 	{
-		Name: "serve", Usage: "[--port <n>] [--open] [--debug]",
-		Summary: "run the local GUI server without opening a browser",
+		Name: "serve", Usage: "[--port <n>] [--open] [--debug] [--interactive | --stay-running]",
+		Summary: "run the local GUI server; it keeps running until stopped unless --interactive",
 		Run:     runServe,
 	},
 	{
@@ -302,14 +305,8 @@ func Run(env *Env, args []string) int {
 	defer withIncidents.flushIncidents()
 	env = &withIncidents
 
-	if len(args) == 0 {
-		// GUI mode: no subcommand starts the server and opens the browser.
-		return runServe(env, []string{"--open"})
-	}
-	// `companion --debug` is GUI mode with the developer controls unlocked —
-	// see runServe's --debug.
-	if args[0] == "--debug" && len(args) == 1 {
-		return runServe(env, []string{"--open", "--debug"})
+	if gui, ok := guiArguments(args); ok {
+		return runServe(env, gui)
 	}
 
 	switch args[0] {
@@ -334,13 +331,40 @@ func Run(env *Env, args []string) int {
 	return code
 }
 
+// guiArguments maps the no-subcommand launch onto serve. No arguments is the
+// application: open the browser, stop when the last page closes. `--debug`
+// unlocks the developer controls and `--stay-running` selects server mode;
+// either may be given, in any order, and nothing else is a GUI flag — an
+// unknown `--flag` stays an unknown command rather than becoming a serve
+// flag nobody documented here.
+func guiArguments(args []string) ([]string, bool) {
+	gui := []string{"--open"}
+	stay := false
+	for _, arg := range args {
+		switch arg {
+		case "--debug":
+			gui = append(gui, "--debug")
+		case "--stay-running":
+			stay = true
+		default:
+			return nil, false
+		}
+	}
+	if stay {
+		return append(gui, "--stay-running"), true
+	}
+	return append(gui, "--interactive"), true
+}
+
 // UsageText is the help output, generated from the registry so a new subcommand
 // cannot be added without appearing here.
 func UsageText() string {
 	var builder strings.Builder
 	builder.WriteString("companion — Auto-Pigeon Companion: build Quake maps, inspect them, and launch games\n\n")
 	builder.WriteString("usage:\n")
-	builder.WriteString("  companion                 start the local GUI and open a browser\n")
+	builder.WriteString("  companion                 start the local GUI and open a browser; closing its last window stops it\n")
+	builder.WriteString("  companion --stay-running  the same, but keep running when every window is closed\n")
+	builder.WriteString("  companion --debug         the GUI with the developer controls unlocked\n")
 	builder.WriteString("  companion <command> [arguments]\n\ncommands:\n")
 
 	width := 0

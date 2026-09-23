@@ -118,8 +118,20 @@ func resolveRoot(request Request, platform profile.Platform, root string, mode p
 		if !withinRoot(absolute, path) {
 			return nil, fmt.Errorf("acquire: the profile's executable %q resolves outside %s", declared.Name, absolute)
 		}
-		if err := checkExecutable(path); err != nil {
-			return nil, err
+		// The profile's own name, then the names upstream's archives use for
+		// the same program; the first that is there is the one recorded.
+		checked := checkExecutable(path)
+		for _, alias := range declared.FileCandidates(platform)[1:] {
+			if checked == nil {
+				break
+			}
+			candidate := filepath.Join(absolute, filepath.FromSlash(alias))
+			if CheckRelativePath(alias) == nil && withinRoot(absolute, candidate) && checkExecutable(candidate) == nil {
+				path, checked = candidate, nil
+			}
+		}
+		if checked != nil {
+			return nil, checked
 		}
 		executables[declared.Name] = path
 	}

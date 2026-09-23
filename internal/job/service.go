@@ -445,6 +445,28 @@ func (s *Service) List() ([]*Job, error) {
 	return out, nil
 }
 
+// Active is every job this process is supervising and has not finished,
+// oldest first. It reads only the jobs this process owns — a handful — never
+// the whole store, so the lifecycle can ask it every second.
+func (s *Service) Active() []*Job {
+	s.mu.Lock()
+	ids := make([]string, 0, len(s.owned))
+	for id := range s.owned {
+		ids = append(ids, id)
+	}
+	s.mu.Unlock()
+	sort.Strings(ids)
+	out := make([]*Job, 0, len(ids))
+	for _, id := range ids {
+		j, err := s.store.Load(id)
+		if err != nil || j.State.Terminal() {
+			continue
+		}
+		out = append(out, j.Clone())
+	}
+	return out
+}
+
 // Cancel asks a job to stop.
 //
 // It works whichever process is supervising the job: the request is a marker in

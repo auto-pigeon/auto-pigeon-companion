@@ -108,6 +108,9 @@ type Server struct {
 	games  *gameState
 	newAUB func(baseURL string) (*aub.Client, error)
 	token  *Token
+	// lifecycle decides when this process stops, and counts the pages that
+	// hold a lease. See lifecycle.go.
+	lifecycle *Lifecycle
 
 	// mu guards the two values a request can change under another request:
 	// the stored configuration, and the client built from the address in it.
@@ -181,6 +184,9 @@ type Options struct {
 	// NewAUB builds a client for a base URL, so a settings change can point the
 	// server at a different backend without a restart. Nil means aub.New.
 	NewAUB func(baseURL string) (*aub.Client, error)
+	// Lifecycle decides when the process stops. Nil is server mode, which never
+	// stops on its own — what a test and `companion serve` want.
+	Lifecycle *Lifecycle
 }
 
 // NewServer builds the server and its routes.
@@ -241,7 +247,13 @@ func NewServer(options Options) (*Server, error) {
 		logf = func(string, ...any) {}
 	}
 
+	lifecycle := options.Lifecycle
+	if lifecycle == nil {
+		lifecycle = NewLifecycle(LifecycleOptions{})
+	}
+
 	server := &Server{
+		lifecycle:    lifecycle,
 		playLive:     playrun.NewLive(),
 		version:      options.Version,
 		debug:        options.Debug,
@@ -371,6 +383,7 @@ func (s *Server) api() map[string]http.HandlerFunc {
 		s.jobAPI(), s.profileAPI(), s.libraryAPI(),
 		s.engineAPI(), s.buildAPI(), s.playAPI(), s.settingsAPI(), s.siteLinksRoutes(), s.hostingRoutes(), s.bugReportRoutes(), s.pathAPI(),
 		s.feedbackAPI(), s.aboutAPI(), s.accountAPI(), s.gamesAPI(), s.noticesAPI(),
+		s.lifecycleAPI(),
 	} {
 		for pattern, handler := range table {
 			if _, clash := routes[pattern]; clash {

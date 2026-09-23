@@ -172,7 +172,7 @@ the router resolves those for you rather than making you read the table.
 | `aucom.release-verification` | A build is not a verification, and five states keep them apart | release, build, artifacts, native, windows, macos, matrix, bundle, acceptance |
 | `aucom.launcher-merge` | It absorbed the Launcher (AUL), and there is one implementation of each thing | launcher, aul, merge, history, bootstrap, duplication |
 | `aucom.component-addresses` | Component addresses live in `.env`, never in code | addresses, env, ports, localhost, port-contract, endpoint |
-| `aucom.desktop-shell` | The desktop shell is deferred, and the browser is not a fallback for it | desktop, shell, wails, webview, window, native-ui, cgo |
+| `aucom.desktop-shell` | The desktop shell is deferred, and the browser is not a fallback for it | desktop, shell, wails, webview, window, native-ui, cgo, lifecycle, lease, quit, exit |
 
 ## 4. Using the router
 

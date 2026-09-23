@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -111,6 +112,21 @@ func NewSharedJoiner(remote Remote, local joinready.Local, runner Runner, shared
 	j.local = local
 
 	return j
+}
+
+// Downloading lists the join packages this process is downloading, by digest.
+func (c *Coordination) Downloading() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]string, 0, len(c.downloading))
+	for digest, active := range c.downloading {
+		if active {
+			out = append(out, digest)
+		}
+	}
+	sort.Strings(out)
+
+	return out
 }
 
 func (c *Coordination) isDownloading(packageSHA256 string) bool {

@@ -345,7 +345,7 @@ func gameOpen(env *Env, args []string) int {
 	if env.ConfigPath != "" {
 		argv = append(argv, "--config", env.ConfigPath)
 	}
-	argv = append(argv, "serve", "--open", "--open-area=games")
+	argv = append(argv, "serve", "--open", "--interactive", "--open-area=games")
 	command := exec.Command(executable, argv...)
 	command.SysProcAttr = detachedProcess()
 	if err = command.Start(); err != nil {

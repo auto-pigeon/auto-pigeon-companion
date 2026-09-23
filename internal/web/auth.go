@@ -146,7 +146,10 @@ func presentedToken(r *http.Request) string {
 	if scheme, value, found := strings.Cut(authorization, " "); found && strings.EqualFold(scheme, "Bearer") {
 		return strings.TrimSpace(value)
 	}
-	return ""
+	// A page cannot set a header on a WebSocket, so the lease offers the token
+	// as a subprotocol — still a header, never the URL. Read only on an upgrade
+	// request; see lease.go.
+	return leaseToken(r)
 }
 
 // loopbackHost reports whether a Host header names this machine.

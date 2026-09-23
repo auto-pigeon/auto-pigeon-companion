@@ -15,9 +15,18 @@ topics:
   - electron
   - tauri
   - cgo
+  - lifecycle
+  - lease
+  - quit
+  - exit
 paths:
   - cmd/companion/**
   - internal/web/open_browser.go
+  - internal/web/lifecycle.go
+  - internal/web/lifecycle_api.go
+  - internal/web/lease.go
+  - internal/web/assets/lifecycle.js
+  - internal/cli/serve_lifecycle.go
 ---
 
 # The desktop shell is deferred, and the browser is not a fallback for it
@@ -94,3 +103,33 @@ opinion.
   existing API.
 - **The token, Host and Origin boundary does not weaken inside a WebView.** A
   page is not trusted because of where it is displayed.
+
+## The browser owns the foreground lifecycle (NEW_247B)
+
+Closing the last page closes the program; the decision and its reasoning are
+`$MAPPER_ROOT/LLM/docs/adr/0030-the-companion-stops-when-its-last-page-lease-ends.md`.
+What binds a task here:
+
+- **Two modes, and `serve` stays server mode.** The no-subcommand launch is
+  interactive (`serve --open --interactive`); `companion serve` and
+  `--stay-running` never stop because no page is attached. Scripts, harnesses
+  and `auto-pigeon-tools` start `serve` and must not start exiting on their own.
+- **The lease is the only authority.** One WebSocket per page at
+  `GET /api/lifecycle/lease` (`internal/web/lease.go`), counted by
+  `internal/web/lifecycle.go`. Never `beforeunload`/`sendBeacon`, and never
+  the handle of the process that opened the browser — `xdg-open` and `start`
+  return before any window exists.
+- **No second local authentication.** The lease carries the existing per-run
+  token as the subprotocol `aucom.token.<token>`, read only on an upgrade
+  request, behind the same guard. No bootstrap URL value, no cookie.
+- **No server-side silence deadline on a lease.** A hidden tab is throttled or
+  frozen and is still open; a closed one closes its loopback socket at once.
+- **Work outlives the page.** Anything in `Server.ActiveWork` keeps an
+  interactive process alive; a new long-running kind of work must be added
+  there, or closing a tab will stop it.
+- **Shutdown order is `Server.Close` then the job service's `Close`:** hosted
+  listings end first (`host_stopped`), Build & Run and builds are cancelled
+  and waited for, then processes stop gracefully-then-forcefully.
+- **The terminal is two lines and one causal exit line** in interactive mode;
+  detail goes to `companion.log`. Server mode's output is unchanged.
+
