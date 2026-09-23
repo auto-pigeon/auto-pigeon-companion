@@ -201,13 +201,17 @@
     });
     fileChoiceField.hidden = true;
 
+    // Only a real choice is a dropdown: with one way to supply this input,
+    // "Where Map source comes from: A file on this machine" was a select with
+    // one option. It appears once My Maps has sent a map over.
+    const sourceField = el("div", {
+      className: "field",
+      children: [el("label", { text: "Where " + (input.title || input.name) + " comes from", attrs: { for: id + "-source" } }), source],
+    });
     const wrapper = el("div", {
       className: "build-input",
       children: [
-        el("div", {
-          className: "field",
-          children: [el("label", { text: "Where " + (input.title || input.name) + " comes from", attrs: { for: id + "-source" } }), source],
-        }),
+        sourceField,
         file.container,
         assetNote,
         fileChoiceField,
@@ -215,6 +219,7 @@
     });
 
     const apply = () => {
+      sourceField.hidden = source.options.length < 2;
       const usingAsset = source.value === "asset";
       file.container.hidden = usingAsset;
       assetNote.hidden = !usingAsset;
@@ -341,6 +346,7 @@
         // answer, not an alternative to go looking for.
         row.source.value = "asset";
       }
+      row.apply();
       // The map the build will read, said plainly and large enough to check
       // at a glance before pressing Build (operator, NEW_244D).
       row.assetNote.replaceChildren(

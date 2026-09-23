@@ -626,23 +626,6 @@
             <div id="run-engine-detail"></div>
           </div>
 
-          <div class="panel" id="run-setup-panel">
-            <h3>Set up this engine on this machine</h3>
-            <p class="muted">
-              These are the parts that are about <em>your</em> computer. They are
-              recorded separately from the profile, and are never part of a
-              profile you export.
-            </p>
-            <div id="run-binding-fields"></div>
-            <div class="row">
-              <button type="button" id="run-detect">Look for installed games</button>
-              <button type="button" id="run-save-binding" class="primary">Save setup</button>
-              <button type="button" id="run-forget" class="danger">Forget this setup</button>
-            </div>
-            <ul id="run-detected" class="rows" aria-label="Detected game directories"></ul>
-            <p id="run-setup-message" class="message" role="alert"></p>
-          </div>
-
           <div class="panel">
             <h3>Start</h3>
             <div class="field">
@@ -682,6 +665,23 @@
             <p id="run-message" class="message" role="alert"></p>
             <div id="run-preview-out" class="preview" hidden></div>
           </div>
+          <details class="panel run-setup" id="run-setup-panel" open>
+            <summary><h3>Set up this engine on this machine</h3></summary>
+            <p class="muted">
+              These are the parts that are about <em>your</em> computer. They are
+              recorded separately from the profile, and are never part of a
+              profile you export.
+            </p>
+            <div id="run-binding-fields"></div>
+            <div class="row">
+              <button type="button" id="run-detect">Look for installed games</button>
+              <button type="button" id="run-save-binding" class="primary">Save setup</button>
+              <button type="button" id="run-forget" class="danger">Forget this setup</button>
+            </div>
+            <ul id="run-detected" class="rows" aria-label="Detected game directories"></ul>
+            <p id="run-setup-message" class="message" role="alert"></p>
+          </details>
+
         </section>
 
         <!-- Games (244F) ------------------------------------------------ -->
@@ -1033,19 +1033,6 @@
 
           <div class="panel">
             <div class="panel-head">
-              <h3>Recent actions in this window</h3>
-              <button type="button" id="activity-clear" class="secondary">Clear this list</button>
-            </div>
-            <p class="muted">
-              What this window has asked the Companion to do, and what it
-              answered. It is a convenience — the record that matters is the job,
-              the build or the file each line points at.
-            </p>
-            <ol id="activity-log" class="rows" aria-label="Recent actions"></ol>
-          </div>
-
-          <div class="panel">
-            <div class="panel-head">
               <h3>Jobs</h3>
               <button type="button" id="jobs-refresh" class="secondary">Refresh</button>
             </div>
@@ -1074,6 +1061,19 @@
             </div>
             <div id="job-detail"></div>
           </div>
+          <details class="panel recent-actions">
+            <summary class="panel-head">
+              <h3>Recent actions in this window</h3>
+              <button type="button" id="activity-clear" class="secondary">Clear this list</button>
+            </summary>
+            <p class="muted">
+              What this window has asked the Companion to do, and what it
+              answered. It is a convenience — the record that matters is the job,
+              the build or the file each line points at.
+            </p>
+            <ol id="activity-log" class="rows" aria-label="Recent actions"></ol>
+          </details>
+
         </section>
 
         <!-- Settings ----------------------------------------------------- -->

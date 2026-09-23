@@ -33,6 +33,21 @@
     for (const profile of installed) list.append(profileCard(profile));
   }
 
+  // Where a profile's programs live, said from its own file names: "the one
+  // containing bin" when they share a subfolder, or the programs themselves
+  // when they sit at the top. It used to say "For ericw-tools…" whatever the
+  // profile was.
+  function folderHint(executables) {
+    const files = executables.map((executable) => window.AUCOM.programFileName(executable.file)).filter(Boolean);
+    if (!files.length) return "";
+    const tops = [...new Set(files.map((file) => (file.includes("/") ? file.split("/")[0] : "")))];
+    if (tops.length === 1 && tops[0]) {
+      return t("The folder you unpacked the programs into — the one containing {folder}.", { folder: tops[0] });
+    }
+    const names = files.map((file) => file.split("/").pop());
+    return t("The folder that has {programs} directly inside it.", { programs: names.slice(0, 4).join(", ") + (names.length > 4 ? ", …" : "") });
+  }
+
   function profileCard(profile) {
     // Fixed rows, so the text lines up across a row of cards (operator,
     // 2026-09-22): two lines for the name, two for the tags, four for the
@@ -191,7 +206,9 @@
       );
       buttons.append(withdraw);
     } else {
-      status.textContent = body.authorization_error || "This profile has not been approved on this machine.";
+      // One sentence: what it asks for is listed just above, and the raw
+      // refusal repeated that list word for word.
+      status.textContent = t("Not approved on this machine yet. Read what it asks for above, then approve it.");
       status.className = "message error";
       const approve = el("button", { text: "I have read this — approve it", attrs: { type: "button", class: "primary" } });
       approve.addEventListener("click", () =>
@@ -289,9 +306,8 @@
           document.createTextNode(" Downloaded and checked against the signed Auto-Pigeon catalogue."));
       } else {
         provenance.append(badge("local binding", "local"),
-          document.createTextNode(
-            " Programs you named on this machine. Nothing has checked these files against a catalogue; " +
-            "the profile's builtin badge is about the document, not about these bytes."));
+          document.createTextNode(" " + t("Programs you named on this machine. Nothing has checked these files against a catalogue.") +
+            (body.trust === "builtin" ? " " + t("The profile's builtin badge is about the document, not about these bytes.") : "")));
       }
     };
     describeProvenance(body.binding);
@@ -301,7 +317,7 @@
       id: "profile-folder",
       kind: "directory",
       label: t("The folder that holds {name}", { name: body.name }),
-      hint: "For ericw-tools, the folder you unpacked the release into (the one containing bin).",
+      hint: folderHint(body.executables || []),
     });
     detail.append(folder.container);
     const useFolder = el("button", { text: "Use this folder", attrs: { type: "button", class: "primary", id: "profile-use-folder" } });

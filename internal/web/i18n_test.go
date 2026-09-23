@@ -67,3 +67,23 @@ func TestEveryOfferedLanguageHasADictionaryThatKeepsItsSlots(t *testing.T) {
 		}
 	}
 }
+
+// Choosing a language is kept, and choosing Automatic again clears it — in
+// the file and in what the server reports at once, not after a restart.
+func TestTheLanguageChoiceIsSavedAndCanBeCleared(t *testing.T) {
+	server, _ := newTestServer(t, nil)
+	for _, want := range []string{"it", "", "fr"} {
+		response, body := do(t, server, "PUT", "/api/v1/settings/language", `{"language":"`+want+`"}`)
+		if response.StatusCode != 200 {
+			t.Fatalf("PUT %q: %d %v", want, response.StatusCode, body)
+		}
+		got, _ := body["language"].(string)
+		if got != want {
+			t.Errorf("after choosing %q the server reports %q", want, got)
+		}
+	}
+	response, _ := do(t, server, "PUT", "/api/v1/settings/language", `{"language":"xx"}`)
+	if response.StatusCode != 400 {
+		t.Errorf("an unknown language was accepted: %d", response.StatusCode)
+	}
+}

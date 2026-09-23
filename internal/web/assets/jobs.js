@@ -68,7 +68,9 @@
       );
       actions.append(cancel);
     }
-    return el("li", { children: [head, detail, actions] });
+    // One line per job: what ran and when on the left, its state and its
+    // controls on the right (the rows were three lines each).
+    return el("li", { className: "job-row", children: [el("div", { className: "job-row__text", children: [head, detail] }), actions] });
   }
 
   // A cancel is a request: the process is signalled and the job is recorded
@@ -233,7 +235,9 @@
     if (poller) window.clearTimeout(poller);
     $("job-detail-panel").hidden = true;
   });
-  $("activity-clear").addEventListener("click", () => {
+  $("activity-clear").addEventListener("click", (event) => {
+    // Inside the disclosure's summary: clearing must not also open or close it.
+    event.preventDefault();
     // Only this window's convenience list — see clearActivity in core.js.
     window.AUCOM.clearActivity();
     setMessage("jobs-message", "Cleared this window's list. The jobs below are untouched.", "");

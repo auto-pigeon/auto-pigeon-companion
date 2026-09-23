@@ -54,19 +54,25 @@
     $("run-detected").replaceChildren();
     if (!engine) return;
 
-    // --- the portable half
-    const portable = el("div", { className: "panel" });
-    portable.append(el("h4", { text: "The profile" }));
-    const head = el("p");
-    head.append(el("strong", { text: engine.name + " " + engine.version }));
-    head.append(document.createTextNode(" "));
+    // The engine at a glance: its name and trust, one sentence, and whether it
+    // can start. Everything else a person rarely needs — where it looks for
+    // content, what the profile author checked, what this machine recorded —
+    // is behind a disclosure, so Start is not below a wall of facts.
+    const perAction = engine.action_problems || {};
+    const ready = !(perAction[$("run-action").value] || []).length && Boolean(engine.binding);
+    const card = el("div", { className: "engine-card" });
+    const head = el("div", { className: "engine-card__head" });
+    head.append(el("strong", { className: "engine-card__name", text: engine.name }));
+    head.append(el("span", { className: "muted", text: engine.version }));
     head.append(badge(engine.trust));
     const wip = maturityBadge(engine.maturity);
-    if (wip) {
-      head.append(document.createTextNode(" "));
-      head.append(wip);
-    }
-    portable.append(head);
+    if (wip) head.append(wip);
+    head.append(el("span", {
+      className: "engine-card__state " + (ready ? "ok" : "pending"),
+      text: ready ? t("Ready to start") : t("Needs setup"),
+    }));
+    card.append(head);
+    if (engine.summary) card.append(el("p", { className: "engine-card__summary", text: engine.summary }));
     // Before the binding fields and before the Play button: this is where a
     // Quake II game is selected and started.
     const note = maturityNote(engine.maturity, () =>
@@ -77,78 +83,72 @@
         profiles: [{ role: "engine", id: engine.id, version: engine.version }],
       })
     );
-    if (note) portable.append(note);
-    portable.append(el("p", { className: "muted", text: engine.trust_description || "" }));
-    portable.append(el("p", { text: engine.summary || "" }));
-    portable.append(
-      el("p", {
-        className: "muted",
-        text: [
-          "runtime " + engine.runtime,
-          "engine " + engine.engine_version,
-          engine.last_qualified ? "author last checked " + engine.last_qualified : "",
-        ]
-          .filter(Boolean)
-          .join(" · "),
-      })
-    );
+    if (note) card.append(note);
+
+    const about = el("details", { className: "engine-more" });
+    about.append(el("summary", { text: t("About this profile") }));
+    if (engine.trust_description) about.append(el("p", { className: "muted", text: engine.trust_description }));
+    about.append(el("p", {
+      className: "muted",
+      text: [
+        "runtime " + engine.runtime,
+        "engine " + engine.engine_version,
+        engine.last_qualified ? "author last checked " + engine.last_qualified : "",
+      ].filter(Boolean).join(" · "),
+    }));
     const support = engine.platform_support || {};
-    portable.append(
-      el("p", {
-        className: "muted",
-        text:
-          `On ${support.platform?.os}/${support.platform?.arch} this profile is ${support.status}` +
-          (support.note ? ": " + support.note : "."),
-      })
-    );
+    about.append(el("p", {
+      className: "muted",
+      text: `On ${support.platform?.os}/${support.platform?.arch} this profile is ${support.status}` +
+        (support.note ? ": " + support.note : "."),
+    }));
     if ((engine.content_layouts || []).length) {
-      portable.append(el("h4", { text: "Where this engine looks for content" }));
-      const layouts = el("ul");
+      about.append(el("h4", { text: "Where this engine looks for content" }));
+      const layouts = el("ul", { className: "plain" });
       for (const layout of engine.content_layouts) {
-        layouts.append(
-          el("li", {
-            // A layout with no fixed path (a mod directory, named when it is
-            // played) is the root itself plus "a directory you name" — never
-            // the word "undefined" (NEW_244D).
-            text: `${layout.title || layout.id}: ${layout.root}/${layout.path || "<a directory you name>"} (${layout.kind})` +
-              (layout.note ? " — " + layout.note : ""),
-          })
-        );
+        layouts.append(el("li", {
+          // A layout with no fixed path (a mod directory, named when it is
+          // played) is the root itself plus "a directory you name" — never
+          // the word "undefined" (NEW_244D).
+          text: `${layout.title || layout.id}: ${layout.root}/${layout.path || "<a directory you name>"} (${layout.kind})` +
+            (layout.note ? " — " + layout.note : ""),
+        }));
       }
-      portable.append(layouts);
+      about.append(layouts);
     }
-    detail.append(portable);
+    card.append(about);
 
     // --- the local half
-    const local = el("div", { className: "panel" });
-    local.append(el("h4", { text: "What this machine has recorded" }));
+    const local = el("details", { className: "engine-more" });
+    local.append(el("summary", { text: "What this machine has recorded" }));
     if (!engine.binding) {
       local.append(el("p", { className: "muted", text: "Nothing yet. Fill in the setup below." }));
+      local.open = true;
     } else {
       const rows = el("dl", { className: "paths" });
       for (const [name, value] of Object.entries(engine.binding.executables || {})) {
-        rows.append(el("dt", { text: name }));
+        rows.append(el("dt", { text: name === "engine" ? t("Program") : name }));
         rows.append(el("dd", { text: value }));
       }
       for (const [role, value] of Object.entries(engine.binding.roots || {})) {
-        rows.append(el("dt", { text: role }));
+        rows.append(el("dt", { text: window.AUCOM.folderTitle(role) }));
         rows.append(el("dd", { text: value }));
       }
-      rows.append(el("dt", { text: "approved" }));
-      rows.append(
-        el("dd", {
-          text: engine.binding.granted
-            ? `yes, on ${when(engine.binding.granted_at)}`
-            : "no",
-        })
-      );
+      rows.append(el("dt", { text: t("Approved") }));
+      rows.append(el("dd", {
+        text: engine.binding.granted ? t("yes, on {when}", { when: when(engine.binding.granted_at) }) : t("no"),
+      }));
       local.append(rows);
     }
-    detail.append(local);
+    card.append(local);
+    detail.append(card);
+    // Setup is folded away once the engine can start: it is where a person
+    // goes to change something, not a step on the way to Start.
+    const setup = $("run-setup-panel");
+    if (setup && setup.tagName === "DETAILS") setup.open = !ready;
 
     // --- what is stopping it
     const problems = el("div");
-    const perAction = engine.action_problems || {};
     const blocking = perAction[$("run-action").value] || [];
     if (blocking.length) {
       problems.append(el("h4", { text: "Before this can start" }));

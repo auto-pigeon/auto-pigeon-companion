@@ -367,7 +367,15 @@ fieldset { min-width: 0; }
 .stale-page p { margin: 0; }
 .notice p { margin: 0 0 0.5rem; }
 
-.app-body { display: flex; align-items: flex-start; gap: 0; }
+/* The sidebar column is painted by the body, full height, so its background
+   and its edge do not stop where the (sticky) navigation's own box ends. */
+.app-body {
+  display: flex; align-items: flex-start; gap: 0;
+  --sidebar: 13.5rem;
+  background: linear-gradient(to right, var(--surface) var(--sidebar), var(--line) var(--sidebar),
+    var(--line) calc(var(--sidebar) + 1px), transparent calc(var(--sidebar) + 1px));
+  min-height: calc(100vh - 7rem);
+}
 
 /*
   The sidebar (operator, 2026-09-22): Build & Run stands alone at the top as
@@ -377,12 +385,11 @@ fieldset { min-width: 0; }
   as the colour, so it reads without colour too.
 */
 .areas {
-  flex: 0 0 13.5rem;
+  flex: 0 0 var(--sidebar);
   display: flex; flex-direction: column; gap: 1.1rem;
   padding: 0.85rem 0.65rem 1.25rem;
   border-right: 1px solid var(--line);
   background: var(--surface);
-  min-height: calc(100vh - 7rem);
   position: sticky; top: 0; align-self: flex-start;
 }
 .areas ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.1rem; }
@@ -666,7 +673,7 @@ button.link {
   /* Stretch, not the wide layout's flex-start: in a column, flex-start sizes
      <main> to its content, so one long line made the narrow page scroll
      sideways (246I1.1). */
-  .app-body { flex-direction: column; align-items: stretch; }
+  .app-body { flex-direction: column; align-items: stretch; background: none; min-height: 0; }
   .areas {
     flex: none; width: 100%; border-right: none; border-bottom: 1px solid var(--line); min-height: 0;
     position: static; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.75rem; padding: 0.6rem;
@@ -1096,3 +1103,43 @@ ol.numbered { list-style: none; padding-inline-start: 0; }
   background: var(--accent-soft); color: var(--accent-strong); font-size: 0.8125rem; font-weight: 500; text-decoration: none;
 }
 .button-link:hover { background: var(--accent); color: var(--accent-ink); }
+
+/* --- Run: the engine at a glance ------------------------------------------ */
+.engine-card { display: grid; gap: 0.5rem; margin-top: 0.75rem; padding: 0.9rem 1rem; background: var(--inset); border: 1px solid var(--line); border-radius: var(--radius-panel); }
+.engine-card__head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.6rem; }
+.engine-card__name { font-size: 1.05rem; }
+.engine-card__state { margin-left: auto; font-size: 0.8rem; font-weight: 600; padding: 0.1rem 0.55rem; border-radius: 999px; }
+.engine-card__state.ok { color: var(--ok); background: var(--ok-soft); }
+.engine-card__state.pending { color: var(--warn); background: var(--warn-soft); }
+.engine-card__summary { margin: 0; color: var(--ink-muted); }
+.engine-more > summary { cursor: pointer; font-size: 0.85rem; color: var(--ink-muted); padding: 0.15rem 0; }
+.engine-more[open] > summary { color: var(--accent-strong); }
+.engine-more > *:not(summary) { margin: 0.4rem 0 0; font-size: 0.85rem; }
+.run-setup > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 0.5rem; }
+.run-setup > summary::-webkit-details-marker { display: none; }
+.run-setup > summary::before { content: "▸"; color: var(--ink-faint); font-size: 0.8rem; }
+.run-setup[open] > summary::before { content: "▾"; }
+.run-setup > summary h3 { display: inline; }
+
+/* --- Jobs: one line per job, and this window's own list folded below ------- */
+#jobs-list > li.job-row { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; flex-wrap: wrap; padding: 0.55rem 0.75rem; }
+.job-row__text { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.2rem 0.9rem; min-width: 0; flex: 1 1 20rem; }
+.job-row__text .row-head { gap: 0.6rem; justify-content: flex-start; }
+.job-row__text p { margin: 0; font-size: 0.8rem; }
+.recent-actions > summary { cursor: pointer; list-style: none; margin: 0; }
+.recent-actions > summary::-webkit-details-marker { display: none; }
+.recent-actions > summary h3::before { content: "▸ "; color: var(--ink-faint); }
+.recent-actions[open] > summary h3::before { content: "▾ "; }
+
+/* --- Breathing room, everywhere (operator: "check and improve distancing,
+   readability and UX look and feel") --------------------------------------- */
+.panel { padding: 1.1rem 1.25rem; margin-bottom: 1.1rem; }
+.panel > h3:first-child { margin-bottom: 0.8rem; }
+.panel-head { margin-bottom: 0.8rem; }
+.lede { margin-bottom: 1.25rem; line-height: 1.55; }
+.area-head { margin-bottom: 0.35rem; }
+.field { gap: 0.3rem; }
+.row { gap: 0.9rem; margin: 0.75rem 0; }
+.panel > p.muted { line-height: 1.55; }
+main { padding: 1.25rem 1.75rem 3rem; }
+@media (max-width: 46rem) { main { padding: 0.85rem; } }

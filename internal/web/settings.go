@@ -318,12 +318,18 @@ func (s *Server) handleLanguagePut(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("%q is not a language this page offers", language))
 		return
 	}
-	if _, err := s.updateConfig(func(current *config.Config) error {
+	updated, err := s.updateConfig(func(current *config.Config) error {
 		current.Language = language
 		return nil
-	}); err != nil {
+	})
+	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	// Only the language moves in memory: the rest of the file is the other
+	// routes' to adopt.
+	s.mu.Lock()
+	s.settings.Language = updated.Language
+	s.mu.Unlock()
 	writeJSON(w, http.StatusOK, s.describeSettings())
 }

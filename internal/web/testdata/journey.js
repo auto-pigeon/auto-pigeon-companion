@@ -243,8 +243,7 @@
     const approve = await waitFor("the approve button", () => buttonIn($("profile-detail"), "approve it"));
     record(
       "the review shows what the profile asks for before it can be approved",
-      textOf($("profile-detail")).includes("has not been reviewed yet") ||
-        textOf($("profile-detail")).includes("has not been approved on this machine"),
+      textOf($("profile-detail")).includes("Not approved on this machine yet"),
       textOf($("profile-detail")).replace(/\s+/g, " ").slice(-200)
     );
 
@@ -363,7 +362,7 @@
     await go("run");
     await waitFor("the engine list", () => $("run-engine").options.length > 0);
     setValue($("run-engine"), settings.engine_id);
-    await waitFor("the engine detail", () => textOf($("run-engine-detail")).includes("The profile"));
+    await waitFor("the engine detail", () => textOf($("run-engine-detail")).includes("About this profile"));
     record(
       "an engine that is not set up says what is stopping it",
       textOf($("run-engine-detail")).includes("Before this can start"),
