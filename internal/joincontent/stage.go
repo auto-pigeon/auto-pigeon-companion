@@ -303,8 +303,9 @@ func (s *Stager) Lookup(packageSHA256 string, files []aub.JoinContentFile) (Stag
 // so the engine can be pointed at the stage and still find the game it needs.
 //
 // Only the named directories are linked, each only if it exists in the user's
-// game root, and each as a symbolic link: the user's files are READ through it
-// and never copied. A link that already points at the right place is left alone;
+// game root, and each as a symbolic link (on Windows without the privilege for
+// one, a directory junction — link_windows.go): the user's files are READ
+// through it and never copied. A link that already points at the right place is left alone;
 // one pointing anywhere else is replaced, because the binding moved.
 func (st Stage) Overlay(gameRoot string, baseDirs []string) error {
 	if gameRoot == "" {
@@ -331,7 +332,7 @@ func (st Stage) Overlay(gameRoot string, baseDirs []string) error {
 		} else if _, statErr := os.Lstat(link); statErr == nil {
 			return fmt.Errorf("joincontent: %s exists and is not a link this Companion made", link)
 		}
-		if err = os.Symlink(source, link); err != nil {
+		if err = linkDir(source, link); err != nil {
 			return fmt.Errorf("joincontent: linking the game folder: %w", err)
 		}
 	}

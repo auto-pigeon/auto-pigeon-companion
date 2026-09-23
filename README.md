@@ -2521,8 +2521,9 @@ reach itself.
 
 `AUB/AUG/AUCOM/AUT 244F`. The **Live Games** area of the Companion lists the games
 being hosted now (public games, or your own), and each game has **one** primary
-action: **Join** when this computer is ready, **Set up to join** when something is
-missing. Setup is a checklist computed fresh every time — never stored — and every
+action: **Join** when this computer is ready — or when all that is left is downloading
+the map files, which one press then does before the review — and **Set up to join**
+when something about this computer is missing. Setup is a checklist computed fresh every time — never stored — and every
 step offers only a real action:
 
 | Step | What it checks | What "Set up to join" does |
@@ -2544,7 +2545,8 @@ second engine. A review is valid for two minutes.
 The Companion never downloads an engine or game data. The map files a host shares
 are staged under your asset cache, in a directory the engine is started in and
 pointed at with `-basedir .`, whose base-game folder (`id1`) is a *link* to your
-own installation — so nothing is ever written into the folder your game lives in.
+own installation (on Windows, a directory junction when the account may not create
+symbolic links) — so nothing is ever written into the folder your game lives in.
 The base directory is `.` rather than its full path because vkQuake keeps only the
 first 255 characters of its command line, its own program path included; a longer
 line loses `+connect` and the engine sits in its demo loop. The engine saves its

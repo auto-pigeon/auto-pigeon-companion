@@ -200,7 +200,11 @@
         primary.textContent = "Join";
         break;
       case "setup_required":
-        primary.textContent = "Set up to join";
+        // Downloading the map files is part of JOINING, not of setting this
+        // computer up (operator, 2026-09-23): when that is all that is left,
+        // the one button says Join, and one press downloads and goes on to the
+        // review.
+        primary.textContent = nextStep()?.action === "download_join_content" ? "Join" : "Set up to join";
         break;
       case "sign_in_required":
         primary.textContent = "Sign in";
@@ -411,11 +415,15 @@
   }
 
   async function downloadContent(button) {
+    let downloaded = false;
     await withBusy(button, async () => {
       busy("games-detail-message", "Downloading this game's map files and checking every one…");
       const response = await api(`/api/v1/games/${encodeURIComponent(current.id)}/content`, { method: "POST", body: {} });
-      await afterStep(response, "The map files are downloaded, checked and ready.");
+      downloaded = await afterStep(response, "The map files are downloaded, checked and ready.");
     });
+    // The press was "Join": once the files are in, go straight on to the review
+    // of the exact command, which still starts nothing until it is approved.
+    if (downloaded && current?.readiness?.state === "ready_for_review") await review(button);
   }
 
   // --- the review, and the one start -----------------------------------------------

@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -75,6 +76,48 @@ func wadFileName(declared string) string {
 	return declared
 }
 
+// OwnWADDestinations is where, under the content root, each WAD must be for
+// the compiler to find it: the path the map declares (`gfx/metal.wad`), keyed by
+// its lower-cased file name. The compiler joins `-wadpath` with the DECLARED
+// path, so a copy staged only by file name is a copy it never opens — which is
+// how dm2 compiled "successfully" with all 38 textures missing (2026-09-23). A
+// declared path that is absolute, has a drive or climbs out with `..` is staged
+// by file name only.
+func OwnWADDestinations(refusals []string) map[string][]string {
+	out := map[string][]string{}
+	for _, refusal := range refusals {
+		code, subject, _ := strings.Cut(refusal, ":")
+		if strings.TrimSpace(code) != "wad_bytes_not_carried" {
+			continue
+		}
+		name := wadFileName(subject)
+		if name == "" {
+			continue
+		}
+		key := strings.ToLower(name)
+		declared := strings.ReplaceAll(strings.TrimSpace(subject), `\`, "/")
+		clean := path.Clean(declared)
+		if declared == "" || strings.HasPrefix(declared, "/") || strings.Contains(declared, ":") ||
+			clean == ".." || strings.HasPrefix(clean, "../") {
+			clean = name
+		}
+		if !containsString(out[key], clean) {
+			out[key] = append(out[key], clean)
+		}
+	}
+
+	return out
+}
+
+func containsString(list []string, value string) bool {
+	for _, item := range list {
+		if item == value {
+			return true
+		}
+	}
+	return false
+}
+
 // OwnWAD is one WAD found in the folder a person named.
 type OwnWAD struct {
 	Name  string `json:"name"`
@@ -124,7 +167,9 @@ func FindOwnWADs(dir string, names []string) ([]OwnWAD, error) {
 // files, plus the person's own copy of each WAD the bundle could not carry,
 // under the name the map declares. The bundle's own directory is never
 // written to — it is a cache entry other runs share.
-func (s *Service) completeWithOwnWADs(record *Record, bundleRoot string, names []string) (string, []StagedFile, error) {
+func (s *Service) completeWithOwnWADs(record *Record, bundleRoot string, names []string,
+	destinations map[string][]string,
+) (string, []StagedFile, error) {
 	found, err := FindOwnWADs(record.Request.OwnWADsDir, names)
 	if err != nil {
 		return "", nil, err
@@ -169,14 +214,20 @@ func (s *Service) completeWithOwnWADs(record *Record, bundleRoot string, names [
 	if err != nil {
 		return "", nil, fmt.Errorf("playrun: copying the texture bundle: %w", err)
 	}
-	// Then the person's own copies, recorded.
+	// Then the person's own copies, recorded, each where the map declares it.
 	staged := make([]StagedFile, 0, len(found))
 	for _, wad := range found {
-		digest, size, err := copyFile(wad.Path, filepath.Join(root, wad.Name))
-		if err != nil {
-			return "", nil, fmt.Errorf("playrun: copying your %s: %w", wad.Name, err)
+		targets := destinations[strings.ToLower(wad.Name)]
+		if len(targets) == 0 {
+			targets = []string{wad.Name}
 		}
-		staged = append(staged, StagedFile{Path: wad.Name, SHA256: digest, Bytes: size})
+		for _, relative := range targets {
+			digest, size, err := copyFile(wad.Path, filepath.Join(root, filepath.FromSlash(relative)))
+			if err != nil {
+				return "", nil, fmt.Errorf("playrun: copying your %s: %w", wad.Name, err)
+			}
+			staged = append(staged, StagedFile{Path: relative, SHA256: digest, Bytes: size})
+		}
 	}
 
 	return root, staged, nil

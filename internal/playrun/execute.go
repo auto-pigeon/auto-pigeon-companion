@@ -111,7 +111,8 @@ func (s *Service) downloadTextures(ctx context.Context, record *Record) error {
 		// named. See ownwads.go.
 		names, onlyNotCarried := OwnWADsNeeded(result.Ref.CompilerRefusals)
 		if onlyNotCarried && record.Request.OwnWADsDir != "" {
-			root, own, err := s.completeWithOwnWADs(record, result.ContentRoot, names)
+			root, own, err := s.completeWithOwnWADs(record, result.ContentRoot, names,
+				OwnWADDestinations(result.Ref.CompilerRefusals))
 			if err != nil {
 				record.Remedy = "Put your own copy of " + strings.Join(names, ", ") +
 					" in the folder you named, or name the folder that has it."
