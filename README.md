@@ -444,12 +444,15 @@ everything the listing will say. Pressing **Build & Run** is the confirmation:
 once the engine is running, the built map is uploaded for people who join, the
 game is listed, and it is kept listed while the engine runs — Activity says so —
 and the listing ends within a couple of seconds of the game stopping. One field
-is settled only once the engine runs: the **engine version**. The preview shows
-the engine profile's supported range (`1.30.x` for vkQuake); the listing carries
-the version the running engine printed about itself as it started
-(`Initializing vkQuake 1.36.0` → `1.36.0`), read from the job's own output under
-**Jobs**. An engine that prints no such line within five seconds is listed with
-the range. It is the same lease `companion game host --build` keeps, where
+is settled only once the engine has run: the **engine version**. The preview
+shows the engine profile's supported range (`1.30.x` for vkQuake). The listing
+carries the version the engine printed about itself (`Initializing vkQuake
+1.36.0` → `1.36.0`, in the job's output under **Jobs**): from the running
+engine when it prints that line within five seconds, otherwise from the last
+time the same program ran — kept in its binding when a hosted game ends, and
+ignored once the program file has changed since. vkQuake's output only arrives
+when it exits, so its **first** hosted game is listed with the range and every
+later one with its real version; the Companion's log says which source was used. It is the same lease `companion game host --build` keeps, where
 `--engine-version` says the version outright; the preview over HTTP is:
 
 ```console

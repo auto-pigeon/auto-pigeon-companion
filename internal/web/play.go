@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -382,9 +383,20 @@ func (s *Server) playLaunch(_ context.Context, request playrun.Request) (playrun
 		},
 		Label: request.Label,
 	}
-	submitted, err := service.Submit(jobRequest)
+	// A hosted game's engine output is watched from its first line, so the
+	// listing can say which version is running (see observedEngineVersion).
+	var mirror io.Writer
+	var opening *engineOpening
+	if request.Listing != nil && hostingActions[request.EngineActionID] != "" {
+		opening = &engineOpening{}
+		mirror = opening
+	}
+	submitted, err := service.SubmitWatched(jobRequest, mirror)
 	if err != nil {
 		return playrun.LaunchRecord{}, err
+	}
+	if opening != nil {
+		s.hosting.keepOpening(submitted.ID, opening)
 	}
 	record := playrun.LaunchRecord{
 		ProfileID: request.EngineProfileID, ActionID: request.EngineActionID, JobID: submitted.ID,

@@ -7,12 +7,14 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/aub"
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/binding"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/build"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/hostgame"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
@@ -46,6 +48,56 @@ type hostingState struct {
 	advertiser *hostgame.Advertiser
 	backend    string
 	listings   map[string]*listingView
+	// openings is the start of each hosted engine's output, by job id, kept
+	// until its listing is registered. A running job's log reaches disk only
+	// when it ends, so this is the one place its version line can be read
+	// while it is still the game being listed.
+	openings map[string]*engineOpening
+}
+
+// engineOpeningBytes is how much of an engine's output is kept for its
+// version line. Engines print it among their first lines.
+const engineOpeningBytes = 64 << 10
+
+// engineOpening keeps the first engineOpeningBytes an engine writes. It is the
+// job's output mirror, so it sees what the program prints as it prints it.
+type engineOpening struct {
+	mu  sync.Mutex
+	buf []byte
+}
+
+func (o *engineOpening) Write(p []byte) (int, error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if room := engineOpeningBytes - len(o.buf); room > 0 {
+		o.buf = append(o.buf, p[:min(room, len(p))]...)
+	}
+	return len(p), nil
+}
+
+func (o *engineOpening) String() string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return string(o.buf)
+}
+
+// keepOpening records a hosted engine's opening output under its job id.
+func (h *hostingState) keepOpening(jobID string, opening *engineOpening) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.openings == nil {
+		h.openings = map[string]*engineOpening{}
+	}
+	h.openings[jobID] = opening
+}
+
+// takeOpening hands over, and forgets, a hosted engine's opening output.
+func (h *hostingState) takeOpening(jobID string) *engineOpening {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	opening := h.openings[jobID]
+	delete(h.openings, jobID)
+	return opening
 }
 
 // listingView is a run's listing as the Activity panel shows it.
@@ -262,24 +314,86 @@ func (s *Server) listingRegistration(request playrun.Request, listing *playListi
 const engineVersionWait = 5 * time.Second
 
 // observedEngineVersion is the version the running engine printed about
-// itself, read from its job's output (see hostgame.ObservedEngineVersion). It
-// waits briefly for the line to appear and reads at most the first 64 KiB.
-func observedEngineVersion(jobs *job.Service, jobID, runtime string) (string, bool) {
+// itself (see hostgame.ObservedEngineVersion), read from the opening output
+// kept for it at launch. It waits up to engineVersionWait for the line, and
+// gives up as soon as the job has ended.
+func (s *Server) observedEngineVersion(jobs *job.Service, jobID, runtime string) (string, int, bool) {
+	opening := s.hosting.takeOpening(jobID)
+	if opening == nil {
+		return "", 0, false
+	}
 	deadline := time.Now().Add(engineVersionWait)
 	for {
-		if out, err := jobs.Logs(jobID, "stdout", false); err == nil {
-			if len(out) > 64<<10 {
-				out = out[:64<<10]
-			}
-			if version, ok := hostgame.ObservedEngineVersion(runtime, string(out)); ok {
-				return version, true
-			}
+		output := opening.String()
+		if version, ok := hostgame.ObservedEngineVersion(runtime, output); ok {
+			return version, len(output), true
 		}
 		if current, err := jobs.Get(jobID); err != nil || current.State.Terminal() || time.Now().After(deadline) {
-			return "", false
+			return "", len(output), false
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
+}
+
+// recordEngineVersion keeps the version a hosted engine printed about itself
+// in its binding, once the game has ended and its whole output is on disk.
+//
+// Why after rather than during: many engines write stdout through C stdio,
+// which a pipe makes fully buffered. vkQuake 1.36.0 prints 2,784 bytes in all,
+// less than one 4 KiB buffer, so not one byte of it reaches the Companion
+// until the engine exits (measured 2026-09-23: 0 bytes after 5 s). The
+// binding's ResolvedVersion and VersionCheckedAt are "what the program
+// reported, and when", which is exactly this.
+func (s *Server) recordEngineVersion(jobs *job.Service, record playrun.Record, runtime string) {
+	out, err := jobs.Logs(record.Launch.JobID, "stdout", false)
+	if err != nil {
+		return
+	}
+	version, ok := hostgame.ObservedEngineVersion(runtime, string(out[:min(len(out), engineOpeningBytes)]))
+	if !ok {
+		return
+	}
+	path, err := s.bindingsPath()
+	if err != nil {
+		return
+	}
+	if _, err := binding.Update(path, func(set *binding.Set) error {
+		local, found := set.Find(record.Request.EngineProfileID)
+		if !found {
+			return nil
+		}
+		local.ResolvedVersion, local.VersionCheckedAt = version, time.Now().UTC()
+		local.UpdatedAt = local.VersionCheckedAt
+		return set.Put(local)
+	}); err != nil {
+		s.logf("run %s: recording engine version %s: %v", record.ID, version, err)
+		return
+	}
+	s.logf("run %s: recorded engine version %s for %s", record.ID, version, record.Request.EngineProfileID)
+}
+
+// recordedEngineVersion is the version recordEngineVersion kept, while it
+// still describes the program: a file modified after the version was read
+// may be a different version, and then the answer is "unknown", not the old
+// number.
+func (s *Server) recordedEngineVersion(profileID, executable string) (string, bool) {
+	path, err := s.bindingsPath()
+	if err != nil {
+		return "", false
+	}
+	set, err := binding.LoadFile(path)
+	if err != nil {
+		return "", false
+	}
+	local, found := set.Find(profileID)
+	if !found || local.ResolvedVersion == "" || local.VersionCheckedAt.IsZero() || executable == "" {
+		return "", false
+	}
+	info, err := os.Stat(executable)
+	if err != nil || info.ModTime().After(local.VersionCheckedAt) {
+		return "", false
+	}
+	return local.ResolvedVersion, true
 }
 
 // playLaunched lists a hosted run once its engine is running. It returns at
@@ -295,6 +409,9 @@ func (s *Server) playLaunched(record playrun.Record) {
 }
 
 func (s *Server) advertiseRun(record playrun.Record) {
+	// A listing that fails before it reads the engine's version must not leave
+	// the kept output behind.
+	defer s.hosting.takeOpening(record.Launch.JobID)
 	fail := func(err error) {
 		s.logf("run %s: listing: %v", record.ID, err)
 		s.hosting.set(record.ID, &listingView{State: "failed", Title: record.Request.Listing.Title,
@@ -334,8 +451,18 @@ func (s *Server) advertiseRun(record playrun.Record) {
 		registration.ContentRequirement = "package"
 	}
 	registration.ConfirmExposure = true
-	if version, ok := observedEngineVersion(jobs, record.Launch.JobID, registration.EngineRuntime); ok {
+	version, seen, live := s.observedEngineVersion(jobs, record.Launch.JobID, registration.EngineRuntime)
+	switch recorded, recordedOK := s.recordedEngineVersion(record.Request.EngineProfileID, record.Launch.Executable); {
+	case live:
 		registration.EngineVersion = version
+		s.logf("run %s: listing: engine version %s, as the running engine printed it", record.ID, version)
+	case recordedOK:
+		registration.EngineVersion = recorded
+		s.logf("run %s: listing: engine version %s, as this program printed it when it last ran "+
+			"(%d bytes of output so far this time)", record.ID, recorded, seen)
+	default:
+		s.logf("run %s: listing: engine version %s, the profile's range: no version line in the first %d bytes "+
+			"the engine printed, and none recorded since the program last changed", record.ID, registration.EngineVersion, seen)
 	}
 
 	advertiser := s.hosting.advertiserFor(client, jobs)
@@ -357,6 +484,7 @@ func (s *Server) advertiseRun(record playrun.Record) {
 	s.logf("run %s: listed as game %s (%s)", record.ID, game.ID, game.Visibility)
 
 	advertiser.Wait(game.ID)
+	s.recordEngineVersion(jobs, record, registration.EngineRuntime)
 	s.hosting.set(record.ID, &listingView{State: "ended", GameID: game.ID, Title: game.Title,
 		Visibility: game.Visibility, Message: "The game stopped, so its listing has ended."})
 }
