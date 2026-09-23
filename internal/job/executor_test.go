@@ -186,6 +186,19 @@ func TestCancellationReachesAJobAnotherProcessIsSupervising(t *testing.T) {
 	if finished.FinishedAt.IsZero() {
 		t.Error("a cancelled job has no finish time")
 	}
+	// Running -> cancelling -> cancelled, every step one the state machine
+	// allows. A stop used to jump running -> cancelled, which finish() could
+	// only force, and the log said so on every Stop from the page.
+	var states []State
+	for _, event := range finished.History {
+		if strings.HasPrefix(event.Note, "forced: ") {
+			t.Errorf("the stop forced a transition: %s", event.Note)
+		}
+		states = append(states, event.State)
+	}
+	if n := len(states); n < 3 || states[n-3] != Running || states[n-2] != Cancelling || states[n-1] != Cancelled {
+		t.Errorf("history = %v, want it to end running, cancelling, cancelled", states)
+	}
 }
 
 func TestAChildThatOutlivesItsParentDoesNotHangTheJob(t *testing.T) {

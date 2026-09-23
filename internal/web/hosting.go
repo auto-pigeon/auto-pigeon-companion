@@ -15,6 +15,7 @@ import (
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/aub"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/build"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/hostgame"
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/joincontent"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/playrun"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
@@ -255,6 +256,32 @@ func (s *Server) listingRegistration(request playrun.Request, listing *playListi
 	}, nil
 }
 
+// engineVersionWait bounds how long a listing waits for the engine to print
+// its version. An engine prints it among its first lines, well inside this;
+// one that never does is listed with its profile's range instead.
+const engineVersionWait = 5 * time.Second
+
+// observedEngineVersion is the version the running engine printed about
+// itself, read from its job's output (see hostgame.ObservedEngineVersion). It
+// waits briefly for the line to appear and reads at most the first 64 KiB.
+func observedEngineVersion(jobs *job.Service, jobID, runtime string) (string, bool) {
+	deadline := time.Now().Add(engineVersionWait)
+	for {
+		if out, err := jobs.Logs(jobID, "stdout", false); err == nil {
+			if len(out) > 64<<10 {
+				out = out[:64<<10]
+			}
+			if version, ok := hostgame.ObservedEngineVersion(runtime, string(out)); ok {
+				return version, true
+			}
+		}
+		if current, err := jobs.Get(jobID); err != nil || current.State.Terminal() || time.Now().After(deadline) {
+			return "", false
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+}
+
 // playLaunched lists a hosted run once its engine is running. It returns at
 // once: the upload and the registration happen beside the run, and their
 // outcome is shown in Activity.
@@ -307,6 +334,9 @@ func (s *Server) advertiseRun(record playrun.Record) {
 		registration.ContentRequirement = "package"
 	}
 	registration.ConfirmExposure = true
+	if version, ok := observedEngineVersion(jobs, record.Launch.JobID, registration.EngineRuntime); ok {
+		registration.EngineVersion = version
+	}
 
 	advertiser := s.hosting.advertiserFor(client, jobs)
 	game, err := advertiser.Start(context.Background(), registration, hostgame.StartOptions{JobID: record.Launch.JobID})

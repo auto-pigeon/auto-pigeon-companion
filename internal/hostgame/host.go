@@ -51,6 +51,15 @@ var (
 	ErrAlreadyAdvertising = errors.New("hostgame: this game is already being advertised")
 )
 
+// JobWatchInterval is how often a beat loop reads the job it advertises.
+//
+// Reading only once per beat meant a stopped game stayed listed as running
+// for up to a whole heartbeat interval after its process ended (operator,
+// 2026-09-23: AUG still showed dm2 live after Stop). Reading the job is a
+// local file read, so doing it every couple of seconds costs nothing, and the
+// listing then ends when the game does.
+const JobWatchInterval = 2 * time.Second
+
 // Advertiser keeps one machine's advertisements alive.
 //
 // One per Companion process. It holds a beat loop per advertised game and
@@ -111,9 +120,9 @@ type StartOptions struct {
 	// JobID is the supervised process this lease describes. Required: a lease
 	// with no process behind it is an advertisement nothing can end.
 	JobID string
-	// PollInterval overrides how often the job's state is re-read. Zero means the
-	// heartbeat cadence AUB published, which is the right answer: there is nothing
-	// to be gained by noticing a crash sooner than the next beat would report it.
+	// PollInterval overrides how often a beat is sent. Zero means the heartbeat
+	// cadence AUB published, which is the right answer. The job's state is read
+	// more often than that, every [JobWatchInterval], whatever this says.
 	PollInterval time.Duration
 	// Occupancy, when set, is asked for a fresh count before each beat. A host
 	// whose engine cannot report one leaves it nil, and the beat then says nothing
@@ -208,15 +217,28 @@ func (a *Advertiser) beat(ctx context.Context, entry *advertisement, interval ti
 			return
 		}
 
-		select {
-		case <-ctx.Done():
-			// The Companion is shutting down or the caller asked to stop. Either way
-			// somebody is signing off, and saying so is better than going silent and
-			// leaving AUB to conclude it two minutes later.
-			a.end(context.WithoutCancel(ctx), entry, aub.ReasonOwnerSignedOut)
+		// The job is watched every JobWatchInterval while the loop waits for its
+		// next beat, so a stop ends the listing seconds after the process ends
+		// rather than at the next beat. The beat cadence itself is unchanged.
+		beatDue := a.after(poll)
+		for waiting := true; waiting; {
+			select {
+			case <-ctx.Done():
+				// The Companion is shutting down or the caller asked to stop. Either
+				// way somebody is signing off, and saying so is better than going
+				// silent and leaving AUB to conclude it two minutes later.
+				a.end(context.WithoutCancel(ctx), entry, aub.ReasonOwnerSignedOut)
 
-			return
-		case <-a.after(poll):
+				return
+			case <-beatDue:
+				waiting = false
+			case <-a.after(JobWatchInterval):
+				if reason, ended := a.jobEnded(entry); ended {
+					a.end(ctx, entry, reason)
+
+					return
+				}
+			}
 		}
 
 		if reason, ended := a.jobEnded(entry); ended {

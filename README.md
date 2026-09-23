@@ -443,8 +443,14 @@ the Auto-Pigeon site's Games page. Step 4 shows the server's own preview of
 everything the listing will say. Pressing **Build & Run** is the confirmation:
 once the engine is running, the built map is uploaded for people who join, the
 game is listed, and it is kept listed while the engine runs — Activity says so —
-and the listing ends when the game stops. It is the same lease
-`companion game host --build` keeps; the preview over HTTP is:
+and the listing ends within a couple of seconds of the game stopping. One field
+is settled only once the engine runs: the **engine version**. The preview shows
+the engine profile's supported range (`1.30.x` for vkQuake); the listing carries
+the version the running engine printed about itself as it started
+(`Initializing vkQuake 1.36.0` → `1.36.0`), read from the job's own output under
+**Jobs**. An engine that prints no such line within five seconds is listed with
+the range. It is the same lease `companion game host --build` keeps, where
+`--engine-version` says the version outright; the preview over HTTP is:
 
 ```console
 $ curl -s -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/play/listing-defaults'?engine=auto-pigeon.engine.vkquake&action=host_listen'
@@ -2644,8 +2650,10 @@ confirmation *of* the preview, and the preview is AUB's own computation run
 without writing anything — so the fields you approve are the fields that get
 published rather than a second rendering that could disagree.
 
-**The advertisement ends when the process does.** The beat loop watches the
-supervised job, and every way a job can end maps onto a word AUB has for it:
+**The advertisement ends when the process does.** The beat loop reads the
+supervised job every two seconds, between beats rather than only at them, so a
+stopped game leaves the listing seconds after its process ends instead of at the
+next heartbeat. Every way a job can end maps onto a word AUB has for it:
 cancelling is `host_stopped`, a clean exit is `host_stopped`, a non-zero exit is
 `host_crashed`, and being killed along with the Companion is `host_crashed`.
 Signing out or quitting ends every advertisement with `owner_signed_out`.

@@ -15,3 +15,12 @@ func NewForTest(backend Backend, jobs Jobs, interval time.Duration) *Advertiser 
 
 	return advertiser
 }
+
+// NewWithAfterForTest is New with the loop's timer replaced, so a test can
+// make the next beat an hour away while the job watch fires at once.
+func NewWithAfterForTest(backend Backend, jobs Jobs, after func(time.Duration) <-chan time.Time) *Advertiser {
+	advertiser := New(backend, jobs)
+	advertiser.after = after
+
+	return advertiser
+}

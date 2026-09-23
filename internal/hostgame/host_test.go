@@ -290,6 +290,47 @@ func TestARefusedBeatEndsTheLoop(t *testing.T) {
 	}
 }
 
+// A stopped game stops being listed when its process ends, not at the next beat.
+// The beat here is an hour away; only the job watch can end the lease in time.
+func TestAStoppedGameIsUnlistedBeforeTheNextBeat(t *testing.T) {
+	backend, jobs := newBackend(), &fakeJobs{current: hostingJob(job.Running)}
+	// Closed when the loop starts waiting for its next beat, so the job ends
+	// while the loop is asleep rather than before it first looked.
+	waiting := make(chan struct{})
+	var once sync.Once
+	advertiser := hostgame.NewWithAfterForTest(backend, jobs, func(d time.Duration) <-chan time.Time {
+		if d == hostgame.JobWatchInterval {
+			return time.After(time.Millisecond)
+		}
+		once.Do(func() { close(waiting) })
+		return time.After(time.Hour)
+	})
+
+	if _, err := advertiser.Start(context.Background(),
+		aub.HostedGameRegistration{ConfirmExposure: true},
+		hostgame.StartOptions{JobID: "job1", PollInterval: time.Hour},
+	); err != nil {
+		t.Fatal(err)
+	}
+	<-waiting
+	jobs.set(job.Cancelled)
+
+	ended := make(chan struct{})
+	go func() { advertiser.Wait("gme1"); close(ended) }()
+	select {
+	case <-ended:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the listing was still live 5s after its job was cancelled; it waited for the next beat")
+	}
+	beats, stops, _ := backend.counts()
+	if len(stops) != 1 || stops[0] != aub.ReasonHostStopped {
+		t.Fatalf("stops = %v, want [%s]", stops, aub.ReasonHostStopped)
+	}
+	if beats != 0 {
+		t.Fatalf("beats = %d, want 0: the lease was renewed for a job that had ended", beats)
+	}
+}
+
 // Signing out ends every advertisement rather than leaving somebody else's
 // listing showing a game that stopped.
 func TestClosingEndsEveryAdvertisementWithAReason(t *testing.T) {

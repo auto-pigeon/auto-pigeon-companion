@@ -841,6 +841,14 @@ func (s *Service) execute(id string) {
 		s.finish(j, Interrupted, "the Companion shut down while this job was running", nil)
 		return
 	case result.reason == stopCancelled || s.store.CancelRequested(id):
+		// A started job reaches Cancelled through Cancelling, as the state
+		// machine says. Going straight there was a transition finish() had to
+		// force, and it logged the violation on every Stop.
+		if j.State == Running || j.State == Resolving {
+			if err := s.step(j, Cancelling, "a stop was asked for while it was running"); err != nil {
+				s.logf("job %s: %v", id, err)
+			}
+		}
 		s.finish(j, Cancelled, "stopped because you asked", nil)
 		return
 	case result.err != nil:
