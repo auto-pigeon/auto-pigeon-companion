@@ -80,6 +80,12 @@ type RootSource struct {
 	// directory, whose contents this program has no identity for and does not
 	// invent one.
 	Bundle *BundleRef `json:"bundle,omitempty"`
+
+	// OwnFiles are WADs the person supplied from their own copy to complete a
+	// bundle AUB could not carry them in (Build & Run's "use my own copy").
+	// Recorded beside the bundle, whose own compiler_ready stays AUB's verdict,
+	// so a manifest says exactly what completed it.
+	OwnFiles []BundleFile `json:"own_files,omitempty"`
 }
 
 // BundleRef identifies a verified AUB texture export.

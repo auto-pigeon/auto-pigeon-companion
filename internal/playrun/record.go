@@ -30,6 +30,7 @@ package playrun
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -158,6 +159,13 @@ type Request struct {
 
 	// Label is a short human name for the Jobs list. Optional.
 	Label string `json:"label,omitempty"`
+
+	// OwnWADsDir is a folder on this machine the person named in the review,
+	// holding their own copy of WADs Auto-Pigeon may not redistribute. Used
+	// only for the WADs AUB refused to carry, each by its exact file name, and
+	// every one is recorded. Empty means none: a bundle that is not
+	// compiler-ready stops the run, as it always did. See ownwads.go.
+	OwnWADsDir string `json:"own_wads_dir,omitempty"`
 }
 
 // DefaultMod is the game directory a Build & Run installs into.
@@ -183,6 +191,7 @@ func (r *Request) Normalize() error {
 	r.EngineActionID = strings.TrimSpace(r.EngineActionID)
 	r.GameRoot = strings.TrimSpace(r.GameRoot)
 	r.MapName = strings.TrimSpace(r.MapName)
+	r.OwnWADsDir = strings.TrimSpace(r.OwnWADsDir)
 	if r.ModName = strings.TrimSpace(r.ModName); r.ModName == "" {
 		r.ModName = DefaultMod
 	}
@@ -204,6 +213,8 @@ func (r *Request) Normalize() error {
 		return fmt.Errorf("playrun: this engine has no game folder set on this machine yet")
 	case r.MapName == "":
 		return fmt.Errorf("playrun: a run needs a map name; it is what the engine is given for +map")
+	case r.OwnWADsDir != "" && !filepath.IsAbs(r.OwnWADsDir):
+		return fmt.Errorf("playrun: the folder with your own WADs must be written as an absolute path")
 	}
 
 	return nil
@@ -269,6 +280,10 @@ type Record struct {
 	// BundleRoot is where the verified bundle's content root is on this
 	// machine. Diagnostic: the identity above is the portable half.
 	BundleRoot string `json:"bundle_root,omitempty"`
+	// OwnWADs are the WADs this run took from the person's own folder to
+	// complete a bundle AUB could not carry them in, with the digest each was
+	// copied at. Empty for an ordinary run.
+	OwnWADs []StagedFile `json:"own_wads,omitempty"`
 
 	// Extractor identifies the AUE that ran, and whether it was verified.
 	Extractor *ExtractorRef `json:"extractor,omitempty"`

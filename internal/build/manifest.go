@@ -339,6 +339,9 @@ func (m *Manifest) computeKey(roots []string) {
 			for _, file := range bundle.Files {
 				write("root-file=%s:%s", file.Path, file.SHA256)
 			}
+			for _, file := range root.Source.OwnFiles {
+				write("root-own-file=%s:%s", file.Path, file.SHA256)
+			}
 		default:
 			write("root-source=%s", root.Source.Kind)
 		}

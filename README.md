@@ -375,11 +375,14 @@ eight steps in four places. Five choices, then one button:
    for ever; saving a newer one in the editor afterwards never changes a build
    that has already started.
 2. **Build** — which build profile, and its options.
-3. **Run** — which engine, and which folder beside the base game to install
-   into. The default is `auto-pigeon`, a folder of the Companion's own.
+3. **Run** — which engine, which folder beside the base game to install into
+   (the default is `auto-pigeon`, a folder of the Companion's own), and how to
+   play it: **Play it** (just you), **Host it and play** (others can join; it
+   shows in Live Games) or **Dedicated server** (you do not play).
 4. **Review** — the WADs this map declares, **in the order it declares them**,
    the programs that will run, every file that will be written, and the exact
-   command the engine will be given.
+   command the engine will be given, as you would type it in this machine's
+   terminal (`$` and POSIX quoting; `>` and double quotes on Windows).
 5. **Build & Run** — one confirmation.
 
 After that the Companion, on its own:
@@ -410,6 +413,27 @@ remedy that says whether the problem is the map or this computer; the tool's
 complete output is under **Technical details**. A run you cancelled says which
 stage you stopped it in and that nothing was installed.
 
+**Your own copy of a WAD the server may not hand out.** Most Quake maps name one
+of id Software's texture WADs (`metal.wad`, `base.wad`), which an Auto-Pigeon
+server may not redistribute, so the bundle arrives without it and the map is not
+compiler-ready. When that is the *only* reason, the review offers **Use your own
+copy**: name the folder that has it — usually your game's `id1`, which is filled
+in for you but used only when you press **Use this folder** — and it lists what
+it found. Only the WADs the server refused are taken, each by its exact file
+name, from that folder and no deeper; the run and the build manifest record each
+one (`roots[].source.own_files`, with its SHA-256). Any other refusal — a private
+source, a texture nothing supplies — still stops the run, and the Companion still
+never picks up a same-named WAD on its own. The same choice over HTTP is the
+`own_wads_dir` field of the plan and start requests:
+
+```console
+$ curl -s -H "X-AUCOM-Token: $TOKEN" -X POST http://127.0.0.1:8791/api/v1/play/plan -d '{
+    "asset_id": "3413lsl7yi1qfrt", "revision_id": "0w5b06cnvzrn3nc", "revision_number": 4,
+    "pipeline": "auto-pigeon.q1.normal", "engine": "auto-pigeon.engine.vkquake",
+    "action": "play_map", "map": "dm2", "own_wads_dir": "/home/me/quake/id1"}' | jq .textures.ready_with_own_wads
+true
+```
+
 A compiled Quake 1 `.bsp` carries its own textures, so the game does not read
 the staged WADs at run time. They are kept with the map because the build is
 then inspectable and repeatable, and the page says so where it lists them.
@@ -434,10 +458,19 @@ directory set to `auto-pigeon`; **Start** copies the level into your game as
 before, and then starts the engine. It never writes into a directory the
 Companion did not stage.
 
-**My Maps reads your account a page at a time.** When there is more than one
-page it says so — *Showing the first 50. Your account has more* — and **Show
-more** brings the next; **Name contains** narrows the list instead. **Use in a
-build** opens **Build** at the map step with that revision already chosen.
+**My Maps is your maps, with their textures.** Only maps are listed — a build
+fetches the textures a map needs by itself — and each compact card names the
+texture WADs the map declares and how many textures it uses. **Build & Run** on a
+card opens the wizard on that map; **Download** keeps it on this computer;
+**Older revisions…** opens the rest. My Maps reads your account a page at a time:
+when there is more than one page it says so — *Showing the first 50. Your account
+has more* — and **Show more** brings the next; **Find a map by name** narrows
+the list instead. The textures come from the relay below:
+
+```console
+$ curl -s -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/library/maps/3413lsl7yi1qfrt/textures
+{"map_id":"3413lsl7yi1qfrt","revision":4,"wad_state":"single","wads_declared":["metal.wad"],"texture_count":34}
+```
 
 **Signing in from a terminal reaches an open page.** `companion auth login` (and
 `logout`) writes the session to `config.json`; the running page picks it up on

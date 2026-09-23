@@ -58,6 +58,10 @@
     mod: "auto-pigeon",
     gameRoot: "",
     plan: null,
+    // ownWadsDir is the folder the person confirmed, in the review, for WADs
+    // Auto-Pigeon may not redistribute. Never remembered in the URL: it is a
+    // path on this machine.
+    ownWadsDir: "",
     // planKey is what the plan was computed for. Any change to an identity
     // invalidates it, and the page says so rather than reviewing a stale one.
     planKey: "",
@@ -131,8 +135,10 @@
     summarize();
     // "Started" describes the run that was started, not the next one.
     if (step !== 5) setMessage("play-start-message", "");
-    if (step === 4) refreshPlan();
-    if (step === 5) renderFinalSummary();
+    // Not while the lists are still arriving: a plan asked for then would be
+    // a plan for choices that are not restored yet.
+    if (step === 4 && !loading) refreshPlan();
+    if (step === 5 && !loading) renderFinalSummary();
     const panel = $("play-step-" + step);
     panel?.querySelector("h3")?.focus?.();
   }
@@ -178,7 +184,7 @@
     };
     const attention = {
       3: Boolean(state.engine) && !state.gameRoot,
-      4: state.plan?.textures?.compiler_ready === false,
+      4: state.plan?.textures?.compiler_ready === false && !state.plan?.textures?.ready_with_own_wads,
     };
     for (const tab of document.querySelectorAll("#play-steps .bwiz-step")) {
       const n = Number(tab.dataset.step);
@@ -218,21 +224,42 @@
   function planKey() {
     return [
       state.map?.asset_id, state.revision?.revision_id, state.sourceFile, state.mapName,
-      state.pipeline, String(state.strict), state.engine, state.action, state.mod,
+      state.pipeline, String(state.strict), state.engine, state.action, state.mod, state.ownWadsDir,
     ].join("|");
   }
 
   // --- step 1: the map ---------------------------------------------------------
 
+  // Every map in the account, a page at a time. The first 200 used to be all
+  // the list ever held, so an older map — dm2, on an account with a few
+  // hundred — could not be chosen at all (operator, 2026-09-22).
+  const MAP_PAGES = 25;
   async function loadMaps() {
-    const { ok, body } = await api("/api/v1/library/catalog?type=map&limit=200");
-    if (!ok) {
-      setMessage("play-map-message", body.error, "error");
-      return;
+    let items = [];
+    let cursor = "";
+    for (let page = 0; page < MAP_PAGES; page += 1) {
+      const query = new URLSearchParams({ type: "map", limit: "200" });
+      if (cursor) query.set("cursor", cursor);
+      const { ok, body } = await api("/api/v1/library/catalog?" + query.toString());
+      if (!ok) {
+        setMessage("play-map-message", body.error, "error");
+        break;
+      }
+      items = items.concat(body.items || []);
+      cursor = body.has_more ? body.next_cursor || "" : "";
+      if (!cursor) break;
     }
-    state.maps = body.items || [];
+    // A remembered map the listing did not reach is asked for by id, so a link
+    // to a map always opens on it.
+    if (pendingMap && !items.some((m) => m.asset_id === pendingMap)) {
+      const { ok, body } = await api(`/api/v1/library/assets/map/${encodeURIComponent(pendingMap)}`);
+      if (ok && body.asset) items.push(body.asset);
+    }
+    items.sort((a, b) => (a.display_name || a.asset_id).localeCompare(b.display_name || b.asset_id,
+      undefined, { numeric: true, sensitivity: "base" }));
+    state.maps = items;
     const select = $("play-map");
-    select.replaceChildren(el("option", { text: "Choose a map…", attrs: { value: "" } }));
+    select.replaceChildren(el("option", { text: t("Choose a map…"), attrs: { value: "" } }));
     for (const map of state.maps) {
       select.append(el("option", {
         text: map.display_name || map.asset_id,
@@ -288,14 +315,17 @@
       pendingRevision = "";
       const chosen = (remembered || state.revisions[0]).revision_id;
       select.value = chosen;
-      chooseRevision(chosen);
+      await chooseRevision(chosen);
     }
   }
 
-  function chooseRevision(revisionID) {
+  // Returns once the revision's files are known and the map's name in the
+  // game is suggested, so a review asked for next has a name to review.
+  async function chooseRevision(revisionID) {
     state.revision = state.revisions.find((r) => r.revision_id === revisionID) || null;
     invalidate("You changed the revision, so the textures this build would use have to be checked again.");
-    loadSourceFiles();
+    summarize();
+    await loadSourceFiles();
     summarize();
   }
 
@@ -504,6 +534,7 @@
       action: state.action,
       mod: state.mod,
       map: $("play-map-name").value.trim(),
+      own_wads_dir: state.ownWadsDir || undefined,
     };
   }
 
@@ -588,23 +619,112 @@
       className: "muted small",
       text: t("Later declarations win a name two WADs both hold. The compiler reads these files; a compiled Quake 1 map carries its own textures, so the game does not read these files at run time — they are kept with the map so the build can be inspected and repeated."),
     }));
-    if (!textures.compiler_ready) {
-      children.push(el("div", {
-        className: "panel notice error",
-        children: [
-          el("p", { children: [el("strong", { text: t("This map cannot be compiled yet.") })] }),
-          el("ul", {
-            className: "plain",
-            children: (textures.compiler_refusals || []).map((r) => el("li", { text: r })),
-          }),
-          el("p", {
-            className: "muted",
-            text: t("The Companion will not start the extractor or a compiler, and will not quietly use a similarly named WAD from your own game folder."),
-          }),
-        ],
+    if (!textures.compiler_ready) children.push(textures.own_wads_possible ? ownWadsOffer(textures) : refusalNotice(textures));
+    return el("section", { className: "panel review-card", children });
+  }
+
+  // The refusal codes AUB gives, as sentences a person can act on. A code this
+  // page does not know is still shown, as it came, rather than dropped.
+  function refusalSentence(refusal) {
+    const [code, ...rest] = String(refusal).split(":");
+    const subject = rest.join(":").trim();
+    switch (code.trim()) {
+      case "wad_bytes_not_carried":
+        return t("Auto-Pigeon may not hand out {wad}: it is part of somebody else's game.", { wad: subject });
+      case "wad_inventory_incomplete":
+        return t("Auto-Pigeon could not list what is inside one of the map's WADs.");
+      case "texture_source_private":
+        return t("{source} belongs to somebody else, who has not shared it.", { source: subject });
+      case "texture_missing":
+      case "texture_source_missing":
+        return t("Nothing the map declares supplies {what}.", { what: subject });
+      default:
+        return refusal;
+    }
+  }
+
+  function refusalNotice(textures) {
+    return el("div", {
+      className: "panel notice error",
+      children: [
+        el("p", { children: [el("strong", { text: t("This map cannot be compiled yet.") })] }),
+        el("ul", {
+          className: "plain",
+          children: (textures.compiler_refusals || []).map((r) => el("li", { text: refusalSentence(r) })),
+        }),
+        el("p", {
+          className: "muted",
+          text: t("The Companion will not start the extractor or a compiler, and will not quietly use a similarly named WAD from your own game folder."),
+        }),
+      ],
+    });
+  }
+
+  // "Use my own copy": the answer to a WAD Auto-Pigeon may not redistribute,
+  // and only to that. The person names the folder and presses the button;
+  // nothing is taken from a game folder on the page's own initiative.
+  function ownWadsOffer(textures) {
+    const names = textures.own_wads_needed || [];
+    const confirmed = textures.own_wads_dir && textures.own_wads_dir === state.ownWadsDir;
+    const box = el("div", { className: "own-wads" });
+    box.append(el("p", {
+      children: [el("strong", {
+        text: t("Auto-Pigeon may not hand out {wads} — it is part of the game you own.", { wads: names.join(", ") }),
+      })],
+    }));
+    box.append(el("p", {
+      className: "muted small",
+      text: t("Use your own copy: name the folder that has it (usually your game's id1). Only these files are taken from it, by their exact names, and the build records each one."),
+    }));
+    const input = el("input", {
+      attrs: { type: "text", id: "play-own-wads-dir", spellcheck: "false", "aria-label": t("Folder with your own WADs") },
+    });
+    input.value = state.ownWadsDir || (state.gameRoot ? state.gameRoot.replace(/[\\/]+$/, "") + "/id1" : "");
+    const use = el("button", { text: t("Use this folder"), className: "primary", attrs: { type: "button" } });
+    use.addEventListener("click", () => window.AUCOM.withBusy(use, async () => {
+      state.ownWadsDir = input.value.trim();
+      await checkOwnWads();
+    }));
+    box.append(el("div", { className: "own-wads__row", children: [input, use] }));
+    if (confirmed) {
+      if (textures.own_wads_error) {
+        box.append(el("p", { className: "message error", text: textures.own_wads_error }));
+      }
+      const list = el("ul", { className: "plain own-wads__list" });
+      for (const wad of textures.own_wads || []) {
+        list.append(el("li", {
+          className: wad.found ? "ok" : "missing",
+          text: wad.found
+            ? t("{wad} — found, {size}", { wad: wad.name, size: bytes(wad.bytes) })
+            : t("{wad} — not in this folder", { wad: wad.name }),
+        }));
+      }
+      box.append(list);
+      box.append(el("p", {
+        className: textures.ready_with_own_wads ? "message ok" : "message error",
+        text: textures.ready_with_own_wads
+          ? t("Ready: the build will use your own copy.")
+          : t("This folder does not have every WAD the map needs."),
       }));
     }
-    return el("section", { className: "panel review-card", children });
+    return box;
+  }
+
+  async function checkOwnWads() {
+    if (!state.plan || !state.map || !state.revision) return;
+    const query = new URLSearchParams({
+      asset_id: state.map.asset_id, revision: String(state.revision.revision), own_wads_dir: state.ownWadsDir,
+    });
+    const { ok, body } = await api("/api/v1/play/textures?" + query.toString());
+    if (!ok) {
+      setMessage("play-review-message", body.error, "error");
+      return;
+    }
+    state.plan.textures = body;
+    state.planKey = planKey();
+    remember();
+    renderReview(state.plan);
+    summarize();
   }
 
   // The command as it would be typed on THIS machine, for DISPLAY: the paths
@@ -683,13 +803,17 @@
 
   function renderFinalSummary() {
     const summary = $("play-final-summary");
+    const textures = state.plan?.textures;
+    const own = textures?.ready_with_own_wads && textures.own_wads_dir === state.ownWadsDir;
     summary.replaceChildren(
-      ...line("Map", `${state.map?.display_name || ""} revision ${state.revision?.revision ?? ""}`),
-      ...line("Build", nameOfPipeline(state.pipeline)),
-      ...line("Run", `${nameOfEngine(state.engine)} → ${state.gameRoot}/${state.mod}`),
-      ...line("Map name", $("play-map-name").value.trim()),
+      ...line(t("Map"), `${state.map?.display_name || ""} · ${t("revision {n}", { n: state.revision?.revision ?? "" })}`),
+      ...line(t("Build"), nameOfPipeline(state.pipeline)),
+      ...line(t("Run"), `${nameOfEngine(state.engine)} · ${actionTitle(state.action)} → ${state.gameRoot}/${state.mod}`),
+      ...line(t("Name in the game"), $("play-map-name").value.trim()),
+      ...(own ? line(t("Your own WADs"), `${(textures.own_wads_needed || []).join(", ")} ← ${state.ownWadsDir}`) : []),
     );
-    const ready = state.plan?.textures?.compiler_ready !== false;
+    const ready = textures?.compiler_ready !== false ||
+      Boolean(textures?.ready_with_own_wads && textures.own_wads_dir === state.ownWadsDir);
     $("play-start").disabled = !ready;
     setMessage("play-start-message", ready ? "" :
       "This map's textures are not complete enough to compile — see step 4.", ready ? "" : "error");
@@ -1007,6 +1131,7 @@
   }
 
   let restored = false;
+  let loading = false;
   window.AUCOM.areas.play = {
     async refresh() {
       if (!restored) {
@@ -1015,8 +1140,16 @@
       }
       const signedIn = Boolean(window.AUCOM.status?.authenticated);
       $("play-signed-out").hidden = signedIn;
-      await Promise.all([loadPipelines(), loadEngines(), signedIn ? loadMaps() : null]);
-      if (signedIn && state.map) await loadRevisions(state.map.asset_id);
+      // The step a link or a reload named is shown at once; the lists fill
+      // in behind it rather than step 1 standing in for a few seconds.
+      loading = true;
+      show(state.step);
+      try {
+        await Promise.all([loadPipelines(), loadEngines(), signedIn ? loadMaps() : null]);
+        if (signedIn && state.map) await loadRevisions(state.map.asset_id);
+      } finally {
+        loading = false;
+      }
       show(state.step);
       poll();
     },

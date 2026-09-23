@@ -106,6 +106,24 @@ func (s *Service) downloadTextures(ctx context.Context, record *Record) error {
 	// The gate. Nothing starts the extractor or a compiler on a bundle AUB has
 	// said it could not complete.
 	if !result.Ref.CompilerReady {
+		// The one exception, and only when the person asked for it in the
+		// review: WADs AUB may not redistribute, taken from the folder they
+		// named. See ownwads.go.
+		names, onlyNotCarried := OwnWADsNeeded(result.Ref.CompilerRefusals)
+		if onlyNotCarried && record.Request.OwnWADsDir != "" {
+			root, own, err := s.completeWithOwnWADs(record, result.ContentRoot, names)
+			if err != nil {
+				record.Remedy = "Put your own copy of " + strings.Join(names, ", ") +
+					" in the folder you named, or name the folder that has it."
+
+				return fmt.Errorf("%w: %v", ErrNotCompilerReady, err)
+			}
+			record.BundleRoot, record.OwnWADs = root, own
+			s.detail(record, fmt.Sprintf("%d file(s), bundle %s, completed with your own copy of %s",
+				len(result.Ref.Files), result.Ref.Digest, strings.Join(names, ", ")))
+
+			return nil
+		}
 		record.Remedy = compilerRefusalRemedy(result.Ref.CompilerRefusals)
 
 		return fmt.Errorf("%w: %s", ErrNotCompilerReady,
@@ -177,7 +195,7 @@ func (s *Service) compile(ctx context.Context, record *Record) error {
 		Inputs:     map[string]string{},
 		Roots:      map[string]string{profile.RootContent: record.BundleRoot},
 		RootSources: map[string]build.RootSource{profile.RootContent: {
-			Kind: build.RootFromTextureBundle, Bundle: record.Bundle,
+			Kind: build.RootFromTextureBundle, Bundle: record.Bundle, OwnFiles: ownBundleFiles(record.OwnWADs),
 		}},
 		Options: record.Request.Options,
 		Strict:  record.Request.Strict,
@@ -388,4 +406,17 @@ func (s *Service) save(record *Record) {
 	if err := s.store.Save(record); err != nil {
 		s.deps.Logf("run %s: writing the record: %v", record.ID, err)
 	}
+}
+
+// ownBundleFiles records the person's own WADs in the manifest's terms.
+func ownBundleFiles(files []StagedFile) []build.BundleFile {
+	if len(files) == 0 {
+		return nil
+	}
+	out := make([]build.BundleFile, 0, len(files))
+	for _, file := range files {
+		out = append(out, build.BundleFile{Path: file.Path, Source: "own_copy", SHA256: file.SHA256, Bytes: file.Bytes})
+	}
+
+	return out
 }

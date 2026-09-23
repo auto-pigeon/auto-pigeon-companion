@@ -435,6 +435,9 @@ type playRequestBody struct {
 	Mod    string `json:"mod,omitempty"`
 	Map    string `json:"map"`
 	Label  string `json:"label,omitempty"`
+	// OwnWADsDir is the folder the person named in the review for WADs
+	// Auto-Pigeon may not redistribute. See playrun/ownwads.go.
+	OwnWADsDir string `json:"own_wads_dir,omitempty"`
 }
 
 func (b playRequestBody) request(gameRoot string) playrun.Request {
@@ -444,6 +447,7 @@ func (b playRequestBody) request(gameRoot string) playrun.Request {
 		PipelineID: b.Pipeline, Options: b.Options, Strict: b.Strict,
 		EngineProfileID: b.Engine, EngineActionID: b.Action,
 		GameRoot: gameRoot, ModName: b.Mod, MapName: b.Map, Label: b.Label,
+		OwnWADsDir: b.OwnWADsDir,
 	}
 }
 
@@ -726,7 +730,41 @@ func (s *Server) handlePlayTextures(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	writeJSON(w, http.StatusOK, textureView(entry, cached))
+	writeJSON(w, http.StatusOK, withOwnWADs(textureView(entry, cached), entry, query.Get("own_wads_dir")))
+}
+
+// withOwnWADs adds to a texture view what "use my own copy" could do for it:
+// which WADs AUB refused only because it may not redistribute them, and —
+// when the person named a folder — which of those that folder holds. The
+// review draws its offer from this; nothing here decides a run.
+func withOwnWADs(view map[string]any, entry texturebundle.Entry, dir string) map[string]any {
+	if entry.Receipt.CompilerReady {
+		return view
+	}
+	names, only := playrun.OwnWADsNeeded(entry.Receipt.CompilerRefusals)
+	view["own_wads_possible"] = only
+	if !only {
+		return view
+	}
+	view["own_wads_needed"] = names
+	dir = strings.TrimSpace(dir)
+	if dir == "" {
+		return view
+	}
+	view["own_wads_dir"] = dir
+	found, err := playrun.FindOwnWADs(dir, names)
+	if err != nil {
+		view["own_wads_error"] = err.Error()
+		return view
+	}
+	ready := true
+	for _, wad := range found {
+		ready = ready && wad.Found
+	}
+	view["own_wads"] = found
+	view["ready_with_own_wads"] = ready
+
+	return view
 }
 
 // textureView is the sanitized bundle status.
@@ -851,7 +889,7 @@ func (s *Server) handlePlayPlan(w http.ResponseWriter, r *http.Request) {
 		if entry, found := cache.Lookup(texturebundle.Expect{
 			MapID: request.AssetID, Revision: request.RevisionNumber,
 		}); found {
-			plan["textures"] = textureView(entry, true)
+			plan["textures"] = withOwnWADs(textureView(entry, true), entry, request.OwnWADsDir)
 		} else {
 			plan["textures"] = map[string]any{
 				"cached": false, "known": false,
