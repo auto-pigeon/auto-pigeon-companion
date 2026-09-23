@@ -1294,5 +1294,8 @@
     <!-- An ES module: it imports the vendored notice contract, which imports
          its rules as JSON modules. See internal/web/notices.go. -->
     <script type="module" src="notices.mjs"></script>
+    <!-- Report a bug: an ES module, because it imports the shared incident
+         contract (vendor/incident-contract), byte for byte AUG's. -->
+    <script type="module" src="bugreport.mjs"></script>
   </body>
 </html>

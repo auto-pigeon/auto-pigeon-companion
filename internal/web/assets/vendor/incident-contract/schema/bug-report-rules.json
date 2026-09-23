@@ -1,0 +1,54 @@
+{
+  "schema_version": "1.0",
+  "document_schema": "auto-pigeon-bug-report/1.0",
+  "description": "The bounds and text rules of the user bug report, as DATA, so the JavaScript reference implementation in ../src/bugReport.mjs and AUB's Go re-validation of a server-route submission apply the same rules rather than two sincere transcriptions. A report is PUBLISHED on a public GitHub repository, so every rule here is a publication rule.",
+  "repository": "auto-pigeon/bug-reports",
+  "components": ["AUP", "AUG"],
+  "limits": {
+    "summary": 140,
+    "steps": 2000,
+    "expected": 1000,
+    "actual": 1000,
+    "release": 40,
+    "recent": 30,
+    "recent_name": 48,
+    "title": 120,
+    "prefill_url": 7000,
+    "document_bytes": 32768
+  },
+  "text_rules": {
+    "notes": [
+      "Applied to every free-text field, in this order: lone UTF-16 surrogates become U+FFFD; CR LF, CR, U+2028 and U+2029 become LF; every code point in `removed_ranges` is deleted; a single-line field turns runs of LF/TAB into one space and runs of spaces into one; the central redaction value patterns run; trailing spaces/tabs are removed from every line; three or more LFs become two; leading and trailing space, TAB and LF are trimmed; and the result is cut to the field's limit in CODE POINTS, the last kept code point replaced by U+2026 when anything was cut.",
+      "Invisible and direction-changing characters are removed BEFORE redaction, so a zero-width joiner cannot split a token into two halves no pattern recognises, and before the public preview, so a right-to-left override cannot make the text a user approved read differently on GitHub.",
+      "Trim is deliberately only space, TAB and LF — not each language's own idea of whitespace, which differs between JavaScript and Go.",
+      "Every rule is idempotent: sanitising a sanitised value returns it unchanged. That is what lets a server refuse a submission whose text is not already canonical instead of silently publishing something the user did not preview."
+    ],
+    "removed_ranges": [
+      ["0000", "0008"],
+      ["000B", "000C"],
+      ["000E", "001F"],
+      ["007F", "009F"],
+      ["061C", "061C"],
+      ["200B", "200F"],
+      ["202A", "202E"],
+      ["2060", "2064"],
+      ["2066", "2069"],
+      ["FEFF", "FEFF"],
+      ["FFF9", "FFFB"]
+    ],
+    "ellipsis": "…"
+  },
+  "patterns": {
+    "report_id": "^[0-9a-f]{32}$",
+    "created_at": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$",
+    "release": "^[A-Za-z0-9._+-]{1,40}$",
+    "environment": "^[a-z][a-z0-9_-]{0,31}$",
+    "subsystem": "^[a-z0-9_.-]{1,48}$",
+    "operation": "^[a-z0-9_. -]{1,48}$",
+    "recent_name": "^[a-z0-9_.:-]{1,48}$",
+    "outcome": "^[a-z_]{1,24}$",
+    "language": "^[a-z]{2,3}$",
+    "browser": "^(Chrome|Edge|Firefox|Safari|Opera) [0-9]{1,4}$|^other$",
+    "os": "^(Windows|macOS|Linux|Android|iOS|ChromeOS|other)$"
+  }
+}

@@ -1,0 +1,178 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://auto-pigeon.dev/schema/incident-envelope-1.0.schema.json",
+  "title": "Auto-Pigeon incident envelope 1.0",
+  "description": "The one shape every Auto-Pigeon component reports a user-impacting incident in. Deliberately CLOSED: additionalProperties is false at every level and `evidence` is a fixed set of typed counters, so no request body, no map document, no annotation text and no prefab content can travel inside an incident even by accident. Anything a component wants to report that this schema cannot express is a schema change, reviewed here, rather than a free-form field.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "incident_id",
+    "occurred_at",
+    "severity",
+    "component",
+    "code",
+    "message",
+    "recoverable"
+  ],
+  "properties": {
+    "schema_version": {
+      "description": "The version of THIS envelope contract, not of any component. Present in every event so a receiver reading a mixed backlog knows which rules the record was written under.",
+      "const": "1.0"
+    },
+    "incident_id": {
+      "description": "Identifies one incident. Stable across escalations: the 3s, 10s and 30s notifications about one stall are one incident_id, so a receiver groups rather than counts four outages.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "occurred_at": {
+      "description": "When the incident STARTED, in UTC, RFC 3339 with milliseconds. Not when it was reported and not when it was received — an escalation reports the same start.",
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "severity": {
+      "description": "warning: the product still works and the user is being told something is slow or degraded. error: this operation failed but the session is usable. fatal: this session may no longer be reliable — the only severity that earns the fatal modal.",
+      "enum": ["warning", "error", "fatal"]
+    },
+    "component": {
+      "description": "Which repository's code raised it. The acronyms are the workspace's own and are the same strings the version manifest and the health dashboard use.",
+      "enum": ["AUP", "AUB", "AUC", "AUE", "AUG", "AUT", "AUCOM"]
+    },
+    "subsystem": {
+      "description": "The part of that component, in its own vocabulary: `render.3d`, `scheduler`, `room`, `wad`, `journal`. Free text on purpose — a closed list here would need editing for every new subsystem — but it is an identifier, never a sentence, and it is length-bounded so it cannot become a dumping ground.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+    },
+    "code": {
+      "description": "A canonical incident code from incident-codes.json. Extending the taxonomy means adding to that file, which is what makes 'which errors exist' answerable without reading six repositories.",
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9]+(?:[._][a-z0-9]+)+$"
+    },
+    "operation": {
+      "description": "The user-recognisable operation in flight — `Paste`, `Bend`, `extract.textures`, `session.join`. This is what makes a message truthful about what the user was doing; it is not a stack frame and not a URL.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 96
+    },
+    "message": {
+      "description": "One sentence a user could be shown. Redaction runs over it (see redaction-rules.json), but redaction is the safety net — the writer's duty is not to put an address, an email or a path in here in the first place.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "duration_ms": {
+      "description": "How long the operation had been running when the incident was raised. Doctrine pillar 2: a duration is evidence and a message without one is an opinion.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 86400000
+    },
+    "correlation_id": {
+      "description": "The cross-stack correlation id (see correlation.mjs). One user action carries one value through AUP -> AUB -> AUE/AUC, so four components' incidents about one failure can be read as one story.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "release": {
+      "description": "The reporting component's own `1.<commit-count>` release, exactly as PREPROD-05 derives it. `unknown` is a permitted, meaningful value: an uninjected build says so rather than inventing a placeholder version that gets believed.",
+      "type": "string",
+      "pattern": "^(1\\.[0-9]+|unknown)$"
+    },
+    "environment": {
+      "description": "Which deployment this came from. Sent as GlitchTip's `environment` so a development stack's noise never has to be read alongside production's.",
+      "enum": ["development", "production", "test"]
+    },
+    "recoverable": {
+      "description": "Whether the session can carry on. false is what escalates a report to the fatal modal, so it is a deliberate claim by the writer rather than a consequence of severity.",
+      "type": "boolean"
+    },
+    "user_action": {
+      "description": "What the reader can actually do — `Reload the page`, `Wait or reload`, `Sign in again`. Omitted when there is honestly nothing to suggest; an invented suggestion is worse than none.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "evidence": {
+      "$ref": "#/$defs/evidence"
+    }
+  },
+  "$defs": {
+    "evidence": {
+      "description": "The typed, bounded facts an incident may carry. Every member is a NUMBER or a short controlled string, and additionalProperties is false — which is the whole point. A map document, a request body, a WAD, an annotation or a prefab cannot be expressed here, so no code path can smuggle one in and no reviewer has to check that it did not.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "brush_count": {
+          "description": "Brushes affected by the operation that failed or stalled.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "face_count": {
+          "description": "Faces affected. `31,040 faces are affected` is the difference between a truthful warning and a spinner.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "entity_count": {
+          "description": "Entities affected.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "triangle_count": {
+          "description": "Triangles the renderer was asked to draw.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "selection_count": {
+          "description": "Objects in the selection the operation ran over.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "http_status": {
+          "description": "The HTTP status a refusing service answered with.",
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 599
+        },
+        "http_reason": {
+          "description": "The service's own short reason CODE — `map_not_found`, `session_full` — never a response body and never a message built from one.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+        },
+        "queue_depth": {
+          "description": "Items waiting when the incident was raised: AUB's job queue, AUC's outbound buffer.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "worker_attempt": {
+          "description": "Which attempt this was, 1-based. Distinguishes `failed once and retried` from `failed four times`.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "client_count": {
+          "description": "Clients in the room, for AUC capacity and backpressure incidents.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "retry_after_ms": {
+          "description": "How long the client was told to wait before retrying.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "event_loop_lag_ms": {
+          "description": "Measured event-loop lag on a Node service, or main-thread stall as measured by the worker heartbeat in a browser.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "memory_mb": {
+          "description": "Resident memory at the moment of the incident, in MiB.",
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

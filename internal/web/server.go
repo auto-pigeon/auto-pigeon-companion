@@ -369,7 +369,7 @@ func (s *Server) api() map[string]http.HandlerFunc {
 	}
 	for _, table := range []map[string]http.HandlerFunc{
 		s.jobAPI(), s.profileAPI(), s.libraryAPI(),
-		s.engineAPI(), s.buildAPI(), s.playAPI(), s.settingsAPI(), s.siteLinksRoutes(), s.hostingRoutes(), s.pathAPI(),
+		s.engineAPI(), s.buildAPI(), s.playAPI(), s.settingsAPI(), s.siteLinksRoutes(), s.hostingRoutes(), s.bugReportRoutes(), s.pathAPI(),
 		s.feedbackAPI(), s.aboutAPI(), s.accountAPI(), s.gamesAPI(), s.noticesAPI(),
 	} {
 		for pattern, handler := range table {

@@ -1,0 +1,134 @@
+{
+  "schema_version": "1.0",
+  "description": "The central redaction rules, as DATA so that the JavaScript reference implementation in ../src/redact.mjs, a Go implementation in AUB/AUE and a Python one in the tooling are the same rules rather than three sincere guesses. Every regular expression here avoids lookaround and backreferences so it compiles unchanged in JavaScript, Go's RE2 and Python's re.",
+  "placeholder": "[redacted]",
+  "notes": [
+    "Redaction is the SECOND line of defence. The first is the envelope schema, which is closed: there is no field a map document, a request body or an annotation can legally occupy. These rules exist for the free-text fields and for anything a component attaches on its way out to the incident backend.",
+    "Nothing here matches a bare 32-character hexadecimal string, deliberately. incident_id and correlation_id are exactly that shape, they are the two identifiers the whole cross-stack story is assembled from, and a rule that ate them would leave a redacted record nobody can correlate.",
+    "ORDER MATTERS and is part of the contract. `url-userinfo` runs before `email`, because `https://key:secret@host/3` contains something the e-mail rule matches: without the ordering the credential is removed by the wrong rule, which is indistinguishable from correct until the day a URL has no password in it.",
+    "241 (2026-09-22) added known-token-prefix, url, ipv4-address and home-relative-path. A FULL URL is redacted, not only its userinfo: a URL carries hosts, map and session ids in its path and tokens in its query, and none of those may reach an event or a public report. `url` runs after `url-userinfo`, so a credential is still removed even by an implementation that stopped at the first rule, and before `email` and the path rules, so `file:///home/...` and `https://host/a@b` are one redaction rather than two partial ones. `home-relative-path` runs before the absolute path rules so `~/private/x` is one redaction, not a stray `~`. IPv6 literals are NOT covered: no portable lookaround-free pattern was worth its false positives, and the closed envelope has no field that carries an address."
+  ],
+  "dropped_keys": [
+    "geometry",
+    "vertices",
+    "planes",
+    "brushes",
+    "entities",
+    "faces",
+    "annotation",
+    "annotations",
+    "chat",
+    "messages",
+    "prefab",
+    "prefabs",
+    "apmap",
+    "apmap_document",
+    "document",
+    "payload",
+    "body",
+    "request",
+    "response",
+    "headers",
+    "params",
+    "query",
+    "form",
+    "contents",
+    "content",
+    "breadcrumbs",
+    "extra",
+    "env",
+    "environ"
+  ],
+  "denied_key_substrings": [
+    "auth",
+    "cookie",
+    "password",
+    "passwd",
+    "secret",
+    "token",
+    "apikey",
+    "api_key",
+    "accesskey",
+    "access_key",
+    "privatekey",
+    "private_key",
+    "credential",
+    "bearer",
+    "invitation",
+    "invite",
+    "email",
+    "mail",
+    "dsn",
+    "signature",
+    "session_id",
+    "sessionid"
+  ],
+  "value_patterns": [
+    {
+      "name": "url-userinfo",
+      "pattern": "://[^\\s/@:]+:[^\\s/@]*@",
+      "flags": "g",
+      "replacement": "://[redacted]@"
+    },
+    {
+      "name": "jwt",
+      "pattern": "eyJ[A-Za-z0-9_-]{6,}\\.[A-Za-z0-9_-]{6,}\\.[A-Za-z0-9_-]{6,}",
+      "flags": "g",
+      "replacement": "[redacted-token]"
+    },
+    {
+      "name": "authorization-scheme",
+      "pattern": "\\b(?:Bearer|Basic|Token|Digest)\\s+[A-Za-z0-9._~+/=-]{8,}",
+      "flags": "gi",
+      "replacement": "[redacted-token]"
+    },
+    {
+      "name": "cookie-pair",
+      "pattern": "\\b(?:pb_auth|sessionid|csrftoken|connect\\.sid)=[^;\\s]+",
+      "flags": "gi",
+      "replacement": "[redacted-cookie]"
+    },
+    {
+      "name": "known-token-prefix",
+      "pattern": "\\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{20,}|xox[abprs]-[A-Za-z0-9-]{10,}|sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16})",
+      "flags": "g",
+      "replacement": "[redacted-token]"
+    },
+    {
+      "name": "url",
+      "pattern": "\\b[A-Za-z][A-Za-z0-9+.-]*://[^\\s'\"`<>]+",
+      "flags": "g",
+      "replacement": "[redacted-url]"
+    },
+    {
+      "name": "email",
+      "pattern": "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}",
+      "flags": "g",
+      "replacement": "[redacted-email]"
+    },
+    {
+      "name": "ipv4-address",
+      "pattern": "\\b(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\b",
+      "flags": "g",
+      "replacement": "[redacted-ip]"
+    },
+    {
+      "name": "home-relative-path",
+      "pattern": "~[/\\\\][^\\s'\"`,;)\\]}]*",
+      "flags": "g",
+      "replacement": "[redacted-path]"
+    },
+    {
+      "name": "absolute-posix-path",
+      "pattern": "/(?:home|Users|root|var|etc|opt|srv|mnt|media|tmp|private)/[^\\s'\"`,;)\\]}]*",
+      "flags": "g",
+      "replacement": "[redacted-path]"
+    },
+    {
+      "name": "absolute-windows-path",
+      "pattern": "[A-Za-z]:\\\\[^\\s'\"`,;)\\]}]*",
+      "flags": "g",
+      "replacement": "[redacted-path]"
+    }
+  ]
+}

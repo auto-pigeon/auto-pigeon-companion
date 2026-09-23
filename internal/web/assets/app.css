@@ -937,11 +937,15 @@ ol.numbered { list-style: none; padding-inline-start: 0; }
    The program's core (operator, 2026-09-22): the step a person is on is
    unmistakable, and what each step chose is the brightest text on the page. */
 #area-play .bwiz { margin-bottom: 1.5rem; }
-#play-steps { gap: 0 0.5rem; }
-#play-steps .bwiz-step { padding: 0.75rem 0.5rem 0.6rem; border-top-width: 4px; border-radius: 0 0 var(--radius) var(--radius); }
-#play-steps .bwiz-step:hover { background: var(--surface); }
-#play-steps .bwiz-step.current { background: var(--accent-soft); }
-#play-steps .bwiz-step.current .bwiz-step__label { color: var(--accent-strong); }
+/* Every wizard's steps (Build & Run and Build): separate bars, so "done" and
+   "current" never run together into one ambiguous line (operator, item 6:
+   "the highlighting of the tabs looks broken"), and a tinted current step. */
+.bwiz-steps { gap: 0 0.5rem; }
+.bwiz-step { padding: 0.75rem 0.5rem 0.6rem; border-top-width: 4px; border-radius: 0 0 var(--radius) var(--radius); }
+.bwiz-step:hover { background: var(--surface); }
+.bwiz-step.current { background: var(--accent-soft); }
+.bwiz-step.current .bwiz-step__label { color: var(--accent-strong); }
+.bwiz-step.current .bwiz-step__summary { color: var(--ink); }
 .bwiz-step__label { text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.72rem; color: var(--ink-muted); }
 #play-steps .bwiz-step__summary { display: grid; gap: 0.1rem; margin-top: 0.15rem; }
 .bwiz-step__value { font-size: 1rem; font-weight: 700; color: var(--ink); line-height: 1.25; overflow-wrap: anywhere; }
@@ -1073,3 +1077,16 @@ ol.numbered { list-style: none; padding-inline-start: 0; }
 .play-listing .check { margin-bottom: 0.75rem; }
 #area-play .play-listing input[type="text"], #area-play .own-wads input[type="text"] { font-size: 0.9rem; font-weight: 500; }
 .exposed-list { font-size: 0.82rem; display: grid; gap: 0.15rem; }
+
+/* Report a bug — AUG's dialog. */
+.bug-warning { margin: 0 0 0.9rem; padding: 0.55rem 0.75rem; border-left: 3px solid var(--warn); background: var(--warn-soft); font-size: 0.85rem; }
+.bug-form { display: grid; gap: 0.75rem; }
+.bug-form textarea { font-family: var(--font); font-size: 0.875rem; }
+.bug-dialog h3 { font-size: 0.9rem; margin: 1rem 0 0.5rem; }
+.bug-route { border-top: 1px solid var(--line); margin-top: 0.75rem; }
+.bug-dialog pre.output { max-height: 14rem; }
+.button-link {
+  display: inline-block; padding: .4rem .75rem; border: 1px solid var(--accent); border-radius: var(--radius);
+  background: var(--accent-soft); color: var(--accent-strong); font-size: 0.8125rem; font-weight: 500; text-decoration: none;
+}
+.button-link:hover { background: var(--accent); color: var(--accent-ink); }
