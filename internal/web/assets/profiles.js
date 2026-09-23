@@ -218,22 +218,6 @@
       buttons.append(approve);
     }
 
-    const exportButton = el("button", { text: "Export the document", attrs: { type: "button", class: "secondary" } });
-    exportButton.addEventListener("click", () =>
-      withBusy(exportButton, async () => {
-        const { ok, body: out } = await api(`/api/v1/profiles/${encodeURIComponent(id)}/document`);
-        if (!ok) {
-          setMessage(status, out.error, "error");
-          return;
-        }
-        $("wizard-json").value = JSON.stringify(out.document, null, 2);
-        $("wizard-json-details").open = true;
-        setStep(4);
-        $("wizard-json").focus();
-        setMessage(status, "Copied into the advanced view at the bottom of this page.", "ok");
-      })
-    );
-    buttons.append(exportButton);
 
     if (body.editable) {
       const remove = el("button", { text: "Remove this profile", attrs: { type: "button", class: "danger" } });

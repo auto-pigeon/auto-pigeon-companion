@@ -476,15 +476,6 @@
             </div>
           </div>
 
-          <div class="panel" id="library-revisions-panel" hidden>
-            <div class="panel-head">
-              <h3 id="library-revisions-title">Revisions</h3>
-              <button type="button" id="library-close-revisions" class="secondary">Close</button>
-            </div>
-            <p id="library-revisions-note" class="muted"></p>
-            <ul id="library-revisions" class="rows" aria-label="Revisions"></ul>
-          </div>
-
           <div class="panel">
             <div class="panel-head">
               <h3>Maps downloaded to this computer</h3>
@@ -502,8 +493,9 @@
         <!-- Build -------------------------------------------------------- -->
         <section id="area-build" class="area" aria-labelledby="area-heading" hidden>
           <p class="lede">
-            Four steps: choose how to build, choose the map, check what will
-            run, then build. Nothing starts before step 4.
+            Three steps: choose how to build, choose the map, then build — the
+            last step shows exactly what will run. Nothing starts before you
+            press Build.
           </p>
 
           <!-- The wizard (NEW_244D, operator: "the Build section is super
@@ -524,13 +516,8 @@
               </button></li>
               <li><button type="button" class="bwiz-step" data-step="3" id="build-step-tab-3">
                 <span class="bwiz-step__n" aria-hidden="true">3</span>
-                <span class="bwiz-step__text"><span class="bwiz-step__label">Check</span>
-                <span class="bwiz-step__summary" id="build-step-summary-3"></span></span>
-              </button></li>
-              <li><button type="button" class="bwiz-step" data-step="4" id="build-step-tab-4">
-                <span class="bwiz-step__n" aria-hidden="true">4</span>
                 <span class="bwiz-step__text"><span class="bwiz-step__label">Build</span>
-                <span class="bwiz-step__summary" id="build-step-summary-4"></span></span>
+                <span class="bwiz-step__summary" id="build-step-summary-3"></span></span>
               </button></li>
             </ol>
           </nav>
@@ -564,13 +551,13 @@
             </div>
             <div class="bwiz-nav">
               <button type="button" class="secondary" data-go="1">Back</button>
-              <button type="button" class="primary" data-go="3">Next: check</button>
+              <button type="button" class="primary" data-go="3">Next: build</button>
             </div>
           </div>
 
           <div class="panel bwiz-panel" id="build-step-3" data-step="3" hidden>
-            <h3>3. Check</h3>
-            <p class="muted">The exact command each stage will run. If something is missing, it is said under the stage that needs it.</p>
+            <h3>3. Build</h3>
+            <p class="muted">The exact command each stage will run, then Build. If something is missing, it is said under the stage that needs it.</p>
             <p id="build-message" class="message" role="alert"></p>
             <div id="build-preview-out" class="preview" hidden></div>
             <div class="bwiz-nav">
@@ -583,7 +570,7 @@
           </div>
 
           <div class="panel bwiz-panel" id="build-step-4" data-step="4" hidden>
-            <p class="muted" id="build-current-empty">Nothing has been built in this window yet. Go through steps 1 to 3, or open a past build below.</p>
+            <p class="muted" id="build-current-empty">Nothing has been built in this window yet. Go through the steps above, or open a past build below.</p>
             <div id="build-current-panel" hidden>
               <div class="panel-head">
                 <h3 id="build-current-title">Building</h3>
@@ -757,7 +744,7 @@
               </div>
             </div>
             <p id="games-message" class="message" role="status"></p>
-            <ul id="games-list" class="rows" aria-label="Games being hosted"></ul>
+            <ul id="games-list" class="cards game-cards" aria-label="Games being hosted"></ul>
             <div class="row-actions">
               <button type="button" id="games-more" class="secondary" hidden>Show more</button>
             </div>
@@ -771,16 +758,18 @@
             <div id="games-facts" class="game-summary"></div>
             <h4 class="games-subhead">Joining from this computer</h4>
             <ol id="games-steps" class="join-steps" aria-label="What joining needs"></ol>
-            <div class="row-actions">
-              <button type="button" id="games-primary" class="primary">Join</button>
-              <button type="button" id="games-recheck" class="secondary">Check again</button>
-            </div>
-            <p id="games-detail-message" class="message" role="alert"></p>
             <div id="games-action" class="games-action" hidden></div>
+            <p id="games-detail-message" class="message" role="alert"></p>
             <details id="games-provenance-box" class="games-provenance">
               <summary>Details</summary>
               <dl id="games-provenance" class="facts"></dl>
             </details>
+            <!-- The one next action, bottom right; active only when it can do
+                 something (operator, 2026-09-23). -->
+            <div class="row-actions games-detail__actions">
+              <button type="button" id="games-recheck" class="secondary">Check again</button>
+              <button type="button" id="games-primary" class="primary">Join</button>
+            </div>
           </div>
         </section>
 
@@ -806,9 +795,9 @@
             <div class="field">
               <label for="profiles-kind">Kind</label>
               <select id="profiles-kind">
-                <option value="tool">Tools</option>
-                <option value="engine">Engines</option>
-                <option value="pipeline">Pipelines</option>
+                <option value="tool">Build Tools</option>
+                <option value="pipeline">Build Pipelines</option>
+                <option value="engine">Game Engines</option>
               </select>
             </div>
             <p id="profiles-message" class="message" role="status"></p>

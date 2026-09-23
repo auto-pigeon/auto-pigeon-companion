@@ -402,8 +402,8 @@
     // Through the button, as a person gets there: showing Run starts its own
     // refresh, and the choice must survive it (the live check lost it).
     await go("build");
-    $("build-step-tab-4").click();
-    await waitFor("Play this build on step 4", () => visible($("build-play")));
+    $("build-step-tab-3").click();
+    await waitFor("Play this build on the Build step", () => visible($("build-play")));
     $("build-play").click();
     await waitFor("Run to open on the build", () => visible($("area-run")) && $("run-build").value !== "");
     await sleep(1500);
@@ -533,7 +533,7 @@
     await waitFor("the check to settle", () => !$("build-preview").disabled, 30000);
     const third = tabOrder();
     const positions = [
-      first.indexOf("build-step-tab-1"), first.indexOf("build-step-tab-4"), first.indexOf("build-pipeline"),
+      first.indexOf("build-step-tab-1"), first.indexOf("build-step-tab-3"), first.indexOf("build-pipeline"),
     ];
     record(
       "the build wizard is reachable by tabbing, in the order it is used",

@@ -192,6 +192,28 @@
       3: Boolean(state.engine) && !state.gameRoot,
       4: state.plan?.textures?.compiler_ready === false && !state.plan?.textures?.ready_with_own_wads,
     };
+    // Each "Next" is active only when its step has what it needs, and says
+    // what is missing when it is not (operator, 2026-09-23).
+    const hosting = state.action === "host_listen" || state.action === "host_dedicated";
+    const listed = !hosting || !state.listing.enabled ||
+      (String(state.listing.host || "").trim() !== "" && Number(state.listing.port) > 0);
+    const missing = {
+      2: !state.revision ? t("Choose a map and one of its revisions first.")
+        : !String(state.mapName || "").trim() ? t("Give the map a name in the game first.") : "",
+      3: !state.pipeline ? t("Choose a build profile first.") : "",
+      4: !state.engine ? t("Choose an engine first.")
+        : !state.action ? t("Choose how to play it first.")
+        : !state.gameRoot ? t("Set up where the game is first (Setup in Run).")
+        : !listed ? t("Give the address and port players connect to first.") : "",
+      5: !state.plan ? t("The review is not ready yet.")
+        : attention[4] ? t("Some textures are missing: use your own copy first.") : "",
+    };
+    for (const button of document.querySelectorAll("#area-play [data-go]")) {
+      const target = Number(button.dataset.go);
+      const why = target > state.step ? missing[target] || "" : "";
+      button.disabled = Boolean(why);
+      button.title = why;
+    }
     for (const tab of document.querySelectorAll("#play-steps .bwiz-step")) {
       const n = Number(tab.dataset.step);
       const current = n === state.step;
@@ -220,6 +242,7 @@
   function invalidate(why) {
     setMessage("play-start-message", "");
     remember();
+    markSteps();
     if (!state.plan) return;
     state.plan = null;
     state.planKey = "";
@@ -421,7 +444,12 @@
     const select = $("play-engine");
     select.replaceChildren(el("option", { text: "Choose an engine…", attrs: { value: "" } }));
     for (const engine of state.engines) {
-      select.append(el("option", { text: engine.name, attrs: { value: engine.id } }));
+      // Whether it can start is in the option itself, as in Run (operator,
+      // 2026-09-23): a <select> holds no markup, so it is words.
+      select.append(el("option", {
+        text: `${engine.name} — ${engine.ready ? t("Ready to start") : t("Needs setup")}`,
+        attrs: { value: engine.id },
+      }));
     }
     if (state.engine) select.value = state.engine;
     renderActions();
@@ -1068,12 +1096,20 @@
   }
 
   function runCard(run) {
+    // "Open in Jobs" opens another page, so it sits top right, in the head,
+    // not in the run's text (operator, 2026-09-23).
+    const headTools = el("div", { className: "activity-run__tools", children: [
+      el("span", { className: "muted", text: elapsed(run.elapsed_ms) }),
+    ] });
+    if (run.build_id) {
+      const jobs = el("button", { text: "Open in Jobs", attrs: { type: "button", class: "secondary" } });
+      // Never a new browser tab: the Jobs page is in this window.
+      jobs.addEventListener("click", () => { window.location.hash = "#jobs"; });
+      headTools.append(jobs);
+    }
     const head = el("div", {
       className: "activity-run__head",
-      children: [
-        el("strong", { text: `${run.map || run.asset_id} — ${run.title}` }),
-        el("span", { className: "muted", text: elapsed(run.elapsed_ms) }),
-      ],
+      children: [el("strong", { text: `${run.map || run.asset_id} — ${run.title}` }), headTools],
     });
     const stages = el("ol", {
       className: "activity-stages",
@@ -1117,7 +1153,7 @@
       }));
     }
 
-    const actions = el("div", { className: "activity-run__actions" });
+    const actions = el("div", { className: "activity-run__actions row-actions" });
     if (run.can_cancel) {
       const cancel = el("button", { text: "Cancel", attrs: { type: "button" } });
       cancel.addEventListener("click", () => cancelRun(run));
@@ -1128,13 +1164,7 @@
       retry.addEventListener("click", () => retryRun(run.id));
       actions.append(retry);
     }
-    if (run.build_id) {
-      const jobs = el("button", { text: "Open in Jobs", attrs: { type: "button" } });
-      // Never a new browser tab: the Jobs page is in this window.
-      jobs.addEventListener("click", () => { window.location.hash = "#jobs"; });
-      actions.append(jobs);
-    }
-    children.push(actions);
+    if (actions.children.length) children.push(actions);
 
     // The technical facts, behind a disclosure. Present for whoever needs them
     // and not in the way of whoever does not.

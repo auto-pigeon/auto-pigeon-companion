@@ -360,7 +360,7 @@ The page has seven areas, and the order is the order of a first run.
 | --- | --- |
 | **Build & Run** | The whole journey in one page: sign in, choose a map revision, choose a build profile, choose an engine, review, and press one button. Everything after that button happens on this machine's own server and survives closing the tab. |
 | **My Maps** | Your maps in your Auto-Pigeon account, and the exact revisions this machine has downloaded and verified. |
-| **Build** | Compiling, as four steps in a row: **How to build** (the pipeline), **The map**, **Check** (the exact command per stage, and what is missing), **Build** (live output, artifacts). |
+| **Build** | Compiling, as three steps in a row: **How to build** (the pipeline), **The map**, **Build** (the exact command per stage and what is missing, the Build button, then the live output and artifacts). |
 | **Run** | Starting a game: which engine, where it is on this machine, which map or package, and the exact command. |
 | **Profiles** | Reading what a tool or engine asks to be allowed to do, approving it, and writing your own. |
 | **Jobs** | Everything that has run, with its command, its exit status and its output. |
@@ -499,16 +499,17 @@ then inspectable and repeatable, and the page says so where it lists them.
 ### The default path through it
 
 **Nothing on the local path needs an account.** A signed-out page opens on
-**Build**, a four-step wizard whose steps sit in one row and can be revisited:
+**Build**, a three-step wizard whose steps sit in one row and can be revisited:
 pick a pipeline, choose a `.map` (and its WAD) on this machine with
-**Browse…**, let **Check** show the exact commands — it names anything missing
-under the stage that needs it, with a **Set up …** button that opens the tool in
-**Profiles** — then press **Build** and read the result there or in **Jobs**;
+**Browse…**; step 3 shows the exact commands — it names anything missing under
+the stage that needs it, with the program's name, a **Set up …** button that
+opens the tool in **Profiles**, and where to find it (Profiles › Build Tools) —
+then press **Build** in the same step and read the result there or in **Jobs**;
 then in **Run**, pick the engine you have and start it. **Build** stays
 disabled until the check for the current choices has passed.
 
-**Play this build.** A finished build with a level shows **Play this build** on
-step 4. It opens **Run** with that build chosen under *Map from a build*, the map
+**Play this build.** A finished build with a level shows **Play this build** in
+step 3. It opens **Run** with that build chosen under *Map from a build*, the map
 name filled in from the source map (`dm2.apmap` plays as `dm2`) and the game
 directory set to `auto-pigeon`; **Start** copies the level into your game as
 `auto-pigeon/maps/dm2.bsp` (and `.lit`) through the same staging record
@@ -520,7 +521,8 @@ Companion did not stage.
 fetches the textures a map needs by itself — and each compact card names the
 texture WADs the map declares and how many textures it uses. **Build & Run** on a
 card opens the wizard on that map; **Download** keeps it on this computer;
-**Older revisions…** opens the rest. My Maps reads your account a page at a time:
+the ▾ beside **Download** lists the older revisions and downloads the one
+chosen. Each card heads its WADs with the texture count, *TEXTURES (47)*. My Maps reads your account a page at a time:
 when there is more than one page it says so — *Showing the first 50. Your account
 has more* — and **Show more** brings the next; **Find a map by name** narrows
 the list instead. The textures come from the relay below:
@@ -2546,6 +2548,17 @@ records and what a job is held to. A profile's page opens under Profiles
 (Profiles › Configure › its name) with the side navigation kept, and the account —
 who you are signed in as, and signing in or out — is the round button at the top
 right, as in the editor and the gallery.
+
+Buttons follow one rule: an action that continues the page sits at the bottom
+right of its panel or card, and one that opens something else sits top right.
+Profiles are grouped as **Build Tools**, **Build Pipelines** and **Game Engines**,
+their cards line up row by row, and a profile's page has no export button. In
+**Run**, the engine's state (*Ready to start* / *Needs setup*) has a **Setup**
+button beside it — the call to action while something is missing — and Build &
+Run's engine list says the same for every engine. A Build & Run **Next** is
+active only once its step has what it needs, and says what is missing when not.
+A game's **Join** is at the bottom right of its card and its page, and is active
+only when joining can do something (it reads *Running* once the game started).
 
 The Companion never downloads an engine or game data. The map files a host shares
 are staged under your asset cache, in a directory the engine is started in and

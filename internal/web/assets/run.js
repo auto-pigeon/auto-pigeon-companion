@@ -71,6 +71,19 @@
       className: "engine-card__state " + (ready ? "ok" : "pending"),
       text: ready ? t("Ready to start") : t("Needs setup"),
     }));
+    // Setup, right of the state: the call to action while something is
+    // missing, an ordinary button once it is ready (operator, 2026-09-23).
+    const setupButton = el("button", {
+      text: t("Setup"),
+      attrs: { type: "button", class: ready ? "secondary engine-card__setup" : "primary engine-card__setup" },
+    });
+    setupButton.addEventListener("click", () => {
+      const panel = $("run-setup-panel");
+      panel.open = true;
+      panel.scrollIntoView({ block: "start", behavior: "smooth" });
+      panel.querySelector("input, select, button")?.focus({ preventScroll: true });
+    });
+    head.append(setupButton);
     card.append(head);
     if (engine.summary) card.append(el("p", { className: "engine-card__summary", text: engine.summary }));
     // Before the binding fields and before the Play button: this is where a

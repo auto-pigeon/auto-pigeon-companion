@@ -257,21 +257,24 @@
     const pipeline = currentPipeline();
     const files = chosenFiles();
     const missing = missingRequired();
+    // Three steps: Check and Build were one step in two panels, and the
+    // operator asked for the Check step to go (2026-09-23). Panel 4 (the
+    // running build) is shown under step 3's tab.
     const summaries = {
       1: pipeline ? pipeline.name : "",
       2: files.length ? files.join(", ") : "nothing chosen yet",
-      3: checked === "ok" ? "ready to build" : checked === "blocked" ? "something is missing" : "not checked yet",
-      4: outcome ? outcome : "",
+      3: outcome ? outcome : checked === "ok" ? "ready to build" : checked === "blocked" ? "something is missing" : "not checked yet",
     };
     const done = { 1: Boolean(pipeline), 2: Boolean(pipeline) && missing.length === 0 && files.length > 0,
-      3: checked === "ok", 4: outcome === "succeeded" };
-    const attention = { 3: checked === "blocked", 4: Boolean(outcome) && !["succeeded", "running", "queued"].includes(outcome) };
-    for (let n = 1; n <= 4; n += 1) {
+      3: outcome === "succeeded" };
+    const attention = { 3: checked === "blocked" || (Boolean(outcome) && !["succeeded", "running", "queued"].includes(outcome)) };
+    const shown = step === 4 ? 3 : step;
+    for (let n = 1; n <= 3; n += 1) {
       const tab = $("build-step-tab-" + n);
-      tab.classList.toggle("current", n === step);
-      tab.classList.toggle("done", n !== step && done[n]);
-      tab.classList.toggle("attention", n !== step && !done[n] && Boolean(attention[n]));
-      if (n === step) tab.setAttribute("aria-current", "step");
+      tab.classList.toggle("current", n === shown);
+      tab.classList.toggle("done", n !== shown && done[n]);
+      tab.classList.toggle("attention", n !== shown && !done[n] && Boolean(attention[n]));
+      if (n === shown) tab.setAttribute("aria-current", "step");
       else tab.removeAttribute("aria-current");
       $("build-step-summary-" + n).textContent = summaries[n];
     }
@@ -394,6 +397,11 @@
   // next step (NEW_244D: a preview used to say "This is
   // what would run" over "(no command resolved)" and hide both).
   function explain(text, step) {
+    // A refusal that reached the whole build rather than one stage still names
+    // the stage it is about when the text carries its profile id (operator,
+    // 2026-09-23: "This stage needs a program that is not installed on this
+    // computer" named neither).
+    step = step || stageNamedIn(text);
     const missingInput =
       /needs "([^"]+)", and nothing supplies/.exec(text || "") ||
       /the required input "([^"]+)" was not supplied/.exec(text || "");
@@ -435,10 +443,21 @@
 
   // setupSentence names the stage and the program, in the user's words.
   function setupSentence(step, ending) {
-    const stage = step?.title ? `The ${step.title} stage` : "This stage";
+    const stage = step?.title ? `The ${step.title} stage` : "One stage of this build";
     const program = step?.provider?.name || step?.profile?.name;
-    if (program) return `${stage} needs ${program}, but it ${ending}.`;
-    return `${stage} needs a program that ${ending}.`;
+    const where = " Set it up in Profiles › Build Tools, or choose another way to build in step 1.";
+    if (program) return `${stage} needs ${program}, but it ${ending}.${where}`;
+    return `${stage} needs a program that ${ending}.${where}`;
+  }
+
+  // stageNamedIn is the pipeline stage whose tool profile a message names.
+  function stageNamedIn(text) {
+    const pipeline = currentPipeline();
+    for (const candidate of pipeline?.steps || []) {
+      const id = candidate.provider?.id || candidate.profile?.id;
+      if (id && String(text || "").includes(id)) return candidate;
+    }
+    return null;
   }
 
   // setupActions is 246I's "compiler setup is an action, not an error scavenger
@@ -886,7 +905,12 @@ Download and set it up?`)) {
     $(id).addEventListener("change", choicesChanged);
   }
   for (const tab of document.querySelectorAll("#build-steps .bwiz-step")) {
-    tab.addEventListener("click", () => showStep(Number(tab.dataset.step)));
+    // Step 3 is where a build is started AND watched: once there is one, its
+    // tab shows it; "Build this again" goes back to the commands.
+    tab.addEventListener("click", () => {
+      const n = Number(tab.dataset.step);
+      showStep(n === 3 && currentBuild ? 4 : n);
+    });
   }
   for (const go of document.querySelectorAll("#area-build [data-go]")) {
     go.addEventListener("click", () => showStep(Number(go.dataset.go)));

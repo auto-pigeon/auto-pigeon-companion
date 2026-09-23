@@ -790,8 +790,11 @@ button.link {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+  justify-content: flex-end;
   margin-block-start: 0.5rem;
 }
+.activity-run__head { align-items: center; }
+.activity-run__tools { display: flex; align-items: center; gap: 0.5rem; flex: 0 0 auto; }
 
 .activity-stages {
   margin: 0.5rem 0 0;
@@ -1150,14 +1153,25 @@ main { padding: 1.25rem 1.75rem 3rem; }
 .breadcrumb a:hover, .breadcrumb a:focus-visible { text-decoration: underline; }
 .breadcrumb [aria-current="page"] { color: var(--ink); font-weight: 600; }
 
-/* Live Games: one compact row per game — title, the facts on one line, Join. */
-#games-list .game-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.45rem 0.75rem; min-height: 0; }
-#games-list .game-row .game-title { font-weight: 600; color: var(--ink); white-space: nowrap; padding: 0; }
-#games-list .game-row .game-facts { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.9rem; }
-#games-list .game-row > button.primary { padding: 0.3rem 0.9rem; }
-@media (max-width: 640px) {
-  #games-list .game-row { flex-wrap: wrap; }
-  #games-list .game-row .game-facts { flex-basis: 100%; order: 3; white-space: normal; }
-}
+/* Live Games: small square cards, Join bottom right (operator, 2026-09-23). */
+.game-cards { grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); }
+.game-card { aspect-ratio: 1 / 1; }
+.game-card .game-title { font-weight: 600; color: var(--ink); padding: 0; text-align: start; }
+.game-card .game-fact { margin: 0; font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.games-detail__actions { margin-top: 1rem; }
 .game-summary p { margin: 0 0 0.75rem; }
 .join-steps .join-step.done p { margin: 0; }
+
+/* --- Where a button goes (operator, 2026-09-23; AUP UI-DESIGN §3) ------------
+   A button is a call to action, not a word in the text: an action that
+   continues what the page is doing sits bottom right of its panel or card; one
+   that opens something else sits top right, in the panel's head. */
+.row-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; justify-content: flex-end; align-items: center; }
+.card > .row-actions, .card .row-actions:last-child { margin-top: auto; }
+
+/* Download ▾ — a button and its caret as one pill (AUP UI-DESIGN §3 .btn-split). */
+.btn-split { position: relative; display: inline-flex; }
+.btn-split > button:first-child { border-start-end-radius: 0; border-end-end-radius: 0; }
+.btn-split > .btn-split__caret { border-start-start-radius: 0; border-end-start-radius: 0; border-inline-start-width: 0; padding-inline: 0.45rem; }
+.btn-split__menu { min-width: 14rem; }
+.map-card__actions { justify-content: flex-end; }

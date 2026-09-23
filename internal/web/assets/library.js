@@ -156,12 +156,14 @@
     download.addEventListener("click", () =>
       withBusy(download, () => downloadRevision(asset, revision || {}, "current", status, download))
     );
-    const other = el("button", { text: t("Older revisions…"), attrs: { type: "button", class: "link" } });
-    other.addEventListener("click", () => openRevisions(asset, other));
+    // Older revisions are a dropdown on Download itself (operator, 2026-09-23):
+    // the main half downloads the latest, the caret lists the older ones and
+    // downloads the one chosen — AUP's split button (UI-DESIGN §3).
+    const split = olderRevisions(asset, revision, download, status);
 
     return el("li", {
       className: "card map-card",
-      children: [head, saved, textures, el("div", { className: "map-card__actions", children: [play, download, other] }), status],
+      children: [head, saved, textures, status, el("div", { className: "map-card__actions row-actions", children: [split, play] })],
     });
   }
 
@@ -194,7 +196,10 @@
       return;
     }
     const wads = body.wads_declared || [];
-    node.append(el("span", { className: "map-card__label", text: t("Textures") }));
+    node.append(el("span", {
+      className: "map-card__label",
+      text: body.texture_count ? t("Textures ({n})", { n: body.texture_count }) : t("Textures"),
+    }));
     if (!wads.length) {
       node.append(el("span", { className: "muted small", text: t("none declared") }));
       return;
@@ -204,9 +209,6 @@
       list.append(el("li", { className: "wad-chip", text: wad.replace(/^.*[\\/]/, ""), attrs: { title: wad } }));
     }
     node.append(list);
-    if (body.texture_count) {
-      node.append(el("span", { className: "muted small", text: t("{n} textures", { n: body.texture_count }) }));
-    }
   }
 
   // downloadRevision fetches and verifies one revision — the latest unless
@@ -234,81 +236,64 @@
     return true;
   }
 
-  async function openRevisions(asset, trigger) {
-    await withBusy(trigger, async () => {
-      const panel = $("library-revisions-panel");
-      const list = $("library-revisions");
-      panel.hidden = false;
-      $("library-revisions-title").textContent = "Revisions of " + nameOf(asset);
-      list.replaceChildren(el("li", { className: "muted", text: "Reading…" }));
-
+  // olderRevisions is Download with its caret: the button, and a menu of the
+  // map's earlier revisions read from the account the first time it opens.
+  function olderRevisions(asset, current, download, status) {
+    const caret = el("button", {
+      text: "▾",
+      attrs: { type: "button", class: "secondary btn-split__caret", "aria-haspopup": "menu", "aria-expanded": "false",
+        "aria-label": t("Older revisions"), title: t("Older revisions") },
+    });
+    caret.disabled = !current;
+    const menu = el("div", { className: "menu btn-split__menu", attrs: { role: "menu" } });
+    menu.hidden = true;
+    let loaded = false;
+    const close = () => {
+      menu.hidden = true;
+      caret.setAttribute("aria-expanded", "false");
+    };
+    caret.addEventListener("click", async () => {
+      if (!menu.hidden) return close();
+      menu.hidden = false;
+      caret.setAttribute("aria-expanded", "true");
+      if (loaded) return;
+      menu.replaceChildren(el("p", { className: "menu-note", text: t("Reading…") }));
       const { ok, body } = await api(
         `/api/v1/library/assets/${encodeURIComponent(asset.asset_type)}/${encodeURIComponent(asset.asset_id)}`
       );
-      list.replaceChildren();
+      menu.replaceChildren();
       if (!ok) {
-        setMessage("library-revisions-note", body.error || "could not read this asset", "error");
+        menu.append(el("p", { className: "menu-note", text: body.error || t("The revisions could not be read.") }));
         return;
       }
-      cachedKeys = new Set(body.cached || []);
-      const revisions = body.revisions || [];
-      $("library-revisions-note").textContent = body.history_error
-        ? "This asset type keeps no per-version history: " + body.history_error
-        : `${revisions.length} revision${revisions.length === 1 ? "" : "s"}. ` +
-          "Downloading one verifies every file against the digest the server declared.";
-      $("library-revisions-note").className = "muted";
-
-      const rows = revisions.length > 0 ? revisions : body.asset?.current_revision ? [body.asset.current_revision] : [];
-      if (rows.length === 0) {
-        list.append(el("li", { className: "muted", text: "This asset has no revisions yet." }));
+      loaded = true;
+      const older = (body.revisions || []).filter((revision) => revision.revision !== current?.revision);
+      if (older.length === 0) {
+        menu.append(el("p", { className: "menu-note", text: t("There are no older revisions.") }));
         return;
       }
-      for (const revision of rows) list.append(revisionRow(asset, revision));
-      // Focus moves into the panel that just appeared, so a keyboard user is
-      // where the new content is rather than back at the button they pressed.
-      $("library-revisions-title").setAttribute("tabindex", "-1");
-      $("library-revisions-title").focus();
+      for (const revision of older) {
+        const item = el("button", {
+          text: [t("Revision {n}", { n: revision.revision }), revision.created_at ? when(revision.created_at) : ""].filter(Boolean).join(" · "),
+          attrs: { type: "button", role: "menuitem" },
+        });
+        item.addEventListener("click", async () => {
+          close();
+          await withBusy(download, () => downloadRevision(asset, revision, revision.revision_id || "", status, null));
+        });
+        menu.append(item);
+      }
     });
-  }
-
-  function revisionRow(asset, revision) {
-    const key = revision.revision_id || "";
-    const held = key && cachedKeys.has(key);
-
-    const head = el("div", { className: "row-head" });
-    const label = el("strong", { text: t("Revision {n}", { n: revision.revision }) });
-    head.append(label);
-    head.append(badge(held ? "downloaded" : "in your account", held ? "ok" : "queued"));
-
-    const detail = el("p", { className: "muted" });
-    detail.textContent = [
-      revision.created_at ? "saved " + when(revision.created_at) : "",
-      revision.immutable ? "" : "may still change",
-    ]
-      .filter(Boolean)
-      .join(" · ");
-
-    const download = el("button", { text: held ? "Download again" : "Download", attrs: { type: "button" } });
-    const use = el("button", { text: "Use in a build", attrs: { type: "button", class: "secondary" } });
-    use.disabled = !held;
-
-    const status = el("p", { className: "message", attrs: { role: "status" } });
-
-    download.addEventListener("click", () =>
-      withBusy(download, async () => {
-        if (await downloadRevision(asset, revision, key, status, download)) use.disabled = false;
-      })
-    );
-
-    use.addEventListener("click", () => {
-      chooseRevision(asset, revision, key);
-      setMessage(status, "Chosen. Build is open on it.", "ok");
-      openBuildOnChosen();
+    document.addEventListener("pointerdown", (event) => {
+      if (!menu.hidden && !menu.contains(event.target) && !caret.contains(event.target)) close();
     });
-
-    return el("li", {
-      children: [head, detail, el("div", { className: "row-actions", children: [download, use] }), status],
+    menu.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        close();
+        caret.focus();
+      }
     });
+    return el("div", { className: "btn-split", children: [download, caret, menu] });
   }
 
   function chooseRevision(asset, revision, key) {
@@ -384,9 +369,6 @@
   $("library-more").addEventListener("click", (event) => showMore(event.currentTarget));
   $("cached-refresh").addEventListener("click", (event) => withBusy(event.currentTarget, refreshCached));
   $("library-search").addEventListener("change", refreshCatalog);
-  $("library-close-revisions").addEventListener("click", () => {
-    $("library-revisions-panel").hidden = true;
-  });
 
   window.AUCOM.areas.library = {
     async refresh() {

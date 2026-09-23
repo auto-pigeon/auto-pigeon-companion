@@ -71,35 +71,30 @@
     );
   }
 
-  // One game, one compact row: up to 50 games are listed at once (operator,
-  // 2026-09-23), so everything a person scans is on one line and Join is on the
-  // row itself. The title opens the game's own page.
+  // One game, one small square card (operator, 2026-09-23: a long line was
+  // mostly empty space): the title, who hosts it, the facts, and Join bottom
+  // right. The title opens the game's own page.
   function gameRow(game) {
     const live = game.state === "live";
     const title = el("button", { className: "link game-title", text: game.title, attrs: { type: "button" } });
     title.addEventListener("click", () => openGame(game.id));
-    const facts = [
-      game.host_nickname,
-      game.map_name,
-      engineName(game),
-      playersShort(game),
-      game.join_content?.state === "required" ? bytes(game.join_content.total_bytes) : "",
-      freshness(game.stale_for_ms),
-    ].filter(Boolean);
-    const actions = [];
-    if (live && game.joinable) {
-      const join = el("button", { className: "primary", text: "Join", attrs: { type: "button" } });
-      join.addEventListener("click", async () => {
-        await openGame(game.id, { quiet: true });
-        if (current?.id === game.id) await joinNow($("games-primary"));
-      });
-      actions.push(join);
-    } else {
-      actions.push(badge(live ? "live" : "ended", live ? "running" : "cancelled"));
-    }
+    const head = el("div", { className: "row-head", children: [title, badge(live ? "live" : "ended", live ? "running" : "cancelled")] });
+    const lines = [
+      game.host_nickname ? `Hosted by ${game.host_nickname}` : "",
+      [game.map_name, engineName(game)].filter(Boolean).join(" · "),
+      [playersShort(game), game.join_content?.state === "required" ? bytes(game.join_content.total_bytes) : "", freshness(game.stale_for_ms)]
+        .filter(Boolean).join(" · "),
+    ].filter(Boolean).map((text) => el("p", { className: "muted game-fact", text }));
+    const join = el("button", { className: "primary", text: "Join", attrs: { type: "button" } });
+    join.disabled = !(live && game.joinable);
+    if (join.disabled) join.title = live ? "This game cannot be joined from this account." : "This game has ended.";
+    join.addEventListener("click", async () => {
+      await openGame(game.id, { quiet: true });
+      if (current?.id === game.id) await joinNow($("games-primary"));
+    });
     return el("li", {
-      className: "game-row",
-      children: [title, el("span", { className: "muted game-facts", text: facts.join(" · ") }), ...actions],
+      className: "card game-card",
+      children: [head, ...lines, el("div", { className: "row-actions", children: [join] })],
     });
   }
 
@@ -126,6 +121,7 @@
 
   async function openGame(id, { quiet = false } = {}) {
     if (!id) return;
+    started.delete(id); // re-read: the engine may have been closed since
     if (window.location.hash !== "#games/" + id) {
       window.history.replaceState(null, "", "#games/" + id);
     }
@@ -211,15 +207,21 @@
     const primary = $("games-primary");
     primary.hidden = false;
     primary.disabled = false;
+    primary.title = "";
+    if (running(id)) {
+      // Pressing it again would only find the engine already running.
+      primary.textContent = "Running";
+      primary.disabled = true;
+      primary.title = "This game is running on this computer; see Jobs to follow or stop it.";
+      return;
+    }
     switch (readiness.state) {
       case "ready_for_review":
         primary.textContent = "Join";
         break;
       case "setup_required":
         // Downloading the map files is part of JOINING, not of setting this
-        // computer up (operator, 2026-09-23): when that is all that is left,
-        // the one button says Join, and one press downloads and goes on to the
-        // review.
+        // computer up: when that is all that is left, the button says Join.
         primary.textContent = nextStep()?.action === "download_join_content" ? "Join" : "Set up to join";
         break;
       case "sign_in_required":
@@ -228,7 +230,15 @@
       default:
         primary.textContent = "Join";
         primary.disabled = true;
+        primary.title = readiness.summary || "This game cannot be joined from this computer now.";
     }
+  }
+
+  // The games this window started, so the button says so rather than offering
+  // to start a second engine.
+  const started = new Set();
+  function running(id) {
+    return started.has(id);
   }
 
   function reachability(word) {
@@ -499,6 +509,8 @@
       actionPanel(children);
       setMessage("games-detail-message", message, "ok");
       record(body.already ? "Join already running" : "Joined a game", current.readiness.title, "ok");
+      started.add(current.id);
+      render(current.id, current.readiness);
     });
   }
 
