@@ -469,7 +469,7 @@ the list instead. The textures come from the relay below:
 
 ```console
 $ curl -s -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/library/maps/3413lsl7yi1qfrt/textures
-{"map_id":"3413lsl7yi1qfrt","revision":4,"wad_state":"single","wads_declared":["metal.wad"],"texture_count":34}
+{"map_id":"3413lsl7yi1qfrt","revision":4,"wad_state":"single","wads_declared":["metal.wad"],"texture_count":37}
 ```
 
 **Signing in from a terminal reaches an open page.** `companion auth login` (and
