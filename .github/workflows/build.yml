@@ -13,7 +13,7 @@
 # `grep -c secrets` on this file is zero and the `no-credentials` job below keeps
 # it that way. A workflow that could publish from a pull request would be a
 # workflow that publishes whatever a pull request contains.
-# Packaging skeletons live under build/ and are run by hand — see README.md.
+# Publishing is release.yml's, on one job, for pushes to main — see README.md.
 #
 # # The extractor is not built here, and is not IN here
 #
@@ -188,22 +188,30 @@ jobs:
       # The bundling path, exercised both ways and publishing nothing: without
       # an extractor the bundle says none is inside; with one it sits beside the
       # Companion as its own file, listed with its digest — which the Companion
-      # then checks before running it. The "extractor" here is a stand-in file;
-      # nothing is downloaded.
+      # then checks before running it. The "extractor" here is a stand-in
+      # linux/amd64 executable (a second Companion build: the bundle step reads
+      # the header, so it has to be a real one for the right platform); nothing
+      # is downloaded. release.yml builds the real one from build/aue-pin.json.
       - name: assemble a bundle without and with an extractor
         run: |
           mkdir -p "$RUNNER_TEMP/bin"
-          go build -o "$RUNNER_TEMP/bin/companion" ./cmd/companion
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o "$RUNNER_TEMP/bin/companion" ./cmd/companion
           build/bundle-sidecar.sh --platform linux-amd64 --version 0.0.0-ci \
             --binary-dir "$RUNNER_TEMP/bin" --out "$RUNNER_TEMP/without"
           python3 -c 'import json,sys; m=json.load(open(sys.argv[1])); assert m["extractor"] is None and "extractor_absent" in m' \
             "$RUNNER_TEMP/without/auto-pigeon-companion-0.0.0-ci-linux-amd64/bundle-manifest.json"
-          printf '#!/bin/sh\n' > "$RUNNER_TEMP/aue"
+          cp "$RUNNER_TEMP/bin/companion" "$RUNNER_TEMP/aue"
+          printf 'stand-in licence\n' > "$RUNNER_TEMP/aue-license"
           build/bundle-sidecar.sh --platform linux-amd64 --version 0.0.0-ci \
             --binary-dir "$RUNNER_TEMP/bin" --out "$RUNNER_TEMP/with" \
             --extractor "$RUNNER_TEMP/aue" --extractor-version 0.0.0-ci \
-            --extractor-source https://example.invalid/aue-source
+            --extractor-commit "$GITHUB_SHA" --extractor-license "$RUNNER_TEMP/aue-license" \
+            --extractor-source "https://example.invalid/aue/tree/$GITHUB_SHA"
           test -x "$RUNNER_TEMP/with/auto-pigeon-companion-0.0.0-ci-linux-amd64/auto-pigeon-extractor"
+          test -f "$RUNNER_TEMP/with/auto-pigeon-companion-0.0.0-ci-linux-amd64/LICENSE-auto-pigeon-extractor.txt"
+      # The release's decisions, driven the way release.yml drives them.
+      - name: the release plan reads its pin
+        run: python3 build/release-plan.py pin
 
   security-contract:
     name: the threat model states itself

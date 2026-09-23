@@ -238,3 +238,52 @@ func TestAnUnreadableBundleManifestIsARefusal(t *testing.T) {
 		t.Errorf("status = %+v, want unavailable", status)
 	}
 }
+
+// On macOS the Companion runs from inside its .app, so the extractor is in
+// `Contents/MacOS/` beside it and the manifest is in `Contents/Resources/`,
+// listing the extractor by its path from the archive root. A digest that
+// agrees verifies it; one that does not refuses it — the same two answers as
+// on every other platform (NEW_247A).
+func TestAnExtractorInsideAMacOSAppIsCheckedAgainstTheAppsManifest(t *testing.T) {
+	for _, tampered := range []bool{false, true} {
+		b := newBundle(t, protocolAnswer("1.0"), "echo ok\n")
+		app := filepath.Join(b.dir, "Auto-Pigeon Companion.app")
+		macos := filepath.Join(app, "Contents", "MacOS")
+		resources := filepath.Join(app, "Contents", "Resources")
+		for _, dir := range []string{macos, resources} {
+			if err := os.MkdirAll(dir, 0o700); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.Rename(b.path(), filepath.Join(macos, "auto-pigeon-extractor")); err != nil {
+			t.Fatal(err)
+		}
+		data, err := os.ReadFile(filepath.Join(macos, "auto-pigeon-extractor"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		sum := sha256.Sum256(data)
+		digest := "sha256:" + hex.EncodeToString(sum[:])
+		if tampered {
+			digest = "sha256:" + strings.Repeat("1", 64)
+		}
+		manifest, _ := json.Marshal(map[string]any{"members": []map[string]any{{
+			"path":    "Auto-Pigeon Companion.app/Contents/MacOS/auto-pigeon-extractor",
+			"product": "auto-pigeon-extractor", "sha256": digest,
+		}}})
+		if err := os.WriteFile(filepath.Join(resources, aue.BundleManifestName), manifest, 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		status := (&aue.Resolver{Dir: macos}).Status()
+		if tampered {
+			if status.Available || !strings.Contains(status.Reason, "not the extractor this release shipped") {
+				t.Errorf("tampered: status = %+v, want a digest refusal", status)
+			}
+			continue
+		}
+		if !status.Available || !status.Verified {
+			t.Errorf("status = %+v, want verified", status)
+		}
+	}
+}

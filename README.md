@@ -776,7 +776,7 @@ commands:
   engine list | show | detect | bind | check | preview | run | stage | unstage                                     set up a Quake engine you already have, and start it as a supervised job
   game list | show | link | join | preview | host | stop                                                           find a game somebody is hosting and join it, or advertise one of your own
   launch (retired)                                                                                                 retired: it read a placeholder launch config; use `engine run <profile> --action play_map`
-  extractor status | version                                                                                       the separately licensed auto-pigeon-extractor (AUE) shipped beside this program
+  extractor status | version | convert <file.apmap>                                                                the separately licensed auto-pigeon-extractor (AUE) shipped beside this program
   feedback compatibility --game <family> --summary <text> [--share <what>]                                         report that a work-in-progress game did not do what you expected — nothing is attached unless you say so
   uri status | register | unregister                                                                               see, set or remove this machine's handler for autopigeon:// links
   security matrix | residual | audit                                                                               the threat model, the risks accepted with it, and what this build is made of
@@ -1995,14 +1995,25 @@ $ companion extractor version
 0.1.0-dev
 ```
 
-> **Release archives do not carry an extractor yet.** The release workflow does
-> not build AUE: that job is deferred until the repositories move from
-> `andrea-dintino` to the `auto-pigeon` GitHub organisation, because the
-> extractor's repository is private and reading it from this repository's CI
-> needs a token that would have to be replaced after the move. Until then a
-> release bundle's manifest records `"extractor": null` and says why, and on
-> such a machine `companion extractor status` says there is none — see
-> [Releasing](#releasing).
+Every release archive carries the extractor. It is built on every push to main
+from the one commit `build/aue-pin.json` names, as described under
+[Publishing a release](#publishing-a-release). On macOS it is inside the app,
+next to the Companion, in `Auto-Pigeon Companion.app/Contents/MacOS/`, and the
+bundle manifest it is checked against is in `Contents/Resources/`. That way
+dragging the app to /Applications keeps it verifiable.
+
+`companion extractor convert` turns an APMap into the `.map` a compiler reads.
+It uses the same path a build uses: the same resolver, digest check, handshake
+and subprocess. That makes it a one-line way to check that an install actually
+works. The `.map` goes where a build puts it, in `converted-<name>/` next to the
+input:
+
+```console
+$ companion extractor convert build/release-fixtures/release-acceptance.apmap
+/home/you/auto-pigeon-companion/build/release-fixtures/converted-release-acceptance/release-acceptance.map
+  sha256:6f0c…
+  converted by the bundled extractor 1.207 (protocol 1.0), verified against the bundle manifest
+```
 
 #### There are exactly two ways to an executable
 
@@ -4358,64 +4369,107 @@ what the release actually claims.
 
 ### Publishing a release
 
-`.github/workflows/release.yml` is the only place in this repository with
-`contents: write`, on one job, reached only by a version tag or by an explicit
-manual publish. `build.yml` remains the per-push verification workflow and still
-publishes nothing and reads no secret.
+**Every push to `main` publishes a development prerelease**, tagged
+`v1.<commit-count>`. Each archive holds the Companion **and the Auto-Pigeon
+Extractor next to it**. `.github/workflows/release.yml` does the work, and
+`build/release-plan.py` makes every decision in it. `build.yml` is still the
+pull-request workflow: it tests and cross-builds, publishes nothing and reads
+no secret.
+
+| trigger | what happens |
+| --- | --- |
+| push to `main` | native tests on Ubuntu, Windows and macOS; every target built; native acceptance; **prerelease published** |
+| manual run | the same, build and accept only, unless `publish` is ticked (main only) |
+| manual run with `promote: v1.N` | an existing verified prerelease becomes a release; nothing is rebuilt |
+
+The extractor is built from the ONE commit in `build/aue-pin.json`, never from
+a branch, a tag or `latest`, using the extractor's own gates and its own
+`scripts/build-release.sh --verify`. To move to a newer extractor, change the
+pin in a reviewed commit. The commit must already be on GitHub:
 
 ```console
-$ git tag -a v1.90 -m "Auto-Pigeon Companion 1.90" && git push origin v1.90
+$ git -C ../auto-pigeon-extractor rev-parse HEAD
+86ac34d587afca043adb93351fd28a4559faa52b
+$ python3 build/release-plan.py pin
+repository=andrea-dintino/auto-pigeon-extractor
+commit=86ac34d587afca043adb93351fd28a4559faa52b
+required_protocol=1.0
+version=1.207
+aulibs_repository=andrea-dintino/auto-pigeon-libraries
 ```
 
-The `verify` jobs run `go vet` and `go test` natively on Ubuntu, Windows and
-macOS — that is where the native claim is made — and the `cross-build` job
-proves all six targets still compile pure-Go and that the Windows test binaries
-still compile for both Windows architectures from Linux. Only then does
-`publish` build the artifacts, assemble one archive per platform, and attach
-them.
+The extractor's repository is private. The workflow reads it with the
+repository secret **`AUE_CHECKOUT_TOKEN`**, which must be a fine-grained token
+(or GitHub App token) with read-only *Contents* on that one repository. Without
+it the run fails and says so. It never publishes a Companion-only archive
+instead.
 
-**Per-platform downloads are the artifacts.** A user should not download five
-irrelevant binaries to run one app. `aucom-release.zip` is an operator
-convenience holding the per-platform archives and their checksums.
-
-**Auto-Pigeon Extractor ships beside the Companion — and is not in these
-archives yet.** It is a separate AGPL-3.0 program, and a release puts the two
-*separately built* programs side by side in one archive: never one inside the
-other. `build/bundle-sidecar.sh` takes an extractor that was **already built**,
-for exactly that platform, from the extractor's own repository, copies it in as
-`auto-pigeon-extractor` (`auto-pigeon-extractor.exe` on Windows) — the name the
-Companion looks for beside itself — and `build/bundle-manifest.py` lists it with
-its SHA-256, its version and licence (`AGPL-3.0-only`) and where its
-corresponding source is. That digest is what the Companion checks before it runs
-the file. Nothing in either script downloads anything:
+**Which targets become downloads** comes from joining two release authorities:
+this repository's `internal/release/native-support.json` and the extractor's
+`aue-release targets`:
 
 ```console
-$ build/bundle-sidecar.sh --platform linux-amd64 --version 1.90 \
+$ python3 build/release-plan.py matrix --aucom-support support.json --aue-targets aue-targets --out matrix.json
+darwin/amd64    bundled_release  aucom=build_only      aue=published
+darwin/arm64    bundled_release  aucom=build_only      aue=published
+linux/amd64     bundled_release  aucom=native_pass     aue=published
+linux/arm64     bundled_release  aucom=manual_pending  aue=published
+windows/amd64   bundled_release  aucom=manual_pending  aue=published
+windows/arm64   build_only       aucom=build_only      aue=build_only
+```
+
+`bundled_release` archives are the downloads. A `build_only` archive (today
+windows/arm64, because nobody has run the extractor on such a machine) goes
+only under `candidates/` in the operator aggregate `…-all.zip`. It is never
+offered as a download. A `refused` target has no archive, and the release
+manifest gives the reason. The `aucom=` column is the Companion's own
+native-support state (see [What is built, and what has been
+run](#what-is-built-and-what-has-been-run)). It is a separate question from
+whether a target is a download.
+
+**Before anything is attached**, each archive is checked. It must hold both
+programs, built for its platform according to their executable headers, and
+built from the right commits according to the Go toolchain. It must hold both
+licence files, and every member must match `bundle-manifest.json`. Then, on a
+native runner per operating-system family (Linux amd64, Windows amd64, macOS
+arm64), the exact archive is unpacked and run:
+
+```console
+$ python3 build/release-acceptance.py --archive auto-pigeon-companion-1.148-linux-amd64.zip \
+    --platform linux-amd64 --version 1.148 --aue-version 1.207 \
+    --fixture build/release-fixtures/release-acceptance.apmap
+PASS  companion version: exit 0, printed '1.148'
+PASS  extractor status: extractor: shipped with this Companion, checked against its bundle manifest …
+…
+PASS  tampered: version refused: exit 1, 'error: aue: … it is not the extractor this release shipped, and it is not run'
+PASS  missing: nothing fetched one: extractor files after the run: []
+PASS: 13/13 steps
+```
+
+**A rerun never replaces bytes.** Both programs and every archive are
+reproducible. When the release already exists, the rebuilt digests are compared
+with the ones GitHub reports. Only missing assets are uploaded, and any
+difference fails the run with nothing changed.
+
+The two programs have two licences. The Companion is MIT
+(`LICENSE-auto-pigeon-companion.txt`). The extractor is a separate program with
+its own licence, `LICENSE-auto-pigeon-extractor.txt`, as its repository ships
+it. The archive records the extractor commit it was built from. A release does
+not publish the extractor's source.
+
+To assemble one bundle by hand from programs you already built:
+
+```console
+$ build/bundle-sidecar.sh --platform linux-amd64 --version 1.148 \
     --binary-dir dist/bin/linux-amd64 --out dist/bundles \
-    --extractor ../auto-pigeon-extractor/dist/auto-pigeon-extractor-linux-amd64 \
-    --extractor-version 0.4.0 \
-    --extractor-source https://github.com/andrea-dintino/auto-pigeon-extractor
+    --extractor ../auto-pigeon-extractor/dist/auto-pigeon-extractor-1.207-linux-amd64 \
+    --extractor-version 1.207 --extractor-commit 86ac34d587afca043adb93351fd28a4559faa52b \
+    --extractor-license ../auto-pigeon-extractor/LICENSE \
+    --extractor-source https://github.com/andrea-dintino/auto-pigeon-extractor/tree/86ac34d587afca043adb93351fd28a4559faa52b
 ```
 
-Without `--extractor` the bundle is complete, carries no extractor, and its
-manifest says so. **That is what every release built today looks like**,
-because the release workflow does not build the extractor yet. It is
-deliberately deferred until the repositories move from `andrea-dintino` to the
-`auto-pigeon` GitHub organisation: the extractor's repository is private, and
-reading it from this repository's CI needs a token that would have to be
-replaced after the move. The TODO is at the top of
-`.github/workflows/release.yml`.
-
-```console
-$ tar -xOzf auto-pigeon-companion-1.90-linux-amd64.tar.gz \
-    auto-pigeon-companion-1.90-linux-amd64/bundle-manifest.json | jq '.extractor, .extractor_absent.reason'
-null
-"This bundle was assembled without an Auto-Pigeon Extractor build."
-```
-
-On such a machine `companion extractor status` says there is no extractor, and
-map inspection needs one: a developer can name a build with `AUCOM_AUE_BINARY`
-(see [Extractor](#extractor)).
+It refuses an extractor built for another platform. Without `--extractor`, the
+bundle's manifest records `"extractor": null` and says why.
 
 Nothing in either workflow signs anything. There is no Apple Developer ID and no
 Authenticode certificate for this project, so the artifacts are unsigned, macOS

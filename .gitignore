@@ -50,3 +50,8 @@ Thumbs.db
 
 # The optional development .env (see .env.example). Never committed.
 /.env
+
+# Python bytecode. The release scripts under build/ do not write it
+# (sys.dont_write_bytecode), because an untracked file makes `go build` stamp
+# vcs.modified=true; this only keeps a stray one out of a commit.
+__pycache__/

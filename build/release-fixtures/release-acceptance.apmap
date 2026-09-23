@@ -1,0 +1,269 @@
+{
+ "$schema": "https://auto-pigeon.org/schemas/apmap/1.3/apmap.schema.json",
+ "apmap_version": "1.3",
+ "document_id": "aucom-release-acceptance-slab",
+ "revision": 0,
+ "role": "full_map",
+ "game": "quake1",
+ "map_dialect": "quake_standard",
+ "id_policy": "minted",
+ "frame": {
+  "space": "source_world",
+  "units": "quake_unit",
+  "coordinate_system": {
+   "handedness": "right",
+   "up_axis": "z"
+  },
+  "to_source": {
+   "type": "identity"
+  }
+ },
+ "provenance": {
+  "producer": "aucom-release-acceptance",
+  "producer_version": "1.0"
+ },
+ "entities": [
+  {
+   "entity_id": "ent_releaseworld01",
+   "content": [
+    {
+     "kind": "property",
+     "key": "classname",
+     "value": "worldspawn"
+    },
+    {
+     "kind": "brush",
+     "brush_id": "brs_releaseslab0001",
+     "faces": [
+      {
+       "face_id": "fac_rel0000001",
+       "plane": {
+        "points": [
+         [
+          -128,
+          -128,
+          0
+         ],
+         [
+          128,
+          -128,
+          0
+         ],
+         [
+          128,
+          128,
+          0
+         ]
+        ]
+       },
+       "texture": "GROUND1_6",
+       "projection": {
+        "mode": "classic",
+        "shift": [
+         0,
+         0
+        ],
+        "rotation": 0,
+        "scale": [
+         1,
+         1
+        ]
+       }
+      },
+      {
+       "face_id": "fac_rel0000002",
+       "plane": {
+        "points": [
+         [
+          -128,
+          -128,
+          -16
+         ],
+         [
+          -128,
+          128,
+          -16
+         ],
+         [
+          128,
+          128,
+          -16
+         ]
+        ]
+       },
+       "texture": "GROUND1_6",
+       "projection": {
+        "mode": "classic",
+        "shift": [
+         0,
+         0
+        ],
+        "rotation": 0,
+        "scale": [
+         1,
+         1
+        ]
+       }
+      },
+      {
+       "face_id": "fac_rel0000003",
+       "plane": {
+        "points": [
+         [
+          -128,
+          -128,
+          -16
+         ],
+         [
+          -128,
+          -128,
+          0
+         ],
+         [
+          -128,
+          128,
+          0
+         ]
+        ]
+       },
+       "texture": "GROUND1_6",
+       "projection": {
+        "mode": "classic",
+        "shift": [
+         0,
+         0
+        ],
+        "rotation": 0,
+        "scale": [
+         1,
+         1
+        ]
+       }
+      },
+      {
+       "face_id": "fac_rel0000004",
+       "plane": {
+        "points": [
+         [
+          128,
+          128,
+          -16
+         ],
+         [
+          128,
+          128,
+          0
+         ],
+         [
+          128,
+          -128,
+          0
+         ]
+        ]
+       },
+       "texture": "GROUND1_6",
+       "projection": {
+        "mode": "classic",
+        "shift": [
+         0,
+         0
+        ],
+        "rotation": 0,
+        "scale": [
+         1,
+         1
+        ]
+       }
+      },
+      {
+       "face_id": "fac_rel0000005",
+       "plane": {
+        "points": [
+         [
+          128,
+          -128,
+          -16
+         ],
+         [
+          128,
+          -128,
+          0
+         ],
+         [
+          -128,
+          -128,
+          0
+         ]
+        ]
+       },
+       "texture": "GROUND1_6",
+       "projection": {
+        "mode": "classic",
+        "shift": [
+         0,
+         0
+        ],
+        "rotation": 0,
+        "scale": [
+         1,
+         1
+        ]
+       }
+      },
+      {
+       "face_id": "fac_rel0000006",
+       "plane": {
+        "points": [
+         [
+          -128,
+          128,
+          -16
+         ],
+         [
+          -128,
+          128,
+          0
+         ],
+         [
+          128,
+          128,
+          0
+         ]
+        ]
+       },
+       "texture": "GROUND1_6",
+       "projection": {
+        "mode": "classic",
+        "shift": [
+         0,
+         0
+        ],
+        "rotation": 0,
+        "scale": [
+         1,
+         1
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "entity_id": "ent_releasestart01",
+   "content": [
+    {
+     "kind": "property",
+     "key": "classname",
+     "value": "info_player_start"
+    },
+    {
+     "kind": "property",
+     "key": "origin",
+     "value": "0 0 24"
+    }
+   ]
+  }
+ ],
+ "groups": []
+}

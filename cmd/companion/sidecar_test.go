@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -57,11 +58,70 @@ func newBundle(t *testing.T) string {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "companion"), []byte("not really a binary"), 0o600); err != nil {
+	writeFakeExecutable(t, filepath.Join(dir, "companion"), "linux-amd64", "companion")
+
+	return dir
+}
+
+// fakeExecutable is the header of an executable for one platform and nothing
+// after it: enough for the bundle step, which reads the header to refuse a
+// program paired with the wrong machine, and never runs it. The tag keeps two
+// fakes' digests apart.
+func fakeExecutable(platform, tag string) []byte {
+	head := make([]byte, 128)
+	switch platform {
+	case "linux-amd64", "linux-arm64":
+		copy(head, "\x7fELF\x02\x01\x01")
+		machine := uint16(0x3E)
+		if platform == "linux-arm64" {
+			machine = 0xB7
+		}
+		binary.LittleEndian.PutUint16(head[18:], machine)
+	case "darwin-amd64", "darwin-arm64":
+		copy(head, "\xcf\xfa\xed\xfe")
+		cpu := uint32(0x01000007)
+		if platform == "darwin-arm64" {
+			cpu = 0x0100000C
+		}
+		binary.LittleEndian.PutUint32(head[4:], cpu)
+	case "windows-amd64", "windows-arm64":
+		copy(head, "MZ")
+		binary.LittleEndian.PutUint32(head[0x3C:], 0x40)
+		copy(head[0x40:], "PE\x00\x00")
+		machine := uint16(0x8664)
+		if platform == "windows-arm64" {
+			machine = 0xAA64
+		}
+		binary.LittleEndian.PutUint16(head[0x44:], machine)
+	}
+
+	return append(head, []byte(tag)...)
+}
+
+func writeFakeExecutable(t *testing.T, path, platform, tag string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, fakeExecutable(platform, tag), 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// extractorArgs are the arguments that place a fake linux-amd64 extractor.
+func extractorArgs(t *testing.T, platform string) []string {
+	t.Helper()
+	dir := t.TempDir()
+	extractor := filepath.Join(dir, "auto-pigeon-extractor-0.9.0-"+platform)
+	writeFakeExecutable(t, extractor, platform, "this is the extractor")
+	license := filepath.Join(dir, "LICENSE")
+	if err := os.WriteFile(license, []byte("the extractor's licence\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	return dir
+	return []string{"--extractor", extractor, "--extractor-version", "0.9.0",
+		"--extractor-commit", strings.Repeat("ab", 20), "--extractor-license", license,
+		"--extractor-source", "https://example.test/aue/tree/" + strings.Repeat("ab", 20)}
 }
 
 func readManifest(t *testing.T, bundle string) map[string]any {
@@ -97,16 +157,32 @@ func TestABundleWithoutAnExtractorSaysSo(t *testing.T) {
 	}
 }
 
-// An extractor without its version or its source offer is refused: the bundle
-// must say which build it carries and where the AGPL source is.
-func TestAnExtractorWithoutVersionOrSourceIsRefused(t *testing.T) {
-	extractor := filepath.Join(t.TempDir(), "aue")
-	if err := os.WriteFile(extractor, []byte("aue"), 0o700); err != nil {
-		t.Fatal(err)
+// An extractor without its version, its source, its licence file or the full
+// commit it was built from is refused: the bundle must say which build it
+// carries, where it came from and whose terms it is under.
+func TestAnExtractorWithoutVersionSourceLicenceOrCommitIsRefused(t *testing.T) {
+	without := func(flag string) []string {
+		args := extractorArgs(t, "linux-amd64")
+		for index := range args {
+			if args[index] == flag {
+				return append(append([]string{}, args[:index]...), args[index+2:]...)
+			}
+		}
+		t.Fatalf("no %s", flag)
+		return nil
+	}
+	shortCommit := extractorArgs(t, "linux-amd64")
+	for index := range shortCommit {
+		if shortCommit[index] == "--extractor-commit" {
+			shortCommit[index+1] = "86ac34d"
+		}
 	}
 	for name, extra := range map[string][]string{
-		"no version": {"--extractor", extractor, "--extractor-source", "https://example.test/src"},
-		"no source":  {"--extractor", extractor, "--extractor-version", "0.9.0"},
+		"no version":   without("--extractor-version"),
+		"no source":    without("--extractor-source"),
+		"no licence":   without("--extractor-license"),
+		"no commit":    without("--extractor-commit"),
+		"short commit": shortCommit,
 	} {
 		if output, err := runBundleManifest(t, newBundle(t), extra...); err == nil {
 			t.Errorf("%s: accepted\n%s", name, output)
@@ -114,23 +190,46 @@ func TestAnExtractorWithoutVersionOrSourceIsRefused(t *testing.T) {
 	}
 }
 
-// A given extractor is bundled as a SEPARATE FILE, under its own licence, with
-// the name the Companion looks for beside itself.
-func TestAnExtractorIsBundledBesideTheCompanion(t *testing.T) {
-	extractor := filepath.Join(t.TempDir(), "auto-pigeon-extractor-0.9.0-linux-amd64")
-	if err := os.WriteFile(extractor, []byte("this is the extractor"), 0o700); err != nil {
+// A bundle pairs the two programs for ONE machine. An extractor built for
+// another platform — or a file whose header says nothing — is refused, and so
+// is a Companion built for another platform than the bundle's (NEW_247A).
+func TestAWrongPlatformExtractorIsRefused(t *testing.T) {
+	for _, platform := range []string{"linux-arm64", "windows-amd64", "darwin-amd64"} {
+		output, err := runBundleManifest(t, newBundle(t), extractorArgs(t, platform)...)
+		if err == nil || !strings.Contains(output, "built for "+platform) {
+			t.Errorf("a %s extractor in a linux-amd64 bundle: err = %v\n%s", platform, err, output)
+		}
+	}
+	notAProgram := extractorArgs(t, "linux-amd64")
+	if err := os.WriteFile(notAProgram[1], []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	if output, err := runBundleManifest(t, newBundle(t), notAProgram...); err == nil {
+		t.Errorf("a script with no executable header was bundled:\n%s", output)
+	}
 	bundle := newBundle(t)
-	if output, err := runBundleManifest(t, bundle, "--extractor", extractor,
-		"--extractor-version", "0.9.0", "--extractor-source", "https://example.test/src"); err != nil {
+	writeFakeExecutable(t, filepath.Join(bundle, "companion"), "linux-arm64", "companion")
+	if output, err := runBundleManifest(t, bundle, extractorArgs(t, "linux-amd64")...); err == nil {
+		t.Errorf("a linux-arm64 Companion was bundled as linux-amd64:\n%s", output)
+	}
+}
+
+// A given extractor is bundled as a SEPARATE FILE, with its own licence file,
+// under the name the Companion looks for beside itself.
+func TestAnExtractorIsBundledBesideTheCompanion(t *testing.T) {
+	bundle := newBundle(t)
+	if output, err := runBundleManifest(t, bundle, append(extractorArgs(t, "linux-amd64"),
+		"--extractor-spdx", "LicenseRef-test")...); err != nil {
 		t.Fatalf("%v\n%s", err, output)
 	}
 	manifest := readManifest(t, bundle)
 	sidecar, _ := manifest["extractor"].(map[string]any)
 	if sidecar == nil || sidecar["version"] != "0.9.0" || sidecar["file"] != "auto-pigeon-extractor" ||
-		sidecar["license"] != "AGPL-3.0-only" {
+		sidecar["license"] != "LicenseRef-test" || sidecar["source_commit"] != strings.Repeat("ab", 20) {
 		t.Fatalf("extractor = %v", sidecar)
+	}
+	if _, err := os.Stat(filepath.Join(bundle, "LICENSE-auto-pigeon-extractor.txt")); err != nil {
+		t.Errorf("the extractor's licence file is not in the bundle: %v", err)
 	}
 	if info, err := os.Stat(filepath.Join(bundle, "auto-pigeon-extractor")); err != nil || info.Mode().Perm()&0o111 == 0 {
 		t.Errorf("the extractor is not an executable file in the bundle: %v", err)

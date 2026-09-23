@@ -1,83 +1,139 @@
 name: release
 
-# Building a release and PUBLISHING one are two decisions, and this workflow
-# keeps them two. `build.yml` remains the per-push verification workflow and
-# still publishes nothing and holds no credential; this one is the only place
-# in this repository with `contents: write`, on one job, reached only by an
-# authorized tag or an explicit manual publish.
+# Every push to main is a development PRERELEASE, tagged v1.<commit-count>, of
+# the Companion WITH the Auto-Pigeon Extractor beside it (NEW_247A).
 #
-# # What this does NOT do
+# Two programs, built separately, put in one archive: the Companion from this
+# commit, the extractor from the ONE commit `build/aue-pin.json` names, with the
+# extractor's own procedure (`scripts/build-release.sh`), never its default
+# branch, a tag, a release asset or `latest`. Nothing is linked into anything
+# and nothing downloads a program at run time; the Companion checks the
+# extractor's digest against `bundle-manifest.json` before it runs it.
 #
-# It does not sign. There is no Apple Developer ID and no Authenticode
-# certificate for this project, so the artifacts are unsigned, macOS shows a
-# Gatekeeper warning and Windows shows SmartScreen on first run — exactly what
-# `companion security residual` already says, with an owner and a review date.
-# `SHA256SUMS` makes a corrupted or truncated download detectable and is not a
-# signature, and the release notes say so rather than implying more.
+# # What decides, and what only runs
 #
-# # The extractor is not built here and is not IN here
+# Every decision — the pin, the AUCOM x AUE target join, the bundle layout, the
+# archive checks, the release manifest, the upload list, whether a rerun may
+# touch an existing release — is `build/release-plan.py`, which the tests in
+# cmd/companion drive. This file carries no target list, no bundle format and
+# no version arithmetic of its own; `release_contract_test.go` fails if it
+# grows one.
 #
-# `no-embedded-extractor` in `build.yml` is the gate and stays. What a release
-# does is put the two SEPARATELY BUILT programs in one archive, as two files
-# under two licences: `build/bundle-sidecar.sh --extractor <file>` places an
-# Auto-Pigeon Extractor build beside the Companion and lists its digest in
-# `bundle-manifest.json`, which the Companion checks before running it. The
-# Companion downloads no program, so the bundle is the only way a user gets it.
+# # Triggers
 #
-# TODO (after the repositories move to the `auto-pigeon` organisation): a job
-# here that checks out the extractor's repository at a pinned tag, builds it
-# with its own scripts/build-release.sh for each platform, and passes each
-# binary to the bundle step below. Not wired yet because the extractor
-# repository is private and reading it from this workflow needs an access
-# token that would have to be replaced when the repositories move. Until then
-# these bundles carry no extractor, and their manifests say so.
+#   push to main       test, build every target, accept natively, PUBLISH a prerelease
+#   workflow_dispatch  build and accept only — unless `publish` (main only), or
+#                      `promote: v1.N`, which turns an existing verified
+#                      prerelease into a release WITHOUT rebuilding anything
+#   pull request       not here: build.yml tests and cross-builds every pull
+#                      request and holds no credential
 #
-# # Why the packaging runs on Linux
+# # Credentials
 #
-# The Companion is pure Go with an embedded frontend, and `build/release.sh`
-# cross-builds all six targets with `CGO_ENABLED=0`. The macOS `.app` layout is
-# made by a shell script, not by Xcode. The two things that WOULD need a native
-# runner — the Inno Setup installer and macOS notarization — are skeletons with
-# no certificate behind them, and are not produced here; `build.yml`'s TODOs say
-# the same. The TESTS do run natively, on all three operating systems, in the
-# `verify` job below, and that is where the native claim is made.
+# `contents: read` everywhere, and `contents: write` on `publish` alone. The
+# extractor's repository is private: `aue` reads it with the AUE_CHECKOUT_TOKEN
+# secret — a fine-grained token (or GitHub App token) with read-only Contents
+# on that one repository — which no other job sees, which is not persisted in
+# the checkout, and which is never printed. Without it the run FAILS with the
+# setup instruction; it never publishes a Companion-only archive instead.
 #
-# # Why no third-party actions
+# # Idempotent reruns
 #
-# Only `actions/checkout` and `actions/setup-go`, both pinned by commit SHA and
-# both the ones `build.yml` already uses. The release is created with the `gh`
-# CLI the runners already carry, so the set of code with write access to this
-# repository's releases is: this file.
+# Everything is reproducible: both programs are `CGO_ENABLED=0 -trimpath`, and
+# every archive is written with fixed times, order and permissions. A rerun of
+# the same commit rebuilds the same bytes; `publish` compares them with the
+# digests GitHub reports for the assets already attached, uploads only what is
+# missing, and FAILS on any difference. Nothing overwrites an attached asset.
+#
+# # Signing
+#
+# None. There is no Apple Developer ID and no Authenticode certificate, and
+# `SHA256SUMS` is corruption evidence, not a signature. The release notes say so.
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [main]
   workflow_dispatch:
     inputs:
       publish:
-        description: 'Attach the artifacts to a GitHub Release. Off means build and verify only.'
+        description: 'Publish the prerelease v1.<count> (main only). Off means build and accept only.'
         required: false
         default: false
         type: boolean
+      promote:
+        description: 'Promote an existing verified prerelease, e.g. v1.150, to a release. Builds nothing.'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
+
+concurrency:
+  group: release-${{ github.sha }}
+  cancel-in-progress: false
 
 env:
   GO_VERSION: "1.26.8"
 
 jobs:
-  # Native tests, on the three operating systems, because %AppData%, ~/Library,
-  # the .exe suffix, the Windows process tree and the PowerShell path picker are
-  # not things a Linux runner exercises.
+  plan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      mode: ${{ steps.plan.outputs.mode }}
+      publish: ${{ steps.plan.outputs.publish }}
+      aue_repository: ${{ steps.pin.outputs.repository }}
+      aue_commit: ${{ steps.pin.outputs.commit }}
+      aulibs_repository: ${{ steps.pin.outputs.aulibs_repository }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # The version is 1.<commit-count>, so the whole history is needed.
+          fetch-depth: 0
+      - id: pin
+        name: The extractor pin is a full commit SHA
+        run: |
+          set -euo pipefail
+          python3 build/release-plan.py pin | tee -a "$GITHUB_OUTPUT"
+      - id: plan
+        name: Version and mode
+        env:
+          PROMOTE: ${{ inputs.promote }}
+          PUBLISH_INPUT: ${{ inputs.publish }}
+        run: |
+          set -euo pipefail
+          version="1.$(git rev-list --count HEAD)"
+          mode=build publish=false
+          if [ -n "${PROMOTE:-}" ]; then
+            mode=promote publish=true
+          elif [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF" = refs/heads/main ]; then
+            publish=true
+          elif [ "${PUBLISH_INPUT:-false}" = true ]; then
+            if [ "$GITHUB_REF" != refs/heads/main ]; then
+              echo "::error::publish is for main only: v${version} on another branch would name a different commit than main's v${version}"
+              exit 1
+            fi
+            publish=true
+          fi
+          {
+            echo "version=${version}"
+            echo "mode=${mode}"
+            echo "publish=${publish}"
+          } | tee -a "$GITHUB_OUTPUT"
+
+  # Native tests, on the three operating systems.
   verify:
+    needs: plan
+    if: needs.plan.outputs.mode != 'promote'
     name: verify (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
@@ -85,144 +141,281 @@ jobs:
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version: ${{ env.GO_VERSION }}
-      - name: go vet
-        run: go vet ./...
-      - name: go test
-        run: go test ./...
+      - run: go vet ./...
+      - run: go test ./...
 
-  # The pure-Go six-target cross-build, unchanged and still green. A release
-  # that could not cross-build is a release with a hole in it.
-  cross-build:
+  # The extractor, from the pinned commit, with its own gates and its own
+  # release procedure. The only job that can read its repository.
+  aue:
+    needs: plan
+    if: needs.plan.outputs.mode != 'promote'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: The extractor repository can be read
+        env:
+          AUE_CHECKOUT_TOKEN: ${{ secrets.AUE_CHECKOUT_TOKEN }}
+        run: |
+          if [ -z "${AUE_CHECKOUT_TOKEN:-}" ]; then
+            echo "::error::AUE_CHECKOUT_TOKEN is not set. ${{ needs.plan.outputs.aue_repository }} is private: add a repository secret AUE_CHECKOUT_TOKEN holding a fine-grained token (or GitHub App installation token) with READ-ONLY 'Contents' on that one repository. Nothing is published without the extractor."
+            exit 1
+          fi
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          path: aucom
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: ${{ needs.plan.outputs.aue_repository }}
+          ref: ${{ needs.plan.outputs.aue_commit }}
+          token: ${{ secrets.AUE_CHECKOUT_TOKEN }}
+          persist-credentials: false
+          # The extractor's version is its own 1.<commit-count>.
+          fetch-depth: 0
+          path: aue
+      - id: aue
+        name: The checkout is the pinned commit, and names the AULIBS it was built against
+        run: |
+          set -euo pipefail
+          python3 aucom/build/release-plan.py aue-checkout --pin aucom/build/aue-pin.json --aue-dir aue | tee -a "$GITHUB_OUTPUT"
+      # Public, and at the exact commit the extractor's committed data records,
+      # so its `sync-aulibs.sh --check` compares against the bytes it embedded
+      # rather than against whatever AULIBS main is today.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: ${{ needs.plan.outputs.aulibs_repository }}
+          ref: ${{ steps.aue.outputs.aulibs_commit }}
+          persist-credentials: false
+          fetch-depth: 0
+          path: aulibs
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+      - name: The extractor's own gates
+        working-directory: aue
+        env:
+          AULIBS_DIR: ${{ github.workspace }}/aulibs
+        run: |
+          set -euo pipefail
+          go build ./...
+          ./scripts/test-fast.sh
+      - name: The extractor's own release procedure, twice and compared
+        working-directory: aue
+        env:
+          AULIBS_DIR: ${{ github.workspace }}/aulibs
+          VERSION: ${{ steps.aue.outputs.version }}
+          COMMIT: ${{ needs.plan.outputs.aue_commit }}
+        run: |
+          set -euo pipefail
+          ./scripts/build-release.sh --out "$RUNNER_TEMP/aue-release" --version "$VERSION" --build-id "$COMMIT" --verify
+          ./scripts/check-release-manifest.sh "$RUNNER_TEMP/aue-release" "$VERSION"
+          ./scripts/stage-release-assets.sh --dir "$RUNNER_TEMP/aue-release" --version "$VERSION" \
+            --commit "$COMMIT" --list-out "$RUNNER_TEMP/aue-upload-list.txt"
+          mkdir -p "$RUNNER_TEMP/aue-release/targets"
+          go run ./internal/release/cmd/aue-release targets > "$RUNNER_TEMP/aue-release/targets/published.txt"
+          go run ./internal/release/cmd/aue-release targets --candidates --reasons > "$RUNNER_TEMP/aue-release/targets/candidates.txt"
+          go run ./internal/release/cmd/aue-release targets --unsupported > "$RUNNER_TEMP/aue-release/targets/unsupported.txt"
+          echo "$VERSION" > "$RUNNER_TEMP/aue-release/targets/version.txt"
+      # The binaries, their manifest, their licence and the target answer. Not
+      # the extractor's source archive or aggregate: this workflow publishes
+      # neither.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: aue-release
+          path: |
+            ${{ runner.temp }}/aue-release/auto-pigeon-extractor-*-*-*
+            ${{ runner.temp }}/aue-release/candidates/
+            ${{ runner.temp }}/aue-release/release-manifest.json
+            ${{ runner.temp }}/aue-release/LICENSE
+            ${{ runner.temp }}/aue-release/targets/
+            !${{ runner.temp }}/aue-release/*.zip
+            !${{ runner.temp }}/aue-release/*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  # The Companion, every declared target, with the version stamped.
+  aucom:
+    needs: [plan, verify]
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
-          go-version: ${{ env.GO_VERSION }}
-      - name: six targets, no cgo
-        run: |
-          set -euo pipefail
-          for target in windows/amd64 windows/arm64 linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
-            GOOS="${target%/*}" GOARCH="${target#*/}" CGO_ENABLED=0 \
-              go build -o /dev/null ./cmd/companion
-            echo "== ${target}"
-          done
-      # Windows test COMPILATION, from Linux, for both Windows architectures.
-      # It is not a native run and is not reported as one: it is the check that
-      # the build tags still split correctly, which is what stopped Unix-only
-      # signals reaching a Windows build.
-      #
-      # `go vet` rather than `go test -run '^$'`: vet type-checks the _test.go
-      # files too, and `go test` would BUILD the Windows test binaries and then
-      # try to execute them on the Linux runner, which fails with `exec format
-      # error` — a failure about the runner rather than about the code.
-      - name: Windows test files still type-check
-        run: |
-          set -euo pipefail
-          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go vet ./...
-          GOOS=windows GOARCH=arm64 CGO_ENABLED=0 go vet ./...
-
-  publish:
-    needs: [verify, cross-build]
-    if: github.ref_type == 'tag' || inputs.publish
-    runs-on: ubuntu-latest
-    permissions:
-      # The one widening in this file, on the one job that needs it.
-      contents: write
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          # The version is 1.<commit-count>, so the whole history is needed.
           fetch-depth: 0
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version: ${{ env.GO_VERSION }}
-
-      - id: version
-        run: echo "version=1.$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
-
-      - name: Build every target
-        run: ./build/release.sh --out "${RUNNER_TEMP}/dist"
-
-      - name: Assemble one bundle per platform
-        # `build/release.sh` publishes one ARCHIVE per platform — the binary or
-        # the .app, the licences and the native acceptance kit. Each is
-        # unpacked, the bundle manifest (and, once this workflow builds one, the
-        # extractor beside the Companion) are added, and it is repacked. Unpacked rather than rebuilt, so what
-        # ships is the archive the release script produced and checked.
+      - name: Build every declared target
         run: |
           set -euo pipefail
-          version='${{ steps.version.outputs.version }}'
-          mkdir -p "${RUNNER_TEMP}/bundles"
-          for platform in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64 windows-amd64 windows-arm64; do
-            staged="${RUNNER_TEMP}/staged/${platform}"
-            mkdir -p "$staged"
-            archive="${RUNNER_TEMP}/dist/auto-pigeon-companion-${version}-${platform}"
-            if [ -f "${archive}.tar.gz" ]; then
-              tar -xzf "${archive}.tar.gz" -C "$staged"
-            else
-              unzip -q "${archive}.zip" -d "$staged"
+          ./build/release.sh --out "$RUNNER_TEMP/dist" --version '${{ needs.plan.outputs.version }}'
+          go run ./cmd/companion release support --json > "$RUNNER_TEMP/dist/support.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: aucom-dist
+          path: ${{ runner.temp }}/dist/
+          if-no-files-found: error
+          retention-days: 14
+
+  # The join, the bundles, and the release as it will be attached.
+  bundle:
+    needs: [plan, aue, aucom]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      acceptance: ${{ steps.matrix.outputs.acceptance }}
+      aue_version: ${{ steps.matrix.outputs.aue_version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: aue-release
+          path: ${{ runner.temp }}/aue-release
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: aucom-dist
+          path: ${{ runner.temp }}/dist
+      - id: matrix
+        name: Join the two release authorities
+        run: |
+          set -euo pipefail
+          aue_version="$(cat "$RUNNER_TEMP/aue-release/targets/version.txt")"
+          python3 build/release-plan.py matrix --aucom-support "$RUNNER_TEMP/dist/support.json" \
+            --aue-targets "$RUNNER_TEMP/aue-release/targets" --out "$RUNNER_TEMP/matrix.json"
+          python3 build/release-plan.py check-aue --matrix "$RUNNER_TEMP/matrix.json" \
+            --aue-release "$RUNNER_TEMP/aue-release" --aue-version "$aue_version" --out "$RUNNER_TEMP/aue-inputs.json"
+          echo "acceptance=$(python3 build/release-plan.py acceptance-matrix --matrix "$RUNNER_TEMP/matrix.json")" >> "$GITHUB_OUTPUT"
+          echo "aue_version=${aue_version}" >> "$GITHUB_OUTPUT"
+      - name: One bundle per target, checked, and the release
+        run: |
+          set -euo pipefail
+          version='${{ needs.plan.outputs.version }}'
+          python3 build/release-plan.py bundle --matrix "$RUNNER_TEMP/matrix.json" \
+            --aue-inputs "$RUNNER_TEMP/aue-inputs.json" --aucom-dist "$RUNNER_TEMP/dist" \
+            --version "$version" --out "$RUNNER_TEMP/bundles"
+          python3 build/release-plan.py release --matrix "$RUNNER_TEMP/matrix.json" \
+            --aue-inputs "$RUNNER_TEMP/aue-inputs.json" --bundles "$RUNNER_TEMP/bundles" \
+            --version "$version" --commit "$GITHUB_SHA" --go go \
+            --out "$RUNNER_TEMP/release/assets" --notes "$RUNNER_TEMP/release/NOTES.md"
+          cat "$RUNNER_TEMP/release/assets/SHA256SUMS"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release
+          path: ${{ runner.temp }}/release/
+          if-no-files-found: error
+          retention-days: 30
+
+  # The exact archive, unpacked and run on the machine it is for — one native
+  # runner per operating-system family, chosen by release-plan.py.
+  acceptance:
+    needs: [plan, bundle]
+    name: accept ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.bundle.outputs.acceptance) }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release
+          path: ${{ runner.temp }}/release
+      - name: Accept the archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          py=python3
+          [ "$RUNNER_OS" = Windows ] && py=python
+          version='${{ needs.plan.outputs.version }}'
+          "$py" build/release-acceptance.py \
+            --archive "$RUNNER_TEMP/release/assets/auto-pigeon-companion-${version}-${{ matrix.platform }}.zip" \
+            --platform '${{ matrix.platform }}' --version "$version" \
+            --aue-version '${{ needs.bundle.outputs.aue_version }}' \
+            --fixture build/release-fixtures/release-acceptance.apmap \
+            --report "$RUNNER_TEMP/acceptance-${{ matrix.platform }}.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: acceptance-${{ matrix.platform }}
+          path: ${{ runner.temp }}/acceptance-${{ matrix.platform }}.json
+          if-no-files-found: warn
+
+  # The one job that can write. Reached only when `plan` decided to publish:
+  # a push to main, a manual publish on main, or a promotion.
+  publish:
+    needs: [plan, bundle, acceptance]
+    if: >-
+      always() && needs.plan.outputs.publish == 'true' &&
+      (needs.plan.outputs.mode == 'promote' ||
+       (needs.bundle.result == 'success' && needs.acceptance.result == 'success'))
+    runs-on: ubuntu-latest
+    permissions:
+      # The one widening in this file, on the one job that needs it.
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: needs.plan.outputs.mode != 'promote'
+        with:
+          name: release
+          path: ${{ runner.temp }}/release
+
+      - name: Publish the prerelease, or verify the one already there
+        if: needs.plan.outputs.mode != 'promote'
+        run: |
+          set -euo pipefail
+          tag="v${VERSION}"
+          assets="$RUNNER_TEMP/release/assets"
+          existing="$RUNNER_TEMP/existing.tsv"
+          if gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}" > "$RUNNER_TEMP/existing.json" 2>/dev/null; then
+            tagged="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${tag}" --jq .sha)"
+            if [ "$tagged" != "$GITHUB_SHA" ]; then
+              echo "::error::${tag} already names ${tagged}; this build is ${GITHUB_SHA}. Nothing was changed."
+              exit 1
             fi
-            ./build/bundle-sidecar.sh \
-              --platform "$platform" \
-              --version "$version" \
-              --binary-dir "$staged" \
-              --out "${RUNNER_TEMP}/bundles"
-          done
-
-      - name: One archive per platform, plus the operator aggregate
-        run: |
-          set -euo pipefail
-          cd "${RUNNER_TEMP}/bundles"
-          for bundle in */; do
-            name="${bundle%/}"
-            zip -qr "${name}.zip" "$name"
-            rm -rf "$name"
-          done
-          # Per-platform downloads are the primary artifacts: a user should not
-          # download five irrelevant binaries to run one app. The aggregate is
-          # an operator convenience over the SAME bundles, not six loose
-          # executables with ambiguous names.
-          sha256sum ./*.zip > SHA256SUMS
-          zip -qr "${RUNNER_TEMP}/aucom-release.zip" ./*.zip SHA256SUMS
-          cp "${RUNNER_TEMP}/aucom-release.zip" .
-          sha256sum aucom-release.zip >> SHA256SUMS
-          cat SHA256SUMS
-
-      - name: Attach everything to the Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          set -euo pipefail
-          cd "${RUNNER_TEMP}/bundles"
-          tag="${GITHUB_REF_NAME}"
-          if [ "${GITHUB_REF_TYPE:-}" != "tag" ]; then
-            tag="v${VERSION}"
-          fi
-          notes="$(cat <<EOF
-          Auto-Pigeon Companion ${VERSION}, built from ${GITHUB_SHA}.
-
-          Download the ONE archive for your machine. \`aucom-release.zip\` is an operator
-          convenience holding all of them and their checksums; it is not what a user needs.
-
-          **These artifacts are not signed.** There is no Apple Developer ID and no Authenticode
-          certificate for this project, so macOS shows a Gatekeeper warning and Windows shows
-          SmartScreen on first run. \`SHA256SUMS\` makes a corrupted or truncated download
-          detectable; it is not a signature, because anybody who can replace the artifacts can
-          replace the checksum file.
-
-          **Auto-Pigeon Extractor is not inside these archives yet.** It is a separate program under
-          AGPL-3.0 that a release carries beside the Companion; this workflow does not build it yet,
-          so map inspection and APMap conversion are unavailable in these archives. The Companion
-          downloads no program. \`bundle-manifest.json\` in each archive says this in full.
-          EOF
-          )"
-          if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" ./*.zip SHA256SUMS --clobber
+            python3 -c 'import json,sys; [print(f"{a[\"name\"]}\t{a.get(\"digest\") or \"\"}") for a in json.load(open(sys.argv[1]))["assets"]]' \
+              "$RUNNER_TEMP/existing.json" > "$existing"
+            mapfile -t upload < <(python3 build/release-plan.py reconcile --release-dir "$assets" --existing "$existing")
+            if [ "${#upload[@]}" -eq 0 ]; then
+              echo "${tag}: every asset is already attached with the digest this build produced"
+              exit 0
+            fi
+            (cd "$assets" && gh release upload "$tag" "${upload[@]}")
           else
-            gh release create "$tag" ./*.zip SHA256SUMS \
-              --title "Auto-Pigeon Companion ${VERSION}" --notes "$notes"
+            mapfile -t upload < <(python3 build/release-plan.py upload-list --release-dir "$assets")
+            (cd "$assets" && gh release create "$tag" "${upload[@]}" --target "$GITHUB_SHA" --prerelease \
+              --title "Auto-Pigeon Companion ${VERSION} (development prerelease)" \
+              --notes-file "$RUNNER_TEMP/release/NOTES.md")
           fi
+
+      - name: Promote a verified prerelease without rebuilding it
+        if: needs.plan.outputs.mode == 'promote'
+        env:
+          TAG: ${{ inputs.promote }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" > "$RUNNER_TEMP/existing.json"
+          python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); sys.exit(0 if r["prerelease"] else "that release is not a prerelease")' \
+            "$RUNNER_TEMP/existing.json"
+          python3 -c 'import json,sys; [print(f"{a[\"name\"]}\t{a.get(\"digest\") or \"\"}") for a in json.load(open(sys.argv[1]))["assets"]]' \
+            "$RUNNER_TEMP/existing.json" > "$RUNNER_TEMP/existing.tsv"
+          mkdir -p "$RUNNER_TEMP/promote"
+          gh release download "$TAG" --pattern release-manifest.json --dir "$RUNNER_TEMP/promote"
+          commit="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${TAG}" --jq .sha)"
+          python3 build/release-plan.py promote-check --release-dir "$RUNNER_TEMP/promote" \
+            --existing "$RUNNER_TEMP/existing.tsv" --commit "$commit"
+          gh release edit "$TAG" --prerelease=false --latest

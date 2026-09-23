@@ -202,12 +202,35 @@ type bundleManifest struct {
 	} `json:"members"`
 }
 
+// bundleManifestFor says where a release's bundle manifest is for an extractor
+// at path, and the member path it lists the extractor under.
+//
+// Beside the executable on Linux and Windows. On macOS the Companion runs from
+// `<Name>.app/Contents/MacOS/`, so that is where its extractor is too, and the
+// manifest — whose member paths are relative to the archive root — is in
+// `<Name>.app/Contents/Resources/`, inside the app so that dragging the app to
+// /Applications keeps it verifiable (NEW_247A: before this, a macOS bundle put
+// both at the archive root, where a Companion in a .app never looked).
+func bundleManifestFor(path string) (manifest, member string) {
+	dir := filepath.Dir(path)
+	contents := filepath.Dir(dir)
+	app := filepath.Dir(contents)
+	if filepath.Base(dir) == "MacOS" && filepath.Base(contents) == "Contents" &&
+		strings.HasSuffix(strings.ToLower(app), ".app") {
+		return filepath.Join(contents, "Resources", BundleManifestName),
+			filepath.Base(app) + "/Contents/MacOS/" + filepath.Base(path)
+	}
+
+	return filepath.Join(dir, BundleManifestName), filepath.Base(path)
+}
+
 // listedDigest returns the executable's digest and the digest the bundle
-// manifest beside it lists ("" when there is no manifest or it does not list
+// manifest lists for it ("" when there is no manifest or it does not list
 // the file). A manifest that is there and unreadable is an error: a release
 // whose inventory cannot be read is not one to vouch for.
 func (r *Resolver) listedDigest(path string) (digest, listed string, err error) {
-	data, err := os.ReadFile(filepath.Join(filepath.Dir(path), BundleManifestName))
+	manifestPath, name := bundleManifestFor(path)
+	data, err := os.ReadFile(manifestPath)
 	if errors.Is(err, fs.ErrNotExist) {
 		return "", "", nil
 	}
@@ -218,7 +241,6 @@ func (r *Resolver) listedDigest(path string) (digest, listed string, err error) 
 	if err := json.Unmarshal(data, &manifest); err != nil {
 		return "", "", fmt.Errorf("aue: the bundle manifest beside this Companion is not readable: %w", err)
 	}
-	name := filepath.Base(path)
 	for _, member := range manifest.Members {
 		if member.Path == name {
 			listed = member.SHA256
@@ -227,12 +249,14 @@ func (r *Resolver) listedDigest(path string) (digest, listed string, err error) 
 	if listed == "" {
 		return "", "", nil
 	}
-	digest, err = fileDigest(path)
+	digest, err = FileDigest(path)
 
 	return digest, listed, err
 }
 
-func fileDigest(path string) (string, error) {
+// FileDigest is `sha256:<hex>` over a file's bytes, the form a bundle manifest
+// lists.
+func FileDigest(path string) (string, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return "", err

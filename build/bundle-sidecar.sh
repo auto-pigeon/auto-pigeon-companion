@@ -9,9 +9,11 @@ set -euo pipefail
 #
 # From --extractor: a binary BUILT BEFOREHAND from the extractor's own
 # repository (its scripts/build-release.sh), for exactly this platform. The
-# release workflow is meant to build it; until it does, a bundle made without
-# --extractor is complete, carries no extractor, and says so in its manifest.
-# Nothing here, and nothing in the Companion, downloads a program.
+# release workflow builds it from the commit `build/aue-pin.json` names and
+# passes it here with that commit, the extractor's own LICENSE and licence
+# identifier, and the repository it came from. A bundle made without --extractor is complete,
+# carries no extractor, and says so in its manifest. Nothing here, and nothing
+# in the Companion, downloads a program.
 #
 # # What this script must never do
 #
@@ -24,7 +26,8 @@ set -euo pipefail
 # usage:
 #   build/bundle-sidecar.sh --platform <goos>-<goarch> --version <v> \
 #       --binary-dir <dir> --out <dir> \
-#       [--extractor <file> --extractor-version <v> --extractor-source <url>]
+#       [--extractor <file> --extractor-version <v> --extractor-commit <sha> \
+#        --extractor-license <file> [--extractor-spdx <id>] --extractor-source <url>]
 
 PLATFORM=""
 VERSION=""
@@ -33,6 +36,9 @@ OUT=""
 EXTRACTOR=""
 EXTRACTOR_VERSION=""
 EXTRACTOR_SOURCE=""
+EXTRACTOR_LICENSE=""
+EXTRACTOR_SPDX="LicenseRef-auto-pigeon-extractor"
+EXTRACTOR_COMMIT=""
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -45,6 +51,9 @@ while [ $# -gt 0 ]; do
         --extractor)         EXTRACTOR="${2:?--extractor needs a value}"; shift 2 ;;
         --extractor-version) EXTRACTOR_VERSION="${2:?--extractor-version needs a value}"; shift 2 ;;
         --extractor-source)  EXTRACTOR_SOURCE="${2:?--extractor-source needs a value}"; shift 2 ;;
+        --extractor-spdx)    EXTRACTOR_SPDX="${2:?--extractor-spdx needs a value}"; shift 2 ;;
+        --extractor-license) EXTRACTOR_LICENSE="${2:?--extractor-license needs a value}"; shift 2 ;;
+        --extractor-commit)  EXTRACTOR_COMMIT="${2:?--extractor-commit needs a value}"; shift 2 ;;
         -h|--help)    sed -n '/^# usage:/,/^$/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)            echo "error: unknown argument: $1" >&2; exit 2 ;;
     esac
@@ -66,9 +75,9 @@ mkdir -p "$BUNDLE"
 # The Companion, and its macOS app bundle when there is one.
 cp -R "${BINARY_DIR}/." "$BUNDLE/"
 
-# Licences and notices. BOTH, always: the Companion is MIT and the extractor is
-# AGPL-3.0, and a user must be able to tell whose bytes they are running even
-# when the bundle carries only one of the two programs.
+# Licences and notices. The Companion's always; the extractor's own licence file
+# is added beside its binary by bundle-manifest.py, so a user can tell whose
+# terms each of the two programs is under.
 cp "${repo_root}/LICENSE" "${BUNDLE}/LICENSE-auto-pigeon-companion.txt"
 cp "${repo_root}/THIRD_PARTY_NOTICES.md" "${BUNDLE}/THIRD_PARTY_NOTICES.md"
 
@@ -78,6 +87,9 @@ python3 "${repo_root}/build/bundle-manifest.py" \
     --bundle "$BUNDLE" \
     --extractor "$EXTRACTOR" \
     --extractor-version "$EXTRACTOR_VERSION" \
+    --extractor-license "$EXTRACTOR_LICENSE" \
+    --extractor-commit "$EXTRACTOR_COMMIT" \
+    --extractor-spdx "$EXTRACTOR_SPDX" \
     --extractor-source "$EXTRACTOR_SOURCE"
 
 echo "== ${BUNDLE}"

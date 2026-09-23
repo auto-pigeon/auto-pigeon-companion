@@ -74,11 +74,15 @@ AUE file> --extractor-version <v> --extractor-source <url>` copies a PREBUILT
 extractor into the release archive and `build/bundle-manifest.py` lists it with
 its digest and licence. Without `--extractor` the manifest says
 `extractor: null` and `extractor_absent`. Nothing in the build downloads it
-either. The GitHub release workflow does **not** build AUE yet — deliberately
-deferred until the repositories move from `andrea-dintino` to the `auto-pigeon`
-organisation, because the AUE repository is private and reading it from this
-repository's CI needs a token that would have to be replaced after the move. So
-current release archives carry no extractor, and say so.
+either. Since `NEW_247A`, `.github/workflows/release.yml` builds AUE on every
+push to main from the ONE commit `build/aue-pin.json` names, with AUE's own
+`scripts/build-release.sh`, and bundles it; the bundle step reads both
+programs' executable headers and refuses a pair built for different machines.
+On macOS the extractor goes inside the app, in `Contents/MacOS/`, and the
+manifest goes in `Contents/Resources/` (`aue.bundleManifestFor`), because that
+is where a Companion in a `.app` looks. The rules for the release itself are
+in `aucom.release-verification`; shared ADR-0029 is the cross-repository
+record.
 
 ### What embedding cost, and why it is three separate faults
 

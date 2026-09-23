@@ -103,3 +103,32 @@ does not have.
 support` prints the game families beside the platforms and calls both of them
 experimental, in `internal/maturity`'s own sentences. A platform row and a
 family row are different axes and neither is allowed to stand in for the other.
+
+## The per-push bundled release (`NEW_247A`)
+
+`.github/workflows/release.yml` publishes a prerelease `v1.<count>` on every
+push to main, and **every decision it makes is `build/release-plan.py`**: the
+pin, the AUCOM × AUE target join, the bundle layout, the archive checks, the
+release manifest, the upload list, and whether a rerun may touch an existing
+release. The YAML holds no target list, no bundle format and no version
+arithmetic. `cmd/companion/release_contract_test.go` fails if it grows one, and
+fails for each fault the prompt listed.
+
+**The join verdict and the native-support state are two axes.**
+`bundled_release`, `build_only` and `refused` answer one question: may this
+archive be a download? That depends on both repositories' release
+authorities. `StateOf` answers a different one: has this program been run on
+this hardware? A `bundled_release` darwin/amd64 whose Companion state is
+`build_only` is honest, and the release notes print both. Do not merge them.
+
+**CI native acceptance is evidence for one run, not a verification record.**
+`build/release-acceptance.py` runs the exact archive on one hosted runner per
+OS family (`NATIVE_RUNNERS`), and refuses to run on a machine the archive is
+not for. A pass there is not written into `native-support.json`. Only a
+returned kit bundle is.
+
+**Reruns compare and never overwrite.** Archives are written by
+`releaselib.write_zip` with fixed times, order and permissions, so one commit
+gives one set of bytes. `reconcile` fails on any attached asset whose digest
+differs, is missing, or was not produced by the build.
+

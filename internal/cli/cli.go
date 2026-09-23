@@ -201,7 +201,7 @@ var commands = []Command{
 		Run:     runLaunch,
 	},
 	{
-		Name: "extractor", Usage: "status | version",
+		Name: "extractor", Usage: "status | version | convert <file.apmap>",
 		Summary: "the separately licensed auto-pigeon-extractor (AUE) shipped beside this program",
 		Run:     runExtractor,
 	},

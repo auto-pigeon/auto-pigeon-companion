@@ -10,14 +10,18 @@ package cli
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/assetref"
 	"github.com/andrea-dintino/auto-pigeon-companion/internal/aue"
 )
 
 const extractorUsage = `usage:
   companion extractor status    which extractor this Companion would run, and what checked it
   companion extractor version   run the extractor and print its version
+  companion extractor convert <file.apmap>
+                                turn an APMap into the .map a compiler reads, the way a build does
 `
 
 func runExtractor(env *Env, args []string) int {
@@ -35,6 +39,8 @@ func runExtractor(env *Env, args []string) int {
 		return extractorStatus(env, args[1:])
 	case "version":
 		return extractorVersion(env, args[1:])
+	case "convert":
+		return extractorConvert(env, args[1:])
 	case "plan", "install":
 		fmt.Fprintf(env.Stderr, "error: `companion extractor %s` was removed: the extractor ships beside the "+
 			"Companion in its release, and nothing downloads it.\n", args[0])
@@ -111,6 +117,57 @@ func extractorVersion(env *Env, args []string) int {
 		return fail(env, err)
 	}
 	fmt.Fprintln(env.Stdout, strings.TrimSpace(string(stdout)))
+
+	return 0
+}
+
+// extractorConvert converts one APMap through the SAME path a build takes —
+// `assetref.ConvertAPMapInputs` over the resolved runner — so a release's
+// acceptance run, or a person checking their install, exercises the real
+// subprocess, the digest check and the handshake rather than a second caller
+// that could disagree with the build (NEW_247A). The `.map` is written where a
+// build writes it: `converted-<name>/` beside the input.
+func extractorConvert(env *Env, args []string) int {
+	set := newFlagSet(env, "extractor convert")
+	rest, code, ok := parseFlags(env, set, args)
+	if !ok {
+		return code
+	}
+	if len(rest) != 1 || !strings.EqualFold(filepath.Ext(rest[0]), ".apmap") {
+		fmt.Fprint(env.Stderr, "error: name one .apmap file\n\n"+extractorUsage)
+
+		return 2
+	}
+	input, err := filepath.Abs(rest[0])
+	if err != nil {
+		return fail(env, err)
+	}
+
+	ctx, stop := signalContext()
+	defer stop()
+
+	runner, err := extractorResolver().Resolve(ctx)
+	if err != nil {
+		return fail(env, err)
+	}
+	name := strings.TrimSuffix(filepath.Base(input), filepath.Ext(input))
+	converted, _, err := assetref.ConvertAPMapInputs(ctx, runner, map[string]string{name: input}, nil)
+	if err != nil {
+		return fail(env, err)
+	}
+	digest, err := aue.FileDigest(converted[name])
+	if err != nil {
+		return fail(env, err)
+	}
+	provenance := runner.Provenance()
+	verified := "UNVERIFIED"
+	if provenance.Verified {
+		verified = "verified against the bundle manifest"
+	}
+	fmt.Fprintln(env.Stdout, converted[name])
+	fmt.Fprintf(env.Stdout, "  %s\n", digest)
+	fmt.Fprintf(env.Stdout, "  converted by the %s extractor %s (protocol %s), %s\n",
+		provenance.Mode, provenance.Version, provenance.Protocol, verified)
 
 	return 0
 }
