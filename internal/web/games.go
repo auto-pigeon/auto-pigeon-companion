@@ -411,7 +411,7 @@ func reviewOf(plan publish.Plan) profileReview {
 	meta := document.Metadata()
 	review := profileReview{Name: meta.Name, Version: meta.Version, DeploymentTrust: plan.DeploymentTrust,
 		Trust: string(plan.Trust), Digest: plan.Digest, FirstInstall: plan.FirstInstall, Escalates: plan.Escalates(),
-		Yanked: plan.Yanked, YankReason: plan.YankReason, Report: profile.PermissionReport(document, plan.Trust)}
+		Yanked: plan.Yanked, YankReason: plan.YankReason, Report: profile.ProfileReport(document, plan.Trust)}
 	if engineDoc, ok := document.(*profile.EngineProfile); ok {
 		review.Runtime = engineDoc.Runtime
 	}

@@ -99,6 +99,10 @@
     renderBackendChoice($("sign-in-backend"), body);
     $("account-email").textContent = body.authenticated ? body.email || "signed in" : "";
     $("account-signed-out").hidden = Boolean(body.authenticated);
+    $("user-sign-in").hidden = Boolean(body.authenticated);
+    $("sign-out").hidden = !body.authenticated;
+    $("user-button").setAttribute("aria-label", body.authenticated ? `Account — signed in as ${body.email || "you"}` : "Account — not signed in");
+    $("user-button").title = $("user-button").getAttribute("aria-label");
     $("account-signed-out").textContent = body.session_expired ? "session expired" : "not signed in";
     $("account-menu").hidden = !body.authenticated;
     $("sync-help").hidden = !body.authenticated;
@@ -304,8 +308,12 @@
   // drops the navigation and the hash names the profile, which `show` hands to
   // `areas.profiles.refresh(argument)` (AUCOM/AUT 246I defect 2).
   const view = new URLSearchParams(window.location.search).get("view");
-  if (view === "new-profile" || view === "profile") {
+  if (view === "new-profile") {
     document.body.classList.add("single-view");
+  } else if (view === "profile") {
+    // An older link to a profile's page, from when Configure opened its own
+    // tab: the same page, now a sub-page of Profiles with the navigation kept.
+    window.history.replaceState(null, "", window.location.pathname + window.location.hash);
   }
 
   // Categories that decide what is drawn below them are tabs.

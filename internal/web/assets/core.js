@@ -561,19 +561,6 @@ function bytes(n) {
   return `${value < 10 && unit > 0 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
 }
 
-// A permission as a person reads it: the sentence, and how much it gives away.
-// Its id is what a grant is recorded against, and stays on the wire (NEW_244D,
-// operator: no internal ids or digests anywhere on the page).
-function permissionBlock(permission) {
-  const head = el("p");
-  head.append(el("strong", { text: permission.summary || "An undescribed permission" }));
-  if (permission.risk) {
-    head.append(document.createTextNode(" "));
-    head.append(badge(permission.risk + " risk", permission.risk === "high" ? "failed" : permission.risk === "medium" ? "warning" : "queued"));
-  }
-  return el("div", { className: "permission", children: [head] });
-}
-
 // programFileName is a declared program file as it is named on THIS machine:
 // `{platform.exe_suffix}` is template syntax for the profile's author, and a
 // hint that printed it asked a person to read a placeholder (NEW_244D).
@@ -651,7 +638,7 @@ function confirmModal({ title, body, confirm = "Continue", cancel = "Cancel" }) 
 Object.assign(AUCOM, {
   $, el, api, announce, setMessage, busy, withBusy, confirmModal,
   record, renderActivity, clearActivity, pathField, downloadButton, tabsFor,
-  badge, maturityBadge, maturityNote, bytes, when, terminal, permissionBlock, programFileName, folderTitle,
+  badge, maturityBadge, maturityNote, bytes, when, terminal, programFileName, folderTitle,
   openCompatibilityReport, wireCompatibilityReport,
   // Translation (i18n.js, loaded first). `t("English {slot}", {slot})`.
   t: (english, values) => window.AUCOM_I18N.t(english, values),

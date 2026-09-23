@@ -430,10 +430,21 @@ func TestPermissionsAreOrderedWithTheWorstFirst(t *testing.T) {
 	}
 }
 
-func TestPermissionReportNamesThePublisherAndTheLicence(t *testing.T) {
+func TestProfileReportNamesThePublisherAndTheLicence(t *testing.T) {
 	p := decodeFixture(t, "community/user-q1-toolchain.tool.json")
-	report := PermissionReport(p, TrustCommunity)
-	for _, want := range []string{"A Companion user", "GPL-2.0-or-later", "Community", "Run "} {
+	report := ProfileReport(p, TrustCommunity)
+	for _, want := range []string{"A Companion user", "GPL-2.0-or-later", "Community"} {
+		if !strings.Contains(report, want) {
+			t.Errorf("the report does not mention %q:\n%s", want, report)
+		}
+	}
+	// The permission list is gone from every review (operator, 2026-09-23).
+	for _, gone := range []string{"If you approve it", "Run "} {
+		if strings.Contains(report, gone) {
+			t.Errorf("the report still recites permissions (%q):\n%s", gone, report)
+		}
+	}
+	for _, want := range []string{} {
 		if !strings.Contains(report, want) {
 			t.Errorf("the report does not mention %q:\n%s", want, report)
 		}

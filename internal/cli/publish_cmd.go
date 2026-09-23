@@ -113,12 +113,6 @@ func printPublishPreview(env *Env, preview publish.Preview) int {
 		}
 		fmt.Fprintf(env.Stdout, "    %-44s %s\n", disclosure.Path, disclosure.Value)
 	}
-	if len(preview.Permissions) > 0 {
-		fmt.Fprintln(env.Stdout, "\nWhoever installs it will be asked to allow:")
-		for _, permission := range preview.Permissions {
-			fmt.Fprintf(env.Stdout, "    [%s] %s\n", permission.Risk, permission.Summary)
-		}
-	}
 	fmt.Fprintf(env.Stdout, "\n%s\n", preview.LicenceNote)
 	fmt.Fprintln(env.Stdout, "\nNothing has been sent. Add --confirm to `companion toolchain publish` to send it.")
 
@@ -437,13 +431,6 @@ func printPlan(env *Env, plan publish.Plan) {
 		}
 	}
 
-	fmt.Fprintln(env.Stdout, "\n  what it asks this machine for")
-	if len(plan.Permissions) == 0 {
-		fmt.Fprintln(env.Stdout, "    nothing")
-	}
-	for _, permission := range plan.Permissions {
-		fmt.Fprintf(env.Stdout, "    [%s] %s\n", permission.Risk, permission.Summary)
-	}
 	fmt.Fprintf(env.Stdout, "\n%s\n", publish.LicenceNote)
 }
 

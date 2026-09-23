@@ -18,7 +18,6 @@
 
   let cursor = "";
   let current = null; // { id, readiness }
-  let reviewing = null; // the plan id awaiting approval
 
   const familyNames = { quake1: "Quake", quake2: "Quake II", quake3: "Quake III" };
 
@@ -72,31 +71,48 @@
     );
   }
 
+  // One game, one compact row: up to 50 games are listed at once (operator,
+  // 2026-09-23), so everything a person scans is on one line and Join is on the
+  // row itself. The title opens the game's own page.
   function gameRow(game) {
     const live = game.state === "live";
-    const head = el("div", { className: "row-head" });
-    const title = el("strong", { text: game.title });
-    head.append(title);
-    head.append(badge(live ? "live" : "ended", live ? "running" : "cancelled"));
+    const title = el("button", { className: "link game-title", text: game.title, attrs: { type: "button" } });
+    title.addEventListener("click", () => openGame(game.id));
     const facts = [
-      game.host_nickname ? `Hosted by ${game.host_nickname}` : "",
-      game.map_name ? `Map: ${game.map_name}` : "",
-      familyNames[game.game_family] || game.game_family,
-      players(game),
-      `heard from ${freshness(game.stale_for_ms)}`,
+      game.host_nickname,
+      game.map_name,
+      engineName(game),
+      playersShort(game),
+      game.join_content?.state === "required" ? bytes(game.join_content.total_bytes) : "",
+      freshness(game.stale_for_ms),
     ].filter(Boolean);
-    const line = el("p", { className: "muted", text: facts.join(" · ") });
-    const content = contentLine(game.join_content);
-    const open = el("button", { text: live && game.joinable ? "Open" : "View", attrs: { type: "button" } });
-    open.addEventListener("click", () => openGame(game.id));
+    const actions = [];
+    if (live && game.joinable) {
+      const join = el("button", { className: "primary", text: "Join", attrs: { type: "button" } });
+      join.addEventListener("click", async () => {
+        await openGame(game.id, { quiet: true });
+        if (current?.id === game.id) await joinNow($("games-primary"));
+      });
+      actions.push(join);
+    } else {
+      actions.push(badge(live ? "live" : "ended", live ? "running" : "cancelled"));
+    }
     return el("li", {
-      children: [head, line, el("p", { className: "muted", text: content }), el("div", { className: "row-actions", children: [open] })],
+      className: "game-row",
+      children: [title, el("span", { className: "muted game-facts", text: facts.join(" · ") }), ...actions],
     });
   }
 
-  function players(game) {
-    if (!game.players_observable) return "players: not reported by the host's server";
-    return `${game.players_current} of ${game.players_max} players, as the host reports it`;
+  function engineName(game) {
+    const runtime = String(game.engine_runtime || "");
+    const known = { vkquake: "vkQuake", quakespasm: "QuakeSpasm", ironwail: "Ironwail", darkplaces: "DarkPlaces", fteqw: "FTEQW" };
+    const name = known[runtime.toLowerCase()] || runtime;
+    return [name, game.engine_version].filter(Boolean).join(" ");
+  }
+
+  function playersShort(game) {
+    if (!game.players_observable) return "";
+    return `${game.players_current}/${game.players_max} players`;
   }
 
   function freshness(ms) {
@@ -104,17 +120,6 @@
     if (seconds < 5) return "just now";
     if (seconds < 120) return `${seconds} seconds ago`;
     return `${Math.round(seconds / 60)} minutes ago`;
-  }
-
-  function contentLine(content) {
-    switch (content?.state) {
-      case "required":
-        return `Map files to download: ${bytes(content.total_bytes)}`;
-      case "not_required":
-        return "No map files needed beyond your own game, the host says";
-      default:
-        return "The host did not say which map files this game needs";
-    }
   }
 
   // --- one game ----------------------------------------------------------------
@@ -127,7 +132,6 @@
     $("games-detail").hidden = false;
     $("games-action").hidden = true;
     $("games-action").replaceChildren();
-    reviewing = null;
     if (!quiet) busy("games-detail-message", "Checking what this computer needs…");
     const { ok, status, body } = await api("/api/v1/games/" + encodeURIComponent(id));
     if (!ok) {
@@ -148,27 +152,39 @@
     current = { id, readiness };
     $("games-detail-title").textContent = readiness.title || "Game";
 
-    const facts = $("games-facts");
-    facts.replaceChildren();
-    const fact = (term, value) => {
-      if (!value) return;
-      facts.append(el("dt", { text: term }), el("dd", { text: value }));
-    };
-    fact("Hosted by", readiness.host);
-    fact("Map", readiness.map_name);
-    fact("Engine", readiness.engine?.name);
-    fact("Players", readiness.players);
-    fact("Address", readiness.endpoint ? `${readiness.endpoint} (${reachability(readiness.details?.reachability)})` : "not shown to your account");
-    fact("Heard from the host", readiness.freshness);
-    if (readiness.package_bytes) fact("Map files", bytes(readiness.package_bytes));
+    // The facts on one line, each once: the engine is named here and not
+    // again by the checklist below.
+    const address = readiness.endpoint
+      ? `${readiness.endpoint} (${reachability(readiness.details?.reachability)})`
+      : "address not shown to your account";
+    $("games-facts").replaceChildren(el("p", {
+      className: "muted",
+      text: [
+        readiness.host ? `Hosted by ${readiness.host}` : "",
+        readiness.map_name,
+        readiness.engine?.name,
+        readiness.players,
+        address,
+        readiness.package_bytes ? `${bytes(readiness.package_bytes)} of map files` : "",
+        readiness.freshness ? `heard ${readiness.freshness}` : "",
+      ].filter(Boolean).join(" · "),
+    }));
 
+    // What is already fine folds into one line; only what is left is listed.
     const steps = $("games-steps");
     steps.replaceChildren();
-    for (const step of readiness.steps || []) {
-      const item = el("li", { className: "join-step" + (step.done ? " done" : "") + (step.id === readiness.next ? " next" : "") });
+    const done = (readiness.steps || []).filter((step) => step.done);
+    if (done.length) {
+      steps.append(el("li", { className: "join-step done", children: [
+        el("p", { className: "muted", text: "Ready: " + done.map((step) => step.title).filter((title, i, all) => all.indexOf(title) === i).join(" · ") }),
+      ] }));
+    }
+    for (const step of (readiness.steps || []).filter((step) => !step.done)) {
+      const next = step.id === readiness.next;
+      const item = el("li", { className: "join-step" + (next ? " next" : "") });
       const head = el("div", { className: "row-head" });
       head.append(el("strong", { text: step.title }));
-      head.append(badge(step.done ? "done" : step.id === readiness.next ? "next" : "waiting", step.done ? "ok" : step.id === readiness.next ? "warning" : "cancelled"));
+      head.append(badge(next ? "next" : "waiting", next ? "warning" : "cancelled"));
       item.append(head);
       if (step.detail) item.append(el("p", { className: "muted", text: step.detail }));
       if (step.warning) item.append(el("p", { className: "join-warning", text: step.warning }));
@@ -240,8 +256,8 @@
       window.AUCOM.openSignIn(button);
       return;
     }
-    if (readiness.state === "ready_for_review") {
-      await review(button);
+    if (readiness.state === "ready_for_review" || nextStep()?.action === "download_join_content") {
+      await joinNow(button);
       return;
     }
     const step = nextStep();
@@ -313,7 +329,6 @@
       }),
     ];
     if (review.yanked) lines.push(el("p", { className: "join-warning", text: `Its publisher withdrew this version: ${review.yank_reason || "no reason given"}.` }));
-    lines.push(el("h4", { text: "What it may do on this computer" }), el("pre", { className: "output", text: review.report }));
     lines.push(el("div", { className: "row-actions", children: [install, cancel] }));
     actionPanel(lines);
     cancel.addEventListener("click", () => ($("games-action").hidden = true));
@@ -345,8 +360,7 @@
       const approve = el("button", { className: "primary", text: "Approve", attrs: { type: "button" } });
       const cancel = el("button", { className: "secondary", text: "Cancel", attrs: { type: "button" } });
       actionPanel([
-        el("h4", { text: `What ${body.name} may do on this computer` }),
-        el("pre", { className: "output", text: body.report }),
+        el("p", { text: `Approve ${body.name} on this computer? It describes how to start the engine you already have.` }),
         el("div", { className: "row-actions", children: [approve, cancel] }),
       ]);
       cancel.addEventListener("click", () => ($("games-action").hidden = true));
@@ -421,68 +435,68 @@
       const response = await api(`/api/v1/games/${encodeURIComponent(current.id)}/content`, { method: "POST", body: {} });
       downloaded = await afterStep(response, "The map files are downloaded, checked and ready.");
     });
-    // The press was "Join": once the files are in, go straight on to the review
-    // of the exact command, which still starts nothing until it is approved.
-    if (downloaded && current?.readiness?.state === "ready_for_review") await review(button);
+    return downloaded;
   }
 
-  // --- the review, and the one start -----------------------------------------------
+  // --- joining, in one press ------------------------------------------------------
+  //
+  // Operator, 2026-09-23: "joining should be an atomic operation: the user
+  // presses join, all the data is downloaded and the game opens immediately
+  // after". Join downloads and checks the map files if they are not here yet,
+  // spends a fresh link, re-checks that the game has not moved, and starts the
+  // engine — the press IS the approval. What ran stays on the page and in Jobs.
+  // Only a choice that is the person's to make — which engine program, which
+  // game folder — stops it, and then Join opens that step instead.
 
-  async function review(button) {
-    await withBusy(button, async () => {
-      busy("games-detail-message", "Getting a fresh link and checking the game has not changed…");
-      const { ok, body } = await api(`/api/v1/games/${encodeURIComponent(current.id)}/review`, { method: "POST", body: {} });
-      if (!ok) {
-        if (body.readiness) render(current.id, body.readiness);
-        setMessage("games-detail-message", body.error || "The join could not be prepared.", "error");
+  async function joinNow(button) {
+    for (let guard = 0; guard < 3 && current; guard++) {
+      const readiness = current.readiness;
+      if (readiness.state === "ready_for_review") {
+        await reviewAndLaunch(button);
         return;
       }
-      setMessage("games-detail-message", "");
-      reviewing = body.plan_id;
-      const start = el("button", { className: "primary", text: "Start the game", attrs: { type: "button" } });
-      const cancel = el("button", { className: "secondary", text: "Cancel", attrs: { type: "button" } });
-      const children = [
-        el("h4", { text: "This is exactly what will run" }),
-        el("pre", { className: "output", text: body.preview?.shell || "" }),
-        el("p", { className: "muted", text: `in ${body.preview?.working_dir || ""}` }),
-        el("p", {
-          className: "muted",
-          text: `${body.engine} will connect to ${body.endpoint}${body.map_files ? ", loading the map files downloaded for this game" : ""}. It runs as a job you can stop from Jobs.`,
-        }),
-      ];
-      for (const warning of body.warnings || []) children.push(el("p", { className: "join-warning", text: warning }));
-      children.push(
-        el("p", { className: "muted", text: `This review is valid for ${Math.round((body.expires_in || 120) / 60)} minutes.` }),
-        el("div", { className: "row-actions", children: [start, cancel] })
-      );
-      actionPanel(children);
-      cancel.addEventListener("click", () => {
-        reviewing = null;
-        $("games-action").hidden = true;
-      });
-      start.addEventListener("click", () => launch(start));
-      start.focus();
-    });
+      if (nextStep()?.action !== "download_join_content") {
+        await primaryAction(button);
+        return;
+      }
+      if (!(await downloadContent(button))) return;
+    }
   }
 
-  async function launch(button) {
-    if (!reviewing) return;
-    const planID = reviewing;
+  async function reviewAndLaunch(button) {
     await withBusy(button, async () => {
-      busy("games-detail-message", "Starting…");
+      busy("games-detail-message", "Joining: checking the game has not changed and starting the engine…");
+      const review = await api(`/api/v1/games/${encodeURIComponent(current.id)}/review`, { method: "POST", body: {} });
+      if (!review.ok) {
+        if (review.body.readiness) render(current.id, review.body.readiness);
+        setMessage("games-detail-message", review.body.error || "The join could not be prepared.", "error");
+        return;
+      }
+      const plan = review.body;
       const { ok, body } = await api(`/api/v1/games/${encodeURIComponent(current.id)}/launch`, {
         method: "POST",
-        body: { plan_id: planID, approve: true },
+        body: { plan_id: plan.plan_id, approve: true },
       });
-      reviewing = null;
       if (!ok) {
         setMessage("games-detail-message", body.error || "The game could not be started.", "error");
         return;
       }
-      const message = body.already ? "This game is already running; see Jobs." : "The game is starting. It is running as a job; see Jobs to follow or stop it.";
+      const message = body.already
+        ? "This game is already running on this computer; see Jobs."
+        : `${plan.engine} is starting and connecting to ${plan.endpoint}.`;
+      const ran = el("details", {
+        children: [
+          el("summary", { text: "What ran" }),
+          el("pre", { className: "output", text: plan.preview?.shell || "" }),
+          el("p", { className: "muted", text: `in ${plan.preview?.working_dir || ""}` }),
+        ],
+      });
+      const children = [el("p", { text: message })];
+      for (const warning of plan.warnings || []) children.push(el("p", { className: "join-warning", text: warning }));
       const jobs = el("button", { className: "secondary", text: "Open Jobs", attrs: { type: "button" } });
       jobs.addEventListener("click", () => window.AUCOM.showArea("jobs"));
-      actionPanel([el("p", { text: message }), el("div", { className: "row-actions", children: [jobs] })]);
+      children.push(ran, el("div", { className: "row-actions", children: [jobs] }));
+      actionPanel(children);
       setMessage("games-detail-message", message, "ok");
       record(body.already ? "Join already running" : "Joined a game", current.readiness.title, "ok");
     });

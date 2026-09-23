@@ -119,8 +119,7 @@ func TestAToolProfileSomebodyWroteIsApprovedRunAndWithdrawnFromTheCommandLine(t 
 		t.Fatalf("profile review exited %d: %s", code, stderr)
 	}
 	for _, want := range []string{
-		"A tool profile somebody wrote", "If you approve it, it may:",
-		"as a program on your computer", digest, "approved: no",
+		"A tool profile somebody wrote", digest, "approved: no",
 	} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("the review does not contain %q:\n%s", want, stdout)
@@ -134,7 +133,7 @@ func TestAToolProfileSomebodyWroteIsApprovedRunAndWithdrawnFromTheCommandLine(t 
 	if code != 2 {
 		t.Errorf("`profile grant` with no flags exited %d, want 2", code)
 	}
-	if !strings.Contains(stdout, "If you approve it, it may:") {
+	if !strings.Contains(stdout, "A tool profile somebody wrote") || !strings.Contains(stdout, digest) {
 		t.Errorf("it did not show what would be approved:\n%s", stdout)
 	}
 	if !strings.Contains(stderr, "--digest="+digest) || !strings.Contains(stderr, "--approve") {
@@ -167,7 +166,7 @@ func TestAToolProfileSomebodyWroteIsApprovedRunAndWithdrawnFromTheCommandLine(t 
 	if code != 0 {
 		t.Fatalf("profile grant exited %d: %s", code, stderr)
 	}
-	if !strings.Contains(stdout, digest) || !strings.Contains(stdout, "approved everything") {
+	if !strings.Contains(stdout, digest) || !strings.Contains(stdout, "approved test.cli.grant") {
 		t.Errorf("the approval does not say what it approved:\n%s", stdout)
 	}
 	local := storedBinding(t, env, grantFixtureID)

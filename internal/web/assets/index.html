@@ -33,7 +33,6 @@
         <button type="button" id="activity-open" class="activity-open" hidden aria-expanded="false" aria-controls="activity">
           Activity <span id="activity-count" class="pill"></span>
         </button>
-        <span id="account-signed-out" class="account-email">not signed in</span>
         <button type="button" id="sign-in-open" class="primary" hidden>Sign in</button>
         <!--
           The account button (NEW_244D, operator): shown only once signed in,
@@ -48,12 +47,9 @@
             <span class="caret" aria-hidden="true">▾</span>
           </button>
           <div class="menu" id="account-dropdown" role="menu" hidden>
-            <p class="menu-note"><span id="account-email" class="account-email"></span><span id="account-server" class="muted"></span></p>
             <p class="menu-note" id="account-sync-note"></p>
             <button type="button" role="menuitem" id="account-sync">Sync to cloud…</button>
             <button type="button" role="menuitem" id="account-check">Check connection</button>
-            <a role="menuitem" id="account-site" target="_blank" rel="noopener noreferrer" hidden>Open Auto-Pigeon</a>
-            <button type="button" role="menuitem" id="sign-out">Sign out</button>
           </div>
         </div>
         <!-- What "Sync needed" means, in plain words: AUP's HelpBubble, a
@@ -80,6 +76,19 @@
               <label for="language-select">Language</label>
               <select id="language-select"></select>
             </div>
+          </div>
+        </div>
+        <!-- The account, top right, as in AUP and AUG (operator, 2026-09-23):
+             who you are signed in as and where, and signing in or out. -->
+        <div class="site-settings" id="site-account">
+          <button type="button" class="site-icon-button" id="user-button" aria-haspopup="menu" aria-expanded="false" aria-controls="user-menu" aria-label="Account" title="Account">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/><path d="M9 10a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"/><path d="M6.168 18.849a4 4 0 0 1 3.832 -2.849h4a4 4 0 0 1 3.834 2.855"/></svg>
+          </button>
+          <div class="menu" id="user-menu" role="menu" hidden>
+            <p class="menu-note"><span id="account-signed-out" class="account-email">not signed in</span><span id="account-email" class="account-email"></span><span id="account-server" class="muted"></span></p>
+            <a role="menuitem" id="account-site" target="_blank" rel="noopener noreferrer" hidden>Open Auto-Pigeon</a>
+            <button type="button" role="menuitem" id="user-sign-in" hidden>Sign in…</button>
+            <button type="button" role="menuitem" id="sign-out">Sign out</button>
           </div>
         </div>
       </div>
@@ -695,9 +704,8 @@
         <section id="area-games" class="area" aria-labelledby="area-heading" hidden>
           <p class="lede">
             Games people are hosting right now. Joining uses an engine and a
-            copy of the game you already have; the Companion downloads only the
-            map files a host shared for their game, checks every file, and shows
-            you the exact command before anything starts.
+            copy of the game you already have; Join downloads only the map files
+            a host shared for their game, checks every file and starts the game.
           </p>
 
           <div id="games-signed-out" class="panel notice" hidden>
@@ -760,7 +768,7 @@
               <h3 id="games-detail-title">Game</h3>
               <button type="button" id="games-detail-close" class="secondary">All games</button>
             </div>
-            <dl id="games-facts" class="facts"></dl>
+            <div id="games-facts" class="game-summary"></div>
             <h4 class="games-subhead">Joining from this computer</h4>
             <ol id="games-steps" class="join-steps" aria-label="What joining needs"></ol>
             <div class="row-actions">
@@ -778,10 +786,16 @@
 
         <!-- Profiles ----------------------------------------------------- -->
         <section id="area-profiles" class="area" aria-labelledby="area-heading" hidden>
+          <nav id="profile-breadcrumb" class="breadcrumb" aria-label="Where you are" hidden>
+            <a href="#profiles" id="profile-breadcrumb-up">Profiles</a>
+            <span aria-hidden="true"> › </span><span>Configure</span>
+            <span aria-hidden="true"> › </span><span id="profile-breadcrumb-name" aria-current="page"></span>
+          </nav>
+          <div id="profiles-overview">
           <p class="lede">
-            A profile describes a tool or an engine: what it is, what it may do,
-            and how to start it. Reading one is inert — nothing here can run
-            until you have read what it asks for and approved it.
+            A profile describes a tool or an engine: what it is and how to start
+            it. Reading one is inert — nothing here can run until you have
+            approved it.
           </p>
 
           <div class="panel">
@@ -799,6 +813,7 @@
             </div>
             <p id="profiles-message" class="message" role="status"></p>
             <ul id="profiles-list" class="cards" aria-label="Installed profiles"></ul>
+          </div>
           </div>
 
           <div class="panel" id="profile-detail-panel" hidden>

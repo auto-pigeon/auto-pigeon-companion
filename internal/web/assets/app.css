@@ -1143,3 +1143,21 @@ ol.numbered { list-style: none; padding-inline-start: 0; }
 .panel > p.muted { line-height: 1.55; }
 main { padding: 1.25rem 1.75rem 3rem; }
 @media (max-width: 46rem) { main { padding: 0.85rem; } }
+
+/* Profiles › Configure › <name>: a profile's page is a step below the list. */
+.breadcrumb { margin: 0 0 1rem; color: var(--ink-muted); font-size: 0.95rem; }
+.breadcrumb a { color: var(--accent); text-decoration: none; }
+.breadcrumb a:hover, .breadcrumb a:focus-visible { text-decoration: underline; }
+.breadcrumb [aria-current="page"] { color: var(--ink); font-weight: 600; }
+
+/* Live Games: one compact row per game — title, the facts on one line, Join. */
+#games-list .game-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.45rem 0.75rem; min-height: 0; }
+#games-list .game-row .game-title { font-weight: 600; color: var(--ink); white-space: nowrap; padding: 0; }
+#games-list .game-row .game-facts { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.9rem; }
+#games-list .game-row > button.primary { padding: 0.3rem 0.9rem; }
+@media (max-width: 640px) {
+  #games-list .game-row { flex-wrap: wrap; }
+  #games-list .game-row .game-facts { flex-basis: 100%; order: 3; white-space: normal; }
+}
+.game-summary p { margin: 0 0 0.75rem; }
+.join-steps .join-step.done p { margin: 0; }

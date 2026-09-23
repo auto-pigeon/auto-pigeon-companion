@@ -8,7 +8,7 @@
 "use strict";
 
 (() => {
-  const { $, el, api, setMessage, busy, withBusy, record, badge, when, permissionBlock,
+  const { $, el, api, setMessage, busy, withBusy, record, badge, when,
     maturityBadge, maturityNote, openCompatibilityReport, t } = window.AUCOM;
 
   let engines = [];
@@ -270,14 +270,6 @@
       container.append(field.container);
     }
 
-    if ((engine.permissions || []).length) {
-      const review = el("details", { attrs: { id: "run-permissions" } });
-      review.append(el("summary", { text: `What ${engine.name} asks to be allowed to do (${engine.permissions.length})` }));
-      for (const permission of engine.permissions) {
-        review.append(permissionBlock(permission));
-      }
-      container.append(review);
-    }
     const approve = el("label", { className: "check" });
     const box = el("input", { attrs: { type: "checkbox", id: "run-approve" } });
     if (engine.binding?.granted) box.checked = true;

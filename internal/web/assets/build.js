@@ -503,8 +503,7 @@
 
     const configure = el("button", { text: "Configure", attrs: { type: "button", class: "secondary" } });
     configure.addEventListener("click", () => {
-      const url = window.AUCOM.areas.profiles?.configureURL?.(profile.id);
-      if (url) window.open(url, "_blank", "noopener");
+      window.AUCOM.areas.profiles?.configure?.(profile.id);
     });
 
     row.append(choose, use, configure);

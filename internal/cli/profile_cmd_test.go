@@ -70,9 +70,7 @@ func TestProfileShowSaysNothingIsGrantedYet(t *testing.T) {
 	out := stdout.String()
 	for _, want := range []string{
 		"Community —",
-		"If you approve it, it may:",
-		"as a program on your computer",
-		"Importing a profile does not let it do any of the above",
+		"Importing a profile does not let it run",
 		"digest: sha256:",
 	} {
 		if !strings.Contains(out, want) {

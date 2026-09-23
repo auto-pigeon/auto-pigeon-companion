@@ -126,14 +126,8 @@ func profileGrant(env *Env, args []string) int {
 	if *asJSON {
 		return printJSON(env, describeDecision(decision))
 	}
-	fmt.Fprintf(env.Stdout, "approved everything %s asks for, against %s\n",
+	fmt.Fprintf(env.Stdout, "approved %s, against %s\n",
 		decision.Entry.Profile.Metadata().ID, decision.Entry.Digest)
-	for _, id := range decision.Binding.Grant.Granted {
-		fmt.Fprintf(env.Stdout, "  %s\n", id)
-	}
-	if len(decision.Binding.Grant.Granted) == 0 {
-		fmt.Fprintln(env.Stdout, "  (it asks for nothing on its own account)")
-	}
 	fmt.Fprintf(env.Stdout, "\nWithdraw it with `companion toolchain withdraw %s --confirm`.\n",
 		decision.Entry.Profile.Metadata().ID)
 	return 0

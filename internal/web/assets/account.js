@@ -140,12 +140,6 @@
       head.append(el("span", { className: "badge " + (state === "done" ? "succeeded" : state === "failed" || state === "conflict" ? "failed" : "queued"),
         text: outcome.result === "planned" ? words[outcome.action] || outcome.action : outcome.result }));
       const item = el("li", { children: [head] });
-      if (outcome.action === "download" && (outcome.permissions || []).length) {
-        item.append(el("p", { className: "muted", text: "Once downloaded, this computer approves it to:" }));
-        const perms = el("ul");
-        for (const permission of outcome.permissions) perms.append(el("li", { text: permission }));
-        item.append(perms);
-      }
       if (outcome.error) item.append(el("p", { className: "message error", text: outcome.error }));
       list.append(item);
     }

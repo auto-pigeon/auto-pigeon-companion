@@ -1735,7 +1735,7 @@ A job's environment is built from nothing (see *Jobs*), so an engine started as
 a job only reaches your display because its profile asks for it. Every client
 and listen-server action of the built-in engine profiles inherits `DISPLAY`,
 `WAYLAND_DISPLAY`, `XDG_RUNTIME_DIR`, `XAUTHORITY` and `PULSE_SERVER` — names
-only, listed in the permission review; a dedicated server inherits none. Before
+only; a dedicated server inherits none. Before
 this, no engine started from Run could open a window on Linux. vkQuake's
 official Linux build is an AppImage, and a job has no `PATH` for the AppImage
 runtime to find `fusermount` on, so its profile also sets
@@ -1833,17 +1833,10 @@ My own Quake engine 0.3.1 (example.engines.quakespasm-of-my-own)
   published by A Companion user, under GPL-2.0-or-later
   Community — imported from elsewhere; nobody has checked it for you.
 
-  If you approve it, it may:
-    - Run a dedicated game server on this computer that other people can connect to. [high]
-    - Connect to hosts on the internet that this profile does not list. [high]
-    - Run My own Quake engine (engine) as a program on your computer. [high]
-    - Create and change files in the folder built content is published into. [high]
-    - Read files in the folder built content is published into. [medium]
-    - Read files in your installed game folder. [medium]
 
   digest: sha256:b759281c01c70ac572d751e7ffc1520a2a979135f5b47b9737de8f2f93258286
 
-  Nothing here has been granted. Importing a profile does not let it do any of the above.
+  Nothing here has been granted. Importing a profile does not let it run.
 ```
 
 Hosting is the first line of that list because it is the most consequential
@@ -2536,11 +2529,23 @@ step offers only a real action:
 | Map files | the host's join content is readable, verified and staged | downloads each file, checks it against the package the game names, and stages it |
 | Start the game | the job service can build the exact command | Join |
 
-**Join** spends a fresh one-use link *only then*, checks the host has not moved to
-another revision, another package or another address since you set up, and shows
-the exact command. **Start the game** starts it once — a double click, a second
-tab or a second terminal finds the game already running rather than starting a
-second engine. A review is valid for two minutes.
+**Join is one press**: it downloads and checks the map files if they are not here
+yet, spends a fresh one-use link, checks the host has not moved to another
+revision, another package or another address since you set up, and starts the
+engine — the press is the approval, and the exact command that ran is shown after
+the start ("What ran") and kept in Jobs. A double click, a second tab or a second
+terminal finds the game already running rather than starting a second engine.
+Only a choice that is yours — the engine program, your game folder — stops it, and
+then Join opens that step. Every game in Live Games is one compact row with its
+own **Join** button, so a long list stays scannable.
+
+Nothing lists what a profile "asks to be allowed to do" any more (operator,
+2026-09-23): approving a profile is one decision about the profile, shown as its
+name, publisher, licence and trust. The permissions are still what an approval
+records and what a job is held to. A profile's page opens under Profiles
+(Profiles › Configure › its name) with the side navigation kept, and the account —
+who you are signed in as, and signing in or out — is the round button at the top
+right, as in the editor and the gallery.
 
 The Companion never downloads an engine or game data. The map files a host shares
 are staged under your asset cache, in a directory the engine is started in and
@@ -3100,14 +3105,10 @@ Andrea's Q1 compile 0.3.0 (example.andrea.q1-compile)
   published by A Companion user, under GPL-2.0-or-later
   Community — imported from elsewhere; nobody has checked it for you.
 
-  If you approve it, it may:
-    - Run Andrea's Q1 compile (qbsp) as a program on your computer. [high]
-    - Read files in a scratch folder created for this job. [low]
-    - Create and change files in a scratch folder created for this job. [low]
 
   digest: sha256:27ef7df7c8bb5bcc596824868f6eafedd3a08f885664bbf444d946d3ab8fe5c9
 
-  Nothing here has been granted. Importing a profile does not let it do any of the above.
+  Nothing here has been granted. Importing a profile does not let it run.
 ```
 
 Approval is recorded against the **digest**, not the version number, so an
@@ -3152,11 +3153,6 @@ A tool profile somebody wrote 1.0.0 (example.local.harmless)
   published by A Companion user, under MIT
   Local — found in your profile folder; nobody has checked it for you, and the Companion cannot tell who put it there.
 
-  If you approve it, it may:
-    - Run A tool profile somebody wrote (harmless) as a program on your computer. [high]
-    - Read files in the folder built content is published into. [medium]
-    - Read files in a scratch folder created for this job. [low]
-    - Create and change files in a scratch folder created for this job. [low]
 
   digest: sha256:2f188103bb82b192370f9c7228e8942e2489650f0141b3cf1ca33e24b74c3530
   source: ~/.config/auto-pigeon-companion/profiles/my-toolchain.tool.json
@@ -3176,10 +3172,7 @@ error: nothing was approved. Read the report above, then:
 
 $ companion toolchain grant example.local.harmless \
     --digest=sha256:2f188103bb82b192370f9c7228e8942e2489650f0141b3cf1ca33e24b74c3530 --approve
-approved everything example.local.harmless asks for, against sha256:2f188103bb82b192370f9c7228e8942e2489650f0141b3cf1ca33e24b74c3530
-  read:content_root
-  read:workspace
-  run_executable
+approved example.local.harmless, against sha256:2f188103bb82b192370f9c7228e8942e2489650f0141b3cf1ca33e24b74c3530
   write:workspace
 
 Withdraw it with `companion toolchain withdraw example.local.harmless --confirm`.
@@ -3369,7 +3362,7 @@ The preview is the whole gate. It validates the document, canonicalizes it — o
 encoder, so a profile written any other way would be a profile whose digest
 depended on who wrote it out — digests it, and then lists **everything it would
 make public**: every free-text value, every URL and host, every environment
-variable name, and the permissions whoever installs it will be asked to allow.
+variable name.
 
 Nothing is sent. Publishing needs a separate, explicit act:
 
@@ -3418,8 +3411,7 @@ so**:
    deliberately does not make, because RFC 8785 is this program's algorithm;
 3. the document is valid, through the same decoder a pasted file goes through;
 4. what changed since whatever is already installed, normalized, and whether it
-   asks for **more** than what is installed was granted;
-5. what it asks this machine for, in the same words a permission review uses.
+   asks for **more** than what is installed was granted.
 
 Add `--approve` to write the document and record the grant. Without it nothing is
 written at all — not even the document — because a document on disk is one the

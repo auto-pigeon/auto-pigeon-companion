@@ -239,7 +239,13 @@
 
     buttonIn(toolCard, "Review").click();
     await waitFor("the review panel", () => visible($("profile-detail-panel")) &&
-      textOf($("profile-detail")).includes("What it asks to be allowed to do"));
+      textOf($("profile-detail")).includes("Not approved on this machine yet"));
+    record(
+      "a profile's page is a sub-page of Profiles, with no list above it and no permission list in it",
+      visible($("profile-breadcrumb")) && !visible($("profiles-overview")) &&
+        !textOf($("profile-detail")).includes("asks to be allowed"),
+      textOf($("profile-breadcrumb")).replace(/\s+/g, " ").trim()
+    );
     const approve = await waitFor("the approve button", () => buttonIn($("profile-detail"), "approve it"));
     record(
       "the review shows what the profile asks for before it can be approved",

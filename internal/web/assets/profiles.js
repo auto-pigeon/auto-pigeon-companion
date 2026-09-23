@@ -9,7 +9,7 @@
 "use strict";
 
 (() => {
-  const { $, el, api, setMessage, busy, withBusy, record, badge, when, permissionBlock,
+  const { $, el, api, setMessage, busy, withBusy, record, badge, when,
     maturityBadge, maturityNote, openCompatibilityReport, t } = window.AUCOM;
 
   let installed = [];
@@ -84,13 +84,8 @@
       text: needsReview ? "Review" : "Configure",
       attrs: { type: "button" },
     });
-    open.addEventListener("click", () => {
-      if (needsReview) {
-        openProfile(profile.id);
-        return;
-      }
-      openConfigureTab(profile.id);
-    });
+    // Either task is the profile's own page, a step below Profiles.
+    open.addEventListener("click", () => configure(profile.id));
 
     return el("li", {
       className: "card profile-card",
@@ -98,19 +93,21 @@
     });
   }
 
-  // configureURL is one profile's configuration page: a URL that survives a
-  // reload and names the profile and nothing else. The id is the only thing in
-  // it — no API token (the server puts that in the page it renders, so a fresh
-  // tab gets its own) and no local path, because a URL is copied, logged and
-  // pasted, and neither belongs anywhere that happens. `?view=` drops the area
-  // navigation the same way the New profile tab already does; the `#profiles/<id>`
-  // hash is what `app.js` hands back to `refresh(argument)` on load.
-  function configureURL(id) {
-    return window.location.pathname + "?view=profile#profiles/" + encodeURIComponent(id);
+  // configure opens one profile's configuration page IN this window, under
+  // Profiles: `#profiles/<id>`, a hash that survives a reload and names the
+  // profile and nothing else. It used to open a new tab without the area
+  // navigation; the operator asked for the side panel to stay and for the page
+  // to read as a step below Profiles (2026-09-23), so it is a sub-page now —
+  // Profiles › Configure › <name> — and the installed list is not drawn above it.
+  function configure(id) {
+    window.AUCOM.showArea("profiles/" + encodeURIComponent(id));
   }
 
-  function openConfigureTab(id) {
-    window.open(configureURL(id), "_blank", "noopener");
+  // showOverview switches the area between the list and one profile's page.
+  function showOverview(overview) {
+    $("profiles-overview").hidden = !overview;
+    $("profile-breadcrumb").hidden = overview;
+    $("profile-detail-panel").hidden = overview;
   }
 
   async function openProfile(id) {
@@ -126,6 +123,7 @@
       return;
     }
     $("profile-detail-title").textContent = body.name;
+    $("profile-breadcrumb-name").textContent = body.name;
     $("profile-detail-title").setAttribute("tabindex", "-1");
     $("profile-detail-title").focus();
 
@@ -154,15 +152,6 @@
           (body.license?.spdx ? ` · ${body.license.spdx}` : ""),
       })
     );
-
-    detail.append(el("h4", { text: "What it asks to be allowed to do" }));
-    if ((body.permissions || []).length === 0) {
-      detail.append(el("p", { className: "muted", text: "Nothing. This document declares no permissions." }));
-    } else {
-      for (const permission of body.permissions) {
-        detail.append(permissionBlock(permission));
-      }
-    }
 
     detail.append(el("h4", { text: "Actions" }));
     const actions = el("ul");
@@ -570,18 +559,9 @@
         className: "muted",
         text:
           "Installing this does not approve it. It will be listed as local — nobody has vouched for it, " +
-          "including you — and it cannot run until you have read what it asks for and approved it.",
+          "including you — and it cannot run until you have approved it.",
       })
     );
-
-    review.append(el("h4", { text: "What it asks to be allowed to do" }));
-    if ((body.permissions || []).length === 0) {
-      review.append(el("p", { className: "muted", text: "Nothing." }));
-    } else {
-      for (const permission of body.permissions) {
-        review.append(permissionBlock(permission));
-      }
-    }
 
     if (body.diff && !body.diff.empty) {
       review.append(el("h4", { text: "What you changed from the template" }));
@@ -718,8 +698,10 @@
 
   $("profiles-refresh").addEventListener("click", (event) => withBusy(event.currentTarget, refreshList));
   $("profiles-kind").addEventListener("change", refreshList);
-  $("profile-detail-close").addEventListener("click", () => {
-    $("profile-detail-panel").hidden = true;
+  $("profile-detail-close").addEventListener("click", () => window.AUCOM.showArea("profiles"));
+  $("profile-breadcrumb-up").addEventListener("click", (event) => {
+    event.preventDefault();
+    window.AUCOM.showArea("profiles");
   });
 
   // New profile opens both ways of writing one — from a tested template, or
@@ -741,8 +723,7 @@
       }
       $("profiles-kind").dispatchEvent(new Event("change", { bubbles: true }));
     }
-    await openProfile(id);
-    $("profile-detail-panel").scrollIntoView({ block: "start" });
+    configure(id);
   };
 
   // New profile opens the creator in a new browser tab: the page served there
@@ -762,14 +743,18 @@
 
   window.AUCOM.areas.profiles = {
     open: openProfile,
-    configureURL,
+    configure,
     async refresh(argument) {
-      await refreshList();
       // `#profiles/<id>` is one profile's configuration page, so a reload comes
       // back to that profile rather than to the list — the shape `#games/<id>`
-      // already established. The list is refreshed first so the page behind the
-      // detail is the real one if the user leaves single-view.
-      if (argument) await openProfile(argument);
+      // already established.
+      showOverview(!argument);
+      if (argument) {
+        await openProfile(decodeURIComponent(argument));
+        window.scrollTo({ top: 0 });
+        return;
+      }
+      await refreshList();
     },
   };
 })();

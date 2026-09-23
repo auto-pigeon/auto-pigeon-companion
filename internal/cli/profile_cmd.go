@@ -229,10 +229,10 @@ func profileShow(env *Env, args []string) int {
 		trust = profile.TrustBuiltin
 	}
 
-	fmt.Fprint(env.Stdout, profile.PermissionReport(p, trust))
+	fmt.Fprint(env.Stdout, profile.ProfileReport(p, trust))
 	fmt.Fprintf(env.Stdout, "\n  digest: %s\n", digest)
 	if trust != profile.TrustBuiltin {
-		fmt.Fprint(env.Stdout, "\n  Nothing here has been granted. Importing a profile does not let it do any of the above.\n")
+		fmt.Fprint(env.Stdout, "\n  Nothing here has been granted. Importing a profile does not let it run.\n")
 	}
 	// Shown for an imported document as much as for a built-in one. The
 	// statement is about the game, not about who wrote the profile, so a

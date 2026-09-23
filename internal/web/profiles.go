@@ -140,7 +140,7 @@ func (s *Server) describeCatalogEntry(entry job.CatalogEntry, local binding.Loca
 	body["executables"] = describeExecutables(entry.Profile)
 	body["trust_description"] = entry.Trust.Describe()
 	body["vouched"] = entry.Trust.Vouched()
-	body["report"] = profile.PermissionReport(entry.Profile, entry.Trust)
+	body["report"] = profile.ProfileReport(entry.Profile, entry.Trust)
 	body["binding"] = describeBinding(local)
 	body["editable"] = strings.HasPrefix(entry.Source, s.profilesPrefix())
 
@@ -358,7 +358,7 @@ func (s *Server) handleProfileCompose(w http.ResponseWriter, r *http.Request) {
 	body["version"] = meta.Version
 	body["digest"] = digest
 	body["permissions"] = document.Permissions()
-	body["report"] = profile.PermissionReport(document, profile.TrustLocal)
+	body["report"] = profile.ProfileReport(document, profile.TrustLocal)
 	body["trust"] = profile.TrustLocal
 	body["actions"] = actionIDs(document)
 
@@ -875,7 +875,7 @@ func (s *Server) handleProfileValidate(w http.ResponseWriter, r *http.Request) {
 		// here means the caller is told what it would take to run it, rather
 		// than finding out when it is refused.
 		"trust":  profile.TrustLocal,
-		"report": profile.PermissionReport(document, profile.TrustLocal),
+		"report": profile.ProfileReport(document, profile.TrustLocal),
 	})
 }
 

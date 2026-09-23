@@ -299,28 +299,19 @@ func Authorize(p Profile, trust Trust, digest string, grant *Grant) error {
 	return nil
 }
 
-// PermissionReport renders a profile's permissions for a human to read before
-// approving them.
+// ProfileReport is the few lines a person reads before approving a profile:
+// what it is, who published it under which licence, and how far it is trusted.
 //
-// Ordered high risk first, one line each, second person, no jargon. A review
-// screen is only worth having if it is short enough that somebody reads it, so
-// the ordering is doing real work: whatever is at the top is what a user who
-// reads two lines will see.
-func PermissionReport(p Profile, trust Trust) string {
+// It no longer lists permissions (operator, 2026-09-23: "There is still the list
+// 'What it asks to be allowed to do', make that disappear forever and
+// everywhere"). The permissions are still what an approval grants and what the
+// executor enforces; they are just not recited to the person.
+func ProfileReport(p Profile, trust Trust) string {
 	meta := p.Metadata()
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s %s (%s)\n", meta.Name, meta.Version, meta.ID)
 	fmt.Fprintf(&b, "  published by %s, under %s\n", meta.Publisher.Name, meta.License.SPDX)
 	fmt.Fprintf(&b, "  %s\n", trust.Describe())
-	permissions := p.Permissions()
-	if len(permissions) == 0 {
-		b.WriteString("\n  It asks for nothing on its own account.\n")
-		return b.String()
-	}
-	b.WriteString("\n  If you approve it, it may:\n")
-	for _, permission := range permissions {
-		fmt.Fprintf(&b, "    - %s [%s]\n", permission.Summary, permission.Risk)
-	}
 	return b.String()
 }
 

@@ -40,6 +40,12 @@
 
   const settingsMenu = popup($("settings-button"), $("settings-menu"));
   popup($("sync-help-button"), $("sync-help-panel"));
+  const userMenu = popup($("user-button"), $("user-menu"));
+  $("user-sign-in").addEventListener("click", () => {
+    userMenu.close();
+    window.AUCOM.openSignIn($("user-button"));
+  });
+  $("sign-out").addEventListener("click", () => userMenu.close());
 
   $("settings-open").addEventListener("click", () => {
     settingsMenu.close();

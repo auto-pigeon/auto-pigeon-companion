@@ -239,7 +239,7 @@ func (s Service) decide(entry job.CatalogEntry, local binding.LocalBinding) Deci
 	return Decision{
 		Entry:              entry,
 		Binding:            local,
-		Report:             profile.PermissionReport(entry.Profile, entry.Trust),
+		Report:             profile.ProfileReport(entry.Profile, entry.Trust),
 		Authorized:         err == nil,
 		AuthorizationError: err,
 	}
