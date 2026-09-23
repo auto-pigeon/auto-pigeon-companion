@@ -499,6 +499,8 @@ button.link {
 .message.error { color: var(--bad); font-weight: 600; }
 .message.error::before { content: "Error: "; }
 .message.ok { color: var(--ok); }
+.message.warning { color: var(--warn); font-weight: 600; }
+.message.warning::before { content: "Warning: "; }
 .message.busy { color: var(--ink-muted); }
 
 .output, .preview pre {

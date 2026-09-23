@@ -324,6 +324,11 @@ type Record struct {
 	// Launch is the engine's identity and the exact argv, element by element.
 	Launch *LaunchRecord `json:"launch,omitempty"`
 
+	// Warnings are what a stage let through but a person must be told about —
+	// textures the compiler did not find, so the level shows a placeholder.
+	// A run with warnings still succeeds; the Activity card shows each one.
+	Warnings []string `json:"warnings,omitempty"`
+
 	// RetryOf names the attempt this one repeats. A retry is a NEW record
 	// linked to the previous one, never a re-run in place: the record of what
 	// happened the first time is the thing a retry most often needs.

@@ -736,6 +736,10 @@
         "hint": {
           "type": "string",
           "maxLength": 4000
+        },
+        "clean_stop": {
+          "type": "boolean",
+          "description": "The line proves the session ended normally: a non-success exit status after it is recorded as a clean stop, not a crash. For a program known to crash while quitting."
         }
       }
     },

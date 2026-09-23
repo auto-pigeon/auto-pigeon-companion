@@ -411,7 +411,12 @@ After that the Companion, on its own:
   every reason the server gave;
 - runs Auto-Pigeon Extractor as a separate program to turn APMap into a Quake
   `.map`, when the revision needs it;
-- compiles, giving the compiler the verified WAD folder with `-wadpath`;
+- compiles, giving the compiler the verified WAD folder with `-wadpath` — and
+  reads what the compiler said, because a compiler that opened none of the
+  map's WADs still exits 0: **a build that found none of the map's textures
+  fails at Compiling** with the WAD it could not open, and a build that missed
+  only some of them goes ahead with a **Warning** on the Activity card naming
+  each one (tool textures such as `skip` never count);
 - installs the `.bsp`, its `.lit` when one was produced, the WADs and the build
   manifest into `<game>/auto-pigeon/`;
 - verifies every installed file again; and
@@ -619,7 +624,10 @@ answered in a dialog they saw.
 
 On a machine with no chooser installed — a headless server, a minimal container
 — the **Browse** button is not drawn at all, and the text field beside it is the
-whole answer. A typed path goes through exactly the same validation the dialog's
+whole answer. When a chooser is installed but fails — measured: `zenity` on a
+MATE desktop printed a GTK theme warning and died on a signal — the field says
+so in a sentence that names the chooser, leaves the toolkit's theme noise out,
+and ends with *type the path in the box instead*; the cursor is put in that box. A typed path goes through exactly the same validation the dialog's
 answer does: absolute, no control characters, and of the kind that was asked
 for, with the reason stated when it is not.
 
@@ -2698,6 +2706,30 @@ stopped game leaves the listing seconds after its process ends instead of at the
 next heartbeat. Every way a job can end maps onto a word AUB has for it:
 cancelling is `host_stopped`, a clean exit is `host_stopped`, a non-zero exit is
 `host_crashed`, and being killed along with the Companion is `host_crashed`.
+
+One exception, declared by the profile rather than guessed from a number:
+vkQuake 1.36.0 crashes while quitting (`*** buffer overflow detected ***`) and
+its AppImage then exits **127**. The built-in vkQuake profile marks that line
+`"clean_stop": true` and sets `LIBC_FATAL_STDERR_=1` so glibc prints it on
+stderr, where the rule can read it. A non-zero exit that follows such a line is
+recorded as a clean stop — the job `succeeded`, its history note keeps the exit
+status and the line — and the listing ends `host_stopped`. The same 127 with no
+such line is still a crash. Any profile can use the field on a `warning` or
+`info` diagnostic (an `error` rule cannot be one):
+
+```json
+{ "id": "quit_crash", "stream": "stderr", "match": "*** buffer overflow detected ***",
+  "severity": "warning", "clean_stop": true }
+```
+
+```console
+$ companion job show <job-id>      # a vkQuake game somebody quit
+job <job-id>: succeeded — finished, and every required output was produced
+  auto-pigeon.engine.vkquake host_listen (listen server — other people can join this machine), 3m1.469s
+  exit status 127
+  clean stop: exited with status 127 after "*** buffer overflow detected ***: terminated" (job: vkQuake-1.36.0-x86_64.AppImage exited with status 127)
+  [warning] vkQuake crashed while quitting, after the game had ended. vkQuake 1.36.0 does this outside the Companion too.
+```
 Signing out or quitting ends every advertisement with `owner_signed_out`.
 
 What this program never sends is `heartbeat_missed`: that is the conclusion AUB
@@ -4054,6 +4086,11 @@ $ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/paths/
 $ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/paths/pick \
     -d '{"kind":"directory"}'          # a machine with no chooser installed
 {"error":"pathpick: this machine has no file chooser the Companion can open; type the path instead"}
+
+$ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/paths/pick \
+    -d '{"kind":"open-file"}'          # a chooser that crashed (HTTP 502)
+{"error":"the file chooser could not be opened: zenity stopped before it answered (it ended on a
+ signal). Type the path in the box instead"}
 
 $ curl -s -X POST -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/paths/validate \
     -d '{"kind":"directory","path":"quake"}'

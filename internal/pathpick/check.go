@@ -50,6 +50,12 @@ var ErrCancelled = errors.New("pathpick: the user cancelled the dialog")
 var ErrNoHelper = errors.New(
 	"pathpick: this machine has no file chooser the Companion can open; type the path instead")
 
+// ErrHelperFailed is a chooser that exists on this machine but did not open or
+// did not answer. The message a caller wraps around it is written for a person
+// and ends with what to do next, because the text field beside the button is
+// always the way through.
+var ErrHelperFailed = errors.New("the file chooser could not be opened")
+
 // Check validates a path a user supplied, from a dialog or from a text field.
 //
 // Both go through here, because a path that arrived from a subprocess's stdout

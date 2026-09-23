@@ -568,6 +568,12 @@ type DiagnosticRule struct {
 	Message string `json:"message,omitempty"`
 	// Hint is what to do about it.
 	Hint string `json:"hint,omitempty"`
+	// CleanStop says the line proves the session ended normally, so a
+	// non-success exit status that follows it is a clean stop and not a crash.
+	// It exists for a program measured to crash while quitting — vkQuake 1.36.0
+	// aborts on `quit`, and its AppImage then exits 127 — and never turns a
+	// job that printed nothing into a success: the line has to be there.
+	CleanStop bool `json:"clean_stop,omitempty"`
 }
 
 var diagnosticStreams = []string{"stdout", "stderr", "both"}
@@ -592,6 +598,11 @@ func (d DiagnosticRule) validate(c *collector) {
 	})
 	c.child(field("message"), func(c *collector) { checkText(c, d.Message, maxSummaryLength, false) })
 	c.child(field("hint"), func(c *collector) { checkText(c, d.Hint, maxTextLength, false) })
+	c.child(field("clean_stop"), func(c *collector) {
+		if d.CleanStop && d.Severity == SeverityError {
+			c.fixf("use severity warning or info", "an error cannot also be the proof of a clean stop")
+		}
+	})
 }
 
 // Matches reports whether a line of output matches the rule.

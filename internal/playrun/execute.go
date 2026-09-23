@@ -246,6 +246,21 @@ func (s *Service) compile(ctx context.Context, record *Record) error {
 	record.CurrentStep, record.CurrentJob = "", ""
 	s.detail(record, "build "+record.BuildID)
 
+	// The compiler exits 0 with no textures at all (textures.go), so its own
+	// words are read here rather than trusting the status.
+	warning, err := checkTextures(manifest).verdict()
+	if err != nil {
+		record.Remedy = "The map names its WADs in worldspawn's `wad` key. Open the build in Jobs to see " +
+			"which archive the compiler could not find, and make sure the map's texture bundle, or " +
+			"your own copy of the WAD, carries it at that path."
+
+		return err
+	}
+	if warning != "" {
+		record.Warnings = append(record.Warnings, warning)
+		s.detail(record, "build "+record.BuildID+" — "+warning)
+	}
+
 	return nil
 }
 

@@ -702,6 +702,11 @@ func printOutcome(env *Env, finished *job.Job) {
 	if finished.Error != "" {
 		fmt.Fprintf(env.Stdout, "  %s\n", finished.Error)
 	}
+	// A success with a non-zero status is a clean stop its profile vouched for
+	// (a program that crashes on quit); the note says which line proved it.
+	if finished.State == job.Succeeded && finished.ExitCode != nil && *finished.ExitCode != 0 && len(finished.History) > 0 {
+		fmt.Fprintf(env.Stdout, "  %s\n", finished.History[len(finished.History)-1].Note)
+	}
 	for _, diagnostic := range finished.Diagnostics {
 		fmt.Fprintf(env.Stdout, "  [%s] %s\n", diagnostic.Severity, diagnostic.Message)
 		if diagnostic.Hint != "" {

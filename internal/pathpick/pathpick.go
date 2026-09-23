@@ -191,11 +191,16 @@ func (p *Picker) Pick(ctx context.Context, request Request) (Result, error) {
 		if errors.Is(runCtx.Err(), context.DeadlineExceeded) {
 			return Result{}, fmt.Errorf("pathpick: %s did not answer within %s", chosen.binary, timeout)
 		}
-		return Result{}, fmt.Errorf("pathpick: running %s: %w%s", chosen.binary, err, said(stderr))
+		return Result{}, helperFailed(chosen.binary, fmt.Sprintf("could not be started (%v)", err), stderr)
 	}
 	if code != 0 {
-		return Result{}, fmt.Errorf("pathpick: %s exited with status %d%s",
-			chosen.binary, code, said(stderr))
+		how := fmt.Sprintf("stopped with status %d", code)
+		if code < 0 {
+			// Go reports -1 for a process that ended on a signal rather than
+			// exiting: the chooser crashed, or something killed it.
+			how = "stopped before it answered (it ended on a signal)"
+		}
+		return Result{}, helperFailed(chosen.binary, how, stderr)
 	}
 
 	// The first line only. A helper asked for one path prints one path; a
@@ -229,15 +234,37 @@ func (p *Picker) adapter() (adapter, bool) {
 	return adapter{}, false
 }
 
+// helperFailed is a chooser that ran and went wrong, said so that a person can
+// act on it: which chooser, what happened, the one line it printed that is not
+// toolkit noise, and what to do instead.
+func helperFailed(binary, how string, stderr []byte) error {
+	return fmt.Errorf("%w: %s %s%s. Type the path in the box instead",
+		ErrHelperFailed, binary, how, said(stderr))
+}
+
+// said is the first line of a helper's stderr that says something about the
+// failure. GTK and GLib log warnings about themes and accents first — measured:
+// zenity on MATE led with "Adwaita-WARNING … No known Yaru accent 'MATE'" and
+// then crashed — and repeating that line as the reason would be naming the one
+// thing that was not wrong.
 func said(stderr []byte) string {
-	message := strings.TrimSpace(string(stderr))
-	if message == "" {
-		return ""
+	for _, line := range strings.Split(string(stderr), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || toolkitNoise(line) {
+			continue
+		}
+		return " — it said: " + line
 	}
-	if index := strings.IndexAny(message, "\r\n"); index >= 0 {
-		message = message[:index]
+	return ""
+}
+
+func toolkitNoise(line string) bool {
+	for _, marker := range []string{"-WARNING **", "-CRITICAL **", "-Message:", "-DEBUG:", "-WARNING:", "Gtk-", "GLib-", "Gdk-", "Adwaita-"} {
+		if strings.Contains(line, marker) {
+			return true
+		}
 	}
-	return ": " + message
+	return false
 }
 
 func defaultTitle(kind Kind) string {

@@ -290,6 +290,28 @@ func TestPickReportsAHelperThatFailed(t *testing.T) {
 	}
 }
 
+// Measured on the operator's MATE desktop (2026-09-23): zenity printed a theme
+// warning and died on a signal. The message names the chooser, says it
+// stopped, leaves the theme warning out, and says to type the path instead.
+func TestAChooserThatCrashedIsReadable(t *testing.T) {
+	runner := &recorder{exitCode: -1, stderr: "(zenity:12345): Adwaita-WARNING **: 16:05:01.123: No known Yaru accent 'MATE'\n"}
+	picker := &Picker{GOOS: "linux", Look: present("zenity"), Run: runner.run, Home: home(t)}
+	_, err := picker.Pick(context.Background(), Request{Kind: OpenFile})
+	if !errors.Is(err, ErrHelperFailed) {
+		t.Fatalf("Pick error = %v, want ErrHelperFailed", err)
+	}
+	for _, want := range []string{"zenity", "stopped before it answered", "Type the path"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("Pick error = %q, want it to say %q", err, want)
+		}
+	}
+	for _, not := range []string{"Adwaita", "Yaru", "status -1"} {
+		if strings.Contains(err.Error(), not) {
+			t.Errorf("Pick error = %q, want no %q in it", err, not)
+		}
+	}
+}
+
 // The argv for the two platforms this test suite can never actually run on.
 func TestWindowsAndDarwinArgv(t *testing.T) {
 	dir := t.TempDir()

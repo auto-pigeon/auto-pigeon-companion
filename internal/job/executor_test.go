@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
 )
 
 // writeAction is the fixture that produces an artifact: it writes the text of
@@ -116,6 +118,51 @@ func TestANonzeroExitIsAFailureCarryingTheProgramsOwnStatus(t *testing.T) {
 	// The output before the failure is kept: it is usually the reason.
 	if got := h.mustLog(finished.ID, "stdout"); !strings.Contains(got, "about to exit 3") {
 		t.Errorf("stdout = %q, want the program's own output", got)
+	}
+}
+
+// vkQuake 1.36.0 aborts while quitting and its AppImage exits 127. The profile
+// names the line only that quit prints, and a non-zero exit after it is a
+// stop; the same status with no such line is still the failure it always was.
+func TestAQuitThatCrashesAfterItsCleanStopLineIsAStop(t *testing.T) {
+	action := func(id string, args ...any) fixtureAction {
+		a := modeAction(id, args...)
+		a.Diagnostics = []map[string]any{{
+			"id": "quit_crash", "stream": "stderr", "match": "buffer overflow detected",
+			"severity": "warning", "message": "It crashed while quitting.", "clean_stop": true,
+		}}
+		return a
+	}
+	h := newHarness(t, fixtureProfile(t, "test.executor.quit",
+		action("quit", "stderr-exit", "127", "*** buffer overflow detected ***: terminated"),
+		action("crash", "exit", "127")))
+
+	quit := h.runToEnd(h.helperRequest("test.executor.quit", "quit"))
+	if quit.State != Succeeded {
+		t.Fatalf("state = %s (%s), want succeeded: the quit line was printed", quit.State, quit.Error)
+	}
+	if quit.ExitCode == nil || *quit.ExitCode != 127 {
+		t.Errorf("exit code = %v, want the program's own 127 kept as evidence", quit.ExitCode)
+	}
+	last := quit.History[len(quit.History)-1]
+	if !strings.Contains(last.Note, "clean stop") || !strings.Contains(last.Note, "127") {
+		t.Errorf("last history note = %q, want it to say clean stop and the status", last.Note)
+	}
+
+	crash := h.runToEnd(h.helperRequest("test.executor.quit", "crash"))
+	if crash.State != Failed {
+		t.Fatalf("state = %s, want failed: nothing proved a normal quit", crash.State)
+	}
+}
+
+func TestACleanStopRuleCannotBeAnError(t *testing.T) {
+	action := modeAction("quit", "exit", "1")
+	action.Diagnostics = []map[string]any{{
+		"id": "quit", "match": "x", "severity": "error", "clean_stop": true,
+	}}
+	_, err := profile.Decode(fixtureProfile(t, "test.executor.badquit", action))
+	if err == nil || !strings.Contains(err.Error(), "clean_stop") {
+		t.Fatalf("decode error = %v, want one naming clean_stop", err)
 	}
 }
 

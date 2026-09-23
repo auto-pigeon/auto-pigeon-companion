@@ -332,7 +332,12 @@ function pathField(options) {
         input.focus();
         return;
       }
-      setMessage(status, body.error || "the file chooser could not be opened", "error");
+      // The chooser is there but did not open or did not answer. The message
+      // says so in words and ends with "type the path"; the cursor goes to the
+      // box that always works. Browse stays: the next press may well succeed.
+      const said = body.error || "The file chooser could not be opened. Type the path in the box instead";
+      setMessage(status, said.charAt(0).toUpperCase() + said.slice(1) + (said.endsWith(".") ? "" : "."), "error");
+      input.focus();
     })
   );
 

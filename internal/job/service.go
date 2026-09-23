@@ -851,6 +851,14 @@ func (s *Service) execute(id string) {
 		}
 		s.finish(j, Cancelled, "stopped because you asked", nil)
 		return
+	case result.err != nil && result.exitCode != nil && cleanStopProof(action, result.diagnostics) != "":
+		// The program printed the line its profile says only a normal quit
+		// prints, then exited non-zero: a quit that crashed on the way out.
+		// Recorded as a stop, with the exit status and the line kept as the
+		// evidence, so a hosted game ends `host_stopped` and not `host_crashed`.
+		s.finish(j, Succeeded, fmt.Sprintf("clean stop: exited with status %d after %q (%s)",
+			*result.exitCode, cleanStopProof(action, result.diagnostics), result.err.Error()), nil)
+		return
 	case result.err != nil:
 		s.finish(j, Failed, result.err.Error(), nil)
 		return
@@ -889,6 +897,24 @@ func (s *Service) step(j *Job, to State, note string) error {
 func (s *Service) transition(j *Job, to State, note string) {
 	j.State = to
 	j.History = append(j.History, Event{State: to, At: s.now(), Note: note})
+}
+
+// cleanStopProof returns the raw line of the first diagnostic whose rule the
+// action marks `clean_stop`, or "" when the program printed none. Only the
+// program's own words decide it; the exit status alone never does.
+func cleanStopProof(action profile.Action, diagnostics []Diagnostic) string {
+	for _, rule := range action.Diagnostics {
+		if !rule.CleanStop {
+			continue
+		}
+		for _, d := range diagnostics {
+			if d.RuleID == rule.ID {
+				return d.Raw
+			}
+		}
+	}
+
+	return ""
 }
 
 // finish records a terminal state. It is the only way a job stops.

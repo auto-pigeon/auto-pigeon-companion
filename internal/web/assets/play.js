@@ -91,7 +91,9 @@
 
   function remember() {
     const values = {
-      asset_id: state.map?.asset_id || "", revision_id: state.revision?.revision_id || "",
+      // While the lists are still arriving, the choice a link or a reload
+      // named is the pending one; writing "" there would drop it from the URL.
+      asset_id: state.map?.asset_id || pendingMap, revision_id: state.revision?.revision_id || pendingRevision,
       map_name: $("play-map-name").value.trim(), pipeline: state.pipeline,
       strict: state.strict ? "1" : "", engine: state.engine, action: state.action,
       mod: state.mod === "auto-pigeon" ? "" : state.mod, step: state.step > 1 ? String(state.step) : "",
@@ -313,10 +315,14 @@
   // revision at all, which the coordinator correctly refuses.
   let revisionRequest = 0;
 
-  async function loadRevisions(assetID) {
+  async function loadRevisions(assetID, { keep = false } = {}) {
     const request = ++revisionRequest;
     const select = $("play-revision");
     select.replaceChildren();
+    // Reloading the same map's list keeps the revision that was chosen: a
+    // second refresh of the page must not quietly move a review to the newest.
+    // A person re-choosing the map still gets the newest (see the map's `change`).
+    if (keep && state.revision && state.map?.asset_id === assetID) pendingRevision = state.revision.revision_id;
     state.revisions = [];
     state.revision = null;
     if (!assetID) return;
@@ -875,7 +881,17 @@
   }
 
   async function checkOwnWads() {
-    if (!state.plan || !state.map || !state.revision) return;
+    // A page opened from a link at step 4 shows its step before the map and
+    // revision the link names have arrived. A press in that window waits for
+    // them rather than returning silently — which it used to do, and a button
+    // that does nothing is the one thing a person cannot debug.
+    await ready;
+    if (!state.map || !state.revision) {
+      setMessage("play-review-message", t("Choose a map and one of its revisions first (step 1)."), "error");
+      return;
+    }
+    if (!state.plan) await refreshPlan();
+    if (!state.plan) return; // refreshPlan has said why.
     const query = new URLSearchParams({
       asset_id: state.map.asset_id, revision: String(state.revision.revision), own_wads_dir: state.ownWadsDir,
     });
@@ -1139,6 +1155,9 @@
       }));
     }
     if (run.remedy) children.push(el("p", { className: "muted", text: run.remedy }));
+    for (const warning of run.warnings || []) {
+      children.push(el("p", { className: "message warning", text: warning }));
+    }
     if (run.listing) {
       const listing = run.listing;
       const label = {
@@ -1328,6 +1347,9 @@
 
   let restored = false;
   let loading = false;
+  // Settles when the lists the current refresh asked for have arrived and the
+  // remembered map and revision are chosen again. See checkOwnWads.
+  let ready = Promise.resolve();
   window.AUCOM.areas.play = {
     async refresh() {
       if (!restored) {
@@ -1339,12 +1361,22 @@
       // The step a link or a reload named is shown at once; the lists fill
       // in behind it rather than step 1 standing in for a few seconds.
       loading = true;
+      // Nothing on the review may be pressed while the map it is about is
+      // still arriving: the review is drawn again once it has.
+      if (state.step >= 4) {
+        state.plan = null;
+        state.planKey = "";
+        $("play-review").replaceChildren(el("p", { className: "muted", text: t("Loading the map this page was opened on…") }));
+      }
       show(state.step);
+      let settle;
+      ready = new Promise((resolve) => { settle = resolve; });
       try {
         await Promise.all([loadPipelines(), loadEngines(), signedIn ? loadMaps() : null]);
-        if (signedIn && state.map) await loadRevisions(state.map.asset_id);
+        if (signedIn && state.map) await loadRevisions(state.map.asset_id, { keep: true });
       } finally {
         loading = false;
+        settle();
       }
       show(state.step);
       poll();

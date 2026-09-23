@@ -120,7 +120,7 @@
       "session_role": "client",
       "environment": {
         "inherit": ["DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "XAUTHORITY", "PULSE_SERVER"],
-        "set": { "APPIMAGE_EXTRACT_AND_RUN": "1" }
+        "set": { "APPIMAGE_EXTRACT_AND_RUN": "1", "LIBC_FATAL_STDERR_": "1" }
       },
       "executable": "engine",
       "working_dir": {
@@ -166,7 +166,8 @@
           "match": "*** buffer overflow detected ***",
           "severity": "warning",
           "message": "vkQuake crashed while quitting, after the game had ended. vkQuake 1.36.0 does this outside the Companion too.",
-          "hint": "The session before it was normal. The job reads failed because the program's exit status was not 0; nothing needs repairing on this machine."
+          "hint": "The session before it was normal, so the job is recorded as a clean stop even though the program's exit status was not 0 (the AppImage reports 127 for a program that ended on a signal). `LIBC_FATAL_STDERR_` puts the line on stderr, where this rule can read it; without it glibc writes it to the terminal and a crash on quit looks like any other.",
+          "clean_stop": true
         }
       ]
     },
@@ -177,7 +178,7 @@
       "session_role": "client",
       "environment": {
         "inherit": ["DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "XAUTHORITY", "PULSE_SERVER"],
-        "set": { "APPIMAGE_EXTRACT_AND_RUN": "1" }
+        "set": { "APPIMAGE_EXTRACT_AND_RUN": "1", "LIBC_FATAL_STDERR_": "1" }
       },
       "executable": "engine",
       "working_dir": {
@@ -221,7 +222,8 @@
           "match": "*** buffer overflow detected ***",
           "severity": "warning",
           "message": "vkQuake crashed while quitting, after the game had ended. vkQuake 1.36.0 does this outside the Companion too.",
-          "hint": "The session before it was normal. The job reads failed because the program's exit status was not 0; nothing needs repairing on this machine."
+          "hint": "The session before it was normal, so the job is recorded as a clean stop even though the program's exit status was not 0 (the AppImage reports 127 for a program that ended on a signal). `LIBC_FATAL_STDERR_` puts the line on stderr, where this rule can read it; without it glibc writes it to the terminal and a crash on quit looks like any other.",
+          "clean_stop": true
         }
       ]
     },
@@ -231,7 +233,7 @@
       "session_role": "client",
       "environment": {
         "inherit": ["DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "XAUTHORITY", "PULSE_SERVER"],
-        "set": { "APPIMAGE_EXTRACT_AND_RUN": "1" }
+        "set": { "APPIMAGE_EXTRACT_AND_RUN": "1", "LIBC_FATAL_STDERR_": "1" }
       },
       "executable": "engine",
       "working_dir": {
@@ -282,7 +284,8 @@
           "match": "*** buffer overflow detected ***",
           "severity": "warning",
           "message": "vkQuake crashed while quitting, after the game had ended. vkQuake 1.36.0 does this outside the Companion too.",
-          "hint": "The session before it was normal. The job reads failed because the program's exit status was not 0; nothing needs repairing on this machine."
+          "hint": "The session before it was normal, so the job is recorded as a clean stop even though the program's exit status was not 0 (the AppImage reports 127 for a program that ended on a signal). `LIBC_FATAL_STDERR_` puts the line on stderr, where this rule can read it; without it glibc writes it to the terminal and a crash on quit looks like any other.",
+          "clean_stop": true
         }
       ]
     },
@@ -293,7 +296,7 @@
       "session_role": "listen_server",
       "environment": {
         "inherit": ["DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "XAUTHORITY", "PULSE_SERVER"],
-        "set": { "APPIMAGE_EXTRACT_AND_RUN": "1" }
+        "set": { "APPIMAGE_EXTRACT_AND_RUN": "1", "LIBC_FATAL_STDERR_": "1" }
       },
       "executable": "engine",
       "working_dir": {
@@ -356,7 +359,8 @@
           "match": "*** buffer overflow detected ***",
           "severity": "warning",
           "message": "vkQuake crashed while quitting, after the game had ended. vkQuake 1.36.0 does this outside the Companion too.",
-          "hint": "The session before it was normal. The job reads failed because the program's exit status was not 0; nothing needs repairing on this machine."
+          "hint": "The session before it was normal, so the job is recorded as a clean stop even though the program's exit status was not 0 (the AppImage reports 127 for a program that ended on a signal). `LIBC_FATAL_STDERR_` puts the line on stderr, where this rule can read it; without it glibc writes it to the terminal and a crash on quit looks like any other.",
+          "clean_stop": true
         }
       ]
     }

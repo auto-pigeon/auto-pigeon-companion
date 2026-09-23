@@ -637,6 +637,9 @@ func playView(record *playrun.Record, now time.Time) map[string]any {
 	if remedy := playrun.CurrentRemedy(record); remedy != "" {
 		out["remedy"] = remedy
 	}
+	if len(record.Warnings) > 0 {
+		out["warnings"] = record.Warnings
+	}
 	if record.RetryOf != "" {
 		out["retry_of"] = record.RetryOf
 	}

@@ -64,6 +64,12 @@ func helperMain(args []string) int {
 		return code
 	case "stderr":
 		fmt.Fprintln(os.Stderr, strings.Join(rest, " "))
+	case "stderr-exit":
+		// A line on stderr, then an exit status: a program that crashed on its
+		// way out after saying so.
+		code, _ := strconv.Atoi(rest[0])
+		fmt.Fprintln(os.Stderr, strings.Join(rest[1:], " "))
+		return code
 	case "flood":
 		count, _ := strconv.Atoi(rest[0])
 		line := strings.Repeat("x", 99) + "\n"
