@@ -111,8 +111,7 @@ func (s *Service) downloadTextures(ctx context.Context, record *Record) error {
 		// named. See ownwads.go.
 		names, onlyNotCarried := OwnWADsNeeded(result.Ref.CompilerRefusals)
 		if onlyNotCarried && record.Request.OwnWADsDir != "" {
-			root, own, err := s.completeWithOwnWADs(record, result.ContentRoot, names,
-				OwnWADDestinations(result.Ref.CompilerRefusals))
+			root, own, err := s.completeWithOwnWADs(record, result.ContentRoot, names)
 			if err != nil {
 				record.Remedy = "Put your own copy of " + strings.Join(names, ", ") +
 					" in the folder you named, or name the folder that has it."
@@ -190,6 +189,14 @@ func (s *Service) compile(ctx context.Context, record *Record) error {
 	source := record.ConvertedMap
 	if source == "" {
 		source = record.MapFile
+	}
+	// Each WAD at the path the map declares it at (declaredwads.go).
+	placed, err := s.placeDeclaredWADs(record, source)
+	if err != nil {
+		return fmt.Errorf("playrun: placing the map's WADs where it declares them: %w", err)
+	}
+	if len(placed) > 0 {
+		s.detail(record, "texture WADs also placed where the map declares them: "+strings.Join(placed, ", "))
 	}
 	request := build.Request{
 		PipelineID: record.Request.PipelineID,

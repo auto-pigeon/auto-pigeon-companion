@@ -55,38 +55,3 @@ func TestFindOwnWADsIsExactThenCaseInsensitiveAndNeverRecursive(t *testing.T) {
 		t.Error("a relative folder was accepted")
 	}
 }
-
-// Own WADs are staged where the map DECLARES them, because the compiler joins
-// `-wadpath` with the declared path: dm2 declares `gfx/metal.wad`, and a copy at
-// the root was never opened — every texture compiled missing (2026-09-23).
-func TestAnOwnWADIsStagedWhereTheMapDeclaresIt(t *testing.T) {
-	refusals := []string{"wad_bytes_not_carried: gfx/metal.wad", "wad_bytes_not_carried: ../../etc/evil.wad",
-		`wad_bytes_not_carried: C:\quake\id1\base.wad`}
-	destinations := OwnWADDestinations(refusals)
-	want := map[string][]string{"metal.wad": {"gfx/metal.wad"}, "evil.wad": {"evil.wad"}, "base.wad": {"base.wad"}}
-	if !reflect.DeepEqual(destinations, want) {
-		t.Fatalf("destinations = %v, want %v", destinations, want)
-	}
-
-	own := t.TempDir()
-	if err := os.WriteFile(filepath.Join(own, "METAL.WAD"), []byte("WAD2"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	store, err := OpenStore(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := &Service{store: store}
-	record := &Record{ID: "run1", Request: Request{OwnWADsDir: own}}
-	root, staged, err := s.completeWithOwnWADs(record, t.TempDir(), []string{"metal.wad"},
-		OwnWADDestinations(refusals[:1]))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(root, "gfx", "metal.wad")); err != nil {
-		t.Fatalf("metal.wad is not where the map declares it: %v", err)
-	}
-	if len(staged) != 1 || staged[0].Path != "gfx/metal.wad" {
-		t.Fatalf("staged = %+v", staged)
-	}
-}
