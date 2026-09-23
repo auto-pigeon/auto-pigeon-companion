@@ -552,8 +552,13 @@
     }
     if (!$("wizard-runtime").value && template.runtime) $("wizard-runtime").value = template.runtime;
     // A profile made from a template usually describes the same program, so
-    // its homepage is offered; the field stays editable.
-    if (!$("wizard-homepage").value && template.homepage) $("wizard-homepage").value = template.homepage;
+    // its homepage is offered, and follows the template while it is still the
+    // offered one. What the person typed is theirs and is kept.
+    const homepage = $("wizard-homepage");
+    if (!homepage.value || homepage.value === homepage.dataset.offered) {
+      homepage.value = template.homepage || "";
+      homepage.dataset.offered = homepage.value;
+    }
     if (!$("wizard-engine-version").value && template.engine_version) {
       $("wizard-engine-version").value = template.engine_version;
     }
