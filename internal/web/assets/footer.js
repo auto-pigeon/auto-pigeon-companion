@@ -92,12 +92,13 @@
     const backend = site ? site.host : status.aub_base_url ? t("development server") : t("no Auto-Pigeon server chosen");
     const where = [status.platform, backend].filter(Boolean).join(" · ") + (status.debug ? " · " + t("debug mode") : "");
     const identity = $("identity");
-    identity.replaceChildren();
+    // Platform and server first, then the version, bottom right (operator,
+    // 2026-09-22): "linux/amd64 · development server | Version 1.124".
+    identity.replaceChildren(el("span", { text: where }));
     if (version) {
-      identity.append(el("span", { className: "site-footer__ver", text: version }));
       identity.append(el("span", { className: "site-footer__sep", text: "|", attrs: { "aria-hidden": "true" } }));
+      identity.append(el("span", { className: "site-footer__ver", text: version }));
     }
-    identity.append(el("span", { text: where }));
     $("about-version").textContent = version ? `${version} · ${status.platform || ""}` : status.platform || "";
 
     // Asked again only when the server in use changes.

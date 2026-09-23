@@ -396,10 +396,9 @@
         <!-- Library ------------------------------------------------------ -->
         <section id="area-library" class="area" aria-labelledby="area-heading">
           <p class="lede">
-            The maps in your Auto-Pigeon account, and what this computer has
-            already downloaded. Download a map to build its latest version; a
-            build keeps the copy it started with, so saving a newer version
-            in the editor never changes a build that is already running.
+            The maps in your Auto-Pigeon account. Each card lists the textures
+            the map uses — a build downloads them for you, so there is nothing
+            else to fetch. Download a map to build it without a connection.
           </p>
 
           <div id="library-signed-out" class="panel notice" hidden>
@@ -415,21 +414,15 @@
 
           <div class="panel">
             <div class="panel-head">
-              <h3>In your account</h3>
-              <button type="button" id="library-refresh" class="secondary">Refresh</button>
-            </div>
-            <div class="row">
-              <div class="field">
-                <label for="library-type">Asset type</label>
-                <select id="library-type"><option value="">All types</option></select>
-              </div>
-              <div class="field grow">
-                <label for="library-search">Name contains</label>
-                <input id="library-search" type="search" placeholder="e1m1" />
+              <h3>Your maps</h3>
+              <div class="panel-head__tools">
+                <label class="visually-hidden" for="library-search">Find a map by name</label>
+                <input id="library-search" type="search" placeholder="Find a map by name" />
+                <button type="button" id="library-refresh" class="secondary">Refresh</button>
               </div>
             </div>
             <p id="library-message" class="message" role="status"></p>
-            <ul id="library-assets" class="cards" aria-label="Maps and assets in your account"></ul>
+            <ul id="library-assets" class="cards map-cards" aria-label="Maps in your account"></ul>
             <div class="row-actions">
               <button type="button" id="library-more" class="secondary" hidden>Show more</button>
             </div>
@@ -446,7 +439,7 @@
 
           <div class="panel">
             <div class="panel-head">
-              <h3>Downloaded to this computer</h3>
+              <h3>Maps downloaded to this computer</h3>
               <button type="button" id="cached-refresh" class="secondary">Refresh</button>
             </div>
             <p class="muted">

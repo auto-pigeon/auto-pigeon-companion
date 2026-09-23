@@ -157,3 +157,29 @@ func textureRefusal(path string, response *http.Response) error {
 
 	return &TextureExportRefusal{Status: api.StatusCode, Reason: api.Reason, Detail: api.Message}
 }
+
+// MapTextures is the part of AUB's `GET /api/maps/{id}/texture-requirements`
+// a map's card shows: the WADs its worldspawn declares, in declaration order,
+// and how many distinct textures it uses. Read, never downloaded: the bundle
+// itself is [Client.TextureExport], which a build fetches.
+type MapTextures struct {
+	MapID        string   `json:"map_id"`
+	Revision     int      `json:"revision"`
+	WADState     string   `json:"wad_state,omitempty"`
+	WADsDeclared []string `json:"wads_declared"`
+	TextureCount int      `json:"texture_count"`
+}
+
+// TextureRequirements asks AUB which WADs a map declares and how many
+// textures it uses, at its latest revision.
+func (c *Client) TextureRequirements(ctx context.Context, mapID string) (MapTextures, error) {
+	if strings.TrimSpace(mapID) == "" {
+		return MapTextures{}, fmt.Errorf("aub: a texture question needs a map id")
+	}
+	var out MapTextures
+	err := c.do(ctx, http.MethodGet, "/api/maps/"+url.PathEscape(mapID)+"/texture-requirements", nil, nil, &out)
+	if out.WADsDeclared == nil {
+		out.WADsDeclared = []string{}
+	}
+	return out, err
+}

@@ -38,7 +38,24 @@ func (s *Server) libraryAPI() map[string]http.HandlerFunc {
 		"GET /api/v1/library/assets/{type}/{id}/{rev}": s.handleLibraryRevision,
 		"POST /api/v1/library/sync":                    s.handleLibrarySync,
 		"GET /api/v1/library/cached":                   s.handleLibraryCached,
+		"GET /api/v1/library/maps/{id}/textures":       s.handleLibraryMapTextures,
 	}
+}
+
+// handleLibraryMapTextures says which texture WADs a map uses, for its card in
+// My Maps. The WADs themselves are fetched by a build, automatically; this is
+// only the list, so a person can see what their map needs.
+func (s *Server) handleLibraryMapTextures(w http.ResponseWriter, r *http.Request) {
+	client, ok := s.requireSession(w)
+	if !ok {
+		return
+	}
+	textures, err := client.TextureRequirements(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeError(w, aubStatus(err), err)
+		return
+	}
+	writeJSON(w, http.StatusOK, textures)
 }
 
 // aubStatus maps a backend refusal to a status the page can act on.

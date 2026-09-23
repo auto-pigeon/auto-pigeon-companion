@@ -183,13 +183,17 @@
     );
 
     // NEW_244D: the card downloads the LATEST revision; older ones are folded
-    // away. And no id of any kind is shown to the person.
+    // away. And no id of any kind is shown to the person. Since 2026-09-22 the
+    // card also lists the textures the map uses.
     record(
       "a map is shown by its name, with no id",
-      !textOf(card).includes(settings.asset_id) && textOf(card).includes("Latest"),
+      !textOf(card).includes(settings.asset_id) && textOf(card).includes("Revision"),
       textOf(card).replace(/\s+/g, " ").trim().slice(0, 90)
     );
-    buttonIn(card, "Download latest").click();
+    await waitFor("the map's textures", () => textOf(card).includes("second.wad"));
+    record("a map's card lists the textures it uses", true,
+      textOf(card.querySelector(".map-card__textures")).replace(/\s+/g, " ").trim());
+    buttonIn(card, "Download").click();
     await waitFor(
       "the download to finish",
       () => {

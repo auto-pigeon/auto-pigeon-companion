@@ -8,7 +8,7 @@
 "use strict";
 
 (() => {
-  const { $, el, api, setMessage, busy, withBusy, record, badge, bytes, when } = window.AUCOM;
+  const { $, el, api, setMessage, busy, withBusy, record, badge, bytes, when, t } = window.AUCOM;
 
   let assets = [];
   let cachedKeys = new Set();
@@ -33,15 +33,6 @@
   }
   window.AUCOM.typeName = typeName;
 
-  async function refreshTypes() {
-    const select = $("library-type");
-    if (select.options.length > 1) return;
-    const { ok, body } = await api("/api/v1/library/capabilities");
-    if (!ok) return;
-    for (const type of body.asset_types || []) {
-      select.append(el("option", { text: typeName(type.asset_type, true), attrs: { value: type.asset_type } }));
-    }
-  }
 
   // The account is read a page at a time. The first page used to be all the
   // page ever showed: with more than 50 assets, dm2 was simply absent until its
@@ -50,10 +41,12 @@
   let nextCursor = "";
 
   function catalogQuery(cursor) {
+    // Maps only (operator, 2026-09-22). Texture sources, entity catalogues
+    // and the rest are the editor's business; a build fetches the textures a
+    // map needs on its own.
     const query = new URLSearchParams();
-    const type = $("library-type").value;
     const name = $("library-search").value.trim();
-    if (type) query.set("type", type);
+    query.set("type", "map");
     if (name) query.set("name", name);
     query.set("limit", "50");
     if (cursor) query.set("cursor", cursor);
@@ -64,8 +57,8 @@
     nextCursor = hasMore ? nextCursor : "";
     $("library-more").hidden = !hasMore;
     setMessage("library-message", hasMore
-      ? `Showing the first ${assets.length}. Your account has more: press Show more, or narrow the list with Name contains.`
-      : `${assets.length} asset${assets.length === 1 ? "" : "s"}.`);
+      ? t("Showing the first {n}. Your account has more: press Show more, or find a map by name.", { n: assets.length })
+      : assets.length === 1 ? t("1 map.") : t("{n} maps.", { n: assets.length }));
   }
 
   async function showMore(button) {
@@ -107,7 +100,9 @@
     }
     assets = body.items || [];
     if (assets.length === 0) {
-      setMessage("library-message", "Nothing matched. This account may have no assets of that type yet.");
+      setMessage("library-message", $("library-search").value.trim()
+        ? t("No map has that in its name.")
+        : t("This account has no maps yet. Make one in the Auto-Pigeon editor."));
       return;
     }
     for (const asset of assets) list.append(assetCard(asset));
@@ -123,36 +118,95 @@
     return asset.display_name || "Untitled " + typeName(asset.asset_type).toLowerCase();
   }
 
+  // A map's card: its name, when it was last saved, the textures it uses,
+  // and one action. Compact, so a screen holds many (operator, 2026-09-22).
   function assetCard(asset) {
-    const title = el("h4", { text: nameOf(asset) });
-    const meta = el("p", { className: "muted" });
-    meta.textContent = [typeName(asset.asset_type), asset.game, asset.visibility].filter(Boolean).join(" · ");
-
     const revision = asset.current_revision;
-    const current = el("p", { className: "muted" });
-    current.textContent = revision
-      ? `Latest: revision ${revision.revision}${revision.created_at ? " · " + when(revision.created_at) : ""}`
-      : "Nothing saved yet";
+    const head = el("div", {
+      className: "map-card__head",
+      children: [
+        el("h4", { text: nameOf(asset) }),
+        asset.visibility ? badge(t(asset.visibility), asset.visibility === "public" ? "ok" : "") : null,
+      ].filter(Boolean),
+    });
+    const saved = el("p", { className: "map-card__meta muted" });
+    saved.textContent = revision
+      ? t("Revision {n}", { n: revision.revision }) + (revision.created_at ? " · " + when(revision.created_at) : "")
+      : t("Nothing saved yet");
 
-    const status = el("p", { className: "message", attrs: { role: "status" } });
-    const download = el("button", { text: "Download latest", attrs: { type: "button", class: "primary" } });
+    const textures = el("div", { className: "map-card__textures", attrs: { "aria-live": "polite" } });
+    textures.append(el("span", { className: "muted small", text: t("Textures: checking…") }));
+    if (revision) queueTextures(asset.asset_id, textures);
+    else textures.replaceChildren();
+
+    const status = el("p", { className: "message small", attrs: { role: "status" } });
+    const play = el("button", { text: t("Build & Run"), attrs: { type: "button", class: "primary" } });
+    play.disabled = !revision;
+    // Build & Run opens on this map, at its newest revision.
+    // The build and engine chosen before are kept; the map, its revision and
+    // its name in the game start again.
+    play.addEventListener("click", () => {
+      const query = new URLSearchParams(window.location.search);
+      for (const key of ["rev", "name", "step"]) query.delete(key);
+      query.set("map", asset.asset_id);
+      window.location.assign("?" + query.toString() + "#play");
+    });
+    const download = el("button", { text: t("Download"), attrs: { type: "button", class: "secondary" } });
     download.disabled = !revision;
     download.addEventListener("click", () =>
       withBusy(download, () => downloadRevision(asset, revision || {}, "current", status, download))
     );
-    // An older revision is a rare need, so it is folded away: the card offers
-    // the latest, and the fold offers the rest.
-    const other = el("button", { text: "Choose an older revision…", attrs: { type: "button", class: "secondary" } });
+    const other = el("button", { text: t("Older revisions…"), attrs: { type: "button", class: "link" } });
     other.addEventListener("click", () => openRevisions(asset, other));
-    const more = el("details", {
-      className: "more",
-      children: [el("summary", { text: "More" }), other],
-    });
 
     return el("li", {
-      className: "card",
-      children: [title, meta, current, el("div", { className: "row-actions", children: [download, more] }), status],
+      className: "card map-card",
+      children: [head, saved, textures, el("div", { className: "map-card__actions", children: [play, download, other] }), status],
     });
+  }
+
+  // The textures each card shows, asked for a few at a time: a first page is
+  // fifty maps, and fifty requests at once would be a burst for no reason.
+  const textureQueue = [];
+  let textureWorkers = 0;
+  function queueTextures(mapID, node) {
+    textureQueue.push({ mapID, node });
+    while (textureWorkers < 4 && textureQueue.length) {
+      textureWorkers += 1;
+      (async () => {
+        // A turn later, so the card this was queued for is on the page.
+        await new Promise((resolve) => window.setTimeout(resolve, 0));
+        while (textureQueue.length) {
+          const job = textureQueue.shift();
+          if (!document.contains(job.node)) continue;
+          await drawTextures(job.mapID, job.node);
+        }
+        textureWorkers -= 1;
+      })();
+    }
+  }
+
+  async function drawTextures(mapID, node) {
+    const { ok, body } = await api(`/api/v1/library/maps/${encodeURIComponent(mapID)}/textures`);
+    node.replaceChildren();
+    if (!ok) {
+      node.append(el("span", { className: "muted small", text: t("Textures: could not be read") }));
+      return;
+    }
+    const wads = body.wads_declared || [];
+    node.append(el("span", { className: "map-card__label", text: t("Textures") }));
+    if (!wads.length) {
+      node.append(el("span", { className: "muted small", text: t("none declared") }));
+      return;
+    }
+    const list = el("ul", { className: "wad-chips", attrs: { "aria-label": t("Texture WADs, in the order the map declares them") } });
+    for (const wad of wads) {
+      list.append(el("li", { className: "wad-chip", text: wad.replace(/^.*[\\/]/, ""), attrs: { title: wad } }));
+    }
+    node.append(list);
+    if (body.texture_count) {
+      node.append(el("span", { className: "muted small", text: t("{n} textures", { n: body.texture_count }) }));
+    }
   }
 
   // downloadRevision fetches and verifies one revision — the latest unless
@@ -285,7 +339,9 @@
       setMessage("cached-message", body.error || "could not read the local cache", "error");
       return;
     }
-    const items = body.items || [];
+    // Maps only, like the list above: other kinds of download are the
+    // editor's, and a build fetches what it needs itself.
+    const items = (body.items || []).filter((item) => item.record?.asset_type === "map");
     setMessage(
       "cached-message",
       items.length === 0
@@ -327,7 +383,6 @@
   $("library-refresh").addEventListener("click", (event) => withBusy(event.currentTarget, refreshCatalog));
   $("library-more").addEventListener("click", (event) => showMore(event.currentTarget));
   $("cached-refresh").addEventListener("click", (event) => withBusy(event.currentTarget, refreshCached));
-  $("library-type").addEventListener("change", refreshCatalog);
   $("library-search").addEventListener("change", refreshCatalog);
   $("library-close-revisions").addEventListener("click", () => {
     $("library-revisions-panel").hidden = true;
@@ -339,7 +394,6 @@
       // offline Companion still shows something true straight away.
       await refreshCached();
       if (window.AUCOM.status.authenticated) {
-        await refreshTypes();
         await refreshCatalog();
       } else {
         setMessage("library-message", "Sign in to see what is in your account.", "");

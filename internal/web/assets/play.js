@@ -607,11 +607,21 @@
     return el("section", { className: "panel review-card", children });
   }
 
-  // POSIX shell quoting, for DISPLAY: the command is still sent to the
-  // operating system element by element, never as a string. A word with
-  // nothing special in it is shown bare; anything else in single quotes.
+  // The command as it would be typed on THIS machine, for DISPLAY: the paths
+  // are already this machine's (C:\\… on Windows), and the quoting and the
+  // prompt follow its shell — cmd/PowerShell double quotes and ">" on Windows,
+  // POSIX single quotes and "$" elsewhere (operator, 2026-09-22). The program
+  // is still started with these words one by one, never through a shell.
+  function onWindows() {
+    return /^windows\//.test(window.AUCOM.status?.platform || "");
+  }
+
   function shellQuote(word) {
     const text = String(word);
+    if (onWindows()) {
+      if (text && !/[\s"&|<>^%]/.test(text)) return text;
+      return '"' + text.replace(/"/g, '""') + '"';
+    }
     if (text && /^[A-Za-z0-9_@%+=:,./-]+$/.test(text)) return text;
     return "'" + text.replace(/'/g, "'\\''") + "'";
   }
@@ -635,7 +645,10 @@
         el("pre", {
           className: "shell__code",
           attrs: { "aria-label": t("The exact command") },
-          children: [el("span", { className: "shell__prompt", text: "$ ", attrs: { "aria-hidden": "true" } }), el("code", { text })],
+          children: [
+            el("span", { className: "shell__prompt", text: onWindows() ? "> " : "$ ", attrs: { "aria-hidden": "true" } }),
+            el("code", { text }),
+          ],
         }),
       ],
     });

@@ -34,8 +34,12 @@
   }
 
   function profileCard(profile) {
-    const title = el("h4", { text: profile.name });
-    const marks = el("p");
+    // Fixed rows, so the text lines up across a row of cards (operator,
+    // 2026-09-22): two lines for the name, two for the tags, four for the
+    // summary. Anything longer is cut with an ellipsis, and the whole text is
+    // in the tooltip.
+    const title = el("h4", { className: "profile-card__title", text: profile.name, attrs: { title: profile.name } });
+    const marks = el("p", { className: "profile-card__tags" });
     marks.append(badge(profile.trust));
     marks.append(document.createTextNode(" "));
     marks.append(badge(profile.kind, "queued"));
@@ -47,8 +51,12 @@
       marks.append(wip);
     }
 
-    const summary = el("p", { className: "muted", text: profile.summary || "" });
-    const identity = el("p", { className: "muted", text: `Version ${profile.version}` });
+    const summary = el("p", {
+      className: "muted profile-card__summary",
+      text: profile.summary || "",
+      attrs: { title: profile.summary || null },
+    });
+    const identity = el("p", { className: "muted profile-card__version", text: `Version ${profile.version}` });
 
     // Configuring a profile and reviewing one are different user tasks, so they
     // are different words (246I defect 2). An installed profile whose document
@@ -70,7 +78,7 @@
     });
 
     return el("li", {
-      className: "card",
+      className: "card profile-card",
       children: [title, marks, summary, identity, el("div", { className: "row-actions", children: [open] })],
     });
   }

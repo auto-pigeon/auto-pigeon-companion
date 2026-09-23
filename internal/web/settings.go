@@ -78,8 +78,8 @@ type settingsBody struct {
 
 func (s *Server) settingsAPI() map[string]http.HandlerFunc {
 	return map[string]http.HandlerFunc{
-		"GET /api/v1/settings": s.handleSettingsGet,
-		"PUT /api/v1/settings": s.handleSettingsPut,
+		"GET /api/v1/settings":          s.handleSettingsGet,
+		"PUT /api/v1/settings":          s.handleSettingsPut,
 		"PUT /api/v1/settings/language": s.handleLanguagePut,
 	}
 }

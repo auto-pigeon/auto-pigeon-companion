@@ -309,7 +309,7 @@
   }
 
   // Categories that decide what is drawn below them are tabs.
-  for (const id of ["profiles-kind", "wizard-kind", "scratch-kind", "jobs-state", "library-type"]) {
+  for (const id of ["profiles-kind", "wizard-kind", "scratch-kind", "jobs-state"]) {
     window.AUCOM.tabsFor(id);
   }
 

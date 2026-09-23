@@ -214,6 +214,19 @@ func (b *fixtureBackend) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// What My Maps shows on a map's card: the WADs it declares, never the
+	// bundle itself.
+	if strings.HasPrefix(path, "/api/maps/") && strings.HasSuffix(path, "/texture-requirements") {
+		write(map[string]any{
+			"map_id":        strings.TrimSuffix(strings.TrimPrefix(path, "/api/maps/"), "/texture-requirements"),
+			"revision":      4,
+			"wad_state":     "multiple",
+			"wads_declared": []string{"first.wad", "second.wad"},
+			"texture_count": 3,
+		})
+		return
+	}
+
 	if b.notices != nil && path == aub.NoticesPath {
 		b.notices.ServeHTTP(w, r)
 		return
