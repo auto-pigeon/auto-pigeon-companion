@@ -10,7 +10,7 @@
     "schema": { "const": "auto-pigeon-bug-report/1.0" },
     "report_id": { "type": "string", "pattern": "^[0-9a-f]{32}$", "description": "Minted once per report by the client. It is also the idempotency key of the server route: retrying the same report can never file a second issue." },
     "created_at": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$" },
-    "component": { "enum": ["AUP", "AUG"] },
+    "component": { "enum": ["AUP", "AUG", "AUCOM"] },
     "release": { "type": "string", "pattern": "^[A-Za-z0-9._+-]{1,40}$" },
     "environment": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,31}$" },
     "kind": { "enum": ["cold", "incident"] },

@@ -619,6 +619,32 @@ The Jobs area additionally keeps *Recent actions in this window*: a list of what
 this window asked for and what it was told. It is a convenience, every line
 points at something durable, and clearing it deletes nothing.
 
+### Report a bug
+
+**Report a bug**, in the footer, is AUG's dialog. The page builds one
+`auto-pigeon-bug-report/1.0` document with component `AUCOM`, using the shared
+incident contract vendored byte for byte under
+`internal/web/assets/vendor/incident-contract/` (1.3.0 or later: earlier
+versions only accept `AUP` and `AUG`). It never collects a map, an address, an
+account or a token. You review exactly what the report contains, and then you
+choose: download it as `.txt` / `.json`, open a prefilled GitHub issue (it
+opens, it never submits), or **Send through Auto-Pigeon**. That last button
+works only when the AUB you are signed in to has
+`AUB_BUG_REPORT_GITHUB_TOKEN` and `AUB_BUG_REPORT_GITHUB_API_BASE_URL` set;
+otherwise the dialog says so and offers the other two.
+Reports are public on `https://github.com/auto-pigeon/bug-reports`.
+
+The page reaches AUB through two relay routes, which pass the document and
+AUB's answer through unchanged:
+
+```console
+$ TOKEN=$(cat ~/.config/auto-pigeon-companion/api-token)
+$ curl -s -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/bug-reports/status
+{"server_route":"unavailable","repository":"auto-pigeon/bug-reports","schema":"auto-pigeon-bug-report/1.0","requires_sign_in":true}
+$ curl -s -H "X-AUCOM-Token: $TOKEN" -X POST http://127.0.0.1:8791/api/v1/bug-reports \
+    -d '{"document": <the reviewed document>, "confirm": true}'
+```
+
 ### Keyboard, screen readers, and small windows
 
 Every control is a native `button`, `input` or `select`, so all of them are in

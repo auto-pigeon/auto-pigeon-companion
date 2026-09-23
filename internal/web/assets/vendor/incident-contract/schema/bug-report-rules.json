@@ -3,7 +3,7 @@
   "document_schema": "auto-pigeon-bug-report/1.0",
   "description": "The bounds and text rules of the user bug report, as DATA, so the JavaScript reference implementation in ../src/bugReport.mjs and AUB's Go re-validation of a server-route submission apply the same rules rather than two sincere transcriptions. A report is PUBLISHED on a public GitHub repository, so every rule here is a publication rule.",
   "repository": "auto-pigeon/bug-reports",
-  "components": ["AUP", "AUG"],
+  "components": ["AUP", "AUG", "AUCOM"],
   "limits": {
     "summary": 140,
     "steps": 2000,
