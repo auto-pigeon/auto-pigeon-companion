@@ -16,7 +16,7 @@
 "use strict";
 
 (() => {
-  const { $, el, api, setMessage, withBusy, record } = window.AUCOM;
+  const { $, el, api, setMessage, withBusy, record, t } = window.AUCOM;
 
   const ROOT_ROLES = ["content_root", "game_root", "project_root", "build_root", "tool_root"];
   const OPTION_TYPES = ["text", "bool", "integer", "enum"];

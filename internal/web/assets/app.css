@@ -942,7 +942,13 @@ ol.numbered { list-style: none; padding-inline-start: 0; }
    "the highlighting of the tabs looks broken"), and a tinted current step. */
 .bwiz-steps { gap: 0 0.5rem; }
 .bwiz-step { padding: 0.75rem 0.5rem 0.6rem; border-top-width: 4px; border-radius: 0 0 var(--radius) var(--radius); }
-.bwiz-step:hover { background: var(--surface); }
+/* Hovering a step never makes it look like another state: the generic
+   button:hover turned every hovered step's bar teal, so the step under the
+   pointer read as the current one. */
+.bwiz-step:hover:not(:disabled) { background: var(--surface); border-color: transparent; border-top-color: var(--line-strong); }
+.bwiz-step.done:hover:not(:disabled) { border-top-color: var(--ok); }
+.bwiz-step.attention:hover:not(:disabled) { border-top-color: var(--bad); }
+.bwiz-step.current:hover:not(:disabled) { border-top-color: var(--accent); background: var(--accent-soft); }
 .bwiz-step.current { background: var(--accent-soft); }
 .bwiz-step.current .bwiz-step__label { color: var(--accent-strong); }
 .bwiz-step.current .bwiz-step__summary { color: var(--ink); }

@@ -9,7 +9,7 @@
 
 (() => {
   const { $, el, api, setMessage, busy, withBusy, record, badge, when, permissionBlock,
-    maturityBadge, maturityNote, openCompatibilityReport } = window.AUCOM;
+    maturityBadge, maturityNote, openCompatibilityReport, t } = window.AUCOM;
 
   let engines = [];
   let bindingInputs = new Map();

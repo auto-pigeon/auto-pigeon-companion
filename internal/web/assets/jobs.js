@@ -9,7 +9,7 @@
 "use strict";
 
 (() => {
-  const { $, el, api, setMessage, withBusy, record, badge, when, terminal } = window.AUCOM;
+  const { $, el, api, setMessage, withBusy, record, badge, when, terminal, t } = window.AUCOM;
 
   let watching = null;
   let poller = null;

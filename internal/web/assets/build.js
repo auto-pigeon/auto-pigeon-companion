@@ -11,7 +11,7 @@
 
 (() => {
   const { $, el, api, setMessage, busy, withBusy, record, badge, when, terminal,
-    maturityBadge, maturityNote, openCompatibilityReport } = window.AUCOM;
+    maturityBadge, maturityNote, openCompatibilityReport, t } = window.AUCOM;
 
   let pipelines = [];
   let inputFields = new Map();
@@ -104,7 +104,7 @@
     if (!pipeline) return;
 
     $("build-pipeline-note").textContent = pipeline.runnable
-      ? `${pipeline.steps.length} stage(s). Version ${pipeline.version}.`
+      ? t("{n} stage(s). Version {version}.", { n: pipeline.steps.length, version: pipeline.version })
       : "This pipeline cannot run here: no tool installed on this machine does " +
         (pipeline.missing_capabilities.length === 1 ? "one of its stages" : `${pipeline.missing_capabilities.length} of its stages`) +
         ". Install the tool that does, then approve it in Profiles.";
@@ -331,7 +331,7 @@
       // The concrete map, named in the selector itself, so "Where Map source
       // comes from" presents the thing that was just downloaded instead of a
       // category the user has to translate.
-      const label = `Downloaded map: ${chosen.display_name} — revision ${chosen.revision}`;
+      const label = t("Downloaded map: {name} — revision {n}", { name: chosen.display_name, n: chosen.revision });
       if (already) {
         already.textContent = label;
       } else {
@@ -459,7 +459,7 @@
       // whichever the browser found first.
       id: "build-setup-folder-" + String(profile.id).replace(/[^a-zA-Z0-9_-]/g, "-"),
       kind: "directory",
-      label: `The folder that holds ${profile.name || profile.id}`,
+      label: t("The folder that holds {name}", { name: profile.name || profile.id }),
     });
     chooser.container.hidden = true;
     const use = el("button", { text: "Use this folder", attrs: { type: "button", class: "primary" } });
@@ -514,7 +514,7 @@
         return;
       }
       const download = el("button", {
-        text: `Download and set up ${body.name || profile.name || profile.id}`,
+        text: t("Download and set up {name}", { name: body.name || profile.name || profile.id }),
         attrs: { type: "button", class: "primary" },
       });
       download.addEventListener("click", () =>
@@ -567,7 +567,7 @@ Download and set it up?`)) {
     if (why?.kind === "input") {
       const field = $("build-input-" + why.name);
       if (field) {
-        const focus = el("button", { text: `Choose the ${inputTitle(why.name)}`, attrs: { type: "button", class: "secondary" } });
+        const focus = el("button", { text: t("Choose the {what}", { what: inputTitle(why.name) }), attrs: { type: "button", class: "secondary" } });
         focus.addEventListener("click", () => {
           showStep(2, { focus: false });
           field.focus();
@@ -765,7 +765,7 @@ Download and set it up?`)) {
         line.append(
           el("span", {
             className: "stage-detail",
-            text: `${errors} error finding(s), ${warnings} warning(s)`,
+            text: t("{errors} error finding(s), {warnings} warning(s)", { errors, warnings }),
           })
         );
       }

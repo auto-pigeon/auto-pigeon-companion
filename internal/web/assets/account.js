@@ -10,7 +10,7 @@
 "use strict";
 
 (() => {
-  const { $, el, api, setMessage, withBusy, record, announce } = window.AUCOM;
+  const { $, el, api, setMessage, t, withBusy, record, announce } = window.AUCOM;
 
   const CHECK_EVERY_MS = 60000;
   let timer = null;
@@ -29,15 +29,15 @@
     if (!status.online) {
       label = "Offline";
       kind = "offline";
-      note = `Your account cannot be reached: ${status.offline_reason || "no answer"}. You can keep building; sync when you are back.`;
+      note = t("Your account cannot be reached: {reason}. You can keep building; sync when you are back.", { reason: status.offline_reason || t("no answer") });
     } else if (status.conflicts > 0) {
       label = "Sync conflict";
       kind = "conflict";
-      note = `${status.conflicts} profile(s) differ between this computer and your account under the same version.`;
+      note = t("{n} profile(s) differ between this computer and your account under the same version.", { n: status.conflicts });
     } else if (pending > 0) {
-      label = `Sync needed (${pending})`;
+      label = t("Sync needed ({n})", { n: pending });
       kind = "pending";
-      note = `${status.to_upload} to upload, ${status.to_download} to download.`;
+      note = t("{up} to upload, {down} to download.", { up: status.to_upload, down: status.to_download });
     } else {
       label = "Synced";
       kind = "synced";
@@ -56,8 +56,8 @@
     const firstLook = !last && status.online;
     if ((cameBack || firstLook) && (pending > 0 || status.conflicts > 0) && Date.now() - dismissedAt > 300000) {
       $("reconnect-text").textContent = cameBack
-        ? `You are back online. ${pending} profile(s) are waiting to sync with your account.`
-        : `${pending} profile(s) on this computer and in your account are not in sync.`;
+        ? t("You are back online. {n} profile(s) are waiting to sync with your account.", { n: pending })
+        : t("{n} profile(s) on this computer and in your account are not in sync.", { n: pending });
       $("reconnect-banner").hidden = false;
     }
     if (status.online && pending === 0 && status.conflicts === 0) $("reconnect-banner").hidden = true;
@@ -167,7 +167,7 @@
     }
     const actionable = (body.outcomes || []).filter((outcome) => outcome.action !== "none");
     $("sync-intro").textContent = actionable.length
-      ? `This will change ${actionable.length} profile(s). Read the list, then press Sync.`
+      ? t("This will change {n} profile(s). Read the list, then press Sync.", { n: actionable.length })
       : "Nothing needs to move.";
     drawOutcomes(body.outcomes || []);
     $("sync-run").disabled = actionable.length === 0;
@@ -187,7 +187,7 @@
       }
       drawOutcomes(body.outcomes || []);
       const failed = (body.outcomes || []).filter((outcome) => outcome.result === "failed").length;
-      setMessage("sync-message", failed ? `${failed} profile(s) could not be synced; the reason is under each.` : "Synced.", failed ? "error" : "ok");
+      setMessage("sync-message", failed ? t("{n} profile(s) could not be synced; the reason is under each.", { n: failed }) : t("Synced."), failed ? "error" : "ok");
       record("Synced profiles with your account", `${(body.outcomes || []).length} change(s)`, failed ? "failed" : "ok");
       $("sync-run").disabled = true;
       if (body.status) draw(body.status);
@@ -214,7 +214,7 @@
       $("account-site").hidden = !site;
       if (site) {
         $("account-site").href = site.url;
-        $("account-site").textContent = `Open ${site.host}`;
+        $("account-site").textContent = t("Open {site}", { site: site.host });
       }
     },
     check,

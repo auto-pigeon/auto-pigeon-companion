@@ -9,7 +9,7 @@
 "use strict";
 
 (() => {
-  const { $, el, api, setMessage, busy, withBusy, record } = window.AUCOM;
+  const { $, el, api, setMessage, busy, withBusy, record, t } = window.AUCOM;
 
   async function refresh() {
     const { ok, body } = await api("/api/v1/settings");

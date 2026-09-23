@@ -14,7 +14,7 @@
 "use strict";
 
 (() => {
-  const { $, el, api, setMessage, busy, withBusy, announce, record, badge, bytes } = window.AUCOM;
+  const { $, el, api, setMessage, busy, withBusy, announce, record, badge, bytes, t } = window.AUCOM;
 
   let cursor = "";
   let current = null; // { id, readiness }

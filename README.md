@@ -366,6 +366,24 @@ The page has seven areas, and the order is the order of a first run.
 | **Jobs** | Everything that has run, with its command, its exit status and its output. |
 | **Settings** | Where the backend is, and where the Companion keeps things. |
 
+### Languages
+
+The page speaks the languages AUP does: **English** (the source), **Italian**,
+and French, German, Spanish, Japanese and Chinese, which are listed and show
+English until somebody translates them. Choose one from the **cog** menu, top
+right; *Automatic* uses your browser's language when it is a translated one. The
+choice is kept in the Companion's own settings, not in the browser:
+
+```console
+$ curl -s -H "X-AUCOM-Token: $TOKEN" -X PUT http://127.0.0.1:8791/api/v1/settings/language -d '{"language": "it"}' | jq .language
+"it"
+```
+
+A dictionary is `internal/web/assets/locales/<code>.js`, keyed by the exact English
+sentence; anything missing is shown in English. Profile documents, commands and
+paths are never translated, and nor are the Quake II and Quake III
+work-in-progress statements, whose exact wording the build pins.
+
 ### Build & Run, in one press
 
 **Build & Run** is the main path, and it exists because doing it by hand was

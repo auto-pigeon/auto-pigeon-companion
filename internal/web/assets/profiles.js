@@ -10,7 +10,7 @@
 
 (() => {
   const { $, el, api, setMessage, busy, withBusy, record, badge, when, permissionBlock,
-    maturityBadge, maturityNote, openCompatibilityReport } = window.AUCOM;
+    maturityBadge, maturityNote, openCompatibilityReport, t } = window.AUCOM;
 
   let installed = [];
   let templates = [];
@@ -29,7 +29,7 @@
       return;
     }
     installed = body.items || [];
-    setMessage("profiles-message", `${installed.length} profile(s) on this machine.`);
+    setMessage("profiles-message", t("{n} profile(s) on this machine.", { n: installed.length }));
     for (const profile of installed) list.append(profileCard(profile));
   }
 
@@ -56,7 +56,7 @@
       text: profile.summary || "",
       attrs: { title: profile.summary || null },
     });
-    const identity = el("p", { className: "muted profile-card__version", text: `Version ${profile.version}` });
+    const identity = el("p", { className: "muted profile-card__version", text: t("Version {version}", { version: profile.version }) });
 
     // Configuring a profile and reviewing one are different user tasks, so they
     // are different words (246I defect 2). An installed profile whose document
@@ -174,7 +174,7 @@
         "This document arrived inside the Companion, so installing the program was the decision. " +
         "There is nothing else to approve.";
     } else if (body.authorized) {
-      status.textContent = `Approved on ${when(body.binding?.granted_at)}.`;
+      status.textContent = t("Approved on {when}.", { when: when(body.binding?.granted_at) });
       status.className = "message ok";
       const withdraw = el("button", { text: "Withdraw approval", attrs: { type: "button", class: "danger" } });
       withdraw.addEventListener("click", () =>
@@ -300,7 +300,7 @@
     const folder = window.AUCOM.pathField({
       id: "profile-folder",
       kind: "directory",
-      label: `The folder that holds ${body.name}`,
+      label: t("The folder that holds {name}", { name: body.name }),
       hint: "For ericw-tools, the folder you unpacked the release into (the one containing bin).",
     });
     detail.append(folder.container);
@@ -315,7 +315,7 @@
         kind: "open-file",
         label: `${executable.title || executable.name}`,
         value: (body.binding?.executables || {})[executable.name] || "",
-        hint: `The profile looks for a file named ${window.AUCOM.programFileName(executable.file)}.`,
+        hint: t("The profile looks for a file named {file}.", { file: window.AUCOM.programFileName(executable.file) }),
       });
       fields.set(executable.name, field);
       detail.append(field.container);

@@ -1034,7 +1034,7 @@
         className: "activity-earlier",
         attrs: { "data-open-key": "earlier" },
         children: [
-          el("summary", { text: `Earlier runs (${earlier.length})` }),
+          el("summary", { text: t("Earlier runs ({n})", { n: earlier.length }) }),
           ...earlier.map((run) => el("details", {
             className: "activity-earlier__run",
             attrs: { "data-open-key": `run:${run.id}` },

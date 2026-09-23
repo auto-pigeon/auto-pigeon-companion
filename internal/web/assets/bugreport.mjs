@@ -136,7 +136,7 @@ function review() {
     [t("Actual result"), orNot(document_.user.actual)],
     [t("Report"), document_.report_id],
     [t("Created"), document_.created_at],
-    [t("Build"), `${document_.component} ${document_.release} (${document_.environment})`],
+    [t("Version"), `${document_.component} ${document_.release} (${document_.environment})`],
     [t("Browser"), [document_.client?.browser, document_.client?.os].filter(Boolean).join(" · ") || t("(not given)")],
   ];
   const preview = el("section", {

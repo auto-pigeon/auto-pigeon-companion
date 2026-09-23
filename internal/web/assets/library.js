@@ -224,7 +224,7 @@
     }
     const summary = body.already_complete
       ? "Already on this computer. It is ready to build."
-      : `Downloaded (${bytes(body.bytes_fetched)}). It is ready to build.`;
+      : t("Downloaded ({size}). It is ready to build.", { size: bytes(body.bytes_fetched) });
     setMessage(status, summary, "ok");
     cachedKeys.add(body.key);
     if (button) button.textContent = "Download again";
@@ -276,7 +276,7 @@
     const held = key && cachedKeys.has(key);
 
     const head = el("div", { className: "row-head" });
-    const label = el("strong", { text: `Revision ${revision.revision}` });
+    const label = el("strong", { text: t("Revision {n}", { n: revision.revision }) });
     head.append(label);
     head.append(badge(held ? "downloaded" : "in your account", held ? "ok" : "queued"));
 
@@ -346,7 +346,7 @@
       "cached-message",
       items.length === 0
         ? "Nothing downloaded yet."
-        : `${items.length} downloaded to this computer.`
+        : t("{n} downloaded to this computer.", { n: items.length })
     );
     for (const item of items) {
       const record_ = item.record;
@@ -359,9 +359,9 @@
       head.append(badge(typeName(record_.asset_type), "ok"));
       const detail = el("p", { className: "muted" });
       detail.textContent = [
-        `revision ${record_.revision}`,
+        t("revision {n}", { n: record_.revision }),
         bytes(record_.total_bytes),
-        "downloaded " + when(record_.synced_at),
+        t("downloaded {when}", { when: when(record_.synced_at) }),
       ]
         .filter(Boolean)
         .join(" · ");
