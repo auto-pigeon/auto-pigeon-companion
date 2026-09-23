@@ -588,6 +588,15 @@ directory. So the Companion opens the desktop's own file chooser — `zenity` or
 `kdialog` on Linux and the BSDs, `osascript` on macOS, PowerShell's dialogs on
 Windows — and the one path you picked comes back.
 
+**On macOS a program can be its `.app`.** Engines there ship as bundles —
+`vkQuake.app`, `DarkPlaces.app` — so wherever a program is asked for, choosing
+the bundle is enough: the Companion uses the executable its `Info.plist` names
+(or, for a binary plist, the one program in `Contents/MacOS`). And a program
+macOS has quarantined — anything downloaded with a browser — gets a note under
+the field saying Gatekeeper may refuse to start it, with the fix: open it once
+from Finder with right-click › Open, or `xattr -d com.apple.quarantine <path>`.
+This is written and tested on Linux; no Mac has run it yet.
+
 There is no directory listing, no `stat` and no completion in the API. The page
 is never given the filesystem; it is given the answer to one question a person
 answered in a dialog they saw.

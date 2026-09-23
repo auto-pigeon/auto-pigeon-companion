@@ -103,6 +103,12 @@ func Check(kind Kind, path string) (string, error) {
 			return "", statError(cleaned, err)
 		}
 		if info.IsDir() {
+			// A macOS application is a folder named *.app, and it is what a
+			// person picks when asked for "the vkQuake program". The program
+			// is the executable the bundle declares; that is what is used.
+			if executable, ok := BundleExecutable(cleaned); ok {
+				return executable, nil
+			}
 			return "", fmt.Errorf("%s is a directory; a file was asked for", cleaned)
 		}
 	case SaveFile:

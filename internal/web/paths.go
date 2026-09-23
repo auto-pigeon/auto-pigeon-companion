@@ -131,7 +131,13 @@ func (s *Server) handlePathValidate(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"valid": false, "error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"valid": true, "path": resolved})
+	answer := map[string]any{"valid": true, "path": resolved}
+	if kind == pathpick.OpenFile {
+		if note := pathpick.QuarantineNote(resolved); note != "" {
+			answer["warning"] = note
+		}
+	}
+	writeJSON(w, http.StatusOK, answer)
 }
 
 // checkDirectory and checkOpenFile are [pathpick.Check] for the two cases every

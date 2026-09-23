@@ -293,7 +293,8 @@ function pathField(options) {
     if (body.valid) {
       input.value = body.path;
       input.removeAttribute("aria-invalid");
-      setMessage(status, "");
+      // A usable path the system may still refuse to run (macOS quarantine).
+      setMessage(status, body.warning || "");
       if (onChange) onChange(body.path);
       return body.path;
     }
