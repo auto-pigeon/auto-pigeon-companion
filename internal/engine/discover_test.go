@@ -75,16 +75,20 @@ func (e fakeEntry) Type() os.FileMode          { return 0 }
 func (e fakeEntry) Info() (os.FileInfo, error) { return nil, os.ErrNotExist }
 
 func TestDetectFindsSteamAndGOGAndSaysWhatMadeItThink(t *testing.T) {
-	home := "/home/mapper"
-	fs := fakeFS{dirs: map[string][]string{
-		home + "/.steam/steam/steamapps/common":                     {"Quake", "Half-Life"},
-		home + "/.steam/steam/steamapps/common/Quake":               {"Id1", "rerelease", "quakespasm"},
-		home + "/.steam/steam/steamapps/common/Quake/Id1":           {"PAK0.PAK", "PAK1.PAK"},
-		home + "/.steam/steam/steamapps/common/Quake/rerelease":     {"id1"},
-		home + "/.steam/steam/steamapps/common/Quake/rerelease/id1": {"pak0.pak"},
-		home + "/GOG Games/Quake":                                   {"id1", "Quake.exe"},
-		home + "/GOG Games/Quake/id1":                               {"pak0.pak"},
-	}}
+	// Paths in the running platform's spelling, as every scan here uses them:
+	// GOOS picks where to look, the paths are this machine's.
+	home := at("home", "mapper")
+	common := filepath.Join(home, ".steam", "steam", "steamapps", "common")
+	gog := filepath.Join(home, "GOG Games", "Quake")
+	fs := newFakeFS(map[string][]string{
+		common:                                             {"Quake", "Half-Life"},
+		filepath.Join(common, "Quake"):                     {"Id1", "rerelease", "quakespasm"},
+		filepath.Join(common, "Quake", "Id1"):              {"PAK0.PAK", "PAK1.PAK"},
+		filepath.Join(common, "Quake", "rerelease"):        {"id1"},
+		filepath.Join(common, "Quake", "rerelease", "id1"): {"pak0.pak"},
+		gog:                       {"id1", "Quake.exe"},
+		filepath.Join(gog, "id1"): {"pak0.pak"},
+	}, nil)
 	scanner := engine.Scanner{
 		GOOS:     "linux",
 		Lookenv:  func(name string) (string, bool) { return map[string]string{"HOME": home}[name], name == "HOME" },

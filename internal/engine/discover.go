@@ -2,7 +2,6 @@ package engine
 
 import (
 	"os"
-	"path"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -115,37 +114,11 @@ var pakNames = []string{"pak0.pak", "pak1.pak"}
 // It never writes anything, never opens a game file, and never copies one. The
 // result is a list of suggestions in a stable order; confirming one is
 // somebody else's job.
-// Paths are spelled the way the platform being scanned spells them. A Unix
-// platform is slash-separated wherever the scan runs — the running system's
-// filepath would put backslashes into a Linux or macOS path on Windows.
-func (s Scanner) unixTarget() bool { return s.goos() != "windows" }
-
-func (s Scanner) join(elements ...string) string {
-	if s.unixTarget() {
-		return path.Join(elements...)
-	}
-	return filepath.Join(elements...)
-}
-
-func (s Scanner) clean(p string) string {
-	if s.unixTarget() {
-		return path.Clean(p)
-	}
-	return filepath.Clean(p)
-}
-
-func (s Scanner) isAbs(p string) bool {
-	if s.unixTarget() {
-		return path.IsAbs(p)
-	}
-	return filepath.IsAbs(p)
-}
-
 func (s Scanner) Detect() []Candidate {
 	var out []Candidate
 	seen := map[string]bool{}
 	one := func(dir string, source Source, note string) {
-		dir = s.clean(dir)
+		dir = filepath.Clean(dir)
 		if dir == "" || dir == "." || seen[dir] {
 			return
 		}
@@ -165,14 +138,14 @@ func (s Scanner) Detect() []Candidate {
 	add := func(dir string, source Source, note string) {
 		one(dir, source, note)
 		for _, sub := range s.entriesLike(dir, rereleaseDirName) {
-			one(s.join(dir, sub), source, "The re-release's own copy of the game data.")
+			one(filepath.Join(dir, sub), source, "The re-release's own copy of the game data.")
 		}
 	}
 
 	for _, library := range s.steamLibraries() {
-		common := s.join(library, "steamapps", "common")
+		common := filepath.Join(library, "steamapps", "common")
 		for _, name := range s.entriesLike(common, "quake") {
-			add(s.join(common, name), SourceSteam, "")
+			add(filepath.Join(common, name), SourceSteam, "")
 		}
 	}
 	for _, dir := range s.gogDirs() {
@@ -189,7 +162,7 @@ func (s Scanner) Detect() []Candidate {
 func (s Scanner) inspect(dir string, source Source) (Candidate, bool) {
 	for _, base := range s.entriesLike(dir, baseDirName) {
 		for _, pak := range pakNames {
-			for _, found := range s.entriesLike(s.join(dir, base), pak) {
+			for _, found := range s.entriesLike(filepath.Join(dir, base), pak) {
 				return Candidate{
 					Path:     dir,
 					Source:   source,
@@ -231,30 +204,30 @@ func (s Scanner) steamLibraries() []string {
 	var roots []string
 	add := func(path string) {
 		if path != "" {
-			roots = append(roots, s.clean(path))
+			roots = append(roots, filepath.Clean(path))
 		}
 	}
 	switch s.goos() {
 	case "windows":
 		for _, variable := range []string{"ProgramFiles(x86)", "ProgramFiles"} {
 			if base, ok := s.lookenv(variable); ok {
-				add(s.join(base, "Steam"))
+				add(filepath.Join(base, "Steam"))
 			}
 		}
 	case "darwin":
 		if home, ok := s.lookenv("HOME"); ok {
-			add(s.join(home, "Library", "Application Support", "Steam"))
+			add(filepath.Join(home, "Library", "Application Support", "Steam"))
 		}
 	default:
 		if home, ok := s.lookenv("HOME"); ok {
-			add(s.join(home, ".steam", "steam"))
-			add(s.join(home, ".local", "share", "Steam"))
+			add(filepath.Join(home, ".steam", "steam"))
+			add(filepath.Join(home, ".local", "share", "Steam"))
 			// The Flatpak build keeps its own home, and a user who installed
 			// Steam that way has no library anywhere else.
-			add(s.join(home, ".var", "app", "com.valvesoftware.Steam", ".local", "share", "Steam"))
+			add(filepath.Join(home, ".var", "app", "com.valvesoftware.Steam", ".local", "share", "Steam"))
 		}
 		if data, ok := s.lookenv("XDG_DATA_HOME"); ok {
-			add(s.join(data, "Steam"))
+			add(filepath.Join(data, "Steam"))
 		}
 	}
 
@@ -263,7 +236,7 @@ func (s Scanner) steamLibraries() []string {
 	// telling a user with two drives that they do not own Quake.
 	var extra []string
 	for _, root := range roots {
-		extra = append(extra, s.libraryFolders(s.join(root, "steamapps", "libraryfolders.vdf"))...)
+		extra = append(extra, s.libraryFolders(filepath.Join(root, "steamapps", "libraryfolders.vdf"))...)
 	}
 	return dedupe(append(roots, extra...))
 }
@@ -292,8 +265,8 @@ func (s Scanner) libraryFolders(index string) []string {
 		}
 		// Windows spells its paths with escaped backslashes inside the index.
 		path := strings.ReplaceAll(fields[1], `\\`, `\`)
-		if s.isAbs(path) {
-			out = append(out, s.clean(path))
+		if filepath.IsAbs(path) {
+			out = append(out, filepath.Clean(path))
 		}
 	}
 	return out
@@ -324,19 +297,19 @@ func (s Scanner) gogDirs() []string {
 	case "windows":
 		for _, variable := range []string{"ProgramFiles(x86)", "ProgramFiles"} {
 			if base, ok := s.lookenv(variable); ok {
-				out = append(out, s.join(base, "GOG Galaxy", "Games", "Quake"))
-				out = append(out, s.join(base, "GOG.com", "Quake"))
+				out = append(out, filepath.Join(base, "GOG Galaxy", "Games", "Quake"))
+				out = append(out, filepath.Join(base, "GOG.com", "Quake"))
 			}
 		}
 	case "darwin":
 		if home, ok := s.lookenv("HOME"); ok {
-			out = append(out, s.join(home, "Applications", "Quake"))
+			out = append(out, filepath.Join(home, "Applications", "Quake"))
 		}
 	default:
 		if home, ok := s.lookenv("HOME"); ok {
 			// The Linux installer's default, and where most people leave it.
-			out = append(out, s.join(home, "GOG Games", "Quake"))
-			out = append(out, s.join(home, "Games", "quake"))
+			out = append(out, filepath.Join(home, "GOG Games", "Quake"))
+			out = append(out, filepath.Join(home, "Games", "quake"))
 		}
 	}
 	return out
