@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/incident"
 )
 
 // Report a bug (operator, 2026-09-22: "copy its behaviour, and code if
@@ -17,9 +18,24 @@ import (
 
 func (s *Server) bugReportRoutes() map[string]http.HandlerFunc {
 	return map[string]http.HandlerFunc{
-		"GET /api/v1/bug-reports/status": s.handleBugReportStatus,
-		"POST /api/v1/bug-reports":       s.handleBugReportSend,
+		"GET /api/v1/bug-reports/status":    s.handleBugReportStatus,
+		"POST /api/v1/bug-reports":          s.handleBugReportSend,
+		"GET /api/v1/bug-reports/incidents": s.handleBugReportIncidents,
 	}
+}
+
+// handleBugReportIncidents lists the incidents this process raised, newest
+// first, so the page can offer to report one (NEW_247H): a failed job from the
+// Jobs area, or either kind from the dialog itself. Typed fields only — code,
+// subsystem, operation, severity, ids — which is all the shared contract lets
+// a report carry about an incident. The page, not this route, asks the
+// contract which area such a report starts in.
+func (s *Server) handleBugReportIncidents(w http.ResponseWriter, _ *http.Request) {
+	list := s.incidents()
+	if list == nil {
+		list = []incident.RecentIncident{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"incidents": list})
 }
 
 func (s *Server) handleBugReportStatus(w http.ResponseWriter, r *http.Request) {

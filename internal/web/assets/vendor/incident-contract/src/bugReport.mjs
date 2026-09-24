@@ -27,9 +27,10 @@ import { isIncidentCode } from "./codes.mjs";
 import { newIncidentId, formatOccurredAt } from "./envelope.mjs";
 import { BUG_REPORT_URL } from "./rules.mjs";
 import bugReportRules from "../schema/bug-report-rules.json" with { type: "json" };
-import bugReportSchema from "../schema/bug-report-1.0.schema.json" with { type: "json" };
+import bugReportSchema from "../schema/bug-report-1.1.schema.json" with { type: "json" };
+import bugReportSchemaPrevious from "../schema/bug-report-1.0.schema.json" with { type: "json" };
 
-export { bugReportRules, bugReportSchema };
+export { bugReportRules, bugReportSchema, bugReportSchemaPrevious };
 
 /** The versioned identity of the document. */
 export const BUG_REPORT_SCHEMA = bugReportRules.document_schema;
@@ -39,6 +40,78 @@ export const BUG_REPORT_REPOSITORY = bugReportRules.repository;
 
 /** Every bound, from the data file. */
 export const BUG_REPORT_LIMITS = Object.freeze({ ...bugReportRules.limits });
+
+/** The report types, in the order a control offers them. */
+export const BUG_REPORT_TYPES = Object.freeze(Object.keys(bugReportRules.report_types));
+
+/** Every canonical area identifier. */
+export const BUG_REPORT_AREAS = Object.freeze(Object.keys(bugReportRules.areas));
+
+/** The areas one application offers, in the order its control lists them; `[]` for anything else. */
+export function bugReportAreasFor(component) {
+  const application = Object.hasOwn(bugReportRules.applications, component) ? bugReportRules.applications[component] : undefined;
+  return application ? [...application.areas] : [];
+}
+
+/** The four field headings a report of this type renders (and a form shows). */
+export function bugReportHeadings(reportType) {
+  const type = Object.hasOwn(bugReportRules.report_types, reportType) ? bugReportRules.report_types[reportType] : bugReportRules.report_types.bug;
+  return { ...type.headings };
+}
+
+const isReportType = (value) => typeof value === "string" && Object.hasOwn(bugReportRules.report_types, value);
+const isAreaFor = (component, area) => typeof area === "string" && bugReportAreasFor(component).includes(area);
+const previousSchema = (schema) => bugReportRules.previous_schemas.find((entry) => entry.schema === schema);
+
+/**
+ * The initial area of an incident-triggered report, from the incident's TYPED fields only
+ * (bug-report-rules.json `incident_areas`): an exact subsystem entry for the reporting application,
+ * else the exact code entry, else `other`; an area the application does not offer becomes `other`.
+ * `undefined` when there is no incident — a cold report's area is the user's choice.
+ */
+export function suggestBugReportArea(component, incident) {
+  if (!incident || typeof incident !== "object") return undefined;
+  const map = bugReportRules.incident_areas;
+  const bySubsystem = Object.hasOwn(map.by_subsystem, component) ? map.by_subsystem[component] : {};
+  const subsystem = typeof incident.subsystem === "string" ? incident.subsystem : "";
+  const area = (subsystem && Object.hasOwn(bySubsystem, subsystem) ? bySubsystem[subsystem] : undefined)
+    ?? (typeof incident.code === "string" && Object.hasOwn(map.by_code, incident.code) ? map.by_code[incident.code] : undefined)
+    ?? "other";
+  return isAreaFor(component, area) ? area : "other";
+}
+
+/**
+ * Whether a server may accept a document declaring `schema` at instant `now`: `"current"`,
+ * `"previous"` (an older version still inside its `accepted_until`), `"expired"` or `"unsupported"`.
+ */
+export function bugReportSchemaStatus(schema, now = Date.now()) {
+  if (schema === bugReportRules.document_schema) return "current";
+  const entry = previousSchema(schema);
+  if (!entry) return "unsupported";
+  return new Date(now).getTime() <= Date.parse(entry.accepted_until) ? "previous" : "expired";
+}
+
+/**
+ * THE three GitHub labels of a report — application, report type, area — and the only place they
+ * are derived. A previous-version document (no classification) is labelled with the type and area
+ * its `previous_schemas` entry names. `null` for anything that cannot be classified exactly: there
+ * is never a fourth label, a missing one, or a label string that came from a client.
+ */
+export function bugReportLabels(document) {
+  if (document === null || typeof document !== "object") return null;
+  const application = Object.hasOwn(bugReportRules.applications, document.component) ? bugReportRules.applications[document.component] : undefined;
+  if (!application) return null;
+  let reportType = document.report_type;
+  let area = document.area;
+  if (document.schema !== bugReportRules.document_schema) {
+    const entry = previousSchema(document.schema);
+    if (!entry || reportType !== undefined || area !== undefined) return null;
+    reportType = entry.report_type;
+    area = entry.area;
+  }
+  if (!isReportType(reportType) || !isAreaFor(document.component, area)) return null;
+  return [application.label, bugReportRules.report_types[reportType].label, bugReportRules.areas[area]];
+}
 
 const PATTERNS = Object.fromEntries(
   Object.entries(bugReportRules.patterns).map(([name, pattern]) => [name, new RegExp(pattern)]),
@@ -210,6 +283,13 @@ function buildRecent(entries) {
 export function buildBugReport(input = {}) {
   const errors = [];
   if (!bugReportRules.components.includes(input.component)) errors.push("component_invalid");
+  const incidentFacts = buildIncident(input.incident);
+  const reportType = input.reportType ?? (incidentFacts ? bugReportRules.incident_report_type : undefined);
+  if (reportType === undefined) errors.push("report_type_required");
+  else if (!isReportType(reportType)) errors.push("report_type_invalid");
+  const area = input.area ?? (incidentFacts ? suggestBugReportArea(input.component, incidentFacts) : undefined);
+  if (area === undefined) errors.push("area_required");
+  else if (bugReportRules.components.includes(input.component) && !isAreaFor(input.component, area)) errors.push("area_invalid");
   const summary = sanitizeReportText(input.user?.summary, BUG_REPORT_LIMITS.summary, { multiline: false });
   if (!summary) errors.push("summary_required");
   const reportId = input.reportId ?? newIncidentId();
@@ -222,7 +302,7 @@ export function buildBugReport(input = {}) {
   const environment = typeof input.environment === "string" && PATTERNS.environment.test(input.environment)
     ? input.environment
     : "unknown";
-  const incident = buildIncident(input.incident);
+  const incident = incidentFacts;
   const correlation = isCorrelationId(input.correlationId)
     ? input.correlationId
     : isCorrelationId(input.incident?.correlation_id) ? input.incident.correlation_id : undefined;
@@ -235,6 +315,8 @@ export function buildBugReport(input = {}) {
     release,
     environment,
     kind: incident ? "incident" : "cold",
+    report_type: reportType,
+    area,
     user: {
       summary,
       steps: sanitizeReportText(input.user?.steps, BUG_REPORT_LIMITS.steps),
@@ -288,7 +370,7 @@ export function reportJsonDownload(document) {
  * never throws. A text field that is not already canonical (sanitising it would change it) is an
  * error: that is how a server refuses to publish something the user was not shown.
  */
-export function validateBugReport(document) {
+export function validateBugReport(document, { acceptPrevious = false } = {}) {
   const errors = [];
   const fail = (code) => errors.push(code);
   const isObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
@@ -296,9 +378,17 @@ export function validateBugReport(document) {
     for (const key of Object.keys(value)) if (!allowed.includes(key)) fail(`${path}.${key}:not_allowed`);
   };
   if (!isObject(document)) return { valid: false, errors: ["document:not_object"] };
-  closed(document, Object.keys(bugReportSchema.properties), "document");
-  for (const key of bugReportSchema.required) if (!(key in document)) fail(`document.${key}:required`);
-  if (document.schema !== BUG_REPORT_SCHEMA) fail("schema:unsupported");
+  const previous = acceptPrevious && previousSchema(document.schema) !== undefined;
+  const schema = previous ? bugReportSchemaPrevious : bugReportSchema;
+  closed(document, Object.keys(schema.properties), "document");
+  for (const key of schema.required) if (!(key in document)) fail(`document.${key}:required`);
+  if (document.schema !== BUG_REPORT_SCHEMA && !previous) {
+    fail(previousSchema(document.schema) ? "schema:previous" : "schema:unsupported");
+  }
+  if (!previous) {
+    if ("report_type" in document && !isReportType(document.report_type)) fail("report_type:invalid");
+    if ("area" in document && !isAreaFor(document.component, document.area)) fail("area:invalid");
+  }
   if (!PATTERNS.report_id.test(String(document.report_id))) fail("report_id:invalid");
   if (!PATTERNS.created_at.test(String(document.created_at))) fail("created_at:invalid");
   if (!bugReportRules.components.includes(document.component)) fail("component:invalid");
@@ -381,8 +471,11 @@ const heading = (title) => [title, "-".repeat(title.length)];
  */
 export function renderReportText(document) {
   const d = document;
+  const classified = d.schema === BUG_REPORT_SCHEMA;
+  const type = classified ? bugReportRules.report_types[d.report_type] : bugReportRules.report_types.bug;
+  const headings = type.headings;
   const lines = [
-    `Auto-Pigeon bug report (${d.schema})`,
+    `Auto-Pigeon ${type.document_title} (${d.schema})`,
     `If you submit it, this report is published PUBLICLY at https://github.com/${BUG_REPORT_REPOSITORY}.`,
     "",
     `${pad("report")}${d.report_id}`,
@@ -392,12 +485,13 @@ export function renderReportText(document) {
     `${pad("environment")}${d.environment}`,
     `${pad("kind")}${d.kind}`,
   ];
+  if (classified) lines.push(`${pad("type")}${type.label}`, `${pad("area")}${bugReportRules.areas[d.area]}`);
   if (d.correlation_id) lines.push(`${pad("correlation")}${d.correlation_id}`);
   if (d.session_correlation_id) lines.push(`${pad("session")}${d.session_correlation_id}`);
-  lines.push("", ...heading("Summary"), d.user.summary);
-  lines.push("", ...heading("Steps to reproduce"), orNotGiven(d.user.steps));
-  lines.push("", ...heading("Expected result"), orNotGiven(d.user.expected));
-  lines.push("", ...heading("Actual result"), orNotGiven(d.user.actual));
+  lines.push("", ...heading(headings.summary), d.user.summary);
+  lines.push("", ...heading(headings.steps), orNotGiven(d.user.steps));
+  lines.push("", ...heading(headings.expected), orNotGiven(d.user.expected));
+  lines.push("", ...heading(headings.actual), orNotGiven(d.user.actual));
   if (d.incident) {
     const i = d.incident;
     lines.push("", ...heading("Incident"));
@@ -467,10 +561,18 @@ export function renderIssue(document, { route = "prefilled" } = {}) {
   return { title, body };
 }
 
-/** GitHub's documented prefilled new-issue URL for this document. Opens a form; submits nothing. */
+/**
+ * GitHub's documented prefilled new-issue URL for this document. Opens a form; submits nothing.
+ * It carries the report's three labels (`bugReportLabels`) as GitHub's `labels` query parameter.
+ * GitHub applies that parameter only for a reporter allowed to label issues in the repository;
+ * the server route is the path whose labels are guaranteed.
+ */
 export function prefilledIssueUrl(document) {
   const { title, body } = renderIssue(document, { route: "prefilled" });
-  return `${BUG_REPORT_URL}/new?${new URLSearchParams({ title, body }).toString()}`;
+  const params = { title, body };
+  const labels = bugReportLabels(document);
+  if (labels) params.labels = labels.join(",");
+  return `${BUG_REPORT_URL}/new?${new URLSearchParams(params).toString()}`;
 }
 
 /** The filenames of the two downloads, from the report id so a maintainer can match them up. */

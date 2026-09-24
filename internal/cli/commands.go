@@ -311,6 +311,10 @@ func runServe(env *Env, args []string) int {
 		Token:     token,
 		Lifecycle: lifecycle,
 		Logf:      logf,
+		// The incidents this process raises — failed jobs, a failed readiness
+		// check — offered to Report a bug. Same reporter the job service and
+		// the readiness check capture through.
+		Incidents: env.incidents(settings).Recent,
 		Paths: web.Paths{
 			Profiles:   profilesDir,
 			Bindings:   bindingsPath,

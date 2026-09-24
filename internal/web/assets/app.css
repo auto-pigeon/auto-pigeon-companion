@@ -1112,6 +1112,15 @@ ol.numbered { list-style: none; padding-inline-start: 0; }
 .bug-dialog h3 { font-size: 0.9rem; margin: 1rem 0 0.5rem; }
 .bug-route { border-top: 1px solid var(--line); margin-top: 0.75rem; }
 .bug-dialog pre.output { max-height: 14rem; }
+.bug-fact { margin: 0; font-size: 0.875rem; }
+.bug-fact__term { color: var(--ink-muted); margin-right: 0.4rem; }
+.bug-classify { display: flex; flex-wrap: wrap; gap: 0.75rem 1.5rem; align-items: flex-start; }
+.bug-classify fieldset { border: none; margin: 0; padding: 0; }
+.bug-classify legend { padding: 0; margin-bottom: 0.3rem; font-weight: 600; font-size: 0.875rem; }
+.bug-classify .bug-types { display: flex; flex-wrap: wrap; gap: 0.35rem 1rem; }
+.bug-classify .field { flex: 1 1 12rem; }
+.bug-labels { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0; padding: 0; list-style: none; }
+.bug-labels li { padding: 0.1rem 0.5rem; border: 1px solid var(--line); border-radius: var(--radius); font-size: 0.8rem; }
 .button-link {
   display: inline-block; padding: .4rem .75rem; border: 1px solid var(--accent); border-radius: var(--radius);
   background: var(--accent-soft); color: var(--accent-strong); font-size: 0.8125rem; font-weight: 500; text-decoration: none;

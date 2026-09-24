@@ -195,6 +195,18 @@
         })
       );
       actions.append(retry);
+      // A failed job this Companion reported as an incident can be reported
+      // as a bug about exactly that incident (NEW_247H): the dialog starts on
+      // the contract's type and area for it, and the person can change both.
+      if (body.state === "failed") {
+        const raised = await api("/api/v1/bug-reports/incidents");
+        const about = raised.ok ? (raised.body.incidents || []).find((entry) => entry.job_id === body.id) : null;
+        if (about && window.AUCOM.reportBug) {
+          const report = el("button", { text: t("Report a bug about this failure"), attrs: { type: "button", id: "job-report-bug" } });
+          report.addEventListener("click", () => window.AUCOM.reportBug({ incident: about }));
+          actions.append(report);
+        }
+      }
       actions.append(
         el("p", {
           className: "muted",

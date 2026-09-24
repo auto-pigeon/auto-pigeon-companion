@@ -1,0 +1,343 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/auto-pigeon/auto-pigeon-libraries/ts/incident-contract/schema/bug-report-1.1.schema.json",
+  "title": "Auto-Pigeon user bug report, version 1.1",
+  "description": "The ONE document a user previews, downloads and may choose to publish on the public auto-pigeon/bug-reports tracker. CLOSED at every level, like the incident envelope: there is no field a map, a map name, an annotation, a chat message, an asset, an account, an e-mail address, a network address or a credential can legally occupy. The only free text is what the user typed, bounded and sanitised by bug-report-rules.json. Incidents are carried by code, never by message. Version 1.1 adds the report's classification: `report_type` (bug or feature request) and `area` (one closed product area the reporting application offers), from which bug-report-rules.json derives exactly three GitHub labels — application, type and area. `kind` still says only cold versus incident.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "report_id",
+    "created_at",
+    "component",
+    "release",
+    "environment",
+    "kind",
+    "report_type",
+    "area",
+    "user",
+    "client",
+    "recent",
+    "omitted_recent"
+  ],
+  "properties": {
+    "schema": {
+      "const": "auto-pigeon-bug-report/1.1"
+    },
+    "report_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$",
+      "description": "Minted once per report by the client. It is also the idempotency key of the server route: retrying the same report can never file a second issue."
+    },
+    "created_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "component": {
+      "enum": [
+        "AUP",
+        "AUG",
+        "AUCOM"
+      ]
+    },
+    "release": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._+-]{1,40}$"
+    },
+    "environment": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+    },
+    "kind": {
+      "enum": [
+        "cold",
+        "incident"
+      ]
+    },
+    "report_type": {
+      "enum": [
+        "bug",
+        "feature_request"
+      ],
+      "description": "Bug or feature request. An incident-triggered report defaults to bug; a cold report is chosen by the user. Mapped to its label by bug-report-rules.json `report_types`."
+    },
+    "area": {
+      "enum": [
+        "editor",
+        "transform",
+        "textures",
+        "import_export",
+        "prefabs_extract",
+        "collaboration",
+        "compile_run",
+        "gallery",
+        "companion",
+        "account_access",
+        "documentation",
+        "other"
+      ],
+      "description": "The ONE primary product area, as a closed machine identifier. It must be one the reporting application offers (bug-report-rules.json `applications`). Mapped to its `Area: …` label by `areas`."
+    },
+    "user": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "summary",
+        "steps",
+        "expected",
+        "actual"
+      ],
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 140
+        },
+        "steps": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "expected": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "actual": {
+          "type": "string",
+          "maxLength": 1000
+        }
+      }
+    },
+    "incident": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "incident_id",
+        "code",
+        "severity",
+        "recoverable"
+      ],
+      "properties": {
+        "incident_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(\\.[a-z0-9_]+)+$"
+        },
+        "severity": {
+          "enum": [
+            "warning",
+            "error",
+            "fatal"
+          ]
+        },
+        "subsystem": {
+          "type": "string",
+          "pattern": "^[a-z0-9_.-]{1,48}$"
+        },
+        "operation": {
+          "type": "string",
+          "pattern": "^[a-z0-9_. -]{1,48}$"
+        },
+        "occurred_at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+        },
+        "recoverable": {
+          "type": "boolean"
+        }
+      }
+    },
+    "correlation_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "session_correlation_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "client": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "browser": {
+          "type": "string",
+          "pattern": "^(Chrome|Edge|Firefox|Safari|Opera) [0-9]{1,4}$|^other$"
+        },
+        "os": {
+          "enum": [
+            "Windows",
+            "macOS",
+            "Linux",
+            "Android",
+            "iOS",
+            "ChromeOS",
+            "other"
+          ]
+        },
+        "viewport_width": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 20000
+        },
+        "viewport_height": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 20000
+        },
+        "pixel_ratio_pct": {
+          "type": "integer",
+          "minimum": 25,
+          "maximum": 1000
+        },
+        "cores": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1024
+        },
+        "memory_mb": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1048576
+        },
+        "language": {
+          "type": "string",
+          "pattern": "^[a-z]{2,3}$"
+        },
+        "webgl2": {
+          "type": "boolean"
+        }
+      }
+    },
+    "recent": {
+      "type": "array",
+      "maxItems": 30,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "at",
+          "kind",
+          "name"
+        ],
+        "properties": {
+          "at": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+          },
+          "kind": {
+            "enum": [
+              "incident",
+              "breadcrumb",
+              "operation"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9_.:-]{1,48}$"
+          },
+          "duration_ms": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 86400000
+          },
+          "outcome": {
+            "type": "string",
+            "pattern": "^[a-z_]{1,24}$"
+          },
+          "correlation_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          }
+        }
+      }
+    },
+    "omitted_recent": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100000
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "component": {
+            "const": "AUP"
+          }
+        },
+        "required": [
+          "component"
+        ]
+      },
+      "then": {
+        "properties": {
+          "area": {
+            "enum": [
+              "editor",
+              "transform",
+              "textures",
+              "import_export",
+              "prefabs_extract",
+              "collaboration",
+              "compile_run",
+              "account_access",
+              "documentation",
+              "other"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "component": {
+            "const": "AUG"
+          }
+        },
+        "required": [
+          "component"
+        ]
+      },
+      "then": {
+        "properties": {
+          "area": {
+            "enum": [
+              "gallery",
+              "account_access",
+              "documentation",
+              "other"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "component": {
+            "const": "AUCOM"
+          }
+        },
+        "required": [
+          "component"
+        ]
+      },
+      "then": {
+        "properties": {
+          "area": {
+            "enum": [
+              "companion",
+              "compile_run",
+              "import_export",
+              "documentation",
+              "other"
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

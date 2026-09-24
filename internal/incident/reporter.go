@@ -49,6 +49,8 @@ type Reporter struct {
 
 	mu                sync.Mutex
 	unavailableLogged bool
+	// recent is what Recent returns (recent.go), oldest first. Guarded by mu.
+	recent []RecentIncident
 
 	sent, dropped, failed atomic.Int64
 }
@@ -105,6 +107,11 @@ func (r *Reporter) Counters() (sent, dropped, failed int64) {
 // release and environment from the configuration, redacts, validates, logs,
 // and queues.
 func (r *Reporter) Capture(d Draft) Incident {
+	return r.capture(d, "")
+}
+
+// capture is Capture, remembering which job (if any) the incident is about.
+func (r *Reporter) capture(d Draft, jobID string) Incident {
 	if r == nil {
 		return Incident{}
 	}
@@ -113,6 +120,10 @@ func (r *Reporter) Capture(d Draft) Incident {
 		r.logf("incident: not sent, the envelope is invalid: %v", problems)
 		return inc
 	}
+	// Offered to the page's Report a bug whether or not a backend is
+	// configured: reporting a failure to the tracker does not depend on
+	// telemetry.
+	r.remember(inc, jobID)
 	// The local record first, and unconditionally: it exists whether or not a
 	// backend does. Identifiers and the code only — never the message.
 	r.logf("incident %s raised: code=%s subsystem=%s operation=%s correlation=%s (%s)",

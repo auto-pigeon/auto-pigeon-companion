@@ -52,6 +52,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/aue"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/config"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/engine"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/incident"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/pathpick"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/playrun"
@@ -111,6 +112,8 @@ type Server struct {
 	// lifecycle decides when this process stops, and counts the pages that
 	// hold a lease. See lifecycle.go.
 	lifecycle *Lifecycle
+	// incidents is Options.Incidents; never nil.
+	incidents func() []incident.RecentIncident
 
 	// mu guards the two values a request can change under another request:
 	// the stored configuration, and the client built from the address in it.
@@ -187,6 +190,10 @@ type Options struct {
 	// Lifecycle decides when the process stops. Nil is server mode, which never
 	// stops on its own — what a test and `companion serve` want.
 	Lifecycle *Lifecycle
+	// Incidents lists what this process raised, newest first, for the page's
+	// Report a bug (bugreport.go). Nil means none: the page files cold
+	// reports only.
+	Incidents func() []incident.RecentIncident
 }
 
 // NewServer builds the server and its routes.
@@ -252,7 +259,13 @@ func NewServer(options Options) (*Server, error) {
 		lifecycle = NewLifecycle(LifecycleOptions{})
 	}
 
+	incidents := options.Incidents
+	if incidents == nil {
+		incidents = func() []incident.RecentIncident { return nil }
+	}
+
 	server := &Server{
+		incidents:    incidents,
 		lifecycle:    lifecycle,
 		playLive:     playrun.NewLive(),
 		version:      options.Version,

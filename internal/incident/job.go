@@ -32,7 +32,7 @@ func JobHook(r *Reporter, onRaised func(Incident)) func(*job.Job, string) {
 		if r == nil || j == nil || j.State != job.Failed {
 			return
 		}
-		inc := r.Capture(JobDraft(j, correlation))
+		inc := r.capture(JobDraft(j, correlation), j.ID)
 		if onRaised != nil {
 			onRaised(inc)
 		}

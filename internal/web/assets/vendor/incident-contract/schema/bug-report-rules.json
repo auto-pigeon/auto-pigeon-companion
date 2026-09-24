@@ -1,9 +1,233 @@
 {
-  "schema_version": "1.0",
-  "document_schema": "auto-pigeon-bug-report/1.0",
-  "description": "The bounds and text rules of the user bug report, as DATA, so the JavaScript reference implementation in ../src/bugReport.mjs and AUB's Go re-validation of a server-route submission apply the same rules rather than two sincere transcriptions. A report is PUBLISHED on a public GitHub repository, so every rule here is a publication rule.",
+  "schema_version": "1.1",
+  "document_schema": "auto-pigeon-bug-report/1.1",
+  "description": "The bounds and text rules of the user bug report, as DATA, so the JavaScript reference implementation in ../src/bugReport.mjs and AUB's Go re-validation of a server-route submission apply the same rules rather than two sincere transcriptions. Since 1.1 it is also the ONE source of the report's GitHub classification: the application, report-type and area labels, which areas each application offers, the closed incident-to-area mapping, the per-type field headings and the bounded acceptance of the previous document version. A report is PUBLISHED on a public GitHub repository, so every rule here is a publication rule.",
   "repository": "auto-pigeon/bug-reports",
-  "components": ["AUP", "AUG", "AUCOM"],
+  "components": [
+    "AUP",
+    "AUG",
+    "AUCOM"
+  ],
+  "report_types": {
+    "bug": {
+      "label": "Bug",
+      "document_title": "bug report",
+      "headings": {
+        "summary": "Summary",
+        "steps": "Steps to reproduce",
+        "expected": "Expected result",
+        "actual": "Actual result"
+      }
+    },
+    "feature_request": {
+      "label": "Feature request",
+      "document_title": "feature request",
+      "headings": {
+        "summary": "Summary",
+        "steps": "Use case",
+        "expected": "Desired result",
+        "actual": "Current limitation"
+      }
+    }
+  },
+  "areas": {
+    "editor": "Area: Editor",
+    "transform": "Area: Transform",
+    "textures": "Area: Textures",
+    "import_export": "Area: Import / Export",
+    "prefabs_extract": "Area: Prefabs / Extract",
+    "collaboration": "Area: Collaboration",
+    "compile_run": "Area: Compile / Run",
+    "gallery": "Area: Gallery",
+    "companion": "Area: Companion",
+    "account_access": "Area: Account / Access",
+    "documentation": "Area: Documentation",
+    "other": "Area: Other"
+  },
+  "applications": {
+    "AUP": {
+      "label": "AUP",
+      "areas": [
+        "editor",
+        "transform",
+        "textures",
+        "import_export",
+        "prefabs_extract",
+        "collaboration",
+        "compile_run",
+        "account_access",
+        "documentation",
+        "other"
+      ]
+    },
+    "AUG": {
+      "label": "AUG",
+      "areas": [
+        "gallery",
+        "account_access",
+        "documentation",
+        "other"
+      ]
+    },
+    "AUCOM": {
+      "label": "AUCOM",
+      "areas": [
+        "companion",
+        "compile_run",
+        "import_export",
+        "documentation",
+        "other"
+      ]
+    }
+  },
+  "incident_areas": {
+    "notes": [
+      "The initial area of an incident-triggered report. It reads only the incident's typed fields — never prose. Order: an exact `by_subsystem` entry for the reporting application, else the exact `by_code` entry, else `other`; an area the reporting application does not offer becomes `other`. The user can change the suggestion before preview.",
+      "`by_code` has one entry for EVERY code in incident-codes.json; test/bug-report.test.mjs fails when the taxonomy gains a code this table does not map."
+    ],
+    "by_code": {
+      "render.3d.slow": "editor",
+      "render.3d.context_lost": "editor",
+      "render.3d.fatal": "editor",
+      "render.2d.slow": "editor",
+      "render.2d.fatal": "editor",
+      "editor.main_thread_stall": "editor",
+      "editor.transform.slow": "transform",
+      "editor.transform.failed": "transform",
+      "editor.operation.failed": "editor",
+      "aub.unavailable": "other",
+      "aub.timeout": "other",
+      "aub.error": "other",
+      "auc.disconnected": "collaboration",
+      "auc.reconnect_failed": "collaboration",
+      "auc.backpressure": "collaboration",
+      "auc.error": "collaboration",
+      "aue.unavailable": "prefabs_extract",
+      "aue.timeout": "prefabs_extract",
+      "aue.job_failed": "prefabs_extract",
+      "aue.worker_failed": "prefabs_extract",
+      "aug.error": "gallery",
+      "reporting.telemetry_unavailable": "other",
+      "aucom.job_failed": "compile_run",
+      "aucom.readiness_failed": "companion",
+      "aut.launch_failed": "other"
+    },
+    "by_subsystem": {
+      "AUP": {},
+      "AUG": {
+        "auth": "account_access",
+        "auth.invitation": "account_access"
+      },
+      "AUCOM": {}
+    }
+  },
+  "incident_report_type": "bug",
+  "previous_schemas": [
+    {
+      "schema": "auto-pigeon-bug-report/1.0",
+      "accepted_until": "2026-11-30T23:59:59.999Z",
+      "report_type": "bug",
+      "area": "other",
+      "note": "A server may still accept a previewed 1.0 document until `accepted_until` (clients built before 1.1). It is labelled with its application, `report_type` and `area` from this entry. After that instant it is refused. Clients never emit it."
+    }
+  ],
+  "label_catalogue": {
+    "notes": [
+      "The exact labels auto-pigeon/bug-reports must carry, with deterministic colours and descriptions. `Already tracked elsewhere` is the only manually applied label; there are no workflow, triage, priority or severity labels. Open/closed is the workflow state."
+    ],
+    "labels": [
+      {
+        "name": "AUP",
+        "color": "1D76DB",
+        "description": "Reported from the Auto-Pigeon editor"
+      },
+      {
+        "name": "AUG",
+        "color": "0E8A16",
+        "description": "Reported from the Auto-Pigeon gallery"
+      },
+      {
+        "name": "AUCOM",
+        "color": "5319E7",
+        "description": "Reported from the Auto-Pigeon Companion"
+      },
+      {
+        "name": "Bug",
+        "color": "D73A4A",
+        "description": "Something is broken"
+      },
+      {
+        "name": "Feature request",
+        "color": "A2EEEF",
+        "description": "A request for new or changed behaviour"
+      },
+      {
+        "name": "Area: Editor",
+        "color": "BFD4F2",
+        "description": "Primary product area: Editor"
+      },
+      {
+        "name": "Area: Transform",
+        "color": "BFD4F2",
+        "description": "Primary product area: Transform"
+      },
+      {
+        "name": "Area: Textures",
+        "color": "BFD4F2",
+        "description": "Primary product area: Textures"
+      },
+      {
+        "name": "Area: Import / Export",
+        "color": "BFD4F2",
+        "description": "Primary product area: Import / Export"
+      },
+      {
+        "name": "Area: Prefabs / Extract",
+        "color": "BFD4F2",
+        "description": "Primary product area: Prefabs / Extract"
+      },
+      {
+        "name": "Area: Collaboration",
+        "color": "BFD4F2",
+        "description": "Primary product area: Collaboration"
+      },
+      {
+        "name": "Area: Compile / Run",
+        "color": "BFD4F2",
+        "description": "Primary product area: Compile / Run"
+      },
+      {
+        "name": "Area: Gallery",
+        "color": "BFD4F2",
+        "description": "Primary product area: Gallery"
+      },
+      {
+        "name": "Area: Companion",
+        "color": "BFD4F2",
+        "description": "Primary product area: Companion"
+      },
+      {
+        "name": "Area: Account / Access",
+        "color": "BFD4F2",
+        "description": "Primary product area: Account / Access"
+      },
+      {
+        "name": "Area: Documentation",
+        "color": "BFD4F2",
+        "description": "Primary product area: Documentation"
+      },
+      {
+        "name": "Area: Other",
+        "color": "BFD4F2",
+        "description": "Primary product area: Other"
+      },
+      {
+        "name": "Already tracked elsewhere",
+        "color": "CFD3D7",
+        "description": "Closed because another issue is the canonical one"
+      }
+    ]
+  },
   "limits": {
     "summary": 140,
     "steps": 2000,
@@ -24,17 +248,50 @@
       "Every rule is idempotent: sanitising a sanitised value returns it unchanged. That is what lets a server refuse a submission whose text is not already canonical instead of silently publishing something the user did not preview."
     ],
     "removed_ranges": [
-      ["0000", "0008"],
-      ["000B", "000C"],
-      ["000E", "001F"],
-      ["007F", "009F"],
-      ["061C", "061C"],
-      ["200B", "200F"],
-      ["202A", "202E"],
-      ["2060", "2064"],
-      ["2066", "2069"],
-      ["FEFF", "FEFF"],
-      ["FFF9", "FFFB"]
+      [
+        "0000",
+        "0008"
+      ],
+      [
+        "000B",
+        "000C"
+      ],
+      [
+        "000E",
+        "001F"
+      ],
+      [
+        "007F",
+        "009F"
+      ],
+      [
+        "061C",
+        "061C"
+      ],
+      [
+        "200B",
+        "200F"
+      ],
+      [
+        "202A",
+        "202E"
+      ],
+      [
+        "2060",
+        "2064"
+      ],
+      [
+        "2066",
+        "2069"
+      ],
+      [
+        "FEFF",
+        "FEFF"
+      ],
+      [
+        "FFF9",
+        "FFFB"
+      ]
     ],
     "ellipsis": "…"
   },

@@ -748,25 +748,59 @@ points at something durable, and clearing it deletes nothing.
 ### Report a bug
 
 **Report a bug**, in the footer, is AUG's dialog. The page builds one
-`auto-pigeon-bug-report/1.0` document with component `AUCOM`, using the shared
+`auto-pigeon-bug-report/1.1` document with component `AUCOM`, using the shared
 incident contract vendored byte for byte under
-`internal/web/assets/vendor/incident-contract/` (1.3.0 or later: earlier
-versions only accept `AUP` and `AUG`). It never collects a map, an address, an
-account or a token. You review exactly what the report contains, and then you
-choose: download it as `.txt` / `.json`, open a prefilled GitHub issue (it
-opens, it never submits), or **Send through Auto-Pigeon**. That last button
-works only when the AUB you are signed in to has
+`internal/web/assets/vendor/incident-contract/` (1.4.0 or later). It never
+collects a map, an address, an account or a token.
+
+Every report is classified before it can be reviewed, and the classification is
+the contract's, not the page's:
+
+- **Application** is a fixed fact: always `AUCOM`. It is shown, not offered.
+- **Type**: *Bug* or *Feature request*. The four fields keep their limits and
+  their redaction; their labels follow the type — *Summary / Steps to
+  reproduce / Expected result / Actual result* for a bug, *Summary / Use case /
+  Desired result / Current limitation* for a feature request — and so do the
+  headings of the published text.
+- **Area**: one of the Companion's areas — *Companion*, *Compile / Run*,
+  *Import / Export*, *Documentation*, *Other*.
+
+A report opened from the footer starts with **no** type and no area; *Review
+report* stays disabled, and says so, until both are chosen. A report about
+something that went wrong starts preselected, and both choices stay
+changeable: **Report a bug about this failure** on a failed job in the Jobs
+area (or choosing that failure under *What it is about* in the dialog) starts
+as a *Bug* in *Compile / Run*; a failed readiness check of the Auto-Pigeon
+server starts as a *Bug* in *Companion*. Those starting points come from the
+contract's one incident-to-area table (`suggestBugReportArea`), which reads the
+incident's code and subsystem, never its words.
+
+You review exactly what the report contains, including **the three labels it
+will carry on GitHub** — for example `AUCOM`, `Feature request`,
+`Area: Documentation` — and then you choose: download it as `.txt` / `.json`,
+open a prefilled GitHub issue (it opens, it never submits), or **Send through
+Auto-Pigeon**. All of them are the one reviewed document; changing the type or
+the area means going back with *Edit* and reviewing again. The prefilled issue
+asks GitHub for the three labels, but GitHub applies them only when your
+account may label issues in the repository, so a prefilled issue may arrive
+unlabelled; sending it through Auto-Pigeon always applies them. **Send through
+Auto-Pigeon** works only when the AUB you are signed in to has
 `AUB_BUG_REPORT_GITHUB_TOKEN` and `AUB_BUG_REPORT_GITHUB_API_BASE_URL` set;
 otherwise the dialog says so and offers the other two.
 Reports are public on `https://github.com/auto-pigeon/bug-reports`.
 
 The page reaches AUB through two relay routes, which pass the document and
-AUB's answer through unchanged:
+AUB's answer through unchanged, and lists what this Companion raised through a
+third, which answers with the typed incident fields a report may carry (never
+a message, a path or a command) — newest first, at most 16, forgotten on
+restart:
 
 ```console
 $ TOKEN=$(cat ~/.config/auto-pigeon-companion/api-token)
 $ curl -s -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/bug-reports/status
-{"server_route":"unavailable","repository":"auto-pigeon/bug-reports","schema":"auto-pigeon-bug-report/1.0","requires_sign_in":true}
+{"server_route":"unavailable","repository":"auto-pigeon/bug-reports","schema":"auto-pigeon-bug-report/1.1","requires_sign_in":true}
+$ curl -s -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/bug-reports/incidents
+{"incidents":[{"incident_id":"…","code":"aucom.job_failed","severity":"error","subsystem":"job.tool","operation":"job.exit_nonzero","occurred_at":"2026-09-24T10:00:00.000Z","recoverable":true,"correlation_id":"…","job_id":"…"}]}
 $ curl -s -H "X-AUCOM-Token: $TOKEN" -X POST http://127.0.0.1:8791/api/v1/bug-reports \
     -d '{"document": <the reviewed document>, "confirm": true}'
 ```
