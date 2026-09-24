@@ -3,6 +3,7 @@ package pack
 import (
 	"errors"
 	"fmt"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/fsshare"
 	"os"
 	"path/filepath"
 	"strings"
@@ -160,7 +161,7 @@ func Create(plan *Plan, options Options) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := os.Rename(stagedPath, output); err != nil {
+	if err := fsshare.Replace(stagedPath, output); err != nil {
 		return nil, fmt.Errorf("pack: publishing %s: %w", output, err)
 	}
 

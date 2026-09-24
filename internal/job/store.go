@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/fsshare"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -147,7 +148,7 @@ func writeFileAtomic(path string, data []byte, mode fs.FileMode) error {
 	if err := temp.Close(); err != nil {
 		return fmt.Errorf("job: closing %s: %w", name, err)
 	}
-	if err := os.Rename(name, path); err != nil {
+	if err := fsshare.Replace(name, path); err != nil {
 		return fmt.Errorf("job: replacing %s: %w", path, err)
 	}
 	return nil
@@ -163,7 +164,7 @@ func (s *Store) Load(id string) (*Job, error) {
 }
 
 func readRecord(path string) (*Job, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := fsshare.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil, fmt.Errorf("%w: %s", ErrNotFound, filepath.Base(filepath.Dir(path)))
@@ -238,7 +239,7 @@ func (s *Store) heartbeatAge(id string, now time.Time) (time.Duration, bool) {
 	if err != nil {
 		return 0, false
 	}
-	raw, err := os.ReadFile(filepath.Join(dir, heartbeatName))
+	raw, err := fsshare.ReadFile(filepath.Join(dir, heartbeatName))
 	if err != nil {
 		return 0, false
 	}
@@ -379,7 +380,7 @@ func (s *Store) ReadLog(id, name string) ([]byte, error) {
 	if name != stdoutLogName && name != stderrLogName {
 		return nil, fmt.Errorf("job: %q is not a log this store keeps", name)
 	}
-	raw, err := os.ReadFile(filepath.Join(dir, name))
+	raw, err := fsshare.ReadFile(filepath.Join(dir, name))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
 	}

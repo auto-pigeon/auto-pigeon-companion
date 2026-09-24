@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -78,6 +79,9 @@ func TestTheURLArrivesAsOneArgumentOnEveryPlatform(t *testing.T) {
 }
 
 func TestRegisteringOnLinuxWritesTheEntryAndTheDefault(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a Linux desktop entry names a Linux path; on a Windows host the fixture's path is C:\\…, which the entry format escapes differently")
+	}
 	binary := fakeBinary(t, "companion")
 	registrar, data := linuxRegistrar(t, binary)
 
@@ -218,6 +222,9 @@ func TestAHandlerIsNeverPointedAtAnExecutableThatIsNotThere(t *testing.T) {
 
 // An installation path with a space has to survive into one argv element.
 func TestAnInstallationPathWithASpaceStaysOneArgument(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a Linux desktop entry names a Linux path; on a Windows host the fixture's path is C:\\…, which the entry format escapes differently")
+	}
 	dir := filepath.Join(t.TempDir(), "Auto Pigeon Companion")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)

@@ -31,6 +31,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/fsshare"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -296,7 +297,7 @@ func Load() (Config, error) {
 // LoadFrom is Load against an explicit path. Tests use it; so does any future
 // --config flag.
 func LoadFrom(path string) (Config, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := fsshare.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return Default(), ErrNotFound
@@ -416,7 +417,7 @@ func saveLocked(path string, value Config) error {
 	if err := temp.Close(); err != nil {
 		return fmt.Errorf("config: closing %s: %w", tempName, err)
 	}
-	if err := os.Rename(tempName, path); err != nil {
+	if err := fsshare.Replace(tempName, path); err != nil {
 		return fmt.Errorf("config: replacing %s: %w", path, err)
 	}
 	return nil

@@ -3,6 +3,7 @@ package binding
 import (
 	"errors"
 	"fmt"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/fsshare"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -24,7 +25,7 @@ var ErrNoFile = errors.New("binding: no binding file")
 // ErrNoFile, so a caller that does not care about the distinction can ignore
 // the error and use the value.
 func LoadFile(path string) (*Set, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := fsshare.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return NewSet(), ErrNoFile
@@ -68,7 +69,7 @@ func SaveFile(path string, set *Set) error {
 	if err := temp.Close(); err != nil {
 		return fmt.Errorf("binding: closing %s: %w", name, err)
 	}
-	if err := os.Rename(name, path); err != nil {
+	if err := fsshare.Replace(name, path); err != nil {
 		return fmt.Errorf("binding: replacing %s: %w", path, err)
 	}
 	return nil

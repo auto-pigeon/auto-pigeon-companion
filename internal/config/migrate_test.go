@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -320,7 +321,10 @@ func TestBackupPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
+	// Windows has no Unix permission bits: Go reports every writable file as
+	// 0666 there, and what keeps the file private is the ACL it inherits from the
+	// user's profile directory. The bits are checked where they are the control.
+	if perm := info.Mode().Perm(); perm != 0o600 && runtime.GOOS != "windows" {
 		t.Errorf("backup mode = %o, want 600", perm)
 	}
 }

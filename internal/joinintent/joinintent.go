@@ -33,6 +33,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/fsshare"
 	"os"
 	"path/filepath"
 	"time"
@@ -211,7 +212,7 @@ func update(path string, now time.Time, mutate func(*Intent) error) error {
 }
 
 func load(path string) Intent {
-	raw, err := os.ReadFile(path)
+	raw, err := fsshare.ReadFile(path)
 	if err != nil {
 		return Intent{SchemaVersion: SchemaVersion}
 	}
@@ -278,7 +279,7 @@ func save(path string, intent Intent) error {
 	if err = temporary.Close(); err != nil {
 		return err
 	}
-	if err = os.Rename(temporary.Name(), path); err != nil {
+	if err = fsshare.Replace(temporary.Name(), path); err != nil {
 		return fmt.Errorf("joinintent: %w", err)
 	}
 

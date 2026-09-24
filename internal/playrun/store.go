@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/fsshare"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -107,7 +108,7 @@ func (s *Store) Save(record *Record) error {
 
 		return fmt.Errorf("playrun: writing run %s: %w", record.ID, errors.Join(writeErr, closeErr))
 	}
-	if err = os.Rename(name, path); err != nil {
+	if err = fsshare.Replace(name, path); err != nil {
 		_ = os.Remove(name)
 
 		return fmt.Errorf("playrun: writing run %s: %w", record.ID, err)
@@ -122,7 +123,7 @@ func (s *Store) Load(id string) (*Record, error) {
 	if err != nil {
 		return nil, err
 	}
-	raw, err := os.ReadFile(path)
+	raw, err := fsshare.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, fmt.Errorf("%w: %s", ErrNotFound, id)
 	}

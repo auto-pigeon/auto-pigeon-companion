@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/fsshare"
 	"io"
 	"io/fs"
 	"os"
@@ -212,7 +213,7 @@ func (s *Stager) Stage(packageSHA256 string, files []aub.JoinContentFile) (Stage
 			return Stage{}, err
 		}
 	}
-	if err = os.Rename(temporary, dir); err != nil {
+	if err = fsshare.Replace(temporary, dir); err != nil {
 		return Stage{}, err
 	}
 

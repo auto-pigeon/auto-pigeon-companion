@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/fsshare"
 	"io"
 	"net/http"
 	"os"
@@ -699,7 +700,7 @@ func (s *Server) handleProfileImport(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	if err := os.Rename(temporary, path); err != nil {
+	if err := fsshare.Replace(temporary, path); err != nil {
 		os.Remove(temporary)
 		writeError(w, http.StatusInternalServerError, err)
 		return

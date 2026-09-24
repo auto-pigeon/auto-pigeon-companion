@@ -62,6 +62,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/fsshare"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -244,15 +245,25 @@ func Acquire(guarded string, options Options) (*Lock, error) {
 			go lock.refresh(options.stale() / 4)
 			return lock, nil
 		}
-		if !errors.Is(err, fs.ErrExist) {
+		// On Windows a lock file somebody else is reading, or is deleting,
+		// answers "in use" rather than "exists". Either way it is held: wait.
+		busy := fsshare.IsBusy(err)
+		if !errors.Is(err, fs.ErrExist) && !busy {
 			return nil, fmt.Errorf("lockfile: creating %s: %w", path, err)
 		}
 
 		current, age, readErr := inspect(path, options.now())
-		if readErr != nil {
-			if errors.Is(readErr, fs.ErrNotExist) {
-				continue // The holder released it between the create and the read.
+		switch {
+		case readErr == nil:
+		case errors.Is(readErr, fs.ErrNotExist):
+			continue // The holder released it between the create and the read.
+		case fsshare.IsBusy(readErr) || busy:
+			if time.Now().After(deadline) {
+				return nil, fmt.Errorf("%w: %s is in use. Wait for it to finish, or stop it", ErrBusy, path)
 			}
+			time.Sleep(options.poll())
+			continue
+		default:
 			return nil, readErr
 		}
 		if limit := options.stale(); limit > 0 && age > limit {
@@ -284,7 +295,7 @@ func inspect(path string, now time.Time) (Holder, time.Duration, error) {
 		age = 0
 	}
 	var holder Holder
-	raw, err := os.ReadFile(path)
+	raw, err := fsshare.ReadFile(path)
 	if err != nil {
 		return Holder{}, age, err
 	}
@@ -363,7 +374,7 @@ func (l *Lock) Release() error {
 	close(l.stop)
 	<-l.done
 
-	raw, err := os.ReadFile(l.path)
+	raw, err := fsshare.ReadFile(l.path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return fmt.Errorf("%w: %s is gone", ErrLost, l.path)
@@ -374,7 +385,7 @@ func (l *Lock) Release() error {
 	if err := json.Unmarshal(raw, &current); err != nil || current.Nonce != l.holder.Nonce {
 		return fmt.Errorf("%w: %s is now held by somebody else", ErrLost, l.path)
 	}
-	if err := os.Remove(l.path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+	if err := fsshare.Remove(l.path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("lockfile: removing %s: %w", l.path, err)
 	}
 	return nil

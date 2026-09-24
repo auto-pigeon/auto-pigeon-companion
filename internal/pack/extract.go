@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/fsshare"
 	"io"
 	"os"
 	"path/filepath"
@@ -271,7 +272,7 @@ func writeMember(root, destination string, entry Entry, source io.Reader, remain
 		return 0, "", err
 	}
 	if staged != "" {
-		if err := os.Rename(staged, destination); err != nil {
+		if err := fsshare.Replace(staged, destination); err != nil {
 			return 0, "", fmt.Errorf("pack: replacing %s: %w", destination, err)
 		}
 	}

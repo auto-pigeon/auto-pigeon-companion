@@ -44,6 +44,20 @@ sys.path.insert(0, HERE)
 sys.dont_write_bytecode = True
 import releaselib  # noqa: E402
 
+
+def bash():
+    """The bash on PATH, found the way a shell or Go's exec.LookPath finds it.
+
+    A bare "bash" handed to subprocess on Windows is resolved by CreateProcess,
+    which searches the system directory first and so starts WSL's launcher
+    (which needs an installed distribution) instead of the Git for Windows bash
+    on PATH. On Linux and macOS this is the same bash either way.
+    """
+    found = shutil.which("bash")
+    if not found:
+        raise Refusal("bash is not on PATH; the bundle is composed by build/bundle-sidecar.sh")
+    return found
+
 PIN_SCHEMA = "aucom.aue-pin/1.0"
 MATRIX_SCHEMA = "aucom.release-matrix/1.0"
 RELEASE_SCHEMA = "aucom.release-manifest/1.0"
@@ -379,7 +393,7 @@ def bundle_one(entry, aue, dist, version, out, work):
     bundles = os.path.join(work, "bundles")
     target = aue["targets"][platform]
     command = [
-        "bash", os.path.join(HERE, "bundle-sidecar.sh"),
+        bash(), os.path.join(HERE, "bundle-sidecar.sh"),
         "--platform", platform, "--version", version,
         "--binary-dir", extracted, "--out", bundles,
         "--extractor", target["path"],

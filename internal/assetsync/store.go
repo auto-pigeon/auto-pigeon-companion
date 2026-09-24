@@ -44,6 +44,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/fsshare"
 	"io"
 	"os"
 	"path/filepath"
@@ -266,7 +267,7 @@ func (s *Store) Publish(reader io.Reader, digest string, size int64) (string, er
 	if err = os.Chmod(stagingPath, 0o600); err != nil {
 		return "", fmt.Errorf("assetsync: setting permissions: %w", err)
 	}
-	if err = os.Rename(stagingPath, final); err != nil {
+	if err = fsshare.Replace(stagingPath, final); err != nil {
 		return "", fmt.Errorf("assetsync: publishing the object: %w", err)
 	}
 
@@ -356,7 +357,7 @@ func (s *Store) SaveRevision(record RevisionRecord) error {
 		return fmt.Errorf("assetsync: setting permissions: %w", err)
 	}
 
-	return os.Rename(stagingPath, path)
+	return fsshare.Replace(stagingPath, path)
 }
 
 // Revision reads one cached revision.

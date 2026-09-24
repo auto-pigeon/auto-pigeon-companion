@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -20,7 +21,10 @@ func TestALinkIsRecordedNotRedeemedAndRedeemedOnlyOnce(t *testing.T) {
 	}
 	raw, _ := os.ReadFile(path)
 	info, _ := os.Stat(path)
-	if info.Mode().Perm() != 0o600 {
+	// Windows has no Unix permission bits: Go reports every writable file as
+	// 0666 there, and what keeps the file private is the ACL it inherits from the
+	// user's profile directory. The bits are checked where they are the control.
+	if info.Mode().Perm() != 0o600 && runtime.GOOS != "windows" {
 		t.Fatalf("mode = %v", info.Mode())
 	}
 	if !strings.Contains(string(raw), "tkt-secret") {

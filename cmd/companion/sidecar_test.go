@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -256,7 +257,10 @@ func TestAnExtractorIsBundledBesideTheCompanion(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(bundle, "LICENSE-auto-pigeon-extractor.txt")); err != nil {
 		t.Errorf("the extractor's licence file is not in the bundle: %v", err)
 	}
-	if info, err := os.Stat(filepath.Join(bundle, "auto-pigeon-extractor")); err != nil || info.Mode().Perm()&0o111 == 0 {
+	// Windows has no executable bit to observe; the release composes its
+	// bundles on Linux, where this is checked.
+	if info, err := os.Stat(filepath.Join(bundle, "auto-pigeon-extractor")); err != nil ||
+		(info.Mode().Perm()&0o111 == 0 && runtime.GOOS != "windows") {
 		t.Errorf("the extractor is not an executable file in the bundle: %v", err)
 	}
 	// Three licences for three kinds of thing: the Companion's own code (MIT),

@@ -1,0 +1,23 @@
+# Every text file is checked out with LF on every platform, as it is stored.
+#
+# Without this, a Windows checkout (core.autocrlf=true, the default on GitHub's
+# Windows runners) rewrites text files to CRLF, and every test that reads a
+# committed file byte for byte — the MIT LICENSE, README statements, the
+# workflow it parses, canonical golden encodings, vendored contract copies —
+# fails there while the file itself is correct. Found by release run
+# 36044864451 (NEW_247A1).
+* text=auto eol=lf
+
+# PowerShell reads LF scripts; nothing here needs CRLF.
+*.ps1 text eol=lf
+
+# Never touched.
+*.png binary
+*.tga binary
+*.ico binary
+*.icns binary
+*.wad binary
+*.bsp binary
+*.pak binary
+*.zip binary
+*.gz binary

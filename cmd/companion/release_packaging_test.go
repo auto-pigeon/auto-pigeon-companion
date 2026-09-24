@@ -2,7 +2,9 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -201,9 +203,18 @@ func TestTheReleaseScriptProducesChecksumsAndAnSBOM(t *testing.T) {
 	if !strings.Contains(script, `rm -rf "$OUT/stage"`) {
 		t.Error("release.sh digests its staging tree")
 	}
+	// Executable as committed — the mode every checkout gets — and, where the
+	// filesystem has an executable bit at all, in this checkout too.
+	staged, err := exec.Command("git", "-C", filepath.Join("..", ".."), "ls-files", "-s", "build/release.sh").Output()
+	if err != nil {
+		t.Fatalf("git ls-files: %v", err)
+	}
+	if !strings.HasPrefix(string(staged), "100755 ") {
+		t.Errorf("build/release.sh is not committed executable: %q", staged)
+	}
 	if info, err := os.Stat(filepath.Join("..", "..", "build", "release.sh")); err != nil {
 		t.Fatal(err)
-	} else if info.Mode().Perm()&0o111 == 0 {
+	} else if info.Mode().Perm()&0o111 == 0 && runtime.GOOS != "windows" {
 		t.Error("build/release.sh is not executable")
 	}
 }

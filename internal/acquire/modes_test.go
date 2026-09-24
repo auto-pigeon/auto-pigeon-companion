@@ -26,6 +26,15 @@ func fixtureExecutables() []profile.Executable {
 	return []profile.Executable{{Name: "fixture", File: "bin/fixture{platform.exe_suffix}"}}
 }
 
+// exe is the file name an executable has on this platform: the profile's
+// `{platform.exe_suffix}` is ".exe" on Windows.
+func exe(name string) string {
+	if runtime.GOOS == "windows" {
+		return name + ".exe"
+	}
+	return name
+}
+
 // writeTool puts an executable file where a test says a user already has one.
 func writeTool(t *testing.T, dir, relative string) string {
 	t.Helper()
@@ -41,7 +50,7 @@ func writeTool(t *testing.T, dir, relative string) string {
 
 func TestAUserPathResolvesAgainstADirectoryTheUserChose(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "my-tools")
-	tool := writeTool(t, root, "bin/fixture")
+	tool := writeTool(t, root, "bin/"+exe("fixture"))
 
 	result, err := Resolve(Request{
 		Option:      profile.AcquisitionOption{Mode: profile.AcquireUserPath, Title: "Choose it", Hint: "the folder"},
@@ -109,7 +118,7 @@ func TestASystemPathResolutionLooksUpOnlyTheCommandsTheOptionNames(t *testing.T)
 
 func TestAnAlreadyInstalledRouteStaysInsideTheConfiguredRoot(t *testing.T) {
 	gameRoot := t.TempDir()
-	tool := writeTool(t, gameRoot, "tools/bin/fixture")
+	tool := writeTool(t, gameRoot, "tools/bin/"+exe("fixture"))
 
 	result, err := Resolve(Request{
 		Option: profile.AcquisitionOption{

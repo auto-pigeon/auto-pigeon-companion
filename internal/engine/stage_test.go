@@ -234,6 +234,11 @@ func TestAFailedStagingLeavesNothingBehind(t *testing.T) {
 		t.Skipf("this filesystem does not enforce permissions: %v", err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(unreadable, 0o600) })
+	// Windows maps 0o000 to "read-only", which still reads.
+	if probe, err := os.Open(unreadable); err == nil {
+		probe.Close()
+		t.Skip("this platform does not make a file unreadable with chmod 000")
+	}
 
 	if _, err := (engine.Staging{GameRoot: game, ModName: "mymap", Source: source}).Stage(); err == nil {
 		t.Fatal("staging an unreadable file succeeded")

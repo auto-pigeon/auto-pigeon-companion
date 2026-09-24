@@ -3,6 +3,7 @@ package pack
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/fsshare"
 	"os"
 	"path/filepath"
 	"sort"
@@ -183,7 +184,7 @@ func (m *Manifest) Save(path string) error {
 	if err := os.WriteFile(temporary, append(encoded, '\n'), 0o600); err != nil {
 		return fmt.Errorf("pack: writing %s: %w", path, err)
 	}
-	if err := os.Rename(temporary, path); err != nil {
+	if err := fsshare.Replace(temporary, path); err != nil {
 		os.Remove(temporary)
 		return fmt.Errorf("pack: publishing %s: %w", path, err)
 	}

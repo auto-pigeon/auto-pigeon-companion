@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/fsshare"
 	"os"
 	"path/filepath"
 	"sort"
@@ -423,7 +424,7 @@ func (m *Manifest) Save(dir string) error {
 	if err := os.WriteFile(temporary, append(encoded, '\n'), 0o600); err != nil {
 		return fmt.Errorf("build: writing %s: %w", path, err)
 	}
-	if err := os.Rename(temporary, path); err != nil {
+	if err := fsshare.Replace(temporary, path); err != nil {
 		return fmt.Errorf("build: publishing %s: %w", path, err)
 	}
 	return nil
@@ -431,7 +432,7 @@ func (m *Manifest) Save(dir string) error {
 
 // LoadManifest reads one manifest.
 func LoadManifest(path string) (*Manifest, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := fsshare.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("build: reading %s: %w", path, err)
 	}

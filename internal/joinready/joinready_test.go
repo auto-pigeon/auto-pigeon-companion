@@ -159,8 +159,8 @@ func TestEachLocalGapIsItsOwnNamedState(t *testing.T) {
 		}, step: joinready.StepEngineProfile, state: joinready.EngineChanged, action: joinready.ActionApproveProfile},
 		"no program chosen": {trust: profile.TrustBuiltin, mutate: func(_ *fixture, b *binding.LocalBinding) { b.Executables = nil },
 			step: joinready.StepEngineProgram, state: joinready.LocalMissing, action: joinready.ActionChooseProgram},
-		"program moved": {trust: profile.TrustBuiltin, mutate: func(_ *fixture, b *binding.LocalBinding) {
-			b.Executables = map[string]string{"engine": "/nowhere/engine"}
+		"program moved": {trust: profile.TrustBuiltin, mutate: func(f *fixture, b *binding.LocalBinding) {
+			b.Executables = map[string]string{"engine": filepath.Join(f.owned, "nowhere", "engine")}
 		}, step: joinready.StepEngineProgram, state: joinready.LocalStale, action: joinready.ActionChooseProgram},
 		"no game folder": {trust: profile.TrustBuiltin, mutate: func(_ *fixture, b *binding.LocalBinding) {
 			delete(b.Roots, "game_root")

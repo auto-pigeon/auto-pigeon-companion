@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -399,7 +400,10 @@ func TestTheConfigFileHoldingTheTokenIsNotReadableByOthers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if perm := info.Mode().Perm(); perm&0o077 != 0 {
+	// Windows has no Unix permission bits: Go reports every writable file as
+	// 0666 there, and what keeps the file private is the ACL it inherits from the
+	// user's profile directory. The bits are checked where they are the control.
+	if perm := info.Mode().Perm(); perm&0o077 != 0 && runtime.GOOS != "windows" {
 		t.Errorf("config.json is %04o; it holds a session token", perm)
 	}
 }

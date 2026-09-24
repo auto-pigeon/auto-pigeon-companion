@@ -137,8 +137,13 @@ func environmentFor(l layout, workingDir string, declared map[string]string, act
 // shellQuote renders one argv element the way a shell would show it.
 //
 // Display only. Nothing re-executes this, and there is no shell whose quoting
-// this could be correct for, because the executor never uses one.
+// this could be correct for, because the executor never uses one. On Windows
+// it follows the command-line convention a Windows program parses its
+// arguments with, so a path reads as the path (C:\Users\me, not C:\\Users).
 func shellQuote(part string) string {
+	if runtime.GOOS == "windows" {
+		return windowsQuote(part)
+	}
 	if part == "" {
 		return `""`
 	}
@@ -146,4 +151,54 @@ func shellQuote(part string) string {
 		return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(part) + `"`
 	}
 	return part
+}
+
+// windowsQuote renders one argument exactly as os/exec passes it to a Windows
+// program (syscall.EscapeArg, which CommandLineToArgvW reads back): quoted only
+// when it holds a space or a tab, a quote escaped with a backslash, and
+// backslashes doubled only where they precede a quote or the closing quote.
+// A port rather than a call because syscall.EscapeArg exists only on Windows,
+// and the display is tested everywhere.
+func windowsQuote(part string) string {
+	if part == "" {
+		return `""`
+	}
+	needsBackslash, hasSpace := false, false
+	for i := 0; i < len(part); i++ {
+		switch part[i] {
+		case '"', '\\':
+			needsBackslash = true
+		case ' ', '\t':
+			hasSpace = true
+		}
+	}
+	if !needsBackslash && !hasSpace {
+		return part
+	}
+	if !needsBackslash {
+		return `"` + part + `"`
+	}
+	var out strings.Builder
+	if hasSpace {
+		out.WriteByte('"')
+	}
+	slashes := 0
+	for i := 0; i < len(part); i++ {
+		c := part[i]
+		switch c {
+		default:
+			slashes = 0
+		case '\\':
+			slashes++
+		case '"':
+			out.WriteString(strings.Repeat(`\`, slashes+1))
+			slashes = 0
+		}
+		out.WriteByte(c)
+	}
+	if hasSpace {
+		out.WriteString(strings.Repeat(`\`, slashes))
+		out.WriteByte('"')
+	}
+	return out.String()
 }

@@ -42,6 +42,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/fsshare"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -502,7 +503,7 @@ func updateMIMEApps(path, entry string) error {
 	if err := temporary.Close(); err != nil {
 		return fmt.Errorf("urischeme: closing %s: %w", name, err)
 	}
-	if err := os.Rename(name, path); err != nil {
+	if err := fsshare.Replace(name, path); err != nil {
 		return fmt.Errorf("urischeme: replacing %s: %w", path, err)
 	}
 	return nil

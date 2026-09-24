@@ -2,6 +2,7 @@ package job
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -263,6 +264,20 @@ func TestAChildThatOutlivesItsParentDoesNotHangTheJob(t *testing.T) {
 	}
 	if elapsed > 30*time.Second {
 		t.Fatalf("the job took %s: the orphaned child held it open", elapsed)
+	}
+	// The orphan is this test's to end: left alone it runs for a minute
+	// inside the job's workspace, which Windows will not delete while a
+	// process is running in it.
+	raw, err := h.service.Logs(finished.ID, "stdout", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pid int
+	if _, err := fmt.Sscanf(strings.TrimSpace(string(raw)), "spawned %d", &pid); err != nil || pid <= 0 {
+		t.Fatalf("the helper did not report its grandchild: %q", raw)
+	}
+	if orphan, err := os.FindProcess(pid); err == nil {
+		_ = orphan.Kill()
 	}
 }
 

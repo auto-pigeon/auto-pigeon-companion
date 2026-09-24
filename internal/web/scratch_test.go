@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -117,7 +118,14 @@ func TestAScratchToolAndPipelineBuildAMap(t *testing.T) {
 	if err := os.MkdirAll(folder, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(self, filepath.Join(folder, "fakecompiler")); err != nil {
+	// The profile names it the way every profile names a program,
+	// fakecompiler{platform.exe_suffix}: Windows starts only a file it
+	// recognises as a program, so there it is fakecompiler.exe.
+	compiler := "fakecompiler"
+	if runtime.GOOS == "windows" {
+		compiler += ".exe"
+	}
+	if err := os.Symlink(self, filepath.Join(folder, compiler)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -150,7 +158,7 @@ func TestAScratchToolAndPipelineBuildAMap(t *testing.T) {
 		"summary": "A compiler described from nothing.", "publisher_name": "Me", "license_spdx": "MIT",
 		"scratch": map[string]any{
 			"kind": "tool", "tool_version": "1",
-			"executables": []map[string]any{{"name": "cc", "title": "The compiler", "file": "fakecompiler"}},
+			"executables": []map[string]any{{"name": "cc", "title": "The compiler", "file": "fakecompiler{platform.exe_suffix}"}},
 			"actions": []map[string]any{{
 				"id": "compile", "title": "Compile", "capability": "scratch.compile", "executable": "cc",
 				"args":    []string{buildHelperFlag, "--fail [if fail]", "{input.source}", "{output.out}"},

@@ -376,7 +376,7 @@ func TestCollectRefusesSymlinksAndDevices(t *testing.T) {
 	if !errors.Is(err, ErrUnsafePath) {
 		t.Fatalf("error is %v, want an ErrUnsafePath", err)
 	}
-	if !strings.Contains(err.Error(), "/etc/passwd") {
+	if !strings.Contains(err.Error(), filepath.FromSlash("/etc/passwd")) {
 		t.Fatalf("error is %v, want it to say where the link points", err)
 	}
 }

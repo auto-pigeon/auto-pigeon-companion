@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/fsshare"
 	"io"
 	"io/fs"
 	"os"
@@ -405,7 +406,7 @@ func collect(l layout, outputs map[string]string, roles map[string]string, optio
 	if err := os.RemoveAll(l.Artifacts); err != nil {
 		return nil, fmt.Errorf("job: replacing %s: %w", l.Artifacts, err)
 	}
-	if err := os.Rename(staging, l.Artifacts); err != nil {
+	if err := fsshare.Replace(staging, l.Artifacts); err != nil {
 		return nil, fmt.Errorf("job: publishing artifacts: %w", err)
 	}
 	if len(missingRequired) > 0 {

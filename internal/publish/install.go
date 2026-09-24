@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/fsshare"
 	"io"
 	"os"
 	"path/filepath"
@@ -305,7 +306,7 @@ func writeAtomically(path string, data []byte) error {
 		return err
 	}
 
-	return os.Rename(staged.Name(), path)
+	return fsshare.Replace(staged.Name(), path)
 }
 
 // decodeTree reads canonical bytes into a plain tree, refusing anything after the
