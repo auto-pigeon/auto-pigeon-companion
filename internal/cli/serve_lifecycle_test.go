@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -29,14 +30,53 @@ import (
 // syncBuffer is a bytes.Buffer several goroutines may write: the lifecycle's
 // notice, the shutdown line and the test's reads.
 type syncBuffer struct {
-	mu  sync.Mutex
-	buf bytes.Buffer
+	mu     sync.Mutex
+	buf    bytes.Buffer
+	writes []string      // every Write, as written: a notice split across two is visible
+	wrote  chan struct{} // closed and replaced on every Write, so a reader can wait for one
 }
 
 func (b *syncBuffer) Write(p []byte) (int, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	b.writes = append(b.writes, string(p))
+	if b.wrote != nil {
+		close(b.wrote)
+	}
+	b.wrote = make(chan struct{})
 	return b.buf.Write(p)
+}
+
+// waitFor returns true once the buffer contains want, woken by each Write —
+// never by a fixed sleep — or false when the deadline passes first.
+func (b *syncBuffer) waitFor(want string, timeout time.Duration) bool {
+	deadline := time.After(timeout)
+	for {
+		b.mu.Lock()
+		if strings.Contains(b.buf.String(), want) {
+			b.mu.Unlock()
+			return true
+		}
+		if b.wrote == nil {
+			b.wrote = make(chan struct{})
+		}
+		wrote := b.wrote
+		b.mu.Unlock()
+		select {
+		case <-wrote:
+		case <-deadline:
+			return false
+		}
+	}
+}
+
+func (b *syncBuffer) firstWrite() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if len(b.writes) == 0 {
+		return ""
+	}
+	return b.writes[0]
 }
 
 func (b *syncBuffer) String() string {
@@ -92,6 +132,12 @@ func startServe(t *testing.T, args []string, openErr error) *servedCompanion {
 		t.Fatal(err)
 	}
 	s.token = token
+	// Startup is announced when its notice is on the terminal. Opening the
+	// browser happens BEFORE that notice is written, so the opener firing is not
+	// the boundary; the notice's own last line is, and it arrives in one write.
+	if slices.Contains(args, "--interactive") && !stdout.waitFor(startupNoticeEnd, 15*time.Second) {
+		t.Fatalf("startup was never announced; stdout %q", stdout.String())
+	}
 	t.Cleanup(func() {
 		select {
 		case <-s.done:
@@ -330,6 +376,8 @@ func TestNoPageWithinTheStartupWindowStopsWithAReadableLine(t *testing.T) {
 	s.assertGone()
 }
 
+const startupNoticeEnd = "Close its last window to stop it, or press Ctrl+C.\n"
+
 func TestABrowserThatCannotOpenPrintsTheAddressOnceAndWaits(t *testing.T) {
 	s := startServe(t, []string{"serve", "--interactive", "--open", "--startup-window", "3s"},
 		os.ErrNotExist)
@@ -337,6 +385,13 @@ func TestABrowserThatCannotOpenPrintsTheAddressOnceAndWaits(t *testing.T) {
 	address := "http://" + s.address + "/"
 	if !strings.Contains(out, "could not open your browser") || strings.Count(out, address) != 1 {
 		t.Fatalf("stdout %q: want the failure said and %s printed once", out, address)
+	}
+	// One write: the failure, the one address, the window and how to stop it.
+	first := s.stdout.firstWrite()
+	for _, want := range []string{"Auto-Pigeon Companion 1.500 could not open your browser.\n", address, "within 3s", startupNoticeEnd} {
+		if !strings.Contains(first, want) {
+			t.Fatalf("the first write %q lacks %q: the notice was split", first, want)
+		}
 	}
 	// Somebody pastes the address: the lease makes it a normal session.
 	page := s.lease()
@@ -377,6 +432,34 @@ func TestTheNoSubcommandLaunchIsInteractiveAndStayRunningIsServerMode(t *testing
 	for _, notGUI := range [][]string{{"serve"}, {"--port", "1"}, {"--help"}, {"--debug", "version"}} {
 		if _, ok := guiArguments(notGUI); ok {
 			t.Errorf("%v was taken as the GUI launch", notGUI)
+		}
+	}
+}
+
+func TestTheStartupNoticeIsCompleteAndNamesTheAddressOnce(t *testing.T) {
+	const url = "http://127.0.0.1:8789/"
+	cases := []struct {
+		name                string
+		opened, triedToOpen bool
+		want                []string
+		address             int
+	}{
+		{"opened", true, true, []string{"is open in your browser.\n", startupNoticeEnd}, 0},
+		{"could not open", false, true, []string{"could not open your browser.\n", "Open " + url + " within 2m0s. ", startupNoticeEnd}, 1},
+		{"not asked to open", false, false, []string{"is running at " + url + "\n", "Open it within 2m0s. ", startupNoticeEnd}, 1},
+	}
+	for _, c := range cases {
+		got := startupNotice("1.500", url, c.opened, c.triedToOpen, 2*time.Minute)
+		for _, want := range c.want {
+			if !strings.Contains(got, want) {
+				t.Errorf("%s: %q lacks %q", c.name, got, want)
+			}
+		}
+		if n := strings.Count(got, url); n != c.address {
+			t.Errorf("%s: the address appears %d times in %q, want %d", c.name, n, got, c.address)
+		}
+		if !strings.HasSuffix(got, startupNoticeEnd) {
+			t.Errorf("%s: %q does not end with the exit guidance", c.name, got)
 		}
 	}
 }

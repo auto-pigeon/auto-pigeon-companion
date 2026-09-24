@@ -4535,12 +4535,12 @@ pin in a reviewed commit. The commit must already be on GitHub:
 
 ```console
 $ git -C ../auto-pigeon-extractor rev-parse HEAD
-865fabc23e97288086b954a0896352188ca7f323
+d9f4a536028369f80e5bab275ef286dd3ec4a6c8
 $ python3 build/release-plan.py pin
 repository=auto-pigeon/auto-pigeon-extractor
-commit=865fabc23e97288086b954a0896352188ca7f323
+commit=d9f4a536028369f80e5bab275ef286dd3ec4a6c8
 required_protocol=1.0
-version=1.213
+version=1.214
 aulibs_repository=auto-pigeon/auto-pigeon-libraries
 ```
 

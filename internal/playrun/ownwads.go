@@ -87,6 +87,13 @@ type OwnWAD struct {
 // same name in another case (a folder copied from Windows keeps METAL.WAD).
 // Nothing below dir is searched: a folder is named so that what is used is
 // predictable.
+//
+// The spelling comes from the directory listing and never from probing the
+// requested path: on a case-insensitive filesystem (macOS by default,
+// Windows) `stat metal.wad` succeeds for METAL.WAD, and the path recorded
+// would then be a spelling that is not on disk. Two regular files that differ
+// only in letter case, with no exact match, are refused rather than chosen by
+// listing order.
 func FindOwnWADs(dir string, names []string) ([]OwnWAD, error) {
 	dir = strings.TrimSpace(dir)
 	if dir == "" || !filepath.IsAbs(dir) {
@@ -96,21 +103,19 @@ func FindOwnWADs(dir string, names []string) ([]OwnWAD, error) {
 	if err != nil {
 		return nil, fmt.Errorf("playrun: your own WAD folder cannot be read: %w", err)
 	}
-	byLower := map[string]string{}
+	listing := make([]wadEntry, 0, len(entries))
 	for _, entry := range entries {
-		if entry.Type().IsRegular() {
-			byLower[strings.ToLower(entry.Name())] = entry.Name()
-		}
+		listing = append(listing, wadEntry{name: entry.Name(), regular: entry.Type().IsRegular()})
 	}
 	out := make([]OwnWAD, 0, len(names))
 	for _, name := range names {
 		found := OwnWAD{Name: name}
-		actual := name
-		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
-			actual = byLower[strings.ToLower(name)]
+		actual, err := selectOwnWAD(listing, name)
+		if err != nil {
+			return nil, err
 		}
 		if actual != "" {
-			if info, err := os.Stat(filepath.Join(dir, actual)); err == nil && info.Mode().IsRegular() {
+			if info, err := os.Lstat(filepath.Join(dir, actual)); err == nil && info.Mode().IsRegular() {
 				found.Path, found.Bytes, found.Found = filepath.Join(dir, actual), info.Size(), true
 			}
 		}
@@ -118,6 +123,41 @@ func FindOwnWADs(dir string, names []string) ([]OwnWAD, error) {
 	}
 
 	return out, nil
+}
+
+// wadEntry is one entry of the named folder, as its listing spells it.
+type wadEntry struct {
+	name    string
+	regular bool
+}
+
+// selectOwnWAD picks the listing entry that stands for name: the regular file
+// spelled exactly so, else the ONE regular file whose name differs only in
+// letter case, else nothing. It never looks at the filesystem, so the rule is
+// the same on a case-sensitive and a case-insensitive host.
+func selectOwnWAD(listing []wadEntry, name string) (string, error) {
+	var folded []string
+	for _, entry := range listing {
+		if !entry.regular {
+			continue
+		}
+		if entry.name == name {
+			return entry.name, nil
+		}
+		if strings.EqualFold(entry.name, name) {
+			folded = append(folded, entry.name)
+		}
+	}
+	switch len(folded) {
+	case 0:
+		return "", nil
+	case 1:
+		return folded[0], nil
+	default:
+		sort.Strings(folded)
+		return "", fmt.Errorf("your folder has %d files named %s in different letter case (%s); keep one and try again",
+			len(folded), name, strings.Join(folded, ", "))
+	}
 }
 
 // completeWithOwnWADs makes this run's content root: the verified bundle's

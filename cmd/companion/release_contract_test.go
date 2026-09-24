@@ -802,6 +802,65 @@ func TestOnlyThePublishJobCanWrite(t *testing.T) {
 	}
 }
 
+// The extractor's gates run against the AULIBS commit its own data names,
+// checked out where its tests look for it: beside the extractor, as
+// auto-pigeon-libraries (run 36031053076 checked it out as `aulibs`, and the
+// extractor's contract tests could not see it).
+func TestTheExtractorsGatesRunAgainstItsOwnAULIBSBesideIt(t *testing.T) {
+	_, jobs := jobBlocks(t, repoFile(t, ".github", "workflows", "release.yml"))
+	job := jobs["aue"]
+	checkout := regexp.MustCompile(`(?s)- uses: actions/checkout@[0-9a-f]{40}[^\n]*\n        with:\n((?:          [^\n]*\n)+)`)
+	var aue, aulibs string
+	for _, match := range checkout.FindAllStringSubmatch(job, -1) {
+		switch {
+		case strings.Contains(match[1], "needs.plan.outputs.aulibs_repository"):
+			aulibs = match[1]
+		case strings.Contains(match[1], "needs.plan.outputs.aue_repository"):
+			aue = match[1]
+		}
+	}
+	if aue == "" || aulibs == "" {
+		t.Fatalf("the aue job does not check out both the extractor and AULIBS:\n%s", job)
+	}
+	if !strings.Contains(aue, "          path: aue\n") {
+		t.Errorf("the extractor is not checked out at `aue`:\n%s", aue)
+	}
+	// The sibling the extractor's tests resolve, and the only one.
+	if !strings.Contains(aulibs, "          path: auto-pigeon-libraries\n") {
+		t.Errorf("AULIBS is not checked out beside the extractor as auto-pigeon-libraries:\n%s", aulibs)
+	}
+	// The exact commit the pinned extractor names; never a branch, tag or latest.
+	if !strings.Contains(aulibs, "          ref: ${{ steps.aue.outputs.aulibs_commit }}\n") {
+		t.Errorf("AULIBS is not checked out at the commit the pinned extractor names:\n%s", aulibs)
+	}
+	if regexp.MustCompile(`ref: *(main|master|latest|refs/|v[0-9])`).MatchString(aulibs) {
+		t.Errorf("AULIBS is checked out at a movable ref:\n%s", aulibs)
+	}
+	// Every AULIBS_DIR names that same checkout.
+	dirs := regexp.MustCompile(`AULIBS_DIR: *([^\n]+)`).FindAllStringSubmatch(job, -1)
+	if len(dirs) == 0 {
+		t.Fatal("no step of the aue job names AULIBS_DIR")
+	}
+	for _, dir := range dirs {
+		if dir[1] != "${{ github.workspace }}/auto-pigeon-libraries" {
+			t.Errorf("AULIBS_DIR is %s; want the checkout beside the extractor", dir[1])
+		}
+	}
+	// The extractor's own fast gate runs, unconditionally, in its checkout.
+	gates := regexp.MustCompile(`(?s)- name: The extractor's own gates\n(.*?)\n      - `).FindStringSubmatch(job)
+	if gates == nil {
+		t.Fatal("the aue job has no step running the extractor's own gates")
+	}
+	mustContain(t, "the extractor's gates", gates[1], "working-directory: aue", "./scripts/test-fast.sh")
+	for _, weakened := range []string{"if:", "continue-on-error", "|| true", "-skip", "AUE_UPDATE_FROZEN"} {
+		if strings.Contains(gates[1], weakened) {
+			t.Errorf("the extractor's gates are weakened with %q", weakened)
+		}
+	}
+	// And the pinned extractor's AULIBS is the repository the plan named.
+	mustContain(t, "the aue job", job, "release-plan.py aue-checkout --pin aucom/build/aue-pin.json --aue-dir aue")
+}
+
 // Nothing in a workflow or in the release tools fetches a program. The
 // Companion downloads no executable (operator, 2026-09-23), and neither does
 // the release that builds it: the extractor is BUILT from a pinned checkout.

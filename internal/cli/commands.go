@@ -402,10 +402,11 @@ func runServe(env *Env, args []string) int {
 	}
 
 	if *interactive {
-		switch {
-		case opened:
-			fmt.Fprintf(env.Stdout, "Auto-Pigeon Companion %s is open in your browser.\n", env.Version)
-			fmt.Fprintln(env.Stdout, "Close its last window to stop it, or press Ctrl+C.")
+		// The startup notice is ONE write, so whoever reads the terminal (a
+		// person, a wrapper, a test) never sees half of it: the failure line
+		// without the address it is about, or an address without what to do.
+		io.WriteString(env.Stdout, startupNotice(env.Version, url, opened, *open, *startupWindow))
+		if opened {
 			// A browser command that "succeeded" is not a window: `xdg-open`
 			// and `start` return before anything appears, and a browser that
 			// joined an existing process leaves no handle to watch. The lease
@@ -419,13 +420,6 @@ func runServe(env *Env, args []string) int {
 				case <-lifecycle.Done():
 				}
 			}()
-		case *open:
-			fmt.Fprintf(env.Stdout, "Auto-Pigeon Companion %s could not open your browser.\n", env.Version)
-			fmt.Fprintf(env.Stdout, "Open %s within %s. Close its last window to stop it, or press Ctrl+C.\n",
-				url, *startupWindow)
-		default:
-			fmt.Fprintf(env.Stdout, "Auto-Pigeon Companion %s is running at %s\n", env.Version, url)
-			fmt.Fprintf(env.Stdout, "Open it within %s. Close its last window to stop it, or press Ctrl+C.\n", *startupWindow)
 		}
 	}
 
@@ -665,4 +659,21 @@ func runMigrate(env *Env, args []string) int {
 		fmt.Fprintln(env.Stdout)
 	}
 	return 0
+}
+
+// startupNotice is what an interactive Companion tells the terminal when it
+// starts: whether the browser opened, and if not, the ONE address to open, how
+// long it will wait, and how to stop it. The caller writes it in one write.
+func startupNotice(version, url string, opened, triedToOpen bool, startupWindow time.Duration) string {
+	const stop = "Close its last window to stop it, or press Ctrl+C.\n"
+	switch {
+	case opened:
+		return fmt.Sprintf("Auto-Pigeon Companion %s is open in your browser.\n", version) + stop
+	case triedToOpen:
+		return fmt.Sprintf("Auto-Pigeon Companion %s could not open your browser.\n", version) +
+			fmt.Sprintf("Open %s within %s. ", url, startupWindow) + stop
+	default:
+		return fmt.Sprintf("Auto-Pigeon Companion %s is running at %s\n", version, url) +
+			fmt.Sprintf("Open it within %s. ", startupWindow) + stop
+	}
 }
