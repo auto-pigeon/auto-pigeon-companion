@@ -2,8 +2,8 @@
   "schema": "aucom.aue-pin/1.0",
   "comment": "The ONE Auto-Pigeon Extractor revision every AUCOM release bundles. Reviewed like code: changing it changes what users run. Never a branch, a tag or a release URL - a full commit SHA, checked out exactly by .github/workflows/release.yml. The extractor's embedded AULIBS data names the AULIBS commit it was synced from, and the workflow checks that commit of aulibs_repository out to build it against.",
   "repository": "auto-pigeon/auto-pigeon-extractor",
-  "commit": "86ac34d587afca043adb93351fd28a4559faa52b",
+  "commit": "865fabc23e97288086b954a0896352188ca7f323",
   "required_protocol": "1.0",
-  "version": "1.207",
+  "version": "1.213",
   "aulibs_repository": "auto-pigeon/auto-pigeon-libraries"
 }

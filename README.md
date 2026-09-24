@@ -4501,12 +4501,12 @@ pin in a reviewed commit. The commit must already be on GitHub:
 
 ```console
 $ git -C ../auto-pigeon-extractor rev-parse HEAD
-86ac34d587afca043adb93351fd28a4559faa52b
+865fabc23e97288086b954a0896352188ca7f323
 $ python3 build/release-plan.py pin
 repository=auto-pigeon/auto-pigeon-extractor
-commit=86ac34d587afca043adb93351fd28a4559faa52b
+commit=865fabc23e97288086b954a0896352188ca7f323
 required_protocol=1.0
-version=1.207
+version=1.213
 aulibs_repository=auto-pigeon/auto-pigeon-libraries
 ```
 
