@@ -17,7 +17,8 @@
 #
 # # The extractor is not built here, and is not IN here
 #
-# Auto-Pigeon Extractor is a separate program under its own licence (AGPL-3.0).
+# Auto-Pigeon Extractor is a separate program under its own licence
+# (proprietary, LicenseRef-Auto-Pigeon-Proprietary, since NEW_247G).
 # It used to be staged into `internal/aue/embedded/` and compiled into this
 # binary. A release now ships it as its own file BESIDE the Companion
 # (build/bundle-sidecar.sh), and nothing ever downloads it. Nothing in this
@@ -143,13 +144,14 @@ jobs:
 
       # Three ways the embed could come back, each checked by name rather than
       # by reading a diff. It was removed for a licensing reason as much as a
-      # technical one — an MIT artifact must not contain an AGPL program — so a
+      # technical one — an MIT artifact must not contain a program under another
+      # licence (the extractor: AGPL-3.0 then, proprietary now) — so a
       # reviewer who does not know that history still gets a failure that
       # explains it.
       - name: no staged extractor binary
         run: |
           if [ -e internal/aue/embedded ]; then
-            echo "internal/aue/embedded exists. The extractor is a separate AGPL-3.0" >&2
+            echo "internal/aue/embedded exists. The extractor is a separate proprietary" >&2
             echo "program shipped beside the Companion in a release; embedding it" >&2
             echo "puts its bytes inside this repository's MIT artifact. See internal/aue." >&2
             exit 1
@@ -242,8 +244,10 @@ jobs:
           PY
 
       # Zero external modules, read out of the binary rather than out of go.mod.
-      # An MIT artifact that quietly contained somebody else's code would be an
-      # artifact whose licence is wrong.
+      # A binary that quietly contained somebody else's code would be one whose
+      # licence statement is wrong. The copyleft check below stays a copyleft
+      # check: the proprietary extractor offers no source and needs none, and
+      # it must never be listed as MIT.
       - name: nothing outside the standard library is linked in
         run: |
           "$RUNNER_TEMP/companion" security audit --json > "$RUNNER_TEMP/audit.json"
@@ -258,6 +262,8 @@ jobs:
                      if c["spdx"].startswith(("GPL", "AGPL", "LGPL"))
                      and not c.get("corresponding_source")]
           assert not missing, f"copyleft components shipped beside the Companion offering no source: {missing}"
+          mit = [c["name"] for c in shipped if c["spdx"].upper().startswith("MIT")]
+          assert not mit, f"components shipped beside the Companion listed as MIT: {mit}"
           print("no external modules; every copyleft component shipped beside it offers its source")
           PY
 

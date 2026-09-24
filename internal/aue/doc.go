@@ -3,10 +3,14 @@
 //
 // # Shipped beside, never inside, never downloaded
 //
-// AUE is AGPL-3.0 and this repository is MIT. It is not embedded — the
-// Companion once compiled it in with `//go:embed`, which put one program's
-// bytes inside the other's artifact under the wrong licence, with nothing
-// checking the staged binary. It is not downloaded either: the Companion once
+// AUE is proprietary (LicenseRef-Auto-Pigeon-Proprietary, (c) Andrea
+// D'Intino, all rights reserved; NEW_247G) and this repository is MIT. Builds
+// of it distributed earlier under AGPL-3.0-only keep that licence, and the
+// handshake accepts either: the licence a build reports is recorded, not
+// judged, and only a copyleft one carries a corresponding-source link. It is
+// not embedded — the Companion once compiled it in with `//go:embed`, which
+// put one program's bytes inside the other's artifact under the wrong
+// licence, with nothing checking the staged binary. It is not downloaded either: the Companion once
 // fetched it against a signed catalogue, and it downloads no program any more
 // (operator, 2026-09-23).
 //
@@ -38,5 +42,6 @@
 // AUE's packages all live under internal/, and Go's internal-package rule
 // blocks a different module from importing them. AUE's CLI is its supported
 // public surface, its subcommands print JSON on stdout, and the separation is
-// what keeps this repository MIT while AUE is AGPL. AUE never appears in go.mod.
+// what keeps this repository MIT while AUE is under its own, proprietary
+// licence. AUE never appears in go.mod.
 package aue

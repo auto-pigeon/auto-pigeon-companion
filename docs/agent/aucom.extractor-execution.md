@@ -92,8 +92,8 @@ download path may be added that ends in an executable (threat row T05).
 are gone with the catalogue; there is nothing for this program to publish or
 sign about the extractor. Publishing the extractor is now an act of the RELEASE:
 `build/bundle-sidecar.sh --extractor …` puts a prebuilt file beside the
-Companion and `build/bundle-manifest.py` lists its digest, licence and
-corresponding source. **CI still reads no secrets**, and that is exactly why the
+Companion and `build/bundle-manifest.py` lists its digest, its licence (quoted
+from the build) and the commit it came from. **CI still reads no secrets**, and that is exactly why the
 release workflow does not build AUE yet: the AUE repository is private, and
 reading it would need a token — deferred until the repositories move to the
 `auto-pigeon` organisation.

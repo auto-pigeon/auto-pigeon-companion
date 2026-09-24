@@ -471,7 +471,10 @@ func TestAReleaseIsTheBundledArchivesAndNothingElse(t *testing.T) {
 	notes := readText(t, filepath.Join(w.dir, "NOTES.md"))
 	mustContain(t, "the release notes", notes, testAUECommit, "Auto-Pigeon Extractor "+testAUEVersion,
 		"windows/arm64 | build_only", "Nothing here is signed", "it is not a signature", "not supported downloads",
-		"LICENSE-auto-pigeon-extractor.txt", "MIT")
+		"LICENSE-auto-pigeon-extractor.txt", "MIT", "not under one licence", "Apache-2.0", "declared `LicenseRef-test`")
+	if strings.Contains(notes, "Auto-Pigeon Companion is MIT (") || strings.Contains(notes, "MIT-licensed archive") {
+		t.Errorf("the release notes describe the archive as MIT:\n%s", notes)
+	}
 
 	// The macOS archive puts the extractor where a Companion in a .app looks.
 	for _, platform := range []string{"linux-amd64", "darwin-arm64"} {
@@ -487,6 +490,60 @@ func TestAReleaseIsTheBundledArchivesAndNothingElse(t *testing.T) {
 			t.Errorf("the macOS bundle has no Contents/%s: %v", path, err)
 		}
 	}
+}
+
+// The extractor's licence is quoted from its own release manifest (NEW_247G):
+// MIT is refused — an archive listing the extractor so would read as entirely
+// MIT — and the proprietary identifier reaches the release manifest and the
+// notes as declared, with the sentence that using it needs the owner's written
+// authorization.
+func TestTheExtractorsDeclaredLicenceIsQuotedAndNeverMIT(t *testing.T) {
+	w := newWorld(t)
+	manifestPath := filepath.Join(w.aue, "release-manifest.json")
+	declare := func(spdx string) {
+		document := map[string]any{}
+		if err := json.Unmarshal([]byte(readText(t, manifestPath)), &document); err != nil {
+			t.Fatal(err)
+		}
+		document["license"] = map[string]string{"spdx": spdx}
+		writeJSON(t, manifestPath, document)
+	}
+	checkAUE := func() (string, error) {
+		return runPlan(t, "check-aue", "--pin", filepath.Join(w.dir, "pin.json"), "--matrix", w.matrix,
+			"--aue-release", w.aue, "--aue-version", testAUEVersion, "--out", w.inputs)
+	}
+
+	declare("MIT")
+	if output, err := checkAUE(); err == nil || !strings.Contains(output, "the extractor is not MIT") {
+		t.Errorf("an extractor declaring MIT: err = %v\n%s", err, output)
+	}
+
+	declare("LicenseRef-Auto-Pigeon-Proprietary")
+	if output, err := checkAUE(); err != nil {
+		t.Fatalf("a proprietary extractor with no source offer was refused: %v\n%s", err, output)
+	}
+	if err := os.RemoveAll(w.bundles); err != nil {
+		t.Fatal(err)
+	}
+	mustPlan(t, "bundle", "--matrix", w.matrix, "--aue-inputs", w.inputs, "--aucom-dist", w.dist,
+		"--version", testVersion, "--out", w.bundles)
+	w.releaseIt(t)
+
+	var document struct {
+		AUE struct {
+			License string `json:"license"`
+		} `json:"aue"`
+	}
+	if err := json.Unmarshal([]byte(readText(t, filepath.Join(w.release, "release-manifest.json"))), &document); err != nil {
+		t.Fatal(err)
+	}
+	if document.AUE.License != "LicenseRef-Auto-Pigeon-Proprietary" {
+		t.Errorf("the release manifest lists the extractor as %q", document.AUE.License)
+	}
+	notes := readText(t, filepath.Join(w.dir, "NOTES.md"))
+	mustContain(t, "the release notes", notes, "declared `LicenseRef-Auto-Pigeon-Proprietary`",
+		"Auto-Pigeon Extractor is proprietary", "Andrea D'Intino", "written authorization",
+		"does not cover it")
 }
 
 // Two builds of one commit are one set of bytes, or a rerun could never show

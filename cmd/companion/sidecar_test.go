@@ -190,6 +190,31 @@ func TestAnExtractorWithoutVersionSourceLicenceOrCommitIsRefused(t *testing.T) {
 	}
 }
 
+// The extractor is never MIT (NEW_247G): an archive listing it so would read as
+// entirely MIT. The proprietary identifier is accepted, and so is the AGPL one
+// an earlier extractor build declares — its copies keep that licence.
+func TestAnExtractorDeclaredMITIsRefusedAndItsOwnLicenceIsKept(t *testing.T) {
+	for _, spdx := range []string{"MIT", "mit", "MIT-0"} {
+		output, err := runBundleManifest(t, newBundle(t), append(extractorArgs(t, "linux-amd64"),
+			"--extractor-spdx", spdx)...)
+		if err == nil || !strings.Contains(output, "the extractor is not MIT") {
+			t.Errorf("an extractor declared %s: err = %v\n%s", spdx, err, output)
+		}
+	}
+	for _, spdx := range []string{"LicenseRef-Auto-Pigeon-Proprietary", "AGPL-3.0-only"} {
+		bundle := newBundle(t)
+		if output, err := runBundleManifest(t, bundle, append(extractorArgs(t, "linux-amd64"),
+			"--extractor-spdx", spdx)...); err != nil {
+			t.Errorf("an extractor declared %s was refused: %v\n%s", spdx, err, output)
+			continue
+		}
+		sidecar, _ := readManifest(t, bundle)["extractor"].(map[string]any)
+		if sidecar["license"] != spdx {
+			t.Errorf("an extractor declared %s is recorded as %v", spdx, sidecar["license"])
+		}
+	}
+}
+
 // A bundle pairs the two programs for ONE machine. An extractor built for
 // another platform — or a file whose header says nothing — is refused, and so
 // is a Companion built for another platform than the bundle's (NEW_247A).
@@ -234,8 +259,23 @@ func TestAnExtractorIsBundledBesideTheCompanion(t *testing.T) {
 	if info, err := os.Stat(filepath.Join(bundle, "auto-pigeon-extractor")); err != nil || info.Mode().Perm()&0o111 == 0 {
 		t.Errorf("the extractor is not an executable file in the bundle: %v", err)
 	}
-	if licences, _ := manifest["licenses"].([]any); len(licences) != 2 {
-		t.Errorf("the bundle declares %d licence(s) and carries two programs", len(licences))
+	// Three licences for three kinds of thing: the Companion's own code (MIT),
+	// the AULIBS contract files compiled into it (Apache-2.0), and the
+	// extractor beside it (whatever it declares — never MIT).
+	licences, _ := manifest["licenses"].([]any)
+	if len(licences) != 3 {
+		t.Errorf("the bundle declares %d licence(s); want the Companion's, AULIBS' and the extractor's", len(licences))
+	}
+	byProduct := map[string]string{}
+	for _, raw := range licences {
+		entry, _ := raw.(map[string]any)
+		product, _ := entry["product"].(string)
+		spdx, _ := entry["spdx"].(string)
+		byProduct[product] = spdx
+	}
+	if byProduct["auto-pigeon-companion"] != "MIT" || byProduct["auto-pigeon-extractor"] != "LicenseRef-test" ||
+		byProduct["auto-pigeon-libraries contract files compiled into the Companion"] != "Apache-2.0" {
+		t.Errorf("the bundle's licences are %v", byProduct)
 	}
 	found := false
 	for _, entry := range manifest["members"].([]any) {

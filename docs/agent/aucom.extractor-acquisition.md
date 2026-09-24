@@ -35,9 +35,31 @@ paths:
 ## 1. THE EXTRACTOR IS NOT IN THIS BINARY, AND THERE IS NO THIRD WAY TO ONE (`AUE/AUB/AUCOM 211`)
 
 **Auto-Pigeon Extractor is a separate program under a different licence
-(AGPL-3.0-only; this repository is MIT). It ships BESIDE the Companion, as its
-own file in the release bundle, and runs as its own process. Nothing here
-contains it, embeds it, downloads it, or claims a licence over it.**
+(proprietary — `LicenseRef-Auto-Pigeon-Proprietary`, Copyright (c) 2026 Andrea
+D'Intino, all rights reserved, since `NEW_247G`; this repository is MIT). It
+ships BESIDE the Companion, as its own file in the release bundle with its own
+licence file, and runs as its own process. Nothing here contains it, embeds it,
+downloads it, or claims a licence over it.**
+
+Licence rules for the extractor, since `NEW_247G` (2026-09-24):
+
+- **Quote, never restate.** What an archive says about the extractor's licence
+  is quoted from the pinned build: its release manifest's `license.spdx` and its
+  own `LICENSE`, copied in as `LICENSE-auto-pigeon-extractor.txt`
+  (`build/release-plan.py check-aue`). The compiled-in component list
+  (`internal/release.Extractor`, shown by `companion security audit` and
+  `companion release sbom`) states the current policy,
+  `LicenseRef-Auto-Pigeon-Proprietary`.
+- **Never MIT, never listed as copyleft.** An extractor declared MIT is refused
+  by `bundle-manifest.py` and `release-plan.py`; an archive listing it so would
+  read as entirely MIT. A proprietary extractor offers no corresponding source
+  and none is demanded — that obligation is copyleft's, and the copyleft checks
+  stay copyleft checks.
+- **Older AGPL-3.0-only builds are still accepted** by the handshake and the
+  bundle scripts, and their copies keep that licence.
+- **Using the bundled extractor needs the copyright owner's written
+  authorization**, per its licence. Nothing here grants it, and no document here
+  may imply that it does.
 
 ```text
 bundled             auto-pigeon-extractor[.exe] in the same directory as the
@@ -90,8 +112,9 @@ record.
 with `//go:embed`. It was never released, and it had to go for three unrelated
 reasons — a later change that fixes one of them has not fixed the others:
 
-1. **Licensing.** An MIT artifact contained and appeared to cover an AGPL
-   program, and a user had no way to tell whose bytes they were running.
+1. **Licensing.** An MIT artifact contained and appeared to cover a separately
+   licensed program (AGPL-3.0 at the time; proprietary now), and a user had no
+   way to tell whose bytes they were running.
 2. **Verification.** Nothing checked the staged binary. `//go:embed` resolves at
    compile time, so a stale or wrong-platform file shipped silently and failed
    on the user's machine.

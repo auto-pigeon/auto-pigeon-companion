@@ -170,8 +170,9 @@ func securityAudit(env *Env, args []string) int {
 		fmt.Fprintln(env.Stdout, "This binary carries no build information, so its module graph cannot be read.")
 	} else if len(modules) == 0 {
 		fmt.Fprintln(env.Stdout, "Go module dependencies: none.")
-		fmt.Fprintln(env.Stdout, "Nothing outside the standard library is linked into this program, which is why")
-		fmt.Fprintln(env.Stdout, "an MIT artifact is an honest description of it.")
+		fmt.Fprintln(env.Stdout, "Nothing outside the standard library is linked into this program. Its own code is")
+		fmt.Fprintln(env.Stdout, "MIT; the auto-pigeon-libraries contract files compiled into it stay Apache-2.0, and")
+		fmt.Fprintln(env.Stdout, "the extractor shipped beside it is proprietary. Each is listed below with its licence.")
 	} else {
 		fmt.Fprintf(env.Stdout, "Go module dependencies: %d\n", len(modules))
 		for _, module := range modules {

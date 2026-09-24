@@ -47,9 +47,12 @@ func TestSelfNeverNamesAnotherModule(t *testing.T) {
 	}
 }
 
-// Every external program is in the component list with a licence, and the
-// Companion is the only thing marked as being inside the artifact.
-func TestOnlyTheCompanionIsInTheArtifact(t *testing.T) {
+// Every external program is in the component list with a licence, and the only
+// things marked as being inside the artifact are the Companion (MIT) and the
+// auto-pigeon-libraries contract files compiled into it (Apache-2.0). Anything
+// else inside it, or either of those under another licence, is a binary whose
+// licence statement is wrong.
+func TestTheArtifactHoldsOnlyTheCompanionAndItsAULIBSContracts(t *testing.T) {
 	components, err := Components("1.2.3")
 	if err != nil {
 		t.Fatal(err)
@@ -57,17 +60,104 @@ func TestOnlyTheCompanionIsInTheArtifact(t *testing.T) {
 	if len(components) < 5 {
 		t.Fatalf("only %d components; the built-in profiles are not being read", len(components))
 	}
-	inArtifact := 0
+	companion, aulibs := 0, 0
 	for _, component := range components {
-		if component.Distribution == InArtifact {
-			inArtifact++
-			if component.SPDX != License {
-				t.Errorf("%s is in the artifact under %q, not %s", component.Name, component.SPDX, License)
+		if component.Distribution != InArtifact {
+			continue
+		}
+		switch {
+		case component.Name == "auto-pigeon-companion":
+			companion++
+			if component.SPDX != License || License != "MIT" {
+				t.Errorf("the Companion is in the artifact under %q, not MIT", component.SPDX)
+			}
+		case strings.HasPrefix(component.Name, "@auto-pigeon/") && component.Repository == AULIBSRepository:
+			aulibs++
+			if component.SPDX != "Apache-2.0" {
+				t.Errorf("%s is AULIBS material and is listed as %q, not Apache-2.0", component.Name, component.SPDX)
+			}
+		default:
+			t.Errorf("%s claims to be in the artifact; only the Companion and its AULIBS contracts may", component.Name)
+		}
+	}
+	if companion != 1 || aulibs != len(AULIBSContracts) || aulibs == 0 {
+		t.Errorf("in the artifact: %d Companion, %d AULIBS contract(s); want 1 and %d", companion, aulibs,
+			len(AULIBSContracts))
+	}
+}
+
+// The extractor is proprietary (NEW_247G). The component list, the SBOM and
+// the audit must never call it MIT — that would describe an archive carrying it
+// as entirely MIT — nor copyleft, which it no longer is, and they must not
+// pretend to offer a source it does not have.
+func TestTheExtractorIsListedAsProprietaryNeverMITOrCopyleft(t *testing.T) {
+	if Extractor.SPDX != "LicenseRef-Auto-Pigeon-Proprietary" ||
+		Extractor.LicenseName != "Auto-Pigeon Proprietary Software License" {
+		t.Errorf("the extractor is listed as %q / %q", Extractor.SPDX, Extractor.LicenseName)
+	}
+	if Extractor.CorrespondingSource != "" {
+		t.Errorf("the extractor offers corresponding source %q; it is proprietary and offers none",
+			Extractor.CorrespondingSource)
+	}
+	for _, forbidden := range []string{"MIT", "AGPL", "GPL", "Apache"} {
+		if strings.Contains(Extractor.SPDX, forbidden) || strings.Contains(Extractor.LicenseName, forbidden) {
+			t.Errorf("the extractor's licence mentions %s: %q / %q", forbidden, Extractor.SPDX, Extractor.LicenseName)
+		}
+	}
+	if !strings.Contains(Extractor.Notice, "Andrea D'Intino") || !strings.Contains(Extractor.Notice, "authorization") {
+		t.Errorf("the extractor's notice does not name its owner and the authorization it needs: %q", Extractor.Notice)
+	}
+
+	document, err := BuildSBOM("1.2.3", time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, entry := range document.Components {
+		if entry.Name != "auto-pigeon-extractor" {
+			continue
+		}
+		found = true
+		if len(entry.Licenses) != 1 || entry.Licenses[0].Expression != "LicenseRef-Auto-Pigeon-Proprietary" ||
+			entry.Licenses[0].License != nil {
+			t.Errorf("the SBOM lists the extractor's licence as %+v", entry.Licenses)
+		}
+		for _, property := range entry.Properties {
+			if property.Name == "aucom:corresponding-source" {
+				t.Errorf("the SBOM offers the proprietary extractor's source: %s", property.Value)
 			}
 		}
 	}
-	if inArtifact != 1 {
-		t.Errorf("%d components claim to be in the artifact; only the Companion may", inArtifact)
+	if !found {
+		t.Error("the SBOM does not list the extractor")
+	}
+	for _, license := range document.Metadata.Component.Licenses {
+		if license.License == nil || license.License.ID != "MIT" {
+			t.Errorf("the SBOM's own component is licensed %+v, want MIT", license)
+		}
+	}
+}
+
+// The AULIBS contract files are in the SBOM as Apache-2.0 libraries, so the
+// document does not describe the binary as MIT and nothing else.
+func TestTheSBOMListsTheAULIBSContractsAsApache(t *testing.T) {
+	document, err := BuildSBOM("1.2.3", time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := 0
+	for _, entry := range document.Components {
+		if !strings.HasPrefix(entry.Name, "@auto-pigeon/") {
+			continue
+		}
+		seen++
+		if entry.Type != "library" || len(entry.Licenses) != 1 || entry.Licenses[0].License == nil ||
+			entry.Licenses[0].License.ID != "Apache-2.0" {
+			t.Errorf("%s is in the SBOM as %s %+v", entry.Name, entry.Type, entry.Licenses)
+		}
+	}
+	if seen != len(AULIBSContracts) {
+		t.Errorf("the SBOM lists %d AULIBS contract(s); want %d", seen, len(AULIBSContracts))
 	}
 }
 

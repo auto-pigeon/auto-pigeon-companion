@@ -148,21 +148,78 @@ func TestPackagingMentionsNoRetiredLauncher(t *testing.T) {
 	}
 }
 
+// canonicalMIT is the SPDX `MIT` licence text, unmodified, with this
+// repository's copyright line (NEW_247G). The comparison is whole-file: a
+// reworded clause is a different licence, whatever the heading says.
+const canonicalMIT = `MIT License
+
+Copyright (c) 2026 Andrea D'Intino
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+`
+
 // TestLicenseIsMIT keeps the licence, the package metadata and the notices
 // agreeing with each other. The contradiction this replaces — a verbatim
 // AGPL-3.0 LICENSE beside `license: Proprietary` in the package config — is
 // exactly what an unread file drifts into.
 func TestLicenseIsMIT(t *testing.T) {
 	license := repoFile(t, "LICENSE")
-	mustContain(t, "LICENSE", license,
-		"MIT License",
-		"Permission is hereby granted, free of charge",
-	)
-	if strings.Contains(license, "GNU AFFERO") || strings.Contains(license, "GNU GENERAL PUBLIC") {
-		t.Error("LICENSE is not the MIT licence")
+	if license != canonicalMIT {
+		t.Errorf("LICENSE is not the canonical MIT text with the line %q", "Copyright (c) 2026 Andrea D'Intino")
 	}
 	notices := repoFile(t, "THIRD_PARTY_NOTICES.md")
-	mustContain(t, "THIRD_PARTY_NOTICES.md", notices, "MIT", "GPL-2.0")
+	mustContain(t, "THIRD_PARTY_NOTICES.md", notices, "MIT", "GPL-2.0", "Apache-2.0")
+}
+
+// An archive that carries the extractor is not an MIT archive (NEW_247G). No
+// file a user reads about a release or an installed package may say it is, and
+// the one line the macOS bundle shows as its copyright must not call the whole
+// .app MIT, because a release puts the proprietary extractor inside it.
+func TestNothingCallsAnArchiveWithTheExtractorMIT(t *testing.T) {
+	for _, file := range [][]string{
+		{"README.md"},
+		{"THIRD_PARTY_NOTICES.md"},
+		{"build", "release-plan.py"},
+		{"build", "bundle-manifest.py"},
+		{"build", "bundle-sidecar.sh"},
+		{"build", "release.sh"},
+		{"build", "linux", "nfpm.yaml"},
+		{"build", "windows", "installer.iss"},
+		{"build", "macos", "make-app-bundle.sh"},
+	} {
+		body := strings.ToLower(strings.Join(strings.Fields(repoFile(t, file...)), " "))
+		for _, phrase := range []string{
+			"mit-licensed archive", "mit-licensed bundle", "mit-licensed release",
+			"mit licensed archive", "mit licensed bundle", "mit licensed release",
+			"one mit-licensed desktop application", "entirely mit",
+		} {
+			if strings.Contains(body, phrase) && !strings.Contains(body, "never \""+phrase) &&
+				!strings.Contains(body, "read as "+phrase) {
+				t.Errorf("%s says %q", filepath.Join(file...), phrase)
+			}
+		}
+	}
+	script := repoFile(t, "build", "macos", "make-app-bundle.sh")
+	if strings.Contains(script, "Andrea D'Intino. MIT licensed;") {
+		t.Error("the macOS bundle's copyright line calls the whole .app MIT, and a release puts the extractor in it")
+	}
+	mustContain(t, "make-app-bundle.sh", script, "Auto-Pigeon Extractor is proprietary")
 }
 
 // TestNoCompiledInAUBPort is the workspace port contract in test form: 8090 is
@@ -205,21 +262,44 @@ func TestNoCompiledInAUBPort(t *testing.T) {
 	}
 }
 
-// TestNoticesCoverEveryRedistributedComponent guards the two claims in
+// TestNoticesCoverEveryRedistributedComponent guards the claims in
 // THIRD_PARTY_NOTICES.md that a code change could quietly falsify.
 //
-// The dangerous one is AUE: it is AGPL-3.0, and internal/aue/embed.go is
-// written for a build that puts its binary inside this executable. That is a
-// redistribution with obligations, and the notices are the only place saying
-// so, so a notices file that stopped saying it would be the whole failure.
+// The dangerous one is AUE: a release bundle ships it beside this executable,
+// and it is proprietary (NEW_247G) — not MIT, whatever the archive's other
+// licence files say, and not AGPL any more. The notices are what a person who
+// unpacks an archive reads, so a notices file that listed it under the wrong
+// licence, or stopped saying that using it needs the owner's authorization,
+// would be the whole failure.
 func TestNoticesCoverEveryRedistributedComponent(t *testing.T) {
 	notices := repoFile(t, "THIRD_PARTY_NOTICES.md")
 	mustContain(t, "THIRD_PARTY_NOTICES.md", notices,
 		"auto-pigeon-extractor",
-		"AGPL-3.0",
+		"LicenseRef-Auto-Pigeon-Proprietary",
+		"Auto-Pigeon Proprietary Software License",
+		"LICENSE-auto-pigeon-extractor.txt",
+		"written authorization",
+		"auto-pigeon-libraries",
+		"Apache-2.0",
 		"GPL-2.0",
 		"MIT",
 	)
+	// The summary row for the extractor names the proprietary licence and
+	// neither of the ones it must never be listed under.
+	row := ""
+	for _, line := range strings.Split(notices, "\n") {
+		if strings.HasPrefix(line, "| auto-pigeon-extractor") {
+			row = line
+		}
+	}
+	if row == "" {
+		t.Fatal("THIRD_PARTY_NOTICES.md has no summary row for auto-pigeon-extractor")
+	}
+	licence := strings.Split(row, "|")[2]
+	if !strings.Contains(licence, "LicenseRef-Auto-Pigeon-Proprietary") ||
+		strings.Contains(licence, "MIT") || strings.Contains(licence, "GPL") {
+		t.Errorf("the extractor's summary row lists its licence as %q", strings.TrimSpace(licence))
+	}
 
 	// The claim "no release embeds AUE yet" rests on this: the staging
 	// directory holds nothing but .gitkeep in a clean checkout, and .gitignore

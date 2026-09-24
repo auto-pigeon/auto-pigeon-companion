@@ -20,11 +20,18 @@ The extractor rules, in one place:
   * It must be built for THIS platform, and so must the Companion: both
     headers are read and a disagreement is refused (releaselib.platform_of).
   * It carries its own licence file, whatever the extractor's repository ships
-    (--extractor-license, --extractor-spdx), and the manifest records the exact
-    commit it was built from. The two programs are the same owner's; the
-    Companion is MIT and the extractor's terms are its own (operator,
-    2026-09-23: "don't worry too much about licensing"). Nothing here publishes
-    the extractor's source.
+    at the pinned commit (--extractor-license), under the identifier the
+    extractor's own release manifest declares (--extractor-spdx), and the
+    manifest records the exact commit it was built from. Both are QUOTED from
+    the extractor build, never restated here, so a bundle cannot disagree with
+    the program inside it. The Companion is MIT; the extractor is proprietary
+    (LicenseRef-Auto-Pigeon-Proprietary, NEW_247G), and a build distributed
+    earlier under AGPL-3.0-only keeps that licence. The one identifier refused
+    is MIT: the extractor was never MIT, and an archive listing it so would read
+    as entirely MIT. Nothing here publishes the extractor's source.
+  * The licences list separates the three things an archive holds: the
+    Companion's own code (MIT), the auto-pigeon-libraries contract files
+    compiled into the Companion (Apache-2.0), and the extractor (its own).
   * With no --extractor the bundle is complete and carries no extractor, and
     says so; the Companion then reports that map inspection is unavailable.
 """
@@ -44,6 +51,7 @@ import releaselib  # noqa: E402
 
 SCHEMA = "aucom.bundle-manifest/1.1"
 COMPANION_LICENSE = "LICENSE-auto-pigeon-companion.txt"
+NOTICES = "THIRD_PARTY_NOTICES.md"
 EXTRACTOR_LICENSE = "LICENSE-auto-pigeon-extractor.txt"
 FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 
@@ -61,6 +69,11 @@ def place_extractor(args, bundle, where):
         raise SystemExit(
             "error: --extractor needs --extractor-license, the extractor's own licence file: the bundle "
             "carries two programs and must say whose terms each is under"
+        )
+    if args.extractor_spdx.strip().upper().startswith("MIT"):
+        raise SystemExit(
+            f"error: --extractor-spdx {args.extractor_spdx!r}: the extractor is not MIT. MIT is the Companion's "
+            "licence; an archive that listed the extractor under it would read as entirely MIT"
         )
     if not FULL_SHA.match(args.extractor_commit or ""):
         raise SystemExit(
@@ -164,7 +177,19 @@ def main():
         "companion": where["companion"],
         "members": members,
         "licenses": [
-            {"product": "auto-pigeon-companion", "spdx": "MIT", "file": COMPANION_LICENSE},
+            {
+                "product": "auto-pigeon-companion",
+                "spdx": "MIT",
+                "file": COMPANION_LICENSE,
+                "covers": "the Companion's own code only",
+            },
+            {
+                "product": "auto-pigeon-libraries contract files compiled into the Companion",
+                "spdx": "Apache-2.0",
+                "license_url": "https://www.apache.org/licenses/LICENSE-2.0",
+                "notice": NOTICES,
+                "covers": "@auto-pigeon/incident-contract and @auto-pigeon/operational-notice-contract, unmodified",
+            },
         ],
         "extractor": sidecar,
     }
@@ -179,7 +204,12 @@ def main():
         }
     else:
         manifest["licenses"].append(
-            {"product": "auto-pigeon-extractor", "spdx": sidecar["license"], "file": EXTRACTOR_LICENSE}
+            {
+                "product": "auto-pigeon-extractor",
+                "spdx": sidecar["license"],
+                "file": EXTRACTOR_LICENSE,
+                "covers": "the extractor executable beside the Companion; not covered by the Companion's MIT licence",
+            }
         )
 
     with open(manifest_path, "w", encoding="utf-8") as handle:

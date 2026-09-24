@@ -11,15 +11,18 @@ set -euo pipefail
 # repository (its scripts/build-release.sh), for exactly this platform. The
 # release workflow builds it from the commit `build/aue-pin.json` names and
 # passes it here with that commit, the extractor's own LICENSE and licence
-# identifier, and the repository it came from. A bundle made without --extractor is complete,
+# identifier — both quoted from that build, never restated here — and the
+# repository it came from. A bundle made without --extractor is complete,
 # carries no extractor, and says so in its manifest. Nothing here, and nothing
 # in the Companion, downloads a program.
 #
 # # What this script must never do
 #
 # Link, embed, or copy extractor SOURCE. Put an extractor inside the Companion's
-# own binary. The two programs are two files, under two licences, and the
-# bundle says which is which; the extractor is copied in as
+# own binary. The two programs are two files, under two licences — the
+# Companion MIT, the extractor proprietary (NEW_247G) — and the bundle says
+# which is which, so an archive carrying the extractor is never "an MIT
+# archive"; the extractor is copied in as
 # `auto-pigeon-extractor[.exe]`, the name the Companion looks for beside itself,
 # and its digest in the manifest is what the Companion checks before running it.
 #
@@ -77,7 +80,9 @@ cp -R "${BINARY_DIR}/." "$BUNDLE/"
 
 # Licences and notices. The Companion's always; the extractor's own licence file
 # is added beside its binary by bundle-manifest.py, so a user can tell whose
-# terms each of the two programs is under.
+# terms each of the two programs is under. THIRD_PARTY_NOTICES.md separates the
+# Companion's MIT code, the Apache-2.0 AULIBS files compiled into it, the
+# proprietary extractor and the third-party programs it runs.
 cp "${repo_root}/LICENSE" "${BUNDLE}/LICENSE-auto-pigeon-companion.txt"
 cp "${repo_root}/THIRD_PARTY_NOTICES.md" "${BUNDLE}/THIRD_PARTY_NOTICES.md"
 

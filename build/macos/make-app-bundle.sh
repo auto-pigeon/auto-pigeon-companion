@@ -85,13 +85,16 @@ mkdir -p "${app_dir}/Contents/MacOS" "${app_dir}/Contents/Resources"
 install -m 0755 "$BINARY" "${app_dir}/Contents/MacOS/${EXECUTABLE}"
 
 # Licensing: both files ship inside the bundle. THIRD_PARTY_NOTICES.md states
-# that the external map-building tools are separate GPL-2.0 programs which are
-# downloaded at runtime and are not part of this bundle. If a tool binary is
+# that the external map-building tools are separate GPL programs the user
+# installs, not part of this bundle. A release bundle later adds the
+# proprietary Auto-Pigeon Extractor inside this .app (Contents/MacOS) together
+# with its own LICENSE-auto-pigeon-extractor.txt (build/bundle-manifest.py), so
+# the copyright line below must not call the whole .app MIT. If a tool binary is
 # ever bundled here instead, its own license text has to ship beside it.
 cp "${repo_root}/LICENSE" "${app_dir}/Contents/Resources/LICENSE"
 cp "${repo_root}/THIRD_PARTY_NOTICES.md" "${app_dir}/Contents/Resources/THIRD_PARTY_NOTICES.md"
 
-copyright="Copyright © $(date +%Y) Andrea D'Intino. MIT licensed; see LICENSE. External map-building tools are separate GPL-2.0 programs — see THIRD_PARTY_NOTICES.md."
+copyright="Copyright © 2026 Andrea D'Intino. Auto-Pigeon Companion's own code is MIT licensed; see LICENSE. A bundled Auto-Pigeon Extractor is proprietary, under its own licence file, and third-party components keep their own licences — see THIRD_PARTY_NOTICES.md."
 sed -e "s|@BUNDLE_ID@|${BUNDLE_ID}|g" \
     -e "s|@VERSION@|${VERSION}|g" \
     -e "s|@ARCH@|${ARCH}|g" \

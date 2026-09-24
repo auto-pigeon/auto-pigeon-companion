@@ -112,10 +112,13 @@ for target in "${targets[@]}"; do
         -o "${staging}/companion${ext}" \
         ./cmd/companion
 
-    # The licence files travel with every artifact. THIRD_PARTY_NOTICES.md is
-    # the statement that the GPL compilers and engines, and the AGPL extractor,
-    # are separate programs obtained separately — which is only true if a person
-    # who downloads this can read it.
+    # The licence files travel with every artifact. LICENSE is the MIT licence
+    # of the Companion's own code; THIRD_PARTY_NOTICES.md is the statement that
+    # the Apache-2.0 AULIBS contract files compiled in keep their licence, that
+    # the GPL compilers and engines are separate programs the user obtains, and
+    # that the proprietary extractor a release bundle adds beside the Companion
+    # (with its own LICENSE-auto-pigeon-extractor.txt) is not covered by the
+    # MIT licence — which is only true if a person who downloads this can read it.
     cp LICENSE THIRD_PARTY_NOTICES.md "$staging/"
 
     # The native acceptance kit travels with every artifact too, and for a

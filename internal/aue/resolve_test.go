@@ -22,10 +22,19 @@ type bundle struct {
 	dir string
 }
 
-// protocolAnswer is what the fake says to `protocol --json`.
+// protocolAnswer is what the fake says to `protocol --json`: an extractor built
+// before NEW_247G, which declared AGPL-3.0-only with its source. Those builds
+// are still accepted — their copies keep that licence.
 func protocolAnswer(protocol string) string {
 	return `{"schema_version":"aue-invocation-protocol/1.0","protocol":"` + protocol + `","version":"0.9.0",` +
 		`"license":{"spdx":"AGPL-3.0-only","corresponding_source":"https://example.org/aue-src"}}`
+}
+
+// proprietaryAnswer is what an extractor built after NEW_247G says: a
+// LicenseRef and no corresponding source, because it is not copyleft.
+func proprietaryAnswer(protocol string) string {
+	return `{"schema_version":"aue-invocation-protocol/1.0","protocol":"` + protocol + `","version":"0.9.1",` +
+		`"license":{"spdx":"LicenseRef-Auto-Pigeon-Proprietary","name":"Auto-Pigeon Proprietary Software License"}}`
 }
 
 // newBundle writes the extractor as a shell script: `protocol` prints answer,
@@ -96,6 +105,30 @@ func TestABundledExtractorListedInTheManifestIsVerified(t *testing.T) {
 	out, err := runner.Run(context.Background(), "summarize")
 	if err != nil || strings.TrimSpace(string(out)) != "ok" {
 		t.Errorf("run = %q, %v", out, err)
+	}
+}
+
+// NEW_247G: an extractor that reports the proprietary LicenseRef and no
+// corresponding source is accepted exactly like one that reports a copyleft
+// licence with a source — the handshake records the licence it is told and does
+// not demand a source offer that only copyleft needs — and what the user reads
+// names the licence without inventing a source link.
+func TestAProprietaryExtractorWithNoSourceOfferIsAccepted(t *testing.T) {
+	b := newBundle(t, proprietaryAnswer("1.0"), "echo ok\n")
+	b.list("")
+
+	runner, err := b.resolver().Resolve(context.Background())
+	if err != nil {
+		t.Fatalf("a proprietary extractor with no source offer was refused: %v", err)
+	}
+	provenance := runner.Provenance()
+	if !provenance.Verified || provenance.License != "LicenseRef-Auto-Pigeon-Proprietary" || provenance.Source != "" {
+		t.Errorf("provenance = %+v", provenance)
+	}
+	described := strings.Join(provenance.Describe(), "\n")
+	if !strings.Contains(described, "licence LicenseRef-Auto-Pigeon-Proprietary") ||
+		strings.Contains(described, "corresponding source") {
+		t.Errorf("the description of a proprietary extractor reads:\n%s", described)
 	}
 }
 

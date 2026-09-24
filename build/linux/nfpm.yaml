@@ -23,19 +23,26 @@ section: games
 priority: optional
 maintainer: Andrea D'Intino <noreply@example.com> # TODO(andrea): real maintainer address
 description: |
-  Auto-Pigeon Companion builds Quake maps, inspects them with the bundled
-  extractor, and launches games. Runs a local web GUI in the default browser,
-  or headless from the CLI.
+  Auto-Pigeon Companion builds Quake maps, inspects them with Auto-Pigeon
+  Extractor when one is installed beside it (this package does not contain
+  it), and launches games. Runs a local web GUI in the default browser, or
+  headless from the CLI.
 vendor: Andrea D'Intino
 homepage: https://github.com/auto-pigeon/auto-pigeon-companion
 license: MIT
 
+# `license: MIT` is true of this package because of what it contains: the
+# Companion's own code (MIT) — whose binary also embeds unmodified Apache-2.0
+# contract files from auto-pigeon-libraries, named in THIRD_PARTY_NOTICES.md —
+# and NOT the proprietary Auto-Pigeon Extractor. A package that ever carried the
+# extractor could no longer say `license: MIT` alone.
+#
 # No dependencies: the binary is a static, CGO-free Go build, and it embeds its
-# own frontend and (in a release build) the extractor. The external
-# map-building tools are deliberately NOT packaged dependencies — they are
-# GPL-2.0 programs downloaded at runtime and run as separate processes, which is
-# what keeps this MIT package free of them. See THIRD_PARTY_NOTICES.md before
-# adding anything here.
+# own frontend; the extractor is never embedded. The external map-building
+# tools are deliberately NOT packaged dependencies — they are GPL programs the
+# user installs and the Companion runs as separate processes, which is what
+# keeps this MIT package free of them. See THIRD_PARTY_NOTICES.md before adding
+# anything here.
 #
 # xdg-open (xdg-utils) opens the browser but is intentionally not a hard
 # dependency: without it the app still runs and prints its URL.

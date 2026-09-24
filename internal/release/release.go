@@ -6,19 +6,25 @@
 // Three claims have to keep being true for the licensing of this project to
 // hold, and all three are the sort that a table drifts away from:
 //
-//  1. **Auto-Pigeon Companion is MIT and contains nothing that is not.** Its
-//     Go module graph is the evidence, and [Dependencies] reads it out of the
-//     binary with [debug.ReadBuildInfo] rather than out of `go.mod` — what is
-//     linked in is what matters, and a build with a `replace` or a tool
-//     dependency would say so there and not there.
+//  1. **Auto-Pigeon Companion's own code is MIT, and the only other thing in
+//     its binary is Apache-2.0 contract data from auto-pigeon-libraries
+//     (AULIBS).** Its Go module graph is the evidence that nothing else is
+//     linked in, and [Dependencies] reads it out of the binary with
+//     [debug.ReadBuildInfo] rather than out of `go.mod` — what is linked in is
+//     what matters, and a build with a `replace` or a tool dependency would say
+//     so there and not there. The AULIBS files are not Go modules; they are
+//     listed by name in [Components] as [AULIBSContracts].
 //  2. **The GPL compilers and engines are separate programs** the user already
 //     has on their machine, run as their own processes. Nothing downloads them.
 //     [Components] derives them from the built-in profiles, so a toolchain
 //     added without a licence and a corresponding-source URL cannot become
 //     invisible here.
-//  3. **The extractor is a third thing again** — AGPL-3.0, separately
-//     licensed, shipped as its own file beside the Companion in the release
-//     bundle, never inside the Companion's binary.
+//  3. **The extractor is a third thing again** — proprietary
+//     ([ExtractorSPDX], (c) Andrea D'Intino, all rights reserved; NEW_247G),
+//     shipped as its own file beside the Companion in the release bundle,
+//     never inside the Companion's binary. An archive that carries it is
+//     therefore never "an MIT archive": it holds an MIT program, Apache-2.0
+//     AULIBS data inside that program, and a proprietary program beside it.
 //
 // A release therefore ships an SBOM and a checksum file that are *generated
 // from* the program, not written beside it.
@@ -52,8 +58,30 @@ import (
 // ModulePath is this program's Go module.
 const ModulePath = "github.com/auto-pigeon/auto-pigeon-companion"
 
-// License is the Companion's own licence.
+// License is the Companion's own licence. It covers this repository's own code
+// and nothing shipped beside it.
 const License = "MIT"
+
+// AULIBSLicense is the licence of the auto-pigeon-libraries files compiled into
+// the Companion's binary.
+const AULIBSLicense = "Apache-2.0"
+
+// ExtractorSPDX and ExtractorLicenseName are Auto-Pigeon Extractor's licence
+// (NEW_247G): proprietary, owned by Andrea D'Intino, all rights reserved.
+// A LicenseRef, because no SPDX list identifier describes it and inventing an
+// open-source one would be a lie.
+//
+// This is the CURRENT POLICY, compiled into the component list a Companion
+// build prints (`companion security audit`, `companion release sbom`). What a
+// given release archive carries is quoted from the pinned extractor itself —
+// its release manifest's `license.spdx` and its own LICENSE file, copied in as
+// LICENSE-auto-pigeon-extractor.txt (build/release-plan.py) — so an archive
+// never disagrees with the extractor build inside it. Extractor builds that
+// were distributed under AGPL-3.0-only keep the rights that licence granted.
+const (
+	ExtractorSPDX        = "LicenseRef-Auto-Pigeon-Proprietary"
+	ExtractorLicenseName = "Auto-Pigeon Proprietary Software License"
+)
 
 // Distribution says what relationship a component has to the released artifact.
 // The distinction is the whole licensing argument, so it is a value rather than
@@ -84,7 +112,8 @@ type Component struct {
 	LicenseURL   string       `json:"license_url,omitempty"`
 	// CorrespondingSource is where the source for exactly this binary is. The
 	// strong copyleft licences require it whenever a binary is distributed,
-	// which is why a component shipped beside the Companion must carry it.
+	// which is why a COPYLEFT component shipped beside the Companion must carry
+	// it. A proprietary one carries none, and none is implied.
 	CorrespondingSource string `json:"corresponding_source,omitempty"`
 	Homepage            string `json:"homepage,omitempty"`
 	Repository          string `json:"repository,omitempty"`
@@ -142,9 +171,10 @@ func Self() (Dependency, bool) {
 // Components is everything a user of this release can end up running, with its
 // licence and its relationship to the artifact.
 //
-// The Companion itself is first and is the only thing marked [InArtifact].
-// Everything after it is derived from the built-in profiles, so a toolchain or
-// an engine added to this build is in this list whether or not anybody
+// The Companion itself is first. The only other things marked [InArtifact] are
+// the [AULIBSContracts] compiled into it, under their own Apache-2.0 licence.
+// Everything after those is derived from the built-in profiles, so a toolchain
+// or an engine added to this build is in this list whether or not anybody
 // remembered to write it down.
 func Components(version string) ([]Component, error) {
 	components := []Component{{
@@ -155,9 +185,13 @@ func Components(version string) ([]Component, error) {
 		SPDX:         License,
 		LicenseName:  "MIT License",
 		Repository:   "https://" + ModulePath,
-		Notice: "Auto-Pigeon Companion is MIT licensed. It contains no GPL tool, " +
-			"no engine and no extractor: each of those is a separate program, run as its own process.",
-	}, Extractor}
+		Notice: "Auto-Pigeon Companion's own code is MIT licensed, Copyright (c) 2026 Andrea D'Intino. " +
+			"Its binary also carries Apache-2.0 contract files from auto-pigeon-libraries, listed separately. " +
+			"It contains no GPL tool, no engine and no extractor: each of those is a separate program, " +
+			"run as its own process.",
+	}}
+	components = append(components, AULIBSContracts...)
+	components = append(components, Extractor)
 
 	entries, err := builtin.Load()
 	if err != nil {
@@ -187,7 +221,7 @@ func Components(version string) ([]Component, error) {
 		}
 		components = append(components, component)
 	}
-	sort.Slice(components[1:], func(i, j int) bool {
+	sort.SliceStable(components[1:], func(i, j int) bool {
 		return components[1+i].Name < components[1+j].Name
 	})
 	return components, nil
@@ -202,22 +236,70 @@ func distributionFor(builtin.Entry) Distribution {
 }
 
 // Extractor is Auto-Pigeon Extractor as a release carries it: its own file
-// beside the Companion (build/bundle-sidecar.sh), AGPL-3.0-only as its own
-// `protocol` document declares.
+// beside the Companion (build/bundle-sidecar.sh), proprietary.
+//
+// It carries NO corresponding source: that is a copyleft obligation, and the
+// extractor is not copyleft. [ExtractorRepository] is where it is developed —
+// a private repository — named for provenance, not offered as source.
 var Extractor = Component{
-	Name:                "auto-pigeon-extractor",
-	Kind:                "tool",
-	Distribution:        ShippedBeside,
-	SPDX:                "AGPL-3.0-only",
-	LicenseName:         "GNU Affero General Public License v3.0 only",
-	CorrespondingSource: ExtractorSource,
-	Repository:          ExtractorSource,
-	Notice: "A separate program under its own licence, shipped as its own file beside the Companion " +
-		"and run as its own process. The Companion does not link, embed or relicense it.",
+	Name:         "auto-pigeon-extractor",
+	Kind:         "tool",
+	Distribution: ShippedBeside,
+	SPDX:         ExtractorSPDX,
+	LicenseName:  ExtractorLicenseName,
+	Repository:   ExtractorRepository,
+	Notice: "Proprietary: Copyright (c) 2026 Andrea D'Intino, all rights reserved. A separate program, " +
+		"shipped as its own file beside the Companion with its own licence " +
+		"(LICENSE-auto-pigeon-extractor.txt in a release bundle), and run as its own process. " +
+		"The Companion's MIT licence does not cover it, and the Companion does not link, embed or " +
+		"relicense it. Its licence grants no right to use it without the copyright owner's written " +
+		"authorization.",
 }
 
-// ExtractorSource is where the extractor's source is published.
-const ExtractorSource = "https://github.com/auto-pigeon/auto-pigeon-extractor"
+// ExtractorRepository is where the extractor is developed. It is private: a
+// reference for provenance, not a source offer.
+const ExtractorRepository = "https://github.com/auto-pigeon/auto-pigeon-extractor"
+
+// AULIBSRepository is where the Apache-2.0 contract files compiled into the
+// Companion come from.
+const AULIBSRepository = "https://github.com/auto-pigeon/auto-pigeon-libraries"
+
+// AULIBSContracts are the auto-pigeon-libraries packages whose files are
+// compiled into the Companion's binary, byte for byte (the vendor tests in
+// internal/web and internal/incident compare every copy with AULIBS). They are
+// Apache-2.0 and stay Apache-2.0 inside an MIT program: listing them is what
+// keeps the component list from calling the whole binary MIT.
+var AULIBSContracts = []Component{
+	{
+		Name:         "@auto-pigeon/incident-contract",
+		Kind:         "library",
+		Distribution: InArtifact,
+		SPDX:         AULIBSLicense,
+		LicenseName:  "Apache License 2.0",
+		LicenseURL:   "https://www.apache.org/licenses/LICENSE-2.0",
+		Repository:   AULIBSRepository,
+		Notice: "From auto-pigeon-libraries, unmodified: internal/incident/contract/ and " +
+			"internal/web/assets/vendor/incident-contract/. Apache-2.0; not relicensed by being compiled " +
+			"into an MIT program.",
+	},
+	{
+		Name:         "@auto-pigeon/operational-notice-contract",
+		Kind:         "library",
+		Distribution: InArtifact,
+		SPDX:         AULIBSLicense,
+		LicenseName:  "Apache License 2.0",
+		LicenseURL:   "https://www.apache.org/licenses/LICENSE-2.0",
+		Repository:   AULIBSRepository,
+		Notice: "From auto-pigeon-libraries, unmodified: internal/web/assets/vendor/operational-notice-contract/. " +
+			"Apache-2.0; not relicensed by being compiled into an MIT program.",
+	},
+}
+
+// isLicenseRef reports whether an identifier is an SPDX `LicenseRef-`, which is
+// not on the SPDX licence list and so cannot be a CycloneDX `license.id`.
+func isLicenseRef(spdx string) bool {
+	return strings.HasPrefix(spdx, "LicenseRef-")
+}
 
 // --- SBOM -----------------------------------------------------------------
 
@@ -253,9 +335,12 @@ type SBOMEntry struct {
 	Properties []SBOMProp `json:"properties,omitempty"`
 }
 
-// SBOMLic is a licence expression.
+// SBOMLic is a licence: a named licence, or an SPDX expression. A `LicenseRef-`
+// identifier is not on the SPDX list, so it is written as an expression rather
+// than as a `license.id` no validator would accept.
 type SBOMLic struct {
-	License *SBOMLicense `json:"license,omitempty"`
+	License    *SBOMLicense `json:"license,omitempty"`
+	Expression string       `json:"expression,omitempty"`
 }
 
 // SBOMLicense is one named licence.
@@ -327,15 +412,21 @@ func BuildSBOM(version string, timestamp time.Time) (SBOM, error) {
 		})
 	}
 
-	// The external programs. In the document, with their relationship stated,
-	// because a component the user downloads later is not a component nobody
-	// should be told about.
+	// Everything else: the AULIBS contract files compiled into the binary, and
+	// the external programs. In the document, with their relationship stated,
+	// because a component the user installs separately is not a component
+	// nobody should be told about, and data compiled in under another licence
+	// is not the Companion's to leave out.
 	for _, component := range components {
-		if component.Distribution == InArtifact {
+		if component.Name == self.Name && component.Distribution == InArtifact {
 			continue
 		}
+		kind := "application"
+		if component.Kind == "library" {
+			kind = "library"
+		}
 		entry := SBOMEntry{
-			Type:    "application",
+			Type:    kind,
 			BOMRef:  "aucom:" + component.Name + "@" + component.Version,
 			Name:    component.Name,
 			Version: component.Version,
@@ -343,7 +434,11 @@ func BuildSBOM(version string, timestamp time.Time) (SBOM, error) {
 				{Name: "aucom:distribution", Value: string(component.Distribution)},
 			},
 		}
-		if component.SPDX != "" && component.SPDX != "NOASSERTION" {
+		if isLicenseRef(component.SPDX) {
+			entry.Licenses = []SBOMLic{{Expression: component.SPDX}}
+			entry.Properties = append(entry.Properties, SBOMProp{
+				Name: "aucom:license-name", Value: component.LicenseName})
+		} else if component.SPDX != "" && component.SPDX != "NOASSERTION" {
 			entry.Licenses = []SBOMLic{{License: &SBOMLicense{
 				ID: component.SPDX, URL: component.LicenseURL}}}
 		} else if component.SPDX == "NOASSERTION" {

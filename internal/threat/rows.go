@@ -662,7 +662,7 @@ var rows = []Row{
 		Mitigation: "The module graph is read out of the BINARY, not out of go.mod, and it is empty. CI fails on a staged extractor, on a go:embed directive in that package, and on any committed executable anywhere in the tree. The packaging policy holds unknown content for review rather than including it.",
 		Evidence: []Evidence{
 			{"internal/release", "TestThisProgramLinksNoExternalModule"},
-			{"internal/release", "TestOnlyTheCompanionIsInTheArtifact"},
+			{"internal/release", "TestTheArtifactHoldsOnlyTheCompanionAndItsAULIBSContracts"},
 			{"cmd/companion", "TestNoticesCoverEveryRedistributedComponent"},
 			{"internal/pack", "TestPolicyRefusesAKnownAssetByContent"},
 			{"internal/pack", "TestPolicyHoldsWhatItKnowsNothingAbout"},
@@ -670,12 +670,13 @@ var rows = []Row{
 	},
 	{
 		ID: "T46", Category: CatRelease,
-		Title:      "A copyleft binary is handed out with no offer of its source",
+		Title:      "A shipped binary is handed out under the wrong licence, or a copyleft one with no offer of its source",
 		Asset:      "compliance with the licences of the programs this project distributes",
-		Vector:     "The AGPL extractor shipped beside the Companion without a corresponding-source offer, or a component list or notices file that quietly omits it.",
-		Mitigation: "The one component this project distributes besides itself — the extractor, shipped beside it — must carry a corresponding-source URL, and the notices file must name it and its licence. The rest of the component list is derived from the built-in profiles, so a toolchain added without a licence cannot become invisible.",
+		Vector:     "A copyleft program shipped beside the Companion without a corresponding-source offer, or a component list or notices file that quietly omits or mislabels what is shipped beside it — the proprietary extractor listed as MIT, which would describe the whole archive as MIT, or as a copyleft program it no longer is.",
+		Mitigation: "Any component shipped beside the Companion under a copyleft licence must carry a corresponding-source URL. The one component this project distributes besides itself today — the extractor — is proprietary (LicenseRef-Auto-Pigeon-Proprietary) and must be listed as that, never as MIT or copyleft, with its own licence file in the bundle; the notices file must name it and its licence. The rest of the component list is derived from the built-in profiles, so a toolchain added without a licence cannot become invisible.",
 		Evidence: []Evidence{
 			{"internal/release", "TestEveryShippedCopyleftComponentOffersItsSource"},
+			{"internal/release", "TestTheExtractorIsListedAsProprietaryNeverMITOrCopyleft"},
 			{"cmd/companion", "TestNoticesCoverEveryRedistributedComponent"},
 		},
 	},

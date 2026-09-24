@@ -5,8 +5,10 @@ package cli
 //
 // Everything here is about ONE question a user is entitled to a straight answer
 // to: which program is about to run on my machine, and who says it is the right
-// one. The Companion is MIT and the extractor is AGPL-3.0; a release ships the
-// extractor as a separate file beside the Companion, and nothing downloads it.
+// one. The Companion is MIT and the extractor is proprietary
+// (LicenseRef-Auto-Pigeon-Proprietary); a release ships the extractor as a
+// separate file beside the Companion, under its own licence file, and nothing
+// downloads it.
 
 import (
 	"fmt"

@@ -281,12 +281,20 @@ def check_aue(matrix, release_dir, pin, aue_version):
     source = manifest.get("source", {})
     if source.get("commit") != pin["commit"]:
         raise Refusal(f"the extractor was built from {source.get('commit')!r}; the pin is {pin['commit']}")
-    # Whatever licence the extractor declares travels with it, as its own file.
-    # Which licence that is is its owner's business, not this check's
-    # (operator, 2026-09-23); that it declares one and ships the file is.
+    # Whatever licence the pinned extractor declares travels with it, as its own
+    # file, and is QUOTED from its release manifest everywhere downstream — the
+    # bundle manifest, the release manifest, the release notes — so nothing here
+    # can disagree with the build that is shipped. Today that is
+    # LicenseRef-Auto-Pigeon-Proprietary (NEW_247G); an older pinned build says
+    # AGPL-3.0-only, and its copies keep that licence. What is refused: no
+    # licence at all, and MIT, which the extractor never was — an archive
+    # listing it so would read as entirely MIT.
     spdx = manifest.get("license", {}).get("spdx", "")
     if not spdx:
         raise Refusal("the extractor's release manifest declares no licence")
+    if spdx.strip().upper().startswith("MIT"):
+        raise Refusal(f"the extractor's release manifest declares {spdx!r}; the extractor is not MIT, and an "
+                      "archive listing it so would read as entirely MIT")
     if not protocol_satisfies(manifest.get("protocol", ""), pin["required_protocol"]):
         raise Refusal(f"the extractor speaks protocol {manifest.get('protocol')!r} and this Companion "
                       f"requires {pin['required_protocol']}")
@@ -545,14 +553,46 @@ def release_notes(document):
         "or truncated download detectable; it is not a signature, because anybody who can replace the archives "
         "can replace the checksum file.",
         "",
-        "**Two programs, two licences.** Auto-Pigeon Companion is MIT (`LICENSE-auto-pigeon-companion.txt`). "
-        "Auto-Pigeon Extractor is a separate program with its own licence "
-        f"(`LICENSE-auto-pigeon-extractor.txt`, declared `{aue['license']}`), run as its own process.",
+        *licence_notes(aue["license"]),
         "",
         "The Companion downloads no program. The extractor reaches it only in this archive, and the Companion "
         "checks its digest against `bundle-manifest.json` before running it.",
     ]
     return "\n".join(lines) + "\n"
+
+
+PROPRIETARY = "LicenseRef-Auto-Pigeon-Proprietary"
+COPYLEFT_PREFIXES = ("GPL-", "AGPL-", "LGPL-")
+
+
+def licence_notes(extractor_spdx):
+    """What the release notes say about licences. The extractor's identifier is
+    quoted from its own release manifest, never restated, and no sentence here
+    calls the archive MIT: it holds an MIT program, Apache-2.0 data compiled
+    into that program, and the extractor under its own licence."""
+    lines = [
+        "**These archives are not under one licence.** Auto-Pigeon Companion's own code is MIT "
+        "(`LICENSE-auto-pigeon-companion.txt`). The contract files from auto-pigeon-libraries compiled into it "
+        "are Apache-2.0. Auto-Pigeon Extractor is a separate program under its own licence "
+        f"(`LICENSE-auto-pigeon-extractor.txt`, declared `{extractor_spdx}`), shipped beside the Companion and run "
+        "as its own process; the Companion's MIT licence does not cover it. Third-party programs the Companion "
+        "runs are the user's own, under their own licences. `THIRD_PARTY_NOTICES.md` in every archive says which "
+        "is which.",
+    ]
+    if extractor_spdx == PROPRIETARY:
+        lines += [
+            "",
+            "**Auto-Pigeon Extractor is proprietary** (Copyright (c) 2026 Andrea D'Intino, all rights reserved). "
+            "Its licence grants no right to use it except through a separate written authorization from the "
+            "copyright owner; see `LICENSE-auto-pigeon-extractor.txt`.",
+        ]
+    elif extractor_spdx.startswith(COPYLEFT_PREFIXES):
+        lines += [
+            "",
+            f"The extractor in these archives was built from a commit that declared `{extractor_spdx}`, and these "
+            "copies are under that licence.",
+        ]
+    return lines
 
 
 def cmd_release(args):

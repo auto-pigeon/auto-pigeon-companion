@@ -138,3 +138,18 @@ catalogue parts of T35, T37, T39 and T43 are gone.
 - After the move to the `auto-pigeon` organisation: a release job that checks
   out AUE at a pinned tag, builds it per platform, and passes it to
   `build/bundle-sidecar.sh --extractor`, together with its licence text.
+
+## 2026-09-24 — Superseded in part by NEW_247G
+
+The narrative above is left as it was decided. One fact in it changed on
+2026-09-24: Auto-Pigeon Extractor is no longer AGPL-3.0-only. Its first-party
+licence is now proprietary — `LicenseRef-Auto-Pigeon-Proprietary`, the
+Auto-Pigeon Proprietary Software License, Copyright (c) 2026 Andrea D'Intino,
+all rights reserved. Where this record says the extractor is AGPL-3.0 and
+carries a corresponding-source offer, read that as true of the builds published
+before the change, whose copies keep the rights AGPL-3.0 granted. For current
+builds, a release quotes the pinned build's own licence identifier and `LICENSE`
+file (`LICENSE-auto-pigeon-extractor.txt`), refuses an extractor declared MIT,
+and offers no corresponding source because none is owed; the copyleft
+source-offer check (`TestEveryShippedCopyleftComponentOffersItsSource`) stays a
+copyleft check. `THIRD_PARTY_NOTICES.md` is the current statement.

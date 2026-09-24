@@ -59,8 +59,14 @@ Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 LicenseFile=..\..\LICENSE
-; TODO(andrea): the external GPL-2.0 map-building tools are downloaded at first
-; run, so nothing of theirs is packaged here. If that ever changes and a tool
+; The installer carries the Companion's own code (MIT, with the Apache-2.0
+; auto-pigeon-libraries contract files its binary embeds — see
+; THIRD_PARTY_NOTICES.md) and NOT the proprietary Auto-Pigeon Extractor, which
+; is why the MIT LICENSE is the licence shown. If the extractor is ever added
+; to [Files], its own LICENSE-auto-pigeon-extractor.txt must be installed
+; beside it and this page may no longer present MIT as the whole licence.
+; TODO(andrea): the external GPL map-building tools are installed by the user,
+; so nothing of theirs is packaged here. If that ever changes and a tool
 ; binary is bundled into the installer, its license text and copyright notice
 ; must be installed alongside it and listed here in [Files]. See
 ; THIRD_PARTY_NOTICES.md.

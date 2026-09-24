@@ -17,7 +17,7 @@ window.AUCOM_LOCALES.it = {
   "(optional, so you can find this build later)": "(facoltativa, per ritrovare questa compilazione più tardi)",
   "(what": "(ciò che riceve",
   ", and starts the game. It never writes into": ", e avvia il gioco. Non scrive mai in",
-  ". The Companion itself is MIT-licensed.": ". Il Companion stesso è distribuito con licenza MIT.",
+  ". The Companion's own code is MIT-licensed; the Auto-Pigeon Extractor shipped beside it is proprietary, under its own licence file.": ". Il codice del Companion è distribuito con licenza MIT; l’Auto-Pigeon Extractor fornito accanto a esso è software proprietario, con un proprio file di licenza.",
   "1 map.": "1 mappa.",
   "1. How to build": "1. Come compilare",
   "1. The map": "1. La mappa",
