@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/build"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/feedback"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/maturity"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/feedback"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/maturity"
 )
 
 // `companion feedback` — report that a work-in-progress game did not do what

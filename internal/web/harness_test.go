@@ -18,13 +18,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/aub"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/binding"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/enginefixture"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/pathpick"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/texturebundle"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/config"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/enginefixture"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/pathpick"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/texturebundle"
 )
 
 // A whole fixture machine: a backend with one map on it, a toolchain, an

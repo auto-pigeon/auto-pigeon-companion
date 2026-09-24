@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/aue"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/aue"
 )
 
 // fakeExtractor writes a shell script and returns an override runner for it.

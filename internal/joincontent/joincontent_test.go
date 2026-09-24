@@ -13,9 +13,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/assetsync"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/aub"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/joincontent"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/assetsync"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/joincontent"
 )
 
 // PinnedDigest is auto-pigeon-backend's

@@ -10,12 +10,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/aub"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/incident"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/joinintent"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/release"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/web"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/config"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/incident"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/joinintent"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/release"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/web"
 )
 
 // PasswordEnv is the environment variable a password may be supplied in, for

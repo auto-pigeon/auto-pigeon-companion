@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/pathpick"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/pathpick"
 )
 
 // Choosing a path, from a page that is not allowed to look at the disk.

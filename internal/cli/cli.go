@@ -48,7 +48,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/urischeme"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/urischeme"
 )
 
 // Env carries the streams a command reads and writes, plus process-level values

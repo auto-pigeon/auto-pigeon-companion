@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
 
 // writeAction is the fixture that produces an artifact: it writes the text of

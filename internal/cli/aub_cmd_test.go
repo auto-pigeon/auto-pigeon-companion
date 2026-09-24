@@ -14,8 +14,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/aub"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/config"
 )
 
 // fakeCompanionAUB serves the four Companion routes these commands use, for one

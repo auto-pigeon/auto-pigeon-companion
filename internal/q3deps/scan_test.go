@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/q3deps"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/q3deps"
 )
 
 const (

@@ -6,10 +6,10 @@ import (
 	"sort"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/approval"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/binding"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/approval"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
 
 // `profile review`, `profile grant` and `profile withdraw`: approving an

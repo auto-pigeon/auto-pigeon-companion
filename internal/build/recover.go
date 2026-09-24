@@ -3,7 +3,7 @@ package build
 import (
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 )
 
 // A build left `running` by a Companion that stopped.

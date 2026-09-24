@@ -21,8 +21,8 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/assetsync"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/aub"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/assetsync"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
 )
 
 // stagingMaxAge is how long a staging file must be untouched before a clean

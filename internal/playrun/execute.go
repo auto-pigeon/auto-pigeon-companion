@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/build"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
 
 // execute is one run's whole life.

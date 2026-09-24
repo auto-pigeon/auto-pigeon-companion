@@ -3,7 +3,7 @@ package builtin
 import (
 	"testing"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
 
 // classify returns the first rule of the action that matches the line.

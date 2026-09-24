@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/aub"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/binding"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/enginefixture"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/joinintent"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/enginefixture"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/joinintent"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
 
 // The Games area through the real server, against a fake AUB that speaks the

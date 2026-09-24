@@ -13,8 +13,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/aue"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/build"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/aue"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
 )
 
 // A map in an Auto-Pigeon account is an APMap, and a compiler reads a `.map`.

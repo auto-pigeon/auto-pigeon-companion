@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/joinintent"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/joinintent"
 )
 
 func TestALinkIsRecordedNotRedeemedAndRedeemedOnlyOnce(t *testing.T) {

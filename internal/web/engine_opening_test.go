@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/binding"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
 )
 
 // A hosted engine's output is kept only as far as its opening lines, however

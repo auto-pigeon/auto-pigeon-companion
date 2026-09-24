@@ -8,7 +8,7 @@
   "description": "The answer when the engine you have is not one of the profiles here: a Quake III fork, a total conversion's own build, an engine somebody packaged for your distribution, or ioquake3 on a platform whose executable is named differently from the one that profile declares.\n\nIt sends four things and no more: `fs_basepath`, `fs_game`, `sv_maxclients` and the `map` and `connect` commands. Every one is id Software's own Quake III vocabulary, which every engine descended from that source understands. A fallback that sent an ioquake3 extension would be a fallback that only worked on ioquake3.\n\nWhat it therefore leaves out is as deliberate as what it sends. There is no dedicated-server action, because the name of a dedicated binary is each project's own invention — ioquake3 calls it `ioq3ded` — and this profile has no way to know what yours is called. There is no `sv_pure` or `sv_allowDownload`, which are ioquake3's spelling of behaviour vanilla Quake III has but does not configure the same way. Use the ioquake3 profile if that is what you have.\n\nThis profile was written from id Software's published Quake III documentation and command-line vocabulary. Nothing has been run against it here, because there is no one engine for it to be run against.\n\nQuake III support in Auto-Pigeon is work in progress. Core editing is available, but shader, patch, entity, compilation and engine workflows may be incomplete, and this profile is part of that path.",
   "publisher": {
     "name": "Auto-Pigeon",
-    "url": "https://github.com/andrea-dintino/auto-pigeon-companion"
+    "url": "https://github.com/auto-pigeon/auto-pigeon-companion"
   },
   "source": {
     "homepage": "https://github.com/id-Software/Quake-III-Arena",

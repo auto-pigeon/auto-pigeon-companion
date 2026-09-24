@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
 
 // SchemaVersion versions the stored job record.

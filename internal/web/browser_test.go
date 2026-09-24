@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/engine"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/engine"
 )
 
 // The first-run journey, in a real browser, against the real page.

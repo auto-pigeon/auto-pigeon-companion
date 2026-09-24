@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/binding"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/enginefixture"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/web"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/config"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/enginefixture"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/web"
 )
 
 // The fixture profiles below run this test binary as their external program,

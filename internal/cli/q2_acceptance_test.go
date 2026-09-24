@@ -8,13 +8,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/binding"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/enginefixture"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/maturity"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/pack"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile/builtin"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/enginefixture"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/maturity"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/pack"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile/builtin"
 )
 
 // `AUP/AUCOM 215`'s acceptance, as one journey:

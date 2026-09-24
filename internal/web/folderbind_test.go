@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/binding"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
 
 // NEW_244D: an already-present EricW directory is bound by choosing the

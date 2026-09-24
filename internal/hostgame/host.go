@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/aub"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 )
 
 // Backend is the part of the AUB client this package needs.

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/maturity"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/maturity"
 )
 
 // The sentences `AUP/AUCOM 215` and `AUP/AUCOM 216` require, quoted from the

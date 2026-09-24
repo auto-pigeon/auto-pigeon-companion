@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/build"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/feedback"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/maturity"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/feedback"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/maturity"
 )
 
 // The compatibility report, as the local API composes it.

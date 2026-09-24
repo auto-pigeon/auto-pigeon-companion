@@ -11,14 +11,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/assetref"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/assetsync"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/build"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/engine"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/playrun"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/texturebundle"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/assetref"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/assetsync"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/engine"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/playrun"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/texturebundle"
 )
 
 // Build & Run: the one-click journey, and the place every existing service is

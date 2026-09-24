@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/engine"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/texturebundle"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/engine"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/texturebundle"
 )
 
 // The Build & Run journey, driven end to end against the fixture machine.

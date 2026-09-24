@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
 
 // NEW_244D: EricW's `-wadpath` is passed only when a texture folder is set, so

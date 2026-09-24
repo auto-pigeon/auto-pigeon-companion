@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/incident"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/incident"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
 
 // The local job API.

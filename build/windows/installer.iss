@@ -29,7 +29,7 @@
 
 #define AppName "Auto-Pigeon Companion"
 #define AppPublisher "Andrea D'Intino"
-#define AppURL "https://github.com/andrea-dintino/auto-pigeon-companion"
+#define AppURL "https://github.com/auto-pigeon/auto-pigeon-companion"
 #define AppExeName "companion.exe"
 
 [Setup]

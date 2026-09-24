@@ -8,7 +8,7 @@
   "description": "The fallback. It sends the vocabulary every id-derived Quake II engine inherited from the original: the `basedir`, `game` and `maxclients` cvars set with `+set`, `+map`, and `+connect`. Nothing else, because everything else is a port's own invention and an engine that does not recognise a switch is an engine that will not start.\n\nThat is why this profile uses `+set basedir` where the Yamagi profile uses `-datadir`: `-datadir` is Yamagi's, and `+set basedir` is the one an unknown Quake II engine can be relied on to understand. Yamagi accepts it too, and says it is deprecated — which is the right trade for a profile whose whole job is to work on an engine nobody here has identified.\n\nThere is no `host_dedicated` action. Whether a particular build has a dedicated server in it at all is exactly what a generic profile cannot know, and a button that started nothing would be worse than no button.\n\nQuake II support in Auto-Pigeon is work in progress. Core editing is available, but some textures, entities, compilation and engine workflows may be incomplete, and this profile is part of that path.",
   "publisher": {
     "name": "Auto-Pigeon",
-    "url": "https://github.com/andrea-dintino/auto-pigeon-companion"
+    "url": "https://github.com/auto-pigeon/auto-pigeon-companion"
   },
   "source": {
     "homepage": "https://github.com/id-Software/Quake-2",

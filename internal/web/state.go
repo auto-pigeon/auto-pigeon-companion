@@ -4,11 +4,11 @@ import (
 	"errors"
 	"path/filepath"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/approval"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/assetsync"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/binding"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/approval"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/assetsync"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/config"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 )
 
 // Where this run's state lives, resolved once per request rather than held.

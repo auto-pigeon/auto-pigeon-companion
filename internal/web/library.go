@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/assetsync"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/aub"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/assetsync"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
 )
 
 // The Library area: what is on the backend, and what is on this machine.

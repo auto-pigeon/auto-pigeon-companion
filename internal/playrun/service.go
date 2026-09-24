@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/build"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
 )
 
 // Deps are the services a run drives. Every one of them already exists

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/maturity"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/maturity"
 )
 
 // The local API is where the page learns that a game is unfinished, so this is

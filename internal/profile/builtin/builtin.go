@@ -47,12 +47,12 @@
 //
 // The Q2 and Q3 documents are shipped and usable. What they are not is
 // finished, and that statement is not theirs to make:
-// [github.com/andrea-dintino/auto-pigeon-companion/internal/maturity] holds it,
+// [github.com/auto-pigeon/auto-pigeon-companion/internal/maturity] holds it,
 // keyed on AUB's engine family, so a community profile cannot publish itself as
 // stable Quake II or Quake III support and switch the warning off.
 //
 // The instrument that *is* measured is
-// [github.com/andrea-dintino/auto-pigeon-companion/internal/enginefixture],
+// [github.com/auto-pigeon/auto-pigeon-companion/internal/enginefixture],
 // which records the argv it was started with. It proves the Companion builds
 // the command line it says it builds. Nothing can make it prove that Ironwail
 // accepts that command line.
@@ -72,7 +72,7 @@ import (
 	"io/fs"
 	"sort"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
 
 //go:embed *.json

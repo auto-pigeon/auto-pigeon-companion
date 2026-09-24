@@ -49,8 +49,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/aub"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
 
 // Disclosure is one thing a publication would make public.

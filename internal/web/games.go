@@ -13,17 +13,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/assetsync"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/aub"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/binding"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/engine"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/hostgame"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/joincontent"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/joinintent"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/joinready"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/publish"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/assetsync"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/config"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/engine"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/hostgame"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/joincontent"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/joinintent"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/joinready"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/publish"
 )
 
 // The Games area — `AUB/AUG/AUCOM/AUT 244F`.

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/urischeme"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/urischeme"
 )
 
 // `companion uri` — the operating system's handler for autopigeon:// links.

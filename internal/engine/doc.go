@@ -10,7 +10,7 @@
 // engine it is; everything it needs, it reads out of the document.
 //
 // Not the process. Starting, supervising, stopping and recording a game is
-// [github.com/andrea-dintino/auto-pigeon-companion/internal/job]'s, the same as
+// [github.com/auto-pigeon/auto-pigeon-companion/internal/job]'s, the same as
 // a compile, because a second execution path is a second set of rules about
 // what a running program may do.
 //

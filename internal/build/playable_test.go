@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 )
 
 func TestAFinishedBuildNamesItsLevel(t *testing.T) {

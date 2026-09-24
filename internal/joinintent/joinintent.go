@@ -37,7 +37,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/lockfile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/lockfile"
 )
 
 // SchemaVersion versions the file.

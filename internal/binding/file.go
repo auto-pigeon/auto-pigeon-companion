@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/lockfile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/lockfile"
 )
 
 // Reading and writing the binding store as a file.

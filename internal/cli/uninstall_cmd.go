@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/urischeme"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/config"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/urischeme"
 )
 
 // `companion uninstall` — remove what this program put on this machine, for

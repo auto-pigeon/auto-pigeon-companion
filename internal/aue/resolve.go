@@ -15,7 +15,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
 
 // RequiredProtocol is the invocation protocol this build drives: the bundled

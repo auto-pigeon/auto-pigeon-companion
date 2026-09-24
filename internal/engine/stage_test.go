@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/engine"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/engine"
 )
 
 func writeFile(t *testing.T, path, body string) {

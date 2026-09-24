@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/aue"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/aue"
 )
 
 // bundle is a release directory: a fake extractor beside where the Companion

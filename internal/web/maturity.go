@@ -1,8 +1,8 @@
 package web
 
 import (
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/maturity"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/maturity"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
 
 // The work-in-progress statement, as the local API serves it.

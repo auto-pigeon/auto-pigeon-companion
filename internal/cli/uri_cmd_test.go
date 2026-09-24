@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/urischeme"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/urischeme"
 )
 
 // uriEnv points the registrar at a temporary data directory. Never the real

@@ -9,7 +9,7 @@ import (
 	"io/fs"
 	"testing"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/texturebundle"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/texturebundle"
 )
 
 // A fixture bundle is built the way AUB builds one, because a test that

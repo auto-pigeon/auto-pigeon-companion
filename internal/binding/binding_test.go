@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
 
 const fakeDigest = "sha256:1111111111111111111111111111111111111111111111111111111111111111"

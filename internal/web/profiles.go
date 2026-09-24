@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/approval"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/binding"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile/builtin"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/approval"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile/builtin"
 )
 
 // The Profiles area: reading a document, writing one, and approving one.

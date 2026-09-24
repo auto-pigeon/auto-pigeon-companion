@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/nativeacceptance"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/nativeacceptance"
 )
 
 func clockAt(text string) func() time.Time {

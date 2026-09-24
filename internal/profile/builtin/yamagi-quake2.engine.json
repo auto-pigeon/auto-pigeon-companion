@@ -8,7 +8,7 @@
   "description": "Yamagi Quake II is the conservative, maintained continuation of id Software's Quake II. It is the reference the Companion's Quake II path is written against.\n\n**It locates game data with `-datadir`, not `-basedir`, and that is not a stylistic preference.** Every Quake 1 engine profile in this build passes `-basedir <game root>`; Yamagi's own filesystem code prints `+set basedir is deprecated, use -datadir instead` and then treats it as a data directory anyway. Writing `-basedir` here would work and would be the deprecated spelling of it, which is the sort of thing that is correct until the release that removes it. The mod is chosen with the `game` cvar, so `+set game`, not `-game`.\n\n`q2ded` is a second executable rather than a switch: Yamagi ships the dedicated server as its own program, and an action that started the client with a flag would be starting something else.\n\nThis profile was written from Yamagi's own published documentation and source, not from a build running on this machine. That is what every `unverified` platform below means, and it is why there is no version probe: asking a Quake II engine what version it is means starting it, and starting it means opening a window and a game.\n\nQuake II support in Auto-Pigeon is work in progress. Core editing is available, but some textures, entities, compilation and engine workflows may be incomplete, and this profile is part of that path.",
   "publisher": {
     "name": "Auto-Pigeon",
-    "url": "https://github.com/andrea-dintino/auto-pigeon-companion"
+    "url": "https://github.com/auto-pigeon/auto-pigeon-companion"
   },
   "source": {
     "homepage": "https://www.yamagi.org/quake2/",

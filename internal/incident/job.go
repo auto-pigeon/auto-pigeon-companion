@@ -3,7 +3,7 @@ package incident
 import (
 	"fmt"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 )
 
 // JobHook is the job service's OnFinished, reporting every FAILED job as

@@ -37,7 +37,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/lockfile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/lockfile"
 )
 
 // AppDirName is the single path element the Companion adds under the OS config

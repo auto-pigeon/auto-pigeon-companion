@@ -6,10 +6,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/build"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/pack"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/q3deps"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/config"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/pack"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/q3deps"
 )
 
 // `companion package` — turn what a build produced into something somebody

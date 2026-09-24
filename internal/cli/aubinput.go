@@ -3,7 +3,7 @@ package cli
 // Building from an AUB asset: `--input map=aub:map/<asset_id>@<revision>`.
 //
 // The parsing, cache resolution and manifest record all live in
-// [github.com/andrea-dintino/auto-pigeon-companion/internal/assetref], because
+// [github.com/auto-pigeon/auto-pigeon-companion/internal/assetref], because
 // the GUI builds from assets too and a second copy would be a second chance for
 // a `--input` and a form field to disagree about which revision a build read.
 // What is left here is the CLI's own half: finding this invocation's cache and
@@ -13,9 +13,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/assetref"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/assetsync"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/build"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/assetref"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/assetsync"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
 )
 
 // AUBInputPrefix marks an input value as an asset reference rather than a path.

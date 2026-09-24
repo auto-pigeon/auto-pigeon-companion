@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/binding"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
 
 // Why a launch will not work, said before anything is started.

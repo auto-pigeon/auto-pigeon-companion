@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/aub"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
 
 // The page's side of the lifecycle: the lease, what is running, and Quit.

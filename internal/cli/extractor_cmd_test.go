@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/aue"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/aue"
 )
 
 func TestExtractorStatusWithNothingConfiguredSaysThereIsNone(t *testing.T) {

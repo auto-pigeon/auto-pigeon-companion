@@ -3,8 +3,8 @@ package web
 import (
 	"testing"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/playrun"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/playrun"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
 
 // The port a hosted game is listed at is a suggestion the page shows: the

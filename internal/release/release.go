@@ -45,12 +45,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile/builtin"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile/builtin"
 )
 
 // ModulePath is this program's Go module.
-const ModulePath = "github.com/andrea-dintino/auto-pigeon-companion"
+const ModulePath = "github.com/auto-pigeon/auto-pigeon-companion"
 
 // License is the Companion's own licence.
 const License = "MIT"
@@ -217,7 +217,7 @@ var Extractor = Component{
 }
 
 // ExtractorSource is where the extractor's source is published.
-const ExtractorSource = "https://github.com/andrea-dintino/auto-pigeon-extractor"
+const ExtractorSource = "https://github.com/auto-pigeon/auto-pigeon-extractor"
 
 // --- SBOM -----------------------------------------------------------------
 

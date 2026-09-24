@@ -7,7 +7,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/aub"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
 )
 
 // CheckReadiness asks the configured AUB whether it is answering, within

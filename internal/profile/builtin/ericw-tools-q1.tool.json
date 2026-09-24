@@ -8,7 +8,7 @@
   "description": "ericw-tools is Eric Wasylishen's continuation of Tyrann's tyrutils. This profile describes release v0.18.1, which is the newest release upstream has not marked a pre-release: the whole 2.0 line, up to 2.0.0-alpha11, is published as a pre-release and is not what a Q1 build should default to. A profile for that line is a separate document and a separate decision.\n\nThe five programs are one profile because they are one download, one licence and one version. What each of them does is measured, not assumed: qbsp writes the .bsp, and beside it the .prt that vis needs, the .pts point file when the map leaks, and its own .log. vis and light do not write a new file — they read the .bsp they were handed and save it back over itself, which is why their outputs are declared `in_place` rather than at a path this document invented. vis additionally opens the .prt of the same stem in the same directory without being told to, which is why the .prt is declared `stage_with` the .bsp: staged into its own directory, as every other input is, it would be somewhere vis never looks.\n\nEvery adjustable knob is a declared, typed option. There is no free-text argument box, so the command preview a user approves is the command that runs.",
   "publisher": {
     "name": "Auto-Pigeon",
-    "url": "https://github.com/andrea-dintino/auto-pigeon-companion"
+    "url": "https://github.com/auto-pigeon/auto-pigeon-companion"
   },
   "source": {
     "homepage": "https://ericwa.github.io/ericw-tools/",

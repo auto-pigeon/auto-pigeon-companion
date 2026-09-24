@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
 
 // Supervision: one process, started from an argument array, watched until it

@@ -13,8 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/assetref"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/aue"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/assetref"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/aue"
 )
 
 const extractorUsage = `usage:

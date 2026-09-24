@@ -3,7 +3,7 @@ package builtin
 import (
 	"testing"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
 
 // TestEveryBuiltinPipelineInputClassifies runs the source-kind rule over the

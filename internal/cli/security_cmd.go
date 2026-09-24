@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/release"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/threat"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/release"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/threat"
 )
 
 // `companion security` — the threat model, and what this build is made of.

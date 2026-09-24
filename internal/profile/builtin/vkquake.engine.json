@@ -8,7 +8,7 @@
   "description": "This profile was written from vkQuake's own published command-line documentation, not from a build running on this machine. That is what every `unverified` platform below means, and it is why there is no version probe: asking a Quake engine what version it is means starting it, and starting it means opening a window and a game.\n\n`play_map` names a game directory as well as a map, because that is what these engines' command lines do: `-game` chooses which directory the map is loaded from. Launching a map into a directory nobody named is how you end up watching the wrong map.",
   "publisher": {
     "name": "Auto-Pigeon",
-    "url": "https://github.com/andrea-dintino/auto-pigeon-companion"
+    "url": "https://github.com/auto-pigeon/auto-pigeon-companion"
   },
   "source": {
     "homepage": "https://github.com/Novum/vkQuake",

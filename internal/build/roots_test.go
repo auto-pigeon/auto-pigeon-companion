@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
 
 // `AUCOM/AUE/AUT 246I1`. A texture collection is a DIRECTORY, and the half-fix

@@ -8,7 +8,7 @@ import (
 
 // Portability, enforced on the document's own text.
 //
-// The type system already keeps a [github.com/andrea-dintino/auto-pigeon-companion/internal/binding.LocalBinding]
+// The type system already keeps a [github.com/auto-pigeon/auto-pigeon-companion/internal/binding.LocalBinding]
 // out of a profile: that type lives in a package which imports this one, so no
 // profile type can contain it and a test asserts the import direction. That
 // handles the structural mistake.

@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/config"
 )
 
 // NEW_244D, HITL: a person chooses one of the official Auto-Pigeon servers;

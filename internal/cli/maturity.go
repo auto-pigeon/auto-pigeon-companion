@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/maturity"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/maturity"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
 
 // Where the work-in-progress statement reaches the command line.

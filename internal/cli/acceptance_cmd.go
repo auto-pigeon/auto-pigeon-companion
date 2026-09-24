@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/nativeacceptance"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/nativeacceptance"
 )
 
 // `companion acceptance` — the native operator acceptance kit.

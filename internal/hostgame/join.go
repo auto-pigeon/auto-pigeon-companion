@@ -11,11 +11,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/aub"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/joincontent"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/joinready"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/joincontent"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/joinready"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
 
 // Remote is the part of the AUB client a join needs.

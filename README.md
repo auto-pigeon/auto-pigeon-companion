@@ -4413,7 +4413,7 @@ In this artifact (1)
 
 Shipped beside it in the release, under its own licence, run as its own process (1)
   auto-pigeon-extractor                    AGPL-3.0-only
-                                           source: https://github.com/andrea-dintino/auto-pigeon-extractor
+                                           source: https://github.com/auto-pigeon/auto-pigeon-extractor
 
 Programs you already have, which this only configures (15)
   auto-pigeon.engine.darkplaces            GPL-2.0-or-later
@@ -4496,11 +4496,11 @@ pin in a reviewed commit. The commit must already be on GitHub:
 $ git -C ../auto-pigeon-extractor rev-parse HEAD
 86ac34d587afca043adb93351fd28a4559faa52b
 $ python3 build/release-plan.py pin
-repository=andrea-dintino/auto-pigeon-extractor
+repository=auto-pigeon/auto-pigeon-extractor
 commit=86ac34d587afca043adb93351fd28a4559faa52b
 required_protocol=1.0
 version=1.207
-aulibs_repository=andrea-dintino/auto-pigeon-libraries
+aulibs_repository=auto-pigeon/auto-pigeon-libraries
 ```
 
 The extractor's repository is private. The workflow reads it with the
@@ -4570,7 +4570,7 @@ $ build/bundle-sidecar.sh --platform linux-amd64 --version 1.148 \
     --extractor ../auto-pigeon-extractor/dist/auto-pigeon-extractor-1.207-linux-amd64 \
     --extractor-version 1.207 --extractor-commit 86ac34d587afca043adb93351fd28a4559faa52b \
     --extractor-license ../auto-pigeon-extractor/LICENSE \
-    --extractor-source https://github.com/andrea-dintino/auto-pigeon-extractor/tree/86ac34d587afca043adb93351fd28a4559faa52b
+    --extractor-source https://github.com/auto-pigeon/auto-pigeon-extractor/tree/86ac34d587afca043adb93351fd28a4559faa52b
 ```
 
 It refuses an extractor built for another platform. Without `--extractor`, the
@@ -4815,6 +4815,6 @@ release carries it yet; see [Publishing a release](#publishing-a-release).)
 [THIRD_PARTY_NOTICES.md][notices] sets out what is compiled in, what is run as a
 separate process, and what a release redistributes.
 
-[aub]: https://github.com/andrea-dintino/auto-pigeon-backend
-[aue]: https://github.com/andrea-dintino/auto-pigeon-extractor
+[aub]: https://github.com/auto-pigeon/auto-pigeon-backend
+[aue]: https://github.com/auto-pigeon/auto-pigeon-extractor
 [notices]: THIRD_PARTY_NOTICES.md

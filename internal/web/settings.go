@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/config"
 )
 
 // The Settings area.

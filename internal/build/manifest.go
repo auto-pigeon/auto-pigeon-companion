@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
 
 // SchemaVersion versions the build manifest.
@@ -227,7 +227,7 @@ type Manifest struct {
 	// EngineFamily is AUB's family the pipeline declares, carried so a reader
 	// of the manifest — or a surface printing it — knows which game this build
 	// was for without going back to the document. It is what
-	// [github.com/andrea-dintino/auto-pigeon-companion/internal/maturity] is
+	// [github.com/auto-pigeon/auto-pigeon-companion/internal/maturity] is
 	// keyed on, so a build of a work-in-progress family can say so.
 	EngineFamily string    `json:"engine_family,omitempty"`
 	State        job.State `json:"state"`

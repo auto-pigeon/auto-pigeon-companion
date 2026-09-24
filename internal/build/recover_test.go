@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/job"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 )
 
 func TestABuildWhoseStepJobWasInterruptedIsInterrupted(t *testing.T) {

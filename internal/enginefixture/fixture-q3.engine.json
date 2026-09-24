@@ -8,7 +8,7 @@
   "description": "The Quake III fixture, for the same reason the Quake 1 and Quake II ones exist: playing Quake III needs a copy of Quake III, and this repository has none and must not acquire one.\n\nEverything after `--` is copied from the built-in ioquake3 profile, action for action and argument for argument, and `internal/cli`'s acceptance compares the two rather than trusting this copy. A change to one that is not made to the other fails a test instead of drifting.\n\nOne difference is deliberate and is the reason this document is not simply ioquake3's with a different executable: ioquake3's dedicated server is a second program, `ioq3ded`, and the fixture is one binary that records whatever it was started as. What the fixture proves is the command line; nothing here can prove what ioquake3 does with it.",
   "publisher": {
     "name": "Auto-Pigeon",
-    "url": "https://github.com/andrea-dintino/auto-pigeon-companion"
+    "url": "https://github.com/auto-pigeon/auto-pigeon-companion"
   },
   "license": {
     "spdx": "MIT",

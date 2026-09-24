@@ -15,8 +15,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/aue"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/release"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/aue"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/release"
 )
 
 // The per-push bundled release (NEW_247A), held to the failures the prompt

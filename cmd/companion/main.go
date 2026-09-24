@@ -18,8 +18,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/cli"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/config"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/cli"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/config"
 )
 
 // version is the build-time version string, `1.<commit-count>` — the format

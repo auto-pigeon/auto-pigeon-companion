@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/release"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/release"
 )
 
 // The declaration has to be readable, and every refusal in it has to be one

@@ -34,7 +34,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/build"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
 )
 
 // SchemaVersion versions the record.

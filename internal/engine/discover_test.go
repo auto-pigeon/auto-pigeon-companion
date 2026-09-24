@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/engine"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/engine"
 )
 
 // A fake filesystem, because a discovery pass that read the developer's real

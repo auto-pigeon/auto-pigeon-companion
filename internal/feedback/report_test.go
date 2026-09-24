@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/feedback"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/maturity"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/feedback"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/maturity"
 )
 
 const today = "2026-09-07"

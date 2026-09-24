@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/aub"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
 )
 
 // siteLinksCache holds AUB's answer to "where is the gallery" for a while, so

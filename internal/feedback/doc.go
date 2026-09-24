@@ -18,7 +18,7 @@
 //
 // A [Diagnostic] carries the id and severity of the rule that fired and *the
 // message the profile document declares for it* — text this program shipped,
-// which [github.com/andrea-dintino/auto-pigeon-companion/internal/profile.CheckPortable]
+// which [github.com/auto-pigeon/auto-pigeon-companion/internal/profile.CheckPortable]
 // already refuses to let contain a path or a credential. The line the tool
 // actually printed — which contains the user's filenames, and on a bad day a
 // token a tool found by other means — is never carried.

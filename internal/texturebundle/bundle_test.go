@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/texturebundle"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/texturebundle"
 )
 
 func publish(t testing.TB, cache *texturebundle.Cache, f fixture) (texturebundle.Entry, error) {

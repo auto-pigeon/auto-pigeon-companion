@@ -42,7 +42,7 @@
 //   - Filesystem reach is declared as roles ([RootRef]), never as paths. A
 //     portable document that contains an absolute path, a home directory, a
 //     hostname or a token is refused by [CheckPortable]; where the paths on
-//     *this* machine live is a [github.com/andrea-dintino/auto-pigeon-companion/internal/binding.LocalBinding],
+//     *this* machine live is a [github.com/auto-pigeon/auto-pigeon-companion/internal/binding.LocalBinding],
 //     which is a different type in a different package for exactly that reason.
 //   - Importing is inert. A freshly imported profile can do nothing at all
 //     until the user has seen its normalized [Diff] and recorded a [Grant]

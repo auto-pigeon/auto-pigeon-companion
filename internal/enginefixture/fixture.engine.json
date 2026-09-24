@@ -8,7 +8,7 @@
   "description": "Not an engine. This profile drives the program in internal/enginefixture, which writes down its argv, its environment and its working directory and then becomes ready, crashes, or stays up until it is stopped.\n\nIt exists so that every claim about a launch command can be checked without a copy of Quake. What it proves is that the Companion built the argv it said it would build; it proves nothing at all about whether a real engine accepts that argv, which is what each curated profile's platform status says in its own words.",
   "publisher": {
     "name": "Auto-Pigeon",
-    "url": "https://github.com/andrea-dintino/auto-pigeon-companion"
+    "url": "https://github.com/auto-pigeon/auto-pigeon-companion"
   },
   "license": {
     "spdx": "MIT",

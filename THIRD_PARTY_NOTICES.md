@@ -135,7 +135,7 @@ Three things are enforced here rather than assumed:
 2. **The release's component list names it.** `companion release sbom` lists
    `auto-pigeon-extractor` with `distribution: shipped-beside-in-the-release`,
    its licence and its corresponding source
-   (<https://github.com/andrea-dintino/auto-pigeon-extractor>), and
+   (<https://github.com/auto-pigeon/auto-pigeon-extractor>), and
    `release.TestEveryShippedCopyleftComponentOffersItsSource` fails a shipped
    copyleft component with no source offer.
 3. **This file names it.** `TestNoticesCoverEveryRedistributedComponent` fails

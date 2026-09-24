@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
 
 // The three routes, resolved through one function.
@@ -165,9 +165,9 @@ func TestANonExecutableFileIsRefused(t *testing.T) {
 // resolved before the job was submitted.
 func TestTheJobAndBindingPackagesDoNotImportAcquire(t *testing.T) {
 	for _, name := range []string{
-		"github.com/andrea-dintino/auto-pigeon-companion/internal/job",
-		"github.com/andrea-dintino/auto-pigeon-companion/internal/binding",
-		"github.com/andrea-dintino/auto-pigeon-companion/internal/profile",
+		"github.com/auto-pigeon/auto-pigeon-companion/internal/job",
+		"github.com/auto-pigeon/auto-pigeon-companion/internal/binding",
+		"github.com/auto-pigeon/auto-pigeon-companion/internal/profile",
 	} {
 		pkg, err := build.Import(name, "", 0)
 		if err != nil {
@@ -199,9 +199,9 @@ func TestAManagedDownloadRouteIsRefusedWithTheWayAround(t *testing.T) {
 // change can add a download route without this test failing first.
 func TestNothingThatFindsAProgramCanDownloadOne(t *testing.T) {
 	for _, name := range []string{
-		"github.com/andrea-dintino/auto-pigeon-companion/internal/acquire",
-		"github.com/andrea-dintino/auto-pigeon-companion/internal/aue",
-		"github.com/andrea-dintino/auto-pigeon-companion/internal/profile",
+		"github.com/auto-pigeon/auto-pigeon-companion/internal/acquire",
+		"github.com/auto-pigeon/auto-pigeon-companion/internal/aue",
+		"github.com/auto-pigeon/auto-pigeon-companion/internal/profile",
 	} {
 		pkg, err := build.Import(name, "", 0)
 		if err != nil {

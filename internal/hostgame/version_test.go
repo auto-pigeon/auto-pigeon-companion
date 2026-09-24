@@ -3,7 +3,7 @@ package hostgame_test
 import (
 	"testing"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/hostgame"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/hostgame"
 )
 
 // The version a listing publishes is the one the running engine printed, not

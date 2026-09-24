@@ -4,7 +4,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/aub"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
 )
 
 // Report a bug (operator, 2026-09-22: "copy its behaviour, and code if

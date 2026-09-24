@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/web"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/web"
 )
 
 // These run the real `serve` in-process, hold leases over real WebSockets the

@@ -49,7 +49,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/aub"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
 )
 
 // Scheme is the URL scheme this package registers. It is [aub.JoinLinkScheme]

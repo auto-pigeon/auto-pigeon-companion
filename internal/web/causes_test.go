@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/pathpick"
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/pathpick"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
 
 // What the interface says when something is wrong.

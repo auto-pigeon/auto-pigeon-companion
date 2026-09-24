@@ -1,6 +1,6 @@
 package engine_test
 
-import "github.com/andrea-dintino/auto-pigeon-companion/internal/engine"
+import "github.com/auto-pigeon/auto-pigeon-companion/internal/engine"
 
 // The two lines that let launch_test.go stage into the harness's game root
 // without repeating the struct literal.

@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/andrea-dintino/auto-pigeon-companion/internal/build"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
 )
 
 // A build whose compiler found none of the map's textures used to succeed.

@@ -1,3 +1,3 @@
-module github.com/andrea-dintino/auto-pigeon-companion
+module github.com/auto-pigeon/auto-pigeon-companion
 
 go 1.26.8
