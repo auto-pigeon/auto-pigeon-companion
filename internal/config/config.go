@@ -170,14 +170,32 @@ func Default() Config {
 
 // AUB resolves the effective AUB address: the environment variable if set,
 // otherwise the config file's value, otherwise ErrAUBNotConfigured.
+//
+// Under the release rule (release_policy.go) the environment variable can only
+// have come from the config.json beside the executable, and a saved address
+// that is not an official deployment is set aside and reported.
 func (c Config) AUB() (string, error) {
 	if fromEnv := strings.TrimSpace(os.Getenv(EnvAUBBaseURL)); fromEnv != "" {
 		return fromEnv, nil
 	}
 	if trimmed := strings.TrimSpace(c.AUBBaseURL); trimmed != "" {
+		if OfficialOnly() && !IsOfficialBackend(trimmed) {
+			NoteIgnoredAddress(trimmed, "an earlier Settings choice saved in this user's config.json")
+			return "", ErrAUBNotConfigured
+		}
 		return trimmed, nil
 	}
 	return "", ErrAUBNotConfigured
+}
+
+// SavedAUB is the address in the per-user file that is in effect: the saved
+// value, or "" when the release rule sets it aside.
+func (c Config) SavedAUB() string {
+	trimmed := strings.TrimSpace(c.AUBBaseURL)
+	if OfficialOnly() && trimmed != "" && !IsOfficialBackend(trimmed) {
+		return ""
+	}
+	return trimmed
 }
 
 // Dir is the OS-appropriate directory holding config.json.

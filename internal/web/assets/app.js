@@ -128,7 +128,8 @@
           ? `Sign in to your account on ${site.host}.`
           : body.aub_base_url
             ? "Sign in to your account on the development server."
-            : "Choose which Auto-Pigeon your account is on, then sign in.";
+            : "Choose which Auto-Pigeon your account is on, then sign in." +
+              ((body.aub_ignored || []).length ? ` Ignored: ${body.aub_ignored.join("; ")}. ${body.aub_ignored_why}` : "");
       renderSignInHelp(site);
     }
 

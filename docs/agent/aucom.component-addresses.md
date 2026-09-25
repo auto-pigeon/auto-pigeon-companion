@@ -62,3 +62,17 @@ a compiled fallback and never a string a UI printed.
 `../auto-pigeon-tools/scripts/agent_context_router.py gate --repo-root "$PWD"` fails a change that
 declares one stable rule id authoritative in two live files, and this pointer is what keeps that
 check honest for this rule.
+
+## A release takes another server only from the file beside it (2026-09-25)
+
+A released Companion on Windows opened on a LAN AUB nobody had configured for it:
+`AUCOM_AUB_BASE_URL` was still set in that computer's environment by an earlier
+development session, and the sign-in dialog could offer nothing else. The
+operator's rule, since then: the default is Auto-Pigeon or Auto-Pigeon beta, and a
+**stamped release started without `--debug`** uses any other address only when the
+`config.json` beside the executable names it. The environment variable, a `.env`
+and a non-official address saved in the per-user `config.json` are set aside and
+reported (terminal, Settings, sign-in). A development build and `--debug` keep
+every source, which is how local stacks and auto-pigeon-tools' harnesses (which
+build their own unstamped binaries) point it. `internal/config/release_policy.go`
+is the implementation and its tests are the contract.

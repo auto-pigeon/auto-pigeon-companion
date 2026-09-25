@@ -35,6 +35,17 @@ import (
 var version = "unknown"
 
 func main() {
+	// A released Companion takes a non-official server address only from the
+	// config.json beside it, or when started with --debug (operator,
+	// 2026-09-25; internal/config/release_policy.go). Applied first, so the
+	// environment variable it sets aside cannot shadow that file.
+	officialOnly, err := config.ApplyReleasePolicy(version != "unknown", config.WantsDebug(os.Args[1:]),
+		os.LookupEnv, os.Unsetenv)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(2)
+	}
+
 	// The optional development `.env` — see internal/config/envfile.go. Read
 	// before anything else so every command, the GUI included, resolves the
 	// same backend address. Absent is the ordinary case and says nothing.
@@ -42,6 +53,16 @@ func main() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(2)
+	}
+	if officialOnly {
+		for i, key := range report.Applied {
+			if key == config.EnvAUBBaseURL {
+				config.NoteIgnoredAddress(os.Getenv(key), report.Path)
+				_ = os.Unsetenv(key)
+				report.Applied = append(report.Applied[:i:i], report.Applied[i+1:]...)
+				break
+			}
+		}
 	}
 	if len(report.Applied) > 0 {
 		fmt.Fprintf(os.Stderr, "using %s from %s\n", strings.Join(report.Applied, ", "), report.Path)
@@ -63,6 +84,9 @@ func main() {
 		if len(override.Applied) > 0 {
 			fmt.Fprintf(os.Stderr, "using %s from %s\n", strings.Join(override.Applied, ", "), override.Path)
 		}
+	}
+	if ignored := config.IgnoredAddresses(); len(ignored) > 0 {
+		fmt.Fprintf(os.Stderr, "ignored server address %s. %s\n", strings.Join(ignored, "; "), config.IgnoredExplanation)
 	}
 
 	env := &cli.Env{

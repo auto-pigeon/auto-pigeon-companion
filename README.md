@@ -227,25 +227,44 @@ it holds your Auto-Pigeon session:
 
 Job records and downloaded map revisions live in the matching cache directory.
 
-To use another backend — a local development stack, say — start with
-`companion --debug` (Settings then accepts any address), or put a `config.json`
-holding only `aub_base_url` and `port` beside the executable, or set:
+By default the Companion uses the server you choose in Settings: **Auto-Pigeon**
+or **Auto-Pigeon beta**. A **released** Companion uses any other server — a
+local development stack, say — only when the `config.json` beside the executable
+names it, or when it is started with `companion --debug` (Settings then accepts
+any address):
+
+```console
+$ cat config.json      # beside companion(.exe)
+{"aub_base_url": "http://192.168.1.20:9190"}
+$ ./companion auth status
+using AUCOM_AUB_BASE_URL from /opt/auto-pigeon-companion/config.json
+aub: http://192.168.1.20:9190
+signed in: no
+```
+
+That file may hold only `aub_base_url` and `port`. In a release started without
+`--debug`, an `AUCOM_AUB_BASE_URL` environment variable, a `.env`, and a
+development address saved in Settings are ignored, and the Companion says so on
+its terminal, in Settings and in the sign-in dialog:
+
+```console
+$ AUCOM_AUB_BASE_URL=http://192.168.1.20:9190 ./companion auth status
+ignored server address http://192.168.1.20:9190 from the AUCOM_AUB_BASE_URL environment variable on this computer. A released Companion uses a server other than Auto-Pigeon or Auto-Pigeon beta only when the config.json beside the program names it, or when it is started with --debug.
+aub: (not configured — set AUCOM_AUB_BASE_URL or aub_base_url)
+signed in: no
+```
+
+A development build (from source) reads all of these:
 
 | Variable | Purpose |
 | --- | --- |
-| `AUCOM_AUB_BASE_URL` | the Auto-Pigeon backend address |
+| `AUCOM_AUB_BASE_URL` | the Auto-Pigeon backend address (a release: only with `--debug`) |
 | `AUCOM_PORT` | the port of the local page |
 | `AUCOM_PASSWORD` | the password for a scripted `auth login` |
 | `AUCOM_OFFLINE` | `1` forbids every network access |
 | `AUCOM_JOBS_DIR`, `AUCOM_PROFILES_DIR`, `AUCOM_ASSET_CACHE_DIR` | where jobs, imported profiles and synced assets live |
 | `AUCOM_AUE_BINARY` | a development build's extractor instead of the bundled one; shown as **unverified** everywhere |
 | `AUCOM_ENV_FILE` | a `.env` to read instead of `./.env` (development only) |
-
-```console
-$ AUCOM_AUB_BASE_URL=http://localhost:9190 ./companion auth status
-aub: http://localhost:9190
-signed in: no
-```
 
 ## Removing it
 

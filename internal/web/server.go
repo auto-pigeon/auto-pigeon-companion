@@ -595,6 +595,11 @@ type statusBody struct {
 	// BackendLabel names the one in use when it is one of them.
 	Backends     []config.Backend `json:"backends"`
 	BackendLabel string           `json:"backend_label,omitempty"`
+	// AUBIgnored are server addresses a released Companion set aside, each
+	// with where it came from (config.ApplyReleasePolicy), and AUBIgnoredWhy
+	// the sentence that explains them. Empty in the ordinary case.
+	AUBIgnored    []string `json:"aub_ignored,omitempty"`
+	AUBIgnoredWhy string   `json:"aub_ignored_why,omitempty"`
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
@@ -632,6 +637,8 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		Debug:          s.debug,
 		Backends:       config.OfficialBackends,
 		BackendLabel:   backendLabel(baseURL),
+		AUBIgnored:     ignoredAddresses(),
+		AUBIgnoredWhy:  ignoredWhy(),
 	})
 }
 

@@ -57,6 +57,10 @@ type settingsBody struct {
 	// facts and a field that showed only the second would make a Save write it.
 	AUBEffectiveURL    string `json:"aub_effective_url,omitempty"`
 	AUBFromEnvironment bool   `json:"aub_from_environment,omitempty"`
+	// AUBIgnored and AUBIgnoredWhy: addresses a released Companion set aside
+	// (config.ApplyReleasePolicy), so the page can say why none is in use.
+	AUBIgnored    []string `json:"aub_ignored,omitempty"`
+	AUBIgnoredWhy string   `json:"aub_ignored_why,omitempty"`
 	// Debug and Backends mirror /api/status, so Settings can draw its chooser
 	// from one response.
 	Debug         bool             `json:"debug"`
@@ -88,7 +92,7 @@ func (s *Server) handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 func (s *Server) describeSettings() settingsBody {
 	settings := s.config()
 	body := settingsBody{
-		AUBBaseURL:     settings.AUBBaseURL,
+		AUBBaseURL:     settings.SavedAUB(),
 		Port:           settings.Port,
 		JobConcurrency: settings.JobConcurrency,
 		GameRoots:      settings.GameRoots,
@@ -108,6 +112,7 @@ func (s *Server) describeSettings() settingsBody {
 	if effective, err := settings.AUB(); err == nil {
 		body.AUBEffectiveURL = effective
 	}
+	body.AUBIgnored, body.AUBIgnoredWhy = ignoredAddresses(), ignoredWhy()
 	if path, err := config.Path(); err == nil {
 		body.ConfigPath = path
 	}
@@ -153,7 +158,7 @@ func (s *Server) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 		// address is a developer's act and needs `--debug` (HITL, NEW_244D).
 		// An address already saved is carried by a Save of the other fields,
 		// so a value set in a debug session does not make the page unsavable.
-		if !s.debug && !config.IsOfficialBackend(baseURL) && baseURL != strings.TrimSpace(s.config().AUBBaseURL) {
+		if !s.debug && !config.IsOfficialBackend(baseURL) && baseURL != s.config().SavedAUB() {
 			writeError(w, http.StatusForbidden, errors.New(
 				"only Auto-Pigeon or Auto-Pigeon beta can be chosen here; another server address needs the Companion started with --debug"))
 			return
@@ -324,4 +329,17 @@ func (s *Server) handleLanguagePut(w http.ResponseWriter, r *http.Request) {
 	s.settings.Language = updated.Language
 	s.mu.Unlock()
 	writeJSON(w, http.StatusOK, s.describeSettings())
+}
+
+// ignoredAddresses are the server addresses the release rule set aside.
+func ignoredAddresses() []string {
+	return config.IgnoredAddresses()
+}
+
+// ignoredWhy explains them, or is "" when there are none.
+func ignoredWhy() string {
+	if len(config.IgnoredAddresses()) == 0 {
+		return ""
+	}
+	return config.IgnoredExplanation
 }

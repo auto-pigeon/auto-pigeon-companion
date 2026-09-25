@@ -31,12 +31,15 @@
     // The field holds what the file holds, so pressing Save never copies an
     // environment variable's value into the file. The note says what is
     // actually in use when the two differ.
-    $("settings-aub-note").textContent = body.aub_from_environment
+    const ignored = (body.aub_ignored || []).length
+      ? ` Ignored: ${body.aub_ignored.join("; ")}. ${body.aub_ignored_why}`
+      : "";
+    $("settings-aub-note").textContent = (body.aub_from_environment
       ? `In use right now: ${body.aub_effective_url}, set when the Companion was started ` +
         `(environment, .env or the config.json beside the program). It wins over what is chosen here.`
       : body.aub_base_url
         ? "Saved. Signing in and My Maps use this server."
-        : "No server chosen. Nothing is contacted until you choose one; everything local works without it.";
+        : "No server chosen. Nothing is contacted until you choose one; everything local works without it.") + ignored;
 
     const paths = $("settings-paths");
     paths.replaceChildren();
