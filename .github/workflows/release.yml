@@ -369,6 +369,10 @@ jobs:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
+      # The assets are attached from $RUNNER_TEMP, which is not a checkout, so
+      # `gh` cannot find the repository from git there (runs 36062935436 and
+      # 36111051517 built and accepted everything, then published nothing).
+      GH_REPO: ${{ github.repository }}
       VERSION: ${{ needs.plan.outputs.version }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0

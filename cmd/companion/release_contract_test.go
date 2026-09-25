@@ -793,6 +793,10 @@ func TestOnlyThePublishJobCanWrite(t *testing.T) {
 	mustContain(t, "the publish job", jobs["publish"], "needs: [plan, bundle, acceptance]",
 		"needs.acceptance.result == 'success'", "--prerelease", "release-plan.py reconcile",
 		"release-plan.py upload-list")
+	// `gh release create/upload` runs inside the assets directory, outside the
+	// checkout; without GH_REPO it cannot name the repository and the publish
+	// step fails after everything else passed (runs 36062935436, 36111051517).
+	mustContain(t, "the publish job", jobs["publish"], "GH_REPO: ${{ github.repository }}")
 	if regexp.MustCompile(`gh release (create|upload)[^\n]*\./\*`).MatchString(jobs["publish"]) {
 		t.Error("the publish job attaches a glob; it attaches the upload list")
 	}
