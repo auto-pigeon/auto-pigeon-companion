@@ -56,12 +56,12 @@ func noWork() []ActiveWork { return nil }
 
 func TestClosingTheOnlyPageStopsAfterTheGraceAndNotBefore(t *testing.T) {
 	l, clock := newClockedLifecycle(true, nil)
-	release, _ := l.acquire(func(ExitCause) {})
+	release, _ := l.acquire("test page", func(ExitCause) {})
 	clock.Advance(time.Hour)
 	if _, stop := l.decide(noWork); stop {
 		t.Fatal("stopped while a page was open")
 	}
-	release()
+	release("test")
 	clock.Advance(14 * time.Second)
 	if _, stop := l.decide(noWork); stop {
 		t.Fatal("stopped inside the grace period")
@@ -74,15 +74,15 @@ func TestClosingTheOnlyPageStopsAfterTheGraceAndNotBefore(t *testing.T) {
 
 func TestAReloadInsideTheGraceDoesNotStop(t *testing.T) {
 	l, clock := newClockedLifecycle(true, nil)
-	release, _ := l.acquire(func(ExitCause) {})
-	release()
+	release, _ := l.acquire("test page", func(ExitCause) {})
+	release("test")
 	clock.Advance(2 * time.Second) // the new page's lease arrives
-	second, _ := l.acquire(func(ExitCause) {})
+	second, _ := l.acquire("test page", func(ExitCause) {})
 	clock.Advance(time.Minute)
 	if _, stop := l.decide(noWork); stop {
 		t.Fatal("a reload stopped the Companion")
 	}
-	second()
+	second("test")
 	clock.Advance(16 * time.Second)
 	if cause, stop := l.decide(noWork); !stop || cause != ExitUIClosed {
 		t.Fatalf("closing the reloaded page: stop=%v cause=%q", stop, cause)
@@ -91,10 +91,10 @@ func TestAReloadInsideTheGraceDoesNotStop(t *testing.T) {
 
 func TestTwoPagesClosingOneDoesNothingClosingTheLastStops(t *testing.T) {
 	l, clock := newClockedLifecycle(true, nil)
-	first, _ := l.acquire(func(ExitCause) {})
-	second, _ := l.acquire(func(ExitCause) {})
-	first()
-	first() // idempotent: a double release must not count as the second page
+	first, _ := l.acquire("test page", func(ExitCause) {})
+	second, _ := l.acquire("test page", func(ExitCause) {})
+	first("test")
+	first("test") // idempotent: a double release must not count as the second page
 	clock.Advance(time.Minute)
 	if _, stop := l.decide(noWork); stop {
 		t.Fatal("closing one of two pages stopped the Companion")
@@ -102,7 +102,7 @@ func TestTwoPagesClosingOneDoesNothingClosingTheLastStops(t *testing.T) {
 	if l.Leases() != 1 {
 		t.Fatalf("leases = %d, want 1", l.Leases())
 	}
-	second()
+	second("test")
 	clock.Advance(16 * time.Second)
 	if cause, stop := l.decide(noWork); !stop || cause != ExitUIClosed {
 		t.Fatalf("closing the last page: stop=%v cause=%q", stop, cause)
@@ -111,8 +111,8 @@ func TestTwoPagesClosingOneDoesNothingClosingTheLastStops(t *testing.T) {
 
 func TestServerModeNeverStopsOnItsOwn(t *testing.T) {
 	l, clock := newClockedLifecycle(false, nil)
-	release, _ := l.acquire(func(ExitCause) {})
-	release()
+	release, _ := l.acquire("test page", func(ExitCause) {})
+	release("test")
 	clock.Advance(24 * time.Hour)
 	if _, stop := l.decide(noWork); stop {
 		t.Fatal("server mode stopped because no page was open")
@@ -134,8 +134,8 @@ func TestNoPageWithinTheStartupWindowStops(t *testing.T) {
 func TestRunningWorkKeepsItAliveSaysSoOnceAndStopsWhenItEnds(t *testing.T) {
 	var notices []string
 	l, clock := newClockedLifecycle(true, func(summary string) { notices = append(notices, summary) })
-	release, _ := l.acquire(func(ExitCause) {})
-	release()
+	release, _ := l.acquire("test page", func(ExitCause) {})
+	release("test")
 	clock.Advance(20 * time.Second)
 
 	work := []ActiveWork{{Kind: "job", ID: "j1", Label: "Compile — qbsp", State: "running"}}
@@ -163,17 +163,17 @@ func TestRunningWorkKeepsItAliveSaysSoOnceAndStopsWhenItEnds(t *testing.T) {
 
 func TestAPageThatComesBackWhileWorkRunsCancelsTheWait(t *testing.T) {
 	l, clock := newClockedLifecycle(true, nil)
-	release, _ := l.acquire(func(ExitCause) {})
-	release()
+	release, _ := l.acquire("test page", func(ExitCause) {})
+	release("test")
 	clock.Advance(20 * time.Second)
 	busy := []ActiveWork{{Kind: "build", ID: "b1", Label: "Build e1m1"}}
 	l.decide(func() []ActiveWork { return busy })
-	again, _ := l.acquire(func(ExitCause) {})
+	again, _ := l.acquire("test page", func(ExitCause) {})
 	busy = nil
 	if _, stop := l.decide(func() []ActiveWork { return busy }); stop {
 		t.Fatal("stopped with a page open")
 	}
-	again()
+	again("test")
 	clock.Advance(16 * time.Second)
 	if cause, _ := l.decide(noWork); cause != ExitUIClosed {
 		t.Fatalf("cause = %q: a page came back, so this is a close, not a work-finished", cause)
@@ -183,8 +183,8 @@ func TestAPageThatComesBackWhileWorkRunsCancelsTheWait(t *testing.T) {
 func TestTheFirstCauseWinsAndOpenPagesAreTold(t *testing.T) {
 	l, _ := newClockedLifecycle(true, nil)
 	var told []ExitCause
-	release, _ := l.acquire(func(cause ExitCause) { told = append(told, cause) })
-	defer release()
+	release, _ := l.acquire("test page", func(cause ExitCause) { told = append(told, cause) })
+	defer release("test")
 	l.Stop(ExitQuit)
 	l.Stop(ExitInterrupted)
 	if l.Cause() != ExitQuit {
@@ -198,7 +198,7 @@ func TestTheFirstCauseWinsAndOpenPagesAreTold(t *testing.T) {
 	default:
 		t.Fatal("Done is not closed")
 	}
-	if _, stopping := l.acquire(func(ExitCause) {}); !stopping {
+	if _, stopping := l.acquire("test page", func(ExitCause) {}); !stopping {
 		t.Fatal("a lease was granted after the process decided to stop")
 	}
 }
@@ -573,5 +573,113 @@ func TestClosingTheServerEndsHostedListingsAtOnce(t *testing.T) {
 	}
 	if len(advertiser.Active()) != 0 {
 		t.Error("the advertisement is still active after Close")
+	}
+}
+
+// capturedLog is a Logf that keeps what it was told, for the log's own tests.
+type capturedLog struct {
+	mu    sync.Mutex
+	lines []string
+}
+
+func (c *capturedLog) Logf(format string, args ...any) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.lines = append(c.lines, fmt.Sprintf(format, args...))
+}
+
+func (c *capturedLog) text() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return strings.Join(c.lines, "\n")
+}
+
+// NEW_254: "it did not stop" is answered from companion.log, so the log must
+// say each lease that opened, why each one ended with how many are left, the
+// grace starting, and every refused lease — and never the token.
+func TestTheLogSaysEveryLeaseWhyItEndedAndEveryRefusal(t *testing.T) {
+	log := &capturedLog{}
+	lifecycle := NewLifecycle(LifecycleOptions{Interactive: true, CloseGrace: 7 * time.Second, Logf: log.Logf})
+	server, err := NewServer(Options{Version: "test", Jobs: newTestJobs(t), Lifecycle: lifecycle, Logf: log.Logf})
+	if err != nil {
+		t.Fatal(err)
+	}
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	httpServer := &httptest.Server{Listener: listener, Config: &http.Server{Handler: server}}
+	httpServer.Start()
+	t.Cleanup(httpServer.Close)
+	address := httpServer.Listener.Addr().String()
+	origin := "http://" + address
+	token := server.Token().Value()
+
+	// A tab closed: the browser's close frame, 1001.
+	first, _ := dialLease(t, address, address, origin, token)
+	first.message(t)
+	second, _ := dialLease(t, address, address, origin, token)
+	second.message(t)
+	waitFor(t, "two leases", func() bool { return lifecycle.Leases() == 2 })
+	first.send(t, opClose, closePayload(1001, ""))
+	waitFor(t, "one lease", func() bool { return lifecycle.Leases() == 1 })
+	// A crashed renderer: the socket just goes.
+	second.conn.Close()
+	waitFor(t, "no lease", func() bool { return lifecycle.Leases() == 0 })
+	// A page from an earlier run.
+	if refused, _ := dialLease(t, address, address, origin, "an-earlier-runs-token"); refused != nil {
+		t.Fatal("a lease was granted to another run's token")
+	}
+
+	said := log.text()
+	for _, want := range []string{
+		"page lease 0 opened (port ",
+		"page lease 1 opened (port ",
+		"; 2 page(s) open",
+		"page lease 0 closed after ",
+		"the page closed it (code 1001, going away: a tab closed or navigated); 1 page(s) open",
+		"page lease 1 closed after ",
+		"the browser closed the socket without a close frame; 0 page(s) open",
+		"no page is open; stopping in 7s unless a page opens or work is running",
+		"a page's lease was refused (port ",
+		"401 this request needs the local API token",
+	} {
+		if !strings.Contains(said, want) {
+			t.Errorf("the log does not say %q:\n%s", want, said)
+		}
+	}
+	if strings.Contains(said, token) || strings.Contains(said, "an-earlier-runs-token") ||
+		strings.Contains(said, leaseTokenPrefix) {
+		t.Errorf("the log carries a token:\n%s", said)
+	}
+
+	lifecycle.Stop(ExitQuit)
+	if said := log.text(); !strings.Contains(said, "stop decided, cause quit; 0 page(s) open") {
+		t.Errorf("the stop is not in the log:\n%s", said)
+	}
+}
+
+func TestServerModeSaysItKeepsRunningWhenTheLastPageCloses(t *testing.T) {
+	log := &capturedLog{}
+	l := NewLifecycle(LifecycleOptions{Logf: log.Logf})
+	release, _ := l.acquire("a page", func(ExitCause) {})
+	release("a test")
+	if said := log.text(); !strings.Contains(said, "no page is open; server mode keeps running") ||
+		strings.Contains(said, "stopping in") {
+		t.Errorf("server mode's log:\n%s", said)
+	}
+}
+
+func TestTheLeasePeerIsThePortAndTheBrowserAndNothingElse(t *testing.T) {
+	r := httptest.NewRequest(http.MethodGet, leasePath, nil)
+	r.RemoteAddr = "127.0.0.1:50123"
+	r.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0) Chrome/150.0\r\nX-Injected: 1")
+	r.Header.Set("Sec-WebSocket-Protocol", leaseProtocol+", "+leaseTokenPrefix+"secret")
+	got := leasePeer(r)
+	if got != "port 50123, Mozilla/5.0 (Windows NT 10.0) Chrome/150.0X-Injected: 1" {
+		t.Errorf("leasePeer = %q", got)
+	}
+	if strings.Contains(got, "secret") {
+		t.Error("the peer description carries the token")
 	}
 }

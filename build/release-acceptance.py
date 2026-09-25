@@ -26,6 +26,11 @@ release as a user receives it.
   8. INTERACTIVE CLOSE (NEW_247B): the unpacked Companion in application mode
      holds one page's lease; closing that page stops the process after its
      grace period, with the causal line, no listener left and no token file
+  9. BROWSER CLOSE (NEW_254): the same with a real Chromium-family browser's
+     pages — two tabs hold two leases, closing one keeps the Companion, closing
+     the last one in a browser that stays open stops it. Skipped, and said,
+     on a machine with no such browser. Headless: evidence about the page, the
+     lease and the process, not about a person's desktop.
 """
 
 import argparse
@@ -81,6 +86,11 @@ class Run:
         self.results.append({"step": step, "result": "pass" if ok else "fail", "detail": detail})
         print(f"{'PASS' if ok else 'FAIL'}  {step}: {detail}")
         return ok
+
+    def skip(self, step, why):
+        """A step this machine cannot run. Said, counted, and not a pass."""
+        self.results.append({"step": step, "result": "skip", "detail": why})
+        print(f"SKIP  {step}: {why}")
 
 
 def files_named(root, prefix):
@@ -158,6 +168,249 @@ def interactive_close(run, companion, grace_seconds=2):
                     f"listener {'STILL OPEN' if listening else 'closed'}; token file "
                     f"{'LEFT' if token_left else 'removed'}; said {said.strip().splitlines()[-1:]!r}")
     finally:
+        if child.poll() is None:
+            child.kill()
+            child.wait()
+
+
+def find_browser():
+    """A Chromium-family browser on this machine, or None. AUCOM_TEST_BROWSER
+    names one explicitly. The runners' images carry Chrome and Edge in their
+    standard places; a person's machine usually does too."""
+    named = os.environ.get("AUCOM_TEST_BROWSER", "").strip()
+    if named:
+        return named
+    candidates = []
+    if os.name == "nt":
+        for root in (os.environ.get("ProgramFiles", ""), os.environ.get("ProgramFiles(x86)", ""),
+                     os.environ.get("LOCALAPPDATA", "")):
+            if root:
+                candidates += [os.path.join(root, "Google", "Chrome", "Application", "chrome.exe"),
+                               os.path.join(root, "Microsoft", "Edge", "Application", "msedge.exe")]
+    elif sys.platform == "darwin":
+        candidates += ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                       "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+                       "/Applications/Chromium.app/Contents/MacOS/Chromium"]
+    for name in ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "microsoft-edge", "chrome"):
+        found = shutil.which(name)
+        if found:
+            candidates.append(found)
+    for candidate in candidates:
+        if os.path.isfile(candidate):
+            return candidate
+    return None
+
+
+def loopback_http(port, method, path, headers=None):
+    """One HTTP request to THIS machine, over a raw socket like step 8's page:
+    the release tools have no HTTP client, so nothing here can be pointed at
+    another host. Returns (status, body)."""
+    connection = socket.create_connection(("127.0.0.1", int(port)), timeout=10)
+    try:
+        extra = "".join(f"{name}: {value}\r\n" for name, value in (headers or {}).items())
+        connection.sendall((f"{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{extra}"
+                            "Content-Length: 0\r\nConnection: close\r\n\r\n").encode())
+        answer = b""
+        while b"\r\n\r\n" not in answer:
+            chunk = connection.recv(65536)
+            if not chunk:
+                break
+            answer += chunk
+        head, _, body = answer.partition(b"\r\n\r\n")
+        fields = {}
+        for line in head.split(b"\r\n")[1:]:
+            name, _, value = line.partition(b":")
+            fields[name.strip().lower()] = value.strip()
+        # Read what the response says it is; a server that keeps the
+        # connection open despite `Connection: close` still ends here.
+        if b"content-length" in fields:
+            length = int(fields[b"content-length"])
+            while len(body) < length:
+                chunk = connection.recv(65536)
+                if not chunk:
+                    break
+                body += chunk
+        else:
+            while True:
+                chunk = connection.recv(65536)
+                if not chunk:
+                    break
+                body += chunk
+    finally:
+        connection.close()
+    status = int(head.split(b" ", 2)[1]) if head.startswith(b"HTTP/") else 0
+    if fields.get(b"transfer-encoding", b"").lower() == b"chunked":
+        plain = b""
+        while body:
+            size, _, rest = body.partition(b"\r\n")
+            length = int(size.split(b";")[0] or b"0", 16)
+            if length == 0:
+                break
+            plain, body = plain + rest[:length], rest[length + 2:]
+        body = plain
+    return status, body.decode("utf-8", errors="replace")
+
+
+class Browser:
+    """A real browser with a profile of its own, driven through its DevTools
+    HTTP endpoints only — open a tab, list them, close one. No WebSocket client
+    and no automation library: closing a tab here is the browser closing a tab,
+    exactly as a person's click does, and the page's own lease script runs."""
+
+    def __init__(self, executable, work):
+        self.profile = os.path.join(work, "browser-profile")
+        os.makedirs(self.profile, exist_ok=True)
+        args = [executable, "--headless=new", "--remote-debugging-port=0", f"--user-data-dir={self.profile}",
+                "--no-first-run", "--no-default-browser-check", "--disable-extensions", "about:blank"]
+        if sys.platform.startswith("linux"):
+            # A hosted Linux runner's AppArmor refuses Chrome's user-namespace
+            # sandbox; the only page it loads is this Companion's.
+            args.insert(1, "--no-sandbox")
+        self.process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        active = os.path.join(self.profile, "DevToolsActivePort")
+        deadline = time.monotonic() + 30
+        self.port = None
+        while time.monotonic() < deadline and self.process.poll() is None:
+            if os.path.isfile(active):
+                first = open(active, encoding="utf-8").read().splitlines()[:1]
+                if first and first[0].strip().isdigit():
+                    self.port = int(first[0])
+                    break
+            time.sleep(0.1)
+        if self.port is None:
+            self.close()
+            raise RuntimeError(f"the browser did not start its DevTools endpoint (exit {self.process.poll()})")
+
+    def call(self, path, method="GET"):
+        status, body = loopback_http(self.port, method, path)
+        if status != 200:
+            raise RuntimeError(f"the browser answered {method} {path} with {status}: {body[:200]!r}")
+        return json.loads(body) if body.strip().startswith(("{", "[")) else body
+
+    def open_tab(self, url):
+        return self.call("/json/new?" + url, method="PUT")["id"]
+
+    def close_tab(self, target):
+        self.call(f"/json/close/{target}")
+
+    def close(self):
+        if self.process.poll() is None:
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait()
+        shutil.rmtree(self.profile, ignore_errors=True)
+
+
+def browser_close(run, companion, work, grace_seconds=3):
+    """NEW_254: the lifecycle with a REAL browser's page, not a raw socket.
+    Two tabs hold two leases; closing one leaves the Companion running past its
+    grace; closing the last one, in a browser that stays open, stops it. The
+    Companion is started as the no-argument launch starts it (application mode)
+    minus the system opener, whose browser a runner cannot drive. Returns
+    (ok, detail), or (None, why) when this machine has no browser."""
+    executable = find_browser()
+    if not executable:
+        return None, "no Chromium-family browser on this machine (set AUCOM_TEST_BROWSER to name one)"
+    child = subprocess.Popen([companion, "serve", "--interactive", f"--close-grace={grace_seconds}s",
+                              "--startup-window=180s"], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                             text=True, env=run.env())
+    lines = []
+    threading.Thread(target=lambda: [lines.append(line) for line in child.stdout], daemon=True).start()
+    browser = None
+    steps = []
+    began = time.monotonic()
+
+    def at(text):
+        steps.append(f"[{time.monotonic() - began:.1f}s] {text}")
+
+    def log_lines():
+        logs = files_named(run.home, "companion.log")
+        if not logs:
+            return []
+        text = open(logs[0], encoding="utf-8", errors="replace").read().splitlines()
+        # Only the lifecycle's own lines: they carry no path and no token.
+        return [line for line in text if re.search(r" (lifecycle|browser|shutdown): ", line)]
+
+    try:
+        deadline = time.monotonic() + 60
+        address = None
+        while time.monotonic() < deadline and address is None and child.poll() is None:
+            for line in list(lines):
+                found = re.search(r"is running at http://([0-9.]+:[0-9]+)/", line)
+                if found:
+                    address = found.group(1)
+            time.sleep(0.05)
+        if address is None:
+            return False, f"no address printed: {lines!r}"
+        at(f"listening on {address}")
+        token = open(files_named(run.home, "api-token")[0], encoding="utf-8").read().strip()
+
+        def leases():
+            status, body = loopback_http(address.split(":")[1], "GET", "/api/lifecycle", {"X-AUCOM-Token": token})
+            if status != 200:
+                raise RuntimeError(f"/api/lifecycle answered {status}: {body[:200]!r}")
+            return json.loads(body)["leases"]
+
+        def wait_leases(count, bound=30):
+            end = time.monotonic() + bound
+            seen = None
+            while time.monotonic() < end:
+                seen = leases()
+                if seen == count:
+                    return True
+                time.sleep(0.2)
+            at(f"waited {bound}s for {count} lease(s), saw {seen}")
+            return False
+
+        browser = Browser(executable, work)
+        version = browser.call("/json/version").get("Browser", os.path.basename(executable))
+        at(version)
+        first = browser.open_tab(f"http://{address}/")
+        # A fresh profile's FIRST request can wait tens of seconds inside the
+        # browser before it is sent (measured: 25 s for headless Chrome 150 on
+        # Linux, with the Companion answering in under a millisecond). That is
+        # the browser starting, not the page, so the first bound is generous.
+        if not wait_leases(1, bound=90):
+            return False, "; ".join(steps + ["the first tab never took a lease"] + log_lines())
+        second = browser.open_tab(f"http://{address}/")
+        if not wait_leases(2):
+            return False, "; ".join(steps + ["the second tab never took a lease"] + log_lines())
+        at("two tabs, two leases")
+        browser.close_tab(first)
+        if not wait_leases(1, bound=10):
+            return False, "; ".join(steps + ["closing a tab did not end its lease"] + log_lines())
+        time.sleep(grace_seconds + 2)
+        if child.poll() is not None:
+            return False, "; ".join(steps + [f"stopped (exit {child.returncode}) while a tab was still open"])
+        at(f"one tab closed, still running {grace_seconds + 2}s later")
+        browser.close_tab(second)
+        closed = time.monotonic()
+        try:
+            code = child.wait(timeout=grace_seconds + 30)
+        except subprocess.TimeoutExpired:
+            return False, "; ".join(steps + [f"still running {grace_seconds + 30}s after its last tab closed"]
+                                    + log_lines())
+        waited = time.monotonic() - closed
+        said = "".join(lines)
+        host_, port = address.split(":")
+        try:
+            socket.create_connection((host_, int(port)), timeout=2).close()
+            listening = True
+        except OSError:
+            listening = False
+        ok = (code == 0 and waited >= grace_seconds and "its last browser window was closed" in said
+              and not listening)
+        at(f"last tab closed in a browser still running: exit {code} {waited:.1f}s later "
+                     f"(grace {grace_seconds}s), listener {'STILL OPEN' if listening else 'closed'}")
+        return ok, "; ".join(steps + log_lines())
+    except Exception as error:  # noqa: BLE001 — the step reports, never crashes the run
+        return False, "; ".join(steps + [f"{type(error).__name__}: {error}"] + log_lines())
+    finally:
+        if browser is not None:
+            browser.close()
         if child.poll() is None:
             child.kill()
             child.wait()
@@ -271,7 +524,14 @@ def main():
     ok, detail = interactive_close(run, companion)
     run.check("interactive close", ok, detail)
 
-    failed = [result for result in run.results if result["result"] != "pass"]
+    # 9. The same lifecycle with a real browser's pages (NEW_254).
+    ok, detail = browser_close(run, companion, work)
+    if ok is None:
+        run.skip("browser close", detail)
+    else:
+        run.check("browser close", ok, detail)
+
+    failed = [result for result in run.results if result["result"] == "fail"]
     report = {
         "schema": "aucom.release-acceptance/1.0",
         "archive": os.path.basename(args.archive),
@@ -287,7 +547,9 @@ def main():
         with open(args.report, "w", encoding="utf-8") as handle:
             json.dump(report, handle, indent=2)
             handle.write("\n")
-    print(f"{report['verdict'].upper()}: {len(run.results) - len(failed)}/{len(run.results)} steps")
+    skipped = [result for result in run.results if result["result"] == "skip"]
+    print(f"{report['verdict'].upper()}: {len(run.results) - len(failed) - len(skipped)}/{len(run.results)} steps"
+          + (f", {len(skipped)} skipped" if skipped else ""))
     return 0 if not failed else 1
 
 

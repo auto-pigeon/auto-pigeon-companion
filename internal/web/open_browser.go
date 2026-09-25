@@ -43,6 +43,17 @@ func OpenBrowser(url string) error {
 	return nil
 }
 
+// BrowserCommand is the command [OpenBrowser] runs on this platform, without
+// the URL, for the log: which opener was asked is the first thing to know when
+// a page did not appear.
+func BrowserCommand() string {
+	name, args, err := openCommand(runtime.GOOS, "http://127.0.0.1/")
+	if err != nil {
+		return "none"
+	}
+	return strings.TrimSpace(name + " " + strings.Join(args[:len(args)-1], " "))
+}
+
 // openCommand is the platform table, split out so every branch is testable from
 // any host.
 func openCommand(goos, url string) (string, []string, error) {

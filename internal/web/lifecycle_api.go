@@ -25,9 +25,12 @@ const hostedLeaseEndTimeout = 5 * time.Second
 // request did not say to cancel it. The page shows the list and asks.
 const codeWorkActive = "work_active"
 
+// leasePath is the page's lease route.
+const leasePath = "/api/lifecycle/lease"
+
 func (s *Server) lifecycleAPI() map[string]http.HandlerFunc {
 	return map[string]http.HandlerFunc{
-		"GET /api/lifecycle/lease": s.handleLease,
+		"GET " + leasePath:         s.handleLease,
 		"GET /api/lifecycle":       s.handleLifecycle,
 		"POST /api/lifecycle/quit": s.handleQuit,
 	}

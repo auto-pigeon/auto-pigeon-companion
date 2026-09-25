@@ -286,6 +286,26 @@ func TestClosingTheOnlyPageStopsAnInteractiveCompanion(t *testing.T) {
 	if err != nil || !strings.Contains(string(logged), "listening on http://") || !strings.Contains(string(logged), "cause ui_closed") {
 		t.Errorf("the detail log does not hold the server's lines: %v %q", err, logged)
 	}
+	// NEW_254: the lines that answer "why did it not stop" — which process and
+	// mode, which opener was asked, each lease and why it ended, the grace, the
+	// decision, and how long each shutdown phase took.
+	for _, want := range []string{
+		"lifecycle: interactive, pid ", "close grace 400ms, startup window 3m0s",
+		"browser: asked the system to open http://", " with ",
+		"lifecycle: page lease 0 opened (port ", "; 1 page(s) open",
+		"lifecycle: page lease 0 closed after ", "; 0 page(s) open",
+		"lifecycle: no page is open; stopping in 400ms unless a page opens or work is running",
+		"lifecycle: stop decided, cause ui_closed",
+		"shutdown: builds, Build & Run and hosted listings ended ",
+		"shutdown: jobs closed ", "printing the exit line and exiting",
+	} {
+		if !strings.Contains(string(logged), want) {
+			t.Errorf("the detail log does not say %q:\n%s", want, logged)
+		}
+	}
+	if strings.Contains(string(logged), s.token) {
+		t.Error("the detail log carries the API token")
+	}
 	s.assertGone()
 }
 

@@ -131,6 +131,17 @@ OS family (`NATIVE_RUNNERS`), and refuses to run on a machine the archive is
 not for. A pass there is not written into `native-support.json`. Only a
 returned kit bundle is.
 
+**A raw socket is not a page (NEW_254).** Step 8 holds a lease with a
+hand-written WebSocket; step 9 (`browser close`) opens the Companion in a real
+Chromium-family browser found on the runner — two tabs, close one, close the
+last in a browser that stays open — through the browser's DevTools HTTP
+endpoints and `loopback_http`, a raw socket to 127.0.0.1, because the release
+tools may hold no HTTP client (`TestNoWorkflowOrReleaseToolRegainsADownloadPath`).
+A machine with no such browser reports `skip`, which is not a pass. Both steps
+start `serve --interactive`, the no-argument launch minus the system opener,
+and both are headless evidence: neither is a person's double-click, and
+neither moves a row of `native-support.json`.
+
 **Reruns compare and never overwrite.** Archives are written by
 `releaselib.write_zip` with fixed times, order and permissions, so one commit
 gives one set of bytes. `reconcile` fails on any attached asset whose digest

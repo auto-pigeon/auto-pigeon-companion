@@ -415,6 +415,14 @@ func (s *Server) api() map[string]http.HandlerFunc {
 func (s *Server) guard(handler http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if status, err := checkRequest(r, s.token); err != nil {
+			if r.URL.Path == leasePath {
+				// A page whose lease is refused is a page the lifecycle
+				// cannot see, so it is said in the log. Origin, Host and
+				// Sec-Fetch-Site are what the checks read; the token is not
+				// written anywhere.
+				s.logf("lifecycle: a page's lease was refused (%s): %d %v; Host %q, Origin %q, Sec-Fetch-Site %q",
+					leasePeer(r), status, err, r.Host, r.Header.Get("Origin"), r.Header.Get("Sec-Fetch-Site"))
+			}
 			body := errorBody{Error: err.Error()}
 			if status == http.StatusUnauthorized {
 				body.Code = codeTokenRefused

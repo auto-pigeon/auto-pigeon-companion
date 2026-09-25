@@ -132,4 +132,19 @@ What binds a task here:
   and waited for, then processes stop gracefully-then-forcefully.
 - **The terminal is two lines and one causal exit line** in interactive mode;
   detail goes to `companion.log`. Server mode's output is unchanged.
+- **The lifecycle narrates itself in `companion.log` (NEW_254).** Every lease
+  opened (browser-side port and user agent) and closed (why: the page's close
+  frame and its code, a socket that just went, a beat that failed, the process
+  stopping) with the count left; the grace starting; a refused lease with the
+  check that refused it; the stop decision; each shutdown phase timed from it.
+  That is what separates *wrong mode*, *no lease*, *refused handshake*, *a
+  second page still open*, *work running* and *a slow shutdown* without a
+  guess — so a change to the lifecycle keeps those lines, and none of them may
+  carry the token or a subprotocol.
+- **Windows is not accepted until a person's no-flag double-click is.** CI's
+  raw-socket step and its headless-browser step are evidence about the
+  lifecycle on Windows, not about a double-clicked program in a real desktop
+  session. As of 2026-09-25 the operator reports that closing the tab does not
+  stop a double-clicked 1.161 on Windows, with no trace yet; the diagnostic and
+  the next step are in the NEW_254 handoff.
 

@@ -114,13 +114,18 @@ func (s *Server) handleLease(w http.ResponseWriter, r *http.Request) {
 	conn, rw, err := upgradeWebSocket(w, r)
 	if err != nil {
 		// upgradeWebSocket has already answered.
+		s.logf("lifecycle: a page's lease handshake was refused (%s): %v", leasePeer(r), err)
 		return
 	}
 	lease := &leaseConn{conn: conn}
 	defer conn.Close()
 
-	release, stopping := s.lifecycle.acquire(lease.stop)
-	defer release()
+	release, stopping := s.lifecycle.acquire(leasePeer(r), lease.stop)
+	// Why this lease ended, as the log says it: the browser closing the
+	// socket (a tab closed, a reload, a crash), the page's own close frame,
+	// or the Companion stopping. Set by whichever of those came first.
+	reason := "the connection ended"
+	defer func() { release(lease.endReason(reason)) }()
 	if stopping {
 		lease.stop(s.lifecycle.Cause())
 		return
@@ -132,6 +137,7 @@ func (s *Server) handleLease(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := lease.send(leaseMessage{Type: "hello", Mode: mode,
 		GraceSeconds: int(s.lifecycle.CloseGrace() / time.Second), Version: s.version}); err != nil {
+		reason = "the hello could not be sent: " + err.Error()
 		return
 	}
 
@@ -147,7 +153,8 @@ func (s *Server) handleLease(w http.ResponseWriter, r *http.Request) {
 			case <-done:
 				return
 			case <-ticker.C:
-				if lease.send(leaseMessage{Type: "beat"}) != nil {
+				if err := lease.send(leaseMessage{Type: "beat"}); err != nil {
+					lease.setEnd("a beat could not be written: " + err.Error())
 					conn.Close()
 					return
 				}
@@ -159,18 +166,66 @@ func (s *Server) handleLease(w http.ResponseWriter, r *http.Request) {
 	for {
 		opcode, payload, err := readFrame(rw.Reader, leaseMaxFrame)
 		if err != nil {
+			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+				reason = "the browser closed the socket without a close frame"
+			} else {
+				reason = "reading from the page failed: " + err.Error()
+			}
 			return
 		}
 		switch opcode {
 		case opClose:
+			reason = "the page closed it" + describeClose(payload)
 			lease.write(opClose, closePayload(1000, ""))
 			return
 		case opPing:
-			if lease.write(opPong, payload) != nil {
+			if err := lease.write(opPong, payload); err != nil {
+				reason = "a pong could not be written: " + err.Error()
 				return
 			}
 		}
 	}
+}
+
+// leasePeer describes the page holding a lease, for the log: the connection's
+// local port on the browser's side and the browser's own name and version.
+// Never a header that could carry a credential, and never the subprotocols.
+func leasePeer(r *http.Request) string {
+	peer := r.RemoteAddr
+	if _, port, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		peer = "port " + port
+	}
+	agent := strings.Map(func(c rune) rune {
+		if c < 0x20 || c == 0x7f {
+			return -1
+		}
+		return c
+	}, r.UserAgent())
+	if len(agent) > 160 {
+		agent = agent[:160] + "…"
+	}
+	if agent == "" {
+		agent = "no user agent"
+	}
+	return peer + ", " + agent
+}
+
+// describeClose renders a close frame's status code and reason for the log.
+// 1001 is what a browser sends when the tab or window is closed or the page is
+// navigated away.
+func describeClose(payload []byte) string {
+	if len(payload) < 2 {
+		return " with no status code"
+	}
+	code := binary.BigEndian.Uint16(payload)
+	text := fmt.Sprintf(" (code %d", code)
+	if code == 1001 {
+		text += ", going away: a tab closed or navigated"
+	}
+	if reason := strings.TrimSpace(string(payload[2:])); reason != "" {
+		text += ", " + fmt.Sprintf("%q", reason)
+	}
+	return text + ")"
 }
 
 // leaseConn serialises writes: the beat, the hello and the stop come from
@@ -179,6 +234,28 @@ type leaseConn struct {
 	mu     sync.Mutex
 	conn   net.Conn
 	closed bool
+	// end is why the lease ended when it was not the page's side that ended
+	// it: the Companion stopping, or a beat that could not be written.
+	end string
+}
+
+// setEnd records why the lease ended, first reason wins.
+func (c *leaseConn) setEnd(reason string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.end == "" {
+		c.end = reason
+	}
+}
+
+// endReason is the recorded reason if there is one, else the reader's.
+func (c *leaseConn) endReason(reader string) string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.end != "" {
+		return c.end
+	}
+	return reader
 }
 
 func (c *leaseConn) write(opcode byte, payload []byte) error {
@@ -203,6 +280,7 @@ func (c *leaseConn) send(message leaseMessage) error {
 // stop tells the page why the process is stopping, then closes: 1001 is
 // "going away", which is what a server shutting down says.
 func (c *leaseConn) stop(cause ExitCause) {
+	c.setEnd("the Companion is stopping (" + string(cause) + ")")
 	c.send(leaseMessage{Type: "stopping", Cause: cause})
 	c.write(opClose, closePayload(1001, string(cause)))
 	c.mu.Lock()

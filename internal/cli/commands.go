@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -295,6 +297,7 @@ func runServe(env *Env, args []string) int {
 		Interactive:   *interactive,
 		CloseGrace:    *closeGrace,
 		StartupWindow: *startupWindow,
+		Logf:          logf,
 		Notify: func(summary string) {
 			logf("lifecycle: no page is open; still running: %s", summary)
 			fmt.Fprintf(env.Stdout, "The page is closed. Auto-Pigeon Companion keeps running until this finishes: %s.\n"+
@@ -365,6 +368,10 @@ func runServe(env *Env, args []string) int {
 	url = web.URL(listener)
 	if *interactive {
 		logf("companion %s listening on %s", env.Version, url)
+		// The facts a report of "it did not stop" is read against: which
+		// process, which build, and the lifecycle it runs under.
+		logf("lifecycle: interactive, pid %d, %s/%s, close grace %s, startup window %s",
+			os.Getpid(), runtime.GOOS, runtime.GOARCH, *closeGrace, *startupWindow)
 	} else {
 		fmt.Fprintf(env.Stdout, "companion %s listening on %s\n", env.Version, url)
 	}
@@ -380,9 +387,9 @@ func runServe(env *Env, args []string) int {
 
 	opened := false
 	if *open {
-		opener := env.OpenBrowser
+		opener, how := env.OpenBrowser, "the opener this run was given"
 		if opener == nil {
-			opener = web.OpenBrowser
+			opener, how = web.OpenBrowser, web.BrowserCommand()
 		}
 		// Never fatal: the URL is printed, and a machine with no browser
 		// handler should still be able to use the server.
@@ -390,6 +397,7 @@ func runServe(env *Env, args []string) int {
 		if *openArea == "games" {
 			page = url + "#games"
 		}
+		asked := time.Now()
 		if err := opener(page); err != nil {
 			logf("warning: %v", err)
 			if !*interactive {
@@ -398,6 +406,8 @@ func runServe(env *Env, args []string) int {
 			}
 		} else {
 			opened = true
+			logf("browser: asked the system to open %s with %s; it returned in %s",
+				page, how, time.Since(asked).Round(time.Millisecond))
 		}
 	}
 
@@ -439,7 +449,8 @@ func runServe(env *Env, args []string) int {
 	// An interrupt that arrived while nothing else had decided.
 	lifecycle.Stop(web.ExitInterrupted)
 	cause := lifecycle.Cause()
-	logf("lifecycle: stopping, cause %s", cause)
+	decided := lifecycle.StoppedAt()
+	logf("lifecycle: stopping, cause %s; the listener closed %s after the decision", cause, since(decided))
 	if serveErr != nil {
 		return fail(env, serveErr)
 	}
@@ -449,7 +460,9 @@ func runServe(env *Env, args []string) int {
 		// hence the explicit Close calls here, which the defers then repeat
 		// harmlessly.
 		server.Close()
+		logf("shutdown: builds, Build & Run and hosted listings ended %s after the decision", since(decided))
 		service.Close()
+		logf("shutdown: jobs closed %s after the decision; printing the exit line and exiting", since(decided))
 		fmt.Fprintln(env.Stdout, web.ExitLine(cause, *startupWindow))
 		if detailPath != "" && cause == web.ExitStartupTimeout {
 			fmt.Fprintf(env.Stdout, "Details: %s\n", detailPath)
@@ -659,6 +672,14 @@ func runMigrate(env *Env, args []string) int {
 		fmt.Fprintln(env.Stdout)
 	}
 	return 0
+}
+
+// since is how long ago t was, rounded for a log line.
+func since(t time.Time) time.Duration {
+	if t.IsZero() {
+		return 0
+	}
+	return time.Since(t).Round(time.Millisecond)
 }
 
 // startupNotice is what an interactive Companion tells the terminal when it

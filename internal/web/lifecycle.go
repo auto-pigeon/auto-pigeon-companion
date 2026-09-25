@@ -106,6 +106,12 @@ type LifecycleOptions struct {
 	// terminal line, because only the caller knows the address to name in it.
 	// Nil discards it.
 	Notify func(summary string)
+	// Logf receives the lifecycle's own account of itself — each page lease
+	// opened and closed with the count left, the grace period starting, the
+	// stop decided — for the detail log. It is what a person reads when the
+	// process did not stop and they need to know which of those did not
+	// happen. Nil discards it.
+	Logf func(format string, args ...any)
 	// Now and Poll are the clock, for tests.
 	Now  func() time.Time
 	Poll time.Duration
@@ -117,6 +123,7 @@ type Lifecycle struct {
 	grace         time.Duration
 	startupWindow time.Duration
 	notify        func(string)
+	logf          func(format string, args ...any)
 	now           func() time.Time
 	poll          time.Duration
 
@@ -130,6 +137,7 @@ type Lifecycle struct {
 	// second and not at every stage of a build.
 	waiting string
 	cause   ExitCause
+	stopAt  time.Time
 	done    chan struct{}
 	// closers are the open leases, told to close with the cause when the
 	// process stops so a page can say why it went.
@@ -160,11 +168,16 @@ func NewLifecycle(options LifecycleOptions) *Lifecycle {
 	if notify == nil {
 		notify = func(string) {}
 	}
+	logf := options.Logf
+	if logf == nil {
+		logf = func(string, ...any) {}
+	}
 	return &Lifecycle{
 		interactive:   options.Interactive,
 		grace:         grace,
 		startupWindow: window,
 		notify:        notify,
+		logf:          logf,
 		now:           now,
 		poll:          poll,
 		started:       now(),
@@ -192,6 +205,13 @@ func (l *Lifecycle) Cause() ExitCause {
 	return l.cause
 }
 
+// StoppedAt is when the stop was decided, or zero while it has not been.
+func (l *Lifecycle) StoppedAt() time.Time {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.stopAt
+}
+
 // EverConnected reports whether any page has held a lease in this run.
 func (l *Lifecycle) EverConnected() bool {
 	l.mu.Lock()
@@ -206,29 +226,46 @@ func (l *Lifecycle) Leases() int {
 	return l.leases
 }
 
-// acquire records one open page. The returned release is idempotent. close is
-// how the lifecycle tells that page the process is stopping.
-func (l *Lifecycle) acquire(close func(ExitCause)) (release func(), stopping bool) {
+// acquire records one open page, described by page for the log. The returned
+// release is idempotent and takes the reason the page went, as the log says
+// it. close is how the lifecycle tells that page the process is stopping.
+func (l *Lifecycle) acquire(page string, close func(ExitCause)) (release func(reason string), stopping bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.cause != "" {
-		return func() {}, true
+		l.logf("lifecycle: a page opened a lease while stopping (%s); told it the process is stopping", page)
+		return func(string) {}, true
 	}
 	l.leases++
 	l.everConnected = true
+	if l.waiting != "" {
+		l.logf("lifecycle: a page opened again while waiting for %s; not stopping", l.waiting)
+	}
 	l.waiting = ""
 	id := l.nextID
 	l.nextID++
 	l.closers[id] = close
+	opened := l.now()
+	l.logf("lifecycle: page lease %d opened (%s); %d page(s) open", id, page, l.leases)
 	var once sync.Once
-	return func() {
+	return func(reason string) {
 		once.Do(func() {
 			l.mu.Lock()
 			defer l.mu.Unlock()
 			delete(l.closers, id)
 			l.leases--
+			now := l.now()
+			l.logf("lifecycle: page lease %d closed after %s: %s; %d page(s) open",
+				id, now.Sub(opened).Round(time.Millisecond), reason, l.leases)
 			if l.leases == 0 {
-				l.lastGone = l.now()
+				l.lastGone = now
+				switch {
+				case l.cause != "":
+				case l.interactive:
+					l.logf("lifecycle: no page is open; stopping in %s unless a page opens or work is running", l.grace)
+				default:
+					l.logf("lifecycle: no page is open; server mode keeps running")
+				}
 			}
 		})
 	}, false
@@ -243,6 +280,8 @@ func (l *Lifecycle) Stop(cause ExitCause) {
 		return
 	}
 	l.cause = cause
+	l.stopAt = l.now()
+	l.logf("lifecycle: stop decided, cause %s; %d page(s) open", cause, l.leases)
 	closers := make([]func(ExitCause), 0, len(l.closers))
 	for _, close := range l.closers {
 		closers = append(closers, close)

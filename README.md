@@ -76,6 +76,25 @@ On Windows, double-click `companion.exe` (SmartScreen: **More info › Run
 anyway**). On macOS, open `Auto-Pigeon Companion.app`; the first time, macOS
 blocks it until you allow it in **System Settings › Privacy & Security**.
 
+Closing its last browser tab stops it about 15 seconds later; the wait is so
+a reload, or another tab of it, keeps it running. A build, a game or a download
+it started keeps it running until that ends, and its window says what it is
+waiting for. What it saw is in `companion.log` beside its settings
+(`%AppData%\auto-pigeon-companion\` on Windows, `~/.config/auto-pigeon-companion/`
+on Linux, `~/Library/Application Support/auto-pigeon-companion/` on macOS):
+each page that connected, when and why it went, and the reason it stopped. The
+log never holds the page's access token.
+
+```console
+$ grep -E 'lifecycle|shutdown' ~/.config/auto-pigeon-companion/companion.log
+20:44:11.387 lifecycle: page lease 2 opened (port 55916, Mozilla/5.0 (X11; Linux x86_64) … Chrome/150.0.0.0 Safari/537.36); 2 page(s) open
+20:44:16.517 lifecycle: page lease 1 closed after 8.768s: the page closed it (code 1001, going away: a tab closed or navigated); 1 page(s) open
+20:44:43.693 lifecycle: page lease 2 closed after 32.307s: the page closed it (code 1001, going away: a tab closed or navigated); 0 page(s) open
+20:44:43.693 lifecycle: no page is open; stopping in 15s unless a page opens or work is running
+20:44:58.996 lifecycle: stop decided, cause ui_closed; 0 page(s) open
+20:44:58.996 shutdown: jobs closed 0s after the decision; printing the exit line and exiting
+```
+
 Check what you are running, and that the extractor beside it is the one the
 release shipped:
 
@@ -329,6 +348,16 @@ The published release is made by `.github/workflows/release.yml` on every push
 to `main`: it tests on Linux, Windows and macOS, builds the extractor from the
 commit pinned in `build/aue-pin.json`, puts it beside the Companion in each
 archive, runs each archive on a native runner, and publishes the prerelease.
+On each runner the archive's Companion is also driven by a real Chrome or Edge:
+two tabs keep it running, closing one does not stop it, and closing the last one
+does. The same acceptance runs on your own machine against an archive
+(`AUCOM_TEST_BROWSER` names a browser it does not find by itself):
+
+```console
+$ build/release-acceptance.py --archive dist/auto-pigeon-companion-1.163-linux-amd64.zip \
+    --platform linux-amd64 --version 1.163 --aue-version 1.214 \
+    --fixture build/release-fixtures/release-acceptance.apmap
+```
 
 **Native acceptance** on hardware CI does not have runs from a checkout against
 an unpacked archive, and writes a result bundle to send back:
