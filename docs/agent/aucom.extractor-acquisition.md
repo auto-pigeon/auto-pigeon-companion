@@ -37,16 +37,17 @@ paths:
 **Auto-Pigeon Extractor is a separate program under a different licence
 (proprietary — `LicenseRef-Auto-Pigeon-Proprietary`, Copyright (c) 2026 Andrea
 D'Intino, all rights reserved, since `NEW_247G`; this repository is MIT). It
-ships BESIDE the Companion, as its own file in the release bundle with its own
-licence file, and runs as its own process. Nothing here contains it, embeds it,
+ships BESIDE the Companion, as its own file in the release bundle, named with
+its own licence in the bundle manifest, and runs as its own process. Nothing here contains it, embeds it,
 downloads it, or claims a licence over it.**
 
 Licence rules for the extractor, since `NEW_247G` (2026-09-24):
 
 - **Quote, never restate.** What an archive says about the extractor's licence
-  is quoted from the pinned build: its release manifest's `license.spdx` and its
-  own `LICENSE`, copied in as `LICENSE-auto-pigeon-extractor.txt`
-  (`build/release-plan.py check-aue`). The compiled-in component list
+  is quoted from the pinned build: its release manifest's `license.spdx`
+  (`build/release-plan.py check-aue`). Since 2026-09-25 no licence or notice
+  file ships inside an archive (operator decision); the extractor's licence
+  text is `LICENSE` in its own repository. The compiled-in component list
   (`internal/release.Extractor`, shown by `companion security audit` and
   `companion release sbom`) states the current policy,
   `LicenseRef-Auto-Pigeon-Proprietary`.

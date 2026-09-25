@@ -78,20 +78,6 @@ func (r *run) laneArtifact(ctx context.Context) Lane {
 		add(r.checkSBOM(sbomPath))
 	}
 
-	for _, name := range []string{"LICENSE", "THIRD_PARTY_NOTICES.md"} {
-		path := filepath.Join(r.artifactDir, name)
-		info, err := os.Stat(path)
-		switch {
-		case err == nil && info.Size() > 0:
-			add(pass("the artifact carries "+name, fmt.Sprintf("%d bytes", info.Size())))
-		case err == nil:
-			add(failed("the artifact carries "+name, "the file is empty"))
-		default:
-			add(failed("the artifact carries "+name,
-				"it is not beside the program; a release artifact ships it"))
-		}
-	}
-
 	version := r.exec(ctx, 30*time.Second, "version")
 	add(verdict(version.code == 0 && strings.TrimSpace(version.stdout) != "",
 		"the program reports a version",

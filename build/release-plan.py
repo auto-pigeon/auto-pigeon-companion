@@ -351,7 +351,6 @@ def check_aue(matrix, release_dir, pin, aue_version):
         "repository": pin["repository"],
         "protocol": manifest["protocol"],
         "license": spdx,
-        "license_file": os.path.abspath(os.path.join(release_dir, "LICENSE")),
         "source": AUE_SOURCE_URL.format(repository=pin["repository"], commit=pin["commit"]),
         "go": manifest.get("toolchain", {}).get("go", ""),
         "targets": inputs,
@@ -399,7 +398,6 @@ def bundle_one(entry, aue, dist, version, out, work):
         "--extractor", target["path"],
         "--extractor-version", aue["version"],
         "--extractor-commit", aue["commit"],
-        "--extractor-license", aue["license_file"],
         "--extractor-spdx", aue["license"],
         "--extractor-source", aue["source"],
     ]
@@ -498,9 +496,6 @@ def verify_archive(archive, platform, version, aue_version, aue_commit, go=None,
                           "bundle is never the Companion alone")
         if where["companion"] not in present:
             raise Refusal(f"{archive} carries no Companion at {where['companion']}")
-        for required in ("LICENSE-auto-pigeon-companion.txt", "LICENSE-auto-pigeon-extractor.txt"):
-            if required not in present:
-                raise Refusal(f"{archive} has no {required}; each program travels with its own licence")
         if extractor.get("version") != aue_version or listed[where["extractor"]]["version"] != aue_version:
             raise Refusal(f"{archive}: the extractor is listed as {extractor.get('version')}; the pin is {aue_version}")
         if listed[where["extractor"]]["product"] != "auto-pigeon-extractor":
@@ -583,22 +578,24 @@ def licence_notes(extractor_spdx):
     """What the release notes say about licences. The extractor's identifier is
     quoted from its own release manifest, never restated, and no sentence here
     calls the archive MIT: it holds an MIT program, Apache-2.0 data compiled
-    into that program, and the extractor under its own licence."""
+    into that program, and the extractor under its own licence. The archives
+    carry no licence files (operator decision, 2026-09-25); the notes say where
+    the texts are."""
     lines = [
         "**These archives are not under one licence.** Auto-Pigeon Companion's own code is MIT "
-        "(`LICENSE-auto-pigeon-companion.txt`). The contract files from auto-pigeon-libraries compiled into it "
-        "are Apache-2.0. Auto-Pigeon Extractor is a separate program under its own licence "
-        f"(`LICENSE-auto-pigeon-extractor.txt`, declared `{extractor_spdx}`), shipped beside the Companion and run "
-        "as its own process; the Companion's MIT licence does not cover it. Third-party programs the Companion "
-        "runs are the user's own, under their own licences. `THIRD_PARTY_NOTICES.md` in every archive says which "
-        "is which.",
+        "(`LICENSE` in the Companion's repository). The contract files from auto-pigeon-libraries compiled into "
+        "it are Apache-2.0. Auto-Pigeon Extractor is a separate program under its own licence (declared "
+        f"`{extractor_spdx}`, text in the extractor's repository), shipped beside the Companion and run as its "
+        "own process; the Companion's MIT licence does not cover it. Third-party programs the Companion runs are "
+        "the user's own, under their own licences. `THIRD_PARTY_NOTICES.md` in the Companion's repository says "
+        "which is which, and each archive's `bundle-manifest.json` names every file's licence.",
     ]
     if extractor_spdx == PROPRIETARY:
         lines += [
             "",
             "**Auto-Pigeon Extractor is proprietary** (Copyright (c) 2026 Andrea D'Intino, all rights reserved). "
             "Its licence grants no right to use it except through a separate written authorization from the "
-            "copyright owner; see `LICENSE-auto-pigeon-extractor.txt`.",
+            "copyright owner.",
         ]
     elif extractor_spdx.startswith(COPYLEFT_PREFIXES):
         lines += [

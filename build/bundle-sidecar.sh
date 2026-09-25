@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Assemble one platform's distribution bundle: the Companion, the licences and
-# notices, a bundle manifest, and — when one is given — an Auto-Pigeon
-# Extractor build for the same platform, beside it.
+# Assemble one platform's distribution bundle: the Companion, a bundle
+# manifest, and — when one is given — an Auto-Pigeon Extractor build for the
+# same platform, beside it. Nothing else: the licences and notices live in the
+# repositories, not in the archive (operator decision, 2026-09-25).
 #
 # # Where the extractor comes from
 #
 # From --extractor: a binary BUILT BEFOREHAND from the extractor's own
 # repository (its scripts/build-release.sh), for exactly this platform. The
 # release workflow builds it from the commit `build/aue-pin.json` names and
-# passes it here with that commit, the extractor's own LICENSE and licence
-# identifier — both quoted from that build, never restated here — and the
-# repository it came from. A bundle made without --extractor is complete,
+# passes it here with that commit, the extractor's licence identifier — quoted
+# from that build's release manifest, never restated here — and the repository
+# it came from. A bundle made without --extractor is complete,
 # carries no extractor, and says so in its manifest. Nothing here, and nothing
 # in the Companion, downloads a program.
 #
@@ -21,8 +22,8 @@ set -euo pipefail
 # Link, embed, or copy extractor SOURCE. Put an extractor inside the Companion's
 # own binary. The two programs are two files, under two licences — the
 # Companion MIT, the extractor proprietary (NEW_247G) — and the bundle says
-# which is which, so an archive carrying the extractor is never "an MIT
-# archive"; the extractor is copied in as
+# which is which in its manifest, so an archive carrying the extractor is never
+# "an MIT archive"; the extractor is copied in as
 # `auto-pigeon-extractor[.exe]`, the name the Companion looks for beside itself,
 # and its digest in the manifest is what the Companion checks before running it.
 #
@@ -30,7 +31,7 @@ set -euo pipefail
 #   build/bundle-sidecar.sh --platform <goos>-<goarch> --version <v> \
 #       --binary-dir <dir> --out <dir> \
 #       [--extractor <file> --extractor-version <v> --extractor-commit <sha> \
-#        --extractor-license <file> [--extractor-spdx <id>] --extractor-source <url>]
+#        [--extractor-spdx <id>] --extractor-source <url>]
 
 PLATFORM=""
 VERSION=""
@@ -39,7 +40,6 @@ OUT=""
 EXTRACTOR=""
 EXTRACTOR_VERSION=""
 EXTRACTOR_SOURCE=""
-EXTRACTOR_LICENSE=""
 EXTRACTOR_SPDX="LicenseRef-auto-pigeon-extractor"
 EXTRACTOR_COMMIT=""
 
@@ -55,7 +55,6 @@ while [ $# -gt 0 ]; do
         --extractor-version) EXTRACTOR_VERSION="${2:?--extractor-version needs a value}"; shift 2 ;;
         --extractor-source)  EXTRACTOR_SOURCE="${2:?--extractor-source needs a value}"; shift 2 ;;
         --extractor-spdx)    EXTRACTOR_SPDX="${2:?--extractor-spdx needs a value}"; shift 2 ;;
-        --extractor-license) EXTRACTOR_LICENSE="${2:?--extractor-license needs a value}"; shift 2 ;;
         --extractor-commit)  EXTRACTOR_COMMIT="${2:?--extractor-commit needs a value}"; shift 2 ;;
         -h|--help)    sed -n '/^# usage:/,/^$/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)            echo "error: unknown argument: $1" >&2; exit 2 ;;
@@ -78,21 +77,12 @@ mkdir -p "$BUNDLE"
 # The Companion, and its macOS app bundle when there is one.
 cp -R "${BINARY_DIR}/." "$BUNDLE/"
 
-# Licences and notices. The Companion's always; the extractor's own licence file
-# is added beside its binary by bundle-manifest.py, so a user can tell whose
-# terms each of the two programs is under. THIRD_PARTY_NOTICES.md separates the
-# Companion's MIT code, the Apache-2.0 AULIBS files compiled into it, the
-# proprietary extractor and the third-party programs it runs.
-cp "${repo_root}/LICENSE" "${BUNDLE}/LICENSE-auto-pigeon-companion.txt"
-cp "${repo_root}/THIRD_PARTY_NOTICES.md" "${BUNDLE}/THIRD_PARTY_NOTICES.md"
-
 python3 "${repo_root}/build/bundle-manifest.py" \
     --platform "$PLATFORM" \
     --version "$VERSION" \
     --bundle "$BUNDLE" \
     --extractor "$EXTRACTOR" \
     --extractor-version "$EXTRACTOR_VERSION" \
-    --extractor-license "$EXTRACTOR_LICENSE" \
     --extractor-commit "$EXTRACTOR_COMMIT" \
     --extractor-spdx "$EXTRACTOR_SPDX" \
     --extractor-source "$EXTRACTOR_SOURCE"

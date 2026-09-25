@@ -296,17 +296,15 @@ func newWorld(t *testing.T) world {
 
 	// The Companion's archives, the shapes build/release.sh makes.
 	writeTarGz(t, filepath.Join(w.dist, "auto-pigeon-companion-"+testVersion+"-linux-amd64.tar.gz"), map[string][]byte{
-		"companion": fakeExecutable("linux-amd64", "aucom"), "LICENSE": []byte("MIT\n"),
+		"companion": fakeExecutable("linux-amd64", "aucom"),
 	})
 	for _, platform := range []string{"darwin-arm64", "windows-arm64"} {
 		stage := filepath.Join(w.dir, "stage", platform)
 		if platform == "darwin-arm64" {
 			writeFakeExecutable(t, filepath.Join(stage, "Auto-Pigeon Companion.app", "Contents", "MacOS", "companion"), platform, "aucom")
-			writeFile(t, filepath.Join(stage, "Auto-Pigeon Companion.app", "Contents", "Resources", "LICENSE"), "MIT\n")
 		} else {
 			writeFakeExecutable(t, filepath.Join(stage, "companion.exe"), platform, "aucom")
 		}
-		writeFile(t, filepath.Join(stage, "LICENSE"), "MIT\n")
 		zipDir(t, stage, filepath.Join(w.dist, "auto-pigeon-companion-"+testVersion+"-"+platform+".zip"), "")
 	}
 	writeJSON(t, filepath.Join(w.dir, "support.json"), map[string]any{"platforms": []map[string]any{
@@ -471,7 +469,7 @@ func TestAReleaseIsTheBundledArchivesAndNothingElse(t *testing.T) {
 	notes := readText(t, filepath.Join(w.dir, "NOTES.md"))
 	mustContain(t, "the release notes", notes, testAUECommit, "Auto-Pigeon Extractor "+testAUEVersion,
 		"windows/arm64 | build_only", "Nothing here is signed", "it is not a signature", "not supported downloads",
-		"LICENSE-auto-pigeon-extractor.txt", "MIT", "not under one licence", "Apache-2.0", "declared `LicenseRef-test`")
+		"`LICENSE` in the Companion's repository", "MIT", "not under one licence", "Apache-2.0", "declared `LicenseRef-test`")
 	if strings.Contains(notes, "Auto-Pigeon Companion is MIT (") || strings.Contains(notes, "MIT-licensed archive") {
 		t.Errorf("the release notes describe the archive as MIT:\n%s", notes)
 	}
@@ -484,11 +482,28 @@ func TestAReleaseIsTheBundledArchivesAndNothingElse(t *testing.T) {
 	mac := filepath.Join(t.TempDir(), "mac")
 	unzipDir(t, filepath.Join(w.release, "auto-pigeon-companion-"+testVersion+"-darwin-arm64.zip"), mac)
 	app := filepath.Join(mac, "auto-pigeon-companion-"+testVersion+"-darwin-arm64", "Auto-Pigeon Companion.app", "Contents")
-	for _, path := range []string{"MacOS/auto-pigeon-extractor", "Resources/bundle-manifest.json",
-		"Resources/LICENSE-auto-pigeon-extractor.txt"} {
+	for _, path := range []string{"MacOS/auto-pigeon-extractor", "Resources/bundle-manifest.json"} {
 		if _, err := os.Stat(filepath.Join(app, path)); err != nil {
 			t.Errorf("the macOS bundle has no Contents/%s: %v", path, err)
 		}
+	}
+
+	// An archive is what runs the Companion and nothing else (operator
+	// decision, 2026-09-25): no licence or notice file, no acceptance kit.
+	for _, platform := range []string{"linux-amd64", "darwin-arm64"} {
+		unpacked := filepath.Join(t.TempDir(), platform)
+		unzipDir(t, filepath.Join(w.release, "auto-pigeon-companion-"+testVersion+"-"+platform+".zip"), unpacked)
+		_ = filepath.WalkDir(unpacked, func(path string, entry os.DirEntry, err error) error {
+			if err != nil || entry.IsDir() {
+				return err
+			}
+			name := entry.Name()
+			if strings.HasPrefix(name, "LICENSE") || name == "THIRD_PARTY_NOTICES.md" ||
+				strings.HasPrefix(name, "run-acceptance") || name == "kit-options.json" {
+				t.Errorf("the %s archive carries %s", platform, strings.TrimPrefix(path, unpacked))
+			}
+			return nil
+		})
 	}
 }
 
@@ -607,10 +622,6 @@ func TestAnIncompleteOrInconsistentArchiveIsRefused(t *testing.T) {
 	}{
 		"no extractor": {mutate("no-extractor", remove("auto-pigeon-extractor"), true),
 			"carries no auto-pigeon-extractor"},
-		"no Companion licence": {mutate("no-companion-licence", remove("LICENSE-auto-pigeon-companion.txt"), false),
-			"LICENSE-auto-pigeon-companion.txt"},
-		"no extractor licence": {mutate("no-extractor-licence", remove("LICENSE-auto-pigeon-extractor.txt"), false),
-			"LICENSE-auto-pigeon-extractor.txt"},
 		"a replaced extractor": {mutate("replaced", func(bundle string) {
 			writeFakeExecutable(t, filepath.Join(bundle, "auto-pigeon-extractor"), "linux-amd64", "something else")
 		}, false), "does not match its bundle manifest"},

@@ -112,36 +112,19 @@ for target in "${targets[@]}"; do
         -o "${staging}/companion${ext}" \
         ./cmd/companion
 
-    # The licence files travel with every artifact. LICENSE is the MIT licence
-    # of the Companion's own code; THIRD_PARTY_NOTICES.md is the statement that
-    # the Apache-2.0 AULIBS contract files compiled in keep their licence, that
-    # the GPL compilers and engines are separate programs the user obtains, and
-    # that the proprietary extractor a release bundle adds beside the Companion
-    # (with its own LICENSE-auto-pigeon-extractor.txt) is not covered by the
-    # MIT licence — which is only true if a person who downloads this can read it.
-    cp LICENSE THIRD_PARTY_NOTICES.md "$staging/"
+    # An archive carries what it takes to run the Companion and nothing else
+    # (operator decision, 2026-09-25): no licence or notice files and no
+    # acceptance kit. The licences and THIRD_PARTY_NOTICES.md live in this
+    # repository; the kit is acceptance/, run from a checkout with
+    # `--companion <unpacked archive>/companion`.
 
-    # The native acceptance kit travels with every artifact too, and for a
-    # reason the licence files do not have: an artifact for a platform nobody
-    # can run is `build_only` until somebody runs it, and the only person who
-    # can is whoever has that machine. Shipping the kit inside the download is
-    # what makes "run this and send the bundle back" a single instruction
-    # instead of a checkout, a toolchain and a set of paths.
-    #
-    # Both entry points ship in every artifact. A Linux machine with pwsh on it
-    # is a real machine, a Windows machine with a POSIX shell is a real
-    # machine, and shipping only the one that matches the target would make the
-    # kit unusable on either.
-    cp acceptance/run-acceptance.sh acceptance/run-acceptance.ps1 \
-       acceptance/kit-options.json "$staging/"
-    chmod +x "$staging/run-acceptance.sh"
-
-    # run-acceptance.sh / .ps1 verify the program against a SHA256SUMS BESIDE
-    # it, before starting it. With none inside the archive, every operator's
-    # bundle recorded `checksums: not_available` (NEW_244D rehearsal). It is
-    # corruption evidence for the unpacked files; the archive's own digest is in
-    # the SHA256SUMS published beside the archives, and neither is a signature.
-    # macOS gets none: its binary moves inside the .app bundle below.
+    # acceptance/run-acceptance.sh / .ps1 verify the program against a
+    # SHA256SUMS BESIDE it, before starting it. With none inside the archive,
+    # every operator's bundle recorded `checksums: not_available` (NEW_244D
+    # rehearsal). It is corruption evidence for the unpacked files; the
+    # archive's own digest is in the SHA256SUMS published beside the archives,
+    # and neither is a signature. macOS gets none: its binary moves inside the
+    # .app bundle below.
     if [ "$goos" != "darwin" ]; then
         go run ./cmd/companion release checksums --dir "$staging" --out - >/dev/null
     fi
@@ -152,8 +135,7 @@ for target in "${targets[@]}"; do
                 --binary "${staging}/companion" \
                 --arch "$goarch" --version "$VERSION" --out "$staging" --no-zip
             ( cd "$staging" && zip -qry "../../auto-pigeon-companion-${VERSION}-darwin-${goarch}.zip" \
-                "Auto-Pigeon Companion.app" LICENSE THIRD_PARTY_NOTICES.md \
-                run-acceptance.sh run-acceptance.ps1 kit-options.json )
+                "Auto-Pigeon Companion.app" )
             ;;
         windows)
             ( cd "$staging" && zip -qr "../../auto-pigeon-companion-${VERSION}-windows-${goarch}.zip" . )
@@ -196,5 +178,5 @@ echo "script and 'companion security residual' for what that means."
 echo
 echo "${#targets[@]} artifact(s) were BUILT (${TARGETS}). What each of them is VERIFIED to do on its own"
 echo "hardware is the table above, and it does not change because a build"
-echo "succeeded: run acceptance/run-acceptance.sh (or .ps1) on the machine and"
-echo "send the bundle back."
+echo "succeeded: on the machine, from a checkout, run acceptance/run-acceptance.sh"
+echo "(or .ps1) --companion <unpacked archive>/companion and send the bundle back."

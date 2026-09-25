@@ -11,15 +11,21 @@ kept apart here on purpose.
 **A release archive is not under one licence.** One that carries the extractor
 holds three kinds of thing, and each keeps its own terms:
 
-- **Auto-Pigeon Companion's own code — MIT** (`LICENSE`, and
-  `LICENSE-auto-pigeon-companion.txt` in a release bundle).
+- **Auto-Pigeon Companion's own code — MIT** (`LICENSE` in this repository).
 - **Contract files from `auto-pigeon-libraries` (AULIBS) compiled into the
   Companion — Apache-2.0**, unmodified. See below.
 - **Auto-Pigeon Extractor (AUE), shipped beside the Companion — proprietary**
   (`LicenseRef-Auto-Pigeon-Proprietary`, the Auto-Pigeon Proprietary Software
   License, Copyright (c) 2026 Andrea D'Intino, all rights reserved), under its
-  own licence file, `LICENSE-auto-pigeon-extractor.txt`. The MIT licence does
-  not cover it. See below.
+  own licence, whose text is `LICENSE` in the extractor's repository. The MIT
+  licence does not cover it. See below.
+
+**No licence or notice file ships inside a release archive** (operator
+decision, 2026-09-25): an archive carries the Companion, the extractor, their
+`bundle-manifest.json` and a `SHA256SUMS`, and nothing else. The licence texts
+and this file are in the repositories; each archive's `bundle-manifest.json`
+names the licence of every file in it, and the release notes say where the
+texts are.
 
 Third-party programs the Companion runs — compilers, engines, games — are
 installed by the user and stay under their own licences.
@@ -34,7 +40,7 @@ installed by the user and stay under their own licences.
 | `@auto-pigeon/operational-notice-contract` 1.0.0 (`src/index.mjs`, two schema files), from auto-pigeon-libraries | Apache-2.0 | vendored byte for byte into the embedded page (`internal/web/assets/vendor/operational-notice-contract/`) | yes, inside the binary |
 | `@auto-pigeon/incident-contract` data (`incident-codes.json`, `redaction-rules.json`), from auto-pigeon-libraries | Apache-2.0 | embedded byte for byte (`internal/incident/contract/`) | yes, inside the binary |
 | `@auto-pigeon/incident-contract` 1.4.0 (`src/*.mjs`, `schema/*.json`), from auto-pigeon-libraries | Apache-2.0 | vendored byte for byte into the embedded page (`internal/web/assets/vendor/incident-contract/`) | yes, inside the binary |
-| auto-pigeon-extractor (AUE) | **LicenseRef-Auto-Pigeon-Proprietary** (Auto-Pigeon Proprietary Software License; all rights reserved) | separate process, shipped as its own file (`auto-pigeon-extractor[.exe]`) beside the Companion in a release bundle, with its own `LICENSE-auto-pigeon-extractor.txt` | yes, beside the binary, when a bundle carries it |
+| auto-pigeon-extractor (AUE) | **LicenseRef-Auto-Pigeon-Proprietary** (Auto-Pigeon Proprietary Software License; all rights reserved) | separate process, shipped as its own file (`auto-pigeon-extractor[.exe]`) beside the Companion in a release bundle | named in the bundle manifest; the text is in the extractor's repository |
 | ericw-tools 0.18.1 (qbsp, vis, light, bspinfo, bsputil) | **GPL-3.0-or-later** as distributed (GPL-2.0-or-later source) | separate process, **obtained by the user** from its homepage; nothing is downloaded | no |
 | ericw-tools 2.0.0-alpha7 (the Quake II line) | **GPL-3.0-or-later** as distributed (GPL-2.0-or-later source) | separate process, **obtained by the user** from its homepage; nothing is downloaded | no |
 | Q3Map2 2.5.17n (NetRadiant-custom `20260114`) | **GPL-2.0-or-later** | separate process, **found by the user**; nothing is downloaded | no |
@@ -108,9 +114,8 @@ AGPL-3.0-only (see "Earlier AGPL-3.0 builds" below).
 Its licence grants no licence or other right to use it except through a
 separate written authorization or agreement issued by the copyright owner.
 Nothing in this repository, in the Companion's MIT licence, or in the fact that
-a release archive carries the extractor grants that authorization. Read
-`LICENSE-auto-pigeon-extractor.txt` in the archive; for licensing inquiries or
-written authorization, contact the copyright owner.
+a release archive carries the extractor grants that authorization. For
+licensing inquiries or written authorization, contact the copyright owner.
 
 **A release carries it as its own file, beside the Companion — never inside the
 Companion's executable, and never downloaded.** The operator settled that on
@@ -127,13 +132,13 @@ A bundle assembled without one has `"extractor": null` and an
 The extractor declares its licence ITSELF — run `auto-pigeon-extractor protocol`
 — and so does its release manifest (`license.spdx`). A release quotes that
 answer: `build/release-plan.py` reads it from the pinned build's release
-manifest and copies the pinned build's own `LICENSE` into the archive as
-`LICENSE-auto-pigeon-extractor.txt`, and the bundle manifest, the release
-manifest and the release notes carry the same identifier. That is deliberate:
-a program under a different licence must not be the thing that says what this
-one is licensed as. It ships a copy of the claim, the copy goes stale, and the
-stale copy is the one a user reads. So **the licence file inside an archive is
-the authority for the extractor build in that archive.**
+manifest, and the bundle manifest, the release manifest and the release notes
+carry the same identifier. That is deliberate: a program under a different
+licence must not be the thing that says what this one is licensed as. It ships
+a copy of the claim, the copy goes stale, and the stale copy is the one a user
+reads. So **the identifier the pinned build declares is the authority for the
+extractor build in that archive**, and its text is the pinned commit's
+`LICENSE` in the extractor's repository.
 
 The one identifier a release refuses for the extractor is MIT — it never was,
 and an archive listing it so would read as entirely MIT.
@@ -164,15 +169,12 @@ space and link nothing — so the Companion stays MIT and AUE stays proprietary.
 
 Three things are enforced here rather than assumed:
 
-1. **A bundle cannot carry it without its own licence file and provenance.**
+1. **A bundle cannot carry it without its licence identifier and provenance.**
    `build/bundle-manifest.py` refuses `--extractor` without
-   `--extractor-version`, `--extractor-license`, `--extractor-source` and the
-   full `--extractor-commit`, copies the licence file in as
-   `LICENSE-auto-pigeon-extractor.txt` (also into `Contents/Resources/` of a
-   macOS `.app`), writes the declared identifier into the manifest's `licenses`
-   list beside the file, and refuses an extractor declared MIT.
-   `build/release-plan.py` refuses an archive without either program's licence
-   file.
+   `--extractor-version`, `--extractor-source` and the full
+   `--extractor-commit`, writes the declared identifier into the manifest's
+   `extractor` entry and `licenses` list, and refuses an extractor declared
+   MIT.
 2. **The release's component list names it.** `companion release sbom` and
    `companion security audit` list `auto-pigeon-extractor` with
    `distribution: shipped-beside-in-the-release` and
@@ -271,7 +273,7 @@ repository's code.
 
 ### Profiles describe these tools; they do not contain or relicense them
 
-A **profile** ([README](README.md#profiles)) is a JSON document in this
+A **profile** (`internal/profile`) is a JSON document in this
 repository's own format that says which programs a tool provides, what arguments
 they take and where its project lives. It contains no third-party code: no
 source, no object code, no binary, no vendored fragment. Describing a program is

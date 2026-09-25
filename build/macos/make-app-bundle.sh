@@ -84,17 +84,12 @@ mkdir -p "${app_dir}/Contents/MacOS" "${app_dir}/Contents/Resources"
 # The executable name must match CFBundleExecutable in the template.
 install -m 0755 "$BINARY" "${app_dir}/Contents/MacOS/${EXECUTABLE}"
 
-# Licensing: both files ship inside the bundle. THIRD_PARTY_NOTICES.md states
-# that the external map-building tools are separate GPL programs the user
-# installs, not part of this bundle. A release bundle later adds the
-# proprietary Auto-Pigeon Extractor inside this .app (Contents/MacOS) together
-# with its own LICENSE-auto-pigeon-extractor.txt (build/bundle-manifest.py), so
-# the copyright line below must not call the whole .app MIT. If a tool binary is
-# ever bundled here instead, its own license text has to ship beside it.
-cp "${repo_root}/LICENSE" "${app_dir}/Contents/Resources/LICENSE"
-cp "${repo_root}/THIRD_PARTY_NOTICES.md" "${app_dir}/Contents/Resources/THIRD_PARTY_NOTICES.md"
-
-copyright="Copyright © 2026 Andrea D'Intino. Auto-Pigeon Companion's own code is MIT licensed; see LICENSE. A bundled Auto-Pigeon Extractor is proprietary, under its own licence file, and third-party components keep their own licences — see THIRD_PARTY_NOTICES.md."
+# Licensing: no licence or notice file ships inside the bundle (operator
+# decision, 2026-09-25); LICENSE and THIRD_PARTY_NOTICES.md are in the
+# repository. A release bundle later adds the proprietary Auto-Pigeon Extractor
+# inside this .app (Contents/MacOS, build/bundle-manifest.py), so the copyright
+# line below must not call the whole .app MIT.
+copyright="Copyright © 2026 Andrea D'Intino. Auto-Pigeon Companion's own code is MIT licensed. A bundled Auto-Pigeon Extractor is proprietary, under its own licence, and third-party components keep their own licences — see THIRD_PARTY_NOTICES.md in the Companion's repository."
 sed -e "s|@BUNDLE_ID@|${BUNDLE_ID}|g" \
     -e "s|@VERSION@|${VERSION}|g" \
     -e "s|@ARCH@|${ARCH}|g" \

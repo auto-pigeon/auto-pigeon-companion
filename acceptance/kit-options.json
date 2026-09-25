@@ -10,7 +10,7 @@
       "name": "--out",
       "takes_value": true,
       "forwarded": true,
-      "summary": "where the result bundle is written (default: acceptance-bundle beside this script)"
+      "summary": "where the result bundle is written (default: acceptance-bundle beside the Companion)"
     },
     {
       "name": "--tool-path",

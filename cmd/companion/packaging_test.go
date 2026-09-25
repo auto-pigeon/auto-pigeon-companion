@@ -100,11 +100,13 @@ func TestMacOSBundleMetadata(t *testing.T) {
 			t.Errorf("make-app-bundle.sh does not substitute %s", token)
 		}
 	}
-	// The licence files ship inside the bundle.
-	mustContain(t, "make-app-bundle.sh", script,
-		"Contents/Resources/LICENSE",
-		"Contents/Resources/THIRD_PARTY_NOTICES.md",
-	)
+	// No licence or notice file ships inside the bundle (operator decision,
+	// 2026-09-25); they are in the repository.
+	for _, shipped := range []string{"Contents/Resources/LICENSE", "Contents/Resources/THIRD_PARTY_NOTICES.md"} {
+		if strings.Contains(script, shipped) {
+			t.Errorf("make-app-bundle.sh copies %s into the .app again", shipped)
+		}
+	}
 }
 
 // TestCIBuildsEverySupportedTarget pins the six OS/architecture targets that
@@ -277,7 +279,7 @@ func TestNoticesCoverEveryRedistributedComponent(t *testing.T) {
 		"auto-pigeon-extractor",
 		"LicenseRef-Auto-Pigeon-Proprietary",
 		"Auto-Pigeon Proprietary Software License",
-		"LICENSE-auto-pigeon-extractor.txt",
+		"No licence or notice file ships inside a release archive",
 		"written authorization",
 		"auto-pigeon-libraries",
 		"Apache-2.0",

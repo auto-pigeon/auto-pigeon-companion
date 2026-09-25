@@ -197,6 +197,7 @@ func releaseSupport(env *Env, args []string) int {
 	fmt.Fprintln(env.Stdout, `
 A built artifact is a real artifact: it is produced, checksummed and published.
 What it is not, on its own, is evidence that the program works on that hardware.
-Run `+"`acceptance/run-acceptance.sh`"+` or `+"`acceptance/run-acceptance.ps1`"+` there and send the bundle back.`)
+From a checkout, run `+"`acceptance/run-acceptance.sh`"+` or `+"`acceptance/run-acceptance.ps1`"+`
+with --companion <unpacked archive>/companion there, and send the bundle back.`)
 	return 0
 }

@@ -153,3 +153,8 @@ file (`LICENSE-auto-pigeon-extractor.txt`), refuses an extractor declared MIT,
 and offers no corresponding source because none is owed; the copyleft
 source-offer check (`TestEveryShippedCopyleftComponentOffersItsSource`) stays a
 copyleft check. `THIRD_PARTY_NOTICES.md` is the current statement.
+
+2026-09-25: an archive no longer carries any licence or notice file, nor the
+acceptance kit (operator decision). The extractor's licence is named by its
+identifier in the bundle manifest, the release manifest and the release notes;
+the texts are in the repositories.

@@ -203,14 +203,13 @@ jobs:
           python3 -c 'import json,sys; m=json.load(open(sys.argv[1])); assert m["extractor"] is None and "extractor_absent" in m' \
             "$RUNNER_TEMP/without/auto-pigeon-companion-0.0.0-ci-linux-amd64/bundle-manifest.json"
           cp "$RUNNER_TEMP/bin/companion" "$RUNNER_TEMP/aue"
-          printf 'stand-in licence\n' > "$RUNNER_TEMP/aue-license"
           build/bundle-sidecar.sh --platform linux-amd64 --version 0.0.0-ci \
             --binary-dir "$RUNNER_TEMP/bin" --out "$RUNNER_TEMP/with" \
             --extractor "$RUNNER_TEMP/aue" --extractor-version 0.0.0-ci \
-            --extractor-commit "$GITHUB_SHA" --extractor-license "$RUNNER_TEMP/aue-license" \
+            --extractor-commit "$GITHUB_SHA" \
             --extractor-source "https://example.invalid/aue/tree/$GITHUB_SHA"
           test -x "$RUNNER_TEMP/with/auto-pigeon-companion-0.0.0-ci-linux-amd64/auto-pigeon-extractor"
-          test -f "$RUNNER_TEMP/with/auto-pigeon-companion-0.0.0-ci-linux-amd64/LICENSE-auto-pigeon-extractor.txt"
+          test ! -e "$RUNNER_TEMP/with/auto-pigeon-companion-0.0.0-ci-linux-amd64/LICENSE-auto-pigeon-extractor.txt"
       # The release's decisions, driven the way release.yml drives them.
       - name: the release plan reads its pin
         run: python3 build/release-plan.py pin

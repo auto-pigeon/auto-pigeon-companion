@@ -19,11 +19,9 @@ The extractor rules, in one place:
     manifest is in `Contents/Resources/` (releaselib.layout).
   * It must be built for THIS platform, and so must the Companion: both
     headers are read and a disagreement is refused (releaselib.platform_of).
-  * It carries its own licence file, whatever the extractor's repository ships
-    at the pinned commit (--extractor-license), under the identifier the
-    extractor's own release manifest declares (--extractor-spdx), and the
-    manifest records the exact commit it was built from. Both are QUOTED from
-    the extractor build, never restated here, so a bundle cannot disagree with
+  * The manifest records the licence identifier the extractor's own release
+    manifest declares (--extractor-spdx) and the exact commit it was built
+    from. Both are QUOTED from the extractor build, never restated here, so a bundle cannot disagree with
     the program inside it. The Companion is MIT; the extractor is proprietary
     (LicenseRef-Auto-Pigeon-Proprietary, NEW_247G), and a build distributed
     earlier under AGPL-3.0-only keeps that licence. The one identifier refused
@@ -32,6 +30,8 @@ The extractor rules, in one place:
   * The licences list separates the three things an archive holds: the
     Companion's own code (MIT), the auto-pigeon-libraries contract files
     compiled into the Companion (Apache-2.0), and the extractor (its own).
+    It names identifiers, not files: no licence or notice file ships in the
+    archive (operator decision, 2026-09-25). The texts are in the repositories.
   * With no --extractor the bundle is complete and carries no extractor, and
     says so; the Companion then reports that map inspection is unavailable.
 """
@@ -49,26 +49,18 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.dont_write_bytecode = True
 import releaselib  # noqa: E402
 
-SCHEMA = "aucom.bundle-manifest/1.1"
-COMPANION_LICENSE = "LICENSE-auto-pigeon-companion.txt"
-NOTICES = "THIRD_PARTY_NOTICES.md"
-EXTRACTOR_LICENSE = "LICENSE-auto-pigeon-extractor.txt"
+SCHEMA = "aucom.bundle-manifest/1.2"
 FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 
 
 def place_extractor(args, bundle, where):
-    """Copy the prebuilt extractor and its licence file into the bundle."""
+    """Copy the prebuilt extractor into the bundle."""
     if not args.extractor_version:
         raise SystemExit("error: --extractor needs --extractor-version: a bundle must say which build it carries")
     if not args.extractor_source:
         raise SystemExit(
             "error: --extractor needs --extractor-source: a bundle must say which repository and commit "
             "the extractor it carries came from"
-        )
-    if not args.extractor_license or not os.path.isfile(args.extractor_license):
-        raise SystemExit(
-            "error: --extractor needs --extractor-license, the extractor's own licence file: the bundle "
-            "carries two programs and must say whose terms each is under"
         )
     if args.extractor_spdx.strip().upper().startswith("MIT"):
         raise SystemExit(
@@ -95,20 +87,12 @@ def place_extractor(args, bundle, where):
     target = os.path.join(bundle, where["extractor"])
     shutil.copyfile(args.extractor, target)
     os.chmod(target, 0o755)
-    destinations = [bundle]
-    if where["resources"]:
-        # A .app dragged to /Applications leaves the archive root behind; the
-        # licence travels inside it too.
-        destinations.append(os.path.join(bundle, where["resources"]))
-    for directory in destinations:
-        shutil.copyfile(args.extractor_license, os.path.join(directory, EXTRACTOR_LICENSE))
     return {
         "product": "auto-pigeon-extractor",
         "version": args.extractor_version,
         "platform": args.platform,
         "file": where["extractor"],
         "license": args.extractor_spdx,
-        "license_file": EXTRACTOR_LICENSE,
         "source_commit": args.extractor_commit,
         "source": args.extractor_source,
     }
@@ -122,7 +106,6 @@ def main():
     parser.add_argument("--extractor", default="", help="a prebuilt auto-pigeon-extractor for this platform")
     parser.add_argument("--extractor-version", default="")
     parser.add_argument("--extractor-source", default="", help="the repository and commit it came from")
-    parser.add_argument("--extractor-license", default="", help="the extractor's own LICENSE file")
     parser.add_argument("--extractor-spdx", default="LicenseRef-auto-pigeon-extractor",
                         help="what the extractor's release manifest says its licence is")
     parser.add_argument("--extractor-commit", default="", help="the full commit SHA it was built from")
@@ -180,14 +163,12 @@ def main():
             {
                 "product": "auto-pigeon-companion",
                 "spdx": "MIT",
-                "file": COMPANION_LICENSE,
                 "covers": "the Companion's own code only",
             },
             {
                 "product": "auto-pigeon-libraries contract files compiled into the Companion",
                 "spdx": "Apache-2.0",
                 "license_url": "https://www.apache.org/licenses/LICENSE-2.0",
-                "notice": NOTICES,
                 "covers": "@auto-pigeon/incident-contract and @auto-pigeon/operational-notice-contract, unmodified",
             },
         ],
@@ -207,11 +188,13 @@ def main():
             {
                 "product": "auto-pigeon-extractor",
                 "spdx": sidecar["license"],
-                "file": EXTRACTOR_LICENSE,
                 "covers": "the extractor executable beside the Companion; not covered by the Companion's MIT licence",
             }
         )
 
+    # On macOS the manifest goes in Contents/Resources/, which nothing else
+    # populates now that no licence file ships there.
+    os.makedirs(os.path.dirname(manifest_path), exist_ok=True)
     with open(manifest_path, "w", encoding="utf-8") as handle:
         json.dump(manifest, handle, indent=2, sort_keys=False)
         handle.write("\n")

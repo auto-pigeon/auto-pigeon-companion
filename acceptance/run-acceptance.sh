@@ -4,9 +4,12 @@
 # Run this on the machine the artifact is for. It produces a small result
 # bundle you can send back; nothing is uploaded from here.
 #
-#   ./run-acceptance.sh
-#   ./run-acceptance.sh --tool-path /opt/ericw-tools --out ~/aucom-bundle
-#   ./run-acceptance.sh --engine /opt/quakespasm/quakespasm --game-root ~/Quake
+# From a checkout, against an unpacked release archive (the archive carries no
+# kit since 2026-09-25):
+#
+#   acceptance/run-acceptance.sh --companion ~/aucom-1.158/companion
+#   acceptance/run-acceptance.sh --companion ~/aucom-1.158/companion --tool-path /opt/ericw-tools
+#   acceptance/run-acceptance.sh --companion ~/aucom-1.158/companion --engine /opt/quakespasm/quakespasm --game-root ~/Quake
 #
 # # What this script is for, and what it deliberately is not
 #
@@ -75,10 +78,10 @@ done
 [ -n "$companion" ] || companion="$script_dir/companion"
 if [ ! -x "$companion" ]; then
     printf 'error: no Companion at %s\n' "$companion" >&2
-    printf 'Unpack the release artifact and run this script from inside it, or pass --companion <path>.\n' >&2
+    printf 'Unpack the release archive and pass --companion <unpacked archive>/companion.\n' >&2
     exit 2
 fi
-[ -n "$out" ] || out="$script_dir/acceptance-bundle"
+[ -n "$out" ] || out="$(dirname -- "$companion")/acceptance-bundle"
 
 # --- the half a program cannot do for itself --------------------------------
 #

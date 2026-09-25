@@ -58,12 +58,16 @@ the same rule in the same words over imported bundles, and reports a row this
 file claims that no bundle supports. Do not add a flag that accepts a build as
 evidence, and do not widen `built` into `supported` in a release note.
 
-**The kit ships INSIDE every artifact.** `acceptance/run-acceptance.sh` and
-`acceptance/run-acceptance.ps1`, plus `kit-options.json`, go into all six
-archives. A platform whose artifact nobody can run stays `build_only` until
-somebody with that machine runs it, and the only way that is a single
-instruction rather than a checkout and a toolchain is if the kit is in the
-download. Both entry points ship in every artifact, deliberately: a Linux
+**The kit is NOT in the download; it runs from a checkout.** Until
+2026-09-25 `acceptance/run-acceptance.sh`, `acceptance/run-acceptance.ps1` and
+`kit-options.json` went into every archive. The operator decided an archive
+carries what runs the Companion and nothing else — no acceptance kit, no
+licence or notice files — so the owner runs the kit from a checkout against an
+unpacked archive: `acceptance/run-acceptance.sh --companion
+<unpacked archive>/companion` (`.ps1` with `-Companion`). The scripts check the
+`SHA256SUMS` beside the program they are given, which is still in every
+non-macOS archive. A platform nobody has run stays `build_only` until somebody
+with that machine does. Both entry points stay in `acceptance/`: a Linux
 machine with `pwsh` and a Windows machine with a POSIX shell are both real.
 
 **The LANES are in the program, once.** `internal/nativeacceptance` drives THIS

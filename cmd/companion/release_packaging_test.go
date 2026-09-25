@@ -186,10 +186,15 @@ func TestTheReleaseScriptProducesChecksumsAndAnSBOM(t *testing.T) {
 		// Reproducible: same commit, same bytes.
 		"-trimpath",
 		"CGO_ENABLED=0",
-		// The licence files travel with every artifact, or the statement that
-		// the GPL tools are separate programs reaches nobody.
-		"cp LICENSE THIRD_PARTY_NOTICES.md",
 	)
+	// An archive carries what runs the Companion and nothing else (operator
+	// decision, 2026-09-25): no licence or notice files, no acceptance kit.
+	for _, shipped := range []string{"cp LICENSE", "THIRD_PARTY_NOTICES.md \"", "cp acceptance/",
+		"kit-options.json \"", "run-acceptance.sh \""} {
+		if strings.Contains(script, shipped) {
+			t.Errorf("release.sh copies %q into an artifact again", shipped)
+		}
+	}
 	for _, target := range []string{
 		"windows/amd64", "windows/arm64", "linux/amd64", "linux/arm64",
 		"darwin/amd64", "darwin/arm64",

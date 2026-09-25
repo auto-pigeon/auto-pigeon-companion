@@ -3,9 +3,12 @@
 # Run this on the machine the artifact is for. It produces a small result
 # bundle you can send back; nothing is uploaded from here.
 #
-#   .\run-acceptance.ps1
-#   .\run-acceptance.ps1 -ToolPath C:\ericw-tools -Out C:\Users\me\aucom-bundle
-#   .\run-acceptance.ps1 -Engine C:\Quake\ironwail.exe -GameRoot C:\Quake
+# From a checkout, against an unpacked release archive (the archive carries no
+# kit since 2026-09-25):
+#
+#   .\acceptance\run-acceptance.ps1 -Companion C:\aucom-1.158\companion.exe
+#   .\acceptance\run-acceptance.ps1 -Companion C:\aucom-1.158\companion.exe -ToolPath C:\ericw-tools
+#   .\acceptance\run-acceptance.ps1 -Companion C:\aucom-1.158\companion.exe -Engine C:\Quake\ironwail.exe -GameRoot C:\Quake
 #
 # Windows may refuse to run a downloaded script. Either unblock this file
 # (Unblock-File .\run-acceptance.ps1) or run it once with:
@@ -83,11 +86,11 @@ if ([string]::IsNullOrWhiteSpace($Companion)) {
     }
 }
 if (-not (Test-Path -LiteralPath $Companion)) {
-    Write-Error "no Companion at $Companion. Unpack the release artifact and run this script from inside it, or pass -Companion <path>."
+    Write-Error "no Companion at $Companion. Unpack the release archive and pass -Companion <unpacked archive>\companion.exe."
     exit 2
 }
 if ([string]::IsNullOrWhiteSpace($Out)) {
-    $Out = Join-Path $scriptDir "acceptance-bundle"
+    $Out = Join-Path (Split-Path -Parent $Companion) "acceptance-bundle"
 }
 
 # --- the half a program cannot do for itself --------------------------------

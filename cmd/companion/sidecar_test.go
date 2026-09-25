@@ -115,13 +115,9 @@ func extractorArgs(t *testing.T, platform string) []string {
 	dir := t.TempDir()
 	extractor := filepath.Join(dir, "auto-pigeon-extractor-0.9.0-"+platform)
 	writeFakeExecutable(t, extractor, platform, "this is the extractor")
-	license := filepath.Join(dir, "LICENSE")
-	if err := os.WriteFile(license, []byte("the extractor's licence\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
 
 	return []string{"--extractor", extractor, "--extractor-version", "0.9.0",
-		"--extractor-commit", strings.Repeat("ab", 20), "--extractor-license", license,
+		"--extractor-commit", strings.Repeat("ab", 20),
 		"--extractor-source", "https://example.test/aue/tree/" + strings.Repeat("ab", 20)}
 }
 
@@ -158,7 +154,7 @@ func TestABundleWithoutAnExtractorSaysSo(t *testing.T) {
 	}
 }
 
-// An extractor without its version, its source, its licence file or the full
+// An extractor without its version, its source or the full
 // commit it was built from is refused: the bundle must say which build it
 // carries, where it came from and whose terms it is under.
 func TestAnExtractorWithoutVersionSourceLicenceOrCommitIsRefused(t *testing.T) {
@@ -181,7 +177,6 @@ func TestAnExtractorWithoutVersionSourceLicenceOrCommitIsRefused(t *testing.T) {
 	for name, extra := range map[string][]string{
 		"no version":   without("--extractor-version"),
 		"no source":    without("--extractor-source"),
-		"no licence":   without("--extractor-license"),
 		"no commit":    without("--extractor-commit"),
 		"short commit": shortCommit,
 	} {
@@ -240,7 +235,7 @@ func TestAWrongPlatformExtractorIsRefused(t *testing.T) {
 	}
 }
 
-// A given extractor is bundled as a SEPARATE FILE, with its own licence file,
+// A given extractor is bundled as a SEPARATE FILE, with its licence named,
 // under the name the Companion looks for beside itself.
 func TestAnExtractorIsBundledBesideTheCompanion(t *testing.T) {
 	bundle := newBundle(t)
@@ -254,8 +249,10 @@ func TestAnExtractorIsBundledBesideTheCompanion(t *testing.T) {
 		sidecar["license"] != "LicenseRef-test" || sidecar["source_commit"] != strings.Repeat("ab", 20) {
 		t.Fatalf("extractor = %v", sidecar)
 	}
-	if _, err := os.Stat(filepath.Join(bundle, "LICENSE-auto-pigeon-extractor.txt")); err != nil {
-		t.Errorf("the extractor's licence file is not in the bundle: %v", err)
+	// The licence is named in the manifest; no licence file ships in the
+	// bundle (operator decision, 2026-09-25).
+	if _, err := os.Stat(filepath.Join(bundle, "LICENSE-auto-pigeon-extractor.txt")); err == nil {
+		t.Error("the bundle carries a licence file again")
 	}
 	// Windows has no executable bit to observe; the release composes its
 	// bundles on Linux, where this is checked.
