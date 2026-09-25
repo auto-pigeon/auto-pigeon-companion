@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "additionalDirectories": [
+      "..",
+      "../../mapper"
+    ],
+    "deny": [
+      "Read(**/run-sequence.sh)",
+      "Edit(**/run-sequence.sh)",
+      "Edit(**/ai-mapcopilot/**)",
+      "Edit(**/auto-pigeon/**)",
+      "Edit(**/auto-pigeon-collaboration/**)",
+      "Edit(**/auto-pigeon-gallery/**)",
+      "Edit(**/auto-pigeon-launcher/**)",
+      "Edit(**/auto-pigeon-libraries/**)",
+      "Edit(**/auto-pigeon-telemetry/**)",
+      "Edit(**/mapper-code/mapper/**)"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "graft"
+  ]
+}
