@@ -35,6 +35,9 @@ import zipfile
 ZIP_EPOCH = (1980, 1, 1, 0, 0, 0)
 
 EXTRACTOR = "auto-pigeon-extractor"
+# The folder beside the Companion that holds the extractor and the bundle
+# manifest on Linux and Windows (internal/aue.DependenciesDir).
+DEPENDENCIES = "dependencies"
 COMPANION = "companion"
 APP_NAME = "Auto-Pigeon Companion.app"
 
@@ -103,7 +106,10 @@ def layout(bundle, platform):
     """Where each program and the bundle manifest live in a bundle, as paths
     relative to its root.
 
-    Beside each other on Linux and Windows. On macOS, inside the .app: the
+    On Linux and Windows the Companion is at the root and the extractor and
+    the manifest are in `dependencies/` (DEPENDENCIES; operator decision,
+    2026-09-25), so the root holds only the program a person starts. On macOS,
+    inside the .app: the
     Companion runs from `Contents/MacOS/` and looks for its extractor beside
     itself, and reads the manifest from `Contents/Resources/` (see
     internal/aue.bundleManifestFor, which is the other half of this).
@@ -119,8 +125,8 @@ def layout(bundle, platform):
         }
     return {
         "companion": COMPANION + suffix,
-        "extractor": EXTRACTOR + suffix,
-        "manifest": "bundle-manifest.json",
+        "extractor": f"{DEPENDENCIES}/{EXTRACTOR}{suffix}",
+        "manifest": f"{DEPENDENCIES}/bundle-manifest.json",
         "resources": None,
     }
 

@@ -158,3 +158,9 @@ copyleft check. `THIRD_PARTY_NOTICES.md` is the current statement.
 acceptance kit (operator decision). The extractor's licence is named by its
 identifier in the bundle manifest, the release manifest and the release notes;
 the texts are in the repositories.
+
+2026-09-25, later: on Linux and Windows the extractor and the bundle manifest
+moved into a `dependencies/` folder beside the Companion, so an archive's root
+holds only the program a person starts. "Beside the Companion's own executable"
+above now means that folder; a macOS `.app` is unchanged. There is no fallback
+to the old location.

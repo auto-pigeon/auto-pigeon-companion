@@ -63,8 +63,9 @@ Licence rules for the extractor, since `NEW_247G` (2026-09-24):
   may imply that it does.
 
 ```text
-bundled             auto-pigeon-extractor[.exe] in the same directory as the
-                    Companion's own executable; digest-checked when the
+bundled             dependencies/auto-pigeon-extractor[.exe] beside the
+                    Companion's own executable (inside a macOS .app:
+                    Contents/MacOS/, beside it); digest-checked when the
                     bundle manifest lists it; must pass the protocol handshake
 developer override  AUCOM_AUE_BINARY, unverified, local, no handshake, and
                     labelled UNVERIFIED everywhere it is shown
@@ -79,7 +80,7 @@ beside this Companion … a development build can name one with AUCOM_AUE_BINARY
 
 The bundled file's verification, in `internal/aue.Resolver`:
 
-- `bundle-manifest.json` beside it lists `auto-pigeon-extractor[.exe]` with a
+- `bundle-manifest.json` beside it lists `dependencies/auto-pigeon-extractor[.exe]` with a
   SHA-256 → the bytes must hash to it. Match: **verified**. Mismatch: **refused**
   ("it is not the extractor this release shipped, and it is not run").
 - no manifest, or the manifest does not list it → it runs **unverified**, with

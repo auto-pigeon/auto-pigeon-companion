@@ -505,6 +505,28 @@ func TestAReleaseIsTheBundledArchivesAndNothingElse(t *testing.T) {
 			return nil
 		})
 	}
+
+	// The root of a Linux or Windows archive is the program a person starts;
+	// the extractor and the manifest are in dependencies/.
+	linux := filepath.Join(t.TempDir(), "linux-root")
+	unzipDir(t, filepath.Join(w.release, "auto-pigeon-companion-"+testVersion+"-linux-amd64.zip"), linux)
+	root := filepath.Join(linux, "auto-pigeon-companion-"+testVersion+"-linux-amd64")
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		switch entry.Name() {
+		case "companion", "SHA256SUMS", "dependencies":
+		default:
+			t.Errorf("the linux-amd64 archive root carries %s", entry.Name())
+		}
+	}
+	for _, name := range []string{"auto-pigeon-extractor", "bundle-manifest.json"} {
+		if _, err := os.Stat(filepath.Join(root, "dependencies", name)); err != nil {
+			t.Errorf("the linux-amd64 archive has no dependencies/%s: %v", name, err)
+		}
+	}
 }
 
 // The extractor's licence is quoted from its own release manifest (NEW_247G):
@@ -620,10 +642,10 @@ func TestAnIncompleteOrInconsistentArchiveIsRefused(t *testing.T) {
 		archive string
 		want    string
 	}{
-		"no extractor": {mutate("no-extractor", remove("auto-pigeon-extractor"), true),
+		"no extractor": {mutate("no-extractor", remove("dependencies/auto-pigeon-extractor"), true),
 			"carries no auto-pigeon-extractor"},
 		"a replaced extractor": {mutate("replaced", func(bundle string) {
-			writeFakeExecutable(t, filepath.Join(bundle, "auto-pigeon-extractor"), "linux-amd64", "something else")
+			writeFakeExecutable(t, filepath.Join(bundle, "dependencies", "auto-pigeon-extractor"), "linux-amd64", "something else")
 		}, false), "does not match its bundle manifest"},
 		"an unlisted file": {mutate("unlisted", func(bundle string) {
 			writeFile(t, filepath.Join(bundle, "extra.txt"), "surprise\n")

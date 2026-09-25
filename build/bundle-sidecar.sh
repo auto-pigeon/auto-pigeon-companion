@@ -24,7 +24,7 @@ set -euo pipefail
 # Companion MIT, the extractor proprietary (NEW_247G) — and the bundle says
 # which is which in its manifest, so an archive carrying the extractor is never
 # "an MIT archive"; the extractor is copied in as
-# `auto-pigeon-extractor[.exe]`, the name the Companion looks for beside itself,
+# `dependencies/auto-pigeon-extractor[.exe]` (inside the .app on macOS), where the Companion looks for it,
 # and its digest in the manifest is what the Companion checks before running it.
 #
 # usage:

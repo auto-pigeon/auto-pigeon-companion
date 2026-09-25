@@ -81,6 +81,11 @@ app_dir="${OUT_DIR}/${APP_NAME}.app"
 rm -rf "$app_dir"
 mkdir -p "${app_dir}/Contents/MacOS" "${app_dir}/Contents/Resources"
 
+# The Auto-Pigeon icon (CFBundleIconFile in the template), derived from the
+# pinned mark by build/icon with the Go toolchain this build already needs.
+icns="$(cd "${app_dir}/Contents/Resources" && pwd)/AppIcon.icns"
+( cd "$repo_root" && go run ./build/icon icns --out "$icns" >/dev/null )
+
 # The executable name must match CFBundleExecutable in the template.
 install -m 0755 "$BINARY" "${app_dir}/Contents/MacOS/${EXECUTABLE}"
 

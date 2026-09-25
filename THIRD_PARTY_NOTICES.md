@@ -150,7 +150,8 @@ A release bundle places a **prebuilt** extractor beside the Companion as
 `bundle-manifest.json` lists it with its SHA-256, its version, its licence and
 the commit it was built from — see [`build/bundle-sidecar.sh`](build/bundle-sidecar.sh)
 and [`build/bundle-manifest.py`](build/bundle-manifest.py). The Companion finds
-it in the directory of its own executable, checks the digest when the manifest
+it in `dependencies/` beside its own executable (in `Contents/MacOS/` inside a
+macOS `.app`), checks the digest when the manifest
 lists it, asks it `protocol --json`, and then invokes it as a **separate
 operating-system process** through `os/exec` and reads its stdout. See
 [`internal/aue`](internal/aue/doc.go).

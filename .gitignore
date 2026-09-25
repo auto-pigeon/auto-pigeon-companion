@@ -29,6 +29,9 @@
 *.app/
 
 # Go
+# The Windows icon resource build/release.sh generates (build/icon) for the
+# length of a release build.
+*.syso
 *.test
 *.out
 *.exe

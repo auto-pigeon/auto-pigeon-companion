@@ -45,6 +45,9 @@ func newBundle(t *testing.T, answer, behaviour string) *bundle {
 		t.Skip("the fake extractor is a shell script")
 	}
 	b := &bundle{t: t, dir: t.TempDir()}
+	if err := os.MkdirAll(b.deps(), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	script := "#!/bin/sh\nif [ \"$1\" = protocol ]; then\ncat <<'JSON'\n" + answer + "\nJSON\nexit 0\nfi\n" + behaviour
 	if err := os.WriteFile(b.path(), []byte(script), 0o700); err != nil {
 		t.Fatal(err)
@@ -53,8 +56,14 @@ func newBundle(t *testing.T, answer, behaviour string) *bundle {
 	return b
 }
 
+// deps is the folder beside the Companion a release puts the extractor and its
+// manifest in.
+func (b *bundle) deps() string {
+	return filepath.Join(b.dir, aue.DependenciesDir)
+}
+
 func (b *bundle) path() string {
-	return filepath.Join(b.dir, "auto-pigeon-extractor")
+	return filepath.Join(b.deps(), "auto-pigeon-extractor")
 }
 
 // list writes the bundle manifest with this digest for the extractor ("" means
@@ -72,11 +81,11 @@ func (b *bundle) list(digest string) {
 	manifest := map[string]any{
 		"schema_version": "aucom.bundle-manifest/1.0",
 		"members": []map[string]any{
-			{"path": "auto-pigeon-extractor", "product": "auto-pigeon-extractor", "sha256": digest},
+			{"path": aue.DependenciesDir + "/auto-pigeon-extractor", "product": "auto-pigeon-extractor", "sha256": digest},
 		},
 	}
 	data, _ := json.Marshal(manifest)
-	if err := os.WriteFile(filepath.Join(b.dir, aue.BundleManifestName), data, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(b.deps(), aue.BundleManifestName), data, 0o600); err != nil {
 		b.t.Fatal(err)
 	}
 }
@@ -261,7 +270,7 @@ func TestProtocolSatisfiesIsSameMajorAndAtLeastTheMinor(t *testing.T) {
 // is a refusal rather than a quiet fall-back to "unlisted".
 func TestAnUnreadableBundleManifestIsARefusal(t *testing.T) {
 	b := newBundle(t, protocolAnswer("1.0"), "")
-	if err := os.WriteFile(filepath.Join(b.dir, aue.BundleManifestName), []byte("{not json"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(b.deps(), aue.BundleManifestName), []byte("{not json"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := b.resolver().Resolve(context.Background()); err == nil || !strings.Contains(err.Error(), "bundle manifest") {
@@ -318,5 +327,20 @@ func TestAnExtractorInsideAMacOSAppIsCheckedAgainstTheAppsManifest(t *testing.T)
 		if !status.Available || !status.Verified {
 			t.Errorf("status = %+v, want verified", status)
 		}
+	}
+}
+
+// The extractor is looked for in dependencies/ and only there: one left at the
+// archive root, where releases before 1.160 put it, is not found, and nothing
+// falls back to it.
+func TestAnExtractorBesideTheCompanionIsNotLookedFor(t *testing.T) {
+	b := newBundle(t, protocolAnswer("1.0"), "echo ok\n")
+	b.list("")
+	if err := os.Rename(b.path(), filepath.Join(b.dir, "auto-pigeon-extractor")); err != nil {
+		t.Fatal(err)
+	}
+	status := b.resolver().Status()
+	if status.Available || !strings.Contains(status.Reason, filepath.Join(aue.DependenciesDir, "auto-pigeon-extractor")) {
+		t.Fatalf("status = %+v; want unavailable, naming %s", status, filepath.Join(aue.DependenciesDir, "auto-pigeon-extractor"))
 	}
 }

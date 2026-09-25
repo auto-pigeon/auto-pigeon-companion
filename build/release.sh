@@ -95,6 +95,15 @@ else
     go test ./internal/web -run 'TestTheEmbeddedAboutIsTheGeneratedCopy' -count=1
 fi
 
+# The Windows executables carry the Auto-Pigeon icon: build/icon writes one
+# resource object per architecture into cmd/companion, and `go build` links
+# rsrc_windows_<arch>.syso into that target only. Generated here from the
+# pinned mark, never committed (.gitignore), and removed when this script ends
+# so a later plain build of the tree is unchanged. macOS gets its icon in
+# build/macos/make-app-bundle.sh; a Linux executable has no icon slot.
+go run ./build/icon syso --out cmd/companion >/dev/null
+trap 'rm -f "$repo_root"/cmd/companion/rsrc_windows_*.syso' EXIT
+
 echo "== building $VERSION into $OUT =="
 IFS=',' read -r -a targets <<< "$TARGETS"
 for target in "${targets[@]}"; do

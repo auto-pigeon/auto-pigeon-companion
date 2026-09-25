@@ -26,6 +26,14 @@ const RequiredProtocol = "1.0"
 // each one's SHA-256 (build/bundle-manifest.py).
 const BundleManifestName = "bundle-manifest.json"
 
+// DependenciesDir is the folder beside the Companion's executable that a
+// Linux or Windows release bundle puts the extractor and its bundle manifest
+// in, so the archive root holds only the program a person starts (operator
+// decision, 2026-09-25). A Companion inside a macOS .app looks beside itself in
+// Contents/MacOS, as before. There is no fallback between the two: the
+// Companion runs beside the layout its own release built.
+const DependenciesDir = "dependencies"
+
 // ExecutableName is the bundled extractor's file name on a platform.
 func ExecutableName(platform profile.Platform) string {
 	return "auto-pigeon-extractor" + platform.ExeSuffix()
@@ -37,9 +45,9 @@ type Resolver struct {
 	// set, Resolve returns an override runner and looks nowhere else.
 	Override string
 
-	// Dir is where the bundled extractor is looked for. Empty means the
-	// directory this program's own executable is in, which is where a release
-	// bundle puts it.
+	// Dir is the directory the Companion's executable is in; the bundled
+	// extractor is looked for in its DependenciesDir, or beside it inside a
+	// macOS .app. Empty means this program's own directory.
 	Dir string
 
 	// Platform is the machine. Zero means the running one.
@@ -76,7 +84,19 @@ func (r *Resolver) BundledPath() (string, error) {
 		return "", err
 	}
 
-	return filepath.Join(dir, ExecutableName(r.platform())), nil
+	if inMacApp(dir) {
+		return filepath.Join(dir, ExecutableName(r.platform())), nil
+	}
+
+	return filepath.Join(dir, DependenciesDir, ExecutableName(r.platform())), nil
+}
+
+// inMacApp reports whether dir is a macOS app bundle's Contents/MacOS.
+func inMacApp(dir string) bool {
+	contents := filepath.Dir(dir)
+
+	return filepath.Base(dir) == "MacOS" && filepath.Base(contents) == "Contents" &&
+		strings.HasSuffix(strings.ToLower(filepath.Dir(contents)), ".app")
 }
 
 // Status is what this Companion can say about its extractor without running it.
@@ -205,7 +225,8 @@ type bundleManifest struct {
 // bundleManifestFor says where a release's bundle manifest is for an extractor
 // at path, and the member path it lists the extractor under.
 //
-// Beside the executable on Linux and Windows. On macOS the Companion runs from
+// Beside the extractor, in DependenciesDir, on Linux and Windows; the member
+// path is relative to the archive root, so it is `dependencies/<name>`. On macOS the Companion runs from
 // `<Name>.app/Contents/MacOS/`, so that is where its extractor is too, and the
 // manifest — whose member paths are relative to the archive root — is in
 // `<Name>.app/Contents/Resources/`, inside the app so that dragging the app to
@@ -213,15 +234,14 @@ type bundleManifest struct {
 // both at the archive root, where a Companion in a .app never looked).
 func bundleManifestFor(path string) (manifest, member string) {
 	dir := filepath.Dir(path)
-	contents := filepath.Dir(dir)
-	app := filepath.Dir(contents)
-	if filepath.Base(dir) == "MacOS" && filepath.Base(contents) == "Contents" &&
-		strings.HasSuffix(strings.ToLower(app), ".app") {
+	if inMacApp(dir) {
+		contents := filepath.Dir(dir)
+
 		return filepath.Join(contents, "Resources", BundleManifestName),
-			filepath.Base(app) + "/Contents/MacOS/" + filepath.Base(path)
+			filepath.Base(filepath.Dir(contents)) + "/Contents/MacOS/" + filepath.Base(path)
 	}
 
-	return filepath.Join(dir, BundleManifestName), filepath.Base(path)
+	return filepath.Join(dir, BundleManifestName), DependenciesDir + "/" + filepath.Base(path)
 }
 
 // listedDigest returns the executable's digest and the digest the bundle

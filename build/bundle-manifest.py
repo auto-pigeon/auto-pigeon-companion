@@ -12,9 +12,10 @@ The extractor rules, in one place:
     release workflow from the extractor's own repository at the commit
     `build/aue-pin.json` names, or by hand — and passed in with --extractor.
     Nothing here downloads anything.
-  * It is copied in as `auto-pigeon-extractor[.exe]`, a SEPARATE FILE beside
-    the Companion, which is where the Companion looks for it and checks its
-    digest against this manifest. Never linked, never inside the Companion's
+  * It is copied in as `dependencies/auto-pigeon-extractor[.exe]`, a SEPARATE
+    FILE in the folder beside the Companion, which is where the Companion looks
+    for it and checks its digest against this manifest (also in
+    `dependencies/`). Never linked, never inside the Companion's
     binary. On macOS "beside" is inside the .app, in `Contents/MacOS/`, and the
     manifest is in `Contents/Resources/` (releaselib.layout).
   * It must be built for THIS platform, and so must the Companion: both
@@ -85,6 +86,7 @@ def place_extractor(args, bundle, where):
         )
 
     target = os.path.join(bundle, where["extractor"])
+    os.makedirs(os.path.dirname(target), exist_ok=True)
     shutil.copyfile(args.extractor, target)
     os.chmod(target, 0o755)
     return {

@@ -124,7 +124,7 @@ func extractorArgs(t *testing.T, platform string) []string {
 func readManifest(t *testing.T, bundle string) map[string]any {
 	t.Helper()
 
-	body, err := os.ReadFile(filepath.Join(bundle, "bundle-manifest.json"))
+	body, err := os.ReadFile(filepath.Join(bundle, "dependencies", "bundle-manifest.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -245,7 +245,7 @@ func TestAnExtractorIsBundledBesideTheCompanion(t *testing.T) {
 	}
 	manifest := readManifest(t, bundle)
 	sidecar, _ := manifest["extractor"].(map[string]any)
-	if sidecar == nil || sidecar["version"] != "0.9.0" || sidecar["file"] != "auto-pigeon-extractor" ||
+	if sidecar == nil || sidecar["version"] != "0.9.0" || sidecar["file"] != "dependencies/auto-pigeon-extractor" ||
 		sidecar["license"] != "LicenseRef-test" || sidecar["source_commit"] != strings.Repeat("ab", 20) {
 		t.Fatalf("extractor = %v", sidecar)
 	}
@@ -256,7 +256,7 @@ func TestAnExtractorIsBundledBesideTheCompanion(t *testing.T) {
 	}
 	// Windows has no executable bit to observe; the release composes its
 	// bundles on Linux, where this is checked.
-	if info, err := os.Stat(filepath.Join(bundle, "auto-pigeon-extractor")); err != nil ||
+	if info, err := os.Stat(filepath.Join(bundle, "dependencies", "auto-pigeon-extractor")); err != nil ||
 		(info.Mode().Perm()&0o111 == 0 && runtime.GOOS != "windows") {
 		t.Errorf("the extractor is not an executable file in the bundle: %v", err)
 	}
@@ -281,7 +281,7 @@ func TestAnExtractorIsBundledBesideTheCompanion(t *testing.T) {
 	found := false
 	for _, entry := range manifest["members"].([]any) {
 		member, _ := entry.(map[string]any)
-		if member["path"] == "auto-pigeon-extractor" {
+		if member["path"] == "dependencies/auto-pigeon-extractor" {
 			found = true
 			if member["product"] != "auto-pigeon-extractor" || member["version"] != "0.9.0" ||
 				!strings.HasPrefix(member["sha256"].(string), "sha256:") {
