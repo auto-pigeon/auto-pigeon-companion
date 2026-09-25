@@ -38,3 +38,17 @@ func TestAListingNeedsAHostedGameAndAnAddress(t *testing.T) {
 		t.Error("a registration without a listing was accepted")
 	}
 }
+
+// NEW_247A2: a listing that names no visibility is Private. Public is only
+// ever what somebody chose; the value they chose is passed on unchanged.
+func TestAListingThatNamesNoVisibilityIsPrivate(t *testing.T) {
+	for given, want := range map[string]string{
+		"": "private", "  ": "private", "private": "private", "public": "public", "unlisted": "unlisted",
+	} {
+		body := playRequestBody{Engine: "e", Action: "host_listen",
+			Listing: &playListingBody{Title: "t", Visibility: given, EndpointHost: "203.0.113.4", EndpointPort: 26000}}
+		if got := body.request("").Listing.Visibility; got != want {
+			t.Errorf("a listing asked for as %q is recorded as %q, want %q", given, got, want)
+		}
+	}
+}

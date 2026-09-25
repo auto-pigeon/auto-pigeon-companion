@@ -118,7 +118,10 @@
     }
   }
 
-  // News lives on the gallery, at the address the server gave out.
+  // News lives on the gallery, at the address the server gave out. So does the
+  // page on hosting a game over the Internet, which Build & Run's "Help to
+  // connect" opens (NEW_247A2): the answer is kept on window.AUCOM.siteLinks
+  // and announced, so that page reads the same answer rather than asking again.
   let linksFor;
   async function refreshSiteLinks() {
     const { ok, body } = await api("/api/v1/site-links");
@@ -126,6 +129,8 @@
     $("news-link").hidden = !gallery;
     $("news-unavailable").hidden = Boolean(gallery);
     if (gallery) $("news-link").href = gallery + "/news";
+    window.AUCOM.siteLinks = { gallery_url: gallery, host_help_url: ok ? String(body.host_help_url || "") : "" };
+    document.dispatchEvent(new CustomEvent("aucom:site-links"));
   }
 
   function modal(dialog, closeButton) {

@@ -466,7 +466,7 @@ type playListingBody struct {
 func (b playRequestBody) request(gameRoot string) playrun.Request {
 	var listing *playrun.Listing
 	if b.Listing != nil {
-		listing = &playrun.Listing{Title: b.Listing.Title, Visibility: b.Listing.Visibility,
+		listing = &playrun.Listing{Title: b.Listing.Title, Visibility: listingVisibility(b.Listing.Visibility),
 			EndpointHost: b.Listing.EndpointHost, EndpointPort: b.Listing.EndpointPort}
 	}
 	return playrun.Request{

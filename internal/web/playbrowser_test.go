@@ -101,8 +101,13 @@ func runPlayJourney(t *testing.T, browser, window, label string) {
 	// `TestFirstRunJourneyInABrowser` already drives that half through the
 	// page, and repeating it here would make this test about something else.
 	m.preparePlay(t)
+	drivePlayPage(t, m, browser, window, label, "testdata/playjourney.js")
+}
 
-	script, err := os.ReadFile("testdata/playjourney.js")
+// drivePlayPage runs one driver script against the real page of a prepared
+// machine, in a real browser, and reports each step it recorded.
+func drivePlayPage(t *testing.T, m *machine, browser, window, label, driver string) {
+	script, err := os.ReadFile(driver)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,6 +122,7 @@ func runPlayJourney(t *testing.T, browser, window, label string) {
 		"aub_url":     m.backend.url(),
 		"cache_dir":   m.assets,
 		"api_token":   m.server.Token().Value(),
+		"gallery":     m.backend.gallery,
 	})
 	if err != nil {
 		t.Fatal(err)

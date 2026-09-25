@@ -39,6 +39,9 @@
     },
   };
 
+  // What "Who can see it" says at the start of every launch. See state.listing.
+  const FRESH_VISIBILITY = "private";
+
   // The whole of this page's state. Exact identities, never display labels: a
   // request carrying "dm1, latest" would mean something different tomorrow.
   const state = {
@@ -66,8 +69,11 @@
     // lists a game on a LAN address for everyone (a development server) or only
     // for its host. Never remembered — it is read from the server each time.
     lanListings: false,
-    // listing is how a hosted game appears in Live Games (step 3).
-    listing: { enabled: true, title: "", visibility: "public", host: "", port: "" },
+    // listing is how a hosted game appears in Live Games (step 3). Private
+    // until somebody chooses otherwise (NEW_247A2): a game is seen by everyone
+    // only because its host picked Everyone for this launch. Never remembered
+    // in the URL, so a reload — a fresh session — is Private again too.
+    listing: { enabled: true, title: "", visibility: FRESH_VISIBILITY, host: "", port: "" },
     // planKey is what the plan was computed for. Any change to an identity
     // invalidates it, and the page says so rather than reviewing a stale one.
     planKey: "",
@@ -565,6 +571,7 @@
     if (local && state.listing.visibility !== "private") state.listing.visibility = "private";
     select.value = state.listing.visibility;
     $("play-listing-local").hidden = !local;
+    renderHelpToConnect();
   }
 
   let listingDefaultsFor = "";
@@ -597,6 +604,47 @@
     $("play-listing-host").value = state.listing.host;
     $("play-listing-port").value = state.listing.port;
     applyAddressRule();
+  }
+
+  // --- "Help to connect" (NEW_247A2) ---------------------------------------------
+  //
+  // A game everyone can see is one people outside this network must reach, and
+  // that takes a UDP port forwarded by hand on the host's router. The gallery's
+  // help page says how, and how to test it from outside. It is guidance, not a
+  // check: whether the address answers is still the server's "unverified" or
+  // "reachable". The address is the one the Companion built from the gallery
+  // the Auto-Pigeon server named (host_help_url, see footer.js); with none, the
+  // page says so rather than guessing one.
+  function publicListing(listing) {
+    return Boolean(listing) && listing.visibility === "public";
+  }
+
+  function helpToConnect() {
+    const href = String(window.AUCOM.siteLinks?.host_help_url || "");
+    if (/^https?:\/\/[^/\s]+\/\S*$/i.test(href)) {
+      return el("p", {
+        className: "listing-help",
+        children: [el("a", {
+          className: "button-link",
+          text: t("Help to connect"),
+          attrs: { href, target: "_blank", rel: "noopener noreferrer", "data-help-to-connect": "link" },
+        })],
+      });
+    }
+    return el("p", {
+      className: "hint listing-help",
+      text: t("Help to connect is not available: this Auto-Pigeon server has not said where its website is."),
+      attrs: { "data-help-to-connect": "unavailable" },
+    });
+  }
+
+  // Beside the networking fields, while Everyone is chosen: the host prepares
+  // the router before launching, not after.
+  function renderHelpToConnect() {
+    const box = $("play-listing-help");
+    const show = hosting() && state.listing.enabled && publicListing(state.listing);
+    box.hidden = !show;
+    box.replaceChildren(...(show ? [helpToConnect()] : []));
   }
 
   // The review's listing card: AUB's own preview of what will be published.
@@ -636,6 +684,7 @@
       }));
     }
     for (const line_ of preview.network_guidance || []) card.append(el("p", { className: "muted small", text: line_ }));
+    if (publicListing(body)) card.append(helpToConnect());
     card.append(el("p", {
       className: "muted small",
       text: t("Pressing Build & Run lists the game once it is running, with the map uploaded for people who join. The listing ends when the game stops."),
@@ -1008,6 +1057,15 @@
       setMessage("play-start-message", body.error, "error");
       return;
     }
+    // Everyone was this launch's choice, not the next one's (NEW_247A2): the
+    // next launch starts Private. The summary is drawn again, so what is
+    // pressed next is what is on the screen, and the review, asked for with
+    // the listing it previews, is worked out again when it is next opened.
+    if (state.listing.visibility !== FRESH_VISIBILITY) {
+      state.listing.visibility = FRESH_VISIBILITY;
+      renderListing();
+      if (state.step === 5) renderFinalSummary();
+    }
     // A short confirmation is a status line; the DETAIL is in Activity, which
     // opens on its own because that is where the run now lives.
     setMessage("play-start-message", "Started. Progress is in the Activity panel.");
@@ -1170,6 +1228,11 @@
         className: "message" + (listing.state === "listed" ? " ok" : listing.state === "failed" ? " error" : ""),
         text: label + (listing.message ? " " + listing.message : ""),
       }));
+      // While a game everyone can see is being listed or is listed — the time
+      // somebody finds out whether players outside can reach it.
+      if (publicListing(listing) && (listing.state === "registering" || listing.state === "listed")) {
+        children.push(helpToConnect());
+      }
     }
 
     const actions = el("div", { className: "activity-run__actions row-actions" });
@@ -1315,6 +1378,7 @@
   $("play-list-it").addEventListener("change", (event) => {
     state.listing.enabled = event.target.checked;
     $("play-listing-fields").hidden = !state.listing.enabled;
+    renderHelpToConnect();
     invalidate("You changed whether the game is listed.");
   });
   for (const [id, field] of [["play-listing-title", "title"], ["play-listing-visibility", "visibility"],
@@ -1322,6 +1386,7 @@
     $(id).addEventListener(id.endsWith("visibility") ? "change" : "input", (event) => {
       state.listing[field] = event.target.value;
       if (field === "host") applyAddressRule();
+      if (field === "visibility") renderHelpToConnect();
       invalidate("You changed the Live Games listing.");
     });
   }
@@ -1331,6 +1396,11 @@
     renderActions();
   });
   $("play-start").addEventListener("click", start);
+  // The gallery's address arrives from the footer's one question to the server.
+  document.addEventListener("aucom:site-links", () => {
+    renderHelpToConnect();
+    if (!$("activity").hidden) poll();
+  });
 
   $("activity-open").addEventListener("click", () => {
     if ($("activity").hidden) openActivity();

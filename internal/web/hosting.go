@@ -263,6 +263,17 @@ func networkAddress() string {
 	return ""
 }
 
+// listingVisibility is the visibility a listing is asked for with. A request
+// that names none is Private (NEW_247A2): a hosted game becomes Public only
+// when somebody chose Public, never because a field was left out. Any other
+// value is passed on as it came, for AUB to accept or refuse.
+func listingVisibility(visibility string) string {
+	if visibility = strings.TrimSpace(visibility); visibility == "" {
+		return aub.GamePrivate
+	}
+	return visibility
+}
+
 // listingRegistration is the registration a hosted run would make, without
 // its join content (the build does not exist yet when the review asks).
 func (s *Server) listingRegistration(request playrun.Request, listing *playListingBody) (aub.HostedGameRegistration, error) {
@@ -310,7 +321,7 @@ func (s *Server) listingRegistration(request playrun.Request, listing *playListi
 		EndpointHost:     host,
 		EndpointPort:     listing.EndpointPort,
 		PlayersMax:       maxPlayers,
-		Visibility:       strings.TrimSpace(listing.Visibility),
+		Visibility:       listingVisibility(listing.Visibility),
 		ProcessIdentity:  hostgame.ProcessIdentity(root, request.AssetID, host, listing.EndpointPort),
 		ClientVersion:    "aucom/" + s.version,
 	}, nil
@@ -411,8 +422,11 @@ func (s *Server) playLaunched(record playrun.Record) {
 	if record.Request.Listing == nil || record.Launch == nil || hostingActions[record.Request.EngineActionID] == "" {
 		return
 	}
+	// The visibility asked for, so Activity can offer "Help to connect" for a
+	// game everyone will see while it is still being listed (NEW_247A2).
 	s.hosting.set(record.ID, &listingView{State: "registering", Title: record.Request.Listing.Title,
-		Message: "Uploading the map for people who join, then listing it in Live Games…"})
+		Visibility: record.Request.Listing.Visibility,
+		Message:    "Uploading the map for people who join, then listing it in Live Games…"})
 	go s.advertiseRun(record)
 }
 

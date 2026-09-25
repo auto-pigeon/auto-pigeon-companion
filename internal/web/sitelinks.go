@@ -3,6 +3,8 @@ package web
 import (
 	"context"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -55,13 +57,40 @@ func (s *Server) siteLinksRoutes() map[string]http.HandlerFunc {
 	}
 }
 
-// handleSiteLinks answers {gallery_url}: where the Auto-Pigeon server in use
-// says the gallery is, or empty when it has not said, cannot be reached, or no
+// handleSiteLinks answers {gallery_url, host_help_url}: where the Auto-Pigeon
+// server in use says the gallery is, and the gallery's page on hosting a game
+// over the Internet — or empty when it has not said, cannot be reached, or no
 // server is chosen. Never guessed.
 func (s *Server) handleSiteLinks(w http.ResponseWriter, r *http.Request) {
 	gallery := ""
 	if client := s.aubClient(); client != nil {
 		gallery = s.siteLinks.galleryURL(r.Context(), client)
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"gallery_url": gallery})
+	writeJSON(w, http.StatusOK, map[string]string{
+		"gallery_url":   gallery,
+		"host_help_url": hostHelpURL(gallery),
+	})
+}
+
+// HostHelpPath is the gallery's public page on letting players outside the
+// host's network reach a hosted game: manual UDP port forwarding, and how to
+// test it (NEW_247A2). Build & Run's "Help to connect" leads there.
+const HostHelpPath = "/help/host-a-game"
+
+// hostHelpURL is the help page on the gallery the server named, or empty. Only
+// an absolute http(s) origin qualifies — the same rule aub.SiteLinks applies,
+// kept here too because this is where the link is made — and whatever query,
+// fragment or credentials it carried are dropped: the destination is the
+// gallery's own page, and nothing a request says can choose another.
+func hostHelpURL(gallery string) string {
+	parsed, err := url.Parse(strings.TrimSpace(gallery))
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" ||
+		parsed.Opaque != "" {
+		return ""
+	}
+	parsed.User, parsed.RawQuery, parsed.Fragment, parsed.RawFragment = nil, "", "", ""
+	parsed.ForceQuery = false
+	parsed.RawPath = ""
+	parsed.Path = strings.TrimRight(parsed.Path, "/") + HostHelpPath
+	return parsed.String()
 }

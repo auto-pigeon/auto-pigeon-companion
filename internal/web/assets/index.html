@@ -421,7 +421,7 @@
                     <select id="play-listing-visibility">
                       <option value="public">Everyone</option>
                       <option value="unlisted">People with the link</option>
-                      <option value="private">Only you</option>
+                      <option value="private" selected>Only you</option>
                     </select>
                   </div>
                 </div>
@@ -436,6 +436,8 @@
                   </div>
                 </div>
                 <p class="hint" id="play-listing-hint"></p>
+                <!-- "Help to connect" (NEW_247A2), while Everyone is chosen: drawn by play.js. -->
+                <div id="play-listing-help" hidden></div>
                 <p class="hint listing-local" id="play-listing-local" hidden>
                   This address is on your own network, so the game is listed for you only — it shows
                   under <strong>My games</strong> in Live Games, here and on the Auto-Pigeon site.

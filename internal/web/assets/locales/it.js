@@ -186,6 +186,8 @@ window.AUCOM_LOCALES.it = {
   "Games being hosted": "Partite ospitate",
   "Games people are hosting right now. Joining uses an engine and a copy of the game you already have; Join downloads only the map files a host shared for their game, checks every file and starts the game.": "Partite ospitate in questo momento. Per unirti usi un motore e una copia del gioco che hai già; Unisciti scarica solo i file di mappa che chi ospita ha condiviso per la sua partita, verifica ogni file e avvia il gioco.",
   "GitHub opened in a new tab. The report is filed only when you press Submit new issue there.": "GitHub si è aperto in una nuova scheda. La segnalazione viene registrata solo quando premi Submit new issue lì.",
+  "Help to connect": "Aiuto per la connessione",
+  "Help to connect is not available: this Auto-Pigeon server has not said where its website is.": "L’aiuto per la connessione non è disponibile: questo server Auto-Pigeon non ha indicato dove si trova il suo sito.",
   "History": "Cronologia",
   "Host a map and it shows in Live Games, where others can join it.": "Ospita una mappa e compare in Partite dal vivo, dove altri possono unirsi.",
   "Host it and play": "Ospitala e gioca",

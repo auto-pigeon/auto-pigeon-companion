@@ -483,7 +483,12 @@ stage you stopped it in and that nothing was installed.
 
 **Hosting from Build & Run lists the game in Live Games.** Choosing **Host it
 and play** or **Dedicated server** in step 3 shows a **Live Games** block: a
-title, who can see it, and the address and port players connect to. The address
+title, who can see it, and the address and port players connect to. **Who can
+see it starts at *Only you* (Private)** on every launch: a game is seen by
+everyone only when you choose **Everyone** for that launch, and the next launch
+— or a reload of the page — starts Private again. Changing the map, the engine,
+the action or going back to the review keeps what you chose. A listing request
+that names no visibility is Private too. The address
 is suggested from this machine's route to the Auto-Pigeon server (its network
 address when the server is on this machine) and the port from the engine's
 profile, or the game's own default (26000 for Quake) — both editable, neither
@@ -519,6 +524,24 @@ $ curl -s -H "X-AUCOM-Token: $TOKEN" -X POST http://127.0.0.1:8791/api/v1/play/l
     "map": "dm2", "listing": {"title": "dm2", "visibility": "private",
     "endpoint_host": "192.168.0.33", "endpoint_port": 26000}}' | jq .reachability
 "local"
+```
+
+**Help to connect.** When **Everyone** is chosen, a **Help to connect** link
+appears beside the address and port, in the review's Live Games card, and in
+Activity while that public game is being listed or is listed. It opens the
+Auto-Pigeon website's `/help/host-a-game` page in a new tab: how to forward the
+game's UDP port on your router by hand, allow it through the firewall, publish
+your public address and test from outside (another connection, such as mobile
+data), and what double NAT and carrier-grade NAT mean. The Companion changes
+nothing on your router — no UPnP, no relay — and the link is guidance, not a
+check: the listing still says `unverified` until the Auto-Pigeon server has
+reached the address. The address is built from the gallery the Auto-Pigeon
+server names at `GET /api/site-links`; when it names none, the page says help is
+unavailable rather than guessing a link:
+
+```console
+$ curl -s -H "X-AUCOM-Token: $TOKEN" http://127.0.0.1:8791/api/v1/site-links
+{"gallery_url":"https://auto-pigeon.example","host_help_url":"https://auto-pigeon.example/help/host-a-game"}
 ```
 
 **Your own copy of a WAD the server may not hand out.** Most Quake maps name one

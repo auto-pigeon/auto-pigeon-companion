@@ -155,6 +155,11 @@ type fixtureBackend struct {
 	// notices, when set, answers AUB's operational-notice route (241).
 	// Unset, the route is a 404, as on a deployment that predates it.
 	notices http.Handler
+
+	// gallery, when set, is the gallery origin AUB's public site-links route
+	// names (NEW_247A2). Unset, the route is a 404: a deployment that has
+	// not said where its gallery is.
+	gallery string
 }
 
 func (b *fixtureBackend) count() int {
@@ -227,6 +232,10 @@ func (b *fixtureBackend) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if b.gallery != "" && path == aub.SiteLinksPath {
+		write(map[string]any{"gallery_url": b.gallery})
+		return
+	}
 	if b.notices != nil && path == aub.NoticesPath {
 		b.notices.ServeHTTP(w, r)
 		return
