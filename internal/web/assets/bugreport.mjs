@@ -1,44 +1,64 @@
-// Report a bug — AUG's dialog, in the Companion (operator, 2026-09-22).
+// Report a bug — AUG's dialog, in the Companion (operator, 2026-09-22), laid
+// out as AUP's corrected report (NEW_253).
 //
 // The document is built ONCE by the shared incident contract, vendored byte for
 // byte under vendor/incident-contract, and every control below renders that one
 // value: the field-by-field preview, the exact text, both downloads, the
 // prefilled GitHub issue and the body AUB files. So what the person reviewed is
-// what is published, exactly as in AUG (`auto-pigeon-gallery/src/incidents/
-// BugReportDialog.tsx`), whose steps and words this follows.
+// what is published.
 //
-// Two steps. Compose: what the report is (NEW_247H) — the application, a fixed
-// fact; a type and an area, chosen by the person (or, for a report about an
-// incident, preselected from the contract and still changeable) — then four
-// fields whose labels follow the type. Nothing is built until Review, and
-// Review is refused until a type and an area are chosen. Review: the document,
-// the three labels it carries, and three ways out — keep a copy, file it
-// yourself on GitHub, or send it through Auto-Pigeon after ticking that it is
-// published publicly. Nothing leaves this page before one of those presses.
+// Two steps, one skeleton (NEW_253, after AUP's `BugReportDialog.tsx`):
+//
+//   Write — the public warning; what it is about (only when this Companion
+//   raised something); one classification band: the application, a printed
+//   fact, the Type as a radio group (Bug on a fresh report) and the Area,
+//   which a cold report must choose; then Summary, Steps, Expected, Actual,
+//   each with its hint, whose labels follow the type. Footer: Close bottom
+//   left, Review report bottom right. Review stays disabled, saying why, until
+//   an area is chosen and a summary written. Nothing is built until Review.
+//
+//   Review — the public warning; the field list (the three GitHub labels as
+//   chips first); the exact text; "How to file it": Download .txt, Download
+//   .json and Open prefilled GitHub issue in one row, their notes, the one
+//   route line, the send result. Footer: Close and Edit bottom left; bottom
+//   right the public-consent tick together with Send through Auto-Pigeon,
+//   offered only when the server route is (AUB configured AND signed in) and
+//   the report has not reached a final outcome.
+//
+// Close never sends. Edit keeps the draft — the words, the type (a deliberate
+// Feature request stays one) and the area — and is offered only until a send
+// was attempted, so a retry sends the very document the first attempt did.
 // The report never carries a map, a path, a profile, an account or a token:
 // the contract has no field for them.
 //
 // Every classification rule — types, areas, the incident's starting area, the
-// headings, the labels — is the contract's, through bugreport-model.mjs.
+// headings, the labels — is the contract's, through bugreport-model.mjs, which
+// also holds this dialog's DOM-free decisions (the Bug default, why Review is
+// blocked, the titles, the route line and when Send is offered) so node can
+// exercise them in bugreport_model_test.go.
 
 import {
   BUG_REPORT_REPOSITORY,
   newIncidentId,
   prefilledIssueUrl,
-  renderIssue,
   renderReportText,
   reportDownloadNames,
   reportJsonDownload,
 } from "./vendor/incident-contract/src/index.mjs";
 import {
   APPLICATION,
+  ROUTE_LINES,
   areaChoices,
   buildReport,
+  dialogTitle,
+  fieldHints,
   fieldLabels,
   initialClassification,
-  missingChoices,
   reportLabels,
   reportTypeChoices,
+  reviewBlocked,
+  serverRoute,
+  suggestedArea,
 } from "./bugreport-model.mjs";
 
 const { $, el, api } = window.AUCOM;
@@ -46,12 +66,20 @@ const t = (english, values) => window.AUCOM.t(english, values);
 
 const dialog = $("bug-dialog");
 const body = $("bug-body");
+const title = $("bug-title");
 const repository = `https://github.com/${BUG_REPORT_REPOSITORY}`;
+const shownRepository = `github.com/${BUG_REPORT_REPOSITORY}`;
 
 let fields = { summary: "", steps: "", expected: "", actual: "" };
 let reportId = "";
 let built = null;
+// "idle" until the first press of Send; "sent" after it (Edit is withdrawn).
 let sendState = "idle";
+// True once AUB's answer was final — filed, outcome unknown, reused,
+// unavailable: Send is not offered again for this report.
+let sendFinal = false;
+// True while one POST is in flight: a second press sends nothing.
+let sending = false;
 // What the report is about and how it is classified. `incident` is an entry of
 // GET /api/v1/bug-reports/incidents, or null for a cold report; `incidents`
 // is that list, for the dialog's "What it is about" choice.
@@ -86,24 +114,48 @@ function build() {
   });
 }
 
+function setTitle(step, type) {
+  title.textContent = t(dialogTitle(step, type));
+}
+
 function warning() {
   return el("p", {
     className: "bug-warning",
-    attrs: { role: "note" },
-    text: t("Bug reports are public and permanent: whatever you send is published at {repository}, where anyone can read it. Do not include anything private.",
-      { repository }),
+    attrs: { role: "note", id: "bug-warning" },
+    text: t("If you file this report it becomes PUBLIC at {repository}, where anyone can read it, permanently. Do not type anything private into it.",
+      { repository: shownRepository }),
   });
 }
 
-function field(name, label, multiline, rows) {
+function buttonTo(label, onClick, className = "", id = null) {
+  const button = el("button", { text: label, className, attrs: { type: "button", id } });
+  button.addEventListener("click", onClick);
+  return button;
+}
+
+// The one footer both steps share: a top border, the left side, a gap that
+// pushes whatever follows hard right.
+function footer(left, right) {
+  return el("div", {
+    className: "bug-foot",
+    children: [...left, el("span", { className: "bug-foot__gap", attrs: { "aria-hidden": "true" } }), ...right],
+  });
+}
+
+function field(name, multiline, rows) {
   const id = "bug-field-" + name;
+  const hintId = "bug-hint-" + name;
   const input = multiline
-    ? el("textarea", { attrs: { id, rows: String(rows) } })
-    : el("input", { attrs: { id, type: "text", maxlength: "400", required: "" } });
+    ? el("textarea", { attrs: { id, rows: String(rows), "aria-describedby": hintId } })
+    : el("input", { attrs: { id, type: "text", maxlength: "400", required: "", "aria-describedby": hintId } });
   input.value = fields[name];
-  input.addEventListener("input", () => { fields[name] = input.value; });
-  const caption = el("label", { text: t(label), attrs: { for: id } });
-  return { node: el("div", { className: "field", children: [caption, input] }), caption };
+  input.addEventListener("input", () => {
+    fields[name] = input.value;
+    if (name === "summary") relabel();
+  });
+  const caption = el("label", { attrs: { for: id } });
+  const hint = el("small", { className: "hint bug-hint", attrs: { id: hintId } });
+  return { node: el("div", { className: "field", children: [caption, input, hint] }), caption, hint };
 }
 
 // A short, human description of an incident this process raised — display
@@ -120,12 +172,25 @@ function describeIncident(entry) {
 function setIncident(next) {
   incident = next;
   // A report about an incident starts where the contract says it does; a cold
-  // one starts with nothing chosen. Either way the person can change it.
+  // one starts as a Bug with no area (NEW_253). Either way the person can
+  // change both.
   ({ reportType, area } = initialClassification(incident));
 }
 
+// The classification band: the application (a fact), the Type (a radio
+// group) and the Area, in one row that wraps to one column when narrow.
 function classification() {
-  const wrap = el("div", { className: "bug-classify" });
+  const wrap = el("div", { className: "bug-classify", attrs: { id: "bug-classification" } });
+
+  wrap.append(el("div", {
+    className: "field bug-fact",
+    attrs: { id: "bug-application" },
+    children: [
+      el("span", { className: "bug-fact__term", text: t("Application") }),
+      el("strong", { className: "bug-fact__value", text: APPLICATION, attrs: { translate: "no" } }),
+      el("small", { className: "hint", text: t("Every report from the Companion is filed as {application}.", { application: APPLICATION }) }),
+    ],
+  }));
 
   const types = el("div", { className: "bug-types" });
   for (const choice of reportTypeChoices()) {
@@ -138,35 +203,29 @@ function classification() {
     });
     types.append(el("label", { className: "check", attrs: { for: radio.id }, children: [radio, document.createTextNode(" " + t(choice.name))] }));
   }
-  wrap.append(el("fieldset", { children: [el("legend", { text: t("Type") }), types] }));
+  wrap.append(el("fieldset", { className: "field bug-type", attrs: { id: "bug-type" }, children: [el("legend", { text: t("Type") }), types] }));
 
-  const select = el("select", { attrs: { id: "bug-area" } });
+  const select = el("select", { attrs: { id: "bug-area", "aria-describedby": "bug-suggested" } });
   select.append(el("option", { text: t("Choose an area"), attrs: { value: "" } }));
   for (const choice of areaChoices()) {
     select.append(el("option", { text: t(choice.name), attrs: { value: choice.id } }));
   }
   select.value = area;
   select.addEventListener("change", () => { area = select.value; relabel(); });
-  wrap.append(el("div", { className: "field", children: [el("label", { text: t("Area"), attrs: { for: "bug-area" } }), select] }));
-  return wrap;
+  const suggested = el("small", { className: "hint", attrs: { id: "bug-suggested" } });
+  wrap.append(el("div", { className: "field", children: [el("label", { text: t("Area"), attrs: { for: "bug-area" } }), select, suggested] }));
+  return { node: wrap, suggested };
 }
 
 let relabel = () => {};
 
 function compose(message) {
   built = null;
-  const form = el("form", { className: "bug-form" });
-  form.append(
-    el("p", { className: "muted", text: t("Tell us what went wrong or what you would like. Before anything leaves this page you will see exactly what the report contains, and choose how to send it.") }),
-    el("p", {
-      className: "bug-fact",
-      children: [el("span", { className: "bug-fact__term", text: t("Application") }), document.createTextNode(t("Auto-Pigeon Companion ({application})", { application: APPLICATION }))],
-    }),
-  );
+  const form = el("form", { className: "bug-form", attrs: { id: "bug-compose" } });
 
   // "What it is about": offered only when this Companion raised something. Choosing an
   // incident preselects the contract's type and area; choosing nothing makes
-  // it a new report, where the person chooses both.
+  // it a new report: a Bug, with the area still to choose.
   if (incidents.length || incident) {
     const about = el("select", { attrs: { id: "bug-incident" } });
     about.append(el("option", { text: t("Nothing in particular: a new report"), attrs: { value: "" } }));
@@ -178,49 +237,66 @@ function compose(message) {
     about.addEventListener("change", () => {
       setIncident(offered.find((entry) => entry.incident_id === about.value) || null);
       compose();
+      $("bug-incident")?.focus();
     });
     form.append(el("div", { className: "field", children: [el("label", { text: t("What it is about"), attrs: { for: "bug-incident" } }), about] }));
   }
-
-  form.append(classification());
   if (incident) {
-    form.append(el("p", { className: "muted small", attrs: { id: "bug-suggested" }, text: t("Type and area were suggested from the incident. Change them if the report is about something else.") }));
+    form.append(el("p", {
+      className: "bug-note",
+      attrs: { id: "bug-about" },
+      text: t("This report is about the incident {code}. Its code, severity and correlation id are included; its message is not.", { code: incident.code }),
+    }));
   }
 
-  const summary = field("summary", "", false);
-  const steps = field("steps", "", true, 4);
-  const expected = field("expected", "", true, 2);
-  const actual = field("actual", "", true, 2);
+  const band = classification();
+  form.append(band.node);
+
+  const summary = field("summary", false);
+  const steps = field("steps", true, 4);
+  const expected = field("expected", true, 2);
+  const actual = field("actual", true, 2);
   form.append(summary.node, steps.node, expected.node, actual.node);
-  if (message) form.append(el("p", { className: "message error", text: message }));
+  if (message) form.append(el("p", { className: "message error", attrs: { role: "alert" }, text: message }));
 
-  const why = el("p", { className: "muted small", attrs: { id: "bug-review-why", role: "status" } });
-  const submit = el("button", { text: t("Review report"), className: "primary", attrs: { type: "submit", "aria-describedby": "bug-review-why" } });
-  form.append(why, el("div", { className: "modal-actions", children: [submit] }));
+  const why = el("p", { className: "bug-note", attrs: { id: "bug-review-why", role: "status" } });
+  form.append(why, el("p", {
+    className: "bug-note",
+    attrs: { id: "bug-collected" },
+    text: t("The Companion adds its release, the environment, the incident's code and correlation id when the report is about one, and coarse browser facts. It never adds a map, a path, a profile, an account, an e-mail address, a network address or a credential. You will see all of it before anything can be filed."),
+  }));
 
-  // The labels follow the type, and Review waits for both choices.
+  const submit = el("button", { text: t("Review report"), className: "primary", attrs: { type: "submit", id: "bug-review", "aria-describedby": "bug-review-why" } });
+  form.append(footer([buttonTo(t("Close"), () => dialog.close(), "", "bug-foot-close")], [submit]));
+
+  // The labels and hints follow the type; the title follows it too; Review
+  // waits for the area and the summary, and says which is missing.
+  const suggestion = suggestedArea(incident);
   relabel = () => {
     const labels = fieldLabels(reportType);
-    summary.caption.textContent = t(labels.summary);
-    steps.caption.textContent = t(labels.steps);
-    expected.caption.textContent = t(labels.expected);
-    actual.caption.textContent = t(labels.actual);
-    const missing = missingChoices({ reportType, area });
-    submit.disabled = missing.length > 0;
-    why.textContent = missing.length === 2 ? t("Choose a type and an area to review the report.")
-      : missing.includes("report_type") ? t("Choose a type to review the report.")
-        : missing.includes("area") ? t("Choose an area to review the report.") : "";
+    const hints = fieldHints(reportType);
+    for (const [key, part] of Object.entries({ summary, steps, expected, actual })) {
+      part.caption.textContent = t(labels[key]);
+      part.hint.textContent = t(hints[key]);
+    }
+    band.suggested.textContent = incident && suggestion && area === suggestion
+      ? t("Suggested from the incident. Change it if another area fits better.") : "";
+    band.suggested.hidden = !band.suggested.textContent;
+    setTitle("compose", reportType);
+    const reason = reviewBlocked({ reportType, area, summary: fields.summary });
+    submit.disabled = Boolean(reason);
+    if (reason) submit.title = t(reason);
+    else submit.removeAttribute("title");
+    const text = reason ? t(reason) : "";
+    if (why.textContent !== text) why.textContent = text;
+    why.hidden = !text;
   };
   relabel();
 
   form.addEventListener("submit", (event) => {
     event.preventDefault();
-    if (missingChoices({ reportType, area }).length) {
+    if (reviewBlocked({ reportType, area, summary: fields.summary })) {
       relabel();
-      return;
-    }
-    if (!fields.summary.trim()) {
-      compose(t("Write a one-line summary first."));
       return;
     }
     const result = build();
@@ -235,7 +311,13 @@ function compose(message) {
     review();
   });
   body.replaceChildren(warning(), form);
-  (body.querySelector(incident || reportType ? "#bug-field-summary" : "#bug-type-" + reportTypeChoices()[0].id) || body.querySelector("#bug-field-summary"))?.focus();
+  focusCompose(message);
+}
+
+// Where the person has something to do first: the area of a cold report, else
+// the words (and the words after a message about them).
+function focusCompose(message) {
+  body.querySelector(message || area ? "#bug-field-summary" : "#bug-area")?.focus();
 }
 
 function save(filename, text, type) {
@@ -249,6 +331,7 @@ function save(filename, text, type) {
 
 function review() {
   const document_ = built.document;
+  setTitle("review", document_.report_type);
   const text = renderReportText(document_);
   const names = reportDownloadNames(document_);
   const orNot = (value) => value || t("(not given)");
@@ -257,86 +340,116 @@ function review() {
   // changed and not yet reviewed.
   const headings = fieldLabels(document_.report_type);
   const labels = reportLabels(document_) || [];
-  const typeName = reportTypeChoices().find((choice) => choice.id === document_.report_type)?.name || document_.report_type;
-  const areaName = areaChoices().find((choice) => choice.id === document_.area)?.name || document_.area;
+  const client = document_.client || {};
+  const viewport = client.viewport_width !== undefined ? `${client.viewport_width}x${client.viewport_height}` : "";
+
+  // The label names themselves, never translated: they are what the issue shows.
+  const chips = el("ul", {
+    className: "bug-labels",
+    attrs: { id: "bug-labels", "aria-label": t("GitHub labels"), translate: "no" },
+    children: labels.map((label) => el("li", { text: label })),
+  });
   const rows = [
-    [t("Application"), t("Auto-Pigeon Companion ({application})", { application: document_.component })],
-    [t("Type"), t(typeName)],
-    [t("Area"), t(areaName)],
+    [t("GitHub labels"), chips],
     [t(headings.summary), document_.user.summary],
     [t(headings.steps), orNot(document_.user.steps)],
     [t(headings.expected), orNot(document_.user.expected)],
     [t(headings.actual), orNot(document_.user.actual)],
-    ...(document_.incident ? [[t("Incident"), [document_.incident.code, document_.incident.operation].filter(Boolean).join(" · ")]] : []),
-    [t("Report"), document_.report_id],
-    [t("Created"), document_.created_at],
     [t("Version"), `${document_.component} ${document_.release} (${document_.environment})`],
-    [t("Browser"), [document_.client?.browser, document_.client?.os].filter(Boolean).join(" · ") || t("(not given)")],
+    ...(document_.incident ? [[t("Incident"), [document_.incident.code, document_.incident.severity, document_.incident.operation].filter(Boolean).join(" · ")]] : []),
+    ...(document_.correlation_id ? [[t("Correlation"), document_.correlation_id]] : []),
+    [t("Browser"), [client.browser, client.os, viewport, client.language].filter(Boolean).join(" · ") || t("(not given)")],
+    [t("Recent activity"), t("{count} entries; {omitted} older or unusable entries omitted",
+      { count: Array.isArray(document_.recent) ? document_.recent.length : 0, omitted: document_.omitted_recent ?? 0 })],
   ];
-  const preview = el("section", {
-    attrs: { "aria-label": t("What the report contains") },
-    children: [
-      el("h3", { text: t("What the report contains") }),
-      el("dl", { className: "summary-list", children: rows.flatMap(([term, value]) => [el("dt", { text: term }), el("dd", { text: value })]) }),
-      el("h3", { text: t("Labels on GitHub") }),
-      // The label names themselves, untranslated: they are what the issue shows.
-      el("ul", { className: "bug-labels", attrs: { id: "bug-labels", "aria-label": t("Labels on GitHub") }, children: labels.map((label) => el("li", { text: label })) }),
-      el("details", { children: [el("summary", { text: t("The exact text") }), el("pre", { className: "output", text })] }),
-    ],
+  // What the person typed is shown as typed: never run through translation.
+  const list = el("dl", {
+    className: "summary-list bug-fields",
+    attrs: { id: "bug-fields" },
+    children: rows.flatMap(([term, value]) => [
+      el("dt", { text: term }),
+      typeof value === "string" ? el("dd", { text: value, attrs: { translate: "no" } }) : el("dd", { children: [value] }),
+    ]),
   });
 
-  const saved = el("p", { className: "muted small", attrs: { role: "status" } });
-  const keep = el("section", {
-    className: "bug-route",
-    children: [
-      el("h3", { text: t("Keep a copy") }),
-      el("div", {
-        className: "row",
-        children: [
-          buttonTo(t("Download .txt"), () => { save(names.text, text, "text/plain"); saved.textContent = t("Saved {file}.", { file: names.text }); }),
-          buttonTo(t("Download .json"), () => { save(names.json, reportJsonDownload(document_), "application/json"); saved.textContent = t("Saved {file}.", { file: names.json }); }),
-        ],
-      }),
-      saved,
-    ],
-  });
+  const exact = [
+    el("h3", { text: t("Exact text") }),
+    el("pre", { className: "output bug-text", attrs: { id: "bug-text", tabindex: "0", "aria-label": t("Exact text") }, text }),
+  ];
 
-  const opened = el("p", { className: "muted small", attrs: { role: "status" } });
-  const github = el("section", { className: "bug-route", children: [el("h3", { text: t("File it yourself on GitHub") })] });
-  if (built.prefill?.fits) {
-    const link = el("a", {
+  // How to file it: the three ways the person files it themselves, their
+  // notes, the one line about the server route, and what a send answered.
+  const downloaded = el("p", { className: "bug-note", attrs: { id: "bug-downloaded", role: "status" } });
+  downloaded.hidden = true;
+  const noteDownloaded = () => {
+    downloaded.textContent = t("Downloaded. The file is exactly the text shown above.");
+    downloaded.hidden = false;
+  };
+  const opened = el("p", { className: "bug-note", attrs: { id: "bug-issue-opened", role: "status" } });
+  opened.hidden = true;
+  const fits = Boolean(built.prefill?.fits);
+  const tooLong = t("This report is too long for GitHub's prefilled form. Download it and attach the file to a new issue instead.");
+  let issue;
+  if (fits) {
+    issue = el("a", {
       className: "button-link",
       text: t("Open prefilled GitHub issue"),
-      attrs: { href: prefilledIssueUrl(document_), target: "_blank", rel: "noopener noreferrer" },
+      attrs: { id: "bug-open-issue", href: prefilledIssueUrl(document_), target: "_blank", rel: "noopener noreferrer" },
     });
-    link.addEventListener("click", () => {
-      opened.textContent = t("GitHub opened in a new tab. The report is filed only when you press Submit new issue there.");
+    issue.addEventListener("click", () => {
+      opened.textContent = t("GitHub's form opened in a new tab with this exact text. The report is filed only when you press Submit on GitHub.");
+      opened.hidden = false;
     });
-    github.append(
-      link,
-      el("p", { className: "muted small", text: t("GitHub adds the three labels to a prefilled issue only if your account may label issues in {repository}. Sending it through Auto-Pigeon always adds them.", { repository }) }),
-      opened,
-    );
   } else {
-    github.append(el("p", { className: "muted", text: t("This report is too long for GitHub's prefilled form. Download it and attach the file to a new issue instead.") }));
+    issue = el("button", { text: t("Open prefilled GitHub issue"), attrs: { type: "button", id: "bug-open-issue", title: tooLong } });
+    issue.disabled = true;
   }
+  const actions = el("div", {
+    className: "bug-file-actions",
+    children: [
+      buttonTo(t("Download .txt"), () => { save(names.text, text, "text/plain"); noteDownloaded(); }, "", "bug-download-txt"),
+      buttonTo(t("Download .json"), () => { save(names.json, reportJsonDownload(document_), "application/json"); noteDownloaded(); }, "", "bug-download-json"),
+      issue,
+    ],
+  });
+  const notes = [downloaded];
+  if (fits) {
+    // GitHub honours a prefilled `labels` parameter only for someone allowed
+    // to label issues there; the server route is the one whose labels are
+    // guaranteed. Said beside the button, rather than implied.
+    notes.push(el("p", {
+      className: "bug-note",
+      attrs: { id: "bug-labels-prefilled" },
+      text: t("The prefilled issue asks GitHub for the labels {labels}. GitHub applies them only when your account may label issues in {repository}; otherwise the issue arrives without them. Sending through Auto-Pigeon always applies them.",
+        { labels: labels.join(", "), repository: shownRepository }),
+    }));
+  } else {
+    notes.push(el("p", { className: "bug-note", attrs: { id: "bug-too-long" }, text: tooLong }));
+  }
+  notes.push(opened);
+  const routeLine = el("p", { className: "bug-note bug-route-line", attrs: { id: "bug-route" }, text: t(ROUTE_LINES.checking) });
+  const outcome = el("p", { className: "message bug-result", attrs: { id: "bug-result", role: "status", tabindex: "-1" } });
+  const how = el("section", {
+    className: "bug-routes",
+    attrs: { "aria-labelledby": "bug-routes-title" },
+    children: [el("h3", { text: t("How to file it"), attrs: { id: "bug-routes-title" } }), actions, ...notes, routeLine, outcome],
+  });
 
-  const server = el("section", { className: "bug-route", children: [el("h3", { text: t("Send through Auto-Pigeon") })] });
-  const serverBody = el("div", { children: [el("p", { className: "muted", text: t("Checking whether this server can file reports…") })] });
-  server.append(serverBody);
-  routeStatus().then((state) => drawServer(serverBody, state, document_));
+  // The footer: Close and Edit bottom left; the consent tick and Send bottom
+  // right, drawn once the route is known to be offered.
+  const close = buttonTo(t("Close"), () => dialog.close(), "", "bug-foot-close");
+  const edit = sendState === "idle" ? buttonTo(t("Edit"), () => compose(), "", "bug-edit") : null;
+  const group = el("div", { className: "bug-send", attrs: { id: "bug-send-group" } });
+  group.hidden = true;
 
-  const actions = el("div", { className: "modal-actions" });
-  if (sendState === "idle") actions.append(buttonTo(t("Edit"), () => compose()));
-  actions.append(buttonTo(t("Close"), () => dialog.close()));
+  body.replaceChildren(warning(), list, ...exact, how, footer(edit ? [close, edit] : [close], [group]));
+  title.focus();
 
-  body.replaceChildren(warning(), preview, keep, github, server, actions);
-}
-
-function buttonTo(label, onClick, className = "") {
-  const button = el("button", { text: label, className, attrs: { type: "button" } });
-  button.addEventListener("click", onClick);
-  return button;
+  routeStatus().then((route) => {
+    const state = serverRoute({ route, authenticated: Boolean(window.AUCOM.status?.authenticated), final: sendFinal });
+    routeLine.textContent = t(ROUTE_LINES[state.state]);
+    if (state.sendOffered) drawSend(group, document_, { outcome, close, edit });
+  });
 }
 
 async function routeStatus() {
@@ -345,28 +458,35 @@ async function routeStatus() {
   return answer.server_route === "available" ? "available" : answer.server_route === "unavailable" ? "unavailable" : "unknown";
 }
 
-function drawServer(node, state, document_) {
-  node.replaceChildren();
-  if (state === "unavailable") {
-    node.append(el("p", { className: "muted", text: t("This server is not configured to file reports. Keep a copy or file it yourself on GitHub.") }));
-    return;
-  }
-  if (state === "unknown") {
-    node.append(el("p", { className: "muted", text: t("Could not check whether this server can file reports. Keep a copy or file it yourself on GitHub.") }));
-    return;
-  }
-  if (!window.AUCOM.status?.authenticated) {
-    node.append(el("p", { className: "muted", text: t("Log in to send it through Auto-Pigeon. Keeping a copy and filing it yourself on GitHub work without an account.") }));
-    return;
-  }
-  node.append(el("p", { className: "muted", text: t("Auto-Pigeon will file exactly this text at {repository} on your behalf.", { repository }) }));
+// The bottom-right group: the consent sentence first, then its box, then the
+// one button it gates — together, right-aligned, so the tick cannot be read as
+// being about the downloads. Unticked, Send is disabled and says why.
+function drawSend(group, document_, { outcome, close, edit }) {
   const ack = el("input", { attrs: { type: "checkbox", id: "bug-ack" } });
-  const send = el("button", { text: sendState === "idle" ? t("Send report") : t("Send again"), className: "primary", attrs: { type: "button" } });
-  send.disabled = true;
-  ack.addEventListener("change", () => { send.disabled = !ack.checked; });
-  const outcome = el("p", { className: "message", attrs: { role: "status" } });
+  const consent = el("label", {
+    className: "check bug-consent",
+    attrs: { for: "bug-ack" },
+    children: [el("span", { text: t("I understand this report will be public on GitHub, for anyone to read.") }), ack],
+  });
+  const send = el("button", {
+    text: sendState === "idle" ? t("Send through Auto-Pigeon") : t("Send again"),
+    className: "primary",
+    attrs: { type: "button", id: "bug-send" },
+  });
+  const gate = () => {
+    send.disabled = sending || !ack.checked;
+    if (ack.checked) send.removeAttribute("title");
+    else send.title = t("Confirm that you understand the report is public first.");
+  };
+  ack.addEventListener("change", gate);
+  gate();
   send.addEventListener("click", async () => {
-    send.disabled = true;
+    if (sending || sendFinal || !ack.checked) return;
+    sending = true;
+    gate();
+    ack.disabled = true;
+    close.disabled = true;
+    if (edit) edit.disabled = true;
     send.textContent = t("Sending…");
     sendState = "sent";
     const { status, body: answer } = await api("/api/v1/bug-reports", {
@@ -374,18 +494,25 @@ function drawServer(node, state, document_) {
       body: { document: document_, confirm: true },
     });
     const final = showOutcome(outcome, status, answer);
-    send.textContent = t("Send again");
-    send.disabled = final || !ack.checked;
+    sending = false;
+    close.disabled = false;
+    // Edit is offered only until a send was attempted: a retry must send the
+    // very document the first attempt did.
+    edit?.remove();
+    if (final) {
+      sendFinal = true;
+      group.replaceChildren();
+      group.hidden = true;
+      outcome.focus();
+    } else {
+      send.textContent = t("Send again");
+      ack.disabled = false;
+      gate();
+    }
+    outcome.scrollIntoView?.({ block: "nearest" });
   });
-  node.append(
-    el("label", { className: "check", children: [ack, document.createTextNode(" " + t("I understand this is published publicly"))] }),
-    el("div", { className: "row", children: [send] }),
-    outcome,
-  );
-  // The issue AUB would file, for whoever wants to see its exact form.
-  node.append(el("details", {
-    children: [el("summary", { text: t("The exact text") }), el("pre", { className: "output", text: renderIssue(document_, { route: "server" }).body })],
-  }));
+  group.replaceChildren(consent, send);
+  group.hidden = false;
 }
 
 // AUB's answer, as AUG maps it (bugReportRoute.ts `outcomeFor`). Returns true
@@ -431,6 +558,8 @@ async function openReport(about = null) {
   fields = { summary: "", steps: "", expected: "", actual: "" };
   reportId = newIncidentId();
   sendState = "idle";
+  sendFinal = false;
+  sending = false;
   // What this Companion raised, offered as a choice under "What it is about" — never
   // chosen for the person. A failed answer just means none are offered.
   const { ok, body: answer } = await api("/api/v1/bug-reports/incidents");
@@ -438,6 +567,9 @@ async function openReport(about = null) {
   setIncident(about);
   compose();
   if (!dialog.open) dialog.showModal();
+  // showModal focuses the header's close button; the report starts where the
+  // person has something to do.
+  focusCompose();
 }
 
 $("bug-report-open").addEventListener("click", () => { openReport(); });

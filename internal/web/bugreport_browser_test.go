@@ -15,11 +15,15 @@ import (
 )
 
 // TestBugReportDialogInABrowser drives Report a bug in a real browser
-// (NEW_247H): a cold report offers the two types and only the Companion's
-// areas with nothing chosen and Review refused; the field labels follow the
-// type; the review shows the three labels the prefilled link also carries;
-// a report about a failed job starts as a bug in the contract's area, and the
-// person corrects the area before Review. The driver is testdata/bugreport.js.
+// (NEW_247H, NEW_253): a cold report offers the two types with Bug chosen and
+// only the Companion's areas with none chosen, Review refused until an area
+// and a summary; the titles, labels and hints follow the type; both windows
+// keep AUP's order and footers (Close bottom left; Review, or the consent
+// tick with Send, bottom right, also when narrow); a Feature request survives
+// Review → Edit → Review and is what is sent; Close sends nothing, an unticked
+// Send sends nothing, a ticked one sends exactly once; a report about a failed
+// job starts as a bug in the contract's area, and the person corrects the area
+// before Review. The driver is testdata/bugreport.js.
 //
 // Same apparatus as TestFirstRunJourneyInABrowser; skips without a
 // Chrome-family browser for the same reason.

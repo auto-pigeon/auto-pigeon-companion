@@ -104,7 +104,8 @@ type modelObservations struct {
 			ReportType string `json:"reportType"`
 			Area       string `json:"area"`
 		} `json:"start"`
-		Suggested struct {
+		SuggestedArea string `json:"suggestedArea"`
+		Suggested     struct {
 			Kind        string          `json:"kind"`
 			Labels      []string        `json:"labels"`
 			Incident    json.RawMessage `json:"incident"`
@@ -124,6 +125,28 @@ type modelObservations struct {
 		Errors []string `json:"errors"`
 	} `json:"foreign"`
 	BadType []string `json:"badType"`
+
+	// NEW_253: the dialog's DOM-free decisions.
+	DefaultType string                       `json:"defaultType"`
+	Hints       map[string]map[string]string `json:"hints"`
+	Titles      map[string]map[string]string `json:"titles"`
+	Blocked     map[string]string            `json:"blocked"`
+	RouteLines  map[string]string            `json:"routeLines"`
+	Routes      []struct {
+		Route         string `json:"route"`
+		Authenticated bool   `json:"authenticated"`
+		Final         bool   `json:"final"`
+		State         string `json:"state"`
+		SendOffered   bool   `json:"sendOffered"`
+	} `json:"routes"`
+	SuggestedCold string `json:"suggestedCold"`
+	RoundTrip     []struct {
+		ReportType string   `json:"reportType"`
+		ReportID   string   `json:"reportId"`
+		Labels     []string `json:"labels"`
+		Text       string   `json:"text"`
+		Errors     []string `json:"errors"`
+	} `json:"roundTrip"`
 }
 
 // raisedIncidents are what the real reporter offers the page after one failed
@@ -236,15 +259,23 @@ func TestTheCompanionsBugReportsAreClassifiedByTheContract(t *testing.T) {
 		t.Errorf("areas offered %v; the contract gives the Companion %v", areaIDs, aucom.Areas)
 	}
 
-	// Cold: nothing chosen, Review refused, and the contract refuses to build it.
-	if observed.Cold.ReportType != "" || observed.Cold.Area != "" {
-		t.Errorf("a cold report starts preselected: %+v", observed.Cold)
+	// Cold (NEW_253): a Bug, as in AUP — the contract's first type — with NO
+	// area; Review is refused until the area is chosen, and the contract
+	// refuses to build it without one.
+	if observed.DefaultType != "bug" || len(observed.Types) == 0 || observed.Types[0].ID != observed.DefaultType {
+		t.Errorf("a fresh report starts as %q; want the contract's first type, bug (types %v)", observed.DefaultType, observed.Types)
 	}
-	if strings.Join(observed.ColdMissing, ",") != "report_type,area" {
-		t.Errorf("a cold report is missing %v, want both choices", observed.ColdMissing)
+	if observed.Cold.ReportType != "bug" || observed.Cold.Area != "" {
+		t.Errorf("a cold report starts as %+v, want a Bug with no area", observed.Cold)
 	}
-	if observed.ColdBuild.OK || !contains(observed.ColdBuild.Errors, "report_type_required") || !contains(observed.ColdBuild.Errors, "area_required") {
-		t.Errorf("an unclassified cold report was built: %+v", observed.ColdBuild)
+	if strings.Join(observed.ColdMissing, ",") != "area" {
+		t.Errorf("a cold report is missing %v, want only the area", observed.ColdMissing)
+	}
+	if observed.ColdBuild.OK || contains(observed.ColdBuild.Errors, "report_type_required") || !contains(observed.ColdBuild.Errors, "area_required") {
+		t.Errorf("a cold report without an area was built, or its type was lost: %+v", observed.ColdBuild)
+	}
+	if observed.SuggestedCold != "" {
+		t.Errorf("a cold report has a suggested area %q", observed.SuggestedCold)
 	}
 
 	// Every type x area: exactly three labels, AUCOM's, from the contract's data;
@@ -331,6 +362,9 @@ func TestTheCompanionsBugReportsAreClassifiedByTheContract(t *testing.T) {
 		if entry.Start.ReportType != rules.IncidentReportType || entry.Start.Area != wantArea {
 			t.Errorf("%s starts as %+v, want %s/%s", entry.Code, entry.Start, rules.IncidentReportType, wantArea)
 		}
+		if entry.SuggestedArea != wantArea {
+			t.Errorf("%s: the form would call %q the suggestion, want %q", entry.Code, entry.SuggestedArea, wantArea)
+		}
 		want := []string{"AUCOM", rules.ReportTypes["bug"].Label, rules.Areas[wantArea]}
 		if entry.Suggested.Kind != "incident" || strings.Join(entry.Suggested.Labels, "|") != strings.Join(want, "|") {
 			t.Errorf("%s as suggested: kind %q labels %v, want incident %v (%v)", entry.Code, entry.Suggested.Kind, entry.Suggested.Labels, want, entry.Suggested.Errors)
@@ -388,4 +422,109 @@ func contains(list []string, value string) bool {
 		}
 	}
 	return false
+}
+
+// NEW_253: the dialog's DOM-free decisions, as AUP's corrected report makes
+// them — the titles per step and type, the hints, why Review is blocked, the
+// one route line, when the consent tick and Send are offered, and that a
+// Feature request taken back to Edit and reviewed again is still one.
+func TestTheCompanionsReportDialogDecidesAsAUPDoes(t *testing.T) {
+	rules := loadBugRules(t)
+	observed := runBugReportModel(t, raisedIncidents(t))
+
+	wantTitles := map[string]map[string]string{
+		"compose": {"bug": "Report a bug", "feature_request": "Request a feature", "none": "Report a bug"},
+		"review":  {"bug": "Review the bug report", "feature_request": "Review the feature request"},
+	}
+	for step, byType := range wantTitles {
+		for reportType, want := range byType {
+			if got := observed.Titles[step][reportType]; got != want {
+				t.Errorf("the %s title for %q is %q, want %q", step, reportType, got, want)
+			}
+		}
+	}
+
+	// Every field has a hint; the summary's says it is required; a feature
+	// request asks for different things than a bug.
+	for _, reportType := range []string{"bug", "feature_request", "none"} {
+		for _, key := range []string{"summary", "steps", "expected", "actual"} {
+			if strings.TrimSpace(observed.Hints[reportType][key]) == "" {
+				t.Errorf("the %s form has no hint for %s", reportType, key)
+			}
+		}
+		if observed.Hints[reportType]["summary"] != "One line. Required." {
+			t.Errorf("the %s summary hint is %q", reportType, observed.Hints[reportType]["summary"])
+		}
+	}
+	for _, key := range []string{"steps", "expected", "actual"} {
+		if observed.Hints["bug"][key] == observed.Hints["feature_request"][key] {
+			t.Errorf("a feature request's %s hint is a bug's: %q", key, observed.Hints["bug"][key])
+		}
+		if observed.Hints["none"][key] != observed.Hints["bug"][key] {
+			t.Errorf("an untyped report's %s hint is not a bug's", key)
+		}
+	}
+	// The labels and hints the form shows for a feature request are the contract's headings.
+	if observed.Headings["feature_request"]["steps"] != rules.ReportTypes["feature_request"].Headings["steps"] {
+		t.Errorf("a feature request's steps field is labelled %q", observed.Headings["feature_request"]["steps"])
+	}
+
+	wantBlocked := map[string]string{
+		"fresh":       "Choose the area this report is about first.",
+		"untyped":     "Choose a type and an area first.",
+		"typeOnly":    "Choose whether this is a bug or a feature request first.",
+		"areaMissing": "Choose the area this report is about first.",
+		"foreignArea": "Choose the area this report is about first.",
+		"noSummary":   "Write a one-line summary first.",
+		"ready":       "",
+	}
+	for scenario, want := range wantBlocked {
+		if got := observed.Blocked[scenario]; got != want {
+			t.Errorf("Review, %s: blocked with %q, want %q", scenario, got, want)
+		}
+	}
+
+	// The route line, and Send offered only when AUB says the route is
+	// configured AND the person is signed in AND the report is not final.
+	wantState := map[string]string{"checking": "checking", "unavailable": "unavailable", "unknown": "unreachable"}
+	if len(observed.Routes) != 16 {
+		t.Fatalf("%d route cases observed, want 16", len(observed.Routes))
+	}
+	for _, entry := range observed.Routes {
+		want := wantState[entry.Route]
+		if entry.Route == "available" {
+			want = "sign_in"
+			if entry.Authenticated {
+				want = "available"
+			}
+		}
+		if entry.State != want {
+			t.Errorf("route %q signed in %v: state %q, want %q", entry.Route, entry.Authenticated, entry.State, want)
+		}
+		offered := entry.Route == "available" && entry.Authenticated && !entry.Final
+		if entry.SendOffered != offered {
+			t.Errorf("route %q signed in %v final %v: Send offered %v, want %v", entry.Route, entry.Authenticated, entry.Final, entry.SendOffered, offered)
+		}
+		if strings.TrimSpace(observed.RouteLines[entry.State]) == "" {
+			t.Errorf("route state %q has no line to show", entry.State)
+		}
+	}
+
+	// Feature request → Review → Edit → Review: still a feature request, the
+	// same report id, and the labels say so.
+	if len(observed.RoundTrip) != 2 {
+		t.Fatalf("round trip observed %d builds", len(observed.RoundTrip))
+	}
+	for i, built := range observed.RoundTrip {
+		if len(built.Errors) > 0 {
+			t.Fatalf("round trip build %d failed: %v", i, built.Errors)
+		}
+		want := []string{"AUCOM", rules.ReportTypes["feature_request"].Label, rules.Areas["documentation"]}
+		if built.ReportType != "feature_request" || strings.Join(built.Labels, "|") != strings.Join(want, "|") {
+			t.Errorf("round trip build %d is %q labelled %v, want feature_request %v", i, built.ReportType, built.Labels, want)
+		}
+	}
+	if observed.RoundTrip[0].ReportID != observed.RoundTrip[1].ReportID || observed.RoundTrip[0].Text != observed.RoundTrip[1].Text {
+		t.Errorf("reviewing the same draft again built a different report")
+	}
 }

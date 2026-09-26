@@ -1257,10 +1257,12 @@
       <p class="muted" id="about-version"></p>
     </dialog>
 
-    <!-- Report a bug: AUG's report, from the shared bug-report contract. -->
+    <!-- Report a bug: AUG's report, from the shared bug-report contract, laid
+         out as AUP's corrected two windows (NEW_253). bugreport.mjs draws both
+         steps into #bug-body and retitles #bug-title per step and type. -->
     <dialog class="modal bug-dialog" id="bug-dialog" aria-labelledby="bug-title">
       <div class="modal-head">
-        <h2 id="bug-title">Report a bug</h2>
+        <h2 id="bug-title" tabindex="-1">Report a bug</h2>
         <button type="button" class="icon-button" id="bug-close" aria-label="Close">&times;</button>
       </div>
       <div id="bug-body"></div>

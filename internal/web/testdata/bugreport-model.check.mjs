@@ -14,7 +14,8 @@ process.stdin.on("end", async () => {
   const model = await import(modelURL);
   const contract = await import(contractURL);
   const {
-    APPLICATION, areaChoices, buildReport, fieldLabels, initialClassification, missingChoices, reportLabels, reportTypeChoices,
+    APPLICATION, DEFAULT_REPORT_TYPE, ROUTE_LINES, areaChoices, buildReport, dialogTitle, fieldHints, fieldLabels,
+    initialClassification, missingChoices, reportLabels, reportTypeChoices, reviewBlocked, serverRoute, suggestedArea,
   } = model;
   const { prefilledIssueUrl, renderIssue, renderReportText, reportJsonDownload, BUG_REPORT_LIMITS } = contract;
 
@@ -42,7 +43,47 @@ process.stdin.on("end", async () => {
     every: [],
     incidents: [],
     foreign: [],
+    // NEW_253: the dialog's DOM-free decisions.
+    defaultType: DEFAULT_REPORT_TYPE,
+    hints: { bug: fieldHints("bug"), feature_request: fieldHints("feature_request"), none: fieldHints("") },
+    titles: {
+      compose: { bug: dialogTitle("compose", "bug"), feature_request: dialogTitle("compose", "feature_request"), none: dialogTitle("compose", "") },
+      review: { bug: dialogTitle("review", "bug"), feature_request: dialogTitle("review", "feature_request") },
+    },
+    blocked: {
+      fresh: reviewBlocked({ ...initialClassification(null), summary: "" }),
+      untyped: reviewBlocked({ reportType: "", area: "", summary: "x" }),
+      typeOnly: reviewBlocked({ reportType: "", area: "other", summary: "x" }),
+      areaMissing: reviewBlocked({ reportType: "feature_request", area: "", summary: "x" }),
+      foreignArea: reviewBlocked({ reportType: "bug", area: "editor", summary: "x" }),
+      noSummary: reviewBlocked({ reportType: "bug", area: "other", summary: "   " }),
+      ready: reviewBlocked({ reportType: "feature_request", area: "other", summary: "x" }),
+    },
+    routeLines: ROUTE_LINES,
+    routes: [],
+    suggestedCold: suggestedArea(null),
   };
+  for (const route of ["checking", "available", "unavailable", "unknown"]) {
+    for (const authenticated of [false, true]) {
+      for (const final of [false, true]) {
+        out.routes.push({ route, authenticated, final, ...serverRoute({ route, authenticated, final }) });
+      }
+    }
+  }
+
+  // A deliberate Feature request, reviewed, taken back to Edit and reviewed
+  // again: the draft (type, area, words, id, time) is what the dialog keeps,
+  // and rebuilding from it is the same report — a feature request.
+  {
+    const draft = { ...initialClassification(null) };
+    draft.reportType = "feature_request";
+    draft.area = "documentation";
+    const first = buildReport({ ...fixed, ...draft, fields });
+    const again = buildReport({ ...fixed, ...draft, fields });
+    out.roundTrip = [first, again].map((built) => (built.ok
+      ? { reportType: built.document.report_type, reportId: built.document.report_id, labels: reportLabels(built.document), text: renderReportText(built.document) }
+      : { errors: built.errors }));
+  }
 
   // Every type x every offered area: the document, its labels and its four renderings.
   for (const type of reportTypeChoices()) {
@@ -83,6 +124,7 @@ process.stdin.on("end", async () => {
     out.incidents.push({
       code: incident.code,
       start,
+      suggestedArea: suggestedArea(incident),
       suggested: suggested.ok ? { kind: suggested.document.kind, labels: reportLabels(suggested.document), incident: suggested.document.incident, correlation: suggested.document.correlation_id } : { errors: suggested.errors },
       corrected: corrected.ok ? { kind: corrected.document.kind, labels: reportLabels(corrected.document), text: renderReportText(corrected.document) } : { errors: corrected.errors },
     });

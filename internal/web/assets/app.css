@@ -943,7 +943,7 @@ ol.numbered { list-style: none; padding-inline-start: 0; }
 .modal-head .icon-button:hover { color: var(--accent-strong); background: none; }
 .about-dialog { max-inline-size: min(38rem, 94vw); line-height: 1.55; }
 .about-dialog ul.plain { display: grid; gap: 0.45rem; margin: 0.75rem 0 1rem; }
-.bug-dialog { max-inline-size: min(44rem, 94vw); inline-size: 100%; }
+.bug-dialog { max-inline-size: min(34rem, 94vw); inline-size: 100%; }
 
 /* --- Build & Run --------------------------------------------------------------
    The program's core (operator, 2026-09-22): the step a person is on is
@@ -1105,22 +1105,59 @@ ol.numbered { list-style: none; padding-inline-start: 0; }
 #area-play .play-listing input[type="text"], #area-play .own-wads input[type="text"] { font-size: 0.9rem; font-weight: 500; }
 .exposed-list { font-size: 0.82rem; display: grid; gap: 0.15rem; }
 
-/* Report a bug — AUG's dialog. */
-.bug-warning { margin: 0 0 0.9rem; padding: 0.55rem 0.75rem; border-left: 3px solid var(--warn); background: var(--warn-soft); font-size: 0.85rem; }
+/* Report a bug — AUP's corrected report (NEW_253): one column of blocks with
+   one rhythm, a classification band that wraps, a compact field list, and one
+   footer skeleton on both steps — Close (and Edit) hard left, the step's
+   action hard right; on Review the consent tick sits with the one button it
+   gates and wraps under Close/Edit, still right-aligned, when narrow. */
+.bug-dialog #bug-body { display: grid; gap: 0.75rem; }
+.bug-warning { margin: 0; padding: 0.55rem 0.75rem; border: 1px solid var(--warn); border-radius: var(--radius); background: var(--warn-soft); font-size: 0.85rem; }
+/* NEW_253: the <dialog> is the scroller, so its header and footer are pinned
+   with `sticky` — the review is taller than a laptop screen, and a footer below
+   the fold would hide Close, the tick and Send. The negative margins cover the
+   dialog's own padding, so nothing scrolls visibly past either edge. */
+.bug-dialog > .modal-head { position: sticky; top: -1.25rem; z-index: 1; margin: -1.25rem 0 0.5rem; padding-top: 1.25rem; padding-bottom: 0.5rem; background: var(--overlay); }
+.bug-dialog .bug-foot { position: sticky; bottom: -1.25rem; z-index: 1; margin-bottom: -1.25rem; padding-bottom: 1.25rem; background: var(--overlay); align-items: flex-end; }
 .bug-form { display: grid; gap: 0.75rem; }
+.bug-form .field { min-width: 0; }
 .bug-form textarea { font-family: var(--font); font-size: 0.875rem; }
-.bug-dialog h3 { font-size: 0.9rem; margin: 1rem 0 0.5rem; }
-.bug-route { border-top: 1px solid var(--line); margin-top: 0.75rem; }
-.bug-dialog pre.output { max-height: 14rem; }
-.bug-fact { margin: 0; font-size: 0.875rem; }
-.bug-fact__term { color: var(--ink-muted); margin-right: 0.4rem; }
-.bug-classify { display: flex; flex-wrap: wrap; gap: 0.75rem 1.5rem; align-items: flex-start; }
-.bug-classify fieldset { border: none; margin: 0; padding: 0; }
-.bug-classify legend { padding: 0; margin-bottom: 0.3rem; font-weight: 600; font-size: 0.875rem; }
+.bug-hint { font-size: 0.78rem; }
+.bug-note { margin: 0; max-width: 70ch; color: var(--ink-muted); font-size: 0.8rem; }
+.bug-dialog h3 { font-size: 0.9rem; margin: 0.25rem 0 0; color: var(--ink-muted); }
+.bug-classify { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 0.75rem 1.25rem; align-items: start; }
+.bug-classify fieldset { border: none; margin: 0; padding: 0; min-width: 0; }
+.bug-classify legend { padding: 0; margin-bottom: 0.3rem; font-weight: 500; font-size: 0.8125rem; }
 .bug-classify .bug-types { display: flex; flex-wrap: wrap; gap: 0.35rem 1rem; }
-.bug-classify .field { flex: 1 1 12rem; }
-.bug-labels { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0; padding: 0; list-style: none; }
-.bug-labels li { padding: 0.1rem 0.5rem; border: 1px solid var(--line); border-radius: var(--radius); font-size: 0.8rem; }
+.bug-fact__term { font-weight: 500; font-size: 0.8125rem; }
+.bug-fact__value { font-size: 0.9rem; color: var(--ink); }
+.bug-fields { font-size: 0.85rem; }
+.bug-fields dd { font-weight: normal; white-space: pre-wrap; }
+.bug-labels { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0; padding: 0; list-style: none; white-space: normal; }
+.bug-labels li { padding: 0.05rem 0.45rem; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--inset); font-family: var(--mono); font-size: 0.75rem; }
+.bug-dialog pre.bug-text { margin: 0; max-height: 16rem; }
+.bug-routes { display: grid; gap: 0.5rem; }
+.bug-file-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.bug-result { margin: 0; max-width: 70ch; }
+.bug-result:empty { display: none; }
+.bug-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 0.25rem; padding-top: 0.75rem; border-top: 1px solid var(--line); }
+.bug-foot__gap { flex: 1 1 auto; }
+/* The tick and Send are one right-aligned group, as in AUP: at the
+   Companion's 34rem measure the sentence takes the row and Send sits under it,
+   hard right — a sentence squeezed into a column beside Send reads badly. */
+.bug-send { flex: 1 1 18rem; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.5rem 0.75rem; min-width: 0; }
+.bug-send > button { flex: none; }
+.bug-consent { flex: 0 1 auto; min-width: 0; justify-content: flex-end; gap: 0.5rem; max-width: 34rem; text-align: right; font-size: 0.8125rem; }
+.bug-consent span { min-width: 0; }
+.bug-consent input { margin: 0; flex: none; }
+@media (max-width: 35rem) {
+  .bug-dialog { padding: 1rem; }
+  .bug-dialog > .modal-head { top: -1rem; margin-top: -1rem; padding-top: 1rem; }
+  .bug-dialog .bug-foot { bottom: -1rem; margin-bottom: -1rem; padding-bottom: 1rem; }
+  .bug-classify { grid-template-columns: minmax(0, 1fr); }
+  .bug-fields { grid-template-columns: minmax(0, 1fr); gap: 0.1rem; }
+  .bug-fields dd { margin-bottom: 0.4rem; }
+  .bug-send { flex-wrap: wrap; }
+}
 .button-link {
   display: inline-block; padding: .4rem .75rem; border: 1px solid var(--accent); border-radius: var(--radius);
   background: var(--accent-soft); color: var(--accent-strong); font-size: 0.8125rem; font-weight: 500; text-decoration: none;
