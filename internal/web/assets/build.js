@@ -29,6 +29,9 @@
   let generation = 0;
   let leakRequestCard = null;
   let leakRequestID = null;
+  // localMap is a file chosen in My Maps › On this computer (NEW_265): a path
+  // on this machine, labelled as exactly that wherever the wizard shows it.
+  let localMap = null;
 
   // An operating-system link only asks. The user's own page resolves the saved revision and
   // displays it here; the ordinary Build preview and explicit Build press still own execution.
@@ -252,6 +255,10 @@
     });
 
     const assetNote = el("p", { className: "build-chosen", attrs: { id: id + "-asset" } });
+    // Where a file chosen in My Maps came from, said under the field: a file
+    // on this computer, not a revision of a map in the account.
+    const localNote = el("p", { className: "build-chosen build-chosen--local", attrs: { id: id + "-local" } });
+    localNote.hidden = true;
     const fileChoice = el("select", { attrs: { id: id + "-file", "aria-label": "Which file of that revision" } });
     const fileChoiceField = el("div", {
       className: "field",
@@ -271,6 +278,7 @@
       children: [
         sourceField,
         file.container,
+        localNote,
         assetNote,
         fileChoiceField,
       ],
@@ -282,11 +290,24 @@
       file.container.hidden = usingAsset;
       assetNote.hidden = !usingAsset;
       fileChoiceField.hidden = !usingAsset || fileChoice.options.length < 2;
+      describeLocal();
+    };
+    const describeLocal = () => {
+      const chosen = localMap && kind === "map" && source.value !== "asset" && file.input.value.trim() === localMap.path;
+      localNote.hidden = !chosen;
+      if (!chosen) return;
+      localNote.replaceChildren(
+        el("span", { className: "build-chosen__name", text: localMap.name }),
+        el("span", { className: "build-chosen__detail", text: t("a file on this computer, chosen in My Maps — not a map from your account. It is copied into the build; the original is never changed.") }),
+        el("span", { className: "build-chosen__detail mono", text: localMap.path }),
+      );
     };
     source.addEventListener("change", apply);
+    file.input.addEventListener("input", describeLocal);
+    file.input.addEventListener("change", describeLocal);
     apply();
 
-    inputFields.set(input.name, { input, kind, source, file, assetNote, fileChoice, fileChoiceField, apply });
+    inputFields.set(input.name, { input, kind, source, file, assetNote, localNote, fileChoice, fileChoiceField, apply });
     return wrapper;
   }
 
@@ -862,6 +883,22 @@
     }
   }
 
+  // applyLocalMap puts the file chosen in My Maps into the map field of the
+  // pipeline on screen — again after a pipeline change, because the rows are
+  // drawn per pipeline. A field somebody has since typed something else into
+  // is theirs and is left alone.
+  function applyLocalMap() {
+    if (!localMap) return;
+    for (const row of inputFields.values()) {
+      if (row.kind !== "map") continue;
+      const typed = row.file.input.value.trim();
+      if (typed && typed !== localMap.path) continue;
+      row.source.value = "file";
+      row.file.input.value = localMap.path;
+      row.apply();
+    }
+  }
+
   // A map and a WAD chosen for one pipeline stay chosen when another is picked:
   // inputs are matched by name, so only what both pipelines declare carries
   // over (NEW_244D rehearsal: switching fast preview to normal emptied the map).
@@ -869,6 +906,7 @@
     const kept = keptInputs();
     renderPipeline();
     restoreInputs(kept);
+    applyLocalMap();
     choicesChanged();
   });
   for (const id of ["build-inputs", "build-strict"]) {
@@ -929,8 +967,27 @@
       }
       choicesChanged();
     },
+    // From My Maps › On this computer: a map file of one's own, into the
+    // ordinary wizard at its Map step. Nothing else about the build changes —
+    // the pipeline, the WAD folder and the check are the wizard's own.
+    async useLocalFile(path) {
+      const name = String(path).split(/[\\/]/).pop();
+      localMap = { path, name };
+      window.AUCOM.showArea("build");
+      if (!pipelines.length) await refreshPipelines();
+      applyLocalMap();
+      if (!$("build-label").value.trim()) $("build-label").value = t("Local file: {name}", { name });
+      choicesChanged();
+      showStep(2);
+      const row = [...inputFields.values()].find((candidate) => candidate.kind === "map");
+      if (!row) {
+        setMessage("build-message", t("The build profile chosen in step 1 takes no map file. Choose one that does; {name} stays chosen.", { name }), "error");
+        showStep(1);
+      }
+    },
     async refresh() {
       await refreshPipelines();
+      applyLocalMap();
       await refreshLeakRequest();
       await refreshHistory();
       renderSteps();

@@ -18,7 +18,7 @@ import (
 // this program, not by anybody else's. A record this build does not fully
 // understand is refused rather than half-read, because a job record is what
 // says whether something ran.
-const SchemaVersion = "aucom.job/1.2"
+const SchemaVersion = "aucom.job/1.3"
 
 // SupportedSchemaVersions is every job record format this build reads, oldest
 // first.
@@ -31,7 +31,11 @@ const SchemaVersion = "aucom.job/1.2"
 // profiles distinguished them, and reading it as "unknown" is true — but a
 // running server that a job list showed as an ordinary process is exactly the
 // thing the field exists to stop, so the version is named rather than inferred.
-var SupportedSchemaVersions = []string{"aucom.job/1.0", "aucom.job/1.1", "aucom.job/1.2"}
+// 1.3 added `sidecar_logs` — the transcripts a tool writes beside its outputs,
+// which the live output view reads while it runs — and `custom_args`, the
+// argument tokens this machine's profile setup appended (NEW_265). A record
+// without them is one from before either existed, and reads as "none".
+var SupportedSchemaVersions = []string{"aucom.job/1.0", "aucom.job/1.1", "aucom.job/1.2", "aucom.job/1.3"}
 
 // SchemaSupported reports whether this build reads a job record format.
 func SchemaSupported(version string) bool {
@@ -134,6 +138,16 @@ type Artifact struct {
 	Missing bool `json:"missing,omitempty"`
 }
 
+// SidecarLog is one declared transcript file of a job.
+type SidecarLog struct {
+	// Name is the declared output's name, which is also the artifact it is
+	// published as when the job ends.
+	Name  string `json:"name"`
+	Title string `json:"title,omitempty"`
+	// Path is where the tool writes it, inside the job's workspace.
+	Path string `json:"path"`
+}
+
 // Diagnostic is one line of output a rule recognised.
 type Diagnostic struct {
 	RuleID   string           `json:"rule_id"`
@@ -214,8 +228,18 @@ type Job struct {
 	// and an old record must keep loading; never written.
 	Installs []string `json:"installs,omitempty"`
 
-	Command   *CommandPreview `json:"command,omitempty"`
-	Workspace string          `json:"workspace,omitempty"`
+	Command *CommandPreview `json:"command,omitempty"`
+	// CustomArgs are the argument tokens this machine's setup of the profile
+	// appended to the declared command — already inside Command.Args, and
+	// repeated here so a reader can see which words were the document's and
+	// which were the user's own. Empty when none were set.
+	CustomArgs []string `json:"custom_args,omitempty"`
+	// SidecarLogs are the transcripts the action declares its tool writes
+	// beside its outputs (a compiler's `.log`), resolved to where they appear
+	// in the workspace. They are what the live output view reads while the
+	// program runs, because a tool's own stdout may say nothing until it exits.
+	SidecarLogs []SidecarLog `json:"sidecar_logs,omitempty"`
+	Workspace   string       `json:"workspace,omitempty"`
 	// ArtifactDir is where collected outputs were published.
 	ArtifactDir string     `json:"artifact_dir,omitempty"`
 	Artifacts   []Artifact `json:"artifacts,omitempty"`
@@ -299,6 +323,8 @@ func (j *Job) Clone() *Job {
 		command.Env = append([]EnvEntry(nil), j.Command.Env...)
 		out.Command = &command
 	}
+	out.CustomArgs = append([]string(nil), j.CustomArgs...)
+	out.SidecarLogs = append([]SidecarLog(nil), j.SidecarLogs...)
 	out.Installs = append([]string(nil), j.Installs...)
 	out.Artifacts = append([]Artifact(nil), j.Artifacts...)
 	out.Diagnostics = append([]Diagnostic(nil), j.Diagnostics...)

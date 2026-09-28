@@ -7,8 +7,10 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/lockfile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
 
 // Reading and writing the binding store as a file.
@@ -127,4 +129,45 @@ func Update(path string, mutate func(*Set) error) (*Set, error) {
 		return nil
 	})
 	return result, err
+}
+
+// SetArguments records a person's own argument tokens for one executable of
+// one profile, or removes them when tokens is empty (NEW_265). The one writer
+// of `arguments`, used by the page and by `companion toolchain args` alike.
+//
+// A profile with nothing recorded yet gets a binding that holds only the
+// tokens, against the document as it is now; it grants nothing. An existing
+// binding keeps everything else — paths, approval, digest — exactly as it was.
+func SetArguments(path, profileID, profileVersion, digest string, trust profile.Trust, executable string, tokens []string) (LocalBinding, error) {
+	if err := profile.ValidateCustomArgs(tokens); err != nil {
+		return LocalBinding{}, fmt.Errorf("the arguments for %s: %w", executable, err)
+	}
+	var out LocalBinding
+	_, err := Update(path, func(set *Set) error {
+		local, found := set.Find(profileID)
+		if !found {
+			local = LocalBinding{
+				ProfileID: profileID, ProfileVersion: profileVersion, ProfileDigest: digest,
+				Trust: trust, Acquisition: profile.AcquireUserPath,
+			}
+		}
+		if len(tokens) == 0 {
+			delete(local.Arguments, executable)
+		} else {
+			if local.Arguments == nil {
+				local.Arguments = map[string][]string{}
+			}
+			local.Arguments[executable] = append([]string(nil), tokens...)
+		}
+		if len(local.Arguments) == 0 {
+			local.Arguments = nil
+		}
+		local.UpdatedAt = time.Now().UTC()
+		if err := set.Put(local); err != nil {
+			return err
+		}
+		out, _ = set.Find(profileID)
+		return nil
+	})
+	return out, err
 }

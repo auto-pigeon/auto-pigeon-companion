@@ -395,6 +395,103 @@
     }
   }
 
+  // --- a map file of one's own (NEW_265) -------------------------------------
+  //
+  // Not an account revision, and never presented as one: the file is chosen
+  // with this machine's own file chooser (or typed, where there is none),
+  // checked like any typed path, and handed to the ordinary Build wizard at
+  // its Map step. The pipeline, the WAD folder and the preview are all the
+  // wizard's, as they are for any file on this machine — there is no second
+  // way to build. Nothing is uploaded, and the file itself is only ever read.
+
+  // The map extensions the installed pipelines' map inputs accept, from their
+  // own declarations: a `.map` for the Quake pipelines, and whatever else a
+  // pipeline on this machine truly takes.
+  async function acceptedMapExtensions() {
+    const { ok, body } = await api("/api/v1/build/pipelines");
+    const extensions = new Set();
+    if (ok) {
+      for (const pipeline of body.items || []) {
+        for (const input of pipeline.inputs || []) {
+          if (input.source_kind !== "map") continue;
+          for (const extension of input.extensions || []) extensions.add(extension.toLowerCase());
+        }
+      }
+    }
+    return [...extensions].sort();
+  }
+
+  async function useLocalMap(path) {
+    const message = $("local-map-message");
+    const accepted = await acceptedMapExtensions();
+    const checked = await api("/api/v1/paths/validate", { method: "POST", body: { kind: "open-file", path } });
+    if (!checked.body.valid) {
+      setMessage(message, checked.body.error || t("That file cannot be used."), "error");
+      return false;
+    }
+    const resolved = checked.body.path;
+    const lower = resolved.toLowerCase();
+    if (accepted.length && !accepted.some((extension) => lower.endsWith(extension))) {
+      setMessage(message, t("{name} is not a map file a build profile here accepts. Choose a {kinds} file.", {
+        name: resolved.split(/[\\/]/).pop(), kinds: accepted.join(" or "),
+      }), "error");
+      return false;
+    }
+    setMessage(message, t("Opening Build on {name}…", { name: resolved.split(/[\\/]/).pop() }), "");
+    record(`Chose a map file on this computer`, resolved, "ok");
+    await window.AUCOM.areas.build?.useLocalFile?.(resolved);
+    return true;
+  }
+
+  function showTypedPath() {
+    const holder = $("local-map-typed");
+    if (!holder.hidden) return;
+    const field = window.AUCOM.pathField({
+      id: "local-map-path", kind: "open-file", label: t("The map file"),
+      hint: t("This machine has no file chooser the Companion can open, so type the file's full path."),
+    });
+    const use = el("button", { text: t("Build this map"), attrs: { type: "button", class: "primary" } });
+    use.addEventListener("click", () => withBusy(use, async () => {
+      const path = field.input.value.trim();
+      if (!path) {
+        setMessage("local-map-message", t("Type the map file's path first."), "error");
+        return;
+      }
+      await useLocalMap(path);
+    }));
+    holder.replaceChildren(field.container, el("div", { className: "row-actions", children: [use] }));
+    holder.hidden = false;
+    field.input.focus();
+  }
+
+  $("local-map-choose").addEventListener("click", (event) => withBusy(event.currentTarget, async () => {
+    const message = $("local-map-message");
+    setMessage(message, "");
+    const accepted = await acceptedMapExtensions();
+    const { ok, status, body } = await api("/api/v1/paths/pick", {
+      method: "POST",
+      body: {
+        kind: "open-file", title: t("Choose a map file"),
+        filters: accepted.length ? [{ name: t("Map files"), extensions: accepted.map((e) => e.replace(/^\./, "")) }] : undefined,
+      },
+    });
+    if (ok && body.cancelled) {
+      // Somebody was asked and said no. Nothing is wrong, nothing changes.
+      setMessage(message, t("No file was chosen."), "");
+      return;
+    }
+    if (!ok) {
+      if (status === 501) {
+        showTypedPath();
+        return;
+      }
+      setMessage(message, (body.error || t("The file chooser could not be opened.")) + " " + t("Type the path instead."), "error");
+      showTypedPath();
+      return;
+    }
+    await useLocalMap(body.path);
+  }));
+
   $("library-view").addEventListener("change", () => {
     const local = $("library-view").value === "local";
     $("library-account-panel").hidden = local;

@@ -346,6 +346,10 @@ func runServe(env *Env, args []string) int {
 	// compiler running is a Companion that has lost track of a process the
 	// user cannot see.
 	defer server.Close()
+	// Auto-build's one poller (NEW_265): this process's, for as long as it
+	// runs, whatever number of pages are open. It asks AUB only about maps a
+	// person switched Auto-build on for.
+	server.StartAutoBuild(ctx)
 
 	listener, err := web.Listen(chosen)
 	if err != nil {

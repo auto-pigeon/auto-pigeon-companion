@@ -54,11 +54,18 @@ func elision(dropped int64) []byte {
 // capture drains one stream, keeps a bounded copy, and offers each line to a
 // callback.
 //
-// Not safe for concurrent use by design: one capture belongs to one stream and
-// one reader goroutine. The counters are read after the goroutine has finished,
-// which the executor guarantees with a WaitGroup rather than a mutex.
+// One capture belongs to one stream and one reader goroutine, and the counters
+// the job record keeps are read after that goroutine has finished, which the
+// executor guarantees with a WaitGroup. The one concurrent reader is the live
+// output view (NEW_265): a person watching a build while it runs. It takes
+// [capture.mu] and copies at most one bounded chunk, so what it costs the
+// program being watched is one uncontended lock per read of the pipe.
 type capture struct {
 	stream string
+
+	// mu guards head, tail and total against [capture.readFrom]. The line
+	// splitter and the counters only its own goroutine touches are outside it.
+	mu sync.Mutex
 
 	head []byte
 	tail []byte
@@ -108,15 +115,48 @@ func (c *capture) drain(r io.Reader) {
 }
 
 func (c *capture) write(chunk []byte) {
-	c.total += int64(len(chunk))
 	if c.mirror != nil {
 		// A failed mirror write is not the job's problem: the terminal went
 		// away, the log is still being kept, and the process should not be
 		// stopped over it.
 		_, _ = c.mirror.Write(chunk)
 	}
+	c.mu.Lock()
+	c.total += int64(len(chunk))
 	c.store(chunk)
+	c.mu.Unlock()
 	c.split(chunk)
+}
+
+// readFrom copies what the program has written from an absolute stream offset,
+// at most max bytes, while it may still be writing.
+//
+// Offsets count every byte the program wrote, kept or not, so a reader's cursor
+// means the same thing before and after the middle of a flood was dropped: the
+// kept head is [0, len(head)), the kept tail is [total-len(tail), total). A
+// cursor that points into the dropped middle is moved to the start of the tail
+// and the distance is reported as the gap, which is what a reader says instead
+// of pretending the stream was continuous.
+func (c *capture) readFrom(offset int64, max int) (chunk []byte, start, total, gap int64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	total = c.total
+	if offset < 0 || offset > total {
+		offset = 0
+	}
+	head := int64(len(c.head))
+	if offset < head {
+		end := min(head, offset+int64(max))
+		return append([]byte(nil), c.head[offset:end]...), offset, total, 0
+	}
+	tailStart := total - int64(len(c.tail))
+	if offset < tailStart {
+		gap = tailStart - offset
+		offset = tailStart
+	}
+	from := offset - tailStart
+	end := min(int64(len(c.tail)), from+int64(max))
+	return append([]byte(nil), c.tail[from:end]...), offset, total, gap
 }
 
 // store appends to the bounded copy: fill head first, then keep a sliding tail.
@@ -205,6 +245,8 @@ func (c *capture) flushPartial() {
 // still a fixed ceiling, never a function of how much was written — and this
 // brings it back to the stated bound once there is nothing more to read.
 func (c *capture) trim() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if len(c.tail) > tailBytes {
 		keep := c.tail[len(c.tail)-tailBytes:]
 		copy(c.tail, keep)

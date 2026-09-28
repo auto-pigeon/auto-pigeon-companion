@@ -426,6 +426,7 @@ func (r *Runner) previewStep(request Request, resolved profile.ResolvedStep, wir
 		profile.RootBuild:     previewBuild,
 	}
 	executables := map[string]string{}
+	var extra []string
 	if local, bound := r.binding(resolved.Profile.Meta.ID); bound {
 		for role, path := range local.Roots {
 			if role != profile.RootWorkspace {
@@ -435,6 +436,9 @@ func (r *Runner) previewStep(request Request, resolved profile.ResolvedStep, wir
 		for name, path := range local.Executables {
 			executables[name] = path
 		}
+		// The same tokens the job service appends when the step runs, so the
+		// preview a person reviews is the argv that starts.
+		extra = local.Arguments[resolved.Action.Executable]
 	}
 	// The request's roots, over the binding's, exactly as [Runner.stepRequest]
 	// merges them. Preview and execution therefore resolve to the same argv
@@ -456,6 +460,7 @@ func (r *Runner) previewStep(request Request, resolved profile.ResolvedStep, wir
 		Executables: executables,
 		Inputs:      inputs,
 		Options:     options,
+		ExtraArgs:   extra,
 	})
 	return invocation, options, records, err
 }

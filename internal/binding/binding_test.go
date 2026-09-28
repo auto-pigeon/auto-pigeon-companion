@@ -24,6 +24,7 @@ func sampleBinding(t *testing.T) LocalBinding {
 		Trust:          profile.TrustCommunity,
 		Acquisition:    profile.AcquireUserPath,
 		Executables:    map[string]string{"qbsp": filepath.Join(base, "tools", "ericw", "qbsp")},
+		Arguments:      map[string][]string{"qbsp": {"-nopercent"}},
 		Roots: map[string]string{
 			profile.RootGame:    filepath.Join(base, "games", "quake"),
 			profile.RootProject: filepath.Join(base, "projects", "mymap"),
@@ -287,7 +288,7 @@ func TestPutRefusesAnInvalidBinding(t *testing.T) {
 // shared, but so the file a user may have to read and repair is documented and
 // versioned.
 func TestTheLocalBindingSchemaIsPublishedAndMatchesTheStoredShape(t *testing.T) {
-	raw, err := profile.SchemaFile("local-binding-1.1.schema.json")
+	raw, err := profile.SchemaFile("local-binding-1.2.schema.json")
 	if err != nil {
 		t.Fatalf("%v", err)
 	}

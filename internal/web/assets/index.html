@@ -359,6 +359,30 @@
               <input id="play-map-name" type="text" placeholder="dm1" />
             </div>
             <p id="play-map-message" class="message" role="status"></p>
+            <!-- Auto-build (NEW_265): one map, one build profile, and only
+                 while this Companion is running. Never starts the game. -->
+            <section id="play-autobuild" class="autobuild" aria-labelledby="play-autobuild-title" hidden>
+              <h4 id="play-autobuild-title">Auto-build</h4>
+              <p class="muted small">
+                While the Companion is running it checks this map about every 30 seconds and
+                builds each newly saved revision with the build profile chosen here. The revision
+                current when you switch it on is not built. It never starts the game.
+              </p>
+              <div class="autobuild__controls">
+                <label class="check autobuild__switch">
+                  <input type="checkbox" id="play-autobuild-on" role="switch" />
+                  <span>Auto-build this map</span>
+                </label>
+                <div class="field">
+                  <label for="play-autobuild-pipeline">Build profile</label>
+                  <select id="play-autobuild-pipeline"></select>
+                </div>
+                <button type="button" id="play-autobuild-now" class="secondary">Build current revision now</button>
+              </div>
+              <dl id="play-autobuild-status" class="summary-list autobuild__status"></dl>
+              <div id="play-autobuild-actions" class="row-actions"></div>
+              <p id="play-autobuild-message" class="message" role="status"></p>
+            </section>
             <div class="bwiz-nav">
               <span></span>
               <button type="button" class="primary" data-go="2">Next: how to build</button>
@@ -531,12 +555,19 @@
           <div class="panel" id="library-local-panel" hidden>
             <div class="panel-head">
               <h3>Maps downloaded to this computer</h3>
-              <button type="button" id="cached-refresh" class="secondary">Refresh</button>
+              <span class="panel-head__actions">
+                <button type="button" id="local-map-choose" class="primary">Choose a map file…</button>
+                <button type="button" id="cached-refresh" class="secondary">Refresh</button>
+              </span>
             </div>
             <p class="muted">
               Everything here builds without a connection, and stays after a
-              restart.
+              restart. A map file of your own — one that is not in your
+              account — builds too: choose it, and Build opens on it. It is
+              copied into the build and never changed, and nothing is uploaded.
             </p>
+            <div id="local-map-typed" class="local-map-typed" hidden></div>
+            <p id="local-map-message" class="message" role="status"></p>
             <p id="cached-message" class="message" role="status"></p>
             <ul id="cached-list" class="cards map-cards" aria-label="Maps downloaded to this computer"></ul>
           </div>
@@ -1309,9 +1340,11 @@
     <script src="locales/ja.js"></script>
     <script src="locales/zh.js"></script>
     <script src="core.js"></script>
+    <script src="joboutput.js"></script>
     <script src="library.js"></script>
     <script src="build.js"></script>
     <script src="play.js"></script>
+    <script src="autobuild.js"></script>
     <script src="run.js"></script>
     <script src="games.js"></script>
     <script src="profiles.js"></script>

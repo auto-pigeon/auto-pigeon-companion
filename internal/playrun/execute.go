@@ -32,6 +32,11 @@ func (s *Service) execute(ctx context.Context, record *Record) {
 		{Launching, s.launch},
 	}
 
+	if record.Request.BuildOnly {
+		// Download, textures, convert, compile — and stop: see Request.BuildOnly.
+		stages = stages[:4]
+	}
+
 	for _, stage := range stages {
 		if err := ctx.Err(); err != nil {
 			s.cancelled(record)
@@ -53,6 +58,15 @@ func (s *Service) execute(ctx context.Context, record *Record) {
 
 			return
 		}
+	}
+
+	if record.Request.BuildOnly {
+		record.State = Succeeded
+		record.FinishedAt = s.deps.Now()
+		s.save(record)
+		s.deps.Logf("run %s: built in %s (build only)", record.ID, record.Elapsed(s.deps.Now()))
+
+		return
 	}
 
 	// The engine started. That is the end of the automated sequence: the run

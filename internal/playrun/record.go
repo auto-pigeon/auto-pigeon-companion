@@ -167,6 +167,16 @@ type Request struct {
 	// compiler-ready stops the run, as it always did. See ownwads.go.
 	OwnWADsDir string `json:"own_wads_dir,omitempty"`
 
+	// BuildOnly stops the run once the map is compiled: nothing is installed
+	// into a game folder and no engine starts. It is how Auto-build (NEW_265)
+	// builds a newly saved revision through this same coordinator — the same
+	// verified map and texture downloads, the same extractor, the same build —
+	// without launching anything nobody asked to play.
+	BuildOnly bool `json:"build_only,omitempty"`
+	// Trigger says what started the run: empty for a person, "auto_build" for
+	// Auto-build. Shown, never acted on.
+	Trigger string `json:"trigger,omitempty"`
+
 	// Listing, when set, lists a hosted game in Live Games once the engine is
 	// running — the listing the person saw previewed in the review. Nil for a
 	// game nobody else can join, and for a host who chose not to list it.
@@ -212,6 +222,26 @@ func (r *Request) Normalize() error {
 	r.OwnWADsDir = strings.TrimSpace(r.OwnWADsDir)
 	if r.ModName = strings.TrimSpace(r.ModName); r.ModName == "" {
 		r.ModName = DefaultMod
+	}
+
+	if r.BuildOnly {
+		// Nothing is installed and nothing is started, so there is no engine,
+		// no game folder and no name for +map to ask for.
+		switch {
+		case r.AssetID == "":
+			return fmt.Errorf("playrun: a run needs a map")
+		case r.RevisionID == "":
+			return fmt.Errorf("playrun: a run needs the exact revision of that map, never `current`")
+		case r.RevisionNumber <= 0:
+			return fmt.Errorf("playrun: a run needs that revision's number, which is how the textures are addressed")
+		case r.PipelineID == "":
+			return fmt.Errorf("playrun: a run needs a build profile")
+		case r.Listing != nil:
+			return fmt.Errorf("playrun: a build-only run starts no game, so it has nothing to list")
+		case r.OwnWADsDir != "" && !filepath.IsAbs(r.OwnWADsDir):
+			return fmt.Errorf("playrun: the folder with your own WADs must be written as an absolute path")
+		}
+		return nil
 	}
 
 	switch {

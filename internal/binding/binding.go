@@ -67,6 +67,12 @@ type LocalBinding struct {
 	// Roots maps a root role to an absolute path here. `workspace` is not
 	// stored: it is created per job and belongs to the executor.
 	Roots map[string]string `json:"roots,omitempty"`
+	// Arguments maps a declared executable name to the argument tokens this
+	// user adds to every command that runs it (NEW_265). One list per
+	// executable, so a qbsp flag never reaches vis or light. Machine state like
+	// the paths above: the document — the profile a user exports — is never
+	// changed by it, and a Companion update that ships a new document keeps it.
+	Arguments map[string][]string `json:"arguments,omitempty"`
 	// ResolvedVersion is what the version probe reported, and VersionCheckedAt
 	// is when. Both, or neither: a version with no timestamp is a claim with no
 	// expiry, and a tool updated in place would keep the old number forever.
@@ -113,6 +119,15 @@ func (b LocalBinding) Validate() error {
 	for _, name := range sortedKeys(b.Executables) {
 		if !filepath.IsAbs(b.Executables[name]) {
 			add("the path for the executable %q is %q, which is not absolute", name, b.Executables[name])
+		}
+	}
+	for name, tokens := range b.Arguments {
+		if strings.TrimSpace(name) == "" {
+			add("arguments are recorded for an executable with no name")
+			continue
+		}
+		if err := profile.ValidateCustomArgs(tokens); err != nil {
+			add("the arguments for the executable %q: %v", name, err)
 		}
 	}
 	for _, role := range sortedKeys(b.Roots) {

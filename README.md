@@ -186,6 +186,56 @@ Set `BUILD_ID` to the finished leak-test build ID. The URL and token files are
 created by the Companion. The JSON records the pinned map identity and artifact
 hashes; it is a local result file, not a signed attestation.
 
+**Watching a build.** In **Jobs**, a job's name is a link to its page. While a
+compiler runs, its page and the **Activity** drawer show what it has printed so
+far — from the transcript the tool writes beside its outputs (EricW's
+`level.log`, `vis.log`, `light.log`) when it declares one, otherwise its own
+output — a stage at a time, bounded, with the full log kept with the job:
+
+```console
+$ companion job output <job-id> --follow
+```
+
+```bash
+curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
+  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/jobs/$JOB_ID/output?source=auto&offset=0"
+```
+
+Send the answer's `next` back as `offset` to read on; `source` names what was read.
+
+**Your own arguments.** **Profiles › Configure** has, per program, a list of
+extra arguments added to every command that runs it, before its input files —
+each box one argument exactly as typed, never split and never passed through a
+shell. qbsp's arguments never reach vis or light, the profile document is not
+changed, and **Reset to default** removes them. The job that used them names
+them. (EricW 0.18.1's `qbsp` has no `-threads`; `-nopercent` is a harmless one
+to try.)
+
+```console
+$ companion toolchain args auto-pigeon.ericw-tools.q1 qbsp --set=-nopercent
+$ companion toolchain args auto-pigeon.ericw-tools.q1                 # every program's command, as it will run
+$ companion toolchain args auto-pigeon.ericw-tools.q1 qbsp --reset
+```
+
+**A map file of your own.** **My Maps › On this computer › Choose a map file…**
+opens Build on that file, at its map step; choose the build profile and a WAD
+folder there as for any file. Nothing is uploaded and the file is only read.
+
+**Build & Run** lists your maps with the most recently saved first. An engine
+it calls **Needs setup** says what is missing, in the same words Profiles uses.
+
+**Auto-build.** Under the map in **Build & Run**, **Auto-build this map** checks
+it about every 30 seconds while the Companion runs and builds each newly saved
+revision — once — with the chosen build profile. It never starts the game.
+The revision current when you switch it on is not built; **Build current
+revision now** does that. A failed build waits for **Retry**.
+
+```console
+$ companion autobuild on <map-id> --pipeline auto-pigeon.q1.normal
+$ companion autobuild show <map-id>
+$ companion autobuild off <map-id>
+```
+
 **Hosting a game.** A hosted game starts **Private**. Choosing **Public** shows
 **Help to connect**, which explains the manual UDP port forwarding people
 outside your network need to reach you.
@@ -208,10 +258,11 @@ commands:
   serve [--port <n>] [--open] [--debug] [--interactive | --stay-running]   run the local GUI server; it keeps running until stopped unless --interactive
   auth login [--email <address>] | status | logout   authenticate against auto-pigeon-backend
   aub capabilities | catalog | show | revisions | sync | cached | verify | export | clean   browse auto-pigeon-backend's assets and sync exact revisions to this machine
-  job run | preview | list | show | logs | cancel | retry | artifacts | profiles   run a profile action as a supervised job, and inspect what ran
+  job run | preview | list | show | logs | output | cancel | retry | artifacts | profiles   run a profile action as a supervised job, and inspect what ran
+  autobuild list | show | on | off | pipeline | build-now | retry   rebuild a hosted map automatically when a new revision is saved (inside a running Companion)
   build run | preview | list | show | pipelines   build a map through a pipeline: several supervised jobs, wired, with a manifest
   package targets | preview | create | inspect | verify | extract   build a PAK or PK3 from what a build produced, and read one somebody else made
-  toolchain validate | show | canonicalize | digest | diff | list | schema | review | grant | withdraw | homepage  read, check and compare tool, engine and pipeline toolchains, and approve one to run
+  toolchain validate | show | canonicalize | digest | diff | list | schema | review | grant | withdraw | homepage | args  read, check and compare tool, engine and pipeline toolchains, and approve one to run
   acquire resolve   find a toolchain's programs on this machine (a folder, PATH, or a game's own copy); nothing is downloaded
   engine list | show | detect | bind | check | preview | run | stage | unstage   set up a Quake engine you already have, and start it as a supervised job
   game list | show | link | join | preview | host | stop   find a game somebody is hosting and join it, or advertise one of your own

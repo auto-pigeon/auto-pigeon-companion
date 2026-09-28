@@ -141,16 +141,42 @@ func TestAnActionTheEngineDoesNotHaveSaysSoAndListsWhatItDoes(t *testing.T) {
 	}
 }
 
-func TestAStaleBindingIsNamedRatherThanUsed(t *testing.T) {
+func TestAStaleApprovalIsNamedRatherThanUsed(t *testing.T) {
 	document, digest := builtinEngine(t, builtin.QuakeSpasm)
 	local, _, _ := workingBinding(t, document, digest)
-	local.ProfileDigest = "sha256:" + strings.Repeat("0", 64)
-	problems := linux().Check(document, profile.TrustBuiltin, digest, local, profile.ActionPlayMap)
+	old := "sha256:" + strings.Repeat("0", 64)
+	local.ProfileDigest = old
+	local.Grant = &profile.Grant{ProfileID: document.Metadata().ID, Digest: old, Trust: profile.TrustLocal}
+	// The same document installed as the user's own: it runs only with an
+	// approval of its exact bytes, and the approval is for other bytes.
+	problems := linux().Check(document, profile.TrustLocal, digest, local, profile.ActionPlayMap)
 	if !problems.Has(engine.FaultStaleBinding) {
-		t.Fatalf("a binding for a different document reported %v", problems)
+		t.Fatalf("an approval of a different document reported %v", problems)
+	}
+	if problems.Has(engine.FaultNotAuthorized) {
+		t.Errorf("a changed document is reported twice: %v", problems)
 	}
 	if !strings.Contains(problems.Error(), "toolchain diff") {
 		t.Errorf("the message does not say how to see what changed: %s", problems.Error())
+	}
+}
+
+// NEW_265: a built-in engine whose recorded setup was written against an
+// earlier version of the shipped document is ready when its paths are — the
+// executor runs it with those paths, and Profiles calls it ready. Only a real
+// missing requirement is reported.
+func TestABuiltinEngineSetUpAgainstAnEarlierDocumentIsReadyWhenItsPathsAre(t *testing.T) {
+	document, digest := builtinEngine(t, builtin.QuakeSpasm)
+	local, _, _ := workingBinding(t, document, digest)
+	local.ProfileDigest = "sha256:" + strings.Repeat("0", 64)
+	if problems := linux().Check(document, profile.TrustBuiltin, digest, local, profile.ActionPlayMap); len(problems) != 0 {
+		t.Fatalf("a built-in engine whose paths are all there reported %v", problems)
+	}
+	// And a program that is really gone is still named, digest or not.
+	local.Executables["engine"] = filepath.Join(t.TempDir(), "gone")
+	problems := linux().Check(document, profile.TrustBuiltin, digest, local, profile.ActionPlayMap)
+	if !problems.Has(engine.FaultMissingEngine) || problems.Has(engine.FaultStaleBinding) {
+		t.Errorf("a missing engine reported %v", problems)
 	}
 }
 

@@ -109,22 +109,20 @@ func (s *Server) describeEngine(entry job.CatalogEntry, local binding.LocalBindi
 	}
 	body["binding"] = describeBinding(local)
 
-	checker := engine.Checker{Platform: currentPlatform()}
 	// Reported per action, because an engine that cannot host a dedicated
 	// server can still play a map, and a single "ready" flag would hide which
-	// of the two the user is actually being stopped from doing.
+	// of the two the user is actually being stopped from doing. The same
+	// decision Profiles shows (readiness.go).
+	state := installReadiness(entry, local)
 	perAction := make(map[string]any, len(document.Actions))
-	ready := false
-	for _, action := range document.Actions {
-		problems := checker.Check(document, entry.Trust, entry.Digest, local, action.ID)
-		perAction[action.ID] = describeProblems(problems)
-		if len(problems) == 0 {
-			ready = true
-		}
+	for id, problems := range state.PerAction {
+		perAction[id] = describeProblems(problems)
 	}
 	body["action_problems"] = perAction
-	body["ready"] = ready
+	body["ready"] = state.Ready
+	body["readiness"] = state.view()
 	if actionID != "" {
+		checker := engine.Checker{Platform: currentPlatform()}
 		body["problems"] = describeProblems(
 			checker.Check(document, entry.Trust, entry.Digest, local, actionID))
 	}
@@ -149,6 +147,7 @@ func describeBinding(local binding.LocalBinding) map[string]any {
 		"acquisition":         local.Acquisition,
 		"executables":         local.Executables,
 		"roots":               local.Roots,
+		"arguments":           local.Arguments,
 		"resolved_version":    local.ResolvedVersion,
 		"version_checked_at":  local.VersionCheckedAt,
 		"overrides":           local.Overrides,

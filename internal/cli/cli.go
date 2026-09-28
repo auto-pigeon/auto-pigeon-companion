@@ -157,9 +157,14 @@ var commands = []Command{
 		Run:     runAUB,
 	},
 	{
-		Name: "job", Usage: "run | preview | list | show | logs | cancel | retry | artifacts | profiles",
+		Name: "job", Usage: "run | preview | list | show | logs | output | cancel | retry | artifacts | profiles",
 		Summary: "run a profile action as a supervised job, and inspect what ran",
 		Run:     runJob,
+	},
+	{
+		Name: "autobuild", Usage: "list | show | on | off | pipeline | build-now | retry",
+		Summary: "rebuild a hosted map automatically when a new revision is saved (inside a running Companion)",
+		Run:     runAutobuild,
 	},
 	{
 		Name: "build", Usage: "run | preview | list | show | pipelines",
@@ -179,7 +184,7 @@ var commands = []Command{
 		// /companion-profiles routes are unchanged — a rename chased into a stable
 		// contract is a break, not a clarification.
 		Name: "toolchain", Aliases: []string{"profile"},
-		Usage:   "validate | show | canonicalize | digest | diff | list | schema | review | grant | withdraw | homepage",
+		Usage:   "validate | show | canonicalize | digest | diff | list | schema | review | grant | withdraw | homepage | args",
 		Summary: "read, check and compare tool, engine and pipeline toolchains, and approve one to run",
 		Run:     runToolchain,
 	},

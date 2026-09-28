@@ -55,20 +55,22 @@ import (
 
 func (s *Server) profileAPI() map[string]http.HandlerFunc {
 	return map[string]http.HandlerFunc{
-		"GET /api/v1/profiles":                s.handleProfileList,
-		"GET /api/v1/profiles/templates":      s.handleProfileTemplates,
-		"GET /api/v1/profiles/{id}":           s.handleProfileGet,
-		"GET /api/v1/profiles/{id}/document":  s.handleProfileDocument,
-		"POST /api/v1/profiles/validate":      s.handleProfileValidate,
-		"POST /api/v1/profiles/compose":       s.handleProfileCompose,
-		"POST /api/v1/profiles/diff":          s.handleProfileDiff,
-		"POST /api/v1/profiles/import":        s.handleProfileImport,
-		"POST /api/v1/profiles/{id}/bind":     s.handleProfileBind,
-		"POST /api/v1/profiles/{id}/unbind":   s.handleProfileUnbind,
-		"POST /api/v1/profiles/{id}/grant":    s.handleProfileGrant,
-		"POST /api/v1/profiles/{id}/withdraw": s.handleProfileWithdraw,
-		"POST /api/v1/profiles/{id}/remove":   s.handleProfileRemove,
-		"POST /api/v1/profiles/{id}/homepage": s.handleProfileHomepage,
+		"GET /api/v1/profiles":                 s.handleProfileList,
+		"GET /api/v1/profiles/templates":       s.handleProfileTemplates,
+		"GET /api/v1/profiles/{id}":            s.handleProfileGet,
+		"GET /api/v1/profiles/{id}/document":   s.handleProfileDocument,
+		"POST /api/v1/profiles/validate":       s.handleProfileValidate,
+		"POST /api/v1/profiles/compose":        s.handleProfileCompose,
+		"POST /api/v1/profiles/diff":           s.handleProfileDiff,
+		"POST /api/v1/profiles/import":         s.handleProfileImport,
+		"POST /api/v1/profiles/{id}/bind":      s.handleProfileBind,
+		"POST /api/v1/profiles/{id}/unbind":    s.handleProfileUnbind,
+		"POST /api/v1/profiles/{id}/grant":     s.handleProfileGrant,
+		"POST /api/v1/profiles/{id}/withdraw":  s.handleProfileWithdraw,
+		"POST /api/v1/profiles/{id}/remove":    s.handleProfileRemove,
+		"POST /api/v1/profiles/{id}/homepage":  s.handleProfileHomepage,
+		"POST /api/v1/profiles/{id}/arguments": s.handleProfileArguments,
+		"GET /api/v1/profiles/{id}/commands":   s.handleProfileCommands,
 	}
 }
 
@@ -148,6 +150,12 @@ func (s *Server) describeCatalogEntry(entry job.CatalogEntry, local binding.Loca
 	body["authorized"] = err == nil
 	if err != nil {
 		body["authorization_error"] = err.Error()
+	}
+	// Whether its programs can start here: the one decision the engine list
+	// in Build & Run also reads (readiness.go). A pipeline starts nothing of
+	// its own and has no answer to give.
+	if _, isPipeline := entry.Profile.(*profile.PipelineProfile); !isPipeline {
+		body["readiness"] = installReadiness(entry, local).view()
 	}
 	return body
 }

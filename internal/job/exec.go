@@ -94,6 +94,9 @@ type execution struct {
 	// onStarted is called once the process exists, with its pid, so the job
 	// record moves to Running before anything is read.
 	onStarted func(pid int, command *CommandPreview) error
+	// onCaptures hands the two live captures to whoever serves a running job's
+	// output (output.go). Nil when nobody does.
+	onCaptures func(stdout, stderr *capture)
 }
 
 // outcome is what one supervised run produced.
@@ -230,6 +233,9 @@ func (e *execution) run(ctx context.Context) outcome {
 	diagnostics := &diagnosticCollector{}
 	stdout := newCapture("stdout", e.mirror, e.lineHandler(diagnostics))
 	stderr := newCapture("stderr", e.mirror, e.lineHandler(diagnostics))
+	if e.onCaptures != nil {
+		e.onCaptures(stdout, stderr)
+	}
 
 	var readers sync.WaitGroup
 	readers.Add(2)

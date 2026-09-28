@@ -233,6 +233,52 @@ func (s *Server) handleJobLogs(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleJobOutput is the next bounded chunk of what a job has printed, read
+// while it runs (NEW_265). Read-only and job-scoped: the id picks the job, the
+// source picks one of the files that job declared or one of its two streams,
+// and nothing here opens a path that came from the request.
+//
+//	GET /api/v1/jobs/{id}/output?source=auto&from=<source id>&offset=<n>&max=<n>
+//
+// The answer carries `next`, the cursor to send back as `offset`, and `source`,
+// the one it read; see [job.OutputChunk].
+func (s *Server) handleJobOutput(w http.ResponseWriter, r *http.Request) {
+	service, ok := s.requireJobs(w)
+	if !ok {
+		return
+	}
+	query := r.URL.Query()
+	request := job.OutputRequest{Source: query.Get("source"), From: query.Get("from")}
+	if raw := query.Get("offset"); raw != "" {
+		offset, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("offset=%q is not a byte offset", raw))
+			return
+		}
+		request.Offset = offset
+	} else {
+		// No cursor: a reader opening a job starts at its last chunk rather
+		// than at a banner a megabyte ago.
+		request.Offset = -1
+	}
+	if raw := query.Get("max"); raw != "" {
+		max, err := strconv.Atoi(raw)
+		if err != nil || max <= 0 {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("max=%q is not a byte count", raw))
+			return
+		}
+		request.Max = max
+	}
+	chunk, err := service.Output(r.PathValue("id"), request)
+	if err != nil {
+		writeError(w, jobStatus(err), err)
+		return
+	}
+	// A poll must never be answered from a cache.
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, chunk)
+}
+
 func (s *Server) handleJobArtifacts(w http.ResponseWriter, r *http.Request) {
 	service, ok := s.requireJobs(w)
 	if !ok {
@@ -292,6 +338,7 @@ func (s *Server) jobAPI() map[string]http.HandlerFunc {
 		"POST /api/v1/jobs/{id}/cancel":          s.handleJobCancel,
 		"POST /api/v1/jobs/{id}/retry":           s.handleJobRetry,
 		"GET /api/v1/jobs/{id}/logs":             s.handleJobLogs,
+		"GET /api/v1/jobs/{id}/output":           s.handleJobOutput,
 		"GET /api/v1/jobs/{id}/artifacts":        s.handleJobArtifacts,
 		"GET /api/v1/jobs/{id}/artifacts/{name}": s.handleJobArtifact,
 	}

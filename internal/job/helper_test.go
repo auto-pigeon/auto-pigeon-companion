@@ -185,6 +185,48 @@ func helperMain(args []string) int {
 		}
 		fmt.Println("spawned", child.Process.Pid)
 		os.Stdout.Sync()
+	case "sidecar":
+		// `sidecar <log> <delay-ms> <lines> <pause-ms> <exit> [fatal words…]`:
+		// EricW's shape on Windows — nothing on stdout, every line in a
+		// transcript beside the outputs, created only once the tool gets going,
+		// and on failure a last fatal line before a non-zero exit.
+		delay, _ := strconv.Atoi(rest[1])
+		lines, _ := strconv.Atoi(rest[2])
+		pause, _ := strconv.Atoi(rest[3])
+		code, _ := strconv.Atoi(rest[4])
+		time.Sleep(time.Duration(delay) * time.Millisecond)
+		log, err := os.Create(rest[0])
+		if err != nil {
+			return 3
+		}
+		defer log.Close()
+		for i := 1; i <= lines; i++ {
+			fmt.Fprintf(log, "sidecar line %d\n", i)
+			_ = log.Sync()
+			time.Sleep(time.Duration(pause) * time.Millisecond)
+		}
+		if len(rest) > 5 {
+			fmt.Fprintf(log, "%s\n", strings.Join(rest[5:], " "))
+			_ = log.Sync()
+		}
+		return code
+	case "stdout-slow":
+		// `stdout-slow <lines> <pause-ms>`: a tool that only prints.
+		lines, _ := strconv.Atoi(rest[0])
+		pause, _ := strconv.Atoi(rest[1])
+		for i := 1; i <= lines; i++ {
+			fmt.Printf("stdout line %d\n", i)
+			os.Stdout.Sync()
+			time.Sleep(time.Duration(pause) * time.Millisecond)
+		}
+	case "sidecar-rewrite":
+		// `sidecar-rewrite <log> <pause-ms>`: a long log, then the same file
+		// rewritten shorter — a second run in the same place, a rotation.
+		pause, _ := strconv.Atoi(rest[1])
+		_ = os.WriteFile(rest[0], []byte(strings.Repeat("first pass line\n", 40)), 0o600)
+		time.Sleep(time.Duration(pause) * time.Millisecond)
+		_ = os.WriteFile(rest[0], []byte("second pass\n"), 0o600)
+		time.Sleep(time.Duration(pause) * time.Millisecond)
 	case "dump-env":
 		for _, entry := range os.Environ() {
 			fmt.Println(entry)

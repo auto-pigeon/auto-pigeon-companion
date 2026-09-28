@@ -44,6 +44,13 @@ type Request struct {
 	// HostEnv supplies values for the environment variables the action asked to
 	// inherit. Names not in the action's `inherit` list are never read from it.
 	HostEnv map[string]string
+	// ExtraArgs are argument tokens this machine's setup adds to the action's
+	// executable (NEW_265): literal words, one argv element each, never
+	// templates and never split. They go in before the action's trailing
+	// positional block — see [CustomArgsIndex] — and are checked by
+	// [ValidateCustomArgs] here as well as where they are saved, so a binding
+	// edited by hand cannot put a NUL or a template into a command.
+	ExtraArgs []string
 }
 
 // Command is the part of an invocation that determines what actually runs.
@@ -105,6 +112,13 @@ type Invocation struct {
 	ProfileDigest  string `json:"profile_digest,omitempty"`
 	ActionID       string `json:"action_id"`
 	Command        Command
+	// CustomArgs are the [Request.ExtraArgs] that went into Command.Args, in
+	// the order they appear there. Kept apart so a record can say which words
+	// were the user's own.
+	CustomArgs []string `json:"custom_args,omitempty"`
+	// CustomArgsAt is the index in Command.Args where CustomArgs begin.
+	// Meaningless when there are none.
+	CustomArgsAt int `json:"custom_args_at,omitempty"`
 	// Outputs maps declared output names to the paths they will appear at.
 	Outputs map[string]string `json:"outputs,omitempty"`
 	// OptionalOutputs names the outputs whose absence is not a failure.
@@ -177,9 +191,22 @@ func Resolve(p Profile, actionID string, request Request) (Invocation, error) {
 		return Invocation{}, fmt.Errorf("profile: resolving %s/%s: %w", meta.ID, actionID, err)
 	}
 
-	args, err := resolveArgs(action, env, options, request.Inputs)
+	args, insertAt, err := resolveArgs(action, env, options, request.Inputs)
 	if err != nil {
 		return Invocation{}, fmt.Errorf("profile: resolving %s/%s: %w", meta.ID, actionID, err)
+	}
+	var custom []string
+	if len(request.ExtraArgs) > 0 {
+		if err := ValidateCustomArgs(request.ExtraArgs); err != nil {
+			return Invocation{}, fmt.Errorf("profile: resolving %s/%s: your own arguments for %q: %w",
+				meta.ID, actionID, action.Executable, err)
+		}
+		custom = append([]string(nil), request.ExtraArgs...)
+		merged := make([]string, 0, len(args)+len(custom))
+		merged = append(merged, args[:insertAt]...)
+		merged = append(merged, custom...)
+		merged = append(merged, args[insertAt:]...)
+		args = merged
 	}
 	environment, err := resolveEnvironment(action, env, request.HostEnv)
 	if err != nil {
@@ -204,6 +231,8 @@ func Resolve(p Profile, actionID string, request Request) (Invocation, error) {
 			WorkingDir: workingDir,
 			Env:        environment,
 		},
+		CustomArgs:      custom,
+		CustomArgsAt:    insertAt,
 		Outputs:         outputs,
 		OptionalOutputs: optional,
 		ReadRoots:       readRoots,
@@ -426,30 +455,117 @@ func executablesOf(p Profile) []Executable {
 	return nil
 }
 
-func resolveArgs(action Action, env Env, options map[string]string, inputs map[string]string) ([]string, error) {
+func resolveArgs(action Action, env Env, options map[string]string, inputs map[string]string) ([]string, int, error) {
 	args := make([]string, 0, len(action.Args))
+	positional := make([]bool, 0, len(action.Args))
 	for i, arg := range action.Args {
 		include, err := argIncluded(arg, options, inputs, env.Roots)
 		if err != nil {
-			return nil, fmt.Errorf("argument %d: %w", i, err)
+			return nil, 0, fmt.Errorf("argument %d: %w", i, err)
 		}
 		if !include {
 			continue
 		}
 		t, err := parseTemplate(arg.Value)
 		if err != nil {
-			return nil, fmt.Errorf("argument %d is unreadable: %w", i, err)
+			return nil, 0, fmt.Errorf("argument %d is unreadable: %w", i, err)
 		}
 		rendered, err := t.resolve(env)
 		if err != nil {
-			return nil, fmt.Errorf("argument %d: %w", i, err)
+			return nil, 0, fmt.Errorf("argument %d: %w", i, err)
 		}
 		if strings.ContainsRune(rendered, '\x00') {
-			return nil, fmt.Errorf("argument %d resolves to a value containing a NUL byte", i)
+			return nil, 0, fmt.Errorf("argument %d resolves to a value containing a NUL byte", i)
 		}
 		args = append(args, rendered)
+		positional = append(positional, fileReference(arg.Value))
 	}
-	return args, nil
+	return args, customArgsIndex(args, positional), nil
+}
+
+// fileReference reports whether a declared argument is exactly one input or
+// output path — the positional operands a compiler reads last.
+func fileReference(value string) bool {
+	value = strings.TrimSpace(value)
+	if !strings.HasPrefix(value, "{") || !strings.HasSuffix(value, "}") || strings.Count(value, "{") != 1 {
+		return false
+	}
+	return strings.HasPrefix(value, "{input.") || strings.HasPrefix(value, "{output.")
+}
+
+// customArgsIndex is where a user's own argument tokens go in a rendered argv.
+//
+// Options before operands: `qbsp [options] sourcefile [destfile]`, `vis
+// [options] bspfile`, and a Quake engine's `-options` before its `+commands`.
+// So the tokens are inserted before whichever comes first of
+//
+//   - the trailing run of input/output paths (qbsp's `level.map level.bsp`),
+//     together with the flag just before that run when the first path is that
+//     flag's value (`-o {output.bsp}` stays one pair); and
+//   - the first `+command` (an engine's `+map e1m1`).
+//
+// With neither, they go at the end. Computed from the document's own
+// declarations, so it is the same answer for every tool that follows the
+// convention, and a preview shows exactly where they landed.
+func customArgsIndex(args []string, positional []bool) int {
+	at := len(args)
+	for at > 0 && positional[at-1] {
+		at--
+	}
+	if at < len(args) && at > 0 && strings.HasPrefix(args[at-1], "-") && !positional[at-1] {
+		// `-o <path>`: the path is the flag's value, not an operand of its
+		// own, and a token placed between them would become the value.
+		if at == len(args)-1 {
+			at--
+		}
+	}
+	for i := 0; i < at; i++ {
+		if strings.HasPrefix(args[i], "+") {
+			return i
+		}
+	}
+	return at
+}
+
+// MaxCustomArgs and MaxCustomArgBytes bound what one executable's own
+// arguments may be. Generous for a person's flags; small enough that a setup
+// file cannot be used to smuggle a payload into a command line.
+const (
+	MaxCustomArgs     = 32
+	MaxCustomArgBytes = 512
+)
+
+// ValidateCustomArgs checks a user's own argument tokens.
+//
+// Each token is one argv element exactly as typed: nothing splits it and
+// nothing quotes it, which is why a Windows path with spaces is one valid
+// token. What is refused is what could not be an argument (an empty token, a
+// NUL, a line break or another control character), what a profile renders as
+// a template (`{…}` would look like `{root.game_root}` and is not expanded
+// here), and more than a bound.
+func ValidateCustomArgs(tokens []string) error {
+	if len(tokens) > MaxCustomArgs {
+		return fmt.Errorf("there are %d arguments; at most %d are allowed", len(tokens), MaxCustomArgs)
+	}
+	for i, token := range tokens {
+		position := i + 1
+		switch {
+		case strings.TrimSpace(token) == "":
+			return fmt.Errorf("argument %d is empty; remove it or type a value", position)
+		case len(token) > MaxCustomArgBytes:
+			return fmt.Errorf("argument %d is %d bytes long; at most %d are allowed", position, len(token), MaxCustomArgBytes)
+		case strings.ContainsAny(token, "{}"):
+			return fmt.Errorf("argument %d (%q) contains { or }, which profile templates use; your own arguments are passed exactly as typed and cannot use them", position, token)
+		case token != strings.TrimSpace(token):
+			return fmt.Errorf("argument %d (%q) starts or ends with a space; each box is one argument exactly as typed", position, token)
+		}
+		for _, r := range token {
+			if r < 0x20 || r == 0x7f {
+				return fmt.Errorf("argument %d contains a control character (such as a line break or a tab); each box is one argument on one line", position)
+			}
+		}
+	}
+	return nil
 }
 
 func argIncluded(arg Arg, options, inputs, roots map[string]string) (bool, error) {

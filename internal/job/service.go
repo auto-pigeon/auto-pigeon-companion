@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
@@ -105,7 +106,11 @@ type Service struct {
 	// correlations holds the correlation id a submission carried, by job id,
 	// until the job finishes. Memory only: see Request.CorrelationID.
 	correlations map[string]string
-	closed       bool
+	// live holds a running job's two captures, so its output can be read while
+	// it is still being written (output.go). Dropped once the job is recorded
+	// as finished, after which the stored logs are the answer.
+	live   map[string]*liveCaptures
+	closed bool
 
 	workers sync.WaitGroup
 	ctx     context.Context
@@ -151,6 +156,7 @@ func NewService(options Options) (*Service, error) {
 		mirrors:      map[string]io.Writer{},
 		owned:        map[string]bool{},
 		correlations: map[string]string{},
+		live:         map[string]*liveCaptures{},
 	}
 	if service.lookupEnv == nil {
 		service.lookupEnv = os.LookupEnv
@@ -412,6 +418,7 @@ func (s *Service) Preview(request Request) (*Job, error) {
 		Workspace:      s.store.layout(id).Workspace,
 		CreatedAt:      now,
 		Command:        preview(invocation, s.store.layout(id), action, s.lookupEnv, s.redactor()),
+		CustomArgs:     append([]string(nil), invocation.CustomArgs...),
 	}
 	if authErr != nil {
 		// Shown rather than withheld. Reviewing what a profile would run is
@@ -711,6 +718,10 @@ func (s *Service) resolve(id string, request Request, entry CatalogEntry, action
 		}
 	}
 
+	var extra []string
+	if local, found := s.binding(request.ProfileID); found {
+		extra = local.Arguments[action.Executable]
+	}
 	invocation, err := profile.Resolve(entry.Profile, action.ID, profile.Request{
 		Platform:    profile.Platform{OS: runtime.GOOS, Arch: runtime.GOARCH},
 		Roots:       s.roots(id, request),
@@ -719,6 +730,7 @@ func (s *Service) resolve(id string, request Request, entry CatalogEntry, action
 		Options:     request.Options,
 		Runtime:     request.Runtime,
 		HostEnv:     hostEnv,
+		ExtraArgs:   extra,
 	})
 	if err != nil {
 		return profile.Invocation{}, err
@@ -738,6 +750,7 @@ func (s *Service) execute(id string) {
 		s.mu.Lock()
 		delete(s.mirrors, id)
 		delete(s.owned, id)
+		delete(s.live, id)
 		s.mu.Unlock()
 	}()
 
@@ -794,6 +807,9 @@ func (s *Service) execute(id string) {
 	mirror := s.mirrors[id]
 	s.mu.Unlock()
 
+	j.SidecarLogs = sidecarLogs(action, invocation)
+	j.CustomArgs = append([]string(nil), invocation.CustomArgs...)
+
 	run := &execution{
 		id:         id,
 		layout:     l,
@@ -811,6 +827,11 @@ func (s *Service) execute(id string) {
 			j.StartedAt = s.now()
 			j.TimeoutSeconds = invocation.TimeoutSeconds
 			return s.step(j, Running, fmt.Sprintf("pid %d", pid))
+		},
+		onCaptures: func(stdout, stderr *capture) {
+			s.mu.Lock()
+			s.live[id] = &liveCaptures{stdout: stdout, stderr: stderr}
+			s.mu.Unlock()
 		},
 	}
 	result := run.run(s.ctxOrBackground())
@@ -896,6 +917,29 @@ func (s *Service) step(j *Job, to State, note string) error {
 func (s *Service) transition(j *Job, to State, note string) {
 	j.State = to
 	j.History = append(j.History, Event{State: to, At: s.now(), Note: note})
+}
+
+// sidecarLogs is the transcripts an action declares, where this job's tool
+// will write them.
+//
+// A declared output is a transcript when its artifact role says it is a log —
+// the `.log` suffix every built-in toolchain profile uses (`q1.compile.log`,
+// `q1.vis.log`) — or when the file it names is a `.log`. Which files those are
+// is the document's statement; nothing here goes looking in the workspace for
+// files nobody declared.
+func sidecarLogs(action profile.Action, invocation profile.Invocation) []SidecarLog {
+	var out []SidecarLog
+	for _, output := range action.Outputs {
+		path, resolved := invocation.Outputs[output.Name]
+		if !resolved || path == "" {
+			continue
+		}
+		if !strings.HasSuffix(output.Role, ".log") && !strings.EqualFold(filepath.Ext(path), ".log") {
+			continue
+		}
+		out = append(out, SidecarLog{Name: output.Name, Title: output.Title, Path: path})
+	}
+	return out
 }
 
 // cleanStopProof returns the raw line of the first diagnostic whose rule the

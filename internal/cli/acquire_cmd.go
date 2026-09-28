@@ -173,7 +173,11 @@ func writeBinding(env *Env, document profile.Profile, result *acquire.Result, ro
 	_, err = binding.Update(bindingsPath, func(set *binding.Set) error {
 		local, existed := set.Find(meta.ID)
 		if !existed || local.ProfileDigest != digest {
-			local = binding.LocalBinding{Trust: profile.TrustLocal}
+			// A person's own argument tokens are about the program, not the
+			// document, and survive a new document like the paths the bind
+			// commands keep (NEW_265).
+			arguments := local.Arguments
+			local = binding.LocalBinding{Trust: profile.TrustLocal, Arguments: arguments}
 		}
 		local.ProfileID = meta.ID
 		local.ProfileVersion = meta.Version

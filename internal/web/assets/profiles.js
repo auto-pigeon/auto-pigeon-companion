@@ -60,6 +60,12 @@
     marks.append(badge(profile.kind, "queued"));
     marks.append(document.createTextNode(" "));
     marks.append(badge(profile.authorized ? "approved" : "not approved", profile.authorized ? "ok" : "failed"));
+    // Whether its programs can start here: the same decision Build & Run's
+    // engine list shows (NEW_265), so the two never disagree.
+    if (profile.readiness) {
+      marks.append(document.createTextNode(" "));
+      marks.append(badge(profile.readiness.ready ? t("ready") : t("needs setup"), profile.readiness.ready ? "ok" : "blocked"));
+    }
     const wip = maturityBadge(profile.maturity);
     if (wip) {
       marks.append(document.createTextNode(" "));
@@ -309,7 +315,163 @@
     detail.append(buttons);
     detail.append(status);
 
+    renderReadiness(detail, body);
     renderSetup(detail, body);
+    renderArguments(detail, body);
+  }
+
+  // renderReadiness says whether this profile's programs can start here and,
+  // when they cannot, exactly what is missing — the answer Build & Run's engine
+  // list gives, from the same server-side decision.
+  function renderReadiness(detail, body) {
+    if (!body.readiness) return;
+    const box = el("div", { className: "readiness", attrs: { id: "profile-readiness" } });
+    if (body.readiness.ready) {
+      box.append(el("p", { className: "message ok", text: t("Ready: everything its programs need is on this machine.") }));
+    } else {
+      box.append(el("p", { className: "message error", text: t("Not ready to start yet:") }));
+      box.append(el("ul", {
+        className: "plain",
+        children: (body.readiness.problems || []).map((problem) => el("li", { text: problem.summary })),
+      }));
+    }
+    detail.append(box);
+  }
+
+  // --- your own arguments (NEW_265) ----------------------------------------
+  //
+  // One list of argv tokens per program, each box one argument exactly as
+  // typed. Nothing is split, quoted or passed through a shell: the Companion
+  // hands each box to the program as one argument, which is why a Windows
+  // path with spaces is one box and not several. The profile document is not
+  // changed; the tokens live with this machine's setup and survive a restart,
+  // a re-import and an update of the profile.
+  function renderArguments(detail, body) {
+    const executables = executableNames(body);
+    if (executables.length === 0) return;
+    const section = el("div", { className: "profile-arguments", attrs: { id: "profile-arguments" } });
+    section.append(el("h4", { text: t("Your own arguments") }));
+    section.append(el("p", {
+      className: "muted",
+      text: t("Extra words added to every command that runs one program, before its input files — for a flag this profile does not offer as an option. Each box is one argument exactly as you type it; nothing splits or quotes it. Only that program gets them: qbsp's arguments never reach vis or light."),
+    }));
+    const saved = body.binding?.arguments || {};
+    const previews = el("div", { className: "profile-arguments__previews" });
+
+    for (const executable of executables) {
+      section.append(argumentsEditor(body, executable, saved[executable.name] || [], previews));
+    }
+    section.append(el("h5", { text: t("The commands, as they will run") }));
+    section.append(el("p", {
+      className: "muted small",
+      text: t("Your own arguments are highlighted. Parts in angle brackets are filled in when a job runs — its folder, its input files, the map."),
+    }));
+    section.append(previews);
+    detail.append(section);
+    refreshPreviews(body.id, previews);
+  }
+
+  function argumentsEditor(body, executable, tokens, previews) {
+    const id = "profile-args-" + executable.name;
+    const fieldset = el("fieldset", { className: "args-editor", attrs: { id } });
+    fieldset.append(el("legend", { text: `${executable.title || executable.name} (${executable.name})` }));
+    const list = el("ol", { className: "args-editor__list", attrs: { "aria-label": t("Arguments for {program}", { program: executable.name }) } });
+    const status = el("p", { className: "message", attrs: { role: "status" } });
+
+    const addRow = (value = "") => {
+      const input = el("input", {
+        attrs: { type: "text", spellcheck: "false", autocomplete: "off", "aria-label": t("Argument"), "data-args-for": executable.name },
+      });
+      input.value = value;
+      const remove = el("button", { text: t("Remove"), attrs: { type: "button", class: "secondary" } });
+      const row = el("li", { className: "args-editor__row", children: [input, remove] });
+      remove.addEventListener("click", () => {
+        const next = row.nextElementSibling?.querySelector("input") || row.previousElementSibling?.querySelector("input");
+        row.remove();
+        (next || add).focus();
+      });
+      list.append(row);
+      return input;
+    };
+    for (const token of tokens) addRow(token);
+
+    const add = el("button", { text: t("Add argument"), attrs: { type: "button", class: "secondary" } });
+    add.addEventListener("click", () => addRow("").focus());
+    const save = el("button", { text: t("Save arguments"), attrs: { type: "button", class: "primary" } });
+    const reset = el("button", { text: t("Reset to default"), attrs: { type: "button" } });
+
+    const send = (payload, done) =>
+      withBusy(save, async () => {
+        const { ok, body: out } = await api(`/api/v1/profiles/${encodeURIComponent(body.id)}/arguments`, {
+          method: "POST", body: { executable: executable.name, ...payload },
+        });
+        if (!ok) {
+          setMessage(status, out.error || t("The arguments could not be saved."), "error");
+          return;
+        }
+        const now = out.binding?.arguments?.[executable.name] || [];
+        list.replaceChildren();
+        for (const token of now) addRow(token);
+        setMessage(status, done(now), "ok");
+        record(`${executable.name}: ${now.length ? now.join(" ") : "no arguments of your own"}`, body.name, "ok");
+        renderPreviewItems(previews, out.commands || []);
+      });
+
+    save.addEventListener("click", () => {
+      const values = [...list.querySelectorAll("input")].map((input) => input.value);
+      send({ arguments: values }, (now) => now.length
+        ? t("Saved. {program} now gets {n} argument(s) of your own; it survives a restart.", { program: executable.name, n: now.length })
+        : t("Saved. {program} gets only the profile's own arguments.", { program: executable.name }));
+    });
+    reset.addEventListener("click", () => send({ reset: true }, () =>
+      t("Reset. {program} runs with the profile's own arguments only.", { program: executable.name })));
+
+    fieldset.append(list, el("div", { className: "row-actions", children: [add, reset, save] }), status);
+    return fieldset;
+  }
+
+  async function refreshPreviews(id, previews) {
+    const { ok, body } = await api(`/api/v1/profiles/${encodeURIComponent(id)}/commands`);
+    if (!ok) {
+      previews.replaceChildren(el("p", { className: "message error", text: body.error || "" }));
+      return;
+    }
+    renderPreviewItems(previews, body.items || []);
+  }
+
+  // The command as it would be typed on THIS machine, for reading only; the
+  // program is given the words one by one, never through a shell.
+  function quoteWord(word) {
+    const text = String(word);
+    if (/^windows\//.test(window.AUCOM.status?.platform || "")) {
+      if (text && !/[\s"&|<>^%]/.test(text)) return text;
+      return '"' + text.replace(/"/g, '""') + '"';
+    }
+    if (text && /^[A-Za-z0-9_@%+=:,./-]+$/.test(text)) return text;
+    return "'" + text.replace(/'/g, "'\\''") + "'";
+  }
+
+  function renderPreviewItems(previews, items) {
+    previews.replaceChildren();
+    for (const item of items) {
+      const block = el("div", { className: "args-preview", attrs: { "data-action": item.action_id } });
+      block.append(el("p", { className: "args-preview__title", text: `${item.title || item.action_id} — ${item.executable}` }));
+      if (item.error) {
+        block.append(el("p", { className: "muted small", text: item.error }));
+        previews.append(block);
+        continue;
+      }
+      const code = el("code", { className: "args-preview__argv" });
+      const from = item.custom_at || -1;
+      const count = (item.custom_args || []).length;
+      (item.argv || []).forEach((word, index) => {
+        if (index > 0) code.append(document.createTextNode(" "));
+        const own = count > 0 && index >= from && index < from + count;
+        code.append(own ? el("mark", { className: "custom-arg-token", text: quoteWord(word) }) : document.createTextNode(quoteWord(word)));
+      });
+      block.append(el("pre", { className: "args-preview__code", children: [code] }));
+      previews.append(block);
+    }
   }
 
   // renderSetup is the local half: where the programs this profile declares

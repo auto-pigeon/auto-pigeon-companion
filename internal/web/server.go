@@ -50,6 +50,7 @@ import (
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/aue"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/autobuild"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/config"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/engine"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/incident"
@@ -98,12 +99,17 @@ type Server struct {
 	// executing. playService builds a coordinator per request, and every one of
 	// them must share this, or a cancel cannot reach the run it names.
 	playLive *playrun.Live
-	runner   aue.Runner
-	paths    Paths
-	picker   *pathpick.Picker
-	scanner  engine.Scanner
-	builds   *buildRuns
-	logf     func(format string, args ...any)
+	// autobuild is this process's one auto-build service (autobuild.go),
+	// made on first use; its poller runs only when `serve` starts it.
+	autobuild     *autobuild.Service
+	autobuildOnce sync.Once
+	autobuildErr  error
+	runner        aue.Runner
+	paths         Paths
+	picker        *pathpick.Picker
+	scanner       engine.Scanner
+	builds        *buildRuns
+	logf          func(format string, args ...any)
 	// games is the Games area's process-wide state: download and launch
 	// coordination, and the reviews waiting for an approval.
 	games  *gameState
@@ -396,7 +402,7 @@ func (s *Server) api() map[string]http.HandlerFunc {
 		s.jobAPI(), s.profileAPI(), s.libraryAPI(),
 		s.engineAPI(), s.buildAPI(), s.playAPI(), s.settingsAPI(), s.siteLinksRoutes(), s.hostingRoutes(), s.bugReportRoutes(), s.pathAPI(),
 		s.feedbackAPI(), s.aboutAPI(), s.accountAPI(), s.gamesAPI(), s.noticesAPI(),
-		s.lifecycleAPI(), s.leakTestAPI(),
+		s.lifecycleAPI(), s.leakTestAPI(), s.autobuildAPI(),
 	} {
 		for pattern, handler := range table {
 			if _, clash := routes[pattern]; clash {

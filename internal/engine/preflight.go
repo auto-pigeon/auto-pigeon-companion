@@ -29,7 +29,9 @@ import (
 type Fault string
 
 const (
-	// FaultStaleBinding: the document changed since the binding was written.
+	// FaultStaleBinding: the document changed since the user approved it, so
+	// the approval no longer covers it. Not reported for a built-in document,
+	// which runs without an approval (see [Checker.Check]).
 	FaultStaleBinding Fault = "stale_binding"
 	// FaultNotAuthorized: nothing has been granted for this document.
 	FaultNotAuthorized Fault = "not_authorized"
@@ -125,20 +127,34 @@ func (c Checker) Check(document profile.Profile, trust profile.Trust, digest str
 	var problems Problems
 	meta := document.Metadata()
 
-	if local.ProfileDigest != "" && digest != "" && local.ProfileDigest != digest {
-		problems = append(problems, Problem{
-			Fault: FaultStaleBinding,
-			Summary: fmt.Sprintf("The recorded setup for %s is for a different version of the document: it was written against %s and the document here is %s.",
-				meta.Name, short(local.ProfileDigest), short(digest)),
-			Fix: "Look at what changed with `companion toolchain diff`, then bind it again; a grant covers the exact document it was given.",
-		})
-	}
+	// A binding written against another version of the document is a problem
+	// only where the approval depends on the document: a grant covers one exact
+	// digest, so a changed document the user approved in an older form needs
+	// approving again, and says so by name. A built-in document needs no grant —
+	// installing the program was the decision — and the executor runs it with
+	// the paths recorded here whatever digest they were recorded against,
+	// because where the engine and the game are is a fact about this machine,
+	// not about the document (see the bind handlers, which keep the paths across
+	// an upgrade for exactly that reason). Reporting that as "needs setup" made
+	// Build & Run say an engine was not ready while Profiles and the executor
+	// both said it was (NEW_265, vkQuake). The paths themselves are still
+	// checked below, so a missing program is still named.
+	stale := local.ProfileDigest != "" && digest != "" && local.ProfileDigest != digest
 	if err := profile.Authorize(document, trust, digest, local.Grant); err != nil {
-		problems = append(problems, Problem{
-			Fault:   FaultNotAuthorized,
-			Summary: fmt.Sprintf("Nothing has been approved for %s on this machine: %v.", meta.Name, err),
-			Fix:     "Read what it asks for with `companion toolchain show`, then approve it.",
-		})
+		if stale {
+			problems = append(problems, Problem{
+				Fault: FaultStaleBinding,
+				Summary: fmt.Sprintf("Nothing has been approved for %s as it is now: it changed since you approved it (the approval was for %s and the document here is %s).",
+					meta.Name, short(local.ProfileDigest), short(digest)),
+				Fix: "Look at what changed with `companion toolchain diff`, then approve it again; a grant covers the exact document it was given.",
+			})
+		} else {
+			problems = append(problems, Problem{
+				Fault:   FaultNotAuthorized,
+				Summary: fmt.Sprintf("Nothing has been approved for %s on this machine: %v.", meta.Name, err),
+				Fix:     "Read what it asks for with `companion toolchain show`, then approve it.",
+			})
+		}
 	}
 
 	action, found := document.ActionByID(actionID)

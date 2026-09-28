@@ -549,10 +549,20 @@ func (s *Server) handlePlayList(w http.ResponseWriter, r *http.Request) {
 	}
 	now := time.Now().UTC()
 	items := make([]map[string]any, 0, len(records))
-	for _, record := range records {
+	for index, record := range records {
 		view := playView(record, now)
 		if listing := s.hosting.view(record.ID); listing != nil {
 			view["listing"] = listing
+		}
+		// The build's steps and their jobs, for the runs the Activity drawer
+		// shows output for: every active one and the most recent few. Read
+		// from the build's manifest, which the runner saves the moment a step
+		// has a job; the rest of the history does not pay for a file read a
+		// second.
+		if record.BuildID != "" && (record.State.Active() || index < 3) {
+			if steps := s.buildStepsView(record.BuildID); steps != nil {
+				view["build_steps"] = steps
+			}
 		}
 		items = append(items, view)
 	}
@@ -584,6 +594,49 @@ func (s *Server) handlePlayRetry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusAccepted, playView(record, time.Now().UTC()))
+}
+
+// buildStepsView is a build's steps as the Activity drawer labels its output:
+// the step, the program it ran and the job that holds what it printed.
+func (s *Server) buildStepsView(buildID string) []map[string]any {
+	dir, err := s.buildsDir()
+	if err != nil {
+		return nil
+	}
+	manifest, err := build.Find(dir, buildID)
+	if err != nil {
+		return nil
+	}
+	steps := make([]map[string]any, 0, len(manifest.Steps))
+	for _, step := range manifest.Steps {
+		row := map[string]any{
+			"id": step.ID, "title": step.Title, "state": step.State,
+			"job_id": step.JobID, "skipped": step.Skipped,
+			"tool": step.Profile.Name,
+		}
+		// The manifest records a step's command when the step finishes; while
+		// it runs, the job it started already knows what it is running.
+		executable := ""
+		if step.Command != nil {
+			executable = step.Command.Executable
+		} else if step.JobID != "" && s.jobs != nil {
+			if running, err := s.jobs.Get(step.JobID); err == nil && running.Command != nil {
+				executable = running.Command.Executable
+			}
+		}
+		if executable != "" {
+			row["program"] = programName(executable)
+		}
+		steps = append(steps, row)
+	}
+	return steps
+}
+
+// programName is an executable's name as a person calls it: `qbsp`, not
+// `C:\Tools\ericw\bin\qbsp.exe`.
+func programName(executable string) string {
+	base := filepath.Base(strings.ReplaceAll(executable, "\\", "/"))
+	return strings.TrimSuffix(base, filepath.Ext(base))
 }
 
 func playStatus(err error) int {
@@ -618,6 +671,12 @@ func playView(record *playrun.Record, now time.Time) map[string]any {
 		"engine":     record.Request.EngineProfileID,
 		"can_cancel": record.Cancellable(),
 		"can_retry":  record.Retryable(),
+	}
+	if record.Request.BuildOnly {
+		out["build_only"] = true
+	}
+	if record.Request.Trigger != "" {
+		out["trigger"] = record.Request.Trigger
 	}
 	if record.Error != "" {
 		out["error"] = record.Error

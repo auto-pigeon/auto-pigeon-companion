@@ -83,11 +83,54 @@ func buildHelperMain(args []string) int {
 			fmt.Println("wadpath holds", name.Name())
 		}
 	}
+	// NEW_265: a person's own flags arrive here, before the operands. The
+	// fixture takes three of its own — `--slow=<ms>` between lines,
+	// `--sidecar` to write its transcript to `<destination stem>.log` and
+	// nothing to stdout (EricW on Windows), `--lines=<n>` — and echoes every
+	// flag it was given, so a test sees the exact argv the program received.
+	slow, sidecar, lines := 0, false, 0
+	var flags []string
+	for len(args) > 2 && strings.HasPrefix(args[0], "-") {
+		flag := args[0]
+		flags, args = append(flags, flag), args[1:]
+		switch {
+		case strings.HasPrefix(flag, "--slow="):
+			fmt.Sscanf(strings.TrimPrefix(flag, "--slow="), "%d", &slow)
+		case strings.HasPrefix(flag, "--lines="):
+			fmt.Sscanf(strings.TrimPrefix(flag, "--lines="), "%d", &lines)
+		case flag == "--sidecar":
+			sidecar = true
+		}
+	}
 	if len(args) != 2 {
 		fmt.Fprintln(os.Stderr, "helper: compile takes a source and a destination")
 		return 2
 	}
 	source, destination := args[0], args[1]
+	if len(flags) > 0 {
+		out := os.Stdout
+		if sidecar {
+			log, err := os.Create(strings.TrimSuffix(destination, filepath.Ext(destination)) + ".log")
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "helper:", err)
+				return 1
+			}
+			defer log.Close()
+			out = log
+		}
+		for _, flag := range flags {
+			fmt.Fprintf(out, "argv flag %s\n", flag)
+		}
+		for i := 1; i <= lines; i++ {
+			fmt.Fprintf(out, "compile line %d\n", i)
+			_ = out.Sync()
+			time.Sleep(time.Duration(slow) * time.Millisecond)
+		}
+		if failing {
+			fmt.Fprintln(out, "*** ERROR: FATAL the map leaks")
+			_ = out.Sync()
+		}
+	}
 	if failing {
 		// The shape a real compiler's failure has: a message a person can read,
 		// on stderr, and a non-zero status.

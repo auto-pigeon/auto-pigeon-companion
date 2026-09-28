@@ -153,6 +153,7 @@
     // a plan for choices that are not restored yet.
     if (step === 4 && !loading) refreshPlan();
     if (step === 5 && !loading) renderFinalSummary();
+    if (step === 1) showAutobuild();
     const panel = $("play-step-" + step);
     panel?.querySelector("h3")?.focus?.();
   }
@@ -293,8 +294,10 @@
       const { ok, body } = await api(`/api/v1/library/assets/map/${encodeURIComponent(pendingMap)}`);
       if (ok && body.asset) items.push(body.asset);
     }
-    items.sort((a, b) => (a.display_name || a.asset_id).localeCompare(b.display_name || b.asset_id,
-      undefined, { numeric: true, sensitivity: "base" }));
+    // Newest saved first (NEW_265): the map somebody has just saved in the
+    // editor is the one they came here to build. Sorted once every page has
+    // arrived, so the order never depends on which page answered first.
+    items.sort(newestSavedFirst);
     state.maps = items;
     const select = $("play-map");
     select.replaceChildren(el("option", { text: t("Choose a map…"), attrs: { value: "" } }));
@@ -310,6 +313,31 @@
     }
     if (state.map) select.value = state.map.asset_id;
   }
+
+  // newestSavedFirst orders maps by when their current revision was saved, as
+  // AUB recorded it on the revision — never by this browser's clock, a title,
+  // or the order the catalog's pages arrived in. Two maps saved at the same
+  // instant, or maps whose revision carries no time (a legacy row), fall back
+  // to a stable order: name, then the map's id, which is unique. Maps with no
+  // saved time come after every map that has one.
+  function savedAt(map) {
+    const stamp = Date.parse(map?.current_revision?.created_at || "");
+    return Number.isNaN(stamp) ? null : stamp;
+  }
+
+  function newestSavedFirst(a, b) {
+    const at = savedAt(a);
+    const bt = savedAt(b);
+    if (at !== bt) {
+      if (at === null) return 1;
+      if (bt === null) return -1;
+      return bt - at;
+    }
+    const byName = (a.display_name || "").localeCompare(b.display_name || "", undefined, { numeric: true, sensitivity: "base" });
+    if (byName) return byName;
+    return String(a.asset_id).localeCompare(String(b.asset_id));
+  }
+  window.AUCOM.newestSavedFirst = newestSavedFirst;
 
   // Two changes of the map in quick succession are two requests, and the one
   // that answers second is not necessarily the one that was asked last. Each
@@ -417,6 +445,18 @@
     state.mapName = $("play-map-name").value;
   }
 
+  // Auto-build on the chosen map (autobuild.js): shown under the map while a
+  // signed-in person is on step 1.
+  function showAutobuild() {
+    window.AUCOM.autobuildPanel?.show(state.map, Boolean(window.AUCOM.status?.authenticated));
+  }
+  window.AUCOM.play = {
+    pipelines: () => state.pipelines,
+    pipeline: () => state.pipeline,
+    // Auto-build tells Activity a build of its own has started.
+    pollActivity: () => poll(),
+  };
+
   // --- step 2: the build profile -------------------------------------------------
 
   async function loadPipelines() {
@@ -522,8 +562,19 @@
     $("play-game-root").textContent = !state.engine
       ? "Choose an engine to see where the game is."
       : $("play-game-root").textContent;
-    setMessage("play-run-message", missing ? "Choose this engine's game folder before continuing." : "",
-      missing ? "error" : "");
+    // What stops this engine starting this action, in the words the server
+    // uses for Profiles too (NEW_265): one decision, so the dropdown's "Needs
+    // setup" always comes with the thing that is actually missing, and an
+    // engine Profiles calls ready is never called otherwise here.
+    const problems = engine ? (engine.action_problems?.[state.action] || []) : [];
+    if (engine && problems.length) {
+      setMessage("play-run-message", t("{engine} cannot start yet: {why} Set it up in Profiles.", {
+        engine: engine.name, why: problems.map((problem) => problem.summary).join(" "),
+      }), "error");
+    } else {
+      setMessage("play-run-message", missing ? "Choose this engine's game folder before continuing." : "",
+        missing ? "error" : "");
+    }
     renderListing();
   }
 
@@ -1083,6 +1134,8 @@
     $("activity").hidden = false;
     $("activity-open").setAttribute("aria-expanded", "true");
     $("activity-heading").focus();
+    // Catch the output up at once rather than at the next slow poll.
+    poll();
   }
 
   function closeActivity() {
@@ -1096,22 +1149,45 @@
     poll();
   }
 
+  let polling = false;
   async function poll() {
+    // One chain of polls at a time: a poll asked for while one is out is the
+    // one already out.
+    if (polling) return;
+    polling = true;
+    try {
+      await pollOnce();
+    } finally {
+      polling = false;
+    }
+  }
+
+  async function pollOnce() {
     clearTimeout(pollTimer);
     const { ok, body } = await api("/api/v1/play/runs");
-    if (ok) renderActivity(body.items || []);
+    const current = ok ? renderActivity(body.items || []) : [];
     const active = (body.items || []).some((run) => run.active);
     $("activity-open").hidden = !(body.items || []).length;
     $("activity-count").textContent = active ? "running" : "";
     // Polled rather than streamed: one small request a second while something
     // is running, and a slow one while nothing is. A server-sent stream would
     // be a second transport for a page that already has one.
-    pollTimer = setTimeout(poll, active ? 1000 : 15000);
+    // An open drawer is polled every few seconds even when nothing is
+    // running, because a run can start without this page — Auto-build starts
+    // one, and so can another window — and a drawer fifteen seconds behind it
+    // showed the previous run's output under the new one (NEW_265, seen live).
+    await pollOutputs(current);
+    // Scheduled once this poll, its outputs included, is done, so a slow read
+    // never overlaps the next one.
+    pollTimer = setTimeout(poll, active ? 1000 : !$("activity").hidden ? 3000 : 15000);
   }
 
-  // Activity is re-rendered on every poll — once a second while a run is
-  // active — so whatever a person opened (Technical details, the earlier runs)
-  // is remembered by key and opened again, rather than snapping shut under them.
+  // Activity is polled once a second while a run is active. A card is rebuilt
+  // only when its run changed — a new stage, an error, a listing — and then in
+  // place, so whatever a person opened (Technical details, the earlier runs),
+  // the button they had focused and the output they had scrolled back through
+  // are all where they left them. The elapsed time is the one thing that
+  // changes every second, and it is updated as text.
   function openKeys(root) {
     return new Set([...root.querySelectorAll("details[data-open-key]")]
       .filter((node) => node.open).map((node) => node.dataset.openKey));
@@ -1123,24 +1199,73 @@
     }
   }
 
+  // cards: run id → { node, key }; outputs: run id → the run's output view.
+  const cards = new Map();
+  const outputs = new Map();
+  let earlierNode = null;
+  let earlierKey = "";
+  let layoutKey = "";
+
+  // What a card shows, minus the clock: a key that changes only when the card
+  // has something new to say.
+  function cardKey(run) {
+    const { elapsed_ms: _elapsed, build_steps: steps, ...rest } = run;
+    return JSON.stringify([rest, (steps || []).map((step) => [step.id, step.state, step.job_id])]);
+  }
+
   // What is happening now is the card; history is one line each, folded, and
   // in full on the Jobs page. Before 246I1.1 every run of the last twenty was a
   // full card, so the drawer was mostly the past.
   function renderActivity(runs) {
     const body = $("activity-body");
-    const keep = openKeys(body);
-    body.replaceChildren();
     if (!runs.length) {
-      body.append(el("p", { className: "muted", text: "Nothing has been built and run yet." }));
-      return;
+      cards.clear();
+      layoutKey = "";
+      body.replaceChildren(el("p", { className: "muted", text: "Nothing has been built and run yet." }));
+      return [];
     }
     const recent = runs.slice(0, 20);
     const active = recent.filter((run) => run.active);
     const current = active.length ? active : recent.slice(0, 1);
     const earlier = recent.filter((run) => !current.includes(run));
-    for (const run of current) body.append(runCard(run));
-    if (earlier.length) {
-      body.append(el("details", {
+
+    const keep = openKeys(body);
+    const wantLayout = current.map((run) => run.id).join("|") + "#" + (earlier.length ? "earlier" : "");
+    if (wantLayout !== layoutKey) {
+      // A different set of current runs: the one moment the drawer is laid
+      // out again. The output views are carried over by run id.
+      layoutKey = wantLayout;
+      cards.clear();
+      earlierKey = "";
+      earlierNode = null;
+      body.replaceChildren();
+      for (const run of current) {
+        const node = runCard(run, { current: true });
+        cards.set(run.id, { node, key: cardKey(run) });
+        body.append(node);
+        for (const scroller of node.querySelectorAll(".joblog__scroll")) {
+          if (scroller.dataset.scrollTop) scroller.scrollTop = Number(scroller.dataset.scrollTop);
+        }
+      }
+    } else {
+      for (const run of current) {
+        const held = cards.get(run.id);
+        const key = cardKey(run);
+        if (held && held.key === key) {
+          const clock_ = held.node.querySelector(".activity-run__elapsed");
+          if (clock_) clock_.textContent = elapsed(run.elapsed_ms);
+          continue;
+        }
+        const node = runCard(run, { current: true });
+        replaceKeepingFocus(held.node, node);
+        cards.set(run.id, { node, key });
+      }
+    }
+
+    const wantEarlier = JSON.stringify(earlier.map((run) => [run.id, run.state, run.error || ""]));
+    if (earlier.length && wantEarlier !== earlierKey) {
+      earlierKey = wantEarlier;
+      const node = el("details", {
         className: "activity-earlier",
         attrs: { "data-open-key": "earlier" },
         children: [
@@ -1153,13 +1278,98 @@
                 el("strong", { text: `${run.map || run.asset_id} — ${run.title}` }),
                 el("span", { className: "muted", text: ` · ${elapsed(run.elapsed_ms) || "<1s"} · ${clock(run.created_at)}` }),
               ] }),
-              runCard(run),
+              runCard(run, { current: false }),
             ],
           })),
         ],
-      }));
+      });
+      if (earlierNode) replaceKeepingFocus(earlierNode, node);
+      else body.append(node);
+      earlierNode = node;
     }
     reopen(body, keep);
+    // Views for runs that are no longer current are let go.
+    for (const id of [...outputs.keys()]) {
+      if (!current.some((run) => run.id === id)) outputs.delete(id);
+    }
+    return current;
+  }
+
+  // replaceKeepingFocus swaps a card for its new version and puts keyboard
+  // focus back on the same control, found by its data-focus-key, and the
+  // output view's scroll position back where it was.
+  function replaceKeepingFocus(oldNode, newNode) {
+    const focused = document.activeElement;
+    const focusKey = oldNode.contains(focused) ? focused?.dataset?.focusKey : "";
+    oldNode.replaceWith(newNode);
+    for (const scroller of newNode.querySelectorAll(".joblog__scroll")) {
+      if (scroller.dataset.scrollTop) scroller.scrollTop = Number(scroller.dataset.scrollTop);
+    }
+    if (focusKey) newNode.querySelector(`[data-focus-key="${CSS.escape(focusKey)}"]`)?.focus();
+  }
+
+  // --- the tools' own output, in the card ---------------------------------------
+  //
+  // The same job-scoped source, cursor and view as the Jobs page (joboutput.js).
+  // It follows the step that is running, labelled with the program and the
+  // stage; when the next stage starts, the finished one's last lines stay above
+  // it, and once the run is over the last stage's output stays on the card.
+
+  // The job whose output a run's card should show now, and how to label it.
+  function jobToFollow(run) {
+    const steps = run.build_steps || [];
+    const label = (step, fallback) => {
+      const program = step?.program || "";
+      const title = step?.title || fallback || "";
+      return [program, title].filter(Boolean).join(" · ") || t("Build step");
+    };
+    if (run.current_job) {
+      const step = steps.find((candidate) => candidate.job_id === run.current_job);
+      return { job: run.current_job, label: label(step, run.current_step), running: true };
+    }
+    const ran = steps.filter((step) => step.job_id);
+    if (!ran.length) return null;
+    const last = ran[ran.length - 1];
+    return { job: last.job_id, label: label(last, last.id), running: false };
+  }
+
+  function outputFor(run) {
+    let entry = outputs.get(run.id);
+    if (!entry) {
+      const link = el("a", { className: "activity-run__joblink", text: t("Open the full log in Jobs") });
+      link.hidden = true;
+      const view = window.AUCOM.outputView({ label: t("What the tools printed"), maxChars: 60000, jobLink: link });
+      entry = { view, link };
+      outputs.set(run.id, entry);
+    }
+    return entry;
+  }
+
+  // pollOutputs reads the next output of every current run's step. Only while
+  // the drawer is open: nobody is reading it otherwise, and it catches up from
+  // the same cursor when it is opened again.
+  async function pollOutputs(current) {
+    if ($("activity").hidden) return;
+    for (const run of current) {
+      const target = jobToFollow(run);
+      if (!target) continue;
+      const entry = outputs.get(run.id);
+      if (!entry) continue;
+      const { view, link } = entry;
+      if (view.job !== target.job) {
+        // The previous stage's final lines are read before the next begins,
+        // so a stage never ends mid-sentence in the drawer.
+        if (view.job && !view.complete) await view.poll();
+        view.follow(target.job, target.label, { fromStart: target.running });
+        link.href = window.AUCOM.areas.jobs?.href?.(target.job) || "#jobs/" + encodeURIComponent(target.job);
+        link.hidden = false;
+      }
+      if (!view.complete) {
+        await view.poll();
+        const scroller = view.root.querySelector(".joblog__scroll");
+        if (scroller) scroller.dataset.scrollTop = String(scroller.scrollTop);
+      }
+    }
   }
 
   function clock(iso) {
@@ -1169,21 +1379,22 @@
     });
   }
 
-  function runCard(run) {
+  function runCard(run, { current = false } = {}) {
     // "Open in Jobs" opens another page, so it sits top right, in the head,
     // not in the run's text (operator, 2026-09-23).
     const headTools = el("div", { className: "activity-run__tools", children: [
-      el("span", { className: "muted", text: elapsed(run.elapsed_ms) }),
+      el("span", { className: "muted activity-run__elapsed", text: elapsed(run.elapsed_ms) }),
     ] });
     if (run.build_id) {
-      const jobs = el("button", { text: "Open in Jobs", attrs: { type: "button", class: "secondary" } });
+      const jobs = el("button", { text: "Open in Jobs", attrs: { type: "button", class: "secondary", "data-focus-key": "jobs" } });
       // Never a new browser tab: the Jobs page is in this window.
       jobs.addEventListener("click", () => { window.location.hash = "#jobs"; });
       headTools.append(jobs);
     }
     const head = el("div", {
       className: "activity-run__head",
-      children: [el("strong", { text: `${run.map || run.asset_id} — ${run.title}` }), headTools],
+      children: [el("strong", { text: `${run.map || run.asset_id} — ${run.title}` +
+        (run.trigger === "auto_build" ? " · " + t("Auto-build") : "") }), headTools],
     });
     const stages = el("ol", {
       className: "activity-stages",
@@ -1237,16 +1448,26 @@
 
     const actions = el("div", { className: "activity-run__actions row-actions" });
     if (run.can_cancel) {
-      const cancel = el("button", { text: "Cancel", attrs: { type: "button" } });
+      const cancel = el("button", { text: "Cancel", attrs: { type: "button", "data-focus-key": "cancel" } });
       cancel.addEventListener("click", () => cancelRun(run));
       actions.append(cancel);
     }
     if (run.can_retry) {
-      const retry = el("button", { text: "Try again", attrs: { type: "button" } });
+      const retry = el("button", { text: "Try again", attrs: { type: "button", "data-focus-key": "retry" } });
       retry.addEventListener("click", () => retryRun(run.id));
       actions.append(retry);
     }
     if (actions.children.length) children.push(actions);
+
+    // The tools' own output, above the technical facts (NEW_265). One view
+    // per run, carried from card to card, so its text and cursor survive a
+    // redraw; shown once there is a build step to read.
+    if (current && jobToFollow(run)) {
+      const { view } = outputFor(run);
+      const scroller = view.root.querySelector(".joblog__scroll");
+      if (scroller) scroller.dataset.scrollTop = String(scroller.scrollTop);
+      children.push(view.root);
+    }
 
     // The technical facts, behind a disclosure. Present for whoever needs them
     // and not in the way of whoever does not.
@@ -1342,6 +1563,7 @@
   $("play-map").addEventListener("change", (event) => {
     state.map = state.maps.find((m) => m.asset_id === event.target.value) || null;
     invalidate("You changed the map, so its textures have to be checked again.");
+    showAutobuild();
     loadRevisions(event.target.value);
   });
   $("play-revision").addEventListener("change", (event) => chooseRevision(event.target.value));

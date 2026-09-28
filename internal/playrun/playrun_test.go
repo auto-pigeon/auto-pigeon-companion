@@ -691,3 +691,46 @@ func equal(a, b []string) bool {
 
 	return true
 }
+
+// NEW_265: Auto-build's run — the same downloads, conversion and build as a
+// Build & Run, and then nothing: no install into a game folder, no engine.
+func TestABuildOnlyRunStopsAfterTheCompileAndStartsNoGame(t *testing.T) {
+	h := newHarness(t)
+	request := playrun.Request{
+		AssetType: "map", AssetID: "map0000000001",
+		RevisionID: "rev0000000007", RevisionNumber: 7,
+		PipelineID: "auto-pigeon.q1-normal", BuildOnly: true, Trigger: "auto_build",
+	}
+	started, err := h.service.Start(request)
+	if err != nil {
+		t.Fatalf("a build-only run with no engine was refused: %v", err)
+	}
+	record := h.await(started.ID)
+	if record.State != playrun.Succeeded {
+		t.Fatalf("state = %s (%s): %s", record.State, record.FailedAt, record.Error)
+	}
+	if got, want := h.calls(), []string{"fetch-map", "fetch-bundle", "convert", "build"}; !equal(got, want) {
+		t.Errorf("stages ran %v, want %v", got, want)
+	}
+	if record.Launch != nil || len(record.Installed) != 0 || record.BuildID == "" {
+		t.Errorf("launch %+v installed %+v build %q", record.Launch, record.Installed, record.BuildID)
+	}
+	for _, stage := range record.Stages {
+		if stage.State == playrun.Installing || stage.State == playrun.Launching || stage.State == playrun.Running {
+			t.Errorf("a build-only run entered %s", stage.State)
+		}
+	}
+
+	// It is still a run with an exact revision: no map, no revision, or a
+	// listing are refused before anything is downloaded.
+	for _, bad := range []playrun.Request{
+		{AssetID: "m", RevisionNumber: 1, PipelineID: "p", BuildOnly: true},
+		{AssetID: "m", RevisionID: "r", RevisionNumber: 1, BuildOnly: true},
+		{AssetID: "m", RevisionID: "r", RevisionNumber: 1, PipelineID: "p", BuildOnly: true,
+			Listing: &playrun.Listing{Title: "x"}},
+	} {
+		if _, err := h.service.Start(bad); err == nil {
+			t.Errorf("an incomplete build-only request was accepted: %+v", bad)
+		}
+	}
+}

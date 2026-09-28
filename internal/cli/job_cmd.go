@@ -31,6 +31,8 @@ const jobUsage = `usage:
   companion job list    [--state <state>] [--limit <n>] [--json]
   companion job show    <job-id> [--json]
   companion job logs    <job-id> [--stream stdout|stderr] [--raw]
+  companion job output  <job-id> [--source auto|stdout|stderr|log:<name>] [--follow]
+                                    what it has printed so far, from the file its tool fills
   companion job cancel  <job-id>
   companion job retry   <job-id> [--wait]
   companion job artifacts <job-id> [--json]
@@ -55,6 +57,8 @@ func runJob(env *Env, args []string) int {
 		return jobShow(env, rest)
 	case "logs":
 		return jobLogs(env, rest)
+	case "output":
+		return jobOutput(env, rest)
 	case "cancel":
 		return jobCancel(env, rest)
 	case "retry":
@@ -439,6 +443,53 @@ func jobLogs(env *Env, args []string) int {
 	}
 	env.Stdout.Write(data)
 	return 0
+}
+
+// jobOutput is the live output view the Jobs page shows (NEW_265), for a
+// terminal: the declared transcript a tool is writing, or its stdout/stderr,
+// read a bounded chunk at a time. --follow keeps reading until the job has
+// stopped and everything has been printed, the way the page polls.
+func jobOutput(env *Env, args []string) int {
+	set := newFlagSet(env, "job output")
+	source := set.String("source", "auto", "auto, stdout, stderr, or log:<declared output name>")
+	follow := set.Bool("follow", false, "keep printing until the job has stopped")
+	rest, code, ok := parseInterspersed(env, set, args)
+	if !ok {
+		return code
+	}
+	id, code, ok := oneID(env, "output", rest)
+	if !ok {
+		return code
+	}
+	service, _, err := openJobs(context.Background(), env, false, nil)
+	if err != nil {
+		return fail(env, err)
+	}
+	defer service.Close()
+
+	request := job.OutputRequest{Source: *source, Offset: 0}
+	announced := ""
+	for {
+		chunk, err := service.Output(id, request)
+		if err != nil {
+			return fail(env, err)
+		}
+		if chunk.Source.ID != announced {
+			fmt.Fprintf(env.Stderr, "[%s]\n", chunk.Source.Label)
+			announced = chunk.Source.ID
+		}
+		if chunk.Gap > 0 {
+			fmt.Fprintf(env.Stderr, "[%d bytes of output are not shown]\n", chunk.Gap)
+		}
+		fmt.Fprint(env.Stdout, chunk.Text)
+		request.From, request.Offset = chunk.Source.ID, chunk.Next
+		if chunk.Complete || (!*follow && chunk.Next >= chunk.Size) {
+			return 0
+		}
+		if chunk.Next >= chunk.Size {
+			time.Sleep(time.Second)
+		}
+	}
 }
 
 func jobCancel(env *Env, args []string) int {
