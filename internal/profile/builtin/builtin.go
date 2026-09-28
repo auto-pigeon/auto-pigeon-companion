@@ -98,6 +98,10 @@ const (
 	Q1FastPreview = "auto-pigeon.q1.fast-preview"
 	Q1Normal      = "auto-pigeon.q1.normal"
 	Q1Final       = "auto-pigeon.q1.final"
+	// Q1LeakTest is not a build: it runs the compile step alone with the leak
+	// test on, for the editor's `autopigeon://leaktest/` request. It publishes
+	// the point file and the qbsp log and never a playable BSP.
+	Q1LeakTest = "auto-pigeon.q1.leak-test"
 	// The two Q2 pipelines. Two rather than three: `final` for Quake 1 is
 	// `normal` plus 4x supersampling, and there is no measured reason yet to
 	// claim a third Quake II preset is a different build rather than a
@@ -158,6 +162,11 @@ var Q1Engines = []string{Ironwail, VkQuake, QuakeSpasm, QuakeSpasmSpiked, DarkPl
 
 // Q1Pipelines is the three built-in Quake 1 pipelines, quickest first.
 var Q1Pipelines = []string{Q1FastPreview, Q1Normal, Q1Final}
+
+// DiagnosticPipelines answer a question about a map rather than build it: one
+// step, no playable output. Listed apart so "every build pipeline is compile,
+// vis, light" stays a statement about builds.
+var DiagnosticPipelines = []string{Q1LeakTest}
 
 // Q2Engines is every curated Quake II engine profile this build ships, in the
 // order they are listed. Yamagi first because it is the one the Quake II path

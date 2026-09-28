@@ -163,6 +163,29 @@ The command is `game open` with **no approval flag at all**: opening a link
 checks its shape, shows it in the Companion and starts nothing. Joining is a
 separate step you take after reviewing the exact command the page shows.
 
+**Testing an editor map for leaks.** Install the same URL handler with
+`./companion uri register`, save the map to your account in the editor, and press
+**Leaks → Test in Companion**. The Companion checks that the saved map revision and
+content digest still match the request. **Review leak test** selects the pinned
+revision and the `auto-pigeon.q1.leak-test` pipeline; use the ordinary Build preview
+and approval before running EricW `qbsp -leaktest`. A leaking map can make qbsp exit
+with failure and still produce a useful pointfile and log. Open the finished build,
+keep the original editor tab open. Companion returns the terminal result through
+your AUB account, and that tab imports it automatically if its saved map revision
+still matches. If the return is unavailable, press **Download leak result** on
+the finished build and import that JSON file in the editor's Leaks panel.
+The result is available through the local guarded API too, for example:
+
+```bash
+curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
+  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/leak-test/runs/$BUILD_ID/result" \
+  -o "$BUILD_ID-leak-result.json"
+```
+
+Set `BUILD_ID` to the finished leak-test build ID. The URL and token files are
+created by the Companion. The JSON records the pinned map identity and artifact
+hashes; it is a local result file, not a signed attestation.
+
 **Hosting a game.** A hosted game starts **Private**. Choosing **Public** shows
 **Help to connect**, which explains the manual UDP port forwarding people
 outside your network need to reach you.

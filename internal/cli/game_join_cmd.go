@@ -22,6 +22,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/joincontent"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/joinintent"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/joinready"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/leakintent"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/web"
 )
 
@@ -292,6 +293,13 @@ func printJoinPlan(env *Env, plan hostgame.Plan) {
 // makes no network request, redeems nothing, and starts no game: the page redeems
 // the link once, shows what this computer still needs, and a join still takes a
 // fresh review and an approval.
+//
+// The handler is registered once, as this command, on machines that already
+// have it; so a second kind of link arrives here too rather than through a new
+// registration. An `autopigeon://leaktest/…` link (`AUP 264` follow-up) is
+// validated by aub.ParseLeakTestLink, recorded through internal/leakintent and
+// shown in the Build area — and it starts nothing either: the page resolves it
+// against AUB, shows the exact command, and a person presses Run.
 func gameOpen(env *Env, args []string) int {
 	set := newFlagSet(env, "game open")
 	noBrowser := set.Bool("no-browser", false, "record the link and print the page address, opening nothing")
@@ -304,20 +312,32 @@ func gameOpen(env *Env, args []string) int {
 
 		return 2
 	}
-	ticketID, err := aub.ParseJoinLink(rest[0])
-	if err != nil {
-		return fail(env, err)
+	area, what := "games", "this game"
+	var record func(dir string) error
+	if aub.IsLeakTestLink(rest[0]) {
+		link, err := aub.ParseLeakTestLink(rest[0])
+		if err != nil {
+			return fail(env, err)
+		}
+		area, what = "build", "this leak test"
+		record = func(dir string) error { return leakintent.Receive(leakintent.Path(dir), link, time.Now().UTC()) }
+	} else {
+		ticketID, err := aub.ParseJoinLink(rest[0])
+		if err != nil {
+			return fail(env, err)
+		}
+		record = func(dir string) error { return joinintent.Receive(joinintent.Path(dir), ticketID, time.Now().UTC()) }
 	}
 	dir, err := configDir(env)
 	if err != nil {
 		return fail(env, err)
 	}
-	if err = joinintent.Receive(joinintent.Path(dir), ticketID, time.Now().UTC()); err != nil {
+	if err = record(dir); err != nil {
 		return fail(env, err)
 	}
 
 	if address, ok := runningServer(dir); ok {
-		page := strings.TrimRight(address, "/") + "/#games"
+		page := strings.TrimRight(address, "/") + "/#" + area
 		fmt.Fprintf(env.Stdout, "the Companion is open at %s\n", page)
 		if *noBrowser {
 			return 0
@@ -345,14 +365,14 @@ func gameOpen(env *Env, args []string) int {
 	if env.ConfigPath != "" {
 		argv = append(argv, "--config", env.ConfigPath)
 	}
-	argv = append(argv, "serve", "--open", "--interactive", "--open-area=games")
+	argv = append(argv, "serve", "--open", "--interactive", "--open-area="+area)
 	command := exec.Command(executable, argv...)
 	command.SysProcAttr = detachedProcess()
 	if err = command.Start(); err != nil {
 		return fail(env, fmt.Errorf("starting the Companion: %w", err))
 	}
 	go command.Process.Release()
-	fmt.Fprintln(env.Stdout, "starting the Companion to show this game")
+	fmt.Fprintf(env.Stdout, "starting the Companion to show %s\n", what)
 
 	return 0
 }

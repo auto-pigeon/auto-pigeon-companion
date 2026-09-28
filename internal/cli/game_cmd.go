@@ -44,6 +44,7 @@ const gameUsage = `usage:
                                                   fresh link, exact command; --approve to launch
   companion game join <link> [--approve]          resolve a join link; --approve to launch
   companion game open <link>                      what a clicked link runs: show it in the Companion
+                                                  (a join link, or an editor leak-test link)
   companion game link <game-id> [--json]          mint your OWN join link for a game
   companion game package --build=<id> --map=<id> [--revision=<n>]
                                                   upload a build's map files for people joining

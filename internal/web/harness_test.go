@@ -160,6 +160,10 @@ type fixtureBackend struct {
 	// names (NEW_247A2). Unset, the route is a 404: a deployment that has
 	// not said where its gallery is.
 	gallery string
+
+	// Captures one private compiler result sent back through AUB.
+	leakResult    map[string]any
+	leakRequestID string
 }
 
 func (b *fixtureBackend) count() int {
@@ -258,6 +262,19 @@ func (b *fixtureBackend) serve(w http.ResponseWriter, r *http.Request) {
 	asset := b.asset
 
 	switch {
+	case strings.HasPrefix(rest, "/leak-results/") && r.Method == http.MethodPost:
+		var result map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&result); err != nil {
+			http.Error(w, "bad result", http.StatusBadRequest)
+			return
+		}
+		b.mu.Lock()
+		b.leakResult = result
+		b.leakRequestID = strings.TrimPrefix(rest, "/leak-results/")
+		b.mu.Unlock()
+		w.WriteHeader(http.StatusCreated)
+		write(map[string]any{"received": true})
+		return
 	case rest == "/capabilities":
 		write(map[string]any{
 			"api_version": aub.CompanionAPIVersion,

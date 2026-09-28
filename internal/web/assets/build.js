@@ -27,6 +27,64 @@
   // Bumped by every change to steps 1 and 2, so a check that was out while the
   // choices changed cannot mark the new choices checked.
   let generation = 0;
+  let leakRequestCard = null;
+  let leakRequestID = null;
+
+  // An operating-system link only asks. The user's own page resolves the saved revision and
+  // displays it here; the ordinary Build preview and explicit Build press still own execution.
+  async function refreshLeakRequest() {
+    if (!leakRequestCard) {
+      leakRequestCard = el("div", { className: "panel notice" });
+      $("area-build").prepend(leakRequestCard);
+    }
+    const { ok, body } = await api("/api/v1/leak-test/pending");
+    leakRequestCard.replaceChildren();
+    if (!ok) {
+      leakRequestCard.hidden = false;
+      leakRequestCard.append(el("p", { className: "message error",
+        text: body.error || "The requested leak test could not be checked." }));
+      return;
+    }
+    if (!body.pending) { leakRequestCard.hidden = true; return; }
+    leakRequestCard.hidden = false;
+    leakRequestCard.append(el("h3", { text: t("Leak test requested by the editor") }));
+    if (body.sign_in_required) {
+      leakRequestCard.append(el("p", { text: t("Sign in to review the saved map revision before running a compiler.") }));
+      return;
+    }
+    leakRequestCard.append(el("p", { text: t("Saved map {id}, revision {n}. The Companion checked that its content digest still matches the editor's request.", {
+      id: body.asset_id, n: body.revision }) }));
+    leakRequestCard.append(el("p", { text: t("Review the compiler command before pressing Build. A leaking map makes qbsp fail and still writes a route.") }));
+    const use = el("button", { text: t("Review leak test"), attrs: { type: "button", class: "primary" } });
+    use.addEventListener("click", async () => {
+      await refreshPipelines();
+      const pipeline = pipelines.find((item) => item.id === body.pipeline);
+      if (!pipeline) {
+        setMessage("build-message", "The leak-test pipeline is unavailable on this computer.", "error");
+        return;
+      }
+      $("build-pipeline").value = body.pipeline;
+      window.AUCOM.chosenRevision = { asset_type: "map", asset_id: body.asset_id,
+        display_name: body.asset_id, revision_id: body.revision_id, revision: body.revision,
+        files: body.files };
+      renderPipeline();
+      revisionChosen();
+      for (const row of inputFields.values()) {
+        if (row.kind === "map") { row.source.value = "asset"; row.apply(); }
+      }
+      $("build-label").value = t("Leak test: map {id}, revision {n}", { id: body.asset_id, n: body.revision });
+      leakRequestID = body.request_id || null;
+      choicesChanged();
+      showStep(2);
+      leakRequestCard.hidden = true;
+    });
+    const dismiss = el("button", { text: t("Dismiss"), attrs: { type: "button", class: "secondary" } });
+    dismiss.addEventListener("click", async () => {
+      const response = await api("/api/v1/leak-test/dismiss", { method: "POST" });
+      if (response.ok) leakRequestCard.hidden = true;
+    });
+    leakRequestCard.append(el("div", { className: "row-actions", children: [dismiss, use] }));
+  }
 
   function currentPipeline() {
     return pipelines.find((item) => item.id === $("build-pipeline").value);
@@ -383,6 +441,7 @@
       inputs,
       label: $("build-label").value.trim() || undefined,
       strict: $("build-strict").checked,
+      leak_request_id: pipeline?.id === "auto-pigeon.q1.leak-test" ? leakRequestID || undefined : undefined,
     };
   }
 
@@ -577,6 +636,7 @@
       showStep(4, { focus: false });
       record(`Build started: ${$("build-label").value.trim() || currentPipeline()?.name || "untitled"}`, "", "running");
       currentBuild = body.build;
+      leakRequestID = null;
       $("build-current-panel").hidden = false;
       $("build-current-title").textContent = "Building " + ($("build-label").value.trim() || currentPipeline()?.name || "");
       $("build-current-title").setAttribute("tabindex", "-1");
@@ -642,6 +702,22 @@
     }
     $("build-current-title").textContent =
       `${body.live ? "Building" : "Build"}: ${manifest.label || manifest.pipeline?.name || "this build"} — ${manifest.state}`;
+    if (!body.live && manifest.pipeline?.id === "auto-pigeon.q1.leak-test") {
+      const resultButton = el("button", { text: t("Download leak result"), attrs: { type: "button", class: "secondary" } });
+      resultButton.addEventListener("click", () => withBusy(resultButton, async () => {
+        const response = await api(`/api/v1/leak-test/runs/${encodeURIComponent(manifest.build_id)}/result`);
+        if (!response.ok) {
+          setMessage("build-message", response.body.error || "The leak result could not be downloaded.", "error");
+          return;
+        }
+        const blob = new Blob([JSON.stringify(response.body)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const anchor = el("a", { attrs: { href: url, download: manifest.build_id + "-leak-result.json" } });
+        anchor.click();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }));
+      list.append(el("li", { children: [resultButton] }));
+    }
 
     // The finished build is the other moment a compatibility report is worth
     // offering: the user has just seen what happened and has the build id that
@@ -855,6 +931,7 @@
     },
     async refresh() {
       await refreshPipelines();
+      await refreshLeakRequest();
       await refreshHistory();
       renderSteps();
       // Back from Profiles after "Set up …": the check that sent the person

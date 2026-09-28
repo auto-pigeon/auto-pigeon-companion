@@ -3,6 +3,7 @@ package builtin
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -230,6 +231,13 @@ func TestEveryBuiltinPipelineResolvesAgainstTheBuiltinToolchain(t *testing.T) {
 			t.Errorf("%s does not resolve against the %s toolchain:\n%v", e.File, family, err)
 			continue
 		}
+		if slices.Contains(DiagnosticPipelines, pipeline.ID) {
+			// A diagnostic runs the compile step alone; see DiagnosticPipelines.
+			if len(steps) != 1 || steps[0].Action.ID != "compile" {
+				t.Errorf("%s is a diagnostic pipeline and must be the compile step alone, got %d steps", e.File, len(steps))
+			}
+			continue
+		}
 		if len(steps) != 3 {
 			t.Errorf("%s resolved to %d steps, want three", e.File, len(steps))
 			continue
@@ -240,7 +248,7 @@ func TestEveryBuiltinPipelineResolvesAgainstTheBuiltinToolchain(t *testing.T) {
 			}
 		}
 	}
-	if want := len(Q1Pipelines) + len(Q2Pipelines) + len(Q3Pipelines); seen != want {
+	if want := len(Q1Pipelines) + len(Q2Pipelines) + len(Q3Pipelines) + len(DiagnosticPipelines); seen != want {
 		t.Errorf("this build ships %d pipelines; %d Quake 1, %d Quake II and %d Quake III are what it declares",
 			seen, len(Q1Pipelines), len(Q2Pipelines), len(Q3Pipelines))
 	}

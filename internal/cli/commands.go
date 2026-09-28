@@ -16,6 +16,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/config"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/incident"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/joinintent"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/leakintent"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/release"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/web"
 )
@@ -178,7 +179,7 @@ func runServe(env *Env, args []string) int {
 	port := set.Int("port", 0, "loopback port to bind; 0 uses the configured port")
 	open := set.Bool("open", false, "open the page in the default browser")
 	debug := set.Bool("debug", false, "unlock the developer controls: typing any server address in Settings")
-	openArea := set.String("open-area", "", "with --open, the area to show first (games)")
+	openArea := set.String("open-area", "", "with --open, the area to show first (games, build)")
 	interactive := set.Bool("interactive", false,
 		"application mode: stop once the last page has closed and nothing is running")
 	stayRunning := set.Bool("stay-running", false,
@@ -384,6 +385,7 @@ func runServe(env *Env, args []string) int {
 	}
 	defer web.RemoveURL(urlPath)
 	_ = joinintent.Prune(joinintent.Path(configDir), time.Now().UTC())
+	_ = leakintent.Prune(leakintent.Path(configDir), time.Now().UTC())
 
 	opened := false
 	if *open {
@@ -394,8 +396,9 @@ func runServe(env *Env, args []string) int {
 		// Never fatal: the URL is printed, and a machine with no browser
 		// handler should still be able to use the server.
 		page := url
-		if *openArea == "games" {
-			page = url + "#games"
+		switch *openArea {
+		case "games", "build":
+			page = url + "#" + *openArea
 		}
 		asked := time.Now()
 		if err := opener(page); err != nil {

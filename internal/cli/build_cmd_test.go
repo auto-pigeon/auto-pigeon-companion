@@ -86,12 +86,19 @@ func TestBuildPipelinesAsJSON(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &rows); err != nil {
 		t.Fatalf("the output is not JSON: %v\n%s", err, stdout.String())
 	}
-	if len(rows) != 7 {
-		t.Fatalf("expected the three Quake 1, two Quake II and two Quake III built-in pipelines, got %d",
+	if len(rows) != 8 {
+		t.Fatalf("expected the three Quake 1, two Quake II and two Quake III built-in pipelines and the Quake 1 leak test, got %d",
 			len(rows))
 	}
 	unfinished := map[string]int{}
 	for _, row := range rows {
+		if row.ID == "auto-pigeon.q1.leak-test" {
+			// The diagnostic: the compile step alone.
+			if len(row.Steps) != 1 || row.Steps[0] != "compile" || !row.Runnable {
+				t.Errorf("%s: steps=%v runnable=%t", row.ID, row.Steps, row.Runnable)
+			}
+			continue
+		}
 		if len(row.Steps) != 3 || !row.Runnable {
 			t.Errorf("%s: steps=%v runnable=%t", row.ID, row.Steps, row.Runnable)
 		}

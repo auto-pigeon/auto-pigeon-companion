@@ -1,0 +1,91 @@
+{
+  "schema_version": "aucom.profile/1.1",
+  "kind": "pipeline",
+  "id": "auto-pigeon.q1.leak-test",
+  "version": "1.0.0",
+  "name": "Quake 1 \u2014 leak test",
+  "summary": "Only the compile step, with the leak test on: does the map leak, and where.",
+  "description": "For the question \u201cis this map sealed\u201d, asked of one exact saved revision. It runs the Quake 1 compile step with its leak test on and stops there: no vis and no light, because neither says anything about a leak and both take longer than the answer. qbsp exits non-zero on a leak and still writes the point file, which is published as this pipeline's `pts` output together with the compiler log; the build is recorded as failed, which is the truthful state of a compile that refused to write a BSP.\n\nWhat a pass means is narrow on purpose: this compiler, at this version, found no leak in this revision. A map that has no entity inside it is not tested at all (qbsp says so), and a compiler that stops before its outside fill gives no answer either way. The Auto-Pigeon editor asks for this pipeline through an `autopigeon://leaktest/` link, and a person approves it here before anything runs.",
+  "publisher": {
+    "name": "Auto-Pigeon",
+    "url": "https://github.com/auto-pigeon/auto-pigeon-companion"
+  },
+  "license": {
+    "spdx": "MIT",
+    "name": "MIT"
+  },
+  "compatibility": {
+    "companion": {
+      "at_least": "0.1.0"
+    }
+  },
+  "game_profile": {
+    "slug": "quake1",
+    "engine_family": "quake1"
+  },
+  "inputs": [
+    {
+      "name": "source_map",
+      "title": "Map source",
+      "role": "q1.map.source",
+      "required": true,
+      "extensions": [
+        ".map",
+        ".apmap"
+      ]
+    },
+    {
+      "name": "wad",
+      "title": "Texture WAD",
+      "role": "q1.wad",
+      "extensions": [
+        ".wad"
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "id": "compile",
+      "title": "Compile the map",
+      "capability": "q1.bsp.compile",
+      "inputs": [
+        {
+          "name": "source_map",
+          "from": "pipeline.source_map"
+        },
+        {
+          "name": "wad",
+          "from": "pipeline.wad"
+        }
+      ],
+      "options": {
+        "basename": "level",
+        "leaktest": "true",
+        "verbosity": "normal"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "name": "pts",
+      "title": "Leak point file",
+      "role": "q1.pts",
+      "from": "compile.pts",
+      "optional": true
+    },
+    {
+      "name": "compile_log",
+      "title": "qbsp log",
+      "role": "q1.compile.log",
+      "from": "compile.log",
+      "optional": true
+    },
+    {
+      "name": "prt",
+      "title": "Portal file",
+      "role": "q1.prt",
+      "from": "compile.prt",
+      "optional": true
+    }
+  ]
+}

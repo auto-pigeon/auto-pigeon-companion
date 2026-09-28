@@ -17,6 +17,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/leakintent"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/maturity"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
@@ -326,10 +327,11 @@ type buildRequestBody struct {
 	// page and in internal/profile and left this request model alone, so the
 	// folder the user chose went through `checkOpenFile` and was rejected as
 	// "not a file". This field is the other half of that fix.
-	Roots   map[string]string            `json:"roots,omitempty"`
-	Options map[string]map[string]string `json:"options,omitempty"`
-	Label   string                       `json:"label,omitempty"`
-	Strict  bool                         `json:"strict,omitempty"`
+	Roots         map[string]string            `json:"roots,omitempty"`
+	Options       map[string]map[string]string `json:"options,omitempty"`
+	Label         string                       `json:"label,omitempty"`
+	Strict        bool                         `json:"strict,omitempty"`
+	LeakRequestID string                       `json:"leak_request_id,omitempty"`
 }
 
 // resolveRoots checks each supplied root as a DIRECTORY.
@@ -525,6 +527,25 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, err)
 		return
 	}
+	if request.LeakRequestID != "" {
+		if request.Pipeline != leakPipelineID || !s.matchesPendingLeakRequest(request.LeakRequestID, sources["source_map"]) {
+			cancel()
+			writeError(w, http.StatusConflict, errors.New("the editor leak request expired or no longer matches this pinned map revision"))
+			return
+		}
+		configDir, err := s.configDir()
+		if err != nil {
+			cancel()
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		consumed, err := leakintent.Consume(leakintent.Path(configDir), request.LeakRequestID, time.Now().UTC())
+		if err != nil || consumed == nil {
+			cancel()
+			writeError(w, http.StatusConflict, errors.New("the editor leak request was already used"))
+			return
+		}
+	}
 
 	failed := make(chan error, 1)
 	go func() {
@@ -541,6 +562,11 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 			Mirror:      run.log,
 		})
 		run.finish(manifest, err)
+		if request.LeakRequestID != "" && manifest != nil && manifest.State.Terminal() {
+			if returnErr := s.publishLeakResult(manifest.BuildID, request.LeakRequestID); returnErr != nil {
+				_, _ = run.log.Write([]byte("\nCompanion could not return the leak result to the editor: " + returnErr.Error() + "\n"))
+			}
+		}
 		if run.ID == "" {
 			// It failed before it had a directory — an unresolvable pipeline,
 			// a capability nothing provides. There is no manifest to point the
