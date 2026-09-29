@@ -339,9 +339,22 @@ func TestAutoBuildBuildsANewRevisionOnceThroughTheOrdinaryPipeline(t *testing.T)
 	if status != http.StatusOK {
 		t.Fatalf("switching it on = %d: %v", status, body["error"])
 	}
+	if body["enabled"] != true || body["running"] != nil {
+		t.Fatalf("after switching on: %v", body)
+	}
+	// The baseline is the poller's to take (NEW_265A: never inside the
+	// request that flips the switch).
+	service, err := m.server.autobuildService()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Tick(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	_, body = m.call(http.MethodGet, "/api/v1/autobuild/"+m.backend.asset.assetID, nil)
 	baseline, _ := body["baseline"].(map[string]any)
 	if baseline["revision"] != float64(4) || body["running"] != nil {
-		t.Fatalf("after switching on: %v", body)
+		t.Fatalf("after the first check: %v", body)
 	}
 	if status, body := m.call(http.MethodPost, "/api/v1/autobuild/"+m.backend.asset.assetID+"/enable",
 		map[string]any{"pipeline": "no.such.pipeline"}); status != http.StatusBadRequest {
@@ -354,10 +367,6 @@ func TestAutoBuildBuildsANewRevisionOnceThroughTheOrdinaryPipeline(t *testing.T)
 	m.backend.asset.body = []byte("{ \"classname\" \"worldspawn\" \"message\" \"revision five\" }\n")
 	m.backend.mu.Unlock()
 
-	service, err := m.server.autobuildService()
-	if err != nil {
-		t.Fatal(err)
-	}
 	due := func() {
 		t.Helper()
 		if _, err := autobuild.Update(service.Path(), func(state *autobuild.State) error {

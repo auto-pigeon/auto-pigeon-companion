@@ -207,6 +207,10 @@ type fixtureBackend struct {
 	// Captures one private compiler result sent back through AUB.
 	leakResult    map[string]any
 	leakRequestID string
+
+	// holdDetail, when set, holds every map-detail request until it is
+	// closed or the caller gives up: a slow AUB (NEW_265A).
+	holdDetail chan struct{}
 }
 
 func (b *fixtureBackend) count() int {
@@ -352,6 +356,19 @@ func (b *fixtureBackend) serve(w http.ResponseWriter, r *http.Request) {
 			"next_cursor": "page-2",
 		})
 	case rest == b.assetPath():
+		b.mu.Lock()
+		hold := b.holdDetail
+		b.mu.Unlock()
+		if hold != nil {
+			select {
+			case <-hold:
+			case <-r.Context().Done():
+				return
+			}
+			b.mu.Lock()
+			asset = b.asset
+			b.mu.Unlock()
+		}
 		write(map[string]any{
 			"api_version":    aub.CompanionAPIVersion,
 			"asset":          b.assetView(),

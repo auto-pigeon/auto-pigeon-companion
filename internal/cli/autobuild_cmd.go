@@ -164,6 +164,9 @@ func printAutobuild(env *Env, entry map[string]any) {
 	if at, ok := entry["last_check_at"].(string); ok {
 		fmt.Fprintf(env.Stdout, "  checked %s; on the server: %s\n", at, revision(entry["observed"]))
 	}
+	if since, ok := entry["checking_since"].(string); ok {
+		fmt.Fprintf(env.Stdout, "  asking the server now, since %s\n", since)
+	}
 	if entry["pending"] != nil {
 		fmt.Fprintf(env.Stdout, "  waiting to build: %s\n", revision(entry["pending"]))
 	}

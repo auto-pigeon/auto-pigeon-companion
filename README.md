@@ -230,9 +230,17 @@ revision — once — with the chosen build profile. It never starts the game.
 The revision current when you switch it on is not built; **Build current
 revision now** does that. A failed build waits for **Retry**.
 
+Switching it off, or choosing another build profile, takes effect at once, even
+while the Auto-Pigeon server is slow to answer. An answer that arrives after the
+change is not used: nothing is built for a map switched off, and a map switched
+off and on again takes a fresh starting point. While a check is waiting for the
+server, the panel says **asking the server now** and for how long. A build that
+is already running is left to finish.
+
 ```console
 $ companion autobuild on <map-id> --pipeline auto-pigeon.q1.normal
 $ companion autobuild show <map-id>
+$ companion autobuild pipeline <map-id> --pipeline auto-pigeon.q1.final
 $ companion autobuild off <map-id>
 ```
 

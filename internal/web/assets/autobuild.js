@@ -20,9 +20,13 @@
     return !$("area-play").hidden && !$("play-step-1").hidden && Boolean(assetID);
   }
 
+  // While a question to AUB is in flight, or the baseline is not yet taken,
+  // the record is read every second so its answer shows as soon as it lands.
+  let soon = false;
+
   function schedule() {
     clearTimeout(timer);
-    if (visible()) timer = setTimeout(refresh, 5000);
+    if (visible()) timer = setTimeout(refresh, soon ? 1000 : 5000);
   }
 
   function pipelines() {
@@ -70,11 +74,19 @@
     fillPipelines(entry.pipeline_id);
 
     const now = Date.parse(entry.now || "") || Date.now();
+    soon = Boolean(entry.checking_since) || (Boolean(entry.enabled) && !entry.baseline && !entry.halted);
     const rows = [];
     if (entry.enabled || entry.last_check_at) {
-      const next = entry.next_check_at ? Math.max(0, Math.round((Date.parse(entry.next_check_at) - now) / 1000)) : null;
-      rows.push(row(t("Checked"), entry.last_check_at ? when(entry.last_check_at) : t("not yet"),
-        entry.enabled && next !== null ? " · " + t("next check in {s} s", { s: next }) : ""));
+      // A question in flight is said as such, with how long it has waited: a
+      // slow server is not an up-to-date one (NEW_265A).
+      let after = "";
+      if (entry.checking_since) {
+        const waited = Math.max(0, Math.round((now - Date.parse(entry.checking_since)) / 1000));
+        after = " · " + t("asking the server now, for {s} s", { s: waited });
+      } else if (entry.enabled && entry.next_check_at) {
+        after = " · " + t("next check in {s} s", { s: Math.max(0, Math.round((Date.parse(entry.next_check_at) - now) / 1000)) });
+      }
+      rows.push(row(t("Checked"), entry.last_check_at ? when(entry.last_check_at) : t("not yet"), after));
     }
     if (entry.observed) {
       const baseline = entry.baseline && entry.baseline.revision_id === entry.observed.revision_id;

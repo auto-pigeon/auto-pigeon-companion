@@ -157,7 +157,7 @@ func (s *Server) autobuildRunState(runID string) (string, string, error) {
 
 // autobuildView is one map's auto-build as the page shows it: the state, and
 // for each attempt the job a person can open.
-func (s *Server) autobuildView(entry autobuild.Entry) map[string]any {
+func (s *Server) autobuildView(service *autobuild.Service, entry autobuild.Entry) map[string]any {
 	view := map[string]any{
 		"asset_id": entry.AssetID, "display_name": entry.DisplayName,
 		"pipeline_id": entry.PipelineID, "enabled": entry.Enabled,
@@ -172,6 +172,12 @@ func (s *Server) autobuildView(entry autobuild.Entry) map[string]any {
 	}
 	if entry.Enabled && entry.Halted == "" && !entry.NextCheckAt.IsZero() {
 		view["next_check_at"] = entry.NextCheckAt
+	}
+	// A question to AUB that has not been answered yet, for the configuration
+	// on screen. One asked before the switch or the profile last changed is
+	// still in flight, but its answer will not be used, so it is not shown.
+	if check, asking := service.CheckingNow(entry.AssetID); asking && entry.Enabled && check.Generation == entry.Generation {
+		view["checking_since"] = check.Since
 	}
 	for key, attempt := range map[string]*autobuild.Attempt{
 		"running": entry.Running, "last_built": entry.LastBuilt, "failed": entry.Failed,
@@ -252,7 +258,7 @@ func (s *Server) handleAutobuildList(w http.ResponseWriter, _ *http.Request) {
 	}
 	items := make([]map[string]any, 0, len(state.Entries))
 	for _, entry := range state.Entries {
-		items = append(items, s.autobuildView(entry))
+		items = append(items, s.autobuildView(service, entry))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"items": items, "now": time.Now().UTC(), "check_interval_seconds": int(autobuild.CheckInterval.Seconds()),
@@ -275,7 +281,7 @@ func (s *Server) handleAutobuildGet(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"asset_id": r.PathValue("asset"), "enabled": false, "now": time.Now().UTC()})
 		return
 	}
-	view := s.autobuildView(*entry)
+	view := s.autobuildView(service, *entry)
 	view["now"] = time.Now().UTC()
 	writeJSON(w, http.StatusOK, view)
 }
@@ -318,9 +324,10 @@ func (s *Server) handleAutobuildEnable(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	// The baseline is taken now rather than at the next tick, so the page
-	// shows which revision it is at once.
-	_ = service.Tick(r.Context())
+	// The baseline is taken by the poller in a moment rather than at its next
+	// tick — and not inside this request: a slow AUB must not hold the switch
+	// (NEW_265A). The page shows the question in flight until it lands.
+	service.Nudge()
 	s.writeAutobuildEntry(w, service, entry.AssetID)
 }
 
@@ -406,7 +413,7 @@ func (s *Server) writeAutobuildEntry(w http.ResponseWriter, service *autobuild.S
 		writeError(w, http.StatusNotFound, fmt.Errorf("%s has no auto-build", assetID))
 		return
 	}
-	view := s.autobuildView(*entry)
+	view := s.autobuildView(service, *entry)
 	view["now"] = time.Now().UTC()
 	writeJSON(w, http.StatusOK, view)
 }

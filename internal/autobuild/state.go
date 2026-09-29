@@ -83,6 +83,10 @@ type Attempt struct {
 	FinishedAt time.Time `json:"finished_at,omitempty"`
 	State      string    `json:"state,omitempty"`
 	Error      string    `json:"error,omitempty"`
+	// Submitter names the Service instance that wrote this attempt down, so
+	// a submission still being started is not mistaken for one a crash
+	// interrupted (NEW_265A). Empty in files written before it existed.
+	Submitter string `json:"submitter,omitempty"`
 }
 
 // Halt reasons: why a map is no longer being checked.
@@ -97,6 +101,15 @@ type Entry struct {
 	DisplayName string `json:"display_name,omitempty"`
 	PipelineID  string `json:"pipeline_id"`
 	Enabled     bool   `json:"enabled"`
+	// Generation counts the changes a person made to this map's auto-build —
+	// switched on, switched off, another build profile (NEW_265A). A question
+	// to AUB carries the generation it was asked under, and its answer is
+	// applied only if nothing has changed since: an answer that arrives after
+	// the switch went off, or after it went off and on again, belongs to a
+	// configuration that no longer exists. It is in the file, so it holds
+	// across processes and across a restart; a timestamp would not tell two
+	// changes made in the same instant apart.
+	Generation uint64 `json:"generation,omitempty"`
 
 	EnabledAt time.Time `json:"enabled_at,omitempty"`
 	// Baseline is the revision that was current when it was switched on.
@@ -195,8 +208,13 @@ func Load(path string) (*State, error) {
 	return state, nil
 }
 
+// errUnchanged, returned by a mutation, means it decided to change nothing:
+// Update then writes nothing and reports no error.
+var errUnchanged = errors.New("autobuild: nothing to change")
+
 // Update is the one way the file changes: read, change and write inside the
-// cross-process lock.
+// cross-process lock. It is held for the read, the change and the write only —
+// never across a question to AUB or the start of a build.
 func Update(path string, mutate func(*State) error) (*State, error) {
 	var result *State
 	err := lockfile.With(path, lockfile.Options{Program: "auto-pigeon-companion"}, func() error {
@@ -205,6 +223,10 @@ func Update(path string, mutate func(*State) error) (*State, error) {
 			return err
 		}
 		if err := mutate(state); err != nil {
+			if errors.Is(err, errUnchanged) {
+				result = state
+				return nil
+			}
 			return err
 		}
 		state.SchemaVersion = SchemaVersion
