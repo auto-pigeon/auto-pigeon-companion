@@ -37,10 +37,23 @@ func (f *fakeConverter) Provenance() aue.Provenance {
 	return aue.Provenance{Mode: aue.ModeDeveloperOverride, Verified: f.verified}
 }
 
+// The Companion reads an APMap's `game` and nothing else: which APMap versions can be converted is
+// the extractor's judgement, made against the contract bundle it ships with, and this program has
+// no copy of that contract to hold an opinion with. So the conversion is the same whatever the
+// document declares — a legacy version, the current one, or one nobody has published — and a
+// refusal, when there is one, is AUE's and arrives through runner.Run. Pinned across versions so
+// that an APMap promotion never has to edit this test (AULIBS NEW_262 moved 1.3 to legacy).
 func TestAnAccountMapIsConvertedToAMapAndTheManifestSaysBy(t *testing.T) {
+	for _, version := range []string{"1.3", "1.4", "999.999"} {
+		t.Run(version, func(t *testing.T) { convertsAnAccountMap(t, version) })
+	}
+}
+
+func convertsAnAccountMap(t *testing.T, version string) {
 	stage := t.TempDir()
 	apmap := filepath.Join(stage, "e1m6.apmap")
-	if err := os.WriteFile(apmap, []byte(`{"apmap_version":"1.3","game":"quake1","entities":[]}`), 0o600); err != nil {
+	document := `{"apmap_version":"` + version + `","game":"quake1","entities":[]}`
+	if err := os.WriteFile(apmap, []byte(document), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	runner := &fakeConverter{}
