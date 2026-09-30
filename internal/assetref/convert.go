@@ -55,9 +55,16 @@ var ErrNoConverter = errors.New(
 		"a compiler reads needs map conversion, which is not installed on this machine")
 
 // directions maps an APMap's `game` to the extractor's conversion direction.
+//
+// `quake3` is the extractor's `apmap-to-q3map` (Q3_004): Quake III `.map` text for Q3Map2, with
+// the editor's own bytes, written beside a `<stem>.q3map-manifest.json` the extractor puts in the
+// same `converted-<name>/` directory. It is only ever that direction — a Quake III document sent to
+// the Quake 1 or Quake 2 writer would lose its patches, and the extractor refuses that by game. An
+// extractor that predates the direction refuses the flag, and that refusal is the error reported.
 var directions = map[string]string{
 	"quake1": "--apmap-to-q1map",
 	"quake2": "--apmap-to-q2map",
+	"quake3": "--apmap-to-q3map",
 }
 
 // ConvertAPMapInputs replaces every resolved input that is an `.apmap` with the

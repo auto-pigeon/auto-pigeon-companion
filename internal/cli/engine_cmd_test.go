@@ -415,3 +415,37 @@ func TestEngineRunHasNoSubmitAndReturnMode(t *testing.T) {
 		t.Errorf("stderr = %s", stderr)
 	}
 }
+
+// A profile that declares two programs — ioquake3's client and dedicated server — is bound with one
+// --executable per program (Q3_004); --engine still refuses it rather than point both at one file,
+// and an undeclared name or a combination with --engine is refused before anything is written.
+func TestEngineBindNamesEachExecutableOfATwoProgramProfile(t *testing.T) {
+	game := gameDir(t)
+	client, server := programFile(t, "ioquake3.x86_64"), programFile(t, "ioq3ded.x86_64")
+
+	env, _, stderr := testEnv(t)
+	if code := Run(env, []string{"engine", "bind", builtin.IoQuake3, "--engine", client}); code != 2 ||
+		!strings.Contains(stderr.String(), "--executable <name>=<path>") {
+		t.Fatalf("--engine on a two-program profile: code %d, stderr = %s", code, stderr)
+	}
+	env, _, stderr = testEnv(t)
+	if code := Run(env, []string{"engine", "bind", builtin.IoQuake3, "--executable", "server=" + server}); code != 2 ||
+		!strings.Contains(stderr.String(), `declares no executable "server"`) {
+		t.Fatalf("undeclared name: code %d, stderr = %s", code, stderr)
+	}
+	env, _, stderr = testEnv(t)
+	if code := Run(env, []string{"engine", "bind", builtin.IoQuake3, "--engine", client, "--executable", "dedicated=" + server}); code != 2 {
+		t.Fatalf("--engine with --executable: code %d, stderr = %s", code, stderr)
+	}
+
+	env, stdout, stderr := testEnv(t)
+	if code := Run(env, []string{"engine", "bind", builtin.IoQuake3,
+		"--executable", "engine=" + client, "--executable", "dedicated=" + server, "--game-root", game}); code != 0 {
+		t.Fatalf("bind exit code = %d, stderr = %s", code, stderr)
+	}
+	for _, want := range []string{client, server, game} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("%s was not recorded:\n%s", want, stdout)
+		}
+	}
+}

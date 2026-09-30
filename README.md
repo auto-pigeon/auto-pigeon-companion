@@ -299,6 +299,8 @@ $ companion toolchain diff old.json new.json
 $ companion toolchain schema                         # the published JSON Schemas
 $ companion engine list                              # engines, and whether each is bound
 $ companion engine bind auto-pigeon.engine.quakespasm --engine /opt/quakespasm/quakespasm
+$ companion engine bind auto-pigeon.engine.ioquake3 --executable engine=/opt/ioq3/ioquake3.x86_64 \
+    --executable dedicated=/opt/ioq3/ioq3ded.x86_64 --game-root /opt/ioq3   # one flag per program
 $ companion game list                                # games being hosted now
 $ companion game join <link>                         # shows the exact command; --approve launches
 $ companion extractor convert map.apmap
@@ -408,6 +410,49 @@ until you point it at one you built from the extractor's repository:
 $ AUCOM_AUE_BINARY=../auto-pigeon-extractor/bin/auto-pigeon-extractor ./companion extractor status
 extractor: UNVERIFIED developer override
 ```
+
+A map in your account is an APMap, and a compiler reads a `.map`, so a build
+converts it through the extractor first, choosing the extractor's direction by
+the APMap's `game`: `quake1` → `--apmap-to-q1map`, `quake2` → `--apmap-to-q2map`,
+`quake3` → `--apmap-to-q3map`. A Quake III conversion needs an extractor that
+has that direction (Q3_004); it writes the `.map` Q3Map2 compiles and, beside it
+in the same `converted-<name>/` directory, `<name>.q3map-manifest.json` — the
+source document's identity, every shader, model and sound the map names, and
+every conversion warning. An extractor refusal (an older extractor, a patch or
+shader it will not write) is reported with its own words and nothing is built.
+`extractor convert` runs that same path by hand:
+
+```console
+$ AUCOM_AUE_BINARY=../auto-pigeon-extractor/bin/auto-pigeon-extractor \
+    ./companion extractor convert q3004-room-patch.apmap
+/home/you/maps/converted-q3004-room-patch/q3004-room-patch.map
+  sha256:8838724210d17862b8112db69be72ec2226380d12e3b5b72a0e11018e2629e18
+  converted by the developer_override extractor  (protocol ), UNVERIFIED
+$ ls converted-q3004-room-patch/
+q3004-room-patch.map  q3004-room-patch.q3map-manifest.json
+```
+
+A `build run` input that is a local `.apmap` goes through the same conversion:
+it is copied into the build's temporary stage first, so nothing is ever
+written beside your own file. Building the same Quake III map through Q3Map2 —
+bound once with `acquire resolve … --mode user_path`, pointing at a directory
+where `q3map2` is a regular file (the Companion refuses a symbolic link, and
+NetRadiant-custom's `usr/bin/q3map2` is one: point at a hard link of
+`q3map2.x86_64` in a sibling of `usr/bin`, so its `../lib` still resolves):
+
+```console
+$ companion acquire resolve internal/profile/builtin/q3map2.tool.json \
+    --mode user_path --user-path /opt/netradiant-custom/usr/aucom-bin --bind
+$ AUCOM_AUE_BINARY=../auto-pigeon-extractor/bin/auto-pigeon-extractor \
+    companion build run --pipeline auto-pigeon.q3.fast-preview \
+      --input source_map=q3004-room-patch.apmap \
+      --root game_root=/opt/quake3 --root content_root=/home/you/q3-project
+```
+
+The build manifest records the converted `.map` as the `source_map` input (its
+SHA-256 is the extractor's output) and the lit BSP as `bsp`. Playing or hosting
+the result needs the base game's `pak0.pk3`, which ioquake3 refuses to start
+without and which the Companion does not provide.
 
 **Checks** — all three must pass before a change is merged:
 

@@ -41,7 +41,7 @@ const engineUsage = `usage:
   companion engine list [--json]                    engine profiles, and what each claims on this machine
   companion engine show <profile>                   its platforms, actions, layouts and local setup
   companion engine detect [--near <dir>] [--json]   directories that look like an installed game; records nothing
-  companion engine bind <profile> --engine <path> [--game-root <dir>] [--content-root <dir>]
+  companion engine bind <profile> --engine <path> | --executable <name>=<path>... [--game-root <dir>] [--content-root <dir>]
                                  [--root <role>=<path>]... [--approve]
                                                     record where the engine and the game are on this machine
   companion engine check <profile> --action <id>    what would stop it running here, before anything starts
@@ -367,6 +367,10 @@ func engineBind(env *Env, args []string) int {
 	// could name a root that nothing could then set.
 	roots := pairs{}
 	set.Var(roots, "root", "where another declared root is, as role=path (repeatable)")
+	// A profile that declares more than one program — a client and a dedicated server — names
+	// each one. `--engine` stays the one-program spelling.
+	executables := pairs{}
+	set.Var(executables, "executable", "where one of the profile's declared programs is, as name=path (repeatable)")
 	approve := set.Bool("approve", false, "record that you approve everything this profile asks for")
 	rest, code, ok := parseInterspersed(env, set, args)
 	if !ok {
@@ -381,8 +385,12 @@ func engineBind(env *Env, args []string) int {
 		return fail(env, err)
 	}
 	document := entry.Profile.(*profile.EngineProfile)
-	if *enginePath == "" && *gameRoot == "" && *contentRoot == "" && len(roots) == 0 && !*approve {
-		fmt.Fprintln(env.Stderr, "error: engine bind needs something to record: --engine, --game-root, --content-root, --root or --approve")
+	if *enginePath == "" && len(executables) == 0 && *gameRoot == "" && *contentRoot == "" && len(roots) == 0 && !*approve {
+		fmt.Fprintln(env.Stderr, "error: engine bind needs something to record: --engine, --executable, --game-root, --content-root, --root or --approve")
+		return 2
+	}
+	if *enginePath != "" && len(executables) > 0 {
+		fmt.Fprintln(env.Stderr, "error: --engine and --executable both name programs; use one of them")
 		return 2
 	}
 
@@ -409,11 +417,32 @@ func engineBind(env *Env, args []string) int {
 			for _, executable := range document.Executables {
 				names = append(names, executable.Name)
 			}
-			fmt.Fprintf(env.Stderr, "error: %s declares %d executables (%s); --engine sets one, so this profile needs a flag per executable that does not exist yet\n",
+			fmt.Fprintf(env.Stderr, "error: %s declares %d executables (%s); --engine sets one, so name each with --executable <name>=<path>\n",
 				document.ID, len(document.Executables), strings.Join(names, ", "))
 			return 2
 		}
 		newExecutables[document.Executables[0].Name] = absolute
+	}
+	for _, name := range sortedNames(executables) {
+		declared := false
+		names := make([]string, 0, len(document.Executables))
+		for _, executable := range document.Executables {
+			names = append(names, executable.Name)
+			declared = declared || executable.Name == name
+		}
+		if !declared {
+			fmt.Fprintf(env.Stderr, "error: %s declares no executable %q (it declares %s)\n", document.ID, name, strings.Join(names, ", "))
+			return 2
+		}
+		absolute, err := filepath.Abs(executables[name])
+		if err != nil {
+			return fail(env, err)
+		}
+		if info, err := os.Stat(absolute); err != nil || info.IsDir() {
+			fmt.Fprintf(env.Stderr, "error: %s is not a program on this machine\n", absolute)
+			return 1
+		}
+		newExecutables[name] = absolute
 	}
 	named := []struct{ role, value string }{
 		{profile.RootGame, *gameRoot},

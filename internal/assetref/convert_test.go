@@ -104,11 +104,10 @@ func TestAnAPMapForAnUnknownGameIsRefused(t *testing.T) {
 	}
 }
 
-// A Quake III APMap (APMap 1.5 can hold patches and brush-primitives texture matrices) has no
-// conversion direction in this build: the extractor's Quake III .map exporter lands with Q3_004.
-// It is refused by its game, before the extractor is ever asked — never converted as a Quake 1 or
-// Quake 2 map, which would drop exactly what makes it a Quake III map.
-func TestAQuake3APMapIsRefusedBeforeAnyConversion(t *testing.T) {
+// A Quake III APMap is converted by the extractor's own Quake III direction (Q3_004) — never by the
+// Quake 1 or Quake 2 one, which would drop exactly what makes it a Quake III map — and the manifest
+// records the conversion like any other.
+func TestAQuake3APMapIsConvertedByTheQuake3Direction(t *testing.T) {
 	stage := t.TempDir()
 	apmap := filepath.Join(stage, "q3dm1.apmap")
 	document := `{"apmap_version":"1.5","game":"quake3","map_dialect":"quake3_extended","entities":[]}`
@@ -116,17 +115,40 @@ func TestAQuake3APMapIsRefusedBeforeAnyConversion(t *testing.T) {
 		t.Fatal(err)
 	}
 	runner := &fakeConverter{}
-	resolved, _, err := ConvertAPMapInputs(context.Background(), runner, map[string]string{"source_map": apmap}, nil)
-	if err == nil || !strings.Contains(err.Error(), `"quake3"`) || !strings.Contains(err.Error(), "cannot turn into a .map") {
-		t.Fatalf("err = %v, want the Quake III APMap refused by its game", err)
+	sources := map[string]build.SourceRef{"source_map": {AssetType: "map", AssetID: "q3"}}
+	resolved, sources, err := ConvertAPMapInputs(context.Background(), runner, map[string]string{"source_map": apmap}, sources)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if resolved != nil {
-		t.Errorf("resolved = %v alongside the refusal", resolved)
+	if strings.Join(runner.args[:2], " ") != "convert --apmap-to-q3map" {
+		t.Fatalf("argv = %v, want the Quake III direction", runner.args)
 	}
-	if runner.args != nil {
-		t.Errorf("the extractor was asked to convert a Quake III APMap: %v", runner.args)
+	if filepath.Base(resolved["source_map"]) != "q3dm1.map" || sources["source_map"].ConvertedTo != "map" {
+		t.Errorf("resolved = %v, ref = %+v", resolved, sources["source_map"])
 	}
-	if entries, _ := os.ReadDir(stage); len(entries) != 1 {
-		t.Errorf("the stage holds %d entries; the refusal must create nothing", len(entries))
+}
+
+// An extractor that refuses (an older build without the direction, or a document the Quake III
+// writer will not write) fails the conversion with its own words, and nothing is resolved.
+func TestAQuake3ConversionRefusedByTheExtractorIsReported(t *testing.T) {
+	stage := t.TempDir()
+	apmap := filepath.Join(stage, "q3dm1.apmap")
+	if err := os.WriteFile(apmap, []byte(`{"game":"quake3"}`), 0o600); err != nil {
+		t.Fatal(err)
 	}
+	refusal := errors.New("apmap-to-q3map refused [q3map_shader_unsafe]: fac_1 (entities[0].content[2].faces[0]): shader \"../evil\" is not a safe Quake III shader path")
+	resolved, _, err := ConvertAPMapInputs(context.Background(), &refusingConverter{err: refusal}, map[string]string{"source_map": apmap}, nil)
+	if err == nil || !strings.Contains(err.Error(), "q3map_shader_unsafe") || resolved != nil {
+		t.Fatalf("err = %v, resolved = %v", err, resolved)
+	}
+}
+
+type refusingConverter struct{ err error }
+
+func (r *refusingConverter) Run(context.Context, string, ...string) ([]byte, error) {
+	return nil, r.err
+}
+
+func (r *refusingConverter) Provenance() aue.Provenance {
+	return aue.Provenance{Mode: aue.ModeDeveloperOverride}
 }
