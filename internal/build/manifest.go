@@ -281,6 +281,21 @@ type Manifest struct {
 // Succeeded reports a build that ran every step and published what it declared.
 func (m *Manifest) Succeeded() bool { return m.State == job.Succeeded }
 
+// Warnings counts the warning-severity findings of every step. A build that
+// succeeded with warnings ran to the end, and it is still not a complete
+// result: Q3Map2 exits 0 and writes a BSP while it prints `Couldn't find image
+// for shader` — measured in `Q3_006` for a shader with no script, and for one
+// whose script names images that are absent — so a surface that reports only
+// the state would call that map finished. Every surface that prints a
+// succeeded build asks this too.
+func (m *Manifest) Warnings() int {
+	n := 0
+	for _, step := range m.Steps {
+		n += step.Findings(profile.SeverityWarning)
+	}
+	return n
+}
+
 // FailedStep names the step a failed build stopped at, and is empty for a build
 // that did not stop at one.
 func (m *Manifest) FailedStep() string {

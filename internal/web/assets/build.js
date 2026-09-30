@@ -686,17 +686,23 @@
       const state = body.manifest.state;
       outcome = state;
       renderSteps();
+      // A compiler that exited 0 while it warned (Q3Map2's `Couldn't find image
+      // for shader`) did not produce a finished map, and the result says so.
+      const warned = (body.manifest.steps || []).reduce((sum, step) =>
+        sum + (step.diagnostics || []).filter((d) => d.severity === "warning").length, 0);
       // A build somebody cancelled is not an error, and is not announced as one.
       setMessage(
         "build-result",
-        state === "succeeded"
+        state === "succeeded" && warned
+          ? t("The build ran to the end, but the compiler warned {warnings} time(s), so this is not a complete result. Read the warnings in the stages below.", { warnings: warned })
+          : state === "succeeded"
           ? "The build succeeded. Its outputs are listed below."
           : state === "cancelled"
             ? "You cancelled this build. The stage that was running was stopped with everything it had started; what it had written is listed below."
             : state === "interrupted"
               ? "This build was interrupted: the Companion stopped while it ran. Nothing was run again; build it again when you are ready."
               : `The build ${state}: ${body.manifest.error || body.error || "see the stages below"}`,
-        state === "succeeded" ? "ok" : state === "cancelled" || state === "interrupted" ? "" : "error"
+        state === "succeeded" ? (warned ? "warning" : "ok") : state === "cancelled" || state === "interrupted" ? "" : "error"
       );
       record(`Build ${state}: ${body.manifest.label || body.manifest.pipeline?.name || "untitled"}`, body.manifest.error || "", state);
       await refreshHistory();

@@ -454,6 +454,27 @@ SHA-256 is the extractor's output) and the lit BSP as `bsp`. Playing or hosting
 the result needs the base game's `pak0.pk3`, which ioquake3 refuses to start
 without and which the Companion does not provide.
 
+**A build that exits 0 with warnings is not a finished map.** Q3Map2 prints
+`Couldn't find image for shader textures/…` and still writes the BSP — when
+nothing defines the shader (it then compiles with default surface flags), and
+also when a shader script defines it but the images the script names are not
+there (the script's flags still apply); only a `surfaceparm nodraw` shader never
+warns. So the outcome line says so, in the terminal and on the Build page:
+
+```console
+$ companion build run --pipeline auto-pigeon.q3.fast-preview --input source_map=room.map \
+    --root game_root=/opt/quake3 --root content_root=/home/you/q3-project
+
+build b_… — succeeded with 1 warning(s): not a complete result; read the warnings below
+  …
+  step bsp      succeeded     412ms  job j_…
+    warning  A shader the map names has no image Q3Map2 could find: nothing defines it, or its script names images that are not there. A nodraw shader never warns.
+```
+
+The manifest's state is still `succeeded` (the BSP exists and every declared
+output was published); the warnings are in each step's `diagnostics`, and
+`companion build show <id> --json` carries them.
+
 **Checks** — all three must pass before a change is merged:
 
 ```console

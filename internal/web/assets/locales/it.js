@@ -624,6 +624,7 @@ window.AUCOM_LOCALES.it = {
   "{count} older or unusable entries omitted": "{count} voci più vecchie o inutilizzabili omesse",
   "{count} older or unusable entry omitted": "{count} voce più vecchia o inutilizzabile omessa",
   "{errors} error finding(s), {warnings} warning(s)": "{errors} errore/i rilevati, {warnings} avviso/i",
+  "The build ran to the end, but the compiler warned {warnings} time(s), so this is not a complete result. Read the warnings in the stages below.": "La compilazione è arrivata in fondo, ma il compilatore ha dato {warnings} avviso/i, quindi il risultato non è completo. Leggi gli avvisi nelle fasi qui sotto.",
   "{input.NAME} {output.NAME} {option.NAME} {root.ROLE} are filled in when it runs.": "{input.NAME} {output.NAME} {option.NAME} {root.ROLE} vengono compilati al momento dell’esecuzione.",
   "{language} — not translated yet": "{language} — non ancora tradotta",
   "{n} downloaded to this computer.": "{n} scaricate su questo computer.",

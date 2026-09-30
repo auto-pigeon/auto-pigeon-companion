@@ -423,7 +423,12 @@ func printBuildPreview(env *Env, m *build.Manifest) {
 }
 
 func printBuildOutcome(env *Env, m *build.Manifest) {
-	fmt.Fprintf(env.Stdout, "\nbuild %s — %s\n", m.BuildID, m.State)
+	if warned := m.Warnings(); m.Succeeded() && warned > 0 {
+		// Exit 0 with warnings is not a finished map: say so on the line a person reads first.
+		fmt.Fprintf(env.Stdout, "\nbuild %s — %s with %d warning(s): not a complete result; read the warnings below\n", m.BuildID, m.State, warned)
+	} else {
+		fmt.Fprintf(env.Stdout, "\nbuild %s — %s\n", m.BuildID, m.State)
+	}
 	fmt.Fprintf(env.Stdout, "  pipeline  %s %s (%s)\n", m.Pipeline.ID, m.Pipeline.Version, m.Pipeline.Trust)
 	printMaturityNote(env, m.EngineFamily, "  ")
 	if m.Error != "" {
