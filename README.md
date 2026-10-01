@@ -592,6 +592,25 @@ stage's result is unusable although the program exited 0; requires severity
 `error`) and `"class": "<token>"`. On the Build page each stage lists its
 findings with the compiler's own line, links to its job, and *What this build
 read* shows the conversion, the staged game data and each bound package.
+A refusal is shown as its first line — an extractor refusal such as
+`apmap-to-q3map refused [q3map_shader_unsafe]: …` leads with the extractor's own
+reason — with everything else the program printed behind *Technical details*,
+and it is recorded once in Activity, with its class. Reloading the page while a
+build runs opens that build again, with its Cancel button; the build itself
+never depended on the page, and a reload starts no second compiler.
+
+ioquake3 prints `Quake 3 data files are missing.` and exits 3 when `baseq3`
+holds no `pak0.pk3`; the engine job then fails with the class
+`game_data_missing` rather than `tool_failed`:
+
+```console
+$ companion engine run auto-pigeon.engine.ioquake3 --action host_dedicated --map mymap --mod baseq3
+…
+job …: failed — did not finish successfully
+  exit status 3
+$ companion job show <job id> --json | jq -r .failure_class
+game_data_missing
+```
 
 **Checks** — all three must pass before a change is merged:
 
