@@ -163,6 +163,7 @@ the router resolves those for you rather than making you read the table.
 | --- | --- | --- |
 | `aucom.quake2-maturity` | Quake II is work in progress, and no document may say otherwise | quake2, maturity, work-in-progress, engine-family, capability, toolchain |
 | `aucom.quake3-maturity` | Quake III is work in progress too, and it is not Quake II renumbered | quake3, q3map2, maturity, shader, patch, toolchain, dependencies |
+| `aucom.quake3-package` | A Quake III map package carries only what was granted, and a run waits for the engine's own word | quake3, pk3, package, rights, licence, grant, install, load-order, launch, map-load, base-game |
 | `aucom.join-readiness` | Joining is one readiness model, and a link starts nothing | join, game, live-game, readiness, ticket, stage, assetsync, uri, engine |
 
 **Shipping it**

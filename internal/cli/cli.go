@@ -172,8 +172,8 @@ var commands = []Command{
 		Run:     runBuild,
 	},
 	{
-		Name: "package", Usage: "targets | preview | create | inspect | verify | extract",
-		Summary: "build a PAK or PK3 from what a build produced, and read one somebody else made",
+		Name: "package", Usage: "targets | preview | create | inspect | verify | extract | map …",
+		Summary: "build a PAK or PK3 from what a build produced, read one somebody else made, and package, install and run a Quake III map",
 		Run:     runPackage,
 	},
 	{

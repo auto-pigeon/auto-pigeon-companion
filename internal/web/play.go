@@ -18,6 +18,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/playrun"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/q3pack"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/q3packages"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/texturebundle"
 )
@@ -521,9 +522,44 @@ func (s *Server) gameRootFor(profileID string) (string, error) {
 	return root, nil
 }
 
+// errPlayIsNotForQuake3 is why Build & Run refuses a Quake III pipeline.
+//
+// Build & Run stages a LOOSE level — `<mod>/maps/<map>.bsp` and the map's WADs —
+// which is the whole of what a Quake map needs to be played. A Quake III map
+// names shaders, images and models that have to travel with it in a PK3, and
+// which of those may be redistributed is a question only its author can answer.
+// Running one through this sequence produced a mod folder with a BSP in it and
+// an engine that drew the default texture everywhere (`Q3_010`, row 24): a run
+// that reported success and showed nothing. So the sequence says where the
+// Quake III path is, rather than doing half of it.
+var errPlayIsNotForQuake3 = errors.New(
+	"Build & Run plays a Quake map by putting its level in a mod folder. A Quake III map needs its " +
+		"textures, shaders and models packaged with it, and you have to say which of them may be " +
+		"redistributed: build it under Build, then use “Package and run this map” under the build's result")
+
+// playRefuses reports a pipeline Build & Run does not run.
+func (s *Server) playRefuses(pipelineID string) error {
+	catalog, err := s.catalog()
+	if err != nil {
+		return nil // the sequence's own first stage reports a catalog it cannot read
+	}
+	entry, err := catalog.Lookup(pipelineID)
+	if err != nil {
+		return nil
+	}
+	if documentFamily(entry.Profile) == q3pack.FamilyQuake3 {
+		return errPlayIsNotForQuake3
+	}
+	return nil
+}
+
 func (s *Server) handlePlayStart(w http.ResponseWriter, r *http.Request) {
 	var body playRequestBody
 	if !decodeJSON(w, r, &body) {
+		return
+	}
+	if err := s.playRefuses(body.Pipeline); err != nil {
+		writeError(w, http.StatusConflict, err)
 		return
 	}
 	gameRoot, err := s.gameRootFor(body.Engine)
@@ -929,6 +965,10 @@ func textureView(entry texturebundle.Entry, wasCached bool) map[string]any {
 func (s *Server) handlePlayPlan(w http.ResponseWriter, r *http.Request) {
 	var body playRequestBody
 	if !decodeJSON(w, r, &body) {
+		return
+	}
+	if err := s.playRefuses(body.Pipeline); err != nil {
+		writeError(w, http.StatusConflict, err)
 		return
 	}
 	gameRoot, err := s.gameRootFor(body.Engine)

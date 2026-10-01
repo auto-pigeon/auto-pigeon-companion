@@ -94,9 +94,10 @@ hold it up:
    loose.** A review that called every `common/*` shader missing is a review a
    user learns to click past — and one nobody reads is worse than none. What a
    base-game shader pulls in is NOT followed: it is inside somebody else's PK3.
-3. **The limits are a member of the report**, not a paragraph in a README. A
-   model's internal references are not read, and the report says so where the
-   model is listed. Do not remove a limit sentence; add one when you add a gap.
+3. **The limits are a member of the report**, not a paragraph in a README. An
+   `.md3` model's own shader names ARE read since `Q3_011`; any other model
+   format's are not, and the report says so where that model is listed. Do not
+   remove a limit sentence; add one when you add a gap.
 4. **`--accept-missing` requires `--reason`, prints the review first and prints
    the reason back.** It is not a way to switch the check off, and there must
    never be a flag that skips the review itself.

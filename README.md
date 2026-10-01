@@ -269,7 +269,7 @@ commands:
   job run | preview | list | show | logs | output | cancel | retry | artifacts | profiles   run a profile action as a supervised job, and inspect what ran
   autobuild list | show | on | off | pipeline | build-now | retry   rebuild a hosted map automatically when a new revision is saved (inside a running Companion)
   build run | preview | list | show | pipelines   build a map through a pipeline: several supervised jobs, wired, with a manifest
-  package targets | preview | create | inspect | verify | extract   build a PAK or PK3 from what a build produced, and read one somebody else made
+  package targets | preview | create | inspect | verify | extract | map …   build a PAK or PK3 from what a build produced, read one somebody else made, and package, install and run a Quake III map
   toolchain validate | show | canonicalize | digest | diff | list | schema | review | grant | withdraw | homepage | args  read, check and compare tool, engine and pipeline toolchains, and approve one to run
   acquire resolve   find a toolchain's programs on this machine (a folder, PATH, or a game's own copy); nothing is downloaded
   engine list | show | detect | bind | check | preview | run | stage | unstage   set up a Quake engine you already have, and start it as a supervised job
@@ -301,6 +301,7 @@ $ companion engine list                              # engines, and whether each
 $ companion engine bind auto-pigeon.engine.quakespasm --engine /opt/quakespasm/quakespasm
 $ companion engine bind auto-pigeon.engine.ioquake3 --executable engine=/opt/ioq3/ioquake3.x86_64 \
     --executable dedicated=/opt/ioq3/ioq3ded.x86_64 --game-root /opt/ioq3   # one flag per program
+$ companion package map preview --build <build id>   # what a Quake III map's PK3 would hold, and why
 $ companion game list                                # games being hosted now
 $ companion game join <link>                         # shows the exact command; --approve launches
 $ companion extractor convert map.apmap
@@ -611,6 +612,170 @@ job …: failed — did not finish successfully
 $ companion job show <job id> --json | jq -r .failure_class
 game_data_missing
 ```
+
+### Packaging a Quake III map, installing it and running it
+
+A Quake III engine finds everything a map names inside the game directory and
+the PK3 archives in it, so a compiled map runs on its author's machine and
+nowhere else until its dependencies travel with it. `companion package map`
+turns ONE finished Quake III build into ONE archive,
+`<game>/auto-pigeon-<map id>-<revision>.pk3`, holding `maps/<name>.bsp` and only
+the files you say may be redistributed. The base game is never packaged, and
+nothing is inferred from a file's name or from where it was found. Quake and
+Quake II packaging is `package preview` / `package create`, unchanged.
+
+**What the map needs is worked out twice**, because the compiler and an engine
+read different things: from the map source (what Q3Map2 looked for) and from the
+compiled BSP (what an engine will look for). A `misc_model` is baked into the
+BSP, so its `.md3` is a compile dependency and its skin is a runtime one; a
+`func_static`'s `model2` is the reverse. A shader's `qer_editorimage` is read by
+the compiler only and its stage images by the engine only — measured: Q3Map2
+2.5.17n warns when the editor image is absent and says nothing when a stage
+image is. So a compile that exited 0 with no warning is not a complete package.
+
+```console
+$ companion package map preview --build 20261001T132051Z-07597814
+package of build 20261001T132051Z-07597814: the map "q3011_room"
+  archive   apfree/auto-pigeon-q3011_room-local-498644628db4.pk3   (per_build)
+
+members, in the order the archive stores them (1, 62836 bytes):
+       62836  379775e17c4b  build_output   maps/q3011_room.bsp
+
+sources — what the build's content came from, and what you said about each:
+  apfree/zz_apq3011_assets.pk3  sha256 a7fea0a98f9954644d820b4c920a7d365fccf589b1b5251d156ab00444e5bb02
+      9 file(s) an engine needs; NO GRANT — nothing from it is packaged
+
+dependencies (8):
+  third_party_unresolved R       models/apq3011/beacon.md3
+  …
+  compile_only           C       models/apq3011/crate.md3
+  (C = the compiler reads it, R = an engine reads it)
+
+this package will not be written as it stands (9 reason(s)):
+  [rights_unresolved] textures/apq3011/wall.tga (image of textures/apq3011/wall) is not packaged: no grant covers apfree/zz_apq3011_assets.pk3 in your content folder
+  …
+```
+
+A **grant** is your answer to "may this be redistributed", for one archive (by
+its SHA-256, which `preview` prints), for the loose files of your content
+folder, or for one path. A grant for a path outranks the one for its archive.
+
+| flag | what you are saying |
+| --- | --- |
+| `--own-archive <sha256>`, `--own-loose`, `--own-path <path>` | it is your own work |
+| `--licensed-archive <sha256>=<licence>`, `--licensed-loose <licence>`, `--licensed-path <path>=<licence>` | you hold a licence that permits redistribution, and you name it |
+| `--deny-archive <sha256>`, `--deny-loose`, `--deny-path <path>` | it is not yours to redistribute; it stays out, and the package says so |
+| `--include <path>` | also carry this file (a licence text, a level shot); it needs a grant like any other |
+| `--accept-missing --reason "<text>"` | write the archive although an engine needs something it will not carry; the reason and the list are recorded in the package |
+
+Each dependency ends as one of: `user_authored` or `licensed` (packaged),
+`base_game` (the installed game supplies it; never packaged),
+`third_party_unresolved` (nobody has answered), `blocked` (you said no, or its
+archive could not be read safely, or its bytes are a known released file),
+`missing` (nothing the build read has it), or `compile_only`. `create` refuses
+— class `package_held` — while any file an engine needs is unresolved, blocked
+or missing:
+
+```console
+$ companion package map create --build 20261001T132051Z-07597814 \
+    --licensed-archive a7fea0a98f9954644d820b4c920a7d365fccf589b1b5251d156ab00444e5bb02=CC0-1.0 \
+    --include LICENSE-apq3011.txt
+wrote /home/you/.cache/auto-pigeon-companion/q3-packages/auto-pigeon-q3011_room-local-498644628db4-9ff2699767f3/auto-pigeon-q3011_room-local-498644628db4.pk3
+  package   auto-pigeon-q3011_room-local-498644628db4-9ff2699767f3
+  sha256    9ff2699767f390774f65f1b7adf3ad171cc625b2d04ecb7b3bb0346fd46a46c6
+  members   11, 84969 bytes unpacked, 9765 bytes as an archive
+  for       apfree/auto-pigeon-q3011_room-local-498644628db4.pk3
+$ companion package map list
+$ companion package map show auto-pigeon-q3011_room-local-498644628db4-9ff2699767f3
+```
+
+The archive is written by the same bounded writer as every other package here:
+members in byte order, fixed timestamps, no path that climbs out, no two paths
+that differ only in capitalisation, never over an existing file. Creating the
+same package twice produces the same bytes (`--out <dir>` writes it somewhere
+of your choosing instead of the package store).
+
+**Installing** puts the archive beside a game. The default, `--into managed`,
+does not write into your game folder at all: the engine is given a directory the
+Companion keeps, in which the game directory is real and holds the archive plus
+a link to each thing in yours. `--into game-folder` writes exactly one file into
+your game folder, never over another, and `uninstall` removes it only while it
+is still the file that was written.
+
+```console
+$ companion package map install auto-pigeon-q3011_room-local-498644628db4-9ff2699767f3 \
+    --engine auto-pigeon.engine.ioquake3 --base-game apfree --dry-run
+$ companion package map install auto-pigeon-q3011_room-local-498644628db4-9ff2699767f3 \
+    --engine auto-pigeon.engine.ioquake3 --base-game apfree
+installed …/q3-installs/auto-pigeon-q3011_room-local-498644628db4-managed-f1ba3c83bfde/base/apfree/auto-pigeon-q3011_room-local-498644628db4.pk3
+  installation  auto-pigeon-q3011_room-local-498644628db4-managed-f1ba3c83bfde
+  target        managed — /home/you/games/freegame is NOT written; its apfree is read through links
+  engine reads  fs_basepath …/base, fs_game apfree
+  searched before it in apfree: loose files in apfree
+$ companion package map installed
+$ companion package map uninstall auto-pigeon-q3011_room-local-498644628db4-managed-f1ba3c83bfde
+```
+
+Load order is checked before anything is installed. Measured on ioquake3 1.36: a
+loose file beats every archive of its game directory, among archives the later
+name wins without regard to case, and a mod directory beats the base game — so
+an archive named `auto-pigeon-…` loses to `pak0.pk3` and to any `z…` archive
+beside it. A map that something else would supply is refused
+(`load_order_shadowed`); any other member that would lose is listed.
+`--mod <name>` installs into a mod directory instead, where nothing of the base
+game is searched first.
+
+**Running** starts the engine and waits for the engine's own word. "The process
+started" is not "the map loaded": told to load a map it cannot find, ioquake3
+prints `Can't find map`, keeps running and later exits 0.
+
+```console
+$ companion package map run auto-pigeon-q3011_room-local-498644628db4-managed-f1ba3c83bfde \
+    --engine auto-pigeon.engine.ioquake3 --action host_dedicated --option port=27990 --check
+map load   ACCEPTED
+  The server loaded the map and started its game.
+  the engine said: InitGame: \sv_maxclients\8\…\mapname\q3011_room\…
+engine pid 1335921
+job        20261001T132150Z-93f4b5e33db6 (cancelled)   `companion job logs 20261001T132150Z-93f4b5e33db6` is the engine's whole output
+fs_game    apfree
+the engine was stopped
+```
+
+`map load` is `ACCEPTED` (the engine printed the line its profile marks
+`"signal": "map_loaded"`), `REFUSED` (it printed an error first, or stopped —
+the engine is then stopped rather than left idling, with a class such as
+`map_not_loaded`, `game_data_missing` or `engine_stopped`), or `NOT_OBSERVED`
+(it said neither within `--wait`; it is left running for you to look at — never
+a polite word for success). `--check` stops the engine once it has answered and
+returns that answer as the exit status; without it the command stays until the
+engine exits or you press Ctrl-C.
+
+**Game data.** `pak0.pk3` is id Software's and is yours to supply. Measured on
+ioquake3 1.36: whenever the base directory is called `baseq3` the engine insists
+on it and stops with `Quake 3 data files are missing` — `com_standalone 1` does
+not change that. A free game that is not Quake III keeps its data in a base
+directory of another name: build the map with that name as its mod, pass
+`--base-game <name>` when installing, and the run sends `+set com_basegame
+<name>`. In such a folder with only ioquake3's own GPL game code, the dedicated
+server loads a packaged map; the windowed client stops with
+`Client fatal crashed: Can't load default sound effect …` because Quake III's
+client needs data that ships in the game, and the run says so
+(`game_data_missing`) instead of reporting a running game.
+
+**On the page** the same three steps are the *Package and run this map* panel
+under a finished Quake III build in **Build**: answer for each source, read the
+ordered member list and the dependency table, create; choose the engine and the
+target and see where it would go; run, and read the pid, the engine's line and
+the link to its job. Build & Run does not run a Quake III map and says where
+this panel is.
+
+**What has been run where.** Linux x86-64 only: the real Q3Map2 2.5.17n and
+ioquake3 1.36, with no id Software data. Windows and macOS compile
+(`GOOS=windows`, `GOOS=darwin`) and their unit tests run in CI; no engine has
+been started there, and the managed install's links on Windows (a directory
+junction where a symbolic link is not permitted, a hard link for a file) have
+not been exercised on a Windows machine. No Quake III client session with real
+game data has been observed anywhere.
 
 **Checks** — all three must pass before a change is merged:
 

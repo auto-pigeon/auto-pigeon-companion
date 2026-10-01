@@ -33,7 +33,7 @@ a later prompt can undo by accident. `docs/adr/0007` is the record; this is what
 binds a change.
 
 **`internal/threat` is checked by the build, and that is the point.** Each of its
-50 rows names the tests that are its evidence, and `threat.Check` PARSES every
+52 rows names the tests that are its evidence, and `threat.Check` PARSES every
 `_test.go` in the tree — parses, not greps, because a name in a comment is not a
 test and a matrix satisfiable by writing a comment is satisfiable by writing a
 comment. **If you rename or delete a test, fix the row that cited it.** Do not

@@ -404,3 +404,20 @@ func TestTheQuake3PackageRoutesRefuseOtherBuilds(t *testing.T) {
 		t.Errorf("no build named = %d", status)
 	}
 }
+
+// Build & Run stages a loose level, which is not how a Quake III map is played.
+// It says where the Quake III path is instead of doing half of it.
+func TestBuildAndRunSendsAQuake3MapToThePackagePath(t *testing.T) {
+	m := newMachine(t)
+	for _, path := range []string{"/api/v1/play/plan", "/api/v1/play/runs"} {
+		status, body := m.call(http.MethodPost, path, map[string]any{
+			"asset_id": "abc", "revision_id": "def", "revision_number": 1,
+			"pipeline": "auto-pigeon.q3.fast-preview", "engine": "auto-pigeon.engine.ioquake3",
+			"action": "play_map", "map": "room", "mod": "apmod",
+		})
+		message, _ := body["error"].(string)
+		if status != http.StatusConflict || !strings.Contains(message, "Package and run this map") {
+			t.Errorf("%s for a Quake III pipeline = %d: %v", path, status, message)
+		}
+	}
+}
