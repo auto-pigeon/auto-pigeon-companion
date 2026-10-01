@@ -154,11 +154,11 @@ func TestNoConverterAndAnUnknownGameAreClassed(t *testing.T) {
 	}
 }
 
-// refusingConverter fails the way the real extractor does: exit 1, with its
+// terminalRefuser fails the way the real extractor does: exit 1, with its
 // reason inside the terminal record on its last stderr line.
-type refusingConverter struct{ fakeConverter }
+type terminalRefuser struct{ fakeConverter }
 
-func (r *refusingConverter) Run(context.Context, string, ...string) ([]byte, error) {
+func (r *terminalRefuser) Run(context.Context, string, ...string) ([]byte, error) {
 	return nil, &aue.ExitError{Subcommand: "convert", ExitCode: 1, Stderr: "auto-pigeon-extractor version 0.1.0-dev\n" +
 		`AUE-TERMINAL/1.0 {"outcome":"failed","reason":"schema_invalid","message":"The input document failed schema validation.",` +
 		`"detail":"apmap-to-q3map refused [q3map_shader_unsafe]: fac_1 (entities[0].content[2].faces[0]): shader \"textures/a/../../evil\" is not a safe Quake III shader path"}` +
@@ -175,7 +175,7 @@ func TestAnExtractorRefusalLeadsWithTheExtractorsOwnReason(t *testing.T) {
 	if err := os.WriteFile(apmap, []byte(`{"game":"quake3"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, _, _, err := ConvertAPMapInputsRecorded(context.Background(), &refusingConverter{},
+	_, _, _, err := ConvertAPMapInputsRecorded(context.Background(), &terminalRefuser{},
 		map[string]string{"source_map": apmap}, nil)
 	if err == nil || failure.Of(err) != failure.ConversionRefused {
 		t.Fatalf("err = %v (class %q)", err, failure.Of(err))
