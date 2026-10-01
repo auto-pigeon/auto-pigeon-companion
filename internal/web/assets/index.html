@@ -665,6 +665,102 @@
               <pre id="build-log" class="output" aria-label="Live build output" tabindex="0"></pre>
               <p id="build-log-note" class="muted"></p>
             </div>
+
+            <!-- Quake III: Package → Install → Run. Shown under a finished
+                 Quake III build; q3package.js fills it. Nothing here names a
+                 folder: an archive is its digest, a game directory is its name. -->
+            <div id="q3pkg-panel" class="q3pkg" hidden>
+              <h3>Package and run this map</h3>
+              <p class="muted">
+                One PK3 holding the compiled map and only the files you say may be
+                redistributed. The base game is never packaged. Then it is put
+                beside a game and the engine is started — and the engine itself
+                has to say the map loaded.
+              </p>
+
+              <section class="q3pkg-step" aria-labelledby="q3pkg-h-package">
+                <h4 id="q3pkg-h-package">1. Package</h4>
+                <div id="q3pkg-sources" class="q3pkg-sources"></div>
+                <p id="q3pkg-plan-message" class="message" role="status"></p>
+                <div id="q3pkg-plan"></div>
+                <div class="field">
+                  <label for="q3pkg-include">Also carry these files <span class="hint">(optional — a licence text, a level shot; separate with spaces)</span></label>
+                  <input id="q3pkg-include" type="text" placeholder="LICENSE.txt levelshots/mymap.jpg" />
+                </div>
+                <div id="q3pkg-accept-row" hidden>
+                  <label class="check">
+                    <input type="checkbox" id="q3pkg-accept" />
+                    Write the package without the files listed above
+                  </label>
+                  <div class="field" id="q3pkg-reason-field" hidden>
+                    <label for="q3pkg-reason">Why <span class="hint">(recorded in the package, word for word)</span></label>
+                    <input id="q3pkg-reason" type="text" placeholder="the texture pack is third-party; players install it themselves" />
+                  </div>
+                </div>
+                <div class="row">
+                  <button type="button" id="q3pkg-create" class="primary" disabled>Create the package</button>
+                </div>
+                <p id="q3pkg-create-message" class="message" role="alert"></p>
+                <div id="q3pkg-created"></div>
+              </section>
+
+              <section class="q3pkg-step" id="q3pkg-step-install" aria-labelledby="q3pkg-h-install" hidden>
+                <h4 id="q3pkg-h-install">2. Install</h4>
+                <div class="row">
+                  <div class="field grow">
+                    <label for="q3pkg-engine">Engine</label>
+                    <select id="q3pkg-engine"></select>
+                  </div>
+                  <div class="field grow">
+                    <label for="q3pkg-into">Where</label>
+                    <select id="q3pkg-into">
+                      <option value="managed">A copy the Companion keeps — my game folder is not written</option>
+                      <option value="game_folder">Into my game folder — one file, never over another</option>
+                    </select>
+                  </div>
+                </div>
+                <p id="q3pkg-engine-note" class="muted"></p>
+                <div class="row">
+                  <div class="field">
+                    <label for="q3pkg-mod">Game directory <span class="hint">(optional — a mod name)</span></label>
+                    <input id="q3pkg-mod" type="text" placeholder="the package's own" />
+                  </div>
+                  <div class="field">
+                    <label for="q3pkg-basegame">Base directory <span class="hint">(only for a free game that is not Quake III)</span></label>
+                    <input id="q3pkg-basegame" type="text" placeholder="baseq3" />
+                  </div>
+                </div>
+                <div class="row">
+                  <button type="button" id="q3pkg-install-preview" class="secondary">Show where it would go</button>
+                  <button type="button" id="q3pkg-install" class="primary">Install</button>
+                  <button type="button" id="q3pkg-uninstall" class="danger" hidden>Remove this install</button>
+                </div>
+                <p id="q3pkg-install-message" class="message" role="alert"></p>
+                <div id="q3pkg-install-out"></div>
+              </section>
+
+              <section class="q3pkg-step" id="q3pkg-step-run" aria-labelledby="q3pkg-h-run" hidden>
+                <h4 id="q3pkg-h-run">3. Run</h4>
+                <div class="row">
+                  <div class="field grow">
+                    <label for="q3pkg-action">What to do</label>
+                    <select id="q3pkg-action"></select>
+                  </div>
+                  <div class="field">
+                    <label for="q3pkg-port">Port <span class="hint">(a server only; optional)</span></label>
+                    <input id="q3pkg-port" type="text" inputmode="numeric" placeholder="27960" />
+                  </div>
+                </div>
+                <p id="q3pkg-action-note" class="muted"></p>
+                <div class="row">
+                  <button type="button" id="q3pkg-run" class="primary">Run and wait for the map</button>
+                  <button type="button" id="q3pkg-stop" class="danger" hidden>Stop the engine</button>
+                </div>
+                <p id="q3pkg-run-message" class="message" role="alert"></p>
+                <div id="q3pkg-run-out"></div>
+              </section>
+            </div>
+
             <div class="bwiz-nav">
               <button type="button" class="secondary" data-go="2">Build another map</button>
               <button type="button" id="build-play" class="primary" hidden>Play this build</button>
@@ -1342,6 +1438,7 @@
     <script src="core.js"></script>
     <script src="joboutput.js"></script>
     <script src="library.js"></script>
+    <script src="q3package.js"></script>
     <script src="build.js"></script>
     <script src="play.js"></script>
     <script src="autobuild.js"></script>

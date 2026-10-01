@@ -174,6 +174,9 @@ func (s *Server) cancelWork(work []ActiveWork) {
 func (s *Server) Close() {
 	s.endHostedGames()
 	s.playLive.CancelAll()
+	// A Quake III run that is still waiting for its engine's word stops
+	// waiting, and stops the engine it started on its way out.
+	s.q3runs.cancelWaiting()
 	for _, run := range s.builds.active() {
 		run.cancel()
 	}

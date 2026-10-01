@@ -772,8 +772,14 @@
     $("build-output-heading").textContent = body.live ? "Output so far" : "Output";
     $("build-current-empty").hidden = true;
     // Play this build: a finished build with a level goes straight to Run.
-    $("build-play").hidden = !(manifest.state === "succeeded" &&
+    // A Quake III map is not played by dropping its BSP into a mod folder: its
+    // textures, shaders and models have to travel with it. That build gets the
+    // Package → Install → Run panel instead (q3package.js), which is told about
+    // every render and ignores the ones for a build it is already showing.
+    const quake3 = manifest.engine_family === "quake3";
+    $("build-play").hidden = quake3 || !(manifest.state === "succeeded" &&
       (manifest.outputs || []).some((output) => output.name === "bsp" && output.path && !output.missing));
+    window.AUCOM.q3package?.show(manifest, Boolean(body.live));
     if (body.live) {
       outcome = manifest.state;
       renderSteps();

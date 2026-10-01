@@ -110,7 +110,10 @@ type Server struct {
 	picker        *pathpick.Picker
 	scanner       engine.Scanner
 	builds        *buildRuns
-	logf          func(format string, args ...any)
+	// q3runs is the Quake III package runs this process is waiting on or has
+	// waited on. See q3package.go.
+	q3runs *q3Runs
+	logf   func(format string, args ...any)
 	// games is the Games area's process-wide state: download and launch
 	// coordination, and the reviews waiting for an approval.
 	games  *gameState
@@ -283,6 +286,7 @@ func NewServer(options Options) (*Server, error) {
 		picker:       picker,
 		scanner:      options.Scanner,
 		builds:       newBuildRuns(),
+		q3runs:       newQ3Runs(),
 		logf:         logf,
 		games:        newGameState(),
 		newAUB:       newAUB,
@@ -403,7 +407,7 @@ func (s *Server) api() map[string]http.HandlerFunc {
 		s.jobAPI(), s.profileAPI(), s.libraryAPI(),
 		s.engineAPI(), s.buildAPI(), s.playAPI(), s.settingsAPI(), s.siteLinksRoutes(), s.hostingRoutes(), s.bugReportRoutes(), s.pathAPI(),
 		s.feedbackAPI(), s.aboutAPI(), s.accountAPI(), s.gamesAPI(), s.noticesAPI(),
-		s.lifecycleAPI(), s.leakTestAPI(), s.autobuildAPI(),
+		s.lifecycleAPI(), s.leakTestAPI(), s.autobuildAPI(), s.q3API(),
 	} {
 		for pattern, handler := range table {
 			if _, clash := routes[pattern]; clash {

@@ -1309,3 +1309,28 @@ main { padding: 1.25rem 1.75rem 3rem; }
 .autobuild__controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.5rem 1rem; }
 .autobuild__switch { font-weight: 600; }
 .autobuild__status { margin-block: 0.5rem 0.25rem; }
+
+/* --- Quake III: Package → Install → Run (q3package.js) ----------------------
+   A panel under a finished build. Three numbered steps, each a block with a
+   rule above it; the dependency table scrolls sideways on a narrow window
+   rather than breaking the page. */
+.q3pkg { margin-top: 1.2rem; padding-top: 1rem; border-top: 2px solid var(--line, var(--surface-2)); }
+.q3pkg-step { margin-top: 1rem; padding-top: 0.8rem; border-top: 1px solid var(--line, var(--surface-2)); }
+.q3pkg-step > h4 { margin: 0 0 0.4rem; }
+.q3pkg-sources > h5 { margin: 0.6rem 0 0.3rem; font-size: 0.95rem; }
+.q3pkg-source { padding: 0.5rem 0.7rem; margin: 0.4rem 0; background: var(--surface-2); border-radius: 6px; }
+.q3pkg-source__name { font-weight: 600; overflow-wrap: anywhere; }
+.q3pkg-block { margin: 0.6rem 0; }
+.q3pkg-block > summary { cursor: pointer; font-weight: 600; }
+.q3pkg-members { margin: 0.4rem 0 0; padding-left: 1.6rem; }
+.q3pkg-members > li { margin: 0.25rem 0; overflow-wrap: anywhere; }
+.q3pkg-deps { width: 100%; border-collapse: collapse; margin-top: 0.4rem; font-size: 0.9rem; display: block; overflow-x: auto; }
+.q3pkg-deps th, .q3pkg-deps td { text-align: left; vertical-align: top; padding: 0.35rem 0.6rem 0.35rem 0; border-bottom: 1px solid var(--surface-2); }
+.q3pkg-files { margin: 0.2rem 0 0; padding-left: 1.1rem; }
+.q3pkg-files > li { overflow-wrap: anywhere; }
+.q3pkg-problems { margin: 0.5rem 0; padding-left: 0; list-style: none; }
+.q3pkg-problems > li { margin: 0.3rem 0; overflow-wrap: anywhere; }
+.q3pkg-facts { display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 0.9rem; margin: 0.5rem 0; }
+.q3pkg-facts dt { color: var(--ink-muted); }
+.q3pkg-facts dd { margin: 0; overflow-wrap: anywhere; }
+.q3pkg label.check { display: flex; gap: 0.5rem; align-items: center; margin: 0.5rem 0; }
