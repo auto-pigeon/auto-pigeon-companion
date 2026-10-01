@@ -1,9 +1,10 @@
 package playrun
 
 import (
-	"encoding/json"
 	"errors"
 	"strings"
+
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/aue"
 )
 
 // What a failed run says to a person, as opposed to what it recorded.
@@ -14,33 +15,13 @@ import (
 // code, the AUE-TERMINAL record and an incident envelope, in red — and the
 // remedy blaming the map for what was a missing setting on this computer.
 
-// terminalMarker is how AUE's published protocol begins its last stderr line.
-const terminalMarker = "AUE-TERMINAL/1.0 "
-
 // ExtractorTerminal is the part of AUE's terminal record a person is shown.
-type ExtractorTerminal struct {
-	Reason  string `json:"reason"`
-	Message string `json:"message"`
-	Detail  string `json:"detail"`
-}
+// The reader is internal/aue's: a build that converts a map reads the same
+// record (Q3_010), and two readers would be two opinions about one line.
+type ExtractorTerminal = aue.Terminal
 
 // extractorTerminal finds AUE's terminal record inside an error's text.
-func extractorTerminal(text string) (ExtractorTerminal, bool) {
-	for _, line := range strings.Split(text, "\n") {
-		at := strings.Index(line, terminalMarker)
-		if at < 0 {
-			continue
-		}
-		var record ExtractorTerminal
-		if err := json.Unmarshal([]byte(strings.TrimSpace(line[at+len(terminalMarker):])), &record); err != nil {
-			continue
-		}
-
-		return record, true
-	}
-
-	return ExtractorTerminal{}, false
-}
+func extractorTerminal(text string) (ExtractorTerminal, bool) { return aue.ReadTerminal(text) }
 
 // Reasons AUE gives when the MAP is what it could not use.
 var mapReasons = map[string]bool{

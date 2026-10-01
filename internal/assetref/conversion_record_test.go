@@ -153,3 +153,43 @@ func TestNoConverterAndAnUnknownGameAreClassed(t *testing.T) {
 		t.Errorf("unknown game: class %q (%v)", failure.Of(err), err)
 	}
 }
+
+// refusingConverter fails the way the real extractor does: exit 1, with its
+// reason inside the terminal record on its last stderr line.
+type refusingConverter struct{ fakeConverter }
+
+func (r *refusingConverter) Run(context.Context, string, ...string) ([]byte, error) {
+	return nil, &aue.ExitError{Subcommand: "convert", ExitCode: 1, Stderr: "auto-pigeon-extractor version 0.1.0-dev\n" +
+		`AUE-TERMINAL/1.0 {"outcome":"failed","reason":"schema_invalid","message":"The input document failed schema validation.",` +
+		`"detail":"apmap-to-q3map refused [q3map_shader_unsafe]: fac_1 (entities[0].content[2].faces[0]): shader \"textures/a/../../evil\" is not a safe Quake III shader path"}` +
+		"\n" + `{"event":"incident.raised"}`}
+}
+
+// Q3_007 recorded that `q3map_shader_unsafe` "was not shown in the Companion
+// page". It was in the text, after an exit code and a version banner, inside a
+// JSON record. The refusal now LEADS with the extractor's own reason, and
+// keeps everything the extractor printed underneath.
+func TestAnExtractorRefusalLeadsWithTheExtractorsOwnReason(t *testing.T) {
+	stage := t.TempDir()
+	apmap := filepath.Join(stage, "room.apmap")
+	if err := os.WriteFile(apmap, []byte(`{"game":"quake3"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, _, _, err := ConvertAPMapInputsRecorded(context.Background(), &refusingConverter{},
+		map[string]string{"source_map": apmap}, nil)
+	if err == nil || failure.Of(err) != failure.ConversionRefused {
+		t.Fatalf("err = %v (class %q)", err, failure.Of(err))
+	}
+	first, rest, _ := strings.Cut(err.Error(), "\n")
+	for _, want := range []string{"[q3map_shader_unsafe]", "fac_1", "is not a safe Quake III shader path", `"source_map"`} {
+		if !strings.Contains(first, want) {
+			t.Errorf("the first line does not say %q:\n%s", want, first)
+		}
+	}
+	if strings.Contains(first, "AUE-TERMINAL") || strings.Contains(first, "exit code") {
+		t.Errorf("the first line still carries the protocol's own framing:\n%s", first)
+	}
+	if !strings.Contains(rest, "AUE-TERMINAL/1.0") || !strings.Contains(rest, "exit code 1") {
+		t.Errorf("what the extractor printed was not kept underneath:\n%s", rest)
+	}
+}

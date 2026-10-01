@@ -138,8 +138,7 @@ func convertAPMapInputs(ctx context.Context, runner aue.Runner, resolved map[str
 			return nil, nil, nil, fmt.Errorf("the input %q: creating %s: %w", name, dir, err)
 		}
 		if _, err := runner.Run(ctx, "convert", direction, "--input", source, "--output", dir, "--json"); err != nil {
-			return nil, nil, nil, failure.As(failure.ConversionRefused,
-				fmt.Errorf("the input %q: converting it to a .map: %w", name, err))
+			return nil, nil, nil, failure.As(failure.ConversionRefused, conversionError(name, err))
 		}
 		stem := strings.TrimSuffix(filepath.Base(source), filepath.Ext(source))
 		target := filepath.Join(dir, stem+".map")
@@ -174,6 +173,24 @@ func convertAPMapInputs(ctx context.Context, runner aue.Runner, resolved map[str
 		}
 	}
 	return out, sources, conversions, nil
+}
+
+// conversionError says why the extractor would not write a `.map`, with the
+// extractor's own reason FIRST.
+//
+// The reason is in the terminal record on the extractor's last stderr line —
+// `apmap-to-q3map refused [q3map_shader_unsafe]: fac_… : shader "…" is not a
+// safe Quake III shader path` — after an exit code and a version banner and
+// before an incident envelope. Printed whole, it was all there and nobody
+// could find it (`Q3_007`: "was not shown in the Companion page"). So the
+// sentence a person reads is the extractor's, and everything it printed stays
+// underneath, because that is still the record.
+func conversionError(name string, err error) error {
+	if terminal, ok := aue.ReadTerminal(err.Error()); ok && terminal.Sentence() != "" {
+		return fmt.Errorf("the input %q: the extractor would not convert it to a .map: %s\n%w",
+			name, terminal.Sentence(), err)
+	}
+	return fmt.Errorf("the input %q: converting it to a .map: %w", name, err)
 }
 
 // conversionManifestSuffix is what the extractor's Quake III direction names
