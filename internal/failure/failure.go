@@ -57,6 +57,22 @@ const (
 	ConversionRefused = "conversion_refused"
 	// FatalDiagnostic: a profile's `fatal` rule matched and named no class.
 	FatalDiagnostic = "fatal_diagnostic"
+	// PackageHeld: a Quake III map package was not written because something
+	// an engine needs is missing, ungranted or refused.
+	PackageHeld = "package_held"
+	// InstallConflict: a package's archive could not be installed because a
+	// file of its name is already there and is not the one this program put.
+	InstallConflict = "install_conflict"
+	// LoadOrderShadowed: the package was not installed because another archive
+	// or a loose file in the same game directory would be loaded INSTEAD of
+	// its map.
+	LoadOrderShadowed = "load_order_shadowed"
+	// MapNotLoaded: the engine started and did not accept the map — it said it
+	// could not find it, or stopped with an error before loading it.
+	MapNotLoaded = "map_not_loaded"
+	// EngineStopped: the engine process ended before it reported loading the
+	// map and printed no line that says why.
+	EngineStopped = "engine_stopped"
 )
 
 // Error is an error with a class.

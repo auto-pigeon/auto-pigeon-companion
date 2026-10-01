@@ -382,3 +382,10 @@ func hashFile(path string) (string, error) {
 
 	return hex.EncodeToString(hash.Sum(nil)), nil
 }
+
+// LinkDir makes link a link to the directory source: a symbolic link, or on
+// Windows without the privilege for one, a directory junction. It is the one
+// implementation of "let an engine read the user's game folder without copying
+// it", exported for the other place that needs exactly that — a Quake III
+// package installed beside a base game it must not write into.
+func LinkDir(source, link string) error { return linkDir(source, link) }
