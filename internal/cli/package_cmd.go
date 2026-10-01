@@ -36,6 +36,8 @@ const packageUsage = `usage:
   companion package verify  <archive> [--format pak|pk3] [--json]
                                                            read every member and check it
   companion package extract <archive> --dest <dir> [--only <path>]... [--replace] [--json]
+  companion package map ...                                one Quake III build as one PK3, installed and
+                                                           run; see "companion package map --help"
 
 selection:
   --from <dir>              package a directory's contents at the archive root (repeatable)
@@ -82,6 +84,8 @@ func runPackage(env *Env, args []string) int {
 		return packageInspect(env, rest, true)
 	case "extract":
 		return packageExtract(env, rest)
+	case "map":
+		return runPackageMap(env, rest)
 	case "-h", "--help", "help":
 		fmt.Fprint(env.Stdout, packageUsage)
 		return 0
@@ -211,6 +215,13 @@ func packageBuild(env *Env, args []string, previewOnly bool) int {
 		manifest, err := loadBuildManifest(env, settings, *buildID)
 		if err != nil {
 			return fail(env, err)
+		}
+		if buildIsQuake3(manifest) {
+			// Said, not enforced: this command packages what was selected and
+			// is unchanged. The other one works out what an engine needs.
+			fmt.Fprintf(env.Stderr, "note: build %s is a Quake III build. `companion package map preview --build %s` "+
+				"works out what an engine needs from the compiled map and packages it under the rights you grant; "+
+				"this command packages the build's outputs as selected.\n", manifest.BuildID, manifest.BuildID)
 		}
 		buildFiles, refs, digests := packageFromBuild(manifest)
 		files = append(files, buildFiles...)

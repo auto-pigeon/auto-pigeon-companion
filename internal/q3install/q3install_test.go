@@ -461,3 +461,31 @@ func TestAPreviewWritesNothing(t *testing.T) {
 		t.Error("a preview recorded something")
 	}
 }
+
+// A free standalone game does not call its base directory `baseq3`. A map
+// built for "the base game" goes into the base directory this game folder has.
+func TestAMapForTheBaseGameGoesIntoThisGameFoldersBaseDirectory(t *testing.T) {
+	w := newWorld(t, "baseq3")
+	write(t, filepath.Join(w.gameRoot, "baseoa", "pak0.pk3"), zipBytes(t, map[string]string{"default.cfg": "// free"}))
+	request := w.request(Managed)
+	request.BaseGame = "baseoa"
+	installation, err := Install(context.Background(), request)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	if installation.BaseGame != "baseoa" || installation.Game != "baseoa" || installation.FSGame != "baseoa" {
+		t.Errorf("%+v", installation)
+	}
+	if !strings.HasSuffix(filepath.ToSlash(installation.Archive.Path), "base/baseoa/"+testArchive) {
+		t.Errorf("the archive went to %s", installation.Archive.Path)
+	}
+	// A map built for a MOD stays in its mod, whatever the base is called.
+	w = newWorld(t, "apmod")
+	request = w.request(Managed)
+	request.BaseGame = "baseoa"
+	write(t, filepath.Join(w.gameRoot, "baseoa", "pak0.pk3"), zipBytes(t, map[string]string{"default.cfg": "// free"}))
+	installation, err = Install(context.Background(), request)
+	if err != nil || installation.Game != "apmod" || installation.BaseGame != "baseoa" {
+		t.Fatalf("%v %+v", err, installation)
+	}
+}

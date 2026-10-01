@@ -90,7 +90,8 @@ type Request struct {
 	// GameRoot is the user's game folder: the directory that CONTAINS the base
 	// game directory.
 	GameRoot string
-	// BaseGame is the base game directory's name. Empty means the package's.
+	// BaseGame is the name of the base directory in THIS game folder. Empty
+	// means the package's own, `baseq3`. A free standalone game names another.
 	BaseGame string
 	// Game is the directory the archive goes into. Empty means the package's
 	// own: the mod the map was built for, or the base game.
@@ -241,6 +242,14 @@ func resolve(request Request) (*planned, error) {
 	game := request.Game
 	if game == "" {
 		game = record.Plan.GameDir
+		// A map built for the base game goes into THIS game folder's base
+		// directory, whatever that is called. A free standalone game does not
+		// call it `baseq3` — measured: ioquake3 insists on Quake III's own
+		// data in a directory of that name — so the name the build used for
+		// "the base game" is not the name to install under.
+		if strings.EqualFold(record.Plan.GameDir, record.Plan.BaseGame) {
+			game = baseGame
+		}
 	}
 	for _, name := range []string{baseGame, game} {
 		if name == "" {

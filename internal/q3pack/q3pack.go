@@ -307,9 +307,9 @@ func (p *Plan) Blocked(accepted bool) error {
 	}
 	first := held[0]
 	if len(held) == 1 {
-		return fmt.Errorf("q3pack: %s", first.Message)
+		return errors.New(first.Message)
 	}
-	return fmt.Errorf("q3pack: %d things stop this package, starting with: %s", len(held), first.Message)
+	return fmt.Errorf("%d things stop this package, starting with: %s", len(held), first.Message)
 }
 
 // Request is what a plan is made from.
@@ -620,15 +620,14 @@ func problemFor(dependency Dependency, file File) Problem {
 	switch file.Disposition {
 	case Missing:
 		problem.Code = ProblemMissing
-		problem.Message = fmt.Sprintf("%s needs %s (%s) and nothing this build read has it. An engine will draw "+
-			"the default texture, or drop the model or sound, in its place", dependency.Name, file.Path, file.Role)
+		problem.Message = fmt.Sprintf("%s (%s of %s) is in nothing this build read. An engine will draw the "+
+			"default texture, or drop the model or sound, in its place", file.Path, file.Role, dependency.Name)
 	case ThirdPartyUnresolved:
 		problem.Code = ProblemUnresolved
-		problem.Message = fmt.Sprintf("%s needs %s, and nobody has said whether it may be redistributed: %s",
-			dependency.Name, file.Path, file.Reason)
+		problem.Message = fmt.Sprintf("%s (%s of %s) is not packaged: %s", file.Path, file.Role, dependency.Name, file.Reason)
 	default:
 		problem.Code = ProblemBlocked
-		problem.Message = fmt.Sprintf("%s needs %s, and it will not be packaged: %s", dependency.Name, file.Path, file.Reason)
+		problem.Message = fmt.Sprintf("%s (%s of %s) is not packaged: %s", file.Path, file.Role, dependency.Name, file.Reason)
 	}
 	return problem
 }

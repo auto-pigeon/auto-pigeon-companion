@@ -114,6 +114,13 @@ func Create(prepared *Prepared, options Options) (*Record, error) {
 		Now:       options.Now,
 		Review:    pack.ReviewRecord{Authorized: authorized, Reason: grantsSummary(prepared.grants)},
 	})
+	if errors.Is(err, pack.ErrWouldOverwrite) {
+		// pack's own sentence offers a `--replace` this command does not have,
+		// and must not: a package somebody may already have installed or given
+		// away is not something to write different bytes over.
+		return nil, fmt.Errorf("%w: %s already holds %s. A map package is never written over; "+
+			"choose another directory", pack.ErrWouldOverwrite, options.Dir, plan.ArchiveName)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("q3pack: %w", err)
 	}

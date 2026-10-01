@@ -205,8 +205,7 @@ func (s *sources) candidate(file q3deps.File, target pack.Target) (*candidate, e
 	switch {
 	case entry.grant == nil:
 		entry.disposition = ThirdPartyUnresolved
-		entry.reason = fmt.Sprintf("it comes from %s, and nothing says that may be redistributed. Say it is your "+
-			"own work, name the licence you hold it under, or say it is not yours to ship", s.describe(entry.source))
+		entry.reason = "no grant covers " + s.describe(entry.source)
 	case entry.grant.Basis == BasisNotRedistributable:
 		entry.disposition = Blocked
 		entry.reason = fmt.Sprintf("you said %s is not yours to redistribute", s.describe(entry.source))

@@ -216,6 +216,19 @@ func TestMissingGameDataIsClassedAndShown(t *testing.T) {
 	if !jobs.cancelled {
 		t.Error("a client stuck on a missing player model was left running")
 	}
+	// With sound on it stops earlier still, and then WAITS in an error dialog:
+	// a live process that will never load the map (measured, the line below).
+	result, jobs = launch(t, "play_map", []string{
+		"^3WARNING: Failed to load sound sound/feedback/hit.wav!",
+		"----- Client Shutdown (Client fatal crashed: Can't load default sound effect sound/feedback/hit.wav) -----",
+	}, nil, 5*time.Second)
+	if result.MapLoad != Refused || result.FailureClass != failure.GameDataMissing || result.RuleID != "sound_data_missing" || !jobs.cancelled {
+		t.Fatalf("%+v", result)
+	}
+	result, _ = launch(t, "host_dedicated", []string{"----- Server Shutdown (Server fatal crashed: Hunk_Alloc failed on 1024) -----"}, nil, 5*time.Second)
+	if result.MapLoad != Refused || result.RuleID != "fatal" {
+		t.Fatalf("%+v", result)
+	}
 }
 
 // An engine that exits without a word is a refusal with its exit status.
@@ -318,5 +331,47 @@ func TestEveryQuake3ActionThatLoadsAMapNamesTheLineThatSaysSo(t *testing.T) {
 				t.Errorf("%s %s loads a map and names no map_loaded line", id, action.ID)
 			}
 		}
+	}
+}
+
+// Measured: ioquake3 insists on Quake III's own data in a base directory
+// called `baseq3`, and starts without it when told another name. The
+// installation knows which base directory it went into, so the engine is told.
+func TestAnEngineIsToldTheBaseDirectoryOfAFreeGame(t *testing.T) {
+	jobs := &fakeJobs{catalog: builtinCatalog(t)}
+	jobs.engine([]string{strings.Replace(lineInitGame, `\mapname\room\`, `\mapname\room\`, 1)}, nil)
+	installation := installed(t)
+	installation.BaseGame, installation.Game, installation.FSGame = "apfree", "apfree", "apfree"
+	result, err := Launch(context.Background(), jobs, Request{
+		Installation: installation, EngineProfileID: ioquake3, ActionID: "host_dedicated", Wait: 5 * time.Second,
+	})
+	if err != nil || !result.OK() {
+		t.Fatalf("%v %+v", err, result)
+	}
+	if jobs.submitted.Options[BaseGameOption] != "apfree" {
+		t.Errorf("the engine was not told its base directory: %+v", jobs.submitted.Options)
+	}
+
+	// Quake III's own base directory is not announced: the argv stays the
+	// engine's default.
+	jobs = &fakeJobs{catalog: builtinCatalog(t)}
+	jobs.engine([]string{lineInitGame}, nil)
+	if _, err := Launch(context.Background(), jobs, Request{
+		Installation: installed(t), EngineProfileID: ioquake3, ActionID: "host_dedicated", Wait: 5 * time.Second,
+	}); err != nil {
+		t.Fatalf("%v", err)
+	}
+	if _, sent := jobs.submitted.Options[BaseGameOption]; sent {
+		t.Errorf("a Quake III install was given a base directory option: %+v", jobs.submitted.Options)
+	}
+
+	// A different name from the person is a disagreement, not an override.
+	jobs = &fakeJobs{catalog: builtinCatalog(t)}
+	_, err = Launch(context.Background(), jobs, Request{
+		Installation: installation, EngineProfileID: ioquake3, ActionID: "host_dedicated",
+		Options: map[string]string{BaseGameOption: "otherfree"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "loads nothing") {
+		t.Errorf("a base directory that disagrees with the installation: %v", err)
 	}
 }

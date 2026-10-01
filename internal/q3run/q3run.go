@@ -37,6 +37,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/q3install"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/q3vfs"
 )
 
 // SchemaVersion versions [Result].
@@ -155,12 +156,75 @@ func jobRequest(request Request) job.Request {
 	}
 }
 
+// BaseGameOption is the option an engine action declares to be told the name
+// of a base directory that is not Quake III's own.
+const BaseGameOption = "base_game"
+
+// withBaseGame tells the engine which base directory the installation is in,
+// when that is not Quake III's own and the action can be told.
+//
+// Measured on ioquake3 1.36 (`Q3_011`): an engine pointed at a game folder
+// whose base directory is called `baseq3` insists on `pak0.pk3`, and one told
+// `com_basegame <another name>` starts without id data. The installation
+// already knows which directory it went into, so the run says so rather than
+// leaving a person to pass the same name twice — and refuses when they pass a
+// different one, because an engine reading one base directory while the map
+// sits in another loads nothing.
+func withBaseGame(request Request, action profile.Action) (Request, error) {
+	installation := request.Installation
+	declared := false
+	for _, option := range action.Options {
+		if option.Name == BaseGameOption {
+			declared = true
+		}
+	}
+	given := request.Options[BaseGameOption]
+	standard := strings.EqualFold(installation.BaseGame, q3vfs.BaseGame)
+	switch {
+	case given != "" && !strings.EqualFold(given, installation.BaseGame):
+		return request, fmt.Errorf("q3run: the option %s is %q, and the package is installed for the base "+
+			"directory %q. An engine reading one while the map is in the other loads nothing",
+			BaseGameOption, given, installation.BaseGame)
+	case standard || given != "" || !declared:
+		return request, nil
+	}
+	options := map[string]string{BaseGameOption: installation.BaseGame}
+	for name, value := range request.Options {
+		options[name] = value
+	}
+	request.Options = options
+	return request, nil
+}
+
 // Preview resolves the command a run would start, and starts nothing.
 func Preview(jobs Jobs, request Request) (*job.Job, error) {
-	if request.Installation == nil {
-		return nil, errors.New("q3run: nothing is installed to run")
+	request, _, err := resolve(jobs, request)
+	if err != nil {
+		return nil, err
 	}
 	return jobs.Preview(jobRequest(request))
+}
+
+// resolve finds the action a run names and completes the request for it.
+func resolve(jobs Jobs, request Request) (Request, profile.Action, error) {
+	if request.Installation == nil {
+		return request, profile.Action{}, errors.New("q3run: nothing is installed to run")
+	}
+	entry, err := jobs.Catalog().Lookup(request.EngineProfileID)
+	if err != nil {
+		return request, profile.Action{}, failure.As(failure.ToolUnavailable,
+			fmt.Errorf("q3run: the engine profile %s: %w", request.EngineProfileID, err))
+	}
+	action, found := entry.Profile.ActionByID(request.ActionID)
+	if !found {
+		return request, action, fmt.Errorf("q3run: %s has no %q action", entry.Profile.Metadata().Name, request.ActionID)
+	}
+	if !runsAMap(action) {
+		return request, action, fmt.Errorf("q3run: the %q action of %s loads no map; choose one that does",
+			request.ActionID, entry.Profile.Metadata().Name)
+	}
+	request, err = withBaseGame(request, action)
+	return request, action, err
 }
 
 // Launch starts the engine and waits for its word about the map.
@@ -169,25 +233,14 @@ func Preview(jobs Jobs, request Request) (*job.Job, error) {
 // after that is in the result, including a refusal: the job exists, has a log,
 // and is what a person opens to read why.
 func Launch(ctx context.Context, jobs Jobs, request Request) (*Result, error) {
-	installation := request.Installation
-	if installation == nil {
-		return nil, errors.New("q3run: nothing is installed to run")
+	request, action, err := resolve(jobs, request)
+	if err != nil {
+		return nil, err
 	}
+	installation := request.Installation
 	// The archive, again, immediately before the engine is started on it.
 	if err := q3install.Verify(installation); err != nil {
 		return nil, err
-	}
-	entry, err := jobs.Catalog().Lookup(request.EngineProfileID)
-	if err != nil {
-		return nil, failure.As(failure.ToolUnavailable, fmt.Errorf("q3run: the engine profile %s: %w", request.EngineProfileID, err))
-	}
-	action, found := entry.Profile.ActionByID(request.ActionID)
-	if !found {
-		return nil, fmt.Errorf("q3run: %s has no %q action", entry.Profile.Metadata().Name, request.ActionID)
-	}
-	if !runsAMap(action) {
-		return nil, fmt.Errorf("q3run: the %q action of %s loads no map; choose one that does",
-			request.ActionID, entry.Profile.Metadata().Name)
 	}
 	wait := request.Wait
 	if wait <= 0 {
@@ -307,11 +360,36 @@ func stop(jobs Jobs, result *Result, current *job.Job) {
 	if current != nil && current.State.Terminal() {
 		return
 	}
-	if cancelled, err := jobs.Cancel(result.JobID); err == nil && cancelled != nil {
-		result.EngineStopped = true
-		result.State = cancelled.State
+	cancelled, err := jobs.Cancel(result.JobID)
+	if err != nil || cancelled == nil {
+		return
 	}
+	result.EngineStopped = true
+	result.State = cancelled.State
+	// Until the process tree is gone, briefly: "stopped" is said of a process
+	// that has stopped, and a caller that exits on this result must not take a
+	// half-stopped engine's supervisor away with it.
+	result.State, result.ExitCode = Settle(jobs, result.JobID, cancelled)
 }
+
+// Settle waits, briefly, for a job that was told to stop to reach its final
+// state, and returns that state and its exit status.
+func Settle(jobs Jobs, id string, last *job.Job) (job.State, *int) {
+	deadline := time.Now().Add(stopWait)
+	for last != nil && !last.State.Terminal() && time.Now().Before(deadline) {
+		time.Sleep(50 * time.Millisecond)
+		if loaded, err := jobs.Get(id); err == nil {
+			last = loaded
+		}
+	}
+	if last == nil {
+		return "", nil
+	}
+	return last.State, last.ExitCode
+}
+
+// stopWait bounds the wait for a stopped engine to be gone.
+const stopWait = 10 * time.Second
 
 // stoppedMessage is the sentence for an engine that ended without loading.
 func stoppedMessage(finished *job.Job) string {
