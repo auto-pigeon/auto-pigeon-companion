@@ -34,6 +34,11 @@ type Deps struct {
 	// extractor, when the file is already a `.map`.
 	Convert func(ctx context.Context, request Request, mapFile string) (ConvertResult, error)
 
+	// BoundPackages returns the packages a saved Quake III map is bound to,
+	// fetched and verified, read out of the APMap itself. Optional: nil, or a
+	// nil result, means the map binds none — which is every Quake 1 map.
+	BoundPackages func(ctx context.Context, request Request, mapFile string) (*build.BoundPackages, error)
+
 	// Build runs the pipeline. `announce` is called as the manifest changes,
 	// which is how a compiling run reports the step and job a Cancel would
 	// have to stop.
@@ -108,6 +113,9 @@ type ConvertResult struct {
 	Path string
 	// Extractor identifies the program that ran, or is nil when none did.
 	Extractor *ExtractorRef
+	// Conversion is what the `.map` was converted from, for the build manifest.
+	// Nil when nothing was converted.
+	Conversion *build.Conversion
 }
 
 // InstallPlan is what a finished build offers the installer.

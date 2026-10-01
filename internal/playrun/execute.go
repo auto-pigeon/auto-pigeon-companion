@@ -185,6 +185,7 @@ func (s *Service) convert(ctx context.Context, record *Record) error {
 	record.Extractor = result.Extractor
 	if result.Path != "" && result.Path != record.MapFile {
 		record.ConvertedMap = result.Path
+		record.Conversion = result.Conversion
 	}
 	switch {
 	case result.Extractor == nil:
@@ -237,6 +238,21 @@ func (s *Service) compile(ctx context.Context, record *Record) error {
 	request.Inputs[name] = source
 	if record.MapSource != nil {
 		request.Sources[name] = *record.MapSource
+	}
+	if record.Conversion != nil {
+		request.Conversions = map[string]build.Conversion{name: *record.Conversion}
+	}
+	// The packages the saved map is bound to, read out of the APMap that was
+	// fetched — not out of the `.map`, which has nowhere to carry them — and
+	// resolved now rather than kept in the record: what is handed to the build
+	// is a verified file on this machine, and a path does not survive a restart
+	// as a fact.
+	if s.deps.BoundPackages != nil {
+		packages, err := s.deps.BoundPackages(ctx, record.Request, record.MapFile)
+		if err != nil {
+			return err
+		}
+		request.Packages = packages
 	}
 
 	announce := func(manifest *build.Manifest) {

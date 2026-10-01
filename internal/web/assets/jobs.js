@@ -175,7 +175,7 @@
   function keyOf(body) {
     return JSON.stringify([
       body.state, body.exit_code, body.error, body.timed_out, body.started_at, body.finished_at,
-      (body.diagnostics || []).length, (body.artifacts || []).map((a) => [a.name, a.missing]),
+      body.failure_class, (body.diagnostics || []).length, (body.artifacts || []).map((a) => [a.name, a.missing]),
       body.command?.shell, body.custom_args,
     ]);
   }
@@ -212,6 +212,9 @@
     if (body.error) {
       parts.push(el("p", { className: "message error", text: body.error }));
     }
+    if (body.failure_class) {
+      parts.push(el("p", { className: "mono failure-class", text: t("Kind of failure: {kind}", { kind: body.failure_class }) }));
+    }
     parts.push(
       el("p", {
         className: "mono",
@@ -230,7 +233,12 @@
       parts.push(el("h4", { text: "Findings" }));
       const list = el("ul");
       for (const diagnostic of body.diagnostics) {
-        list.append(el("li", { children: [badge(diagnostic.severity, diagnostic.severity === "error" ? "failed" : "queued"), document.createTextNode(" " + diagnostic.message)] }));
+        const row = el("li", { children: [badge(diagnostic.severity, diagnostic.severity === "error" ? "failed" : "queued"), document.createTextNode(" " + diagnostic.message)] });
+        // The program's own line beside the rule's sentence, and the finding's
+        // kind: "a model could not be opened" does not say WHICH model.
+        if (diagnostic.class) row.append(el("span", { className: "stage-detail", text: " [" + diagnostic.class + "]" }));
+        if (diagnostic.raw && diagnostic.raw !== diagnostic.message) row.append(el("pre", { className: "output", text: diagnostic.raw }));
+        list.append(row);
       }
       parts.push(list);
     }

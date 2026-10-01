@@ -339,6 +339,10 @@ type Record struct {
 	Extractor *ExtractorRef `json:"extractor,omitempty"`
 	// ConvertedMap is the `.map` the extractor produced, when one was needed.
 	ConvertedMap string `json:"converted_map,omitempty"`
+	// Conversion is what ConvertedMap was converted from: the APMap's digest
+	// and identity, and the extractor's conversion manifest. The build is
+	// handed it, so the build manifest carries it (Q3_010).
+	Conversion *build.Conversion `json:"conversion,omitempty"`
 
 	// BuildID names the build manifest, and CurrentStep and CurrentJob say
 	// which step of it is running — which is what a Cancel button needs.

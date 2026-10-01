@@ -18,6 +18,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/playrun"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/q3packages"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/texturebundle"
 )
 
@@ -104,6 +105,7 @@ func (s *Server) playService() (*playrun.Service, error) {
 		FetchMap:        s.playFetchMap,
 		FetchBundle:     s.playFetchBundle,
 		Convert:         s.playConvert,
+		BoundPackages:   s.playBoundPackages,
 		MapInputName:    s.playMapInputName,
 		Build:           s.playBuild,
 		PlanInstall:     s.playPlanInstall,
@@ -231,15 +233,20 @@ func (s *Server) playConvert(ctx context.Context, _ playrun.Request, mapFile str
 	if !strings.EqualFold(filepath.Ext(mapFile), ".apmap") {
 		return playrun.ConvertResult{Path: mapFile}, nil
 	}
-	converted, _, err := assetref.ConvertAPMapInputs(ctx, s.runner,
+	converted, _, conversions, err := assetref.ConvertAPMapInputsRecorded(ctx, s.runner,
 		map[string]string{playMapInput: mapFile}, nil)
 	if err != nil {
 		return playrun.ConvertResult{}, err
 	}
 	provenance := s.runner.Provenance()
+	var conversion *build.Conversion
+	if recorded, ok := conversions[playMapInput]; ok {
+		conversion = &recorded
+	}
 
 	return playrun.ConvertResult{
-		Path: converted[playMapInput],
+		Path:       converted[playMapInput],
+		Conversion: conversion,
 		Extractor: &playrun.ExtractorRef{
 			Version:  provenance.Version,
 			Protocol: provenance.Protocol,
@@ -248,6 +255,21 @@ func (s *Server) playConvert(ctx context.Context, _ playrun.Request, mapFile str
 			Verified: provenance.Verified,
 		},
 	}, nil
+}
+
+// playBoundPackages resolves the packages the fetched map is bound to, through
+// the Companion's own session and its content-addressed cache.
+func (s *Server) playBoundPackages(ctx context.Context, _ playrun.Request, mapFile string) (*build.BoundPackages, error) {
+	store, err := s.assets()
+	if err != nil {
+		return nil, err
+	}
+	var account q3packages.Account
+	if client := s.aubClient(); client != nil && client.Authenticated() {
+		account = client
+	}
+
+	return assetref.BoundPackages(ctx, account, store, map[string]string{playMapInput: mapFile})
 }
 
 // playMapInputName asks the pipeline which of its declared inputs the map

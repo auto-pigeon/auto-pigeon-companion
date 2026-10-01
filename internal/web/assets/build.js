@@ -648,7 +648,11 @@
       const { ok, body } = await api("/api/v1/build/runs", { method: "POST", body: requestBody() });
       if (!ok) {
         setMessage("build-message", explain(body.error)?.advice || body.error || "the build could not be started", "error");
-        record("Build could not be started", body.error, "failed");
+        // The refusal's own words, whole, in Activity — and its kind, when the
+        // Companion classified it (Q3_010: an extractor refusal such as
+        // `q3map_shader_unsafe` never becomes a build, so this line and the
+        // message above are the only places it can be read).
+        record("Build could not be started", (body.class ? "[" + body.class + "] " : "") + (body.error || ""), "failed");
         return;
       }
       setMessage("build-message", "The build has started.", "ok");
@@ -790,6 +794,20 @@
         );
       }
       if (step.error && !pending) line.append(el("span", { className: "stage-detail", text: step.error }));
+      // What KIND of failure it was, as the token the manifest carries
+      // (Q3_010): "the map leaks" and "the compiler is not installed" are told
+      // apart by this, not by their wording.
+      if (step.failure_class && !pending) {
+        line.append(el("span", { className: "stage-detail failure-class", text: t("Kind of failure: {kind}", { kind: step.failure_class }) }));
+      }
+      // The stage's own job: its whole output, live while it runs, and its
+      // artifacts. A link, so it opens from the keyboard and survives a reload.
+      if (step.job_id) {
+        line.append(el("a", { className: "stage-detail stage-job", text: t("Open this stage's job and its output"),
+          attrs: { href: "#jobs/" + encodeURIComponent(step.job_id) } }));
+      }
+      const found = findingsList(step);
+      if (found) line.append(found);
       if (step.command?.shell) {
         const details = el("details");
         details.append(el("summary", { text: "command" }));
@@ -798,6 +816,9 @@
       }
       list.append(line);
     }
+
+    const read = whatWasRead(manifest);
+    if (read) list.append(read);
 
     if (manifest.outputs?.length) {
       const outputs = el("li");
@@ -843,6 +864,86 @@
         ? `Showing the last ${log.textContent.length} characters; ${body.log_dropped} earlier bytes were not kept in this view. Each stage's own job holds the full log.`
         : "Each stage's own job holds the full log.";
     }
+  }
+
+  // findingsList is every error and warning a stage's rules recognised, with
+  // the compiler's own line beside the rule's sentence. The count alone used to
+  // be all the page showed (Q3_007: a missing model and a missing image were
+  // "1 error finding(s), 1 warning(s)" and nothing said which).
+  function findingsList(step) {
+    const findings = (step.diagnostics || []).filter((d) => d.severity === "error" || d.severity === "warning");
+    if (!findings.length) return null;
+    const details = el("details", { className: "stage-findings" });
+    // Open when the stage failed or warned: these are why.
+    details.open = true;
+    details.append(el("summary", { text: t("Findings ({count})", { count: findings.length }) }));
+    const rows = el("ul");
+    for (const finding of findings.slice(0, 50)) {
+      const row = el("li");
+      row.append(badge(finding.severity, finding.severity === "error" ? "failed" : "queued"));
+      row.append(document.createTextNode(" " + (finding.message || finding.raw || "")));
+      if (finding.class) row.append(el("span", { className: "stage-detail", text: " [" + finding.class + "]" }));
+      if (finding.fatal) row.append(el("span", { className: "stage-detail", text: " " + t("This line is what failed the stage.") }));
+      if (finding.raw && finding.raw !== finding.message) row.append(el("pre", { className: "output", text: finding.raw }));
+      rows.append(row);
+    }
+    details.append(rows);
+    if (findings.length > 50) {
+      details.append(el("p", { className: "muted", text: t("{more} more in the stage's job.", { more: findings.length - 50 }) }));
+    }
+    return details;
+  }
+
+  // whatWasRead says what the build compiled and what the compiler was allowed
+  // to see (Q3_010): the APMap the `.map` was converted from, the game data
+  // staged for a Quake III build, and each package the saved map is bound to
+  // with the digest it was verified at. Every value is the manifest's own.
+  function whatWasRead(manifest) {
+    const lines = [];
+    for (const input of manifest.inputs || []) {
+      const c = input.conversion;
+      if (!c) continue;
+      lines.push(t("{name}: converted from the map document {document} (revision {revision}), {digest}", {
+        name: input.name, document: c.document_id || c.source_name, revision: c.document_revision, digest: c.source_sha256 }));
+      if (c.manifest) {
+        lines.push(t("Conversion record: {shaders} shader(s), {models} model(s), {warnings} warning(s) — {digest}", {
+          shaders: c.manifest.shaders, models: c.manifest.models, warnings: c.manifest.warnings, digest: c.manifest.sha256 }));
+      }
+    }
+    const data = manifest.game_data;
+    if (data) {
+      lines.push(t("Game data staged for this build: base folder {base}, mod folder {mod}.", {
+        base: data.base_game, mod: data.fs_game || t("none") }));
+      for (const root of data.roots || []) {
+        for (const game of root.games || []) {
+          if (!game.present) continue;
+          lines.push(t("{role} › {game}: {archives} archive(s), {loose} loose file(s)", {
+            role: root.role === "game_root" ? t("Base game data") : t("Your content"),
+            game: game.name, archives: (game.archives || []).length, loose: game.loose_files }));
+          for (const archive of game.archives || []) lines.push("    " + archive.name + " — " + archive.sha256);
+        }
+      }
+      for (const bound of data.packages || []) {
+        lines.push(bound.staged
+          ? t("Bound package {name} — {digest} (staged)", { name: bound.root + "/" + bound.archive_name, digest: bound.sha256 })
+          : t("Bound package {name} — {digest} (NOT staged: {reason})", { name: bound.root + "/" + bound.archive_name, digest: bound.sha256, reason: bound.reason }));
+      }
+      for (const finding of data.findings || []) lines.push(finding.message);
+    }
+    if (!lines.length && !manifest.failure_class) return null;
+    const item = el("li");
+    item.append(el("span", { className: "stage-name", text: t("What this build read") }));
+    if (manifest.failure_class) {
+      item.append(el("span", { className: "stage-detail failure-class", text: t("Kind of failure: {kind}", { kind: manifest.failure_class }) }));
+    }
+    if (lines.length) {
+      const details = el("details", { className: "stage-findings" });
+      details.open = Boolean((data?.findings || []).length);
+      details.append(el("summary", { text: t("Sources and staged game data") }));
+      details.append(el("pre", { className: "output", text: lines.join("\n") }));
+      item.append(details);
+    }
+    return item;
   }
 
   async function refreshHistory() {

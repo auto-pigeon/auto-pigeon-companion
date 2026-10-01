@@ -53,6 +53,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/autobuild"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/config"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/engine"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/failure"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/incident"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/pathpick"
@@ -542,6 +543,9 @@ type errorBody struct {
 	Error string `json:"error"`
 	// Code names the few refusals a page acts on rather than only shows.
 	Code string `json:"code,omitempty"`
+	// Class is what kind of failure this is, when the error says
+	// (internal/failure). Additive: a page that does not read it loses nothing.
+	Class string `json:"class,omitempty"`
 }
 
 // codeTokenRefused marks a request whose token is not this run's. From the
@@ -551,7 +555,10 @@ type errorBody struct {
 const codeTokenRefused = "token_refused"
 
 func writeError(w http.ResponseWriter, status int, err error) {
-	writeJSON(w, status, errorBody{Error: err.Error()})
+	// The class travels beside the sentence when the error carries one
+	// (internal/failure): a build that could not START — the extractor refused
+	// the map, a bound package is not held — has no manifest to carry it.
+	writeJSON(w, status, errorBody{Error: err.Error(), Class: failure.Of(err)})
 }
 
 // maxRequestBody caps a request body. Every request this API takes is a small
