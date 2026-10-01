@@ -649,7 +649,10 @@
         out.append(problemBlock(body.error || "the preview failed"));
         // A refusal met at the check never becomes a build, so this is the only
         // record of it in Activity: its kind, and the refusal's own sentence.
-        recordOnce("check:" + (body.error || ""), "Build check refused",
+        // Keyed on the sentence, not the whole text: the extractor's raw output
+        // carries a fresh incident id each time, so the same refusal re-read
+        // on a return to this area looked new.
+        recordOnce("check:" + sentenceOf(body.error), "Build check refused",
           (body.class ? "[" + body.class + "] " : "") + sentenceOf(body.error), "failed");
         return;
       }
@@ -1121,7 +1124,9 @@
         return;
       }
       setMessage("build-message", "Stopping. The stage records what happened, and the manifest is completed rather than abandoned.", "");
-      record("Build cancelled", "", "cancelled");
+      // Not recorded here: the build's own end state is, once, when the poll
+      // reads it ("Build cancelled: <label>"). Recording the press as well put
+      // two lines in Activity for one cancel.
     })
   );
 
