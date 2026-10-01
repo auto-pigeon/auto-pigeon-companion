@@ -630,7 +630,26 @@ type DiagnosticRule struct {
 	// beside the message, so "the map leaks" and "the compiler is not
 	// installed" are told apart by something other than their wording.
 	Class string `json:"class,omitempty"`
+	// Signal says the line is the program's own report of something a caller
+	// is WAITING for, as a token. There is one: `map_loaded`, the line an
+	// engine prints once it has loaded the map it was told to load.
+	//
+	// It exists because "the process started" is not "the map loaded".
+	// Measured on ioquake3 1.36 (`Q3_011`): told to load a map it cannot find,
+	// the engine prints `Can't find map maps/<name>.bsp`, stays up and exits 0
+	// when asked to quit; told to load one it can, it prints `InitGame:` with
+	// the map's name. A launcher that reported success on a live process would
+	// report both as a running game. Which line means "loaded" is each engine's
+	// own wording, so the document's author says which one it is — and a
+	// document that names none is a document whose engine's map load is
+	// reported as not observed, never assumed.
+	Signal string `json:"signal,omitempty"`
 }
+
+// SignalMapLoaded is the one signal a diagnostic rule may carry.
+const SignalMapLoaded = "map_loaded"
+
+var diagnosticSignals = []string{SignalMapLoaded}
 
 var diagnosticStreams = []string{"stdout", "stderr", "both"}
 
@@ -673,6 +692,19 @@ func (d DiagnosticRule) validate(c *collector) {
 	c.child(field("class"), func(c *collector) {
 		if d.Class != "" {
 			checkToken(c, d.Class)
+		}
+	})
+	c.child(field("signal"), func(c *collector) {
+		if d.Signal == "" {
+			return
+		}
+		if !contains(diagnosticSignals, d.Signal) {
+			c.fixf("use one of: "+strings.Join(diagnosticSignals, ", "), "is %q", d.Signal)
+		}
+		// A line cannot be both the proof that something worked and an error
+		// or the reason a job fails.
+		if d.Severity == SeverityError || d.Fatal {
+			c.fixf("use severity info", "a line that reports the map loaded cannot also be an error")
 		}
 	})
 }

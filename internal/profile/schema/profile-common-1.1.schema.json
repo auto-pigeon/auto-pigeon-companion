@@ -750,6 +750,12 @@
         "class": {
           "$ref": "#/$defs/token",
           "description": "What kind of failure or finding this line is, as a token a build reports beside the message."
+        },
+        "signal": {
+          "enum": [
+            "map_loaded"
+          ],
+          "description": "The line is the program's own report of something a caller waits for. `map_loaded`: the engine has loaded the map it was told to load. Never on an error."
         }
       }
     },

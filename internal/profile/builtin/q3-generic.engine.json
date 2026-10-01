@@ -90,6 +90,8 @@
         { "role": "content_root", "access": "read", "purpose": "load what you built" }
       ],
       "diagnostics": [
+        { "id": "map_loaded", "match": "CL_InitCGame:", "severity": "info", "signal": "map_loaded", "message": "The client entered the map.", "hint": "The line id Software's published Quake III source prints once the client game has started on a map. A fork that words it differently reports its map load as not observed here, never as loaded." },
+        { "id": "map_not_found", "match": "Can't find map", "severity": "error", "class": "map_not_loaded", "message": "The engine could not find the map it was asked to load.", "hint": "Check that the PK3 you built is in the game directory this action names, and that the map inside it is at `maps/<name>.bsp`." },
         { "id": "missing_pak", "match": "Couldn't load default.cfg", "severity": "error", "message": "The engine did not find the game's own data.", "hint": "The base game data root has to hold the game directory with its PK3 files in it." },
         { "id": "error", "match": "ERROR:", "severity": "error", "message": "The engine stopped with a fatal error." }
       ]
@@ -161,6 +163,8 @@
       ],
       "network": { "required": true, "purpose": "accept connections from other players" },
       "diagnostics": [
+        { "id": "map_loaded", "match": "CL_InitCGame:", "severity": "info", "signal": "map_loaded", "message": "The client entered the map.", "hint": "The line id Software's published Quake III source prints once the client game has started on a map. A fork that words it differently reports its map load as not observed here, never as loaded." },
+        { "id": "map_not_found", "match": "Can't find map", "severity": "error", "class": "map_not_loaded", "message": "The engine could not find the map it was asked to load.", "hint": "Check that the PK3 you built is in the game directory this action names, and that the map inside it is at `maps/<name>.bsp`." },
         { "id": "error", "match": "ERROR:", "severity": "error", "message": "The engine stopped with a fatal error." }
       ]
     }
