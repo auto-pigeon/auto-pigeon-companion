@@ -129,3 +129,16 @@ func TestQ3Map2OnAPlatformItMakesNoClaimAboutIsAClassedRefusal(t *testing.T) {
 		t.Errorf("no game folder: err = %v (class %q)", err, failure.Of(err))
 	}
 }
+
+// ioquake3 1.36, measured (Q3_010): with no `pak0.pk3` the engine prints this
+// and exits 3. The line is classed, so a job that failed on it says "game data
+// is missing" and not merely "the program failed".
+func TestIoquake3SaysItsGameDataIsMissingAndTheLineIsClassed(t *testing.T) {
+	line := `Quake 3 data files are missing. Please copy "pak0.pk3" through "pak8.pk3" from the "baseq3" directory in your Quake 3 install or CD-ROM to:`
+	for _, action := range []string{"play_map", "host_dedicated"} {
+		rule, ok := classify(t, IoQuake3, action, "stdout", line)
+		if !ok || rule.Class != "game_data_missing" || rule.Severity != profile.SeverityError {
+			t.Errorf("%s: classified as %+v", action, rule)
+		}
+	}
+}

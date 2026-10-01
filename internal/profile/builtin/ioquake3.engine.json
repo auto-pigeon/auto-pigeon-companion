@@ -96,7 +96,8 @@
       ],
       "diagnostics": [
         { "id": "ready", "match": "Com_Init", "severity": "info", "message": "The engine is starting." },
-        { "id": "missing_pak", "match": "Couldn't load default.cfg", "severity": "error", "message": "Quake III's own data was not found.", "hint": "The base game data root has to hold `baseq3` with your `pak0.pk3` in it. That file comes from a copy of the game you bought; Auto-Pigeon does not and cannot supply it." },
+        { "id": "missing_pak", "match": "Couldn't load default.cfg", "severity": "error", "class": "game_data_missing", "message": "Quake III's own data was not found.", "hint": "The base game data root has to hold `baseq3` with your `pak0.pk3` in it. That file comes from a copy of the game you bought; Auto-Pigeon does not and cannot supply it." },
+        { "id": "missing_pak_files", "match": "Quake 3 data files are missing", "severity": "error", "class": "game_data_missing", "message": "ioquake3 found no Quake III game data and stopped.", "hint": "Measured on ioquake3 1.36: with no `pak0.pk3` in the base game data folder's `baseq3`, the engine prints this, names the folder it looked in and exits with status 3. `pak0.pk3` is id Software's and is yours to supply; the Companion ships none and downloads none." },
         { "id": "map_not_found", "match": "Can't find map", "severity": "error", "message": "The engine could not find the map it was asked to load.", "hint": "Check that the PK3 you built is in the game directory this action names, and that the map inside it is at `maps/<name>.bsp`." },
         { "id": "error", "match": "ERROR:", "severity": "error", "message": "The engine stopped with a fatal error.", "hint": "The engine's own last line is usually the whole diagnosis; read the job's log." }
       ]
@@ -120,7 +121,8 @@
         { "role": "content_root", "access": "read", "purpose": "load what you built" }
       ],
       "diagnostics": [
-        { "id": "missing_pak", "match": "Couldn't load default.cfg", "severity": "error", "message": "Quake III's own data was not found.", "hint": "The base game data root has to hold `baseq3` with your `pak0.pk3` in it." },
+        { "id": "missing_pak", "match": "Couldn't load default.cfg", "severity": "error", "class": "game_data_missing", "message": "Quake III's own data was not found.", "hint": "The base game data root has to hold `baseq3` with your `pak0.pk3` in it." },
+        { "id": "missing_pak_files", "match": "Quake 3 data files are missing", "severity": "error", "class": "game_data_missing", "message": "ioquake3 found no Quake III game data and stopped.", "hint": "Measured on ioquake3 1.36: with no `pak0.pk3` in the base game data folder's `baseq3`, the engine prints this, names the folder it looked in and exits with status 3. `pak0.pk3` is id Software's and is yours to supply; the Companion ships none and downloads none." },
         { "id": "error", "match": "ERROR:", "severity": "error", "message": "The engine stopped with a fatal error." }
       ]
     },
@@ -187,7 +189,8 @@
       "network": { "required": true, "purpose": "accept connections from other players" },
       "diagnostics": [
         { "id": "listening", "match": "Opening IP socket", "severity": "info", "message": "The server has its socket." },
-        { "id": "missing_pak", "match": "Couldn't load default.cfg", "severity": "error", "message": "Quake III's own data was not found." },
+        { "id": "missing_pak", "match": "Couldn't load default.cfg", "severity": "error", "class": "game_data_missing", "message": "Quake III's own data was not found." },
+        { "id": "missing_pak_files", "match": "Quake 3 data files are missing", "severity": "error", "class": "game_data_missing", "message": "ioquake3 found no Quake III game data and stopped.", "hint": "Measured on ioquake3 1.36: with no `pak0.pk3` in the base game data folder's `baseq3`, the engine prints this, names the folder it looked in and exits with status 3. `pak0.pk3` is id Software's and is yours to supply; the Companion ships none and downloads none." },
         { "id": "error", "match": "ERROR:", "severity": "error", "message": "The engine stopped with a fatal error." }
       ]
     },
@@ -235,7 +238,8 @@
       "network": { "required": true, "purpose": "accept connections from other players" },
       "diagnostics": [
         { "id": "listening", "match": "Opening IP socket", "severity": "info", "message": "The server has its socket." },
-        { "id": "missing_pak", "match": "Couldn't load default.cfg", "severity": "error", "message": "Quake III's own data was not found.", "hint": "A dedicated server needs the game data too: `baseq3` with your `pak0.pk3` in it." },
+        { "id": "missing_pak", "match": "Couldn't load default.cfg", "severity": "error", "class": "game_data_missing", "message": "Quake III's own data was not found.", "hint": "A dedicated server needs the game data too: `baseq3` with your `pak0.pk3` in it." },
+        { "id": "missing_pak_files", "match": "Quake 3 data files are missing", "severity": "error", "class": "game_data_missing", "message": "ioquake3 found no Quake III game data and stopped.", "hint": "Measured on ioquake3 1.36: with no `pak0.pk3` in the base game data folder's `baseq3`, the engine prints this, names the folder it looked in and exits with status 3. `pak0.pk3` is id Software's and is yours to supply; the Companion ships none and downloads none." },
         { "id": "error", "match": "ERROR:", "severity": "error", "message": "The server stopped with a fatal error." }
       ]
     }

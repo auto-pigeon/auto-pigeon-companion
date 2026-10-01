@@ -898,6 +898,17 @@ func (s *Service) execute(id string) {
 			*result.exitCode, cleanStopProof(action, result.diagnostics), result.err.Error()), nil)
 		return
 	case result.err != nil:
+		// A failure status says the program failed. When the program also said
+		// WHY, in a line its profile classes — ioquake3's "Quake 3 data files
+		// are missing" — that is the kind of failure this was: the status is
+		// kept in the sentence, and the class is the program's own word.
+		if failure.Of(result.err) == failure.ToolFailed {
+			if said := errorClass(result.diagnostics); said != "" {
+				j.FailureClass = said
+				s.finish(j, Failed, result.err.Error(), nil)
+				return
+			}
+		}
 		s.fail(j, result.err)
 		return
 	}
