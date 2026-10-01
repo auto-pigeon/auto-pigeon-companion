@@ -552,6 +552,7 @@ exit status.** Three things fail a Quake III stage that exited 0:
 | --- | --- | --- |
 | a required output is not there | a leak with `-leaktest`: no BSP, a `.lin` line file, exit 0 | failed, class `leak`; the `.lin` is published as the `lin` output, downloadable from the page |
 | the compiler printed a line its profile marks `fatal` | `ERROR: Unable to open file "models/…"` for a `misc_model`: the BSP is written without it, exit 0 | failed at that stage, class `model_missing`; later stages do not run |
+| …or a model that is there and is not one | `ERROR: Invalid MD3 file: Magic bytes not found`, `ERROR: Invalid MD3 header: …`, `ERROR: MD3 File is too small.`: same — BSP without the model, exit 0 | failed at that stage, class `model_unreadable` |
 | an output is present and is not what its role says | `-light` given an empty or garbage `.srf` exits 0 and writes a lit BSP | failed, class `output_invalid` or `input_invalid` |
 
 `.bsp` (IBSP 46 with a lump table inside the file), `.prt` (`PRT1` and the
@@ -580,7 +581,7 @@ carries `class` in the HTTP error:
 | `archive_damaged` | a PK3 in an approved folder, or a bound package, is not a readable archive |
 | `content_refused` | a link out of the approved folders, a same-named different archive, an unreadable package record |
 | `fs_game_invalid`, `fs_game_not_found` | the mod directory is not a name, or no folder has it |
-| `leak`, `model_missing`, `shader_image_missing` | the compiler's own findings, classed by its profile |
+| `leak`, `model_missing`, `model_unreadable`, `shader_image_missing` | the compiler's own findings, classed by its profile |
 | `input_invalid`, `output_invalid`, `output_missing` | a stage's file is not what its role says, or is not there |
 | `conversion_refused`, `converter_unavailable` | the extractor would not, or was not there to, write a `.map` |
 | `tool_failed`, `timed_out`, `cancelled` | the program's own failure status, its time bound, or you |

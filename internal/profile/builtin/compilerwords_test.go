@@ -3,6 +3,7 @@ package builtin
 import (
 	"testing"
 
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/failure"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
 
@@ -74,6 +75,9 @@ func TestQ3Map2sExitZeroFindingsAreClassedAndAMissingModelIsFatal(t *testing.T) 
 		fatal                  bool
 	}{
 		{"compile", `ERROR: Unable to open file "models/q3010/nothere.md3".`, "model_missing", "model_missing", true},
+		{"compile", "ERROR: Invalid MD3 header: some offsets are outside the file", "model_unreadable", "model_unreadable", true},
+		{"compile", "ERROR: Invalid MD3 file: Magic bytes not found", "model_unreadable", "model_unreadable", true},
+		{"compile", "ERROR: MD3 File is too small.", "model_truncated", "model_unreadable", true},
 		{"compile", "******* leaked *******", "leaked", "leak", false},
 		{"compile", "--- MAP LEAKED, ABORTING LEAKTEST ---", "leaktest_abort", "leak", false},
 		{"compile", "WARNING: Couldn't find image for shader textures/q3004/floor", "missing_image", "shader_image_missing", false},
@@ -87,5 +91,41 @@ func TestQ3Map2sExitZeroFindingsAreClassedAndAMissingModelIsFatal(t *testing.T) 
 	// A line that merely mentions a file being unreadable is not the model line.
 	if rule, ok := classify(t, Q3Map2, "compile", "stdout", "Unable to open file"); ok && rule.Fatal {
 		t.Errorf("a bare phrase matched the fatal rule: %+v", rule)
+	}
+}
+
+// A platform the Q3Map2 document makes no claim about is refused, and the
+// refusal is CLASSED: "this program does not run here" is a different thing to
+// tell somebody than "this program is not installed", and before Q3_010 the
+// two differed only in their wording. The three platforms it does name are
+// each `supported` or `unverified` — unverified is information, not a refusal.
+func TestQ3Map2OnAPlatformItMakesNoClaimAboutIsAClassedRefusal(t *testing.T) {
+	entry, err := Find(Q3Map2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := func(platform profile.Platform) profile.Request {
+		return profile.Request{
+			Platform: platform,
+			Roots: map[string]string{
+				profile.RootWorkspace: "/w", profile.RootGame: "/g", profile.RootContent: "/c", profile.RootToolInstall: "/t",
+			},
+			Inputs: map[string]string{"source_map": "/w/input/source_map/a.map"},
+		}
+	}
+	_, err = profile.Resolve(entry.Profile, "compile", request(profile.Platform{OS: "plan9", Arch: "amd64"}))
+	if err == nil || failure.Of(err) != failure.PlatformUnsupported {
+		t.Fatalf("plan9: err = %v (class %q)", err, failure.Of(err))
+	}
+	for _, platform := range []profile.Platform{{OS: "linux", Arch: "amd64"}, {OS: "windows", Arch: "amd64"}, {OS: "darwin", Arch: "arm64"}} {
+		if _, err := profile.Resolve(entry.Profile, "compile", request(platform)); failure.Of(err) == failure.PlatformUnsupported {
+			t.Errorf("%s is refused as unsupported: %v", platform, err)
+		}
+	}
+	// And a build with no game folder at all is its own class.
+	missing := request(profile.Platform{OS: "linux", Arch: "amd64"})
+	delete(missing.Roots, profile.RootGame)
+	if _, err := profile.Resolve(entry.Profile, "compile", missing); failure.Of(err) != failure.GameDataMissing {
+		t.Errorf("no game folder: err = %v (class %q)", err, failure.Of(err))
 	}
 }

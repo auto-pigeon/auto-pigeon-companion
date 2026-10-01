@@ -3,6 +3,7 @@ package profile
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"path"
 	"path/filepath"
@@ -142,6 +143,33 @@ type Invocation struct {
 
 // Resolve turns one action of a profile into an invocation.
 func Resolve(p Profile, actionID string, request Request) (Invocation, error) {
+	invocation, err := resolveInvocation(p, actionID, request)
+	return invocation, classifyUnresolvedRoot(err)
+}
+
+// classifyUnresolvedRoot gives a class to the refusal an unset folder produces.
+//
+// A root with no value is reported by whichever template met it first — an
+// argument, usually — as an [ErrUnresolved]. Which folder it was decides what a
+// person has to do: the tool's own folder means the program is not set up, and
+// a game data folder means there is no game data to read. The reference is the
+// document's own spelling, `{root.<role>}`, so the role is read from it rather
+// than from the message.
+func classifyUnresolvedRoot(err error) error {
+	var unresolved *ErrUnresolved
+	if err == nil || !errors.As(err, &unresolved) {
+		return err
+	}
+	switch unresolved.Ref {
+	case "{root." + RootGame + "}", "{root." + RootContent + "}":
+		return failure.As(failure.GameDataMissing, err)
+	case "{root." + RootToolInstall + "}":
+		return failure.As(failure.ToolUnavailable, err)
+	}
+	return err
+}
+
+func resolveInvocation(p Profile, actionID string, request Request) (Invocation, error) {
 	meta := p.Metadata()
 	action, found := p.ActionByID(actionID)
 	if !found {

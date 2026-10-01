@@ -550,10 +550,41 @@
     return el("div", { className: "row-actions", children: [setup] });
   }
 
+  // sentenceOf is the line a person reads: a refusal's first line. A refusal
+  // from the extractor leads with its own reason and keeps everything the
+  // extractor printed underneath (its terminal record, an incident envelope);
+  // run together they were one paragraph nobody could read, shown twice
+  // (Q3_010, headed run: `[q3map_shader_unsafe]` was on the page and lost in
+  // it). The rest goes behind "Technical details", never away.
+  function sentenceOf(text) {
+    return String(text || "").split("\n")[0];
+  }
+
+  function technicalDetails(text) {
+    const lines = String(text || "").split("\n");
+    if (lines.length < 2) return null;
+    const details = el("details", { className: "stage-findings" });
+    details.append(el("summary", { text: t("Technical details") }));
+    details.append(el("pre", { className: "output", text: lines.slice(1).join("\n") }));
+    return details;
+  }
+
+  // recordOnce puts a line in Activity unless this window already recorded the
+  // same event. Activity is a list of things that happened, and re-reading a
+  // result is not one of them.
+  const recorded = new Set();
+  function recordOnce(key, summary, detail, kind) {
+    if (recorded.has(key)) return;
+    recorded.add(key);
+    record(summary, detail, kind);
+  }
+
   function problemBlock(text, profile, step) {
     const why = explain(text, step);
     const block = el("div", { className: "problem" });
-    block.append(el("p", { children: [el("strong", { text: why ? why.advice : text })] }));
+    block.append(el("p", { children: [el("strong", { text: why ? why.advice : sentenceOf(text) })] }));
+    const technical = why ? null : technicalDetails(text);
+    if (technical) block.append(technical);
     // The executor's own sentence names profile ids, root roles and a CLI
     // command; when the advice above already says what to do, the page does not
     // repeat it (NEW_244D, operator: no internal ids on the page). A refusal
@@ -609,9 +640,17 @@
       const verdict = (value) => (asked === generation ? value : null);
       if (!ok) {
         checked = verdict("blocked");
+        // A refused check is about THESE choices; the last build's outcome is
+        // not theirs, and left on the step's tab it read "succeeded" over a
+        // refusal.
+        outcome = null;
         renderSteps();
-        setMessage("build-message", explain(body.error)?.advice || body.error || "the preview failed", "error");
+        setMessage("build-message", explain(body.error)?.advice || sentenceOf(body.error) || "the preview failed", "error");
         out.append(problemBlock(body.error || "the preview failed"));
+        // A refusal met at the check never becomes a build, so this is the only
+        // record of it in Activity: its kind, and the refusal's own sentence.
+        recordOnce("check:" + (body.error || ""), "Build check refused",
+          (body.class ? "[" + body.class + "] " : "") + sentenceOf(body.error), "failed");
         return;
       }
       const blocked = (body.steps || []).filter((step) => step.error);
@@ -647,12 +686,12 @@
       busy("build-message", "Starting…");
       const { ok, body } = await api("/api/v1/build/runs", { method: "POST", body: requestBody() });
       if (!ok) {
-        setMessage("build-message", explain(body.error)?.advice || body.error || "the build could not be started", "error");
+        setMessage("build-message", explain(body.error)?.advice || sentenceOf(body.error) || "the build could not be started", "error");
         // The refusal's own words, whole, in Activity — and its kind, when the
         // Companion classified it (Q3_010: an extractor refusal such as
         // `q3map_shader_unsafe` never becomes a build, so this line and the
         // message above are the only places it can be read).
-        record("Build could not be started", (body.class ? "[" + body.class + "] " : "") + (body.error || ""), "failed");
+        record("Build could not be started", (body.class ? "[" + body.class + "] " : "") + sentenceOf(body.error), "failed");
         return;
       }
       setMessage("build-message", "The build has started.", "ok");
@@ -708,7 +747,12 @@
               : `The build ${state}: ${body.manifest.error || body.error || "see the stages below"}`,
         state === "succeeded" ? (warned ? "warning" : "ok") : state === "cancelled" || state === "interrupted" ? "" : "error"
       );
-      record(`Build ${state}: ${body.manifest.label || body.manifest.pipeline?.name || "untitled"}`, body.manifest.error || "", state);
+      // Once per build and outcome. Coming back to this area polls the open
+      // build again, and each return used to add the same line: four builds,
+      // eleven entries (Q3_010, headed run).
+      recordOnce(`${body.manifest.build_id}:${state}`,
+        `Build ${state}: ${body.manifest.label || body.manifest.pipeline?.name || "untitled"}`,
+        sentenceOf(body.manifest.error), state);
       await refreshHistory();
     };
     tick();
@@ -951,6 +995,25 @@
     return item;
   }
 
+  // reattach opens the build this Companion is running when the page has none
+  // open — after a reload, which forgets everything the window knew. The build
+  // itself never depended on the page; what a reload lost was the panel with
+  // its Cancel button, so a person watching a twenty-minute lighting pass had
+  // to find it again in a list (Q3_010, headed run). Only a build running HERE
+  // is taken, only when nothing is open, and nothing is started: this reads.
+  async function reattach() {
+    if (currentBuild) return;
+    const { ok, body } = await api("/api/v1/build/runs?limit=25");
+    if (!ok) return;
+    const live = (body.items || []).find((item) => item.live);
+    if (!live) return;
+    currentBuild = live.manifest.build_id;
+    outcome = live.manifest.state;
+    $("build-current-panel").hidden = false;
+    setMessage("build-result", "", "");
+    showStep(4, { focus: false });
+  }
+
   async function refreshHistory() {
     const list = $("build-history");
     const { ok, body } = await api("/api/v1/build/runs?limit=25");
@@ -1102,6 +1165,7 @@
       applyLocalMap();
       await refreshLeakRequest();
       await refreshHistory();
+      await reattach();
       renderSteps();
       // Back from Profiles after "Set up …": the check that sent the person
       // there is out of date, so it runs again rather than waiting for a click.
