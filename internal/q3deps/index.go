@@ -165,7 +165,25 @@ type located struct {
 	// Role says what this file is to the reference: `image`, `shader script`,
 	// `model`, `sound`.
 	Role string `json:"role"`
+	// CompileOnly and RuntimeOnly say which program opens an image a shader
+	// script names, and they are measured rather than assumed (Q3Map2 2.5.17n,
+	// `Q3_011`): the COMPILER reads a shader's `qer_editorimage` or
+	// `q3map_lightimage` and warns when it is absent even though every stage
+	// image is there; an ENGINE reads the stage images and never opens the
+	// editor one, and the compiler says nothing when a stage image is absent.
+	// Neither set means both programs read it. A package review still counts
+	// either kind as missing — these say WHICH half of the work would break.
+	CompileOnly bool `json:"compile_only,omitempty"`
+	RuntimeOnly bool `json:"runtime_only,omitempty"`
 }
+
+// File is one file a reference needs and where it turned out to be. It is the
+// element type of [Resolution.Files], named so that a caller outside this
+// package — the one that packages what a review resolved — can hold one.
+type File = located
+
+// Found reports whether anything on this machine has the file.
+func (l located) Found() bool { return l.found() }
 
 func (l located) found() bool { return l.Where != "" }
 

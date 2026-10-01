@@ -19,6 +19,22 @@ type shaderDef struct {
 	// Images are the VFS paths of every image its stages name, in the order
 	// they appear.
 	Images []string
+	// Compile and Runtime say which program reads each image: the ones named
+	// by `qer_editorimage` or `q3map_lightimage`, and the ones a stage or a sky
+	// names. An image may be in both. See [located.CompileOnly] for what was
+	// measured.
+	Compile map[string]bool
+	Runtime map[string]bool
+}
+
+// compileOnlyKeywords are the image keywords the compiler acts on and an
+// engine does not: the renderer's shader parser skips every `qer_*` and
+// `q3map_*` line.
+var compileOnlyKeywords = map[string]bool{
+	"qer_editorimage":  true,
+	"editorimage":      true,
+	"lightimage":       true,
+	"q3map_lightimage": true,
 }
 
 // imageKeywords are the shader keywords whose argument is an image.
@@ -70,6 +86,18 @@ func parseShaderScripts(scripts []scriptRef) (map[string]shaderDef, error) {
 		}
 	}
 	return defs, nil
+}
+
+// OpenSource opens what a [File]'s Source names: a file on this machine, or an
+// entry inside a PK3, which the index spells `archive!member`. It is how a
+// caller that packages a dependency reads the same bytes this scan resolved.
+func OpenSource(source string) (io.ReadCloser, error) { return openShaderScript(source) }
+
+// SplitSource separates a [File]'s Source into the archive that holds it and
+// the member's own name, exactly as the archive spells it. `inside` is false
+// for a loose file, whose path is returned as the first value.
+func SplitSource(source string) (archive, member string, inside bool) {
+	return strings.Cut(source, "!")
 }
 
 // openShaderScript opens a script that is either a file on this machine or an
@@ -158,7 +186,18 @@ func parseShaderScript(r io.Reader, script scriptRef) map[string]shaderDef {
 			if current == nil {
 				continue
 			}
-			current.Images = append(current.Images, imagesIn(tokens)...)
+			images := imagesIn(tokens)
+			current.Images = append(current.Images, images...)
+			if current.Compile == nil {
+				current.Compile, current.Runtime = map[string]bool{}, map[string]bool{}
+			}
+			into := current.Runtime
+			if compileOnlyKeywords[strings.ToLower(tokens[0])] {
+				into = current.Compile
+			}
+			for _, image := range images {
+				into[image] = true
+			}
 		}
 	}
 	return defs

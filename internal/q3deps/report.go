@@ -38,6 +38,19 @@ type Resolution struct {
 	// has to. It is a sentence rather than a flag because "review" with no
 	// reason is a thing a user clicks past.
 	Review string `json:"review,omitempty"`
+
+	// unreadModel records a model that was found and is not a format this
+	// reads, so what it names inside itself is not in Files.
+	unreadModel bool
+	// damagedModel is why a model that should have been readable was not.
+	damagedModel string
+}
+
+func joinNotes(left, right string) string {
+	if left == "" {
+		return right
+	}
+	return left + "; " + right
 }
 
 // NeedsReview reports whether this one is why the package is being held.
@@ -177,9 +190,41 @@ func Discover(mapPaths []string, scan Scan) (*Report, error) {
 			found.add(reference)
 		}
 	}
+	return report(idx, shaders, baseShaders, mapPaths, found.all()), nil
+}
 
-	report := &Report{Maps: append([]string(nil), mapPaths...)}
-	for _, reference := range found.all() {
+// Resolve reports on references a caller already holds — what [ParseBSP] read
+// out of a compiled map, which is the set an ENGINE will look for, as opposed
+// to the set the compiler did. `sources` names what they were read from and is
+// only what the report prints as its subject.
+//
+// It is the same resolution [Discover] performs, against the same three places
+// in the same order, so "the compiler needed this" and "the engine needs this"
+// cannot disagree about where a file is.
+func Resolve(sources []string, references []Reference, scan Scan) (*Report, error) {
+	idx, err := newIndex(scan.Members, scan.ContentRoots, scan.GameRoots)
+	if err != nil {
+		return nil, err
+	}
+	contentScripts, baseScripts := idx.shaderScripts()
+	shaders, err := parseShaderScripts(contentScripts)
+	if err != nil {
+		return nil, err
+	}
+	baseShaders, err := parseShaderScripts(baseScripts)
+	if err != nil {
+		return nil, err
+	}
+	found := newCollector()
+	for _, reference := range references {
+		found.add(reference)
+	}
+	return report(idx, shaders, baseShaders, sources, found.all()), nil
+}
+
+func report(idx *index, shaders, baseShaders map[string]shaderDef, sources []string, references []Reference) *Report {
+	report := &Report{Maps: append([]string(nil), sources...)}
+	for _, reference := range references {
 		report.Resolutions = append(report.Resolutions, resolve(idx, shaders, baseShaders, reference))
 	}
 	sort.SliceStable(report.Resolutions, func(i, j int) bool {
@@ -190,7 +235,7 @@ func Discover(mapPaths []string, scan Scan) (*Report, error) {
 		return left.Name < right.Name
 	})
 	report.Limits = limits(idx, report)
-	return report, nil
+	return report
 }
 
 func resolve(idx *index, shaders, baseShaders map[string]shaderDef, reference Reference) Resolution {
@@ -199,7 +244,36 @@ func resolve(idx *index, shaders, baseShaders map[string]shaderDef, reference Re
 	case KindShader:
 		resolution.Files = shaderFiles(idx, shaders, baseShaders, reference.Name)
 	case KindModel:
-		resolution.Files = []located{idx.find(reference.Name, "model")}
+		model := idx.find(reference.Name, "model")
+		resolution.Files = []located{model}
+		if model.found() {
+			// What the model names inside itself, when it is a format this
+			// reads. A model nobody could read keeps the sentence saying so —
+			// see reviewFor.
+			names, err := modelShaders(model)
+			switch {
+			case err != nil:
+				resolution.Note = joinNotes(resolution.Note, err.Error())
+				resolution.damagedModel = err.Error()
+			case names == nil:
+				resolution.unreadModel = true
+			default:
+				seen := map[string]bool{}
+				for _, name := range names {
+					for _, file := range shaderFiles(idx, shaders, baseShaders, name) {
+						key := file.Role + "\x00" + file.Path
+						if seen[key] {
+							continue
+						}
+						seen[key] = true
+						if file.Role == "image" {
+							file.Role = "model image"
+						}
+						resolution.Files = append(resolution.Files, file)
+					}
+				}
+			}
+		}
 	case KindSound, KindMusic:
 		resolution.Files = []located{findSound(idx, reference.Name)}
 	default:
@@ -253,7 +327,10 @@ func shaderFiles(idx *index, shaders, baseShaders map[string]shaderDef, name str
 			continue
 		}
 		seen[image] = true
-		files = append(files, idx.findImage(image))
+		file := idx.findImage(image)
+		file.CompileOnly = def.Compile[image] && !def.Runtime[image]
+		file.RuntimeOnly = def.Runtime[image] && !def.Compile[image]
+		files = append(files, file)
 	}
 	return files
 }
@@ -302,6 +379,20 @@ func findSound(idx *index, name string) located {
 // reviewFor is the sentence that says why somebody has to look, or the empty
 // string when nobody does.
 func reviewFor(resolution Resolution) string {
+	review := statusReview(resolution)
+	if resolution.Kind == KindModel && resolution.damagedModel != "" {
+		// Said whatever else is true of the model: a file that is there and is
+		// not a model is not made whole by being packaged.
+		damaged := resolution.damagedModel + ". Q3Map2 prints `Invalid MD3` for such a file and still exits 0 (measured, `Q3_010`)."
+		if review == "" {
+			return damaged
+		}
+		return review + " Also: " + damaged
+	}
+	return review
+}
+
+func statusReview(resolution Resolution) string {
 	switch resolution.Status {
 	case StatusMissing:
 		var missing []string
@@ -322,9 +413,9 @@ func reviewFor(resolution Resolution) string {
 		return fmt.Sprintf("this is your own content and the package does not carry it: %s. "+
 			"Add it to the package, or say why it stays out.", strings.Join(outside, ", "))
 	}
-	if resolution.Kind == KindModel && resolution.Status != StatusMissing {
-		return "a model names its own shaders inside itself, and this scan does not read model files. " +
-			"Whatever textures it uses are not in this report."
+	if resolution.Kind == KindModel && resolution.Status != StatusMissing && resolution.unreadModel {
+		return "a model names its own shaders inside itself, and this scan reads that out of `.md3` files only. " +
+			"Whatever textures this one uses are not in this report."
 	}
 	return ""
 }
@@ -373,8 +464,9 @@ func limits(idx *index, report *Report) []string {
 		}
 	}
 	if models {
-		out = append(out, "what a `.md3` or `.ase` model references internally — a model is a binary "+
-			"file that names its own shaders, and this reads map sources and shader scripts only")
+		out = append(out, "what a model that is not an `.md3` references internally — an `.ase`, an `.obj` "+
+			"or any other model format names its own shaders inside itself, and this reads that out of "+
+			"`.md3` files only; nor does it read a `.skin` file or a model's animation configuration")
 	}
 	out = append(out, "what a base-game shader pulls in; its own script is read, and anything defined "+
 		"there is reported as the base game's, which is the answer that decides whether you may ship it")

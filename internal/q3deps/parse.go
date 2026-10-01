@@ -41,6 +41,10 @@ type Reference struct {
 	// Note is a remark about the reference itself rather than about whether it
 	// resolves — the doubled `textures/` prefix is the one that matters.
 	Note string `json:"note,omitempty"`
+	// RuntimeOnly marks a file the compiler never opens: an entity's `model2`,
+	// `noise` or `music`. It is in a map source's report because a package that
+	// leaves it out is incomplete, and it is not why a compile would fail.
+	RuntimeOnly bool `json:"runtime_only,omitempty"`
 }
 
 // maxMapBytes bounds a map source. A Quake III `.map` is text; the largest
@@ -236,11 +240,17 @@ func parseEntity(tokens []token, i int, found *collector) (int, error) {
 
 // addEntityFiles records the entity keys that name a file.
 //
-// Three keys, and no more, because these are the three that were checked
-// against real maps. An entity key that names a file this does not know about
-// is exactly what the model review sentence is for.
+// Four keys, and no more, because these are the ones that were checked against
+// real maps and against the game source: `model` (a `misc_model`, which the
+// compiler bakes in), `model2` (a model the ENGINE draws on a brush entity —
+// `G_SpawnString("model2")` in ioquake3's `g_mover.c` — and which the compiler
+// never opens), `noise` and `music`. An entity key that names a file this does
+// not know about is what the limit sentence about gamecode is for.
 func addEntityFiles(keys map[string]string, classname string, found *collector) {
-	for key, kind := range map[string]Kind{"model": KindModel, "noise": KindSound, "music": KindMusic} {
+	names := []string{"model", "model2", "noise", "music"}
+	kinds := map[string]Kind{"model": KindModel, "model2": KindModel, "noise": KindSound, "music": KindMusic}
+	for _, key := range names {
+		kind := kinds[key]
 		value := strings.TrimSpace(keys[key])
 		if value == "" || strings.HasPrefix(value, "*") {
 			// `*3` is an inline brush model: it is inside the BSP, not a file.
@@ -252,6 +262,9 @@ func addEntityFiles(keys map[string]string, classname string, found *collector) 
 			Kind:  kind,
 			From:  fmt.Sprintf("%s %q", classname, key),
 			Count: 1,
+			// `model` is a misc_model, which Q3Map2 opens and bakes in. The
+			// other three are read by the game and the engine only.
+			RuntimeOnly: key != "model",
 		})
 	}
 }
