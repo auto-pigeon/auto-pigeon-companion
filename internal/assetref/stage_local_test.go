@@ -1,4 +1,4 @@
-package cli
+package assetref
 
 import (
 	"os"
@@ -20,7 +20,7 @@ func TestLocalAPMapInputsAreCopiedIntoTheStage(t *testing.T) {
 	}
 	inputs := map[string]string{"source_map": apmap, "wad": wad, "other": "aub:map/abc@r1"}
 	resolved := map[string]string{"source_map": apmap, "wad": wad, "other": filepath.Join(stage, "abc.apmap")}
-	out, err := stageLocalAPMaps(inputs, resolved, stage)
+	out, err := StageLocalAPMaps(inputs, resolved, stage)
 	if err != nil {
 		t.Fatal(err)
 	}

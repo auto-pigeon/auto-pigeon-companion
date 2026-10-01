@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/binary"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -138,19 +139,66 @@ func fixtureQ3BSP(parsed q3Args) int {
 			return 0
 		}
 	}
-	if err := os.WriteFile(base+".prt", []byte("PRT1\n2\n2\n"), 0o644); err != nil {
+	// Measured (Q3_010): a `misc_model` whose file is absent is this line, then
+	// every output as usual, then exit status 0.
+	if strings.Contains(string(source), "aucom_missing_model") {
+		fmt.Println(`ERROR: Unable to open file "models/aucom/nothere.md3".`)
+	}
+	if err := os.WriteFile(base+".prt", []byte(fixtureQ3Portals), 0o644); err != nil {
 		return 1
 	}
 	fmt.Printf("writing %s\n", base+".prt")
-	if err := os.WriteFile(base+".srf", []byte("surfaces "+filepath.Base(base)+"\n"), 0o644); err != nil {
+	surfaces := "default\n{\n\tcastShadows 1\n}\n"
+	if strings.Contains(string(source), "aucom_empty_srf") {
+		// Not something Q3Map2 was seen to do. It stands for the file that is
+		// present and wrong — a full disk, an interrupted write — which the
+		// REAL `-light` was measured to accept without a word.
+		surfaces = ""
+	}
+	if err := os.WriteFile(base+".srf", []byte(surfaces), 0o644); err != nil {
 		return 1
 	}
 	fmt.Printf("Writing %s\n", base+".srf")
-	if err := os.WriteFile(base+".bsp", []byte("IBSP\x2e\x00\x00\x00 fixture bsp\n"), 0o644); err != nil {
+	if err := os.WriteFile(base+".bsp", fixtureQ3BSPBytes(), 0o644); err != nil {
 		return 1
 	}
 	fmt.Printf("Writing %s\n", base+".bsp")
 	return 0
+}
+
+// fixtureQ3Portals is a portal file the way Q3Map2 lays one out: the header,
+// the cluster, portal and face counts, then a line for each portal and face.
+const fixtureQ3Portals = "PRT1\n2\n1\n1\n" +
+	"4 0 1 0 (0 0 0 ) (0 0 256 ) (0 256 256 ) (0 256 0 ) \n" +
+	"4 0 (0 0 0 ) (0 0 256 ) (0 256 256 ) (0 256 0 ) \n"
+
+// fixtureQ3BSPBytes is the smallest file that is structurally a Quake III BSP:
+// `IBSP`, version 46, seventeen lumps that lie inside the file, an entity
+// string and one model. Since Q3_010 a declared output is READ as what its role
+// says, so a placeholder that merely began with the magic is refused — which is
+// the point, and is why the fixture now writes the container properly. Later
+// stages append to it, as the real ones grow it; the lump table stays valid.
+func fixtureQ3BSPBytes() []byte {
+	const header = 8 + 17*8
+	entities := []byte("{\n\"classname\" \"worldspawn\"\n}\n\x00")
+	models := make([]byte, 40)
+	out := make([]byte, header, header+len(entities)+len(models))
+	copy(out, "IBSP")
+	binary.LittleEndian.PutUint32(out[4:], 46)
+	end := uint32(header + len(entities) + len(models))
+	for lump := 0; lump < 17; lump++ {
+		offset, length := end, uint32(0)
+		switch lump {
+		case 0:
+			offset, length = header, uint32(len(entities))
+		case 7:
+			offset, length = uint32(header+len(entities)), uint32(len(models))
+		}
+		binary.LittleEndian.PutUint32(out[8+lump*8:], offset)
+		binary.LittleEndian.PutUint32(out[12+lump*8:], length)
+	}
+	out = append(out, entities...)
+	return append(out, models...)
 }
 
 func fixtureQ3Vis(parsed q3Args) int {

@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/failure"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
 
@@ -147,15 +148,17 @@ func checkExecutable(path string) error {
 	info, err := os.Stat(path)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
-		return fmt.Errorf("job: %s does not exist; acquire the tool, or point the Companion at a copy you already have", path)
+		return failure.As(failure.ToolUnavailable,
+			fmt.Errorf("job: %s does not exist; acquire the tool, or point the Companion at a copy you already have", path))
 	case err != nil:
-		return fmt.Errorf("job: %s: %w", path, err)
+		return failure.As(failure.ToolUnavailable, fmt.Errorf("job: %s: %w", path, err))
 	case info.IsDir():
-		return fmt.Errorf("job: %s is a directory, not a program", path)
+		return failure.As(failure.ToolUnavailable, fmt.Errorf("job: %s is a directory, not a program", path))
 	case !info.Mode().IsRegular():
-		return fmt.Errorf("job: %s is %s", path, describeMode(info.Mode()))
+		return failure.As(failure.ToolUnavailable, fmt.Errorf("job: %s is %s", path, describeMode(info.Mode())))
 	case runtime.GOOS != "windows" && info.Mode().Perm()&0o111 == 0:
-		return fmt.Errorf("job: %s is not executable; check its permissions", path)
+		return failure.As(failure.ToolUnavailable,
+			fmt.Errorf("job: %s is not executable; check its permissions", path))
 	}
 	return nil
 }
@@ -208,7 +211,8 @@ func (e *execution) run(ctx context.Context) outcome {
 		stdoutWrite.Close()
 		stderrRead.Close()
 		stderrWrite.Close()
-		result.err = fmt.Errorf("job: starting %s: %w", filepath.Base(e.invocation.Command.Executable), err)
+		result.err = failure.As(failure.ToolUnavailable,
+			fmt.Errorf("job: starting %s: %w", filepath.Base(e.invocation.Command.Executable), err))
 		return result
 	}
 	// The child has its own descriptors now. Closing these is what makes the
@@ -297,8 +301,8 @@ func (e *execution) run(ctx context.Context) outcome {
 func (e *execution) classify(reason stopReason, waitErr error, code int, exited bool) error {
 	switch reason {
 	case stopTimedOut:
-		return fmt.Errorf("job: %s did not finish within %s and was stopped",
-			filepath.Base(e.invocation.Command.Executable), e.timeout())
+		return failure.As(failure.TimedOut, fmt.Errorf("job: %s did not finish within %s and was stopped",
+			filepath.Base(e.invocation.Command.Executable), e.timeout()))
 	case stopCancelled:
 		return nil // The service records Cancelled; that is not a failure.
 	case stopShutdown:
@@ -315,7 +319,8 @@ func (e *execution) classify(reason stopReason, waitErr error, code int, exited 
 			return nil
 		}
 	}
-	return fmt.Errorf("job: %s exited with status %d", filepath.Base(e.invocation.Command.Executable), code)
+	return failure.As(failure.ToolFailed,
+		fmt.Errorf("job: %s exited with status %d", filepath.Base(e.invocation.Command.Executable), code))
 }
 
 func exitCodeOf(err error) (int, bool) {
@@ -417,6 +422,8 @@ func (e *execution) lineHandler(collector *diagnosticCollector) func(string, int
 				Message:  message,
 				Hint:     rule.Hint,
 				Raw:      view,
+				Class:    rule.Class,
+				Fatal:    rule.Fatal,
 			})
 		}
 	}

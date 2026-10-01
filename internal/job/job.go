@@ -160,6 +160,11 @@ type Diagnostic struct {
 	// Raw is the matched line as the user view renders it: valid UTF-8, control
 	// characters removed, secrets redacted.
 	Raw string `json:"raw"`
+	// Class is the rule's own `class`, when it declares one: what kind of
+	// finding this is, as a token. Fatal is the rule's `fatal`: this line is
+	// why a job that exited 0 failed.
+	Class string `json:"class,omitempty"`
+	Fatal bool   `json:"fatal,omitempty"`
 }
 
 // StreamLog is what was captured from one output stream.
@@ -254,6 +259,11 @@ type Job struct {
 	ExitCode *int `json:"exit_code,omitempty"`
 	// Error is why a job failed, in a sentence. Empty on success.
 	Error string `json:"error,omitempty"`
+	// FailureClass says what KIND of failure Error is, as one of the tokens in
+	// internal/failure or a profile rule's own `class`. Empty on success, and
+	// empty on a failure nothing classified — which is a fact about that
+	// failure, not a class called "unknown".
+	FailureClass string `json:"failure_class,omitempty"`
 	// TimedOut and TimeoutSeconds record the bound and whether it was hit.
 	TimedOut       bool `json:"timed_out,omitempty"`
 	TimeoutSeconds int  `json:"timeout_seconds,omitempty"`

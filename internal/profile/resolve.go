@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/failure"
 )
 
 // Resolution: turning a document plus a machine into one exact process.
@@ -262,7 +264,8 @@ func checkActionPlatform(p Profile, action Action, want Platform) error {
 			}
 		}
 		if !matched {
-			return fmt.Errorf("profile: %s does not offer %q on %s", p.Metadata().ID, action.ID, want)
+			return failure.As(failure.PlatformUnsupported,
+				fmt.Errorf("profile: %s does not offer %q on %s", p.Metadata().ID, action.ID, want))
 		}
 	}
 	type supporter interface {
@@ -271,7 +274,8 @@ func checkActionPlatform(p Profile, action Action, want Platform) error {
 	if s, ok := p.(supporter); ok {
 		status, note := s.SupportFor(want)
 		if status == Unsupported {
-			return fmt.Errorf("profile: %s does not support %s: %s", p.Metadata().ID, want, note)
+			return failure.As(failure.PlatformUnsupported,
+				fmt.Errorf("profile: %s does not support %s: %s", p.Metadata().ID, want, note))
 		}
 	}
 	return nil
@@ -437,8 +441,9 @@ func resolveExecutable(p Profile, action Action, request Request) (string, error
 	}
 	base, ok := request.Roots[RootToolInstall]
 	if !ok || base == "" {
-		return "", fmt.Errorf("the executable %q lives under the %q root, which is not configured; acquire the tool first, or point the Companion at an existing copy",
-			action.Executable, RootToolInstall)
+		return "", failure.As(failure.ToolUnavailable,
+			fmt.Errorf("the executable %q lives under the %q root, which is not configured; acquire the tool first, or point the Companion at an existing copy",
+				action.Executable, RootToolInstall))
 	}
 	return filepath.Join(base, filepath.FromSlash(rendered)), nil
 }
@@ -620,7 +625,12 @@ func resolveRoots(action Action, roots map[string]string) (read, write []string,
 			if r.Optional {
 				continue
 			}
-			return nil, nil, fmt.Errorf("the action needs the %q root, which is not configured on this machine", r.Role)
+			err := fmt.Errorf("the action needs the %q root, which is not configured on this machine", r.Role)
+			if r.Role == RootGame || r.Role == RootContent {
+				// Game data is the one kind of root nothing here can supply.
+				err = failure.As(failure.GameDataMissing, err)
+			}
+			return nil, nil, err
 		}
 		resolved = filepath.Clean(resolved)
 		read = append(read, resolved)

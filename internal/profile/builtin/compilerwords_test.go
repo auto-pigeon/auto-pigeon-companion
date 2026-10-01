@@ -62,3 +62,30 @@ func TestVkQuakesQuitCrashIsACleanStop(t *testing.T) {
 		}
 	}
 }
+
+// Q3Map2 2.5.17n, measured (Q3_010): a `misc_model` whose file is absent prints
+// this line, writes the BSP without the model and exits 0. The line is the
+// only thing that says so, so the rule that matches it is `fatal` — and the
+// rules for a leak and for a missing image carry a class, so a build tells
+// them apart by a token and not by their wording.
+func TestQ3Map2sExitZeroFindingsAreClassedAndAMissingModelIsFatal(t *testing.T) {
+	for _, c := range []struct {
+		action, raw, id, class string
+		fatal                  bool
+	}{
+		{"compile", `ERROR: Unable to open file "models/q3010/nothere.md3".`, "model_missing", "model_missing", true},
+		{"compile", "******* leaked *******", "leaked", "leak", false},
+		{"compile", "--- MAP LEAKED, ABORTING LEAKTEST ---", "leaktest_abort", "leak", false},
+		{"compile", "WARNING: Couldn't find image for shader textures/q3004/floor", "missing_image", "shader_image_missing", false},
+		{"light", "WARNING: Couldn't find image for shader textures/q3004/floor", "missing_image", "shader_image_missing", false},
+	} {
+		rule, ok := classify(t, Q3Map2, c.action, "stdout", c.raw)
+		if !ok || rule.ID != c.id || rule.Class != c.class || rule.Fatal != c.fatal {
+			t.Errorf("%s: %q classified as %+v, want %s class %s fatal %t", c.action, c.raw, rule, c.id, c.class, c.fatal)
+		}
+	}
+	// A line that merely mentions a file being unreadable is not the model line.
+	if rule, ok := classify(t, Q3Map2, "compile", "stdout", "Unable to open file"); ok && rule.Fatal {
+		t.Errorf("a bare phrase matched the fatal rule: %+v", rule)
+	}
+}

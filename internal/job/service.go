@@ -13,7 +13,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/artifactcheck"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/failure"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
 
@@ -695,6 +697,10 @@ func (s *Service) resolve(id string, request Request, entry CatalogEntry, action
 	for _, declared := range action.Inputs {
 		groups[declared.Name] = declared.StageGroup()
 	}
+	inputRoles := make(map[string]string, len(action.Inputs))
+	for _, declared := range action.Inputs {
+		inputRoles[declared.Name] = declared.Role
+	}
 	inputs := make(map[string]string, len(request.Inputs))
 	for _, name := range sortedKeys(request.Inputs) {
 		resolved, destination, err := plannedInput(l, name, groups[name], request.Inputs[name], allowed)
@@ -704,6 +710,12 @@ func (s *Service) resolve(id string, request Request, entry CatalogEntry, action
 		if stage {
 			if err := stageInput(name, resolved, destination); err != nil {
 				return profile.Invocation{}, err
+			}
+			// Read as what its role says it is, before a process is started
+			// on it: a `.srf` that is empty lights a map without a word, and
+			// a `.prt` that is not one fails only after the stage began.
+			if err := checkArtifact("input", name, inputRoles[name], destination); err != nil {
+				return profile.Invocation{}, failure.As(failure.InputInvalid, err)
 			}
 		}
 		inputs[name] = destination
@@ -781,11 +793,11 @@ func (s *Service) execute(id string) {
 
 	entry, action, err := s.resolveAction(j.Request)
 	if err != nil {
-		s.finish(j, Failed, err.Error(), nil)
+		s.fail(j, err)
 		return
 	}
 	if err := s.authorize(entry, j.Request); err != nil {
-		s.finish(j, Failed, err.Error(), nil)
+		s.fail(j, err)
 		return
 	}
 	// The digest is re-read here, not carried from submission: a document on
@@ -799,7 +811,7 @@ func (s *Service) execute(id string) {
 
 	invocation, err := s.resolve(id, j.Request, entry, action, true)
 	if err != nil {
-		s.finish(j, Failed, err.Error(), nil)
+		s.fail(j, err)
 		return
 	}
 
@@ -855,6 +867,12 @@ func (s *Service) execute(id string) {
 	}
 	artifacts, collectErr := collect(l, invocation.Outputs, roles, optional)
 	j.Artifacts = artifacts
+	if collectErr != nil {
+		// A required output that is not there. When the program said why — a
+		// leak, in its own classified line — that is the class; otherwise the
+		// absence is all that is known.
+		collectErr = failure.As(firstNonEmpty(errorClass(result.diagnostics), failure.OutputMissing), collectErr)
+	}
 
 	switch {
 	case result.reason == stopShutdown:
@@ -880,11 +898,31 @@ func (s *Service) execute(id string) {
 			*result.exitCode, cleanStopProof(action, result.diagnostics), result.err.Error()), nil)
 		return
 	case result.err != nil:
-		s.finish(j, Failed, result.err.Error(), nil)
+		s.fail(j, result.err)
 		return
-	case collectErr != nil:
-		s.finish(j, Failed, collectErr.Error(), nil)
+	}
+	// The process exited with a success status. Three things can still make
+	// its result unusable, and exit status alone says none of them (Q3_010):
+	// a line the profile marks `fatal`, a required output that is absent, and
+	// an output that exists and is not what its role says.
+	if fatal := fatalDiagnostic(result.diagnostics); fatal != nil {
+		s.fail(j, failure.As(firstNonEmpty(fatal.Class, failure.FatalDiagnostic), fmt.Errorf(
+			"job: %s exited 0 after printing a line its profile marks fatal (%s): %s",
+			filepath.Base(invocation.Command.Executable), fatal.RuleID, fatal.Raw)))
 		return
+	}
+	if collectErr != nil {
+		s.fail(j, collectErr)
+		return
+	}
+	for _, artifact := range artifacts {
+		if artifact.Missing {
+			continue
+		}
+		if err := checkArtifact("output", artifact.Name, artifact.Role, artifact.Path); err != nil {
+			s.fail(j, failure.As(failure.OutputInvalid, err))
+			return
+		}
 	}
 	s.finish(j, Succeeded, "", func() {
 		if !s.keep {
@@ -896,6 +934,58 @@ func (s *Service) execute(id string) {
 			}
 		}
 	})
+}
+
+// fail finishes a job as Failed, recording what kind of failure it was when the
+// error says.
+func (s *Service) fail(j *Job, err error) {
+	j.FailureClass = failure.Of(err)
+	s.finish(j, Failed, err.Error(), nil)
+}
+
+// checkArtifact reads a staged input or a collected output as its role.
+//
+// An [artifactcheck.Invalid] becomes the job's failure. A file that could not
+// be read at all is reported the same way and says so: an output the Companion
+// just copied and cannot open is not a result either.
+func checkArtifact(kind, name, role, path string) error {
+	err := artifactcheck.Check(role, path)
+	switch {
+	case err == nil:
+		return nil
+	case artifactcheck.IsInvalid(err):
+		return fmt.Errorf("job: the %s %q is %w", kind, name, err)
+	}
+	return fmt.Errorf("job: the %s %q could not be read as %s: %w", kind, name, role, err)
+}
+
+// fatalDiagnostic is the first finding whose rule is marked `fatal`.
+func fatalDiagnostic(diagnostics []Diagnostic) *Diagnostic {
+	for i := range diagnostics {
+		if diagnostics[i].Fatal {
+			return &diagnostics[i]
+		}
+	}
+	return nil
+}
+
+// errorClass is the class of the first error-severity finding that has one.
+func errorClass(diagnostics []Diagnostic) string {
+	for _, d := range diagnostics {
+		if d.Severity == profile.SeverityError && d.Class != "" {
+			return d.Class
+		}
+	}
+	return ""
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func (s *Service) ctxOrBackground() context.Context {

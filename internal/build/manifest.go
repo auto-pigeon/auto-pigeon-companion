@@ -14,6 +14,7 @@ import (
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/q3vfs"
 )
 
 // SchemaVersion versions the build manifest.
@@ -22,7 +23,7 @@ import (
 // what somebody else reads to find out what produced it, and may be read by a
 // build of the Companion older or newer than the one that wrote it. So it is
 // versioned by name and refused rather than half-read.
-const SchemaVersion = "aucom.build-manifest/1.2"
+const SchemaVersion = "aucom.build-manifest/1.3"
 
 // readableSchemas is every version this build can read.
 //
@@ -35,11 +36,15 @@ const SchemaVersion = "aucom.build-manifest/1.2"
 // was given, and the identity of the AUB texture bundle that supplied one
 // (`AUCOM/AUE/AUT 246I1`). Both are additive, and every older manifest stays
 // readable — `companion build show` on a manifest written last week must keep
-// working, and a test pins that.
+// working, and a test pins that. What 1.3 adds (`Q3_010`) is [Manifest.GameData]
+// — what a Quake III build staged and was allowed to read — the failure class
+// beside a failed build's and a failed step's sentence, and the conversion
+// record on an input that was an APMap. Additive again.
 var readableSchemas = map[string]bool{
 	"aucom.build-manifest/1.0": true,
 	"aucom.build-manifest/1.1": true,
 	"aucom.build-manifest/1.2": true,
+	"aucom.build-manifest/1.3": true,
 }
 
 // ManifestFileName is what the manifest is called inside a build directory.
@@ -77,6 +82,67 @@ type FileRecord struct {
 	// identity. Absent for a file the user pointed at on their own disk, which
 	// has none.
 	Source *SourceRef `json:"source,omitempty"`
+
+	// Conversion is set when this file was written by the extractor from an
+	// APMap: which document it was, the digest of the APMap that was read, and
+	// the extractor's own conversion manifest. Added by
+	// `aucom.build-manifest/1.3`.
+	Conversion *Conversion `json:"conversion,omitempty"`
+}
+
+// Conversion records that an input is a `.map` the extractor wrote from an
+// APMap, and exactly which APMap.
+//
+// # Why it is not left to SourceRef
+//
+// [SourceRef] already carries `converted_to` and the converted digest, and it
+// exists only for an input that came from the account. A local `.apmap` has no
+// SourceRef at all, so before `Q3_010` a build of one recorded the digest of a
+// `.map` nobody had ever seen and nothing about the document it came from. The
+// conversion is a fact about the FILE, whichever way the APMap arrived, so it
+// is recorded on the file.
+type Conversion struct {
+	// From and To are the formats: `apmap` and `map`.
+	From string `json:"from"`
+	To   string `json:"to"`
+	// Direction is the extractor's own name for what it did, `apmap-to-q3map`.
+	Direction string `json:"direction"`
+
+	// SourceName, SourceSHA256 and SourceBytes identify the APMap bytes read.
+	SourceName   string `json:"source_name"`
+	SourceSHA256 string `json:"source_sha256"`
+	SourceBytes  int64  `json:"source_bytes"`
+
+	// DocumentID and DocumentRevision are the APMap's own identity, read from
+	// its header; APMapVersion and Game are what it declares itself to be.
+	DocumentID       string `json:"document_id,omitempty"`
+	DocumentRevision int    `json:"document_revision"`
+	APMapVersion     string `json:"apmap_version,omitempty"`
+	Game             string `json:"game,omitempty"`
+
+	// ConvertedBy and ConverterVerified say which extractor did it and whether
+	// anything verified that extractor.
+	ConvertedBy       string `json:"converted_by,omitempty"`
+	ConverterVerified bool   `json:"converter_verified"`
+
+	// Manifest is the extractor's conversion manifest, when it writes one (the
+	// Quake III direction does): kept in the build beside the `.map`, with its
+	// digest, so every shader, model and warning the conversion named is still
+	// there to read after the build.
+	Manifest *ConversionManifest `json:"manifest,omitempty"`
+}
+
+// ConversionManifest points at the extractor's own record of a conversion.
+type ConversionManifest struct {
+	Name string `json:"name"`
+	// Path is where the build kept it. Diagnostic, like every path here.
+	Path   string `json:"path,omitempty"`
+	SHA256 string `json:"sha256"`
+	Format string `json:"format,omitempty"`
+	// Warnings, Shaders and Models are how many of each it lists.
+	Warnings int `json:"warnings"`
+	Shaders  int `json:"shaders"`
+	Models   int `json:"models"`
 }
 
 // SourceRef names the exact remote revision an input was taken from.
@@ -184,15 +250,18 @@ type Step struct {
 	PreviewMatched    bool   `json:"preview_matched"`
 	PreviewDifference string `json:"preview_difference,omitempty"`
 
-	Options    map[string]string `json:"options,omitempty"`
-	Inputs     []FileRecord      `json:"inputs,omitempty"`
-	Outputs    []FileRecord      `json:"outputs,omitempty"`
-	ExitCode   *int              `json:"exit_code,omitempty"`
-	TimedOut   bool              `json:"timed_out,omitempty"`
-	Error      string            `json:"error,omitempty"`
-	StartedAt  time.Time         `json:"started_at,omitempty"`
-	FinishedAt time.Time         `json:"finished_at,omitempty"`
-	DurationMS int64             `json:"duration_ms,omitempty"`
+	Options  map[string]string `json:"options,omitempty"`
+	Inputs   []FileRecord      `json:"inputs,omitempty"`
+	Outputs  []FileRecord      `json:"outputs,omitempty"`
+	ExitCode *int              `json:"exit_code,omitempty"`
+	TimedOut bool              `json:"timed_out,omitempty"`
+	Error    string            `json:"error,omitempty"`
+	// FailureClass is what kind of failure Error is — the job's own, or the
+	// runner's for a step that never became a job. See internal/failure.
+	FailureClass string    `json:"failure_class,omitempty"`
+	StartedAt    time.Time `json:"started_at,omitempty"`
+	FinishedAt   time.Time `json:"finished_at,omitempty"`
+	DurationMS   int64     `json:"duration_ms,omitempty"`
 
 	Diagnostics []job.Diagnostic `json:"diagnostics,omitempty"`
 	Stdout      job.StreamLog    `json:"stdout"`
@@ -233,6 +302,11 @@ type Manifest struct {
 	EngineFamily string    `json:"engine_family,omitempty"`
 	State        job.State `json:"state"`
 	Error        string    `json:"error,omitempty"`
+	// FailureClass says what KIND of failure Error is, as a token: the tool is
+	// not installed, the platform is not supported, game data is missing, an
+	// archive is damaged, the map leaks. It is beside the sentence, never
+	// instead of it, and it is empty for a failure nothing classified.
+	FailureClass string `json:"failure_class,omitempty"`
 	// Strict says whether an error-severity diagnostic was treated as a failure.
 	Strict bool `json:"strict,omitempty"`
 
@@ -248,10 +322,15 @@ type Manifest struct {
 	//
 	// Added by `aucom.build-manifest/1.2`. A 1.0 or 1.1 manifest simply has no
 	// roots, which is exactly what those builds had.
-	Roots   []RootRecord `json:"roots,omitempty"`
-	Tools   []ToolRecord `json:"tools,omitempty"`
-	Steps   []Step       `json:"steps"`
-	Outputs []FileRecord `json:"outputs,omitempty"`
+	Roots []RootRecord `json:"roots,omitempty"`
+	// GameData is what a Quake III build staged out of those roots and gave the
+	// compiler instead of them: the base game and mod directories, every PK3
+	// with its digest, the loose file count, and what was left out. Nil for a
+	// family that stages nothing. Added by `aucom.build-manifest/1.3`.
+	GameData *q3vfs.Stage `json:"game_data,omitempty"`
+	Tools    []ToolRecord `json:"tools,omitempty"`
+	Steps    []Step       `json:"steps"`
+	Outputs  []FileRecord `json:"outputs,omitempty"`
 
 	// ReproducibleKey is a digest over the *recipe*: the pipeline document, the
 	// tools that ran, the inputs, the options and the argv, with the paths and
@@ -355,6 +434,23 @@ func (m *Manifest) computeKey(roots []string) {
 			}
 		default:
 			write("root-source=%s", root.Source.Kind)
+		}
+	}
+	// What was staged is part of the recipe by IDENTITY: the mod name, and each
+	// archive's digest. Two builds that read a different `pak0.pk3` are not the
+	// same build. Loose files have no digest here — they are read in place —
+	// so their count and total stand in, which changes the key when a texture
+	// is added and not when one is edited; the BSP's own digest is what says
+	// that.
+	if m.GameData != nil {
+		write("game-data=%s:%s", m.GameData.BaseGame, m.GameData.FSGame)
+		for _, root := range m.GameData.Roots {
+			for _, game := range root.Games {
+				write("game-dir=%s:%s:%t:%d:%d", root.Role, game.Name, game.Present, game.LooseFiles, game.LooseBytes)
+				for _, archive := range game.Archives {
+					write("game-archive=%s:%s", archive.Name, archive.SHA256)
+				}
+			}
 		}
 	}
 	for _, tool := range m.Tools {

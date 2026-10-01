@@ -742,6 +742,14 @@
         "clean_stop": {
           "type": "boolean",
           "description": "The line proves the session ended normally: a non-success exit status after it is recorded as a clean stop, not a crash. For a program known to crash while quitting."
+        },
+        "fatal": {
+          "type": "boolean",
+          "description": "The line proves the stage's result is not usable: the job fails although the program exited 0. Requires severity error."
+        },
+        "class": {
+          "$ref": "#/$defs/token",
+          "description": "What kind of failure or finding this line is, as a token a build reports beside the message."
         }
       }
     },

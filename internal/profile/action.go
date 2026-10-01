@@ -548,6 +548,12 @@ func (o OptionSpec) Check(value string) error {
 		if len(value) > max {
 			return fmt.Errorf("option %q is %d bytes, over its %d-byte limit", o.Name, len(value), max)
 		}
+		// Measured (Q3_010): `-fs_game ..` makes Q3Map2 read the PARENT of every
+		// base path, and `..` is made of permitted characters. A value that is
+		// only dots is a directory reference, whatever option it arrives in.
+		if value != "" && strings.Trim(value, ".") == "" {
+			return fmt.Errorf("option %q is %q, which names a directory rather than being a name", o.Name, value)
+		}
 		for i := 0; i < len(value); i++ {
 			ch := value[i]
 			if !(ch >= 'A' && ch <= 'Z' || ch >= 'a' && ch <= 'z' || ch >= '0' && ch <= '9' || ch == '.' || ch == '_' || ch == '-') {
@@ -611,6 +617,19 @@ type DiagnosticRule struct {
 	// aborts on `quit`, and its AppImage then exits 127 — and never turns a
 	// job that printed nothing into a success: the line has to be there.
 	CleanStop bool `json:"clean_stop,omitempty"`
+	// Fatal says the line proves the stage's result is not usable, so the job
+	// fails although the program exited 0. It is CleanStop's mirror, and it
+	// exists for the same kind of reason: Q3Map2 2.5.17n prints `ERROR: Unable
+	// to open file "models/…"` for a `misc_model` whose file is absent, drops
+	// the model, writes the BSP and exits 0 (measured, Q3_010). An exit status
+	// cannot say that; only the program's own line can, and the document's
+	// author is who knows which line that is.
+	Fatal bool `json:"fatal,omitempty"`
+	// Class names what kind of failure or finding this line is, as a token —
+	// `leak`, `model_missing`, `shader_image_missing`. A build reports it
+	// beside the message, so "the map leaks" and "the compiler is not
+	// installed" are told apart by something other than their wording.
+	Class string `json:"class,omitempty"`
 }
 
 var diagnosticStreams = []string{"stdout", "stderr", "both"}
@@ -638,6 +657,22 @@ func (d DiagnosticRule) validate(c *collector) {
 	c.child(field("clean_stop"), func(c *collector) {
 		if d.CleanStop && d.Severity == SeverityError {
 			c.fixf("use severity warning or info", "an error cannot also be the proof of a clean stop")
+		}
+	})
+	c.child(field("fatal"), func(c *collector) {
+		// Both are said when both are true: a clean stop is never an error
+		// and a fatal finding always is, so a rule marked with both is wrong
+		// twice, and the second message is the one that explains the first.
+		if d.Fatal && d.Severity != SeverityError {
+			c.fixf("use severity error", "a line that fails the job is %q; a fatal finding is an error", d.Severity)
+		}
+		if d.Fatal && d.CleanStop {
+			c.fixf("remove one of them", "the same line cannot prove both a clean stop and an unusable result")
+		}
+	})
+	c.child(field("class"), func(c *collector) {
+		if d.Class != "" {
+			checkToken(c, d.Class)
 		}
 	})
 }

@@ -368,7 +368,7 @@ func (s *Server) resolveRoots(request buildRequestBody) (
 // The staging directory is inside the builds directory and per-request, so two
 // builds started at once cannot write over each other's copy of a map.
 func (s *Server) resolveInputs(ctx context.Context, request buildRequestBody) (
-	map[string]string, map[string]build.SourceRef, error) {
+	map[string]string, map[string]build.SourceRef, map[string]build.Conversion, error) {
 	anyRef := false
 	for _, value := range request.Inputs {
 		if assetref.Is(value) {
@@ -376,46 +376,60 @@ func (s *Server) resolveInputs(ctx context.Context, request buildRequestBody) (
 			break
 		}
 	}
+	resolved := make(map[string]string, len(request.Inputs))
+	var sources map[string]build.SourceRef
 	if !anyRef {
 		// Local files only. Each is checked here rather than left to fail
 		// somewhere inside the build, so the message names the input.
-		resolved := make(map[string]string, len(request.Inputs))
 		for name, value := range request.Inputs {
 			path, err := checkOpenFile(value)
 			if err != nil {
-				return nil, nil, fmt.Errorf("the input %q: %w", name, err)
+				return nil, nil, nil, fmt.Errorf("the input %q: %w", name, err)
 			}
 			resolved[name] = path
 		}
-		return resolved, nil, nil
-	}
-
-	store, err := s.assets()
-	if err != nil {
-		return nil, nil, err
-	}
-	// The syncer is optional on purpose: a pinned revision already in the cache
-	// builds with no session and no network. Only `current`, and a revision
-	// this machine has never fetched, need one.
-	var syncer *assetsync.Syncer
-	if client := s.aubClient(); client != nil && client.Authenticated() {
-		if made, err := assetsync.NewSyncer(ctx, client, store); err == nil {
-			syncer = made
+		if !assetref.HasLocalAPMap(resolved) {
+			return resolved, nil, nil, nil
 		}
 	}
+
 	buildsDir, err := s.buildsDir()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	stage, err := os.MkdirTemp(ensureDir(buildsDir), "inputs-")
 	if err != nil {
-		return nil, nil, fmt.Errorf("creating a staging directory: %w", err)
+		return nil, nil, nil, fmt.Errorf("creating a staging directory: %w", err)
 	}
-	resolved, sources, err := assetref.ResolveAll(ctx, store, syncer, request.Inputs, stage)
+	local := resolved
+	if anyRef {
+		store, err := s.assets()
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		// The syncer is optional on purpose: a pinned revision already in the cache
+		// builds with no session and no network. Only `current`, and a revision
+		// this machine has never fetched, need one.
+		var syncer *assetsync.Syncer
+		if client := s.aubClient(); client != nil && client.Authenticated() {
+			if made, err := assetsync.NewSyncer(ctx, client, store); err == nil {
+				syncer = made
+			}
+		}
+		resolved, sources, err = assetref.ResolveAll(ctx, store, syncer, request.Inputs, stage)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		local = request.Inputs
+	}
+	// A local `.apmap` is converted from a copy in the stage, never beside the
+	// user's own file. Before Q3_010 only the terminal did this; the page sent
+	// the APMap to the compiler as it was.
+	resolved, err = assetref.StageLocalAPMaps(local, resolved, stage)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return assetref.ConvertAPMapInputs(ctx, s.runner, resolved, sources)
+	return assetref.ConvertAPMapInputsRecorded(ctx, s.runner, resolved, sources)
 }
 
 func ensureDir(dir string) string {
@@ -441,7 +455,7 @@ func (s *Server) handleBuildPreview(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, err)
 		return
 	}
-	inputs, sources, err := s.resolveInputs(r.Context(), request)
+	inputs, sources, conversions, err := s.resolveInputs(r.Context(), request)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -455,6 +469,7 @@ func (s *Server) handleBuildPreview(w http.ResponseWriter, r *http.Request) {
 		PipelineID:  request.Pipeline,
 		Inputs:      inputs,
 		Sources:     sources,
+		Conversions: conversions,
 		Roots:       roots,
 		RootSources: rootSources,
 		Options:     request.Options,
@@ -489,7 +504,7 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 	// started: fetching a map from AUB is the part that can fail for reasons
 	// the user must be told about immediately, and a build that had already
 	// started would report them as a build failure instead.
-	inputs, sources, err := s.resolveInputs(r.Context(), request)
+	inputs, sources, conversions, err := s.resolveInputs(r.Context(), request)
 	if err != nil {
 		writeError(w, aubStatus(err), err)
 		return
@@ -554,6 +569,7 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 			PipelineID:  request.Pipeline,
 			Inputs:      inputs,
 			Sources:     sources,
+			Conversions: conversions,
 			Roots:       roots,
 			RootSources: rootSources,
 			Options:     request.Options,

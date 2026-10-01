@@ -190,7 +190,7 @@ func buildRun(env *Env, args []string, previewOnly bool) int {
 	}
 	defer os.RemoveAll(stage)
 
-	resolvedInputs, sources, err := resolveAUBInputs(ctx, env, inputs.orNil(), stage)
+	resolvedInputs, sources, conversions, err := resolveAUBInputs(ctx, env, inputs.orNil(), stage)
 	if err != nil {
 		return fail(env, err)
 	}
@@ -204,6 +204,7 @@ func buildRun(env *Env, args []string, previewOnly bool) int {
 		PipelineID:  *pipeline,
 		Inputs:      resolvedInputs,
 		Sources:     sources,
+		Conversions: conversions,
 		Roots:       requestRoots,
 		RootSources: rootSources,
 		Options:     options.orNil(),
@@ -434,6 +435,11 @@ func printBuildOutcome(env *Env, m *build.Manifest) {
 	if m.Error != "" {
 		fmt.Fprintf(env.Stdout, "  error     %s\n", m.Error)
 	}
+	if m.FailureClass != "" {
+		// The kind of failure, as a token, beside the sentence: what a script
+		// or a page tells apart without reading the wording.
+		fmt.Fprintf(env.Stdout, "  class     %s\n", m.FailureClass)
+	}
 	for _, tool := range m.Tools {
 		fmt.Fprintf(env.Stdout, "  tool      %s %s via %s\n", tool.Profile.Name, tool.ToolVersion, orNone(string(tool.Acquisition)))
 		for _, exe := range tool.Executables {
@@ -442,8 +448,10 @@ func printBuildOutcome(env *Env, m *build.Manifest) {
 	}
 	for _, input := range m.Inputs {
 		fmt.Fprintf(env.Stdout, "  input     %-12s %s\n", input.Name, input.SHA256)
+		printConversion(env, input.Conversion)
 	}
 	printBuildRoots(env, m)
+	printGameData(env, m)
 	for _, step := range m.Steps {
 		state := string(step.State)
 		if step.Skipped {
@@ -458,6 +466,9 @@ func printBuildOutcome(env *Env, m *build.Manifest) {
 		}
 		if step.Error != "" {
 			fmt.Fprintf(env.Stdout, "    error: %s\n", step.Error)
+		}
+		if step.FailureClass != "" {
+			fmt.Fprintf(env.Stdout, "    class: %s\n", step.FailureClass)
 		}
 		for _, d := range step.Diagnostics {
 			fmt.Fprintf(env.Stdout, "    %-8s %s\n", d.Severity, firstNonEmpty(d.Message, d.Raw))
@@ -596,5 +607,63 @@ func printBuildRoots(env *Env, m *build.Manifest) {
 		default:
 			fmt.Fprintf(env.Stdout, "            %s\n", root.Source.Kind)
 		}
+	}
+}
+
+// printConversion says what an input was converted from: the APMap's own
+// identity and digest, and the extractor's conversion manifest when it wrote
+// one. Nothing for an input that was a `.map` to begin with.
+func printConversion(env *Env, c *build.Conversion) {
+	if c == nil {
+		return
+	}
+	verified := "UNVERIFIED"
+	if c.ConverterVerified {
+		verified = "verified"
+	}
+	fmt.Fprintf(env.Stdout, "            converted from %s %s (%s, revision %d) by the %s extractor, %s\n",
+		c.From, c.SourceSHA256, orNone(c.DocumentID), c.DocumentRevision, orNone(c.ConvertedBy), verified)
+	if c.Manifest != nil {
+		fmt.Fprintf(env.Stdout, "            %s %s — %d shader(s), %d model(s), %d warning(s)\n",
+			c.Manifest.Name, c.Manifest.SHA256, c.Manifest.Shaders, c.Manifest.Models, c.Manifest.Warnings)
+	}
+}
+
+// printGameData prints what a Quake III build staged: the mod directory name,
+// and for each approved folder the game directories it had, every PK3 with
+// its digest, the loose file count and what was left out. It is what the
+// compiler was given INSTEAD of the folders above it.
+func printGameData(env *Env, m *build.Manifest) {
+	if m.GameData == nil {
+		return
+	}
+	fsGame := "none (a plain base-game map)"
+	if m.GameData.FSGame != "" {
+		fsGame = m.GameData.FSGame
+	}
+	fmt.Fprintf(env.Stdout, "  game data base game %s, fs_game %s, staged by %s\n", m.GameData.BaseGame, fsGame, m.GameData.Method)
+	for _, root := range m.GameData.Roots {
+		fmt.Fprintf(env.Stdout, "            %s -> %s\n", root.Role, root.Path)
+		for _, game := range root.Games {
+			if !game.Present {
+				fmt.Fprintf(env.Stdout, "              %s/ not present\n", game.Name)
+				continue
+			}
+			fmt.Fprintf(env.Stdout, "              %s/ %d archive(s), %d loose file(s), %d bytes loose\n",
+				game.Name, len(game.Archives), game.LooseFiles, game.LooseBytes)
+			for _, archive := range game.Archives {
+				fmt.Fprintf(env.Stdout, "                %-24s %10d  %s  %d member(s)\n",
+					archive.Name, archive.Size, archive.SHA256, archive.Entries)
+			}
+			for _, skipped := range game.Skipped {
+				fmt.Fprintf(env.Stdout, "                not staged: %s (%s)\n", skipped.Path, skipped.Reason)
+			}
+			if game.SkippedMore > 0 {
+				fmt.Fprintf(env.Stdout, "                not staged: %d more\n", game.SkippedMore)
+			}
+		}
+	}
+	for _, finding := range m.GameData.Findings {
+		fmt.Fprintf(env.Stdout, "            %s: %s\n", finding.Class, finding.Message)
 	}
 }

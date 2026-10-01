@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/failure"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
@@ -104,6 +105,10 @@ type Request struct {
 	// asset — rather than discovered here, because this package must not learn
 	// how to talk to a backend to record where a file came from.
 	Sources map[string]SourceRef
+	// Conversions names, for an input the extractor wrote from an APMap, what
+	// it was written from. Keyed like Sources, optional like Sources, and
+	// supplied by the caller for the same reason.
+	Conversions map[string]Conversion
 
 	// Inputs maps a declared pipeline input to a file on this machine.
 	//
@@ -206,6 +211,19 @@ func (r *Runner) Run(ctx context.Context, request Request) (*Manifest, error) {
 	// which a build is running and has no name.
 	r.options.Announce(manifest)
 
+	// A Quake III build reads game data, and reads only what was staged for
+	// it. Done before the map is copied in: a damaged archive or a mod
+	// directory no folder has is a reason not to start, and saying so costs
+	// nothing yet.
+	if stagesGameData(manifest.EngineFamily) {
+		if request, err = r.stageGameData(request, steps, layout, manifest); err != nil {
+			return r.fail(manifest, job.Failed, err)
+		}
+		if err := manifest.Save(dir); err != nil {
+			return nil, err
+		}
+	}
+
 	wires, err := r.stageInputs(pipeline, request, layout, manifest)
 	if err != nil {
 		return r.fail(manifest, job.Failed, err)
@@ -236,8 +254,8 @@ func (r *Runner) Run(ctx context.Context, request Request) (*Manifest, error) {
 			// Cancelled by whoever started it: recorded as exactly that, and
 			// finished now, so nothing later mistakes it for a build the
 			// Companion abandoned by crashing.
-			return r.fail(manifest, job.Cancelled,
-				fmt.Errorf("cancelled while the %s step was running", resolved.Step.ID))
+			return r.fail(manifest, job.Cancelled, failure.As(failure.Cancelled,
+				fmt.Errorf("cancelled while the %s step was running", resolved.Step.ID)))
 		}
 		if err != nil {
 			// Published anyway, best effort. A failed compile still wrote the
@@ -245,7 +263,8 @@ func (r *Runner) Run(ctx context.Context, request Request) (*Manifest, error) {
 			// build's own scratch layout would mean the one artifact the user
 			// needs is the one a failure hides.
 			_ = r.publish(pipeline, layout, wires, manifest)
-			return r.fail(manifest, step.State, fmt.Errorf("the %s step: %w", resolved.Step.ID, err))
+			return r.fail(manifest, step.State, failure.As(step.FailureClass,
+				fmt.Errorf("the %s step: %w", resolved.Step.ID, err)))
 		}
 	}
 
@@ -254,7 +273,7 @@ func (r *Runner) Run(ctx context.Context, request Request) (*Manifest, error) {
 	}
 	if request.Strict {
 		if offender := strictFindings(manifest); offender != "" {
-			return r.fail(manifest, job.Failed, errors.New(offender))
+			return r.fail(manifest, job.Failed, failure.As(failure.FatalDiagnostic, errors.New(offender)))
 		}
 	}
 	manifest.State = job.Succeeded
@@ -305,6 +324,11 @@ func (r *Runner) Preview(request Request) (*Manifest, error) {
 	// or the user finds out at stage three.
 	if manifest.Roots, err = checkRoots(request, steps); err != nil {
 		return nil, err
+	}
+	if stagesGameData(manifest.EngineFamily) {
+		if request, err = r.previewGameData(request, steps); err != nil {
+			return nil, err
+		}
 	}
 
 	// Where the user's files would be after the build copied them in, and where
@@ -556,6 +580,13 @@ func (r *Runner) stageInputs(pipeline *profile.PipelineProfile, request Request,
 			provenance := source
 			record.Source = &provenance
 		}
+		if conversion, converted := request.Conversions[input.Name]; converted {
+			kept, err := keepConversionManifest(conversion, filepath.Dir(destination))
+			if err != nil {
+				return nil, fmt.Errorf("the input %q: %w", input.Name, err)
+			}
+			record.Conversion = &kept
+		}
 		manifest.Inputs = append(manifest.Inputs, record)
 	}
 	return wires, nil
@@ -633,9 +664,9 @@ func (r *Runner) stepRequest(request Request, layout layout, resolved profile.Re
 		switch {
 		case !produced || source.Missing:
 			if required {
-				return job.Request{}, nil, nil, fmt.Errorf(
+				return job.Request{}, nil, nil, failure.As(failure.OutputMissing, fmt.Errorf(
 					"needs %q, which %s did not produce; it is a required input of the %q action",
-					w.Name, w.From, resolved.Action.ID)
+					w.Name, w.From, resolved.Action.ID))
 			}
 			records = append(records, FileRecord{Name: w.Name, From: w.From, Missing: true, Optional: true})
 			continue
@@ -688,7 +719,7 @@ func (r *Runner) runStep(ctx context.Context, request Request, layout layout, re
 	jobRequest, options, inputs, err := r.stepRequest(request, layout, resolved, wires)
 	step.Options, step.Inputs = options, inputs
 	if err != nil {
-		step.Error = err.Error()
+		step.Error, step.FailureClass = err.Error(), failure.Of(err)
 		return step, err
 	}
 
@@ -699,13 +730,13 @@ func (r *Runner) runStep(ctx context.Context, request Request, layout layout, re
 	// is a claim worth making only if something checks it.
 	previewed, err := r.options.Service.Preview(jobRequest)
 	if err != nil {
-		step.Error = err.Error()
+		step.Error, step.FailureClass = err.Error(), failure.Of(err)
 		return step, err
 	}
 
 	submitted, err := r.options.Service.SubmitWatched(jobRequest, request.Mirror)
 	if err != nil {
-		step.Error = err.Error()
+		step.Error, step.FailureClass = err.Error(), failure.Of(err)
 		return step, err
 	}
 	step.JobID = submitted.ID
@@ -724,6 +755,7 @@ func (r *Runner) runStep(ctx context.Context, request Request, layout layout, re
 		// stopped. So the job is cancelled too, and waited for, briefly.
 		stopped := r.stopJob(submitted.ID)
 		step.State, step.Error = job.Cancelled, "cancelled while this step was running"
+		step.FailureClass = failure.Cancelled
 		if stopped != nil {
 			step.Command, step.ExitCode = stopped.Command, stopped.ExitCode
 			step.StartedAt, step.FinishedAt = stopped.StartedAt, stopped.FinishedAt
@@ -731,7 +763,7 @@ func (r *Runner) runStep(ctx context.Context, request Request, layout layout, re
 			if stopped.State == job.Succeeded {
 				// It finished before the signal arrived; say so rather than
 				// claiming it was stopped.
-				step.State, step.Error = job.Succeeded, ""
+				step.State, step.Error, step.FailureClass = job.Succeeded, "", ""
 			}
 		}
 
@@ -749,7 +781,7 @@ func (r *Runner) runStep(ctx context.Context, request Request, layout layout, re
 	step.Stdout, step.Stderr = finished.Stdout, finished.Stderr
 	step.StartedAt, step.FinishedAt = finished.StartedAt, finished.FinishedAt
 	step.DurationMS = finished.Duration().Milliseconds()
-	step.Error = finished.Error
+	step.Error, step.FailureClass = finished.Error, finished.FailureClass
 
 	step.PreviewMatched, step.PreviewDifference = comparePreview(previewed, finished)
 
@@ -894,6 +926,7 @@ func (r *Runner) fail(manifest *Manifest, state job.State, cause error) (*Manife
 	}
 	manifest.State = state
 	manifest.Error = cause.Error()
+	manifest.FailureClass = failure.Of(cause)
 	finished, saveErr := r.finish(manifest)
 	if saveErr != nil {
 		return finished, saveErr
@@ -1064,6 +1097,33 @@ func Find(dir, id string) (*Manifest, error) {
 		return nil, fmt.Errorf("build: %q is not a build id", id)
 	}
 	return LoadManifest(filepath.Join(dir, id, ManifestFileName))
+}
+
+// keepConversionManifest copies the extractor's conversion manifest into the
+// build, beside the `.map` it describes, and points the record at the copy.
+//
+// The original sits in a temporary stage that is not the build's to keep. A
+// record that named a file which is gone by the time anybody reads it would be
+// a digest of nothing.
+func keepConversionManifest(conversion Conversion, dir string) (Conversion, error) {
+	if conversion.Manifest == nil || conversion.Manifest.Path == "" {
+		return conversion, nil
+	}
+	kept := *conversion.Manifest
+	destination := filepath.Join(dir, filepath.Base(kept.Path))
+	if err := copyFile(kept.Path, destination); err != nil {
+		return conversion, fmt.Errorf("keeping the conversion manifest: %w", err)
+	}
+	digest, _, err := digestFile(destination)
+	if err != nil {
+		return conversion, err
+	}
+	if kept.SHA256 != "" && kept.SHA256 != digest {
+		return conversion, fmt.Errorf("the conversion manifest changed while it was being kept (%s, then %s)", kept.SHA256, digest)
+	}
+	kept.Path, kept.SHA256 = destination, digest
+	conversion.Manifest = &kept
+	return conversion, nil
 }
 
 func copyFile(source, destination string) error {
