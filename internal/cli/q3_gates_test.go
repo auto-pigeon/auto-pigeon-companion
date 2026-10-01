@@ -394,3 +394,38 @@ func mustBinding(t *testing.T, env *Env, profileID string) binding.LocalBinding 
 	}
 	return local
 }
+
+// The review is where a missing folder is said. A preview that answered
+// "everything is in place" for a build the run then refused is a preview that
+// was not about that build (seen live, Q3_010: the Build page's third step).
+func TestAQuake3PreviewRefusesWhatTheRunWouldRefuse(t *testing.T) {
+	env, _, _ := testEnv(t)
+	contentRoot, _ := q3Content(t)
+	bindQ3Map2(t, env, contentRoot, contentRoot)
+	// The content folder is taken away again: only the base game data is set.
+	local := mustBinding(t, env, builtin.Q3Map2)
+	bindTool(t, env, builtin.Q3Map2, local.Executables, map[string]string{"game_root": contentRoot})
+
+	source := q3Source(t, "preview.map", "")
+	env, stdout, stderr := testEnvAt(t, env.ConfigPath)
+	code := Run(env, []string{"build", "preview", "--pipeline", builtin.Q3FastPreview, "--input", "source_map=" + source})
+	if code == 0 {
+		t.Fatalf("the preview accepted a build with no content folder:\n%s", stdout)
+	}
+	said := stderr.String() + stdout.String()
+	if !strings.Contains(said, "content folder") || strings.Contains(said, `"content_root"`) {
+		t.Errorf("the refusal does not name the folder in a person's words:\n%s", said)
+	}
+
+	// A folder given to this build is enough, and the preview shows where the
+	// compiler would be pointed: the build's own staged directory.
+	env, stdout, stderr = testEnvAt(t, env.ConfigPath)
+	code = Run(env, []string{"build", "preview", "--pipeline", builtin.Q3FastPreview,
+		"--input", "source_map=" + source, "--root", "content_root=" + contentRoot})
+	if code != 0 {
+		t.Fatalf("exit code = %d: %s", code, stderr)
+	}
+	if !strings.Contains(stdout.String(), filepath.Join("<build>", "vfs", "content_root")) {
+		t.Errorf("the preview does not show the staged directory:\n%s", stdout)
+	}
+}

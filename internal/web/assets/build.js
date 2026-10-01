@@ -177,7 +177,7 @@
     // Removed before it is added: renderPipeline runs on every change of the
     // selector, and a note appended each time would stack up one warning per
     // pipeline the user looked at.
-    for (const stale of document.querySelectorAll("#area-build > .panel > .wip")) stale.remove();
+    for (const stale of $("build-pipeline-note").parentElement.querySelectorAll(".wip")) stale.remove();
     const note = maturityNote(pipeline.maturity, () =>
       openCompatibilityReport({
         family: pipeline.engine_family,
@@ -754,7 +754,12 @@
     // offering: the user has just seen what happened and has the build id that
     // fills in the diagnostics. The manifest carries the family (see
     // internal/build/manifest.go), so this needs no second lookup.
-    for (const stale of document.querySelectorAll("#build-current-panel > .wip")) stale.remove();
+    // Removed from where it is PUT: beside the title, inside the panel's head.
+    // The selector here used to be `#build-current-panel > .wip`, which names a
+    // child of the panel; the note is a grandchild, so nothing was ever
+    // removed and every poll of a build added another copy — three on a
+    // three-poll build, seven on a slower one (operator, 2026-10-01).
+    for (const stale of $("build-current-title").parentElement.querySelectorAll(".wip")) stale.remove();
     const buildNote = maturityNote(
       { work_in_progress: true, badge: "Work in progress", message: body.maturity_message, feedback_invited: true },
       () =>

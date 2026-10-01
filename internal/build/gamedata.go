@@ -210,6 +210,33 @@ func (r *Runner) approvedRoots(request Request, steps []profile.ResolvedStep) (m
 	return paths, kinds, access
 }
 
+// folderNames is what a person calls each game data role. The role names are
+// the documents' vocabulary; a refusal a page will show names the folder.
+var folderNames = map[string]string{
+	profile.RootGame:    "base game data folder (the one that contains `baseq3`)",
+	profile.RootContent: "content folder (your own `baseq3` or mod directory is inside it)",
+}
+
+// missingGameFolder refuses a build for which a game data folder the pipeline
+// declares has not been chosen — for this build or on the tool.
+//
+// The content folder is not needed when the saved map binds packages: those
+// ARE its content, and the Companion stages them itself.
+func missingGameFolder(approved map[string]string, access map[string]profile.Access, packages []q3vfs.Package) error {
+	for _, role := range gameDataRoles {
+		if role == q3vfs.PackagesRole && len(packages) > 0 {
+			continue
+		}
+		if _, declared := access[role]; declared && approved[role] == "" {
+			return failure.As(failure.GameDataMissing, fmt.Errorf(
+				"no %s is set. A Quake III build reads the base game data and your own content from folders "+
+					"you choose, and the Companion supplies neither. Set it on the compiler in Profiles › Build Tools, "+
+					"or give it to this build (`--root %s=<folder>`)", folderNames[role], role))
+		}
+	}
+	return nil
+}
+
 // stageGameData stages a Quake III build's game data into the build directory
 // and returns the request the steps are then run with: the same request, with
 // each game data root replaced by its staged directory.
@@ -231,18 +258,8 @@ func (r *Runner) stageGameData(request Request, steps []profile.ResolvedStep, la
 		packages = request.Packages.Packages
 	}
 	approved, kinds, access := r.approvedRoots(request, steps)
-	for _, role := range gameDataRoles {
-		if role == q3vfs.PackagesRole && len(packages) > 0 {
-			// The map's own packages ARE its content: a build of a saved map
-			// needs no content folder beside them.
-			continue
-		}
-		if _, declared := access[role]; declared && approved[role] == "" {
-			return request, failure.As(failure.GameDataMissing, fmt.Errorf(
-				"no folder is set for %q: a Quake III build reads the base game data and your own content from "+
-					"folders you choose, and the Companion supplies neither. Choose one for this build, or set it on the tool",
-				role))
-		}
+	if err := missingGameFolder(approved, access, packages); err != nil {
+		return request, err
 	}
 	stage, err := q3vfs.Build(q3vfs.Request{
 		FSGame:   name,
@@ -288,7 +305,16 @@ func (r *Runner) previewGameData(request Request, steps []profile.ResolvedStep) 
 	if _, err := fsGame(request, steps); err != nil {
 		return request, err
 	}
-	_, _, access := r.approvedRoots(request, steps)
+	approved, _, access := r.approvedRoots(request, steps)
+	var packages []q3vfs.Package
+	if request.Packages != nil {
+		packages = request.Packages.Packages
+	}
+	// Said in the review, not discovered by pressing Build: a preview whose
+	// job is "this is what would happen" refuses what the run would refuse.
+	if err := missingGameFolder(approved, access, packages); err != nil {
+		return request, err
+	}
 	roots := make(map[string]string, len(request.Roots)+len(access))
 	for role, path := range request.Roots {
 		roots[role] = path

@@ -251,3 +251,45 @@ func TestThePageCanRenderTheStatementAndOfferTheReport(t *testing.T) {
 		}
 	}
 }
+
+// A work-in-progress note is removed from the element it is inserted into.
+//
+// The Build page put the note beside the build's title — inside the panel's
+// head — and cleaned up with `#build-current-panel > .wip`, a CHILD selector
+// that could not reach it. Nothing was ever removed, so each poll of a running
+// build added another copy: the operator saw the Quake III warning three times
+// on one result (2026-10-01; `Q3_007` had recorded the same). A selector written
+// against the page's structure breaks the next time the structure moves, so
+// the cleanup is now relative to the insertion point, and this pins that no
+// area goes back to guessing where its own note is.
+func TestAWorkInProgressNoteIsRemovedFromWhereItIsPut(t *testing.T) {
+	assets := assetsFS()
+	for _, area := range []string{"build.js", "run.js", "profiles.js", "play.js", "games.js"} {
+		data, err := fs.ReadFile(assets, area)
+		if err != nil {
+			t.Fatalf("%v", err)
+		}
+		for number, line := range strings.Split(string(data), "\n") {
+			if !strings.Contains(line, ".wip") || !strings.Contains(line, "remove()") {
+				continue
+			}
+			if strings.Contains(line, "document.querySelectorAll(") {
+				t.Errorf("%s:%d removes stale notes by a document-wide selector, which is how the note came to be "+
+					"shown once per poll; remove them from the element the note is inserted into:\n%s",
+					area, number+1, strings.TrimSpace(line))
+			}
+		}
+	}
+	build, err := fs.ReadFile(assets, "build.js")
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	for _, want := range []string{
+		`$("build-current-title").parentElement.querySelectorAll(".wip")`,
+		`$("build-pipeline-note").parentElement.querySelectorAll(".wip")`,
+	} {
+		if !strings.Contains(string(build), want) {
+			t.Errorf("build.js does not clean up beside the element it inserts after: %s", want)
+		}
+	}
+}
