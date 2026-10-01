@@ -109,6 +109,10 @@ type Request struct {
 	// it was written from. Keyed like Sources, optional like Sources, and
 	// supplied by the caller for the same reason.
 	Conversions map[string]Conversion
+	// Packages is what a saved Quake III map says it is built with, fetched and
+	// verified by the caller. Nil for a map that binds nothing and for every
+	// other game. See gamedata.go.
+	Packages *BoundPackages
 
 	// Inputs maps a declared pipeline input to a file on this machine.
 	//

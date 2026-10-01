@@ -72,6 +72,74 @@ func fsGameOption(action profile.Action) string {
 	return ""
 }
 
+// BoundPackages is what a saved map says it is built with: the game folders it
+// names, and each package it binds, already fetched and verified by the caller
+// (internal/q3packages) against the digest the map records.
+//
+// Supplied by the caller for the reason [Request.Sources] is: this package must
+// not learn to talk to a backend. What it does with them is its own business —
+// they are staged, by name and digest, and the manifest records each one.
+type BoundPackages struct {
+	// BaseRoot and ModRoot are the map's own `base_root` and `mod_root`.
+	BaseRoot string
+	ModRoot  string
+	Packages []q3vfs.Package
+}
+
+// withModRoot gives every step the map's own mod folder when the build named
+// none, and refuses a build that named a different one.
+//
+// The map's document says which mod folder it is built with. A build that
+// silently compiled it as a plain base-game map would read none of the mod's
+// packages, and one that compiled it against another mod would read the wrong
+// ones; neither is the map the editor showed.
+func withModRoot(request Request, steps []profile.ResolvedStep) (Request, error) {
+	bound := request.Packages
+	if bound == nil {
+		return request, nil
+	}
+	if bound.BaseRoot != "" && !strings.EqualFold(bound.BaseRoot, q3vfs.BaseGame) {
+		return request, failure.As(failure.ContentRefused, fmt.Errorf(
+			"the map is bound to packages for the base folder %q, and this pipeline builds %q maps: "+
+				"its compiler reads `%s` and would not see them", bound.BaseRoot, q3vfs.BaseGame, q3vfs.BaseGame))
+	}
+	if bound.ModRoot == "" || strings.EqualFold(bound.ModRoot, q3vfs.BaseGame) {
+		return request, nil
+	}
+	options := make(map[string]map[string]string, len(request.Options)+len(steps))
+	for step, values := range request.Options {
+		copied := make(map[string]string, len(values))
+		for name, value := range values {
+			copied[name] = value
+		}
+		options[step] = copied
+	}
+	for _, resolved := range steps {
+		option := fsGameOption(resolved.Action)
+		if option == "" {
+			continue
+		}
+		asked, set := request.Options[resolved.Step.ID][option]
+		if !set {
+			asked, set = resolved.Step.Options[option]
+		}
+		switch {
+		case !set || asked == "":
+			if options[resolved.Step.ID] == nil {
+				options[resolved.Step.ID] = map[string]string{}
+			}
+			options[resolved.Step.ID][option] = bound.ModRoot
+		case asked != bound.ModRoot:
+			return request, failure.As(failure.FSGameInvalid, fmt.Errorf(
+				"the map is bound to packages for the mod folder %q, and the %s step asks for %q: "+
+					"build it as the map says, or change the map's mod folder in the editor",
+				bound.ModRoot, resolved.Step.ID, asked))
+		}
+	}
+	request.Options = options
+	return request, nil
+}
+
 // fsGame is the one mod directory name a build's steps agree on.
 //
 // Three stages of one compiler, each with its own option, is three chances to
@@ -150,12 +218,25 @@ func (r *Runner) approvedRoots(request Request, steps []profile.ResolvedStep) (m
 // binding rather than from the request — the record of where it came from, so
 // every folder the compiler could see is named in one place.
 func (r *Runner) stageGameData(request Request, steps []profile.ResolvedStep, layout layout, manifest *Manifest) (Request, error) {
+	request, err := withModRoot(request, steps)
+	if err != nil {
+		return request, err
+	}
 	name, err := fsGame(request, steps)
 	if err != nil {
 		return request, err
 	}
+	var packages []q3vfs.Package
+	if request.Packages != nil {
+		packages = request.Packages.Packages
+	}
 	approved, kinds, access := r.approvedRoots(request, steps)
 	for _, role := range gameDataRoles {
+		if role == q3vfs.PackagesRole && len(packages) > 0 {
+			// The map's own packages ARE its content: a build of a saved map
+			// needs no content folder beside them.
+			continue
+		}
 		if _, declared := access[role]; declared && approved[role] == "" {
 			return request, failure.As(failure.GameDataMissing, fmt.Errorf(
 				"no folder is set for %q: a Quake III build reads the base game data and your own content from "+
@@ -164,9 +245,10 @@ func (r *Runner) stageGameData(request Request, steps []profile.ResolvedStep, la
 		}
 	}
 	stage, err := q3vfs.Build(q3vfs.Request{
-		FSGame: name,
-		Roots:  approved,
-		Dir:    filepath.Join(layout.Dir, stagedDirName),
+		FSGame:   name,
+		Roots:    approved,
+		Dir:      filepath.Join(layout.Dir, stagedDirName),
+		Packages: packages,
 	})
 	if err != nil {
 		return request, err
@@ -199,6 +281,10 @@ func (r *Runner) stageGameData(request Request, steps []profile.ResolvedStep, la
 // previewGameData is the same substitution for a preview, which stages
 // nothing: each game data root becomes the place this build WOULD stage it.
 func (r *Runner) previewGameData(request Request, steps []profile.ResolvedStep) (Request, error) {
+	request, err := withModRoot(request, steps)
+	if err != nil {
+		return request, err
+	}
 	if _, err := fsGame(request, steps); err != nil {
 		return request, err
 	}

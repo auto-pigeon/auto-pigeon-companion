@@ -16,6 +16,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/assetref"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/assetsync"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/q3packages"
 )
 
 // AUBInputPrefix marks an input value as an asset reference rather than a path.
@@ -34,7 +35,7 @@ func ParseAssetRef(value string) (AssetRef, error) { return assetref.Parse(value
 // and every APMap input — from the account or a local `.apmap` — into the
 // `.map` a compiler reads.
 func resolveAUBInputs(ctx context.Context, env *Env, inputs map[string]string, stage string,
-) (map[string]string, map[string]build.SourceRef, map[string]build.Conversion, error) {
+) (map[string]string, map[string]build.SourceRef, map[string]build.Conversion, *build.BoundPackages, error) {
 	anyRef := false
 	for _, value := range inputs {
 		if assetref.Is(value) {
@@ -42,14 +43,14 @@ func resolveAUBInputs(ctx context.Context, env *Env, inputs map[string]string, s
 		}
 	}
 	if !anyRef && !assetref.HasLocalAPMap(inputs) {
-		return inputs, nil, nil, nil
+		return inputs, nil, nil, nil, nil
 	}
 	resolved := inputs
 	var sources map[string]build.SourceRef
 	if anyRef {
 		store, err := openStore(env)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 		// A syncer is OPTIONAL: an offline Companion, or one whose session has
 		// lapsed, still builds from what it has already verified.
@@ -60,18 +61,43 @@ func resolveAUBInputs(ctx context.Context, env *Env, inputs map[string]string, s
 		}
 		resolved, sources, err = assetref.ResolveAll(ctx, store, syncer, inputs, stage)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 	}
 	resolved, err := assetref.StageLocalAPMaps(inputs, resolved, stage)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	// An account map is an APMap; the compilers read `.map`. The extractor is
 	// resolved lazily, so an input that needs no conversion fetches nothing.
-	return assetref.ConvertAPMapInputsRecorded(ctx, extractorRunner(env, func(format string, args ...any) {
+	// A saved Quake III map names the packages it is built with, by digest. They
+	// are read out of the APMap now — the `.map` has nowhere to carry them — and
+	// fetched through the same cache and the same session the map came through.
+	packages, err := boundPackages(ctx, env, resolved)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	converted, sources, conversions, err := assetref.ConvertAPMapInputsRecorded(ctx, extractorRunner(env, func(format string, args ...any) {
 		fmt.Fprintf(env.Stderr, format+"\n", args...)
 	}), resolved, sources)
+	return converted, sources, conversions, packages, err
+}
+
+// boundPackages resolves a build's bound packages with whatever session this
+// invocation has. No session is not an error here: a package already in the
+// cache builds offline, and one that is not is refused by name, by the resolver.
+func boundPackages(ctx context.Context, env *Env, resolved map[string]string) (*build.BoundPackages, error) {
+	store, err := openStore(env)
+	if err != nil {
+		return nil, err
+	}
+	var account q3packages.Account
+	if settings, err := loadSettings(env); err == nil && settings.Session.Valid() {
+		if client, err := newClient(settings); err == nil && client.Authenticated() {
+			account = client
+		}
+	}
+	return assetref.BoundPackages(ctx, account, store, resolved)
 }
 
 // openSyncerQuietly is openSyncer without treating an absent session as fatal.

@@ -452,6 +452,9 @@ func (m *Manifest) computeKey(roots []string) {
 				}
 			}
 		}
+		for _, bound := range m.GameData.Packages {
+			write("game-package=%s:%s:%s:%t", bound.Root, bound.ArchiveName, bound.SHA256, bound.Staged)
+		}
 	}
 	for _, tool := range m.Tools {
 		write("tool=%s@%s=%s:%s", tool.Profile.ID, tool.Profile.Version, tool.Profile.Digest, tool.ToolVersion)

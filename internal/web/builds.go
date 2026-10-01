@@ -20,6 +20,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/leakintent"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/maturity"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/q3packages"
 )
 
 // The Build area: several supervised jobs, wired, with a manifest.
@@ -368,7 +369,7 @@ func (s *Server) resolveRoots(request buildRequestBody) (
 // The staging directory is inside the builds directory and per-request, so two
 // builds started at once cannot write over each other's copy of a map.
 func (s *Server) resolveInputs(ctx context.Context, request buildRequestBody) (
-	map[string]string, map[string]build.SourceRef, map[string]build.Conversion, error) {
+	map[string]string, map[string]build.SourceRef, map[string]build.Conversion, *build.BoundPackages, error) {
 	anyRef := false
 	for _, value := range request.Inputs {
 		if assetref.Is(value) {
@@ -384,28 +385,28 @@ func (s *Server) resolveInputs(ctx context.Context, request buildRequestBody) (
 		for name, value := range request.Inputs {
 			path, err := checkOpenFile(value)
 			if err != nil {
-				return nil, nil, nil, fmt.Errorf("the input %q: %w", name, err)
+				return nil, nil, nil, nil, fmt.Errorf("the input %q: %w", name, err)
 			}
 			resolved[name] = path
 		}
 		if !assetref.HasLocalAPMap(resolved) {
-			return resolved, nil, nil, nil
+			return resolved, nil, nil, nil, nil
 		}
 	}
 
 	buildsDir, err := s.buildsDir()
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	stage, err := os.MkdirTemp(ensureDir(buildsDir), "inputs-")
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("creating a staging directory: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("creating a staging directory: %w", err)
 	}
 	local := resolved
 	if anyRef {
 		store, err := s.assets()
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 		// The syncer is optional on purpose: a pinned revision already in the cache
 		// builds with no session and no network. Only `current`, and a revision
@@ -418,7 +419,7 @@ func (s *Server) resolveInputs(ctx context.Context, request buildRequestBody) (
 		}
 		resolved, sources, err = assetref.ResolveAll(ctx, store, syncer, request.Inputs, stage)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 		local = request.Inputs
 	}
@@ -427,9 +428,24 @@ func (s *Server) resolveInputs(ctx context.Context, request buildRequestBody) (
 	// the APMap to the compiler as it was.
 	resolved, err = assetref.StageLocalAPMaps(local, resolved, stage)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
-	return assetref.ConvertAPMapInputsRecorded(ctx, s.runner, resolved, sources)
+	// The packages the saved map is bound to, by digest, through the Companion's
+	// own session: the page never sees the token or a download address.
+	store, err := s.assets()
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	var account q3packages.Account
+	if client := s.aubClient(); client != nil && client.Authenticated() {
+		account = client
+	}
+	packages, err := assetref.BoundPackages(ctx, account, store, resolved)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	converted, sources, conversions, err := assetref.ConvertAPMapInputsRecorded(ctx, s.runner, resolved, sources)
+	return converted, sources, conversions, packages, err
 }
 
 func ensureDir(dir string) string {
@@ -455,7 +471,7 @@ func (s *Server) handleBuildPreview(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, err)
 		return
 	}
-	inputs, sources, conversions, err := s.resolveInputs(r.Context(), request)
+	inputs, sources, conversions, packages, err := s.resolveInputs(r.Context(), request)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -470,6 +486,7 @@ func (s *Server) handleBuildPreview(w http.ResponseWriter, r *http.Request) {
 		Inputs:      inputs,
 		Sources:     sources,
 		Conversions: conversions,
+		Packages:    packages,
 		Roots:       roots,
 		RootSources: rootSources,
 		Options:     request.Options,
@@ -504,7 +521,7 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 	// started: fetching a map from AUB is the part that can fail for reasons
 	// the user must be told about immediately, and a build that had already
 	// started would report them as a build failure instead.
-	inputs, sources, conversions, err := s.resolveInputs(r.Context(), request)
+	inputs, sources, conversions, packages, err := s.resolveInputs(r.Context(), request)
 	if err != nil {
 		writeError(w, aubStatus(err), err)
 		return
@@ -570,6 +587,7 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 			Inputs:      inputs,
 			Sources:     sources,
 			Conversions: conversions,
+			Packages:    packages,
 			Roots:       roots,
 			RootSources: rootSources,
 			Options:     request.Options,

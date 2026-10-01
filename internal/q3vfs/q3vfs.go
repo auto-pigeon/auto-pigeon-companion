@@ -129,6 +129,71 @@ type Root struct {
 	Games []Game `json:"games"`
 }
 
+// Where a bound package's bytes came from.
+const (
+	// OriginCache: already on this machine, in the content-addressed cache.
+	OriginCache = "cache"
+	// OriginAccount: downloaded from the account for this build.
+	OriginAccount = "account"
+)
+
+// Package is one archive a saved map is bound to, already on this machine and
+// already verified against the digest the map records.
+//
+// It is staged by NAME and DIGEST: under the game folder the binding names,
+// called what the binding calls it — the name decides which of two archives
+// wins, so it is part of what was bound — and standing for a cache file whose
+// own name is its digest.
+type Package struct {
+	// Root is the game folder the map binds it under: the base game's, or a mod's.
+	Root        string `json:"root"`
+	ArchiveName string `json:"archive_name"`
+	SHA256      string `json:"sha256"`
+	Size        int64  `json:"size"`
+	// Entries is how many members its central directory declares.
+	Entries int `json:"entries"`
+	// Origin is `cache` or `account`; PackageID is the account's id for it when
+	// it was downloaded for this build.
+	Origin    string `json:"origin,omitempty"`
+	PackageID string `json:"package_id,omitempty"`
+	// Staged is false for a binding under a folder this build does not read,
+	// with Reason saying which. A fact about the build, recorded rather than
+	// passed over: the map says it needs the package and the compiler was not
+	// shown it.
+	Staged bool   `json:"staged"`
+	Reason string `json:"reason,omitempty"`
+	// Path is the verified file on this machine. Not part of the record.
+	Path string `json:"-"`
+}
+
+// PackagesRole is the staged root the map's bound packages are placed in: the
+// user's own content, which is what a map's packages are.
+const PackagesRole = "content_root"
+
+// CheckArchiveName says whether a bound archive's name is a PK3 file name and
+// nothing else. It arrives from a document, and it becomes a file name in the
+// staged tree.
+func CheckArchiveName(name string) error {
+	switch {
+	case name == "":
+		return errors.New("it names no archive")
+	case len(name) > 128:
+		return fmt.Errorf("its archive name is %d bytes long", len(name))
+	case strings.HasPrefix(name, "."):
+		return fmt.Errorf("its archive name %q starts with a dot", name)
+	case !strings.EqualFold(filepath.Ext(name), ".pk3"):
+		return fmt.Errorf("its archive name %q is not a .pk3", name)
+	}
+	for i := 0; i < len(name); i++ {
+		ch := name[i]
+		if !(ch >= 'A' && ch <= 'Z' || ch >= 'a' && ch <= 'z' || ch >= '0' && ch <= '9' || ch == '.' || ch == '_' || ch == '-') {
+			return fmt.Errorf("its archive name %q contains %q; an archive name is letters, digits, `.`, `_` and `-`, never a path",
+				name, string(ch))
+		}
+	}
+	return nil
+}
+
 // Finding is something a person should know about the staged data that did not
 // stop the build.
 type Finding struct {
@@ -144,8 +209,12 @@ type Stage struct {
 	FSGame string `json:"fs_game,omitempty"`
 	// Method is how staged files stand for the user's. One value for the whole
 	// stage: the weakest that had to be used.
-	Method   Method    `json:"method"`
-	Roots    []Root    `json:"roots"`
+	Method Method `json:"method"`
+	Roots  []Root `json:"roots"`
+	// Packages are the archives the saved map is bound to, each with the
+	// digest it was verified at, in the map's own order. Empty for a map that
+	// binds none.
+	Packages []Package `json:"packages,omitempty"`
 	Findings []Finding `json:"findings,omitempty"`
 }
 
@@ -166,6 +235,10 @@ type Request struct {
 	Roots map[string]string
 	// Dir is where to stage; it is created, and must not exist with content.
 	Dir string
+	// Packages are the archives the map is bound to, verified. They are staged
+	// into the [PackagesRole] root, which is created for them when the user
+	// approved no folder for it.
+	Packages []Package
 }
 
 // CheckFSGame says whether a mod directory name is a name.
@@ -275,6 +348,13 @@ func Build(request Request) (*Stage, error) {
 		}
 		stage.Roots = append(stage.Roots, root)
 	}
+	bound, err := st.packages(request, games)
+	if err != nil {
+		return nil, err
+	}
+	if bound {
+		modFound = modFound || st.modBound
+	}
 	if fsGame != "" && !modFound {
 		return nil, failure.As(failure.FSGameNotFound, fmt.Errorf(
 			"no approved folder has a %q directory, so `-fs_game %s` would read nothing: Q3Map2 does not complain "+
@@ -318,6 +398,108 @@ type stager struct {
 	stage    *Stage
 	approved []string
 	loose    int
+	// modBound is set when a bound package was staged under the mod directory:
+	// a mod that exists only as the map's own packages is a mod that is there.
+	modBound bool
+}
+
+// packages stages the map's bound archives into the [PackagesRole] root.
+//
+// Each is re-read here as an archive — the cache verified its digest, and a
+// digest says the bytes are the ones the map named, not that they are a PK3 —
+// and placed under the folder and the name the binding gives. A file of that
+// name already staged from the user's own folder is accepted when it is the
+// same bytes and refused when it is not: two different archives cannot both be
+// `zz_textures.pk3`, and silently letting either win would make the build read
+// something the map did not bind or the user did not approve.
+func (st *stager) packages(request Request, games []string) (bool, error) {
+	if len(request.Packages) == 0 {
+		return false, nil
+	}
+	var root *Root
+	for i := range st.stage.Roots {
+		if st.stage.Roots[i].Role == PackagesRole {
+			root = &st.stage.Roots[i]
+		}
+	}
+	if root == nil {
+		st.stage.Roots = append(st.stage.Roots, Root{Role: PackagesRole, Path: filepath.Join(request.Dir, PackagesRole)})
+		sort.Slice(st.stage.Roots, func(i, j int) bool { return st.stage.Roots[i].Role < st.stage.Roots[j].Role })
+		for i := range st.stage.Roots {
+			if st.stage.Roots[i].Role == PackagesRole {
+				root = &st.stage.Roots[i]
+			}
+		}
+		for _, name := range games {
+			root.Games = append(root.Games, Game{Name: name})
+		}
+	}
+	for _, pkg := range request.Packages {
+		if err := CheckArchiveName(pkg.ArchiveName); err != nil {
+			return false, failure.As(failure.ContentRefused, fmt.Errorf("a package the map is bound to: %w", err))
+		}
+		info, err := os.Stat(pkg.Path)
+		if err != nil {
+			return false, failure.As(failure.GameDataMissing, fmt.Errorf("the bound package %s: %w", pkg.ArchiveName, err))
+		}
+		archive, err := inspectArchive(pkg.Path, info.Size())
+		if err != nil {
+			return false, failure.As(failure.ArchiveDamaged, fmt.Errorf(
+				"the package %s the map is bound to is damaged or incomplete: %w", pkg.ArchiveName, err))
+		}
+		if archive.SHA256 != pkg.SHA256 {
+			return false, failure.As(failure.ArchiveDamaged, fmt.Errorf(
+				"the package %s on this machine hashes to %s, and the map is bound to %s",
+				pkg.ArchiveName, archive.SHA256, pkg.SHA256))
+		}
+		pkg.Size, pkg.Entries = archive.Size, archive.Entries
+
+		var game *Game
+		for i := range root.Games {
+			if strings.EqualFold(root.Games[i].Name, pkg.Root) {
+				game = &root.Games[i]
+			}
+		}
+		if game == nil {
+			pkg.Reason = fmt.Sprintf("it is bound under %q, and this build reads %s", pkg.Root, describeGames(games))
+			st.stage.Packages = append(st.stage.Packages, pkg)
+			st.stage.Findings = append(st.stage.Findings, Finding{
+				Class: failure.GameDataMissing, Role: PackagesRole,
+				Message: fmt.Sprintf("the map is bound to %s under the folder %q, which this build does not read: "+
+					"the compiler was not shown it", pkg.ArchiveName, pkg.Root),
+			})
+			continue
+		}
+		taken := false
+		for _, existing := range game.Archives {
+			if !strings.EqualFold(existing.Name, pkg.ArchiveName) {
+				continue
+			}
+			if existing.SHA256 != pkg.SHA256 {
+				return false, failure.As(failure.ContentRefused, fmt.Errorf(
+					"your content folder holds a %s/%s with digest %s, and the map is bound to one with digest %s: "+
+						"two different archives cannot both have that name. Remove or rename the one in the folder, "+
+						"or bind the map to it", game.Name, existing.Name, existing.SHA256, pkg.SHA256))
+			}
+			taken = true
+		}
+		if !taken {
+			target := filepath.Join(root.Path, game.Name, pkg.ArchiveName)
+			if err := st.link(pkg.Path, target); err != nil {
+				return false, err
+			}
+			archive.Name = pkg.ArchiveName
+			game.Archives = append(game.Archives, archive)
+			sort.Slice(game.Archives, func(i, j int) bool { return game.Archives[i].Name < game.Archives[j].Name })
+		}
+		game.Present = true
+		if game.Name != BaseGame {
+			st.modBound = true
+		}
+		pkg.Staged = true
+		st.stage.Packages = append(st.stage.Packages, pkg)
+	}
+	return true, nil
 }
 
 // game stages one game directory of one root.

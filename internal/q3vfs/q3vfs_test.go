@@ -312,3 +312,138 @@ func TestALinkOutOfTheApprovedFoldersIsRefused(t *testing.T) {
 		t.Fatalf("a linked game directory: class = %q (%v)", failure.Of(err), err)
 	}
 }
+
+// bound writes an archive where a verified cache would hold it — under a name
+// that is NOT the archive's — and returns the binding for it.
+func bound(t *testing.T, root, name string, body []byte) Package {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "objects", "ab", "cd", "the-digest-is-the-name")
+	write(t, path, body)
+	archive, err := inspectArchive(path, int64(len(body)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return Package{Root: root, ArchiveName: name, SHA256: archive.SHA256, Path: path, Origin: OriginCache}
+}
+
+func buildWith(t *testing.T, fsGame string, roots map[string]string, packages ...Package) (*Stage, string, error) {
+	t.Helper()
+	dir := filepath.Join(t.TempDir(), "vfs")
+	stage, err := Build(Request{FSGame: fsGame, Roots: roots, Dir: dir, Packages: packages})
+	return stage, dir, err
+}
+
+// Q3_010: the packages a saved map is bound to are staged by the Companion —
+// under the folder and the NAME the map gives, standing for the verified bytes
+// — and recorded with the digest they were verified at.
+func TestTheMapsBoundPackagesAreStagedByNameAndDigest(t *testing.T) {
+	game, _ := roots(t)
+	archive := pk3(t)
+	pkg := bound(t, "baseq3", "zz_synth.pk3", archive)
+
+	// No content folder at all: the map's own packages are its content.
+	stage, dir, err := buildWith(t, "", map[string]string{"game_root": game}, pkg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	staged, err := os.ReadFile(filepath.Join(dir, "content_root", "baseq3", "zz_synth.pk3"))
+	if err != nil || !bytes.Equal(staged, archive) {
+		t.Fatalf("the bound package was not staged under its own name: %v", err)
+	}
+	if len(stage.Packages) != 1 {
+		t.Fatalf("packages = %+v", stage.Packages)
+	}
+	record := stage.Packages[0]
+	if !record.Staged || record.SHA256 != pkg.SHA256 || record.Entries != 2 || record.Size != int64(len(archive)) {
+		t.Errorf("record = %+v", record)
+	}
+	if stage.Paths()["content_root"] != filepath.Join(dir, "content_root") {
+		t.Errorf("the content root was not created for the packages: %v", stage.Paths())
+	}
+}
+
+func TestABoundPackageAndAFolderArchiveOfTheSameName(t *testing.T) {
+	game, content := roots(t)
+	archive := pk3(t)
+	both := map[string]string{"game_root": game, "content_root": content}
+
+	// The same bytes under the same name in the user's folder: one archive.
+	write(t, filepath.Join(content, "baseq3", "zz_synth.pk3"), archive)
+	stage, _, err := buildWith(t, "", both, bound(t, "baseq3", "zz_synth.pk3", archive))
+	if err != nil {
+		t.Fatalf("the same archive in the folder and in the binding was refused: %v", err)
+	}
+	for _, root := range stage.Roots {
+		if root.Role == "content_root" && len(root.Games[0].Archives) != 1 {
+			t.Errorf("content archives = %+v", root.Games[0].Archives)
+		}
+	}
+
+	// Different bytes under that name: neither may silently win.
+	write(t, filepath.Join(content, "baseq3", "zz_synth.pk3"), append(pk3(t), []byte("PK\x05\x06")...))
+	_, _, err = buildWith(t, "", both, bound(t, "baseq3", "zz_synth.pk3", archive))
+	if err == nil || (failure.Of(err) != failure.ContentRefused && failure.Of(err) != failure.ArchiveDamaged) {
+		t.Fatalf("err = %v (class %q)", err, failure.Of(err))
+	}
+}
+
+func TestABoundPackageThatIsNotTheBytesItClaimsIsRefused(t *testing.T) {
+	game, _ := roots(t)
+	pkg := bound(t, "baseq3", "zz_synth.pk3", pk3(t))
+	pkg.SHA256 = "sha256:" + strings.Repeat("0", 64)
+	if _, _, err := buildWith(t, "", map[string]string{"game_root": game}, pkg); failure.Of(err) != failure.ArchiveDamaged {
+		t.Fatalf("a digest that does not match: %v (class %q)", err, failure.Of(err))
+	}
+
+	garbage := bound(t, "baseq3", "zz_synth.pk3", pk3(t))
+	if err := os.WriteFile(garbage.Path, []byte("not a zip"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := buildWith(t, "", map[string]string{"game_root": game}, garbage); failure.Of(err) != failure.ArchiveDamaged {
+		t.Fatalf("a bound file that is not an archive: %v (class %q)", err, failure.Of(err))
+	}
+
+	path := bound(t, "baseq3", "../escape.pk3", pk3(t))
+	if _, dir, err := buildWith(t, "", map[string]string{"game_root": game}, path); failure.Of(err) != failure.ContentRefused {
+		t.Fatalf("an archive name that is a path: %v (class %q)", err, failure.Of(err))
+	} else if _, statErr := os.Stat(filepath.Join(dir, "content_root", "escape.pk3")); statErr == nil {
+		t.Error("the archive was written outside its game folder")
+	}
+}
+
+// A package bound under a mod folder makes that mod exist for this build; one
+// bound under a folder the build does not read is recorded as not staged.
+func TestABoundPackageUnderAModFolder(t *testing.T) {
+	game, _ := roots(t)
+	only := map[string]string{"game_root": game}
+	stage, dir, err := buildWith(t, "packmod", only, bound(t, "packmod", "zz_mod.pk3", pk3(t)))
+	if err != nil {
+		t.Fatalf("a mod that exists only as the map's packages was not found: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "content_root", "packmod", "zz_mod.pk3")); err != nil {
+		t.Errorf("not staged under the mod folder: %v", err)
+	}
+	if !stage.Packages[0].Staged {
+		t.Errorf("record = %+v", stage.Packages[0])
+	}
+
+	stage, dir, err = buildWith(t, "", only, bound(t, "elsewhere", "zz_other.pk3", pk3(t)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stage.Packages[0].Staged || !strings.Contains(stage.Packages[0].Reason, "elsewhere") {
+		t.Errorf("record = %+v", stage.Packages[0])
+	}
+	if _, err := os.Stat(filepath.Join(dir, "content_root", "elsewhere")); err == nil {
+		t.Error("a folder the build does not read was staged")
+	}
+	found := false
+	for _, finding := range stage.Findings {
+		if strings.Contains(finding.Message, "zz_other.pk3") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("no finding says the package was not shown to the compiler: %+v", stage.Findings)
+	}
+}

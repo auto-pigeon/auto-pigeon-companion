@@ -190,7 +190,7 @@ func buildRun(env *Env, args []string, previewOnly bool) int {
 	}
 	defer os.RemoveAll(stage)
 
-	resolvedInputs, sources, conversions, err := resolveAUBInputs(ctx, env, inputs.orNil(), stage)
+	resolvedInputs, sources, conversions, packages, err := resolveAUBInputs(ctx, env, inputs.orNil(), stage)
 	if err != nil {
 		return fail(env, err)
 	}
@@ -205,6 +205,7 @@ func buildRun(env *Env, args []string, previewOnly bool) int {
 		Inputs:      resolvedInputs,
 		Sources:     sources,
 		Conversions: conversions,
+		Packages:    packages,
 		Roots:       requestRoots,
 		RootSources: rootSources,
 		Options:     options.orNil(),
@@ -662,6 +663,16 @@ func printGameData(env *Env, m *build.Manifest) {
 				fmt.Fprintf(env.Stdout, "                not staged: %d more\n", game.SkippedMore)
 			}
 		}
+	}
+	// The packages the saved map binds, each by the digest it was verified at:
+	// what makes this build a build of THAT map's content.
+	for _, bound := range m.GameData.Packages {
+		state := "staged"
+		if !bound.Staged {
+			state = "NOT staged: " + bound.Reason
+		}
+		fmt.Fprintf(env.Stdout, "            bound package %s/%s %s (%d bytes, %d member(s), from the %s) — %s\n",
+			bound.Root, bound.ArchiveName, bound.SHA256, bound.Size, bound.Entries, orNone(bound.Origin), state)
 	}
 	for _, finding := range m.GameData.Findings {
 		fmt.Fprintf(env.Stdout, "            %s: %s\n", finding.Class, finding.Message)
