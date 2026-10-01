@@ -475,6 +475,123 @@ The manifest's state is still `succeeded` (the BSP exists and every declared
 output was published); the warnings are in each step's `diagnostics`, and
 `companion build show <id> --json` carries them.
 
+**A Quake III build reads only what was staged for it.** Q3Map2 is told where
+content is with two `-fs_basepath` folders — the base game data (`game_root`) and
+your own content (`content_root`) — and, measured on 2.5.17n, it will read
+anything it is pointed near: `-fs_game ..` reads the *parent* of each folder, a
+mod directory that is not there is initialised without a word, and a truncated
+PK3 is skipped in silence with exit status 0. So a build does not hand the
+compiler your folders. It stages `<folder>/baseq3` and, when a mod is named,
+`<folder>/<mod>` into `<build>/vfs/`, as links to the PK3s that parse as
+archives and to the regular loose files, and points Q3Map2 there. A sibling mod,
+an engine binary beside `baseq3`, a hidden name such as `.git`, and a link that
+leaves the folders you approved are not there to be read. Choose the folder
+that *contains* `baseq3`:
+
+```console
+$ companion build run --pipeline auto-pigeon.q3.fast-preview \
+    --input source_map=q3004-room-patch.apmap \
+    --root game_root=/opt/quake3 --root content_root=/home/you/q3-project
+
+build 20261001T101836Z-e30095b2 — succeeded
+  input     source_map   sha256:8838724210d17862…
+            converted from apmap sha256:3305a41b2c70563c… (q3004-room-patch:full_map, revision 0) by the developer_override extractor, UNVERIFIED
+            q3004-room-patch.q3map-manifest.json sha256:8593dae7f39b8cbc… — 4 shader(s), 0 model(s), 0 warning(s)
+  game data base game baseq3, fs_game none (a plain base-game map), staged by symlink
+            content_root -> …/builds/20261001T101836Z-e30095b2/vfs/content_root
+              baseq3/ 1 archive(s), 0 loose file(s), 0 bytes loose
+                q3010.pk3                      1432  sha256:634e3c08fff6cb9e…  4 member(s)
+            game_root -> …/builds/20261001T101836Z-e30095b2/vfs/game_root
+              baseq3/ 0 archive(s), 0 loose file(s), 0 bytes loose
+            game_data_missing: the base game directory baseq3 is empty: there is no pak0.pk3 and no loose file, …
+```
+
+The mod directory is a **name**, set the same on every stage, and the build
+refuses one that is not there instead of compiling without it:
+
+```console
+$ companion build run --pipeline auto-pigeon.q3.fast-preview --input source_map=room.map \
+    --option compile.mod=missionpack --option vis.mod=missionpack --option light.mod=missionpack
+```
+
+What was staged is the manifest's `game_data` (`aucom.build-manifest/1.3`): the
+base game and mod names, each archive with its SHA-256 and member count, the
+loose file count, what was left out and why. An input that was an APMap also
+records, as `inputs[].conversion`, the APMap's digest and its own `document_id`
+and revision, and keeps the extractor's `<name>.q3map-manifest.json` beside the
+`.map` in the build. This staging belongs to a **build**; `companion job run`
+on a single Q3Map2 action uses the bound folders as they are (its `mod` option
+still refuses `.` and `..`).
+
+**A build of a saved map stages the packages that map is bound to.** The
+editor records a Quake III map's packages in the map itself, by SHA-256
+(worldspawn's `auto-pigeon.packages`). When the map comes from your account —
+or from a local `.apmap` that carries the same record — the Companion finds
+each bound archive in your account *by that digest*, downloads it into its
+content-addressed cache through the session it already has, refuses bytes that
+do not hash to the binding, and stages each archive under the folder and the
+name the map gives. No content folder is needed for such a map, and a package
+already fetched builds offline:
+
+```console
+$ companion build run --pipeline auto-pigeon.q3.fast-preview \
+    --input source_map=aub:map/<map id>@<revision> --root game_root=/opt/quake3
+  …
+            bound package baseq3/zz_q3010.pk3 sha256:634e3c08fff6cb9e… (1432 bytes, 4 member(s), from the account) — staged
+```
+
+A bound package the account does not hold, a download that is not the bound
+bytes, and a *different* archive of the same name in your content folder each
+stop the build by name. The map's own `mod_root` is the build's mod directory
+unless a stage asks for another, which is refused.
+
+**A stage is judged by what it produced and what the compiler said, not by its
+exit status.** Three things fail a Quake III stage that exited 0:
+
+| what happened | measured on Q3Map2 2.5.17n | the build |
+| --- | --- | --- |
+| a required output is not there | a leak with `-leaktest`: no BSP, a `.lin` line file, exit 0 | failed, class `leak`; the `.lin` is published as the `lin` output, downloadable from the page |
+| the compiler printed a line its profile marks `fatal` | `ERROR: Unable to open file "models/…"` for a `misc_model`: the BSP is written without it, exit 0 | failed at that stage, class `model_missing`; later stages do not run |
+| an output is present and is not what its role says | `-light` given an empty or garbage `.srf` exits 0 and writes a lit BSP | failed, class `output_invalid` or `input_invalid` |
+
+`.bsp` (IBSP 46 with a lump table inside the file), `.prt` (`PRT1` and the
+lines its counts promise), `.srf`, `.lin` and the `.map` source are each read
+as what they claim to be, on the way into a stage and on the way out. A missing
+*image* stays a warning, as above — now with the class `shader_image_missing`.
+
+```console
+$ companion build run --pipeline auto-pigeon.q3.fast-preview --input source_map=model.map \
+    --root game_root=/opt/quake3 --root content_root=/home/you/q3-project
+
+build 20261001T101838Z-413d8d7a — failed
+  error     the compile step: job: q3map2 exited 0 after printing a line its profile marks fatal (model_missing): ERROR: Unable to open file "models/q3010/nothere.md3".
+  class     model_missing
+```
+
+**A failure says what kind it is.** Beside the sentence, the manifest, each step
+and each job carry a `failure_class`, and a refusal that never became a build
+carries `class` in the HTTP error:
+
+| class | what it means |
+| --- | --- |
+| `tool_unavailable` | the compiler is not installed, was moved, or cannot be started |
+| `platform_unsupported` | the tool's profile says it does not run on this platform |
+| `game_data_missing` | no folder is set, the folder holds no `baseq3`, or a bound package is not held |
+| `archive_damaged` | a PK3 in an approved folder, or a bound package, is not a readable archive |
+| `content_refused` | a link out of the approved folders, a same-named different archive, an unreadable package record |
+| `fs_game_invalid`, `fs_game_not_found` | the mod directory is not a name, or no folder has it |
+| `leak`, `model_missing`, `shader_image_missing` | the compiler's own findings, classed by its profile |
+| `input_invalid`, `output_invalid`, `output_missing` | a stage's file is not what its role says, or is not there |
+| `conversion_refused`, `converter_unavailable` | the extractor would not, or was not there to, write a `.map` |
+| `tool_failed`, `timed_out`, `cancelled` | the program's own failure status, its time bound, or you |
+
+A tool profile declares the two things only its author can know with two
+optional members of a diagnostic rule: `"fatal": true` (the line proves the
+stage's result is unusable although the program exited 0; requires severity
+`error`) and `"class": "<token>"`. On the Build page each stage lists its
+findings with the compiler's own line, links to its job, and *What this build
+read* shows the conversion, the staged game data and each bound package.
+
 **Checks** — all three must pass before a change is merged:
 
 ```console

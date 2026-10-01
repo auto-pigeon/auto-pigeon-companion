@@ -16,9 +16,17 @@ topics:
   - patch
   - toolchain
   - dependencies
+  - staging
+  - fs_game
+  - packages
+  - failure-class
 paths:
   - internal/maturity/**
   - internal/q3deps/**
+  - internal/q3vfs/**
+  - internal/q3packages/**
+  - internal/artifactcheck/**
+  - internal/failure/**
 prerequisites:
   - aucom.quake2-maturity
 ---
@@ -110,3 +118,51 @@ project's own invention.
 read only what was bound to it; a player's settings, demos and screenshots
 belong where the engine puts them. Those are different requirements and must not
 be made consistent with each other.
+
+## A Quake III build reads what was staged, and a stage is judged by what it produced (`Q3_010`)
+
+These five rules were each bought with a measurement of Q3Map2 2.5.17n, and each
+would be undone by a change that looked like a simplification.
+
+**The compiler is never handed a folder the user chose.** `internal/q3vfs`
+stages `<root>/baseq3` and `<root>/<fs_game>` of `game_root` and `content_root`
+into `<build>/vfs/<role>/`, and `internal/build/gamedata.go` substitutes the
+staged directories before any step is submitted — for every caller, because it
+is in `Runner.Run`. Measured: `-fs_game ..` made Q3Map2 read the parent of each
+base path, a mod directory that is absent is initialised in silence, and a
+truncated PK3 is skipped with exit 0. Do not "optimise" the staging away for a
+local folder, and do not add a caller that builds a Quake III pipeline around
+the runner. `job run` on one action is the documented exception and is not
+staged; its `mod` option still refuses `.` and `..`, in `OptionSpec.Check`.
+
+**The mod directory is found in the DOCUMENT, not by a name.** The option that
+follows a literal `-fs_game` in an action's args is the one; `fsGameOption`
+reads it. A rule keyed on an option called `mod` would stage nothing for a
+profile somebody else wrote. Every stage must name the same mod, and a mod no
+approved folder has is refused (`fs_game_not_found`).
+
+**A saved map's bound packages are staged by the Companion, by digest.**
+`internal/q3packages` reads worldspawn's `auto-pigeon.packages` out of the APMap
+— before conversion, because the `.map` cannot carry it — finds each binding in
+the account BY ITS SHA-256, never by name or package id, and downloads through
+`assetsync.Store.Publish`, which verifies. An unreadable ledger is refused, not
+treated as empty. `q3vfs` re-hashes each archive when it stages it. A second
+writer of "which packages does this build read" — a folder the user copied the
+archive into, a download that trusts the row's own digest — is the defect
+`Q3_007` recorded and this closed.
+
+**Exit status is not the verdict.** A profile rule may be `fatal` (the line
+proves the result unusable although the exit was 0) and may carry a `class`.
+Q3Map2's `ERROR: Unable to open file` is fatal; a leak and a missing image are
+classed. `internal/artifactcheck` reads `.bsp`, `.prt`, `.srf`, `.lin` and the
+`.map` source as their role, on every staged input and every collected output:
+`-light` given an EMPTY `.srf` exits 0 with a lit BSP, which is the case an
+existence check passes. A missing image is still a WARNING and the build still
+says "not a complete result" (`Q3_006`); do not promote it to fatal, and do not
+demote the model line.
+
+**A failure has a class, attached where it is known.** `internal/failure` is a
+token beside the sentence, set by the function that knows the cause and read
+with `failure.Of`. Never derive a class from an error's text, and never add a
+class called "unknown": an unclassified failure is a fact about that failure.
+
