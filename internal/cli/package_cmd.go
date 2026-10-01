@@ -429,34 +429,12 @@ func packageFromBuild(manifest *build.Manifest) ([]pack.FileSource, buildRefs, m
 			File:      output.Path,
 			FromBuild: fmt.Sprintf("%s (%s)", output.Name, manifest.BuildID),
 		})
-		if output.SHA256 != "" {
-			digests[output.SHA256] = fmt.Sprintf("output %q of build %s", output.Name, manifest.BuildID)
-		}
 	}
-	refs := buildRefs{
-		build: &pack.BuildRef{
-			BuildID: manifest.BuildID,
-			Pipeline: pack.DocumentRef{
-				ID: manifest.Pipeline.ID, Version: manifest.Pipeline.Version,
-				Name: manifest.Pipeline.Name, Digest: manifest.Pipeline.Digest,
-			},
-			ReproducibleKey: manifest.ReproducibleKey,
-			Platform:        manifest.Platform,
-		},
+	buildRef, tools, recorded := build.PackageRefs(manifest)
+	for digest, source := range recorded {
+		digests[digest] = source
 	}
-	for _, tool := range manifest.Tools {
-		record := pack.ToolRef{
-			Profile: pack.DocumentRef{
-				ID: tool.Profile.ID, Version: tool.Profile.Version,
-				Name: tool.Profile.Name, Digest: tool.Profile.Digest,
-			},
-			ToolVersion: tool.ToolVersion,
-		}
-		for _, exe := range tool.Executables {
-			record.Executables = append(record.Executables, pack.ExecutableRef{Name: exe.Name, SHA256: exe.SHA256})
-		}
-		refs.tools = append(refs.tools, record)
-	}
+	refs := buildRefs{build: buildRef, tools: tools}
 	return files, refs, digests
 }
 

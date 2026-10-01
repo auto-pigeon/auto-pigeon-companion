@@ -21,6 +21,9 @@ const (
 	KindSound Kind = "sound"
 	// KindMusic is a track named by worldspawn's `music` key.
 	KindMusic Kind = "music"
+	// KindFile is a file somebody named outright, by the path an engine would
+	// look it up under. No map says it; a caller that packages one does.
+	KindFile Kind = "file"
 )
 
 // Reference is one thing a map depends on.
