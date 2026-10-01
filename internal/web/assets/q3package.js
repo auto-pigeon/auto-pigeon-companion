@@ -393,7 +393,7 @@
     note.replaceChildren();
     if (engine.problem) {
       note.append(el("span", { className: "message error", text: engine.problem }), " ");
-      note.append(el("a", { text: t("Set up this engine in Profiles"), attrs: { href: "#profiles/engines/" + encodeURIComponent(engine.id) } }));
+      note.append(el("a", { text: t("Set up this engine in Profiles"), attrs: { href: "#profiles/" + encodeURIComponent(engine.id) } }));
     } else {
       note.textContent = t("Its game folder: {folder}", { folder: engine.game_root });
     }
