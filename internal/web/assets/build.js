@@ -27,7 +27,6 @@
   // Bumped by every change to steps 1 and 2, so a check that was out while the
   // choices changed cannot mark the new choices checked.
   let generation = 0;
-  let leakRequestCard = null;
   let leakRequestID = null;
   // localMap is a file chosen in My Maps › On this computer (NEW_265): a path
   // on this machine, labelled as exactly that wherever the wizard shows it.
@@ -35,58 +34,84 @@
 
   // An operating-system link only asks. The user's own page resolves the saved revision and
   // displays it here; the ordinary Build preview and explicit Build press still own execution.
-  async function refreshLeakRequest() {
-    if (!leakRequestCard) {
-      leakRequestCard = el("div", { className: "panel notice" });
-      $("area-build").prepend(leakRequestCard);
+  // The request itself is shown by leakrequest.js, above every area, so a page
+  // that is open on My Maps sees it too (NEW_307W). What is here is the one
+  // thing only this area can do: take the reviewed request into the wizard.
+  // It returns a sentence when it cannot, and nothing when it did.
+  async function adoptLeakRequest(body) {
+    if (outcome === "running") {
+      return t("A build is running here. Review this leak test when it has finished, or cancel it first.");
     }
-    const { ok, body } = await api("/api/v1/leak-test/pending");
-    leakRequestCard.replaceChildren();
-    if (!ok) {
-      leakRequestCard.hidden = false;
-      leakRequestCard.append(el("p", { className: "message error",
-        text: body.error || "The requested leak test could not be checked." }));
-      return;
+    await refreshPipelines();
+    const pipeline = pipelines.find((item) => item.id === body.pipeline);
+    if (!pipeline) {
+      return t("The leak-test pipeline is unavailable on this computer. Set up a Quake 1 compiler (qbsp) in Profiles, then review this request again.");
     }
-    if (!body.pending) { leakRequestCard.hidden = true; return; }
-    leakRequestCard.hidden = false;
-    leakRequestCard.append(el("h3", { text: t("Leak test requested by the editor") }));
-    if (body.sign_in_required) {
-      leakRequestCard.append(el("p", { text: t("Sign in to review the saved map revision before running a compiler.") }));
-      return;
+    const name = body.name || body.asset_id;
+    $("build-pipeline").value = body.pipeline;
+    window.AUCOM.chosenRevision = { asset_type: "map", asset_id: body.asset_id,
+      display_name: name, revision_id: body.revision_id, revision: body.revision,
+      files: body.files };
+    renderPipeline();
+    revisionChosen();
+    for (const row of inputFields.values()) {
+      if (row.kind === "map") { row.source.value = "asset"; row.apply(); }
     }
-    leakRequestCard.append(el("p", { text: t("Saved map {id}, revision {n}. The Companion checked that its content digest still matches the editor's request.", {
-      id: body.asset_id, n: body.revision }) }));
-    leakRequestCard.append(el("p", { text: t("Review the compiler command before pressing Build. A leaking map makes qbsp fail and still writes a route.") }));
-    const use = el("button", { text: t("Review leak test"), attrs: { type: "button", class: "primary" } });
-    use.addEventListener("click", async () => {
-      await refreshPipelines();
-      const pipeline = pipelines.find((item) => item.id === body.pipeline);
-      if (!pipeline) {
-        setMessage("build-message", "The leak-test pipeline is unavailable on this computer.", "error");
+    $("build-label").value = t("Leak test: {name}, revision {n}", { name, n: body.revision });
+    leakRequestID = body.request_id || null;
+    choicesChanged();
+    showStep(2);
+    return "";
+  }
+
+  // How returning a leak build's result to the editor went, apart from what
+  // the compiler found. A delivery that failed is sent again from here; that
+  // never compiles anything.
+  function leakVerdict(manifest) {
+    const compile = (manifest.steps || []).find((step) => step.id === "compile");
+    const route = (manifest.outputs || []).some((output) => output.name === "pts" && output.path && !output.missing);
+    if (route) return t("The compiler wrote a leak route (.pts): this run found a leak in this saved revision.");
+    if (!compile || compile.skipped || !compile.state) {
+      return t("The leak test did not reach the compiler: {why}. That is not a result about leaks.", {
+        why: sentenceOf(manifest.error) || t("it stopped before the compile stage") });
+    }
+    if (compile.state === "succeeded") {
+      return t("This compiler run found no leak. That is a statement about this run of this saved revision, not proof the map is sealed.");
+    }
+    return t("The compiler ended as {state} and wrote no leak route. Its output says why; this is not a no-leak result.", { state: compile.state });
+  }
+
+  function renderLeakReturn(manifest, item, attempt = 0) {
+    const id = manifest.build_id;
+    api(`/api/v1/leak-test/runs/${encodeURIComponent(id)}/return`).then(({ ok, body }) => {
+      if (currentBuild !== id || !item.isConnected) return;
+      const line = item.querySelector(".leak-return") || item.appendChild(el("p", { className: "leak-return" }));
+      line.replaceChildren();
+      if (!ok) { line.textContent = body.error || t("The return state could not be read."); return; }
+      const waiting = !body.requested || body.state === "pending" || body.state === "sending";
+      if (!body.requested && attempt > 4) {
+        line.textContent = t("This build was not started from an editor's request, so nothing is returned automatically. Download the result and import it in the editor.");
         return;
       }
-      $("build-pipeline").value = body.pipeline;
-      window.AUCOM.chosenRevision = { asset_type: "map", asset_id: body.asset_id,
-        display_name: body.asset_id, revision_id: body.revision_id, revision: body.revision,
-        files: body.files };
-      renderPipeline();
-      revisionChosen();
-      for (const row of inputFields.values()) {
-        if (row.kind === "map") { row.source.value = "asset"; row.apply(); }
+      if (waiting) {
+        line.textContent = body.requested ? t("Sending the result to the editor…") : t("The result is ready on this computer.");
+        if (attempt < 40) window.setTimeout(() => renderLeakReturn(manifest, item, attempt + 1), 1500);
+        return;
       }
-      $("build-label").value = t("Leak test: map {id}, revision {n}", { id: body.asset_id, n: body.revision });
-      leakRequestID = body.request_id || null;
-      choicesChanged();
-      showStep(2);
-      leakRequestCard.hidden = true;
+      if (body.state === "returned") {
+        line.textContent = t("Returned to the editor. The tab that asked imports it for saved revision {n}.", { n: body.revision });
+        line.className = "leak-return message ok";
+        return;
+      }
+      line.className = "leak-return message error";
+      line.append(document.createTextNode(t("The result was not returned to the editor: {why}", { why: body.error || t("the server refused it") }) + " "));
+      const retry = el("button", { text: t("Retry"), attrs: { type: "button", class: "secondary" } });
+      retry.addEventListener("click", () => withBusy(retry, async () => {
+        await api(`/api/v1/leak-test/runs/${encodeURIComponent(id)}/return`, { method: "POST" });
+        renderLeakReturn(manifest, item);
+      }));
+      line.append(retry);
     });
-    const dismiss = el("button", { text: t("Dismiss"), attrs: { type: "button", class: "secondary" } });
-    dismiss.addEventListener("click", async () => {
-      const response = await api("/api/v1/leak-test/dismiss", { method: "POST" });
-      if (response.ok) leakRequestCard.hidden = true;
-    });
-    leakRequestCard.append(el("div", { className: "row-actions", children: [dismiss, use] }));
   }
 
   function currentPipeline() {
@@ -800,7 +825,12 @@
         anchor.click();
         window.setTimeout(() => URL.revokeObjectURL(url), 1000);
       }));
-      list.append(el("li", { children: [resultButton] }));
+      // What the compiler found, then how returning it went, then the file:
+      // three things, kept apart (NEW_307W).
+      const item = el("li", { className: "leak-outcome", children: [
+        el("p", { className: "leak-verdict", text: leakVerdict(manifest) }), resultButton] });
+      list.append(item);
+      renderLeakReturn(manifest, item);
     }
 
     // The finished build is the other moment a compatibility report is worth
@@ -1171,10 +1201,10 @@
         showStep(1);
       }
     },
+    adoptLeakRequest,
     async refresh() {
       await refreshPipelines();
       applyLocalMap();
-      await refreshLeakRequest();
       await refreshHistory();
       await reattach();
       renderSteps();

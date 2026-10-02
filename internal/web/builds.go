@@ -14,6 +14,7 @@ import (
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/assetref"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/assetsync"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
@@ -544,7 +545,13 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 	run.cancel = cancel
 
 	identified := make(chan string, 1)
+	// Set below, once the editor's request is taken: a leak build tells the
+	// editor which step is running (leakrelay.go).
+	var leakRequest *aub.LeakTestLink
 	announce := func(manifest *build.Manifest) {
+		if leakRequest != nil {
+			s.reportLeakBuild(*leakRequest, manifest)
+		}
 		if run.ID != "" || manifest.BuildID == "" {
 			return
 		}
@@ -577,6 +584,7 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusConflict, errors.New("the editor leak request was already used"))
 			return
 		}
+		leakRequest = consumed
 	}
 
 	failed := make(chan error, 1)
@@ -596,9 +604,11 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 			Mirror:      run.log,
 		})
 		run.finish(manifest, err)
-		if request.LeakRequestID != "" && manifest != nil && manifest.State.Terminal() {
-			if returnErr := s.publishLeakResult(manifest.BuildID, request.LeakRequestID); returnErr != nil {
-				_, _ = run.log.Write([]byte("\nCompanion could not return the leak result to the editor: " + returnErr.Error() + "\n"))
+		if leakRequest != nil && manifest != nil && manifest.BuildID != "" && manifest.State.Terminal() {
+			// The delivery is recorded beside the build, so the page can show
+			// it apart from the compiler's verdict and send it again.
+			if returned := s.deliverLeakResult(manifest.BuildID, *leakRequest); returned.State != "returned" {
+				_, _ = run.log.Write([]byte("\nCompanion could not return the leak result to the editor: " + returned.Error + "\n"))
 			}
 		}
 		if run.ID == "" {

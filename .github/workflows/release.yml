@@ -86,7 +86,7 @@ jobs:
       mode: ${{ steps.plan.outputs.mode }}
       publish: ${{ steps.plan.outputs.publish }}
       aue_repository: ${{ steps.pin.outputs.repository }}
-      aue_commit: ${{ steps.pin.outputs.commit }}
+      aue_ref: ${{ steps.pin.outputs.ref }}
       aulibs_repository: ${{ steps.pin.outputs.aulibs_repository }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -94,7 +94,7 @@ jobs:
           # The version is 1.<commit-count>, so the whole history is needed.
           fetch-depth: 0
       - id: pin
-        name: The extractor pin is a full commit SHA
+        name: The extractor's repository and branch
         run: |
           set -euo pipefail
           python3 build/release-plan.py pin | tee -a "$GITHUB_OUTPUT"
@@ -144,7 +144,7 @@ jobs:
       - run: go vet ./...
       - run: go test ./...
 
-  # The extractor, from the pinned commit, with its own gates and its own
+  # The extractor, from the head of its branch resolved to one commit, with its own gates and its own
   # release procedure. The only job that can read its repository.
   aue:
     needs: plan
@@ -167,14 +167,14 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: ${{ needs.plan.outputs.aue_repository }}
-          ref: ${{ needs.plan.outputs.aue_commit }}
+          ref: ${{ needs.plan.outputs.aue_ref }}
           token: ${{ secrets.AUE_CHECKOUT_TOKEN }}
           persist-credentials: false
           # The extractor's version is its own 1.<commit-count>.
           fetch-depth: 0
           path: aue
       - id: aue
-        name: The checkout is the pinned commit, and names the AULIBS it was built against
+        name: The checkout is one commit, and names the AULIBS it was built against
         run: |
           set -euo pipefail
           python3 aucom/build/release-plan.py aue-checkout --pin aucom/build/aue-pin.json --aue-dir aue | tee -a "$GITHUB_OUTPUT"
@@ -212,7 +212,7 @@ jobs:
         env:
           AULIBS_DIR: ${{ github.workspace }}/auto-pigeon-libraries
           VERSION: ${{ steps.aue.outputs.version }}
-          COMMIT: ${{ needs.plan.outputs.aue_commit }}
+          COMMIT: ${{ steps.aue.outputs.commit }}
         run: |
           set -euo pipefail
           ./scripts/build-release.sh --out "$RUNNER_TEMP/aue-release" --version "$VERSION" --build-id "$COMMIT" --verify
@@ -224,6 +224,7 @@ jobs:
           go run ./internal/release/cmd/aue-release targets --candidates --reasons > "$RUNNER_TEMP/aue-release/targets/candidates.txt"
           go run ./internal/release/cmd/aue-release targets --unsupported > "$RUNNER_TEMP/aue-release/targets/unsupported.txt"
           echo "$VERSION" > "$RUNNER_TEMP/aue-release/targets/version.txt"
+          echo "$COMMIT" > "$RUNNER_TEMP/aue-release/targets/commit.txt"
       # The binaries, their manifest, their licence and the target answer. Not
       # the extractor's source archive or aggregate: this workflow publishes
       # neither.
@@ -293,10 +294,11 @@ jobs:
         run: |
           set -euo pipefail
           aue_version="$(cat "$RUNNER_TEMP/aue-release/targets/version.txt")"
+          aue_commit="$(cat "$RUNNER_TEMP/aue-release/targets/commit.txt")"
           python3 build/release-plan.py matrix --aucom-support "$RUNNER_TEMP/dist/support.json" \
             --aue-targets "$RUNNER_TEMP/aue-release/targets" --out "$RUNNER_TEMP/matrix.json"
           python3 build/release-plan.py check-aue --matrix "$RUNNER_TEMP/matrix.json" \
-            --aue-release "$RUNNER_TEMP/aue-release" --aue-version "$aue_version" --out "$RUNNER_TEMP/aue-inputs.json"
+            --aue-release "$RUNNER_TEMP/aue-release" --aue-version "$aue_version" --aue-commit "$aue_commit" --out "$RUNNER_TEMP/aue-inputs.json"
           echo "acceptance=$(python3 build/release-plan.py acceptance-matrix --matrix "$RUNNER_TEMP/matrix.json")" >> "$GITHUB_OUTPUT"
           echo "aue_version=${aue_version}" >> "$GITHUB_OUTPUT"
       - name: One bundle per target, checked, and the release

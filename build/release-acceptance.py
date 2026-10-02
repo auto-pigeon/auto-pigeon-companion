@@ -19,8 +19,11 @@ release as a user receives it.
   2. `companion version` is the release version
   3. `extractor status` says verified; `extractor version` runs the bundled one
   4. the extractor's bytes are the digest the bundle manifest lists
-  5. `extractor convert` turns the fixture APMap into a .map through the real
-     subprocess path
+  5. `extractor convert` turns EVERY fixture APMap beside the one named into a
+     .map through the real subprocess path, each holding the entities and
+     brushes `expectations.json` lists — the APMap 1.3 slab and a Quake 1
+     APMap 1.5 document with authorship and nested groups — and a version
+     nobody defined is refused
   6. a TAMPERED extractor is refused before it runs
   7. a MISSING extractor is named by its path, and nothing fetches one
   8. INTERACTIVE CLOSE (NEW_247B): the unpacked Companion in application mode
@@ -474,16 +477,48 @@ def main():
     run.check("extractor digest", listed.get(where["extractor"]) == digest,
               f"{digest} (manifest lists {listed.get(where['extractor'])})")
 
-    # 5. A real conversion, through the build's own subprocess path.
+    # 5. Real conversions, through the build's own subprocess path: EVERY
+    # fixture beside the one named, each compared with what expectations.json
+    # says the .map must hold (NEW_307W). A release once bundled an extractor
+    # that read APMap 1.0 to 1.3 while the editor saved 1.5, and one 1.3
+    # fixture could not see it. The newest fixture carries what 1.4 added, so
+    # a changed version header is not the whole of the coverage.
     fixtures = os.path.join(work, "fixture")
     os.makedirs(fixtures, exist_ok=True)
-    source = os.path.join(fixtures, "release-acceptance.apmap")
-    shutil.copyfile(args.fixture, source)
-    code, out, err = run.companion(companion, "extractor", "convert", source)
-    converted = os.path.join(fixtures, "converted-release-acceptance", "release-acceptance.map")
-    written = open(converted, encoding="utf-8").read() if os.path.isfile(converted) else ""
-    run.check("convert", code == 0 and '"classname" "worldspawn"' in written and "verified" in out,
-              f"exit {code}, {len(written)} bytes of .map, {out.strip()!r} {err.strip()!r}")
+    fixture_dir = os.path.dirname(os.path.abspath(args.fixture))
+    expected = json.load(open(os.path.join(fixture_dir, "expectations.json"), encoding="utf-8"))["fixtures"]
+    names = sorted(name for name in os.listdir(fixture_dir) if name.endswith(".apmap"))
+    run.check("fixtures", os.path.basename(args.fixture) in names and names == sorted(expected),
+              f"{names}; expectations.json lists {sorted(expected)}")
+    for name in names:
+        want = expected.get(name, {})
+        stem = name[:-len(".apmap")]
+        label = "convert" if name == os.path.basename(args.fixture) else f"convert {stem}"
+        source = os.path.join(fixtures, name)
+        shutil.copyfile(os.path.join(fixture_dir, name), source)
+        declared = json.load(open(source, encoding="utf-8")).get("apmap_version")
+        code, out, err = run.companion(companion, "extractor", "convert", source)
+        converted = os.path.join(fixtures, f"converted-{stem}", f"{stem}.map")
+        written = open(converted, encoding="utf-8").read() if os.path.isfile(converted) else ""
+        lines = [line.strip() for line in written.splitlines()]
+        classnames = [line.split('"')[3] for line in lines if line.startswith('"classname" "')]
+        brushes = sum(1 for line in lines if line == "{") - len(classnames)
+        run.check(label, code == 0 and "verified" in out and declared == want.get("apmap_version")
+                  and classnames == want.get("classnames") and brushes == want.get("brushes"),
+                  f"exit {code}, APMap {declared}, {len(written)} bytes of .map, classnames {classnames}, "
+                  f"{brushes} brushes (want {want}), {out.strip()!r} {err.strip()!r}")
+
+    # 5b. A version nobody defined is still refused, by the extractor, by name.
+    newest = json.load(open(os.path.join(fixtures, names[-1]), encoding="utf-8"))
+    newest["apmap_version"] = "9.9"
+    newest["$schema"] = str(newest.get("$schema", "")).replace(str(declared), "9.9")
+    unknown = os.path.join(fixtures, "unknown-version.apmap")
+    with open(unknown, "w", encoding="utf-8") as handle:
+        json.dump(newest, handle)
+    code, out, err = run.companion(companion, "extractor", "convert", unknown)
+    run.check("unknown version refused", code != 0 and "not a supported APMap version" in out + err
+              and not os.path.isfile(os.path.join(fixtures, "converted-unknown-version", "unknown-version.map")),
+              f"exit {code}, {(out + err).strip()[:300]!r}")
 
     # 6. Tampered: one byte appended. The bytes would still run and still
     # speak the protocol, so a refusal here is the digest check, before any

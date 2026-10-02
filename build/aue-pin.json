@@ -1,9 +1,8 @@
 {
-  "schema": "aucom.aue-pin/1.0",
-  "comment": "The ONE Auto-Pigeon Extractor revision every AUCOM release bundles. Reviewed like code: changing it changes what users run. Never a branch, a tag or a release URL - a full commit SHA, checked out exactly by .github/workflows/release.yml. The extractor's embedded AULIBS data names the AULIBS commit it was synced from, and the workflow checks that commit of aulibs_repository out to build it against.",
+  "schema": "aucom.aue-pin/1.1",
+  "comment": "Where every AUCOM release gets the Auto-Pigeon Extractor it bundles: the head of `ref` in `repository`, at the moment the release runs (operator, 2026-10-02: \"AUCOM should always build with the latest AUE\"). No commit is written here, so a release cannot ship an extractor older than the maps the editor saves; when the extractor changes, a release of this repository picks it up - from a NEW commit on main (an empty one will do), because a release's version is this repository's commit count and the assets of an existing release are never replaced. The release still resolves the head to ONE full commit SHA (`release-plan.py aue-checkout`), builds exactly that, and records it in the bundle manifest and the release manifest. The extractor's embedded AULIBS data names the AULIBS commit it was synced from, and the workflow checks that commit of aulibs_repository out to build it against.",
   "repository": "auto-pigeon/auto-pigeon-extractor",
-  "commit": "d9f4a536028369f80e5bab275ef286dd3ec4a6c8",
+  "ref": "main",
   "required_protocol": "1.0",
-  "version": "1.214",
   "aulibs_repository": "auto-pigeon/auto-pigeon-libraries"
 }

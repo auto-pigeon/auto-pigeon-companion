@@ -1,0 +1,8 @@
+{
+  "schema": "aucom.release-fixtures/1.0",
+  "comment": "What the packaged extractor must make of each fixture in this directory. release-acceptance.py converts every *.apmap here with the archive's own extractor and compares the .map it wrote with these counts; a fixture with no entry fails the run. release-acceptance.apmap is the APMap 1.3 slab kept as backward-compatibility evidence. release-acceptance-1.5.apmap is a Quake 1 APMap 1.5 document carrying what 1.4 added (authorship, three nested groups) so that a changed version header is not the whole of the coverage.",
+  "fixtures": {
+    "release-acceptance.apmap": { "apmap_version": "1.3", "classnames": ["worldspawn", "info_player_start"], "brushes": 1 },
+    "release-acceptance-1.5.apmap": { "apmap_version": "1.5", "classnames": ["worldspawn", "light"], "brushes": 4 }
+  }
+}

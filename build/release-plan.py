@@ -58,7 +58,8 @@ def bash():
         raise Refusal("bash is not on PATH; the bundle is composed by build/bundle-sidecar.sh")
     return found
 
-PIN_SCHEMA = "aucom.aue-pin/1.0"
+PIN_SCHEMA = "aucom.aue-pin/1.1"
+BRANCH = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$")
 MATRIX_SCHEMA = "aucom.release-matrix/1.0"
 RELEASE_SCHEMA = "aucom.release-manifest/1.0"
 AUE_MANIFEST_SCHEMA = "aue-release-manifest/1.0"
@@ -112,20 +113,25 @@ def load_pin(path):
     pin = load_json(path)
     if pin.get("schema") != PIN_SCHEMA:
         raise Refusal(f"{path} is {pin.get('schema')!r}; this release reads {PIN_SCHEMA!r}")
-    commit = pin.get("commit", "")
-    if not FULL_SHA.match(commit):
+    ref = pin.get("ref", "")
+    if not BRANCH.match(ref) or ref.startswith("refs/") or FULL_SHA.match(ref):
         raise Refusal(
-            f"{path}: commit {commit!r} is not a full 40-character lowercase commit SHA. A branch, a tag, a "
-            "short SHA or `latest` can move, and the extractor a release bundles must not"
+            f"{path}: ref {ref!r} is not a branch name. A release bundles the head of that branch as it is "
+            "when the release runs, resolved to one commit by `aue-checkout`"
         )
+    for stale in ("commit", "version"):
+        if stale in pin:
+            raise Refusal(
+                f"{path}: {stale!r} is no longer written here. The extractor is the head of {ref!r} at release "
+                "time (operator, 2026-10-02); a commit kept here is how a release shipped an extractor too old "
+                "for the maps the editor saved"
+            )
     if not REPOSITORY.match(pin.get("repository", "")):
         raise Refusal(f"{path}: repository {pin.get('repository')!r} is not <owner>/<name>")
     if not re.match(r"^[0-9]+\.[0-9]+$", pin.get("required_protocol", "")):
         raise Refusal(f"{path}: required_protocol {pin.get('required_protocol')!r} is not <major>.<minor>")
     if not REPOSITORY.match(pin.get("aulibs_repository", "")):
         raise Refusal(f"{path}: aulibs_repository {pin.get('aulibs_repository')!r} is not <owner>/<name>")
-    if pin.get("version") and not VERSION.match(pin["version"]):
-        raise Refusal(f"{path}: version {pin['version']!r} is not the 1.<commit-count> shape")
     return pin
 
 
@@ -142,27 +148,26 @@ def protocol_satisfies(speaks, minimum):
 def cmd_pin(args):
     pin = load_pin(args.pin)
     print(f"repository={pin['repository']}")
-    print(f"commit={pin['commit']}")
+    print(f"ref={pin['ref']}")
     print(f"required_protocol={pin['required_protocol']}")
-    print(f"version={pin.get('version', '')}")
     print(f"aulibs_repository={pin['aulibs_repository']}")
 
 
 def cmd_aue_checkout(args):
-    """The checked-out AUE is the pinned commit, and the AULIBS revision its
-    committed data was synced from is the one to build it against."""
-    pin = load_pin(args.pin)
+    """The checked-out AUE is resolved to ONE commit — the head of the branch
+    the release follows, as it was when this ran — and the AULIBS revision its
+    committed data was synced from is the one to build it against. Everything
+    after this step names that commit, never the branch."""
+    load_pin(args.pin)
     head = subprocess.run(["git", "-C", args.aue_dir, "rev-parse", "HEAD"], check=True,
                           capture_output=True, text=True).stdout.strip()
-    if head != pin["commit"]:
-        raise Refusal(f"the extractor checkout is at {head} and build/aue-pin.json pins {pin['commit']}")
+    if not FULL_SHA.match(head):
+        raise Refusal(f"the extractor checkout's HEAD is {head!r}, not a commit")
     count = subprocess.run(["git", "-C", args.aue_dir, "rev-list", "--count", "HEAD"], check=True,
                            capture_output=True, text=True).stdout.strip()
     version = f"1.{count}"
     if count in ("", "1"):
         raise Refusal("the extractor checkout has no history; fetch-depth 0 is needed for its 1.<count> version")
-    if pin.get("version") and pin["version"] != version:
-        raise Refusal(f"build/aue-pin.json says version {pin['version']} and commit {pin['commit']} is {version}")
     aulibs = set()
     for relative in ("internal/apmap/embedded/schema/apmap-contract-provenance.json",
                      "internal/gameparams/embedded/games/game-params-provenance.json"):
@@ -171,7 +176,8 @@ def cmd_aue_checkout(args):
             aulibs.add(load_json(path).get("aulibs_commit", ""))
     aulibs.discard("")
     if len(aulibs) != 1 or not FULL_SHA.match(next(iter(aulibs))):
-        raise Refusal(f"the pinned extractor's embedded data names AULIBS commits {sorted(aulibs)}; want exactly one")
+        raise Refusal(f"the extractor's embedded data names AULIBS commits {sorted(aulibs)}; want exactly one")
+    print(f"commit={head}")
     print(f"version={version}")
     print(f"aulibs_commit={next(iter(aulibs))}")
 
@@ -285,16 +291,18 @@ def cmd_acceptance_matrix(args):
 # The extractor's release, checked before any of it enters a bundle
 
 
-def check_aue(matrix, release_dir, pin, aue_version):
+def check_aue(matrix, release_dir, pin, aue_version, aue_commit):
     manifest_path = os.path.join(release_dir, "release-manifest.json")
     manifest = load_json(manifest_path)
     if manifest.get("schema_version") != AUE_MANIFEST_SCHEMA:
         raise Refusal(f"the extractor's release manifest is {manifest.get('schema_version')!r}")
     if manifest.get("version") != aue_version:
-        raise Refusal(f"the extractor's release manifest says {manifest.get('version')} and the pin is {aue_version}")
+        raise Refusal(f"the extractor's release manifest says {manifest.get('version')} and the checkout is {aue_version}")
     source = manifest.get("source", {})
-    if source.get("commit") != pin["commit"]:
-        raise Refusal(f"the extractor was built from {source.get('commit')!r}; the pin is {pin['commit']}")
+    if not FULL_SHA.match(aue_commit):
+        raise Refusal(f"the extractor's commit {aue_commit!r} is not a full 40-character lowercase commit SHA")
+    if source.get("commit") != aue_commit:
+        raise Refusal(f"the extractor was built from {source.get('commit')!r}; the checkout resolved to {aue_commit}")
     # Whatever licence the pinned extractor declares travels with it, as its own
     # file, and is QUOTED from its release manifest everywhere downstream — the
     # bundle manifest, the release manifest, the release notes — so nothing here
@@ -347,18 +355,18 @@ def check_aue(matrix, release_dir, pin, aue_version):
         inputs[entry["platform"]] = {"path": os.path.abspath(path), "sha256": digest, "status": status}
     return {
         "version": aue_version,
-        "commit": pin["commit"],
+        "commit": aue_commit,
         "repository": pin["repository"],
         "protocol": manifest["protocol"],
         "license": spdx,
-        "source": AUE_SOURCE_URL.format(repository=pin["repository"], commit=pin["commit"]),
+        "source": AUE_SOURCE_URL.format(repository=pin["repository"], commit=aue_commit),
         "go": manifest.get("toolchain", {}).get("go", ""),
         "targets": inputs,
     }
 
 
 def cmd_check_aue(args):
-    inputs = check_aue(load_json(args.matrix), args.aue_release, load_pin(args.pin), args.aue_version)
+    inputs = check_aue(load_json(args.matrix), args.aue_release, load_pin(args.pin), args.aue_version, args.aue_commit)
     write_json(args.out, inputs)
     for platform, entry in sorted(inputs["targets"].items()):
         print(f"{platform:15} {entry['status']:10} {entry['sha256']}")
@@ -497,7 +505,7 @@ def verify_archive(archive, platform, version, aue_version, aue_commit, go=None,
         if where["companion"] not in present:
             raise Refusal(f"{archive} carries no Companion at {where['companion']}")
         if extractor.get("version") != aue_version or listed[where["extractor"]]["version"] != aue_version:
-            raise Refusal(f"{archive}: the extractor is listed as {extractor.get('version')}; the pin is {aue_version}")
+            raise Refusal(f"{archive}: the extractor is listed as {extractor.get('version')}; this release built {aue_version}")
         if listed[where["extractor"]]["product"] != "auto-pigeon-extractor":
             raise Refusal(f"{archive}: the extractor is listed as a member of {listed[where['extractor']]['product']}")
         if extractor.get("source_commit") != aue_commit:
@@ -815,6 +823,7 @@ def main(argv):
     p.add_argument("--matrix", required=True)
     p.add_argument("--aue-release", required=True)
     p.add_argument("--aue-version", required=True)
+    p.add_argument("--aue-commit", required=True, help="the commit `aue-checkout` resolved")
     p.add_argument("--out", required=True)
     p.set_defaults(run=cmd_check_aue)
 

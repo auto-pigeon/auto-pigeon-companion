@@ -1334,3 +1334,18 @@ main { padding: 1.25rem 1.75rem 3rem; }
 .q3pkg-facts dt { color: var(--ink-muted); }
 .q3pkg-facts dd { margin: 0; overflow-wrap: anywhere; }
 .q3pkg label.check { display: flex; gap: 0.5rem; align-items: center; margin: 0.5rem 0; }
+
+/* The editor's leak-test request, above every area (leakrequest.js). The
+   service-notice treatment: an accent rule and the soft accent ground. */
+.leak-request {
+  display: grid; gap: 0.25rem; padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--line); border-left: 3px solid var(--accent); background: var(--accent-soft);
+}
+.leak-request p { margin: 0; }
+.leak-request__title { font-weight: 600; }
+.leak-request__what { font-size: 0.875rem; }
+.leak-request__state { font-size: 0.875rem; color: var(--ink-muted); }
+.leak-request .row-actions { margin-top: 0.4rem; }
+.leak-outcome { display: grid; gap: 0.4rem; justify-items: start; }
+.leak-outcome p { margin: 0; }
+.leak-verdict { font-weight: 600; }

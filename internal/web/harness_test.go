@@ -207,10 +207,21 @@ type fixtureBackend struct {
 	// Captures one private compiler result sent back through AUB.
 	leakResult    map[string]any
 	leakRequestID string
+	// leakStatuses is every progress line relayed for the editor, in order,
+	// as "<request id> <state> <stage>"; refuseLeakResult makes the result
+	// rendezvous answer 503, the way an AUB that is away does.
+	leakStatuses     []string
+	refuseLeakResult bool
 
 	// holdDetail, when set, holds every map-detail request until it is
 	// closed or the caller gives up: a slow AUB (NEW_265A).
 	holdDetail chan struct{}
+}
+
+func (b *fixtureBackend) refusesLeakResult() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.refuseLeakResult
 }
 
 func (b *fixtureBackend) count() int {
@@ -309,6 +320,25 @@ func (b *fixtureBackend) serve(w http.ResponseWriter, r *http.Request) {
 	asset := b.asset
 
 	switch {
+	case strings.HasPrefix(rest, "/leak-status/") && r.Method == http.MethodPost:
+		var status map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&status); err != nil || status["schema_version"] != aub.LeakStatusSchema {
+			http.Error(w, "bad status", http.StatusBadRequest)
+			return
+		}
+		stage, _ := status["stage"].(string)
+		if len(stage) > 24 {
+			stage = stage[:24]
+		}
+		b.mu.Lock()
+		b.leakStatuses = append(b.leakStatuses, strings.TrimSpace(fmt.Sprintf("%s %v %s",
+			strings.TrimPrefix(rest, "/leak-status/"), status["state"], stage)))
+		b.mu.Unlock()
+		write(map[string]any{"state": status["state"]})
+		return
+	case strings.HasPrefix(rest, "/leak-results/") && r.Method == http.MethodPost && b.refusesLeakResult():
+		http.Error(w, `{"message":"the server is away"}`, http.StatusServiceUnavailable)
+		return
 	case strings.HasPrefix(rest, "/leak-results/") && r.Method == http.MethodPost:
 		var result map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&result); err != nil {

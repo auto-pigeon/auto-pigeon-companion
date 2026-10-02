@@ -99,7 +99,11 @@ extractor into the release archive and `build/bundle-manifest.py` lists it with
 its digest and licence. Without `--extractor` the manifest says
 `extractor: null` and `extractor_absent`. Nothing in the build downloads it
 either. Since `NEW_247A`, `.github/workflows/release.yml` builds AUE on every
-push to main from the ONE commit `build/aue-pin.json` names, with AUE's own
+push to main from the head of the ONE branch `build/aue-pin.json` names — resolved to one commit by
+`release-plan.py aue-checkout`, which every later step names instead of the
+branch (operator, 2026-10-02: *"AUCOM should always build with the latest AUE"*;
+a commit written in that file is how v1.192 bundled an extractor that could not
+read the APMap 1.5 maps the editor was saving) — with AUE's own
 `scripts/build-release.sh`, and bundles it; the bundle step reads both
 programs' executable headers and refuses a pair built for different machines.
 On macOS the extractor goes inside the app, in `Contents/MacOS/`, and the

@@ -127,6 +127,13 @@
       </p>
     </section>
 
+    <!--
+      The editor's leak-test request (leakrequest.js), above every area: a page
+      open on My Maps sees it without a reload. It only offers a review; nothing
+      runs until a person presses Build in the Build area.
+    -->
+    <section id="leak-request" class="leak-request" role="status" aria-live="polite" aria-label="Leak test request" hidden></section>
+
     <!-- Back online with something to sync: said once, where the person is. -->
     <div id="reconnect-banner" class="reconnect-banner" role="status" hidden>
       <p id="reconnect-text"></p>
@@ -1277,6 +1284,21 @@
           </div>
 
           <div class="panel">
+            <h3>Links from Auto-Pigeon</h3>
+            <p class="muted">
+              The editor's <em>Test in Companion</em> and a game's join link are
+              <code>autopigeon://</code> links. This computer has to be told that the
+              Companion opens them. A link only shows a request here; nothing runs
+              until you review it and press Build or Join.
+            </p>
+            <p id="uri-state" class="muted" role="status">Checking…</p>
+            <div class="row">
+              <button type="button" id="uri-register" class="primary" hidden>Open Auto-Pigeon links with this Companion</button>
+            </div>
+            <p id="uri-message" class="message" role="alert"></p>
+          </div>
+
+          <div class="panel">
             <h3>Extractor</h3>
             <p id="extractor-state" class="muted">Checking…</p>
             <div class="row">
@@ -1450,6 +1472,7 @@
     <script src="settings.js"></script>
     <script src="footer.js"></script>
     <script src="account.js"></script>
+    <script src="leakrequest.js"></script>
     <script src="lifecycle.js"></script>
     <script src="app.js"></script>
     <!-- An ES module: it imports the vendored notice contract, which imports

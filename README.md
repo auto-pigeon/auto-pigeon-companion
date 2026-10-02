@@ -163,17 +163,40 @@ The command is `game open` with **no approval flag at all**: opening a link
 checks its shape, shows it in the Companion and starts nothing. Joining is a
 separate step you take after reviewing the exact command the page shows.
 
-**Testing an editor map for leaks.** Install the same URL handler with
-`./companion uri register`, save the map to your account in the editor, and press
-**Leaks → Test in Companion**. The Companion checks that the saved map revision and
-content digest still match the request. **Review leak test** selects the pinned
-revision and the `auto-pigeon.q1.leak-test` pipeline; use the ordinary Build preview
-and approval before running EricW `qbsp -leaktest`. A leaking map can make qbsp exit
-with failure and still produce a useful pointfile and log. Open the finished build,
-keep the original editor tab open. Companion returns the terminal result through
-your AUB account, and that tab imports it automatically if its saved map revision
-still matches. If the return is unavailable, press **Download leak result** on
-the finished build and import that JSON file in the editor's Leaks panel.
+**Testing an editor map for leaks.** Tell this computer that the Companion opens
+`autopigeon://` links — **Settings › Links from Auto-Pigeon › Open Auto-Pigeon links
+with this Companion**, or `./companion uri register` — save the map to your account
+in the editor, and press **Leaks → Test in Companion**. Without that handler the
+editor's click reaches nothing and the editor waits for a result that cannot come.
+
+```console
+$ ./companion uri status
+scheme:     autopigeon://
+registered: yes
+```
+
+A request shows as a notice above every area of an open Companion window within
+about two seconds, whichever area it is on and without a reload: the map's name,
+its saved revision and when it arrived. The Companion checks that the saved revision
+and content digest still match. **Review leak test** takes the pinned revision and
+the `auto-pigeon.q1.leak-test` pipeline into the Build area; the ordinary preview
+shows the exact command, and only **Build** runs EricW `qbsp -leaktest`.
+**Dismiss** forgets that request and no other. Signed out, the notice says so and
+offers Sign in; a revision that changed since the click is refused by name.
+
+A leaking map can make qbsp exit with failure and still produce a useful pointfile
+and log. The finished build says three things apart: what the compiler found (a
+leak route, no leak in that run, or that the test never reached the compiler), how
+returning the result to the editor went, and **Download leak result**. A return that
+failed has **Retry**, which sends the same result again and compiles nothing.
+
+Keep the original editor tab open. The Companion tells your Auto-Pigeon account what
+it is doing with the request — received, in review, which build stage is running,
+result returned — and the editor tab shows that line, because a web page is not
+allowed to ask a program on your own computer directly. The result itself returns
+the same way, and the tab imports it if its saved map revision still matches. If the
+return is unavailable, press **Download leak result** and import that JSON file in
+the editor's Leaks panel.
 The result is available through the local guarded API too, for example:
 
 ```bash
@@ -796,7 +819,9 @@ $ ./build/release.sh --out dist/local --targets linux/amd64,windows/amd64
 
 The published release is made by `.github/workflows/release.yml` on every push
 to `main`: it tests on Linux, Windows and macOS, builds the extractor from the
-commit pinned in `build/aue-pin.json`, puts it beside the Companion in each
+head of the branch `build/aue-pin.json` names (the newest extractor at that moment,
+resolved to one commit and recorded in the release manifest), puts it beside the
+Companion in each
 archive, runs each archive on a native runner, and publishes the prerelease.
 On each runner the archive's Companion is also driven by a real Chrome or Edge:
 two tabs keep it running, closing one does not stop it, and closing the last one

@@ -211,7 +211,7 @@ jobs:
           test -x "$RUNNER_TEMP/with/auto-pigeon-companion-0.0.0-ci-linux-amd64/dependencies/auto-pigeon-extractor"
           test ! -e "$RUNNER_TEMP/with/auto-pigeon-companion-0.0.0-ci-linux-amd64/LICENSE-auto-pigeon-extractor.txt"
       # The release's decisions, driven the way release.yml drives them.
-      - name: the release plan reads its pin
+      - name: the release plan reads where the extractor comes from
         run: python3 build/release-plan.py pin
 
   security-contract:

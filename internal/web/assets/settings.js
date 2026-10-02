@@ -11,7 +11,37 @@
 (() => {
   const { $, el, api, setMessage, busy, withBusy, record, t } = window.AUCOM;
 
+  // Whether this computer hands `autopigeon://` links to this Companion, and
+  // the button that makes it so (NEW_307W). The sentence under the state is
+  // the registrar's own: which key or file, or why this platform registers
+  // another way.
+  async function refreshLinks() {
+    const { ok, body } = await api("/api/v1/uri");
+    if (!ok) {
+      $("uri-state").textContent = body.error || t("The link handler could not be read.");
+      $("uri-register").hidden = true;
+      return;
+    }
+    $("uri-state").textContent = body.registered
+      ? t("This Companion opens Auto-Pigeon links on this computer.")
+      : t("Nothing on this computer opens Auto-Pigeon links yet, so the editor's Test in Companion and join links do nothing.") +
+        (body.detail ? " " + body.detail : "");
+    $("uri-register").hidden = Boolean(body.registered);
+  }
+
+  $("uri-register").addEventListener("click", (event) => withBusy(event.currentTarget, async () => {
+    const { ok, body } = await api("/api/v1/uri/register", { method: "POST" });
+    if (!ok) {
+      setMessage("uri-message", body.error || t("The link handler could not be registered."), "error");
+      return;
+    }
+    setMessage("uri-message", body.registered ? "" : body.detail || "", body.registered ? "" : "error");
+    if (body.registered) record(t("Auto-Pigeon links now open in this Companion"), "", "ok");
+    await refreshLinks();
+  }));
+
   async function refresh() {
+    refreshLinks();
     const { ok, body } = await api("/api/v1/settings");
     if (!ok) {
       setMessage("settings-message", body.error || "could not read the settings", "error");

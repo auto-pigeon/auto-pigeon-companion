@@ -24,9 +24,13 @@ const leakPipelineID = "auto-pigeon.q1.leak-test"
 // this review reads the user's normal AUB session and starts no program.
 func (s *Server) leakTestAPI() map[string]http.HandlerFunc {
 	return map[string]http.HandlerFunc{
-		"GET /api/v1/leak-test/pending":          s.handleLeakTestPending,
-		"POST /api/v1/leak-test/dismiss":         s.handleLeakTestDismiss,
-		"GET /api/v1/leak-test/runs/{id}/result": s.handleLeakTestResult,
+		"GET /api/v1/leak-test/pending":           s.handleLeakTestPending,
+		"GET /api/v1/leak-test/request":           s.handleLeakTestRequest,
+		"POST /api/v1/leak-test/reviewing":        s.handleLeakTestReviewing,
+		"POST /api/v1/leak-test/dismiss":          s.handleLeakTestDismiss,
+		"GET /api/v1/leak-test/runs/{id}/result":  s.handleLeakTestResult,
+		"GET /api/v1/leak-test/runs/{id}/return":  s.handleLeakTestReturn,
+		"POST /api/v1/leak-test/runs/{id}/return": s.handleLeakTestReturnRetry,
 	}
 }
 
@@ -49,7 +53,8 @@ func (s *Server) handleLeakTestPending(w http.ResponseWriter, r *http.Request) {
 	s.adoptSessionFromDisk()
 	client := s.aubClient()
 	if client == nil || !client.Authenticated() {
-		writeJSON(w, http.StatusOK, map[string]any{"pending": true, "sign_in_required": true})
+		writeJSON(w, http.StatusOK, map[string]any{"pending": true, "sign_in_required": true,
+			"request_id": request.RequestID, "asset_id": request.AssetID, "revision": request.Revision, "received_at": received})
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
@@ -64,6 +69,7 @@ func (s *Server) handleLeakTestPending(w http.ResponseWriter, r *http.Request) {
 	if revision.AssetID != request.AssetID || revision.AssetType != aub.AssetTypeMap ||
 		revision.Number != request.Revision || revision.ContentSHA256 != request.ContentSHA256 ||
 		!revision.Immutable || revision.ID == "" {
+		s.reportLeakStatus(*request, leakBlocked, "the saved map revision changed since this request", "")
 		writeError(w, http.StatusConflict, errors.New("the saved map revision changed or cannot be pinned; ask the editor again"))
 		return
 	}
@@ -83,8 +89,8 @@ func (s *Server) handleLeakTestPending(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"pending": true, "received_at": received, "pipeline": leakPipelineID,
-		"request_id": request.RequestID,
-		"asset_id":   request.AssetID, "revision": revision.Number, "revision_id": revision.ID,
+		"request_id": request.RequestID, "name": strings.TrimSuffix(filepath.Base(source), filepath.Ext(source)),
+		"asset_id": request.AssetID, "revision": revision.Number, "revision_id": revision.ID,
 		"content_sha256": revision.ContentSHA256, "files": revision.Files,
 		"source_ref": fmt.Sprintf("aub:map/%s@%s#%s", request.AssetID, revision.ID, source),
 	})
@@ -130,16 +136,40 @@ func (s *Server) publishLeakResult(buildID, requestID string) error {
 	return err
 }
 
-func (s *Server) handleLeakTestDismiss(w http.ResponseWriter, _ *http.Request) {
-	dir, err := s.configDir()
-	if err == nil {
-		err = leakintent.Dismiss(leakintent.Path(dir), time.Now().UTC())
+// handleLeakTestDismiss forgets the request a person dismissed — that one. A
+// page names the request it was showing, so a newer link that arrived while
+// its card was on screen is not erased by a click meant for the older one. A
+// body without an id is the older form, and forgets whatever is pending.
+func (s *Server) handleLeakTestDismiss(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		RequestID string `json:"request_id"`
 	}
+	if r.ContentLength != 0 && !decodeJSON(w, r, &body) {
+		return
+	}
+	dir, err := s.configDir()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"dismissed": true})
+	path, now := leakintent.Path(dir), time.Now().UTC()
+	if body.RequestID == "" {
+		if err = leakintent.Dismiss(path, now); err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"dismissed": true})
+		return
+	}
+	dismissed, err := leakintent.Consume(path, body.RequestID, now)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if dismissed != nil {
+		s.reportLeakStatus(*dismissed, leakDismissed, "", "")
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"dismissed": dismissed != nil})
 }
 
 type leakResult struct {

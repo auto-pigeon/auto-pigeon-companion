@@ -163,3 +163,188 @@ func TestLeakOutputRefusesTamperingAndEscape(t *testing.T) {
 		t.Fatal("a symlink outside this build was accepted")
 	}
 }
+
+// leakStatusesSoon waits for the relay's single sender to have posted `want`
+// lines. They are sent off the request's goroutine, in order.
+func (m *machine) leakStatusesSoon(t *testing.T, want int) []string {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		m.backend.mu.Lock()
+		got := append([]string(nil), m.backend.leakStatuses...)
+		m.backend.mu.Unlock()
+		if len(got) >= want || time.Now().After(deadline) {
+			return got
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// An open page asks every couple of seconds whether a link arrived
+// (NEW_307W). That question is answered from this machine alone, the editor is
+// told once that its request arrived, and a Dismiss removes the request it
+// names — never a newer one that replaced it meanwhile.
+func TestAnOpenPageSeesANewLeakRequestAndDismissesOnlyTheOneItNamed(t *testing.T) {
+	m := newMachine(t)
+	m.backend.asset.fileName = "fixture.apmap"
+	m.signIn()
+	dir, err := m.server.configDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status, body := m.call(http.MethodGet, "/api/v1/leak-test/request", nil); status != http.StatusOK || body["pending"] != false {
+		t.Fatalf("nothing asked yet: %d %v", status, body)
+	}
+	older := aub.LeakTestLink{AssetID: m.backend.asset.assetID, Revision: m.backend.asset.revision,
+		ContentSHA256: m.backend.asset.digest(), RequestID: strings.Repeat("a", 32)}
+	if err := leakintent.Receive(leakintent.Path(dir), older, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	watch := func() {
+		t.Helper()
+		status, body := m.call(http.MethodGet, "/api/v1/leak-test/request", nil)
+		if status != http.StatusOK || body["pending"] != true || body["request_id"] != older.RequestID ||
+			body["asset_id"] != older.AssetID || body["revision"] != float64(older.Revision) {
+			t.Fatalf("the watch: %d %v", status, body)
+		}
+	}
+	// The first sighting tells the editor, once; every later one asks nobody.
+	watch()
+	if got := m.leakStatusesSoon(t, 1); len(got) != 1 || got[0] != older.RequestID+" received" {
+		t.Fatalf("the editor was told %v, want one `received`", got)
+	}
+	served := m.backend.count()
+	for range 5 {
+		watch()
+	}
+	time.Sleep(100 * time.Millisecond)
+	if got := m.backend.count(); got != served {
+		t.Errorf("watching an unchanged request asked the account server %d more time(s)", got-served)
+	}
+	if status, _ := m.call(http.MethodPost, "/api/v1/leak-test/reviewing", map[string]any{"request_id": strings.Repeat("f", 32)}); status != http.StatusConflict {
+		t.Errorf("reviewing a request that is not pending: %d", status)
+	}
+	if status, _ := m.call(http.MethodPost, "/api/v1/leak-test/reviewing", map[string]any{"request_id": older.RequestID}); status != http.StatusOK {
+		t.Errorf("reviewing the pending request: %d", status)
+	}
+
+	// The editor is clicked again while the first notice is still on screen.
+	newer := older
+	newer.RequestID = strings.Repeat("b", 32)
+	if err := leakintent.Receive(leakintent.Path(dir), newer, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	status, body := m.call(http.MethodPost, "/api/v1/leak-test/dismiss", map[string]any{"request_id": older.RequestID})
+	if status != http.StatusOK || body["dismissed"] != false {
+		t.Fatalf("dismissing the replaced request: %d %v", status, body)
+	}
+	if _, body := m.call(http.MethodGet, "/api/v1/leak-test/request", nil); body["request_id"] != newer.RequestID {
+		t.Fatalf("the newer request did not survive an older Dismiss: %v", body)
+	}
+	status, body = m.call(http.MethodPost, "/api/v1/leak-test/dismiss", map[string]any{"request_id": newer.RequestID})
+	if status != http.StatusOK || body["dismissed"] != true {
+		t.Fatalf("dismissing the pending request: %d %v", status, body)
+	}
+	if _, body := m.call(http.MethodGet, "/api/v1/leak-test/request", nil); body["pending"] != false {
+		t.Fatalf("after dismiss: %v", body)
+	}
+	want := []string{older.RequestID + " received", older.RequestID + " reviewing",
+		newer.RequestID + " received", newer.RequestID + " dismissed"}
+	if got := m.leakStatusesSoon(t, len(want)); strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("the editor was told\n %v\nwant\n %v", got, want)
+	}
+}
+
+// Returning a result is recorded apart from the compiler's verdict, and a
+// delivery that failed is sent again without compiling anything: the retry
+// carries the same build's bytes for the same request.
+func TestAFailedLeakReturnIsRecordedAndRetriedWithoutAnotherBuild(t *testing.T) {
+	m := newMachine(t)
+	m.signIn()
+	id := "20260928T000000Z-feedface"
+	buildDir := filepath.Join(m.builds, id)
+	outputDir := filepath.Join(buildDir, "output")
+	if err := os.MkdirAll(outputDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	log := "---- qbsp ----\nLeak file written to level.pts\n"
+	path := filepath.Join(outputDir, "compile.log")
+	if err := os.WriteFile(path, []byte(log), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256([]byte(log))
+	request := aub.LeakTestLink{AssetID: "saved-map", Revision: 7, ContentSHA256: strings.Repeat("a", 64),
+		RequestID: strings.Repeat("c", 32)}
+	manifest := &build.Manifest{SchemaVersion: build.SchemaVersion, BuildID: id,
+		Pipeline: build.DocumentRef{ID: leakPipelineID}, State: job.Failed,
+		Inputs: []build.FileRecord{{Name: "source_map", Source: &build.SourceRef{
+			AssetType: aub.AssetTypeMap, AssetID: request.AssetID, RevisionID: "immutable-revision", Revision: request.Revision,
+			ContentSHA256: request.ContentSHA256, Refetchable: true}}},
+		Outputs: []build.FileRecord{{Name: "compile_log", Path: path, SHA256: "sha256:" + hex.EncodeToString(sum[:])}}}
+	if err := manifest.Save(buildDir); err != nil {
+		t.Fatal(err)
+	}
+	digestOf := func() string {
+		entries, err := os.ReadDir(buildDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		hash := sha256.New()
+		for _, entry := range entries {
+			if entry.IsDir() || entry.Name() == leakReturnFile {
+				continue
+			}
+			raw, err := os.ReadFile(filepath.Join(buildDir, entry.Name()))
+			if err != nil {
+				t.Fatal(err)
+			}
+			hash.Write([]byte(entry.Name()))
+			hash.Write(raw)
+		}
+		return hex.EncodeToString(hash.Sum(nil))
+	}
+	before := digestOf()
+	if status, body := m.call(http.MethodGet, "/api/v1/leak-test/runs/"+id+"/return", nil); status != http.StatusOK || body["requested"] != false {
+		t.Fatalf("a build nobody asked for: %d %v", status, body)
+	}
+	if status, _ := m.call(http.MethodPost, "/api/v1/leak-test/runs/"+id+"/return", nil); status != http.StatusConflict {
+		t.Fatalf("retrying a build nobody asked for: %d", status)
+	}
+
+	m.backend.mu.Lock()
+	m.backend.refuseLeakResult = true
+	m.backend.mu.Unlock()
+	if record := m.server.deliverLeakResult(id, request); record.State != "failed" || record.Error == "" || record.Attempts != 1 {
+		t.Fatalf("a refused delivery: %+v", record)
+	}
+	status, body := m.call(http.MethodGet, "/api/v1/leak-test/runs/"+id+"/return", nil)
+	if status != http.StatusOK || body["state"] != "failed" || body["request_id"] != request.RequestID || body["error"] == "" {
+		t.Fatalf("the recorded failure: %d %v", status, body)
+	}
+	if status, _ := m.call(http.MethodPost, "/api/v1/leak-test/runs/"+id+"/return", nil); status != http.StatusBadGateway {
+		t.Fatalf("a retry while the server is still away: %d", status)
+	}
+
+	m.backend.mu.Lock()
+	m.backend.refuseLeakResult = false
+	m.backend.mu.Unlock()
+	status, body = m.call(http.MethodPost, "/api/v1/leak-test/runs/"+id+"/return", nil)
+	if status != http.StatusOK || body["state"] != "returned" || body["attempts"] != float64(3) {
+		t.Fatalf("the retry that got through: %d %v", status, body)
+	}
+	m.backend.mu.Lock()
+	gotID, returned := m.backend.leakRequestID, m.backend.leakResult
+	m.backend.mu.Unlock()
+	if gotID != request.RequestID || returned["build_id"] != id || returned["log"] != log {
+		t.Fatalf("AUB received request %q result %v", gotID, returned)
+	}
+	if after := digestOf(); after != before {
+		t.Fatal("returning a result changed the build's own files")
+	}
+	statuses := strings.Join(m.leakStatusesSoon(t, 6), "|")
+	for _, want := range []string{request.RequestID + " returning", request.RequestID + " return_failed", request.RequestID + " returned"} {
+		if !strings.Contains(statuses, want) {
+			t.Errorf("the editor was never told %q: %s", want, statuses)
+		}
+	}
+}

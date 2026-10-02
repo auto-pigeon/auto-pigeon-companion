@@ -118,6 +118,23 @@ release. The YAML holds no target list, no bundle format and no version
 arithmetic. `cmd/companion/release_contract_test.go` fails if it grows one, and
 fails for each fault the prompt listed.
 
+**The extractor is the newest one, and a new one needs a new commit here
+(`NEW_307W`).** `build/aue-pin.json` names a branch, not a commit. Each release
+checks out its head, `aue-checkout` prints the commit it resolved to, and the
+bundle manifest, the release manifest and the release notes carry that commit.
+Nothing in this repository chooses an extractor version any more, so nothing
+here can fall behind the APMap version the editor saves. Because a release's
+version is this repository's commit count and `reconcile` never replaces an
+attached asset, **re-running a release on the same commit after the extractor
+moved is refused at publish**: picking a new extractor up takes a new commit on
+main (an empty one will do). Do not relax `reconcile` to make a rerun pass.
+
+**Acceptance converts every fixture, not one.** `build/release-fixtures/` holds
+the APMap 1.3 slab kept as backward-compatibility evidence and a Quake 1 APMap
+1.5 document with authorship and three nested groups; `expectations.json` says
+what each `.map` must hold, a fixture without an entry fails the run, and a
+document declaring a version nobody defined must be refused.
+
 **The join verdict and the native-support state are two axes.**
 `bundled_release`, `build_only` and `refused` answer one question: may this
 archive be a download? That depends on both repositories' release

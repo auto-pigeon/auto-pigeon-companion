@@ -79,40 +79,46 @@ func sha(body []byte) string {
 // ---------------------------------------------------------------------------
 // The pin
 
-func TestTheExtractorPinIsAFullCommitSHAAndThisBuildsProtocol(t *testing.T) {
+// The extractor a release bundles is the head of AUE's main branch when the
+// release runs (operator, 2026-10-02): a commit written here is how v1.192
+// shipped an extractor that could not read the maps the editor was saving. The
+// branch is resolved to one commit by `aue-checkout`, so what is refused here
+// is a commit, a tag or a ref path standing where the branch name goes.
+func TestTheExtractorIsTheHeadOfItsBranchAndThisBuildsProtocol(t *testing.T) {
 	var pin struct {
-		Commit           string `json:"commit"`
+		Ref              string `json:"ref"`
 		Repository       string `json:"repository"`
 		RequiredProtocol string `json:"required_protocol"`
 	}
 	if err := json.Unmarshal([]byte(repoFile(t, "build", "aue-pin.json")), &pin); err != nil {
 		t.Fatal(err)
 	}
-	if !regexp.MustCompile(`^[0-9a-f]{40}$`).MatchString(pin.Commit) {
-		t.Errorf("build/aue-pin.json pins %q; it must be a full commit SHA", pin.Commit)
+	if pin.Ref != "main" {
+		t.Errorf("build/aue-pin.json follows %q; a release bundles the head of main", pin.Ref)
 	}
 	if pin.RequiredProtocol != aue.RequiredProtocol {
 		t.Errorf("the pin requires protocol %s and this Companion drives %s", pin.RequiredProtocol, aue.RequiredProtocol)
 	}
 	mustPlan(t, "pin")
 
-	for name, commit := range map[string]string{
-		"a branch":     "main",
-		"latest":       "latest",
-		"a short SHA":  "86ac34d",
-		"a tag":        "v1.207",
-		"upper case":   strings.ToUpper(pin.Commit),
-		"41 hex chars": pin.Commit + "0",
+	for name, change := range map[string]func(map[string]any){
+		"no branch":            func(d map[string]any) { delete(d, "ref") },
+		"a commit as the ref":  func(d map[string]any) { d["ref"] = strings.Repeat("ab", 20) },
+		"a ref path":           func(d map[string]any) { d["ref"] = "refs/heads/main" },
+		"a ref with a space":   func(d map[string]any) { d["ref"] = "main; rm" },
+		"a parent directory":   func(d map[string]any) { d["ref"] = "../main" },
+		"a commit kept beside": func(d map[string]any) { d["commit"] = strings.Repeat("ab", 20) },
+		"a version kept":       func(d map[string]any) { d["version"] = "1.214" },
 	} {
 		document := map[string]any{}
 		if err := json.Unmarshal([]byte(repoFile(t, "build", "aue-pin.json")), &document); err != nil {
 			t.Fatal(err)
 		}
-		document["commit"] = commit
+		change(document)
 		path := filepath.Join(t.TempDir(), "pin.json")
 		writeJSON(t, path, document)
 		if output, err := runPlan(t, "pin", "--pin", path); err == nil {
-			t.Errorf("%s (%q) was accepted as a pin:\n%s", name, commit, output)
+			t.Errorf("%s was accepted:\n%s", name, output)
 		}
 	}
 }
@@ -346,12 +352,11 @@ func newWorld(t *testing.T) world {
 	if err := json.Unmarshal([]byte(repoFile(t, "build", "aue-pin.json")), &pin); err != nil {
 		t.Fatal(err)
 	}
-	pin["commit"], pin["version"] = testAUECommit, testAUEVersion
 	writeJSON(t, filepath.Join(w.dir, "pin.json"), pin)
 
 	mustPlan(t, "matrix", "--aucom-support", filepath.Join(w.dir, "support.json"), "--aue-targets", targets, "--out", w.matrix)
 	mustPlan(t, "check-aue", "--pin", filepath.Join(w.dir, "pin.json"), "--matrix", w.matrix,
-		"--aue-release", w.aue, "--aue-version", testAUEVersion, "--out", w.inputs)
+		"--aue-release", w.aue, "--aue-version", testAUEVersion, "--aue-commit", testAUECommit, "--out", w.inputs)
 	mustPlan(t, "bundle", "--matrix", w.matrix, "--aue-inputs", w.inputs, "--aucom-dist", w.dist,
 		"--version", testVersion, "--out", w.bundles)
 
@@ -547,7 +552,7 @@ func TestTheExtractorsDeclaredLicenceIsQuotedAndNeverMIT(t *testing.T) {
 	}
 	checkAUE := func() (string, error) {
 		return runPlan(t, "check-aue", "--pin", filepath.Join(w.dir, "pin.json"), "--matrix", w.matrix,
-			"--aue-release", w.aue, "--aue-version", testAUEVersion, "--out", w.inputs)
+			"--aue-release", w.aue, "--aue-version", testAUEVersion, "--aue-commit", testAUECommit, "--out", w.inputs)
 	}
 
 	declare("MIT")
@@ -929,9 +934,10 @@ func TestNoWorkflowOrReleaseToolRegainsADownloadPath(t *testing.T) {
 			}
 		}
 	}
-	// The extractor is checked out at the pin, never a ref that moves.
+	// The extractor is checked out — never downloaded — at the branch the plan
+	// names, and built from the one commit that checkout resolved to.
 	mustContain(t, "release.yml", repoFile(t, ".github", "workflows", "release.yml"),
-		"ref: ${{ needs.plan.outputs.aue_commit }}", "./scripts/build-release.sh")
+		"ref: ${{ needs.plan.outputs.aue_ref }}", "COMMIT: ${{ steps.aue.outputs.commit }}", "./scripts/build-release.sh")
 }
 
 // A native acceptance run refuses a platform the machine is not.
