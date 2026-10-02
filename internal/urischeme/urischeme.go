@@ -522,10 +522,40 @@ func (r *Registrar) windowsStatus() (State, error) {
 		state.Detail = WindowsKey + " does not exist; nothing handles " + Scheme + ":// for this user"
 		return state, nil
 	}
+	line := strings.TrimSpace(lastValue(string(out)))
+	state.Command = strings.Fields(line)
+	// The key existing is not this program handling the links (NEW_307W). A
+	// handler left pointing at an older or deleted Companion opens THAT one —
+	// or nothing — and said "registered" while the editor's leak request went
+	// to it. So the program the key runs is compared with this one, and a
+	// different one is reported as not registered, which is what offers the
+	// repair. A program that cannot find itself keeps the old answer.
+	if self, err := r.executable(); err == nil {
+		if handler := firstArgument(line); handler != "" && !strings.EqualFold(filepath.Clean(handler), filepath.Clean(self)) {
+			state.Detail = Scheme + ":// is handled by " + line + ", not by this Companion (" + self +
+				"). Register again to point the links at this one"
+			return state, nil
+		}
+	}
 	state.Registered = true
-	state.Command = strings.Fields(strings.TrimSpace(lastValue(string(out))))
-	state.Detail = Scheme + ":// is handled by " + strings.TrimSpace(lastValue(string(out)))
+	state.Detail = Scheme + ":// is handled by " + line
 	return state, nil
+}
+
+// firstArgument is the program a Windows command line runs: the quoted first
+// element, or everything before the first space when it is not quoted.
+func firstArgument(line string) string {
+	line = strings.TrimSpace(line)
+	if strings.HasPrefix(line, `"`) {
+		if end := strings.Index(line[1:], `"`); end >= 0 {
+			return line[1 : end+1]
+		}
+		return ""
+	}
+	if space := strings.IndexByte(line, ' '); space >= 0 {
+		return line[:space]
+	}
+	return line
 }
 
 func (r *Registrar) windowsRegister() (State, error) {

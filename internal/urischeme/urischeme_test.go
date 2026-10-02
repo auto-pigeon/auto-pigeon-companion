@@ -336,11 +336,12 @@ func TestWindowsUnregisteringSomethingAbsentIsNotAnError(t *testing.T) {
 }
 
 func TestWindowsStatusReadsTheCommandBack(t *testing.T) {
+	self := fakeBinary(t, "companion.exe")
 	runner := &recordingRunner{reply: map[string]string{
 		"query " + windowsCommandKey + " /ve": "\r\n" + windowsCommandKey +
-			"\r\n    (Default)    REG_SZ    \"C:\\Program Files\\Auto-Pigeon Companion\\companion.exe\" game open \"%1\"\r\n",
+			"\r\n    (Default)    REG_SZ    \"" + self + "\" game open \"%1\"\r\n",
 	}}
-	state, err := (&Registrar{GOOS: "windows", Run: runner.run}).Status()
+	state, err := (&Registrar{GOOS: "windows", Executable: self, Run: runner.run}).Status()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -349,6 +350,37 @@ func TestWindowsStatusReadsTheCommandBack(t *testing.T) {
 	}
 	if !strings.Contains(state.Detail, "game open") {
 		t.Errorf("Status reports %q", state.Detail)
+	}
+}
+
+// A key that runs ANOTHER program is not this Companion handling the links
+// (NEW_307W): a handler left pointing at an older Companion opens that one,
+// while every check said "registered". It is reported as not registered,
+// naming both programs, so Settings offers the repair.
+func TestWindowsStatusDoesNotCountAHandlerForAnotherProgram(t *testing.T) {
+	self := fakeBinary(t, "companion.exe")
+	runner := &recordingRunner{reply: map[string]string{
+		"query " + windowsCommandKey + " /ve": "\r\n" + windowsCommandKey +
+			"\r\n    (Default)    REG_SZ    \"C:\\Users\\someone\\Desktop\\old companion\\companion.exe\" game open \"%1\"\r\n",
+	}}
+	state, err := (&Registrar{GOOS: "windows", Executable: self, Run: runner.run}).Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Registered {
+		t.Fatal("a handler for another program counted as this one")
+	}
+	if !strings.Contains(state.Detail, `old companion\companion.exe`) || !strings.Contains(state.Detail, self) {
+		t.Errorf("Status reports %q", state.Detail)
+	}
+	for line, want := range map[string]string{
+		`"C:\Program Files\A B\companion.exe" game open "%1"`: `C:\Program Files\A B\companion.exe`,
+		`C:\tools\companion.exe game open "%1"`:               `C:\tools\companion.exe`,
+		`"unterminated`:                                       "",
+	} {
+		if got := firstArgument(line); got != want {
+			t.Errorf("firstArgument(%q) = %q, want %q", line, got, want)
+		}
 	}
 }
 
