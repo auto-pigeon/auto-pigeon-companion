@@ -270,16 +270,25 @@ class Browser:
         active = os.path.join(self.profile, "DevToolsActivePort")
         deadline = time.monotonic() + 30
         self.port = None
+        unread = None
         while time.monotonic() < deadline and self.process.poll() is None:
             if os.path.isfile(active):
-                first = open(active, encoding="utf-8").read().splitlines()[:1]
+                # Windows: the browser writes this file beside itself and
+                # renames it into place, and a read that lands on the rename
+                # is refused (Errno 13, release run 37039959203). That is the
+                # file not being ready yet, which is what this loop waits for.
+                try:
+                    first = open(active, encoding="utf-8").read().splitlines()[:1]
+                except OSError as error:
+                    unread, first = error, []
                 if first and first[0].strip().isdigit():
                     self.port = int(first[0])
                     break
             time.sleep(0.1)
         if self.port is None:
             self.close()
-            raise RuntimeError(f"the browser did not start its DevTools endpoint (exit {self.process.poll()})")
+            raise RuntimeError(f"the browser did not start its DevTools endpoint (exit {self.process.poll()}"
+                               + (f"; last read: {unread}" if unread else "") + ")")
 
     def call(self, path, method="GET"):
         status, body = loopback_http(self.port, method, path)
