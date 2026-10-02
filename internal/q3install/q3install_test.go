@@ -107,36 +107,98 @@ func (w *world) request(kind Kind) Request {
 	return Request{Package: w.record, Kind: kind, GameRoot: w.gameRoot, Dir: w.installs}
 }
 
+// symlinksAllowed reports whether this account may make a symbolic link. On
+// Windows that takes Developer Mode or an elevated account; without it a
+// managed install links a file with a hard link and a directory with a junction.
+func symlinksAllowed(t *testing.T) bool {
+	t.Helper()
+	dir := t.TempDir()
+	write(t, filepath.Join(dir, "file"), []byte("probe"))
+	return os.Symlink(filepath.Join(dir, "file"), filepath.Join(dir, "link")) == nil
+}
+
+// assertLinked fails unless link reaches source without being a copy of it: a
+// symbolic link wherever this host may make one, and otherwise the fallback
+// the install documents — the same file through a hard link, or the same
+// directory through a junction that is not a directory of its own.
+func assertLinked(t *testing.T, link, source string, symlinks bool) {
+	t.Helper()
+	info, err := os.Lstat(link)
+	if err != nil {
+		t.Errorf("%s is not there: %v", link, err)
+		return
+	}
+	if symlinks {
+		if info.Mode()&os.ModeSymlink == 0 {
+			t.Errorf("%s is not a symbolic link: %v", link, info.Mode())
+		}
+		return
+	}
+	want, err := os.Stat(source)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	if want.IsDir() && (info.IsDir() || info.Mode()&(os.ModeSymlink|os.ModeIrregular) == 0) {
+		t.Errorf("%s is a directory of its own, not a junction: %v", link, info.Mode())
+		return
+	}
+	if got, err := os.Stat(link); err != nil || !os.SameFile(got, want) {
+		t.Errorf("%s is not %s through a link: %v", link, source, err)
+	}
+}
+
 // snapshot is every path under a directory with its content, links not
 // followed — what "the game folder was not touched" is checked against.
 func snapshot(t *testing.T, dir string) string {
 	t.Helper()
-	var lines []string
+	entries := snapshotEntries(t, dir)
+	paths := make([]string, 0, len(entries))
+	for path := range entries {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	lines := make([]string, 0, len(paths))
+	for _, path := range paths {
+		lines = append(lines, path+entries[path])
+	}
+	return strings.Join(lines, "\n")
+}
+
+// snapshotEntries is the same snapshot keyed by path. The keys are
+// slash-separated on every host so a test can name "baseq3/x.pk3"; only the
+// key is converted, never a link target or anything read from disk.
+func snapshotEntries(t *testing.T, dir string) map[string]string {
+	t.Helper()
+	entries := map[string]string{}
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		relative, _ := filepath.Rel(dir, path)
+		relative, err := filepath.Rel(dir, path)
+		if err != nil {
+			return err
+		}
+		relative = filepath.ToSlash(relative)
 		switch {
 		case info.Mode()&os.ModeSymlink != 0:
 			target, _ := os.Readlink(path)
-			lines = append(lines, relative+" -> "+target)
+			entries[relative] = " -> " + target
 		case info.IsDir():
-			lines = append(lines, relative+"/")
+			entries[relative] = "/"
 		default:
 			data, err := os.ReadFile(path)
 			if err != nil {
 				return err
 			}
 			digest, _, _ := hashFile(path)
-			lines = append(lines, relative+" "+digest+" "+info.Mode().String()+" "+string(rune('0'+len(data)%10)))
+			entries[relative] = " " + digest + " " + info.Mode().String() + " " + string(rune('0'+len(data)%10))
 		}
 		return nil
 	})
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
-	return strings.Join(lines, "\n")
+	return entries
 }
 
 // The default install never writes into the user's game folder: the engine is
@@ -162,19 +224,15 @@ func TestAManagedInstallNeverWritesIntoTheGameFolder(t *testing.T) {
 	if info, err := os.Lstat(filepath.Join(game, testArchive)); err != nil || !info.Mode().IsRegular() {
 		t.Errorf("the archive: %v %v", info, err)
 	}
+	symlinks := symlinksAllowed(t)
 	for _, name := range []string{"pak0.pk3", "q3config.cfg", "vm"} {
-		info, err := os.Lstat(filepath.Join(game, name))
-		if err != nil || info.Mode()&os.ModeSymlink == 0 {
-			t.Errorf("%s is not a link in the managed directory: %v %v", name, info, err)
-		}
+		assertLinked(t, filepath.Join(game, name), filepath.Join(w.gameRoot, "baseq3", name), symlinks)
 	}
 	// And they read through: the engine finds the game.
 	if data, err := os.ReadFile(filepath.Join(game, "vm", "qagame.qvm")); err != nil || string(data) != "vm" {
 		t.Errorf("the game is not readable through the managed directory: %q %v", data, err)
 	}
-	if info, err := os.Lstat(filepath.Join(installation.BasePath, "missionpack")); err != nil || info.Mode()&os.ModeSymlink == 0 {
-		t.Errorf("the other game directory is not one link: %v %v", info, err)
-	}
+	assertLinked(t, filepath.Join(installation.BasePath, "missionpack"), filepath.Join(w.gameRoot, "missionpack"), symlinks)
 
 	// Installing it again is the same installation.
 	again, err := Install(context.Background(), w.request(Managed))
@@ -212,9 +270,7 @@ func TestAManagedModInstallLinksTheBaseGameWhole(t *testing.T) {
 	if installation.FSGame != "apmod" || installation.CreatedGameDir {
 		t.Errorf("%+v", installation)
 	}
-	if info, err := os.Lstat(filepath.Join(installation.BasePath, "baseq3")); err != nil || info.Mode()&os.ModeSymlink == 0 {
-		t.Errorf("the base game is not one link: %v %v", info, err)
-	}
+	assertLinked(t, filepath.Join(installation.BasePath, "baseq3"), filepath.Join(w.gameRoot, "baseq3"), symlinksAllowed(t))
 	if info, err := os.Lstat(filepath.Join(installation.BasePath, "apmod", testArchive)); err != nil || !info.Mode().IsRegular() {
 		t.Errorf("the archive: %v %v", info, err)
 	}
@@ -228,6 +284,12 @@ func TestAManagedModInstallLinksTheBaseGameWhole(t *testing.T) {
 func TestAGameFolderInstallIsOneFileAndIsRemovedOnlyWhileItIsThatFile(t *testing.T) {
 	w := newWorld(t, "baseq3")
 	before := snapshot(t, w.gameRoot)
+	beforeEntries := snapshotEntries(t, w.gameRoot)
+	for _, path := range []string{"baseq3/pak0.pk3", "baseq3/q3config.cfg", "baseq3/vm", "baseq3/vm/qagame.qvm", "missionpack/pak0.pk3"} {
+		if _, ok := beforeEntries[path]; !ok {
+			t.Fatalf("the fixture has no %s: %v", path, beforeEntries)
+		}
+	}
 	installation, err := Install(context.Background(), w.request(GameFolder))
 	if err != nil {
 		t.Fatalf("%v", err)
@@ -236,10 +298,32 @@ func TestAGameFolderInstallIsOneFileAndIsRemovedOnlyWhileItIsThatFile(t *testing
 	if installation.Archive.Path != target || installation.BasePath != w.gameRoot {
 		t.Errorf("%+v", installation)
 	}
-	after := snapshot(t, w.gameRoot)
-	added := strings.TrimSpace(strings.ReplaceAll(after, before, ""))
-	if !strings.Contains(after, "baseq3/"+testArchive) || strings.Count(after, "\n") != strings.Count(before, "\n")+1 {
-		t.Fatalf("a game folder install wrote more than one file:\n%s", added)
+	// Exactly one path is new, it is the archive, and everything that was there
+	// is still there with the same type, content and mode.
+	afterEntries := snapshotEntries(t, w.gameRoot)
+	for path, was := range beforeEntries {
+		if now, ok := afterEntries[path]; !ok || now != was {
+			t.Fatalf("a game folder install changed %s: %q became %q (present %v)", path, was, now, ok)
+		}
+	}
+	var added []string
+	for path := range afterEntries {
+		if _, ok := beforeEntries[path]; !ok {
+			added = append(added, path)
+		}
+	}
+	if len(added) != 1 || added[0] != "baseq3/"+testArchive {
+		t.Fatalf("a game folder install wrote %v, not only baseq3/%s", added, testArchive)
+	}
+	if info, err := os.Lstat(target); err != nil || !info.Mode().IsRegular() {
+		t.Fatalf("the installed archive is not a regular file: %v %v", info, err)
+	}
+	installed, _, err := hashFile(target)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	if packaged, _, _ := hashFile(w.record.ArchivePath); installed != packaged {
+		t.Fatalf("the installed archive is %s, the package's is %s", installed, packaged)
 	}
 	// Idempotent, through this program's own receipt.
 	if again, err := Install(context.Background(), w.request(GameFolder)); err != nil || again.ID != installation.ID {

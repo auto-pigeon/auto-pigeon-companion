@@ -3,6 +3,7 @@ package leakintent
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -20,8 +21,17 @@ func TestARequestIsRecordedReadReplacedAndExpires(t *testing.T) {
 		t.Fatal(err)
 	}
 	info, err := os.Stat(path)
-	if err != nil || info.Mode().Perm() != 0o600 {
-		t.Fatalf("the intent file is %v, %v", info, err)
+	if err != nil {
+		t.Fatalf("the intent file was not written: %v", err)
+	}
+	if !info.Mode().IsRegular() {
+		t.Fatalf("the intent file is not a regular file: %v", info.Mode())
+	}
+	// Windows reports 0666 for any writable file; what keeps it private there
+	// is the ACL it inherits from the user's profile directory, which this test
+	// does not check. The bits are checked where they are the control.
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
+		t.Fatalf("the intent file is mode %v, want 0600", info.Mode().Perm())
 	}
 	got, received, err := Read(path, now.Add(time.Minute))
 	if err != nil || got == nil || *got != first || !received.Equal(now) {
