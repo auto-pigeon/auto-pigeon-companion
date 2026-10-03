@@ -330,3 +330,49 @@ func TestAQuake3LeakReturnIsRetriedWithoutAnotherCompile(t *testing.T) {
 		t.Fatalf("returning a result left %d build directories", len(entries))
 	}
 }
+
+// A leak test cancelled before Q3Map2 flushed a byte has nothing to return.
+// The editor is told the build was stopped — not that a return failed, which
+// would offer a Retry that can never succeed — and a cancelled run that DID
+// print is still returned, as no verdict.
+func TestACancelledLeakTestWithNoOutputTellsTheEditorItWasStopped(t *testing.T) {
+	m := newMachine(t)
+	m.signIn()
+	request := aub.LeakTestLink{AssetID: "saved-map", Revision: 7, ContentSHA256: strings.Repeat("a", 64),
+		RequestID: strings.Repeat("e", 32), Profile: "quake3"}
+
+	silent := "20261003T000000Z-0000000c"
+	manifest := m.q3LeakBuild(silent, "a_sealed", job.Cancelled, false, false)
+	manifest.Outputs[0] = build.FileRecord{Name: "compile_log", Missing: true, Optional: true}
+	if err := manifest.Save(filepath.Join(m.builds, silent)); err != nil {
+		t.Fatal(err)
+	}
+	record := m.server.deliverLeakResult(silent, request)
+	if record.State != "failed" || !strings.Contains(record.Error, "cancelled") {
+		t.Fatalf("a silent cancelled build: %+v", record)
+	}
+	m.backend.mu.Lock()
+	returned := m.backend.leakResult
+	m.backend.mu.Unlock()
+	if returned != nil {
+		t.Fatalf("a result was sent for a build with nothing to say: %v", returned)
+	}
+	statuses := strings.Join(m.leakStatusesSoon(t, 1), "|")
+	if !strings.Contains(statuses, request.RequestID+" blocked build_cancelled") || strings.Contains(statuses, "return_failed") {
+		t.Fatalf("the editor was told %q", statuses)
+	}
+
+	spoke := "20261003T000000Z-0000000d"
+	m.q3LeakBuild(spoke, "a_sealed", job.Cancelled, false, false)
+	second := request
+	second.RequestID = strings.Repeat("f", 32)
+	if record := m.server.deliverLeakResult(spoke, second); record.State != "returned" {
+		t.Fatalf("a cancelled build that printed: %+v", record)
+	}
+	m.backend.mu.Lock()
+	returned = m.backend.leakResult
+	m.backend.mu.Unlock()
+	if returned["build_state"] != "cancelled" || returned["diagnostic"].(map[string]any)["outcome"] != "incomplete" {
+		t.Fatalf("AUB received %v", returned)
+	}
+}

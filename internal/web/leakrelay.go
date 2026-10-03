@@ -229,6 +229,15 @@ func (s *Server) deliverLeakResult(buildID string, request aub.LeakTestLink) lea
 	}
 	record.Attempts++
 	_ = s.writeLeakReturn(buildID, record)
+	// A build that was cancelled before its compiler printed anything has no
+	// result, and sending one again will not make one: the editor is told the
+	// build was stopped, which ends its wait, rather than that a return failed.
+	if s.leakBuildCancelledSilent(buildID) {
+		record.State, record.Error = "failed", "the build was cancelled before the compiler printed anything, so there is no result to return"
+		s.reportLeakStatus(request, leakBlocked, leakStageCancelled, buildID)
+		_ = s.writeLeakReturn(buildID, record)
+		return record
+	}
 	s.reportLeakStatus(request, leakReturning, "", buildID)
 	if err := s.publishLeakResult(buildID, request.RequestID); err != nil {
 		record.State, record.Error = "failed", err.Error()
@@ -239,6 +248,26 @@ func (s *Server) deliverLeakResult(buildID string, request aub.LeakTestLink) lea
 	}
 	_ = s.writeLeakReturn(buildID, record)
 	return record
+}
+
+// leakStageCancelled is the stage of a `blocked` status for a build somebody
+// stopped before there was anything to return. A token: the editor has a
+// translated line for it.
+const leakStageCancelled = "build_cancelled"
+
+// leakBuildCancelledSilent reports a cancelled leak-test build that left no
+// compiler text.
+func (s *Server) leakBuildCancelledSilent(buildID string) bool {
+	dir, err := s.buildsDir()
+	if err != nil {
+		return false
+	}
+	manifest, err := build.Find(dir, buildID)
+	if err != nil || manifest.State != job.Cancelled {
+		return false
+	}
+	_, err = s.buildLeakResult(buildID)
+	return errors.Is(err, errNoLeakLog)
 }
 
 // handleLeakTestReturn says how returning a build's result went.

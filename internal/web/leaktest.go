@@ -149,6 +149,13 @@ func (s *Server) handleLeakTestPending(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, base)
 }
 
+// errNoLeakLog reports a leak-test build that left no compiler text at all.
+// Measured (`Q3_018`): Q3Map2's output is block-buffered when it is not a
+// terminal, so a run stopped a few seconds in has printed nothing this program
+// ever received. There is then no evidence of any kind — not a log to read,
+// not a result to return.
+var errNoLeakLog = errors.New("this build has no compiler log; there is no diagnostic to import")
+
 // The two reasons a request is blocked by its game. Tokens, not sentences: the
 // editor has a translated line for each.
 const (
@@ -429,7 +436,7 @@ func (s *Server) buildLeakResult(id string) (leakResult, error) {
 		}
 	}
 	if result.Log == "" {
-		return leakResult{}, errors.New("this build has no compiler log; there is no diagnostic to import")
+		return leakResult{}, errNoLeakLog
 	}
 	if adapter.ResultSchema == leakadapter.Schema10 {
 		return result, nil
