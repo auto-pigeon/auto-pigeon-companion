@@ -451,3 +451,41 @@ func TestStatusWritesNothing(t *testing.T) {
 		t.Errorf("Status created %d entries", len(entries))
 	}
 }
+
+// A newer release unpacked beside an older one: the entry still runs the older
+// program (`NEW_307W1`, found live). That is not "this Companion is
+// registered", it says which program is, and registering takes it over — also
+// when both paths have a space in them.
+func TestALinuxEntryThatRunsAnotherCompanionIsNotThisOneRegistered(t *testing.T) {
+	older := fakeBinary(t, "companion")
+	registrar, data := linuxRegistrar(t, older)
+	if _, err := registrar.Register(); err != nil {
+		t.Fatal(err)
+	}
+	if state, err := registrar.Status(); err != nil || !state.Registered {
+		t.Fatalf("the program that registered itself: %+v %v", state, err)
+	}
+	newerDir := filepath.Join(t.TempDir(), "release 1.200")
+	if err := os.MkdirAll(newerDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	newer := filepath.Join(newerDir, "companion")
+	if err := os.WriteFile(newer, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	other := &Registrar{GOOS: "linux", Executable: newer, DataHome: data, Run: registrar.Run}
+	state, err := other.Status()
+	if err != nil || state.Registered || len(state.Command) == 0 ||
+		!strings.Contains(state.Detail, older) || !strings.Contains(state.Detail, newer) {
+		t.Fatalf("a newer program beside the registered one: %+v %v", state, err)
+	}
+	if state, err = other.Register(); err != nil || !state.Registered {
+		t.Fatalf("taking it over: %+v %v", state, err)
+	}
+	if state, err = other.Status(); err != nil || !state.Registered {
+		t.Fatalf("after taking it over, with a space in the path: %+v %v", state, err)
+	}
+	if state, err = registrar.Status(); err != nil || state.Registered {
+		t.Fatalf("the older program still says it is registered: %+v %v", state, err)
+	}
+}

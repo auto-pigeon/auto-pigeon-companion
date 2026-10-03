@@ -276,8 +276,19 @@ func (r *Registrar) xdgStatus() (State, error) {
 			" is not defaulted to it in " + mimeapps
 		return state, nil
 	}
-	state.Registered = true
 	state.Command = execLine(string(body))
+	// The entry can be this program's from an older place: a previous release
+	// unpacked beside this one. Found live on Linux (`NEW_307W1`) — a 1.200
+	// said "this Companion opens links" while the entry ran the 1.199 next to
+	// it, which is the Windows finding of NEW_307W on the other platform. A
+	// link would start THAT program, with whatever it can no longer read.
+	handler := execProgram(string(body))
+	if self, err := r.executable(); err == nil && handler != "" && filepath.Clean(handler) != filepath.Clean(self) {
+		state.Detail = MIMEType + " is handled by " + handler + ", not by this Companion (" + self +
+			"); registering this one takes it over"
+		return state, nil
+	}
+	state.Registered = true
 	state.Detail = MIMEType + " is handled by " + entry
 	return state, nil
 }
@@ -382,6 +393,18 @@ func execLine(body string) []string {
 		}
 	}
 	return nil
+}
+
+// execProgram is the program an entry's Exec= runs: its first argument, with
+// the quoting [desktopExec] puts around a path that has a space in it undone.
+func execProgram(body string) string {
+	for _, line := range strings.Split(body, "\n") {
+		if value, found := strings.CutPrefix(strings.TrimSpace(line), "Exec="); found {
+			program := firstArgument(value)
+			return strings.NewReplacer(`\\\\`, `\`, `\"`, `"`, "\\`", "`", `\$`, "$").Replace(program)
+		}
+	}
+	return ""
 }
 
 // readMIMEApps reads the [Default Applications] section.
