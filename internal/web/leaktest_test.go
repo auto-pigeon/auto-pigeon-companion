@@ -34,11 +34,15 @@ func TestLeakResultReturnsPinnedEvidenceFromAFailedLeakBuild(t *testing.T) {
 	}
 	log := "---- qbsp / ericw-tools v0.18.1 ----\nInput file: level.map\n---- FillOutside ----\nLeak file written to level.pts\n"
 	pts := "0 0 0\n1 0 0\n"
-	logRecord, ptsRecord := put("compile.log", log), put("route.pts", pts)
+	// qbsp names its outputs after its `basename` option, never after the map:
+	// the point file of `hole.map` is `level.pts`. Found live (`Q3_018`): a
+	// check that the point file be named after the staged source — right for
+	// Q3Map2, which writes `<stem>.lin` — refused every Quake 1 leak result.
+	logRecord, ptsRecord := put("level.log", log), put("level.pts", pts)
 	logRecord.Name, ptsRecord.Name = "compile_log", "pts"
 	manifest := &build.Manifest{SchemaVersion: build.SchemaVersion, BuildID: id,
 		Pipeline: build.DocumentRef{ID: "auto-pigeon.q1.leak-test"}, State: job.Failed,
-		Inputs: []build.FileRecord{{Name: "source_map", Source: &build.SourceRef{
+		Inputs: []build.FileRecord{{Name: "source_map", Path: filepath.Join(buildDir, "input", "source_map", "hole.map"), Source: &build.SourceRef{
 			AssetType: aub.AssetTypeMap, AssetID: "saved-map", RevisionID: "immutable-revision", Revision: 7,
 			ContentSHA256: strings.Repeat("a", 64), Refetchable: true}}},
 		Tools:   []build.ToolRecord{{ToolVersion: "v0.18.1"}},

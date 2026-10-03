@@ -20,13 +20,14 @@ func read(t *testing.T, parts ...string) string {
 func TestOnlyMeasuredGamesHaveALeakAdapterAndNothingFallsBackToQuake1(t *testing.T) {
 	q1, err := ForProfile("quake1")
 	if err != nil || q1.PipelineID != "auto-pigeon.q1.leak-test" || q1.ResultSchema != Schema10 ||
-		q1.PointfileFormat != FormatEricwPts || q1.Direction != DirectionOccupantFirst || q1.Classify != nil {
+		q1.PointfileFormat != FormatEricwPts || q1.Direction != DirectionOccupantFirst || q1.Classify != nil ||
+		q1.PointfileBesideSource {
 		t.Fatalf("quake1: %+v %v", q1, err)
 	}
 	q3, err := ForProfile("quake3")
 	if err != nil || q3.PipelineID != "auto-pigeon.q3.leak-test" || q3.ResultSchema != Schema11 ||
 		q3.Compiler != CompilerQ3Map2 || q3.PointfileFormat != FormatQ3Map2Lin ||
-		q3.Direction != DirectionOutsideFirst || q3.Classify == nil {
+		q3.Direction != DirectionOutsideFirst || q3.Classify == nil || !q3.PointfileBesideSource {
 		t.Fatalf("quake3: %+v %v", q3, err)
 	}
 	for _, game := range []string{"quake2", "", "unknown", "Quake1", "quake1 ", "hexen2"} {

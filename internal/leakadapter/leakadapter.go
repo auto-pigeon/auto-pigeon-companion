@@ -93,6 +93,12 @@ type Adapter struct {
 	// BSPOutput is the pipeline output that is the compiled BSP, when the
 	// pipeline publishes one as evidence. Empty when it does not.
 	BSPOutput string
+	// PointfileBesideSource is whether the compiler names its point file after
+	// the map it was handed. Q3Map2 does — it writes `<stem>.lin` beside the
+	// staged input — so a line file of any other name is not this build's.
+	// qbsp does not: it names every output after its `basename` option
+	// (`level.pts`), whatever the map is called.
+	PointfileBesideSource bool
 	// ResultSchema is the envelope this row's results are returned in.
 	ResultSchema string
 	// QualifiedVersions are the compiler versions this row's reading of the
@@ -123,7 +129,7 @@ var adapters = map[string]Adapter{
 	ProfileQuake3: {
 		Profile: ProfileQuake3, PipelineID: "auto-pigeon.q3.leak-test",
 		Compiler: CompilerQ3Map2, PointfileFormat: FormatQ3Map2Lin, Direction: DirectionOutsideFirst,
-		PointfileOutput: "lin", LogOutput: "compile_log", BSPOutput: "bsp",
+		PointfileOutput: "lin", LogOutput: "compile_log", BSPOutput: "bsp", PointfileBesideSource: true,
 		ResultSchema: Schema11, QualifiedVersions: []string{Q3Map2MeasuredVersion},
 		Classify: ClassifyQ3Map2,
 	},

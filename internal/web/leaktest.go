@@ -411,9 +411,10 @@ func (s *Server) buildLeakResult(id string) (leakResult, error) {
 		}
 		// The file is this build's own: it sits inside this build's output
 		// directory, it still has the digest the build recorded when it
-		// collected it from the job's fresh workspace, and it is named after
-		// the source this build staged. Nothing is ever looked for by pattern.
-		if output.Name == adapter.PointfileOutput && !sameStem(output.Path, staged.Path) {
+		// collected it from the job's fresh workspace, and — for a compiler
+		// that names its point file after its input — it is named after the
+		// source this build staged. Nothing is ever looked for by pattern.
+		if output.Name == adapter.PointfileOutput && adapter.PointfileBesideSource && !sameStem(output.Path, staged.Path) {
 			return leakResult{}, errors.New("the recorded point file is not named after this build's map source")
 		}
 		content, err := readLeakOutput(dir, manifest.BuildID, output, limit)
