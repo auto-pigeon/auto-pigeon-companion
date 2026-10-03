@@ -49,12 +49,21 @@ func (s *Server) handleLeakTestPending(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"pending": false})
 		return
 	}
+	// A page names the request it is asking about. When another one replaced
+	// it meanwhile, the answer is "replaced" and nothing is resolved: resolving
+	// the newer request here would hand the page facts about B to show under A.
+	if named := r.URL.Query().Get("request_id"); named != "" && named != request.RequestID {
+		writeJSON(w, http.StatusOK, map[string]any{"pending": true, "replaced": true,
+			"request_id": request.RequestID, "asset_id": request.AssetID, "revision": request.Revision, "received_at": received})
+		return
+	}
 
 	s.adoptSessionFromDisk()
 	client := s.aubClient()
 	if client == nil || !client.Authenticated() {
 		writeJSON(w, http.StatusOK, map[string]any{"pending": true, "sign_in_required": true,
-			"request_id": request.RequestID, "asset_id": request.AssetID, "revision": request.Revision, "received_at": received})
+			"request_id": request.RequestID, "asset_id": request.AssetID, "revision": request.Revision,
+			"content_sha256": request.ContentSHA256, "received_at": received})
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)

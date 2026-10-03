@@ -35,6 +35,11 @@ type LeakStatus struct {
 	State         string `json:"state"`
 	Stage         string `json:"stage,omitempty"`
 	BuildID       string `json:"build_id,omitempty"`
+	// Sequence orders one request's statuses: AUB keeps the highest it has
+	// seen and ignores a lower one, so a POST that was held up somewhere
+	// cannot put the editor back a step. Zero is "unordered", which is what a
+	// Companion older than `NEW_307W1` sends.
+	Sequence int64 `json:"sequence,omitempty"`
 }
 
 // PublishLeakStatus replaces this request's status on AUB. The editor cannot

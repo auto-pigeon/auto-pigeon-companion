@@ -250,6 +250,9 @@ func TestAnOpenPageSeesANewLeakRequestAndDismissesOnlyTheOneItNamed(t *testing.T
 	if _, body := m.call(http.MethodGet, "/api/v1/leak-test/request", nil); body["request_id"] != newer.RequestID {
 		t.Fatalf("the newer request did not survive an older Dismiss: %v", body)
 	}
+	// Statuses are coalesced: wait until `received` was accepted, or the
+	// dismissal that follows would rightly be the only thing sent.
+	m.leakStatusesSoon(t, 3)
 	status, body = m.call(http.MethodPost, "/api/v1/leak-test/dismiss", map[string]any{"request_id": newer.RequestID})
 	if status != http.StatusOK || body["dismissed"] != true {
 		t.Fatalf("dismissing the pending request: %d %v", status, body)
@@ -313,6 +316,30 @@ func TestAFailedLeakReturnIsRecordedAndRetriedWithoutAnotherBuild(t *testing.T) 
 		return hex.EncodeToString(hash.Sum(nil))
 	}
 	before := digestOf()
+	// Every program this machine runs is a job with a record: a return that
+	// compiled again would add one.
+	jobsOf := func() int {
+		count := 0
+		_ = filepath.WalkDir(m.settings.JobsDir, func(_ string, entry os.DirEntry, err error) error {
+			if err == nil && !entry.IsDir() {
+				count++
+			}
+			return nil
+		})
+		return count
+	}
+	jobsBefore, buildsBefore := jobsOf(), len(m.server.builds.active())
+	t.Cleanup(func() {
+		if got := jobsOf(); got != jobsBefore {
+			t.Errorf("returning a result started %d job record(s)", got-jobsBefore)
+		}
+		if got := len(m.server.builds.active()); got != buildsBefore {
+			t.Errorf("returning a result left %d build(s) running", got-buildsBefore)
+		}
+		if entries, _ := os.ReadDir(m.builds); len(entries) != 1 {
+			t.Errorf("returning a result left %d build directories, want the one it returned", len(entries))
+		}
+	})
 	if status, body := m.call(http.MethodGet, "/api/v1/leak-test/runs/"+id+"/return", nil); status != http.StatusOK || body["requested"] != false {
 		t.Fatalf("a build nobody asked for: %d %v", status, body)
 	}

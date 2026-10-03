@@ -62,7 +62,10 @@
       name, n: seen.revision, time: when(seen.received_at) }) });
     const state = el("p", { className: "leak-request__state" });
     const actions = el("div", { className: "row-actions" });
-    const dismiss = button(t("Dismiss"), "secondary", dismissRequest);
+    // Bound to the request THIS notice shows, not to whatever is on screen
+    // when the click is handled.
+    const shown = seen.request_id;
+    const dismiss = button(t("Dismiss"), "secondary", () => dismissRequest(shown));
 
     if (!details) {
       state.textContent = t("Checking the saved revision with your account…");
@@ -85,20 +88,46 @@
       actions.append(button(t("Review leak test"), "primary", review));
     }
     actions.prepend(dismiss);
-    box.replaceChildren(head, what, state, actions);
+    // The request is HERE either way. Whether the editor's tab knows is a
+    // separate fact, said only when it does not.
+    const relay = seen.relay?.state;
+    const told = relay === "retrying"
+      ? t("The editor has not been told yet: the account server is not answering. The Companion keeps trying; the request stays here.")
+      : relay === "stopped"
+        ? t("The editor cannot be told about this request: the account server rejected it. The review above says why.")
+        : "";
+    const lines = [head, what, state];
+    if (told) lines.push(el("p", { className: "leak-request__relay hint", text: told }));
+    box.replaceChildren(...lines, actions);
+  }
+
+  // sameRequest: does an answer speak about the request on screen? Every field
+  // both sides carry must agree — an id reused for other bytes is not it.
+  function sameRequest(body, request) {
+    if (!body || !request || body.request_id !== request.request_id) return false;
+    return ["asset_id", "revision", "content_sha256"].every((key) =>
+      body[key] === undefined || request[key] === undefined || body[key] === request[key]);
   }
 
   // resolve asks the account's server about the request on screen. `force` is
   // a person asking again; without it an answered request is not asked twice.
+  //
+  // It NAMES the request it asks about. The pending request can be replaced
+  // between the watch that showed A and this question, and the answer would
+  // then be about B: the server says so (`replaced`) instead of resolving B,
+  // and an answer that names anything but the request on screen is thrown
+  // away and the watch re-reads — B is never shown, reviewed or built as A.
   async function resolve(force) {
     if (!seen || resolving || (details && !force)) return;
     resolving = true;
     const own = generation;
+    const asked = seen;
     if (force) { details = null; render(); }
-    const answer = await api("/api/v1/leak-test/pending");
+    const answer = await api("/api/v1/leak-test/pending?request_id=" + encodeURIComponent(asked.request_id));
     resolving = false;
-    if (own !== generation) return; // Another request arrived meanwhile.
+    if (own !== generation) { watch(); return; } // Another request arrived meanwhile.
     if (answer.ok && !answer.body.pending) { forget(); return; }
+    if (answer.ok && (answer.body.replaced || !sameRequest(answer.body, asked))) { watch(); return; }
     details = answer;
     render();
   }
@@ -116,18 +145,22 @@
     reading = false;
     if (!ok) return; // The local server is away; the stale-page banner says so.
     if (!body.pending) { if (seen) forget(); return; }
-    if (!seen || seen.request_id !== body.request_id) {
+    if (!seen || !sameRequest(body, seen)) {
       generation += 1;
       seen = body;
       details = reviewing = null;
       render();
       record(t("Leak test requested by the editor"), t("map {id}, revision {n}", { id: body.asset_id, n: body.revision }), "running");
+    } else if ((body.relay?.state || "") !== (seen.relay?.state || "")) {
+      // Whether the editor has been told changed; the request did not.
+      seen = body;
+      render();
     }
     resolve(false);
   }
 
   async function review() {
-    if (!seen || !details?.ok) return;
+    if (!seen || !details?.ok || !sameRequest(details.body, seen)) return;
     const own = generation;
     const request = details.body;
     const told = await api("/api/v1/leak-test/reviewing", { method: "POST", body: { request_id: request.request_id } });
@@ -146,9 +179,8 @@
 
   // Dismiss names the request it is dismissing, so a newer one that arrived
   // while this notice was on screen is not the one forgotten.
-  async function dismissRequest() {
-    if (!seen) return;
-    const id = seen.request_id;
+  async function dismissRequest(id) {
+    if (!id) return;
     await api("/api/v1/leak-test/dismiss", { method: "POST", body: { request_id: id } });
     if (seen && seen.request_id === id) forget();
     watch();

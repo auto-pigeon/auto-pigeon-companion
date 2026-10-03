@@ -172,6 +172,9 @@ func (s *Server) cancelWork(work []ActiveWork) {
 // service's own Close after this, gracefully first and forcefully after its
 // grace, which is the path Ctrl+C has always taken.
 func (s *Server) Close() {
+	// Nothing is said to the editor after this: a status posted by a program
+	// that has stopped would be a line nobody can follow up.
+	defer s.leaks.close()
 	s.endHostedGames()
 	s.playLive.CancelAll()
 	// A Quake III run that is still waiting for its engine's word stops

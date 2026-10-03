@@ -197,6 +197,32 @@ allowed to ask a program on your own computer directly. The result itself return
 the same way, and the tab imports it if its saved map revision still matches. If the
 return is unavailable, press **Download leak result** and import that JSON file in
 the editor's Leaks panel.
+
+That line is delivered, not merely sent. When the account server does not accept a
+status — it is away, it is restarting — the Companion keeps the newest thing to say
+about that request and sends it again after 1, 2, 4, 8, 16 and then every 30 seconds,
+for as long as the request is worth telling anyone about (30 minutes). It sends where
+the work **is**: if you reviewed and pressed Build while the server was away, the
+editor is told "building", never walked back through "received". While a request is
+being worked on its line is repeated every 30 seconds, so a server that restarted and
+forgot it has it again. Signed out, or signed in as another account, nothing is sent
+and nothing is lost: the same request is acknowledged when you sign in to the account
+it belongs to. None of this delays a build, and the notice says so when the editor
+has not been told yet:
+
+```bash
+curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
+  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/leak-test/request"
+# {"pending":true,"request_id":"…","asset_id":"…","revision":3,
+#  "relay":{"state":"retrying","desired":"received","failures":2,
+#           "error":"the account server answered HTTP 503"}}
+```
+
+`relay.state` is `delivered`, `pending`, `retrying`, `sign_in_required`,
+`other_account` or `stopped` (the server rejected the request itself; it is not sent
+again). A page asking about one request names it —
+`/api/v1/leak-test/pending?request_id=<id>` — and is told `"replaced": true` when a
+newer click took its place, instead of being handed the newer request's details.
 The result is available through the local guarded API too, for example:
 
 ```bash

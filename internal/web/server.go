@@ -113,7 +113,10 @@ type Server struct {
 	// q3runs is the Quake III package runs this process is waiting on or has
 	// waited on. See q3package.go.
 	q3runs *q3Runs
-	logf   func(format string, args ...any)
+	// leaks tells the editor, through AUB, what is happening to its leak
+	// requests. One worker, stopped by Close. See leaksender.go.
+	leaks *leakSender
+	logf  func(format string, args ...any)
 	// games is the Games area's process-wide state: download and launch
 	// coordination, and the reviews waiting for an approval.
 	games  *gameState
@@ -301,6 +304,7 @@ func NewServer(options Options) (*Server, error) {
 		return nil, err
 	}
 	server.index = index
+	server.leaks = newLeakSender(nil, server.leakSession, logf)
 	server.handler = server.routes()
 
 	// Records a previous Companion left mid-run, and the temporary directories
@@ -704,6 +708,9 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		s.settings = updated
 		s.mu.Unlock()
+		// A leak request that arrived while nobody was signed in is
+		// acknowledged to the editor now.
+		s.leaks.sessionChanged()
 	} else {
 		// The login itself succeeded and the in-memory client is usable; only
 		// persistence failed, so this is reported without failing the request.

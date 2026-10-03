@@ -1,14 +1,15 @@
 package web
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
@@ -38,75 +39,36 @@ const (
 	leakBlocked      = "blocked"
 )
 
-// leakStatusSender sends statuses one at a time, in the order they were said:
-// "building" must never arrive before "received" because two requests raced.
-type leakStatusSender struct {
-	once  sync.Once
-	queue chan func()
-	mu    sync.Mutex
-	last  map[string]string
-}
-
-var leakStatuses = &leakStatusSender{last: map[string]string{}}
-
-// enqueue sends a status unless it is the one last said for that request.
-// `opening` is a status that only ever starts a request's story ("received"):
-// it is said once, and never again after anything else has been — the page's
-// watch re-reads the pending request every two seconds, and a "received" sent
-// after "reviewing" put the editor back a step (found live, NEW_307W).
-func (q *leakStatusSender) enqueue(key, value string, opening bool, send func()) {
-	q.mu.Lock()
-	previous, said := q.last[key]
-	if previous == value || (opening && said) {
-		q.mu.Unlock()
-		return
-	}
-	if len(q.last) > 256 {
-		q.last = map[string]string{}
-	}
-	q.last[key] = value
-	q.mu.Unlock()
-	q.once.Do(func() {
-		q.queue = make(chan func(), 64)
-		go func() {
-			for next := range q.queue {
-				next()
-			}
-		}()
-	})
-	select {
-	case q.queue <- send:
-	default: // A full queue drops a line of progress rather than block a build.
-	}
-}
-
 // reportLeakStatus tells the editor's tab, through AUB, what happened to its
 // request. Best effort: it returns at once and its failure changes nothing.
+// The sending, the retrying and the order are leaksender.go's.
 func (s *Server) reportLeakStatus(link aub.LeakTestLink, state, stage, buildID string) {
-	if link.RequestID == "" {
-		return
+	s.leaks.report(link, state, truncateLeakStage(stage), buildID, state == leakReceived)
+}
+
+// truncateLeakStage keeps a stage inside AUB's limit, which counts characters:
+// cutting bytes could split one and send text AUB cannot read.
+func truncateLeakStage(stage string) string {
+	stage = strings.ToValidUTF8(stage, "\uFFFD")
+	if utf8.RuneCountInString(stage) <= leakStageLimit {
+		return stage
 	}
-	if len(stage) > 120 {
-		stage = stage[:120]
-	}
-	// Signed out, nothing can be said — and nothing is remembered as said, so
-	// the request is acknowledged once somebody signs in.
+	return string([]rune(stage)[:leakStageLimit])
+}
+
+// leakStageLimit is AUB's `maxLeakStatusStage`.
+const leakStageLimit = 120
+
+// leakSession is the account this program would post as right now.
+func (s *Server) leakSession() leakSession {
 	s.adoptSessionFromDisk()
-	if client := s.aubClient(); client == nil || !client.Authenticated() {
-		return
+	s.mu.RLock()
+	client, session := s.client, s.settings.Session
+	s.mu.RUnlock()
+	if client == nil || !client.Authenticated() {
+		return leakSession{}
 	}
-	leakStatuses.enqueue(link.RequestID, state+"\x00"+stage+"\x00"+buildID, state == leakReceived, func() {
-		client := s.aubClient()
-		if client == nil || !client.Authenticated() {
-			return
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-		defer cancel()
-		_ = client.PublishLeakStatus(ctx, link.RequestID, aub.LeakStatus{
-			MapID: link.AssetID, Revision: link.Revision, ContentSHA256: link.ContentSHA256,
-			State: state, Stage: stage, BuildID: buildID,
-		})
-	})
+	return leakSession{Server: client.BaseURL(), UserID: session.UserID, Token: client.Token(), Send: client.PublishLeakStatus}
 }
 
 // reportLeakBuild says which step of a leak build is running.
@@ -144,9 +106,12 @@ func (s *Server) handleLeakTestRequest(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	s.reportLeakStatus(*request, leakReceived, "", "")
+	// `relay` is whether the editor has been told: a request this machine
+	// holds and the editor has not heard about are different facts.
 	writeJSON(w, http.StatusOK, map[string]any{
 		"pending": true, "request_id": request.RequestID, "asset_id": request.AssetID,
-		"revision": request.Revision, "received_at": received,
+		"revision": request.Revision, "content_sha256": request.ContentSHA256, "received_at": received,
+		"relay": s.leaks.view(request.RequestID),
 	})
 }
 
@@ -301,6 +266,8 @@ func (s *Server) handleLeakTestReturnRetry(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusConflict, errors.New("this build's result is not ready to be sent again yet"))
 		return
 	}
+	// A person asked: a status held back by a refused session is tried again.
+	s.leaks.retryNow(record.Request.RequestID)
 	after := s.deliverLeakResult(id, record.Request)
 	if after.State != "returned" {
 		writeError(w, http.StatusBadGateway, errors.New(after.Error))

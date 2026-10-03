@@ -212,6 +212,12 @@ type fixtureBackend struct {
 	// rendezvous answer 503, the way an AUB that is away does.
 	leakStatuses     []string
 	refuseLeakResult bool
+	// failLeakStatus answers that many progress POSTs with 503 before letting
+	// one through; leakStatusPosts counts every one that arrived, refused or
+	// not, and leakStatusBodies keeps the accepted documents.
+	failLeakStatus   int
+	leakStatusPosts  int
+	leakStatusBodies []map[string]any
 
 	// holdDetail, when set, holds every map-detail request until it is
 	// closed or the caller gives up: a slow AUB (NEW_265A).
@@ -331,6 +337,14 @@ func (b *fixtureBackend) serve(w http.ResponseWriter, r *http.Request) {
 			stage = stage[:24]
 		}
 		b.mu.Lock()
+		b.leakStatusPosts++
+		if b.failLeakStatus > 0 {
+			b.failLeakStatus--
+			b.mu.Unlock()
+			http.Error(w, `{"message":"the server is away"}`, http.StatusServiceUnavailable)
+			return
+		}
+		b.leakStatusBodies = append(b.leakStatusBodies, status)
 		b.leakStatuses = append(b.leakStatuses, strings.TrimSpace(fmt.Sprintf("%s %v %s",
 			strings.TrimPrefix(rest, "/leak-status/"), status["state"], stage)))
 		b.mu.Unlock()
