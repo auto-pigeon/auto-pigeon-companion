@@ -433,8 +433,12 @@ fieldset { min-width: 0; }
 main { flex: 1 1 auto; padding: 1rem 1.25rem 3rem; min-width: 0; }
 .area-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--gap); }
 .area-head h2 { margin: 0 0 0.25rem; }
-/* The New profile page in its own tab has no area navigation of its own. */
+/* The New profile page in its own tab has no area navigation of its own — and
+   so no column for one either: .app-body paints the sidebar's surface and its
+   edge as a background, which without the sidebar was a grey bar down the left
+   of the page (operator, 2026-10-03). */
 body.single-view .areas { display: none; }
+body.single-view .app-body { background: none; }
 
 .panel {
   background: var(--surface);
