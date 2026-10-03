@@ -258,15 +258,15 @@ var formOwned = map[string][]string{
 	"executables": {"name", "title", "file"},
 	"actions": {"id", "title", "capability", "executable", "args", "inputs", "outputs", "options", "roots",
 		"timeout_seconds", "session_role"},
-	"actions.inputs":  {"name", "title", "role", "required", "extensions", "stage_with"},
-	"actions.outputs": {"name", "title", "role", "path", "in_place", "optional"},
-	"actions.options": {"name", "title", "type", "default", "values"},
+	"actions.inputs":         {"name", "title", "role", "required", "extensions", "stage_with"},
+	"actions.outputs":        {"name", "title", "role", "path", "in_place", "optional"},
+	"actions.options":        {"name", "title", "type", "default", "values"},
 	"actions.options.values": {"value"},
-	"actions.roots":   {"role", "optional", "access", "purpose"},
-	"capabilities":    {"id", "title", "consumes", "produces"},
-	"inputs":          {"name", "title", "role", "required", "extensions"},
-	"steps":           {"id", "title", "capability", "inputs", "options"},
-	"outputs":         {"name", "title", "role", "from", "optional"},
+	"actions.roots":          {"role", "optional", "access", "purpose"},
+	"capabilities":           {"id", "title", "consumes", "produces"},
+	"inputs":                 {"name", "title", "role", "required", "extensions"},
+	"steps":                  {"id", "title", "capability", "inputs", "options"},
+	"outputs":                {"name", "title", "role", "from", "optional"},
 }
 
 // formGuessed is, for each place, the members scratch.go fills in on a
