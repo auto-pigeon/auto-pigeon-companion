@@ -103,9 +103,13 @@ func (s *Server) handleLeakTestRequest(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	if request == nil {
+		// Nothing is pending: a request that was only received or reviewed
+		// has expired or was replaced, so its line is no longer kept alive.
+		s.leaks.nothingPending("")
 		writeJSON(w, http.StatusOK, map[string]any{"pending": false})
 		return
 	}
+	s.leaks.nothingPending(request.RequestID)
 	s.reportLeakStatus(*request, leakReceived, "", "")
 	// `relay` is whether the editor has been told: a request this machine
 	// holds and the editor has not heard about are different facts.

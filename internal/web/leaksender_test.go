@@ -822,3 +822,39 @@ func TestAnExpiredSessionAsksForSignInAndTheSameRequestThenResolves(t *testing.T
 		t.Fatalf("after signing in the editor was told %v", got)
 	}
 }
+
+// A request that expired on this machine before anyone built it is not kept
+// "in review" on AUB by the refresh.
+func TestAnExpiredUnbuiltLeakRequestIsNoLongerRefreshed(t *testing.T) {
+	sender, relay, clock := steppedSender(t)
+	reviewed, building := testLeakLink("a"), testLeakLink("b")
+	sender.report(reviewed, leakReceived, "", "", true)
+	sender.report(reviewed, leakReviewing, "", "", false)
+	sender.report(building, leakBuilding, "compile", "build-1", false)
+	sender.step()
+	posts := relay.posts()
+	// The watch finds nothing pending: the intent expired.
+	sender.nothingPending("")
+	clock.advance(leakStatusRefresh)
+	sender.step()
+	if got := relay.posts() - posts; got != 1 {
+		t.Fatalf("%d refresh(es): want one, for the build only (%s)", got, relay.acceptedStates())
+	}
+	relay.mu.Lock()
+	last := relay.accepted[len(relay.accepted)-1]
+	relay.mu.Unlock()
+	if last.State != leakBuilding {
+		t.Fatalf("the refreshed status is %q", last.State)
+	}
+	// The request still pending is the one exception.
+	pending := testLeakLink("c")
+	sender.report(pending, leakReceived, "", "", true)
+	sender.step()
+	sender.nothingPending(pending.RequestID)
+	posts = relay.posts()
+	clock.advance(leakStatusRefresh)
+	sender.step()
+	if got := relay.posts() - posts; got != 2 {
+		t.Fatalf("%d refresh(es): want the build and the pending request", got)
+	}
+}

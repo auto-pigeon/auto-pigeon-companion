@@ -497,6 +497,26 @@ func (q *leakSender) sessionChanged() {
 	}
 }
 
+// nothingPending is the page's watch saying which request, if any, this
+// machine still holds for review. Every OTHER request that never reached a
+// build is over — its ten-minute intent expired, or a newer click replaced it
+// — so its "received" or "reviewing" stops being refreshed. Found live
+// (`NEW_307W1`): a request nobody built was still "in review" on AUB twenty
+// minutes after this machine had forgotten it. A build is not touched: it
+// consumed its request and reports for itself.
+func (q *leakSender) nothingPending(except string) {
+	if q == nil {
+		return
+	}
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	for id, item := range q.items {
+		if id != except && (item.desired.State == leakReceived || item.desired.State == leakReviewing) {
+			item.superseded = true
+		}
+	}
+}
+
 // retryNow is a person asking again for one request: whatever was holding its
 // status back, short of AUB having rejected the request itself, is forgotten.
 func (q *leakSender) retryNow(requestID string) {
