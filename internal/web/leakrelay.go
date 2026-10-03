@@ -49,9 +49,15 @@ type leakStatusSender struct {
 
 var leakStatuses = &leakStatusSender{last: map[string]string{}}
 
-func (q *leakStatusSender) enqueue(key, value string, send func()) {
+// enqueue sends a status unless it is the one last said for that request.
+// `opening` is a status that only ever starts a request's story ("received"):
+// it is said once, and never again after anything else has been — the page's
+// watch re-reads the pending request every two seconds, and a "received" sent
+// after "reviewing" put the editor back a step (found live, NEW_307W).
+func (q *leakStatusSender) enqueue(key, value string, opening bool, send func()) {
 	q.mu.Lock()
-	if q.last[key] == value {
+	previous, said := q.last[key]
+	if previous == value || (opening && said) {
 		q.mu.Unlock()
 		return
 	}
@@ -83,8 +89,13 @@ func (s *Server) reportLeakStatus(link aub.LeakTestLink, state, stage, buildID s
 	if len(stage) > 120 {
 		stage = stage[:120]
 	}
-	leakStatuses.enqueue(link.RequestID, state+"\x00"+stage+"\x00"+buildID, func() {
-		s.adoptSessionFromDisk()
+	// Signed out, nothing can be said — and nothing is remembered as said, so
+	// the request is acknowledged once somebody signs in.
+	s.adoptSessionFromDisk()
+	if client := s.aubClient(); client == nil || !client.Authenticated() {
+		return
+	}
+	leakStatuses.enqueue(link.RequestID, state+"\x00"+stage+"\x00"+buildID, state == leakReceived, func() {
 		client := s.aubClient()
 		if client == nil || !client.Authenticated() {
 			return

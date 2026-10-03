@@ -24,7 +24,10 @@
     }
     $("uri-state").textContent = body.registered
       ? t("This Companion opens Auto-Pigeon links on this computer.")
-      : t("Nothing on this computer opens Auto-Pigeon links yet, so the editor's Test in Companion and join links do nothing.") +
+      : ((body.command || []).length
+          // A handler exists and runs another program — an older Companion.
+          ? t("Auto-Pigeon links open another program on this computer, not this Companion, so the editor's Test in Companion and join links do not arrive here.")
+          : t("Nothing on this computer opens Auto-Pigeon links yet, so the editor's Test in Companion and join links do nothing.")) +
         (body.detail ? " " + body.detail : "");
     $("uri-register").hidden = Boolean(body.registered);
   }

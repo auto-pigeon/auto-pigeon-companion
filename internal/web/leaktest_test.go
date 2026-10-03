@@ -227,6 +227,15 @@ func TestAnOpenPageSeesANewLeakRequestAndDismissesOnlyTheOneItNamed(t *testing.T
 	if status, _ := m.call(http.MethodPost, "/api/v1/leak-test/reviewing", map[string]any{"request_id": older.RequestID}); status != http.StatusOK {
 		t.Errorf("reviewing the pending request: %d", status)
 	}
+	// The pages keep watching while the request is in review. That must not
+	// say "received" again: it did, live, and put the editor back a step.
+	for range 3 {
+		watch()
+	}
+	time.Sleep(150 * time.Millisecond)
+	if got := m.leakStatusesSoon(t, 2); strings.Join(got, "|") != older.RequestID+" received|"+older.RequestID+" reviewing" {
+		t.Fatalf("watching a request in review told the editor %v", got)
+	}
 
 	// The editor is clicked again while the first notice is still on screen.
 	newer := older
