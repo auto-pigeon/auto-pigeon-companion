@@ -405,10 +405,18 @@
     actionChanged();
   }
 
+  function actionTakes(action, option) {
+    return Boolean(action && (action.options || []).includes(option));
+  }
+
   function actionChanged() {
     const engine = currentEngine();
     const action = (engine?.actions || []).find((candidate) => candidate.id === $("q3pkg-action").value);
     const note = $("q3pkg-action-note");
+    // The Port field belongs to the actions that declare a port. A client
+    // action declares none: the field is not offered to it, and what was typed
+    // for a server is not sent with it (the engine profile would refuse it).
+    $("q3pkg-port").disabled = !actionTakes(action, "port");
     if (!action) {
       note.textContent = "";
       return;
@@ -508,8 +516,9 @@
     await withBusy(button, async () => {
       busy("q3pkg-run-message", t("Starting the engine…"));
       const options = {};
+      const action = (currentEngine()?.actions || []).find((candidate) => candidate.id === $("q3pkg-action").value);
       const port = $("q3pkg-port").value.trim();
-      if (port) options.port = port;
+      if (port && actionTakes(action, "port")) options.port = port;
       const response = await api("/api/v1/q3/runs", { method: "POST", body: {
         installation: state.installation.id, engine: $("q3pkg-engine").value, action: $("q3pkg-action").value, options } });
       if (!response.ok) {

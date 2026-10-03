@@ -421,3 +421,49 @@ func TestBuildAndRunSendsAQuake3MapToThePackagePath(t *testing.T) {
 		}
 	}
 }
+
+// A run action is offered a setting only when its profile declares it. The
+// page had one Port field for every action: after a server run on a chosen
+// port, choosing "Play a map" still sent the port, and the client action — which
+// declares no port — was refused with a profile-resolution error instead of
+// running (Q3_012, seen in a headed browser).
+func TestAQuake3RunActionNamesTheOptionsItDeclares(t *testing.T) {
+	m := newMachine(t)
+	status, body := m.call(http.MethodGet, "/api/v1/q3/engines", nil)
+	if status != http.StatusOK {
+		t.Fatalf("engines = %d: %v", status, body["error"])
+	}
+	declared := map[string][]string{}
+	for _, raw := range body["engines"].([]any) {
+		engine := raw.(map[string]any)
+		if engine["id"] != "auto-pigeon.engine.ioquake3" {
+			continue
+		}
+		for _, rawAction := range engine["actions"].([]any) {
+			action := rawAction.(map[string]any)
+			names := []string{}
+			options, isList := action["options"].([]any)
+			if !isList {
+				t.Fatalf("action %v names no options list: %v", action["id"], action)
+			}
+			for _, option := range options {
+				names = append(names, option.(string))
+			}
+			declared[action["id"].(string)] = names
+		}
+	}
+	has := func(action, option string) bool {
+		for _, name := range declared[action] {
+			if name == option {
+				return true
+			}
+		}
+		return false
+	}
+	if !has("host_dedicated", "port") || !has("host_listen", "port") {
+		t.Errorf("a server action does not name its port option: %v", declared)
+	}
+	if _, listed := declared["play_map"]; !listed || has("play_map", "port") {
+		t.Errorf("the client action play_map: listed=%v options=%v — it declares no port", listed, declared["play_map"])
+	}
+}

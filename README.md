@@ -885,6 +885,12 @@ a polite word for success). `--check` stops the engine once it has answered and
 returns that answer as the exit status; without it the command stays until the
 engine exits or you press Ctrl-C.
 
+On the Build page the same run is step 3 of *Package and run this map*. Its
+**Port** field belongs to the actions that declare a port (the two servers):
+choosing a client action disables it, and a port typed for a server is not sent
+with a client run. `GET /api/v1/q3/engines` names each action's declared options
+(`"options": ["base_game", "port", …]`), which is what the page reads.
+
 **Game data.** `pak0.pk3` is id Software's and is yours to supply. Measured on
 ioquake3 1.36: whenever the base directory is called `baseq3` the engine insists
 on it and stops with `Quake 3 data files are missing` — `com_standalone 1` does

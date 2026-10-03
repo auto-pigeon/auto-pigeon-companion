@@ -277,9 +277,15 @@ func (s *Server) handleQ3Engines(w http.ResponseWriter, r *http.Request) {
 			if !loadsAMap(action) {
 				continue
 			}
+			// The settings this action declares, by name: the page offers a
+			// field only to an action that reads it, and sends nothing else.
+			options := []string{}
+			for _, option := range action.Options {
+				options = append(options, option.Name)
+			}
 			view := map[string]any{
 				"id": action.ID, "title": action.Title, "session_role": action.SessionRole,
-				"reports_map_load": reportsMapLoad(action),
+				"reports_map_load": reportsMapLoad(action), "options": options,
 			}
 			if problem := q3run.Preflight(entry, local, action.ID, currentPlatform()); problem != nil {
 				view["problem"] = problem.Error()
