@@ -86,14 +86,17 @@ func TestBuildPipelinesAsJSON(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &rows); err != nil {
 		t.Fatalf("the output is not JSON: %v\n%s", err, stdout.String())
 	}
-	if len(rows) != 8 {
-		t.Fatalf("expected the three Quake 1, two Quake II and two Quake III built-in pipelines and the Quake 1 leak test, got %d",
+	if len(rows) != 9 {
+		t.Fatalf("expected the three Quake 1, two Quake II and two Quake III built-in pipelines and the Quake 1 and Quake III leak tests, got %d",
 			len(rows))
 	}
 	unfinished := map[string]int{}
+	diagnostics := 0
 	for _, row := range rows {
-		if row.ID == "auto-pigeon.q1.leak-test" {
-			// The diagnostic: the compile step alone.
+		if row.ID == "auto-pigeon.q1.leak-test" || row.ID == "auto-pigeon.q3.leak-test" {
+			// A diagnostic: the compile step alone, for the two games with a
+			// measured leak test. Quake II has none.
+			diagnostics++
 			if len(row.Steps) != 1 || row.Steps[0] != "compile" || !row.Runnable {
 				t.Errorf("%s: steps=%v runnable=%t", row.ID, row.Steps, row.Runnable)
 			}
@@ -115,6 +118,9 @@ func TestBuildPipelinesAsJSON(t *testing.T) {
 		default:
 			t.Errorf("%s declares the family %q", row.ID, row.Family)
 		}
+	}
+	if diagnostics != 2 {
+		t.Errorf("%d leak-test pipelines were listed, want the Quake 1 and Quake III ones", diagnostics)
 	}
 	if unfinished["quake2"] != 2 || unfinished["quake3"] != 2 {
 		t.Errorf("%d Quake II and %d Quake III pipelines were listed",

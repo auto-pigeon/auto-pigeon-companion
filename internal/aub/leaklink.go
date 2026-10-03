@@ -25,6 +25,12 @@ type LeakTestLink struct {
 	Revision      int    `json:"revision"`
 	ContentSHA256 string `json:"content_sha256"`
 	RequestID     string `json:"request_id,omitempty"`
+	// Profile is the game the editor says the map is for (`Q3_018`). A HINT:
+	// the Companion reads the game out of the pinned revision's own bytes and
+	// refuses a link whose hint disagrees. Absent from a link written before
+	// the field existed, and from every Quake 1 link, which stays byte for
+	// byte what it was.
+	Profile string `json:"profile,omitempty"`
 }
 
 // MaxLeakTestRevision bounds the revision number a link may name. Far above any
@@ -35,6 +41,7 @@ var (
 	leakAssetID   = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 	leakSHA256    = regexp.MustCompile(`^[0-9a-f]{64}$`)
 	leakRequestID = regexp.MustCompile(`^[0-9a-f]{32}$`)
+	leakProfile   = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
 )
 
 // IsLeakTestLink reports whether raw is shaped like a leak-test link at all, so
@@ -49,6 +56,9 @@ func (l LeakTestLink) Link() string {
 	if l.RequestID != "" {
 		value += "&request=" + l.RequestID
 	}
+	if l.Profile != "" {
+		value += "&profile=" + l.Profile
+	}
 	return value
 }
 
@@ -56,7 +66,7 @@ func (l LeakTestLink) Link() string {
 //
 // Strict where ParseJoinLink is lenient, because this link is not an opaque
 // ticket: every part of it is later used to ask AUB for something, so every part
-// is checked here, before the handler records it. Exactly the three fields, no
+// is checked here, before the handler records it. Only the named fields, no
 // fragment, no user info, no other query key, no repeated key.
 func ParseLeakTestLink(raw string) (LeakTestLink, error) {
 	value := strings.TrimSpace(raw)
@@ -82,9 +92,18 @@ func ParseLeakTestLink(raw string) (LeakTestLink, error) {
 	if err != nil {
 		return refuse("unreadable query")
 	}
-	if (len(values) != 2 && len(values) != 3) || len(values["revision"]) != 1 || len(values["sha256"]) != 1 ||
-		(len(values) == 3 && len(values["request"]) != 1) {
-		return refuse("it must carry revision, sha256 and optionally one request id")
+	known := 0
+	for key, each := range values {
+		switch key {
+		case "revision", "sha256", "request", "profile":
+			if len(each) != 1 {
+				return refuse("a repeated field")
+			}
+			known++
+		}
+	}
+	if known != len(values) || len(values["revision"]) != 1 || len(values["sha256"]) != 1 {
+		return refuse("it must carry revision, sha256 and optionally one request id and one profile")
 	}
 	revision, err := strconv.Atoi(values.Get("revision"))
 	if err != nil || revision < 1 || revision > MaxLeakTestRevision {
@@ -99,8 +118,12 @@ func ParseLeakTestLink(raw string) (LeakTestLink, error) {
 	if requestID != "" && !leakRequestID.MatchString(requestID) {
 		return refuse("bad request id")
 	}
-	if len(values) == 3 && requestID == "" {
+	if _, named := values["request"]; named && requestID == "" {
 		return refuse("empty request id")
 	}
-	return LeakTestLink{AssetID: id, Revision: revision, ContentSHA256: digest, RequestID: requestID}, nil
+	profile := values.Get("profile")
+	if _, named := values["profile"]; named && !leakProfile.MatchString(profile) {
+		return refuse("bad profile")
+	}
+	return LeakTestLink{AssetID: id, Revision: revision, ContentSHA256: digest, RequestID: requestID, Profile: profile}, nil
 }

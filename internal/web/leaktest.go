@@ -13,12 +13,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/assetref"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/assetsync"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/leakadapter"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/leakintent"
 )
 
-const leakPipelineID = "auto-pigeon.q1.leak-test"
+// Which pipeline a leak request may run is leakadapter's, keyed by the game the
+// pinned revision's own bytes declare. There is no pipeline id here.
 
 // All routes are behind Server.guard. The URI handler only records an intent;
 // this review reads the user's normal AUB session and starts no program.
@@ -110,13 +114,98 @@ func (s *Server) handleLeakTestPending(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, errors.New("this revision has no APMap source"))
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"pending": true, "received_at": received, "pipeline": leakPipelineID,
+	// The game is the saved document's own word, read from the pinned bytes.
+	// Everything else — the link's hint, whatever pipeline the page had
+	// selected — is checked against it.
+	game, err := s.savedMapGame(ctx, client, request.AssetID, revision.ID, source)
+	if err != nil {
+		writeError(w, aubStatus(err), fmt.Errorf("reading this revision's game: %w", err))
+		return
+	}
+	base := map[string]any{
+		"pending": true, "received_at": received, "game_profile": game,
 		"request_id": request.RequestID, "name": strings.TrimSuffix(filepath.Base(source), filepath.Ext(source)),
 		"asset_id": request.AssetID, "revision": revision.Number, "revision_id": revision.ID,
-		"content_sha256": revision.ContentSHA256, "files": revision.Files,
-		"source_ref": fmt.Sprintf("aub:map/%s@%s#%s", request.AssetID, revision.ID, source),
-	})
+		"content_sha256": revision.ContentSHA256,
+	}
+	if request.Profile != "" && request.Profile != game {
+		s.reportLeakStatus(*request, leakBlocked, leakStageProfileMismatch, "")
+		writeError(w, http.StatusConflict, fmt.Errorf(
+			"the editor asked for a %s leak test, and this saved revision is a %s map; ask the editor again",
+			request.Profile, game))
+		return
+	}
+	adapter, err := leakadapter.ForProfile(game)
+	if err != nil {
+		// Not Quake 1 by default, and nothing runs: the reader is told which
+		// game it is and which ones have a compiler here.
+		s.reportLeakStatus(*request, leakBlocked, leakStageUnsupported, "")
+		base["unsupported"], base["supported_profiles"] = true, leakadapter.Profiles()
+		writeJSON(w, http.StatusOK, base)
+		return
+	}
+	base["pipeline"], base["compiler"], base["files"] = adapter.PipelineID, adapter.Compiler, revision.Files
+	base["source_ref"] = fmt.Sprintf("aub:map/%s@%s#%s", request.AssetID, revision.ID, source)
+	writeJSON(w, http.StatusOK, base)
+}
+
+// The two reasons a request is blocked by its game. Tokens, not sentences: the
+// editor has a translated line for each.
+const (
+	leakStageUnsupported     = "unsupported_profile"
+	leakStageProfileMismatch = "profile_mismatch"
+)
+
+// savedMapGame reads the `game` out of one pinned revision's APMap.
+//
+// It goes through the asset cache, which checks every file against the digest
+// the revision recorded before handing it over — so the game is read from the
+// bytes the build will be given, and a revision already cached costs no
+// download. The copy made to read it is removed again.
+func (s *Server) savedMapGame(ctx context.Context, client *aub.Client, assetID, revisionID, file string) (string, error) {
+	store, err := s.assets()
+	if err != nil {
+		return "", err
+	}
+	var syncer *assetsync.Syncer
+	if client != nil && client.Authenticated() {
+		if made, err := assetsync.NewSyncer(ctx, client, store); err == nil {
+			syncer = made
+		}
+	}
+	buildsDir, err := s.buildsDir()
+	if err != nil {
+		return "", err
+	}
+	stage, err := os.MkdirTemp(ensureDir(buildsDir), "leak-review-")
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(stage)
+	input, err := assetref.Materialize(ctx, store, syncer,
+		assetref.Ref{AssetType: aub.AssetTypeMap, AssetID: assetID, Revision: revisionID, File: file}, stage, "source_map")
+	if err != nil {
+		return "", err
+	}
+	return assetref.APMapGame(input.Path)
+}
+
+// leakAdapterForBuild is the one resolver the build start uses, and it is the
+// review's: the adapter of the game the pinned APMap itself declares. A request
+// naming any other pipeline is refused.
+func leakAdapterForBuild(pipelineID string, conversion build.Conversion, converted bool) (leakadapter.Adapter, error) {
+	if !converted || conversion.Game == "" {
+		return leakadapter.Adapter{}, errors.New("the pinned map source is not an APMap whose game can be read, so no compiler is chosen for it")
+	}
+	adapter, err := leakadapter.ForProfile(conversion.Game)
+	if err != nil {
+		return leakadapter.Adapter{}, err
+	}
+	if adapter.PipelineID != pipelineID {
+		return leakadapter.Adapter{}, fmt.Errorf("this saved revision is a %s map, and its leak test is %q, not %q",
+			conversion.Game, adapter.PipelineID, pipelineID)
+	}
+	return adapter, nil
 }
 
 func (s *Server) matchesPendingLeakRequest(requestID string, source build.SourceRef) bool {
@@ -195,6 +284,19 @@ func (s *Server) handleLeakTestDismiss(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"dismissed": dismissed != nil})
 }
 
+// leakResult is the envelope returned to the editor.
+//
+// `aucom.leak-result/1.0` is the Quake 1 envelope and is exactly what it was:
+// the fields below the line are absent from it. `1.1` (`Q3_018`) names what
+// ran — the game, the compiler, the point file's format and direction — and
+// carries this program's reading of the run, because the three facts a log
+// cannot state about itself (was the BSP there, how did the step end, is the
+// line file this run's) are known only here.
+//
+// Three states travel apart and are never folded into one: how the process
+// exited (`compile_exit_code`), how the pipeline ended (`build_state`) and what
+// the run says about leaks (`diagnostic.outcome`). A leaked Quake III map is
+// exit 0, `failed`, `leak`.
 type leakResult struct {
 	SchemaVersion   string `json:"schema_version"`
 	BuildID         string `json:"build_id"`
@@ -209,6 +311,17 @@ type leakResult struct {
 	PointfileSHA256 string `json:"pointfile_sha256,omitempty"`
 	Log             string `json:"log,omitempty"`
 	LogSHA256       string `json:"log_sha256,omitempty"`
+
+	// --- 1.1 ---
+	GameProfile        string `json:"game_profile,omitempty"`
+	Compiler           string `json:"compiler,omitempty"`
+	PointfileFormat    string `json:"pointfile_format,omitempty"`
+	PointfileDirection string `json:"pointfile_direction,omitempty"`
+	// CompilerSourceSHA256 is the `.map` the compiler was handed — the
+	// extractor's conversion of the saved APMap. It is NOT `content_sha256`,
+	// which is the saved revision, and the two are never compared.
+	CompilerSourceSHA256 string               `json:"compiler_source_sha256,omitempty"`
+	Diagnostic           *leakadapter.Verdict `json:"diagnostic,omitempty"`
 }
 
 func (s *Server) handleLeakTestResult(w http.ResponseWriter, r *http.Request) {
@@ -232,24 +345,32 @@ func (s *Server) buildLeakResult(id string) (leakResult, error) {
 	if err != nil {
 		return leakResult{}, err
 	}
-	if manifest.Pipeline.ID != leakPipelineID {
+	adapter, isLeakTest := leakadapter.ForPipeline(manifest.Pipeline.ID)
+	if !isLeakTest {
 		return leakResult{}, errors.New("this is not a leak-test build")
 	}
 	if !manifest.State.Terminal() {
 		return leakResult{}, errors.New("the leak test is still running")
 	}
 	var source *build.SourceRef
+	var staged build.FileRecord
 	for _, input := range manifest.Inputs {
 		if input.Name == "source_map" {
-			source = input.Source
+			source, staged = input.Source, input
 			break
 		}
+	}
+	// A build that compiled a map of another game than its pipeline's is not
+	// evidence about anything: the wrong compiler read it.
+	if staged.Conversion != nil && staged.Conversion.Game != "" && staged.Conversion.Game != adapter.Profile {
+		return leakResult{}, fmt.Errorf("this build ran the %s leak test on a %s map; its output is not a result",
+			adapter.Profile, staged.Conversion.Game)
 	}
 	if source == nil || source.AssetType != aub.AssetTypeMap || source.AssetID == "" ||
 		source.RevisionID == "" || source.Revision < 1 || len(source.ContentSHA256) != 64 || !source.Refetchable {
 		return leakResult{}, errors.New("the build has no pinned AUB map source")
 	}
-	result := leakResult{SchemaVersion: "aucom.leak-result/1.0", BuildID: manifest.BuildID,
+	result := leakResult{SchemaVersion: adapter.ResultSchema, BuildID: manifest.BuildID,
 		MapID: source.AssetID, RevisionID: source.RevisionID, Revision: source.Revision, ContentSHA256: source.ContentSHA256,
 		BuildState: string(manifest.State)}
 	for _, tool := range manifest.Tools {
@@ -258,40 +379,85 @@ func (s *Server) buildLeakResult(id string) (leakResult, error) {
 			break
 		}
 	}
+	stepState := ""
 	for _, step := range manifest.Steps {
 		if step.ID == "compile" {
-			result.CompileExitCode = step.ExitCode
+			result.CompileExitCode, stepState = step.ExitCode, string(step.State)
+			if step.Skipped {
+				stepState = ""
+			}
 			break
 		}
 	}
+	var bsp *bool
 	for _, output := range manifest.Outputs {
 		var limit int64
 		switch output.Name {
-		case "pts":
-			limit = 2 << 20
-		case "compile_log":
+		case adapter.PointfileOutput:
+			limit = leakadapter.MaxPointfileBytes
+		case adapter.LogOutput:
 			limit = 16 << 20
+		case adapter.BSPOutput:
+			// Only whether this run left one. Its bytes never leave this
+			// machine in a leak result.
+			present := !output.Missing && output.Path != ""
+			bsp = &present
+			continue
 		default:
 			continue
 		}
 		if output.Missing || output.Path == "" {
 			continue
 		}
+		// The file is this build's own: it sits inside this build's output
+		// directory, it still has the digest the build recorded when it
+		// collected it from the job's fresh workspace, and it is named after
+		// the source this build staged. Nothing is ever looked for by pattern.
+		if output.Name == adapter.PointfileOutput && !sameStem(output.Path, staged.Path) {
+			return leakResult{}, errors.New("the recorded point file is not named after this build's map source")
+		}
 		content, err := readLeakOutput(dir, manifest.BuildID, output, limit)
 		if err != nil {
 			return leakResult{}, err
 		}
-		if output.Name == "pts" {
+		if output.Name == adapter.PointfileOutput {
 			result.Pointfile, result.PointfileSHA256 = content, strings.TrimPrefix(output.SHA256, "sha256:")
 		}
-		if output.Name == "compile_log" {
+		if output.Name == adapter.LogOutput {
 			result.Log, result.LogSHA256 = content, strings.TrimPrefix(output.SHA256, "sha256:")
 		}
 	}
 	if result.Log == "" {
 		return leakResult{}, errors.New("this build has no compiler log; there is no diagnostic to import")
 	}
+	if adapter.ResultSchema == leakadapter.Schema10 {
+		return result, nil
+	}
+	result.GameProfile, result.Compiler = adapter.Profile, adapter.Compiler
+	result.PointfileFormat, result.PointfileDirection = adapter.PointfileFormat, adapter.Direction
+	if len(staged.SHA256) == 64+len("sha256:") {
+		result.CompilerSourceSHA256 = strings.TrimPrefix(staged.SHA256, "sha256:")
+	}
+	if adapter.Classify != nil {
+		verdict := adapter.Classify(leakadapter.Evidence{Log: result.Log, CompilerVersion: result.CompilerVersion,
+			ExitCode: result.CompileExitCode, StepState: stepState, Pointfile: result.Pointfile, BSP: bsp})
+		result.Diagnostic = &verdict
+	}
 	return result, nil
+}
+
+// sameStem reports whether two paths name the same file apart from its
+// extension. A staged source with no recorded path cannot be compared, and is
+// not a reason to refuse.
+func sameStem(output, source string) bool {
+	if source == "" {
+		return true
+	}
+	stem := func(path string) string {
+		base := filepath.Base(path)
+		return strings.TrimSuffix(base, filepath.Ext(base))
+	}
+	return stem(output) == stem(source)
 }
 
 func readLeakOutput(buildDir, id string, output build.FileRecord, limit int64) (string, error) {
@@ -329,4 +495,30 @@ func readLeakOutput(buildDir, id string, output build.FileRecord, limit int64) (
 		return "", errors.New("the compiler output no longer matches its recorded digest")
 	}
 	return string(raw), nil
+}
+
+// leakTestView is what the Build page needs to know about a leak-test build
+// without knowing any pipeline by name: which game and compiler it is, which
+// output is the route, and — when this program reads the run itself — what the
+// run says. Nil for a build that is not a leak test.
+func (s *Server) leakTestView(manifest *build.Manifest) map[string]any {
+	adapter, ok := leakadapter.ForPipeline(manifest.Pipeline.ID)
+	if !ok {
+		return nil
+	}
+	view := map[string]any{
+		"game_profile": adapter.Profile, "compiler": adapter.Compiler,
+		"pointfile_output": adapter.PointfileOutput, "pointfile_format": adapter.PointfileFormat,
+		"pointfile_direction": adapter.Direction,
+	}
+	if adapter.Classify == nil || !manifest.State.Terminal() {
+		return view
+	}
+	result, err := s.buildLeakResult(manifest.BuildID)
+	if err != nil {
+		view["unreadable"] = err.Error()
+		return view
+	}
+	view["diagnostic"] = result.Diagnostic
+	return view
 }

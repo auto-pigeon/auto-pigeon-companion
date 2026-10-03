@@ -18,6 +18,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/leakadapter"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/leakintent"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/maturity"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
@@ -285,6 +286,11 @@ func (s *Server) handleBuildPipelines(w http.ResponseWriter, r *http.Request) {
 			"steps": steps, "missing_capabilities": missing, "runnable": runnable,
 			"engine_family": family, "maturity": describeMaturity(family),
 		})
+		// A leak test is a question about a map, not a build of it. The page
+		// asks this flag rather than knowing a pipeline id (`Q3_018`).
+		if _, leak := leakadapter.ForPipeline(meta.ID); leak {
+			items[len(items)-1]["leak_test"] = true
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
@@ -567,9 +573,19 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if request.LeakRequestID != "" {
-		if request.Pipeline != leakPipelineID || !s.matchesPendingLeakRequest(request.LeakRequestID, sources["source_map"]) {
+		if !s.matchesPendingLeakRequest(request.LeakRequestID, sources["source_map"]) {
 			cancel()
 			writeError(w, http.StatusConflict, errors.New("the editor leak request expired or no longer matches this pinned map revision"))
+			return
+		}
+		// The same resolver the review used, on the bytes that were just
+		// staged: the game the pinned APMap declares decides the pipeline. A
+		// request that names another one — a stale page, a hand-made call —
+		// starts nothing.
+		conversion, converted := conversions["source_map"]
+		if _, err := leakAdapterForBuild(request.Pipeline, conversion, converted); err != nil {
+			cancel()
+			writeError(w, http.StatusConflict, err)
 			return
 		}
 		configDir, err := s.configDir()
@@ -698,6 +714,9 @@ func (s *Server) handleBuildGet(w http.ResponseWriter, r *http.Request) {
 	// family this build makes no claim about, and the page draws nothing then.
 	body["maturity"] = describeMaturity(manifest.EngineFamily)
 	body["maturity_message"] = maturity.Of(manifest.EngineFamily).Message
+	if leak := s.leakTestView(manifest); leak != nil {
+		body["leak_test"] = leak
+	}
 	if run, running := s.builds.get(id); running {
 		finished, message := run.state()
 		body["live"] = !finished

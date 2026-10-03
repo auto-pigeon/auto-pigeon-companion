@@ -131,7 +131,8 @@ func fixtureQ3BSP(parsed q3Args) int {
 	if strings.Contains(string(source), "aucom_leak_me") {
 		fmt.Println("******* leaked *******")
 		fmt.Println("Entity 4, Brush 0: Entity leaked")
-		if err := os.WriteFile(base+".lin", []byte("0 0 0\n"), 0o644); err != nil {
+		// The measured shape: from outside the map to the entity reached.
+		if err := os.WriteFile(base+".lin", []byte("280.000000 136.000000 128.000000\n256.000000 128.000000 128.000000\n0.000000 0.000000 192.000000\n"), 0o644); err != nil {
 			return 1
 		}
 		if parsed.leaktest {
@@ -144,6 +145,16 @@ func fixtureQ3BSP(parsed q3Args) int {
 	if strings.Contains(string(source), "aucom_missing_model") {
 		fmt.Println(`ERROR: Unable to open file "models/aucom/nothere.md3".`)
 	}
+	// Measured (Q3_018): a map with nothing standing in open space floods
+	// nothing, prints the same banner, names no entity and writes no line file.
+	if strings.Contains(string(source), "aucom_no_occupant") {
+		fmt.Println("******* leaked *******")
+		if parsed.leaktest {
+			fmt.Println("--- MAP LEAKED, ABORTING LEAKTEST ---")
+			return 0
+		}
+	}
+	fmt.Println("       28 leafs filled")
 	if err := os.WriteFile(base+".prt", []byte(fixtureQ3Portals), 0o644); err != nil {
 		return 1
 	}
@@ -163,6 +174,7 @@ func fixtureQ3BSP(parsed q3Args) int {
 		return 1
 	}
 	fmt.Printf("Writing %s\n", base+".bsp")
+	fmt.Println("        0 seconds elapsed")
 	return 0
 }
 

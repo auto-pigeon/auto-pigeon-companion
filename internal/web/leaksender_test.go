@@ -587,7 +587,7 @@ func TestClosingTheLeakSenderEndsABlockedPost(t *testing.T) {
 // and Close ends the held POST.
 func TestTheLeakRoutesDoNotWaitOnTheRelay(t *testing.T) {
 	m := newMachine(t)
-	m.backend.asset.fileName = "fixture.apmap"
+	m.backend.savedAPMap("quake1")
 	m.signIn()
 	relay := newRelayServer()
 	held := make(chan struct{}, 8)
@@ -725,7 +725,7 @@ func TestThePageNeverShowsOneLeakRequestAsAnother(t *testing.T) {
 // when another one replaced it, and that newer request is NOT resolved for it.
 func TestPendingAnswersReplacedToAPageNamingAnOlderRequest(t *testing.T) {
 	m := newMachine(t)
-	m.backend.asset.fileName = "fixture.apmap"
+	m.backend.savedAPMap("quake1")
 	m.signIn()
 	dir, err := m.server.configDir()
 	if err != nil {
@@ -772,7 +772,7 @@ func TestPendingAnswersReplacedToAPageNamingAnOlderRequest(t *testing.T) {
 // worth sending at all, and one AUB refuses although it looks fine.
 func TestAnExpiredSessionAsksForSignInAndTheSameRequestThenResolves(t *testing.T) {
 	m := newMachine(t)
-	m.backend.asset.fileName = "fixture.apmap"
+	m.backend.savedAPMap("quake1")
 	dir, err := m.server.configDir()
 	if err != nil {
 		t.Fatal(err)

@@ -54,6 +54,11 @@ func TestALeakTestLinkRefusesEverythingElse(t *testing.T) {
 		base + "?revision=1&sha256=" + leakDigest + "&request=" + strings.Repeat("A", 32),
 		base + "?revision=1&sha256=" + leakDigest + "&request=" + strings.Repeat("a", 32) + "&request=" + strings.Repeat("b", 32),
 		base + "?revision=1&sha256=" + leakDigest + "#x",
+		base + "?revision=1&sha256=" + leakDigest + "&profile=",
+		base + "?revision=1&sha256=" + leakDigest + "&profile=Quake3",
+		base + "?revision=1&sha256=" + leakDigest + "&profile=quake3&profile=quake1",
+		base + "?revision=1&sha256=" + leakDigest + "&profile=../x",
+		base + "?revision=1&sha256=" + leakDigest + "&profile=" + strings.Repeat("a", 33),
 		"autopigeon://leaktest/map/../x?revision=1&sha256=" + leakDigest,
 		"autopigeon://leaktest/map/a/b?revision=1&sha256=" + leakDigest,
 		"autopigeon://leaktest/map/user@abc?revision=1&sha256=" + leakDigest,
@@ -61,5 +66,29 @@ func TestALeakTestLinkRefusesEverythingElse(t *testing.T) {
 		if _, err := ParseLeakTestLink(raw); err == nil {
 			t.Errorf("accepted %q", raw)
 		}
+	}
+}
+
+// The profile is a hint the editor adds for a map that is not Quake 1. It is
+// carried, spelled back the same way, and decided by nobody here: the
+// Companion reads the game out of the pinned revision.
+func TestALeakTestLinkCarriesAnOptionalProfileHint(t *testing.T) {
+	link := LeakTestLink{AssetID: "abc123def456ghi", Revision: 7, ContentSHA256: leakDigest,
+		RequestID: strings.Repeat("a", 32), Profile: "quake3"}
+	if !strings.HasSuffix(link.Link(), "&request="+strings.Repeat("a", 32)+"&profile=quake3") {
+		t.Fatalf("canonical spelling %q", link.Link())
+	}
+	parsed, err := ParseLeakTestLink(link.Link())
+	if err != nil || parsed != link {
+		t.Fatalf("parsed %+v: %v", parsed, err)
+	}
+	// Without a request id, and a legacy link with neither.
+	parsed, err = ParseLeakTestLink("autopigeon://leaktest/map/abc?revision=1&sha256=" + leakDigest + "&profile=quake2")
+	if err != nil || parsed.Profile != "quake2" || parsed.RequestID != "" {
+		t.Fatalf("parsed %+v: %v", parsed, err)
+	}
+	parsed, err = ParseLeakTestLink("autopigeon://leaktest/map/abc?revision=1&sha256=" + leakDigest)
+	if err != nil || parsed.Profile != "" {
+		t.Fatalf("legacy link: %+v: %v", parsed, err)
 	}
 }

@@ -15,7 +15,7 @@ import (
 // with no second link, no new request id and no restart (`NEW_307W1`).
 func TestALostFirstAcknowledgementIsDeliveredOnceTheServerIsBack(t *testing.T) {
 	m := newMachine(t)
-	m.backend.asset.fileName = "fixture.apmap"
+	m.backend.savedAPMap("quake1")
 	m.signIn()
 	dir, err := m.server.configDir()
 	if err != nil {

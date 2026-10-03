@@ -1,0 +1,59 @@
+2.5.17n-git-68ecbed
+4 threads
+Q3Map         - v1.0r (c) 1999 Id Software Inc.
+Q3Map (ydnar) - v2.5.17n-git-68ecbed
+NetRadiant    - v1.6.0n-git-68ecbed Jan 14 2026 15:44:01
+Your map saw the pretty lights from q3map2's BFG
+/tools/bin/q3map2
+--- InitPaths ---
+VFS Init: /work/home/baseq3/
+VFS Init: /game/baseq3/
+
+-bsp argument unnecessary
+--- BSP ---
+Leaktest enabled
+Creating meta surfaces from brush faces
+entering scripts/shaderlist.txt
+entering scripts/q3018.shader
+        2 shaderInfo
+--- LoadMapFile ---
+entering /work/input/source_map/e_patch_cover.map
+detected brushType = QUAKE (Axial Projection)
+        5 total world brushes
+        0 detail brushes
+        2 patches
+        0 boxbevels
+        0 edgebevels
+        3 entities
+       24 planes
+        0 areaportals
+Size:  -272,  -272,   -16 to   272,   272,   272
+--- ProcessDecals ---
+        0 decal projectors
+--- CreateMapFogs ---
+        0 fogs
+############### model 0 ###############
+block size = { 1024 1024 1024 }
+BSP bounds: { -272.000000 -272.000000 -16.000000 } { 288.000000 272.000000 272.000000 }
+--- PatchMapDrawSurfs ---
+        2 patches
+        2 patch LOD groups
+--- FaceBSP ---
+       30 faces
+       46 leafs
+--- MakeTreePortals ---
+        0 tiny portals
+        0 bad portals
+--- FilterStructuralBrushesIntoTree ---
+        5 structural brushes
+       14 cluster references
+--- FloodEntities ---
+       33 flooded leafs
+entity reached from outside -- leak detected
+**********************
+******* leaked *******
+**********************
+--- LeakFile ---
+        3 point linefile
+Entity 1, Brush 0: Entity leaked
+--- MAP LEAKED, ABORTING LEAKTEST ---

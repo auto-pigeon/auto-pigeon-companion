@@ -261,6 +261,14 @@ func newFixtureBackend(t *testing.T) *fixtureBackend {
 
 func (b *fixtureBackend) url() string { return b.server.URL }
 
+// savedAPMap makes the one asset a saved APMap that declares a game, which is
+// what a map in an account is: the leak review reads the game out of exactly
+// these bytes (`Q3_018`).
+func (b *fixtureBackend) savedAPMap(game string) {
+	b.asset.fileName = "fixture.apmap"
+	b.asset.body = []byte(`{"apmap_version":"1.5","document_id":"fixture:full_map","revision":0,"game":"` + game + `","entities":[]}`)
+}
+
 func (b *fixtureBackend) serve(w http.ResponseWriter, r *http.Request) {
 	b.mu.Lock()
 	b.served++

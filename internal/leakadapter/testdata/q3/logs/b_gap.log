@@ -1,0 +1,25 @@
+2.5.17n-git-68ecbed
+4 threads
+Q3Map         - v1.0r (c) 1999 Id Software Inc.
+Q3Map (ydnar) - v2.5.17n-git-68ecbed
+NetRadiant    - v1.6.0n-git-68ecbed Jan 14 2026 15:44:01
+Your map saw the pretty lights from q3map2's BFG
+/tools/bin/q3map2
+VFS Init: /work/home/baseq3/
+VFS Init: /game/baseq3/
+
+-bsp argument unnecessary
+--- BSP ---
+Leaktest enabled
+Creating meta surfaces from brush faces
+entering scripts/shaderlist.txt
+entering scripts/q3018.shader
+entering /work/input/source_map/b_gap.map
+        0 areaportals
+Size:  -272,  -272,   -16 to   272,   272,   272
+block size = { 1024 1024 1024 }
+**********************
+******* leaked *******
+**********************
+Entity 1, Brush 0: Entity leaked
+--- MAP LEAKED, ABORTING LEAKTEST ---

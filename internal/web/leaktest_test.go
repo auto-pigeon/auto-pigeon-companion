@@ -37,7 +37,7 @@ func TestLeakResultReturnsPinnedEvidenceFromAFailedLeakBuild(t *testing.T) {
 	logRecord, ptsRecord := put("compile.log", log), put("route.pts", pts)
 	logRecord.Name, ptsRecord.Name = "compile_log", "pts"
 	manifest := &build.Manifest{SchemaVersion: build.SchemaVersion, BuildID: id,
-		Pipeline: build.DocumentRef{ID: leakPipelineID}, State: job.Failed,
+		Pipeline: build.DocumentRef{ID: "auto-pigeon.q1.leak-test"}, State: job.Failed,
 		Inputs: []build.FileRecord{{Name: "source_map", Source: &build.SourceRef{
 			AssetType: aub.AssetTypeMap, AssetID: "saved-map", RevisionID: "immutable-revision", Revision: 7,
 			ContentSHA256: strings.Repeat("a", 64), Refetchable: true}}},
@@ -88,7 +88,7 @@ func TestLeakResultReturnsPinnedEvidenceFromAFailedLeakBuild(t *testing.T) {
 
 func TestLeakRequestOnlyReviewsTheExactSavedRevision(t *testing.T) {
 	m := newMachine(t)
-	m.backend.asset.fileName = "fixture.apmap"
+	m.backend.savedAPMap("quake1")
 	dir, err := m.server.configDir()
 	if err != nil {
 		t.Fatal(err)
@@ -186,7 +186,7 @@ func (m *machine) leakStatusesSoon(t *testing.T, want int) []string {
 // names — never a newer one that replaced it meanwhile.
 func TestAnOpenPageSeesANewLeakRequestAndDismissesOnlyTheOneItNamed(t *testing.T) {
 	m := newMachine(t)
-	m.backend.asset.fileName = "fixture.apmap"
+	m.backend.savedAPMap("quake1")
 	m.signIn()
 	dir, err := m.server.configDir()
 	if err != nil {
@@ -288,7 +288,7 @@ func TestAFailedLeakReturnIsRecordedAndRetriedWithoutAnotherBuild(t *testing.T) 
 	request := aub.LeakTestLink{AssetID: "saved-map", Revision: 7, ContentSHA256: strings.Repeat("a", 64),
 		RequestID: strings.Repeat("c", 32)}
 	manifest := &build.Manifest{SchemaVersion: build.SchemaVersion, BuildID: id,
-		Pipeline: build.DocumentRef{ID: leakPipelineID}, State: job.Failed,
+		Pipeline: build.DocumentRef{ID: "auto-pigeon.q1.leak-test"}, State: job.Failed,
 		Inputs: []build.FileRecord{{Name: "source_map", Source: &build.SourceRef{
 			AssetType: aub.AssetTypeMap, AssetID: request.AssetID, RevisionID: "immutable-revision", Revision: request.Revision,
 			ContentSHA256: request.ContentSHA256, Refetchable: true}}},

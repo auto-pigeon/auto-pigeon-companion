@@ -1,0 +1,36 @@
+2.5.17n-git-68ecbed
+4 threads
+Q3Map         - v1.0r (c) 1999 Id Software Inc.
+Q3Map (ydnar) - v2.5.17n-git-68ecbed
+NetRadiant    - v1.6.0n-git-68ecbed Jan 14 2026 15:44:01
+Your map saw the pretty lights from q3map2's BFG
+/tools/bin/q3map2
+VFS Init: /work/home/baseq3/
+VFS Init: /game/baseq3/
+
+-bsp argument unnecessary
+--- BSP ---
+Leaktest enabled
+Creating meta surfaces from brush faces
+entering scripts/shaderlist.txt
+entering scripts/q3018.shader
+entering /work/input/source_map/a_sealed.map
+        0 areaportals
+Size:  -272,  -272,   -16 to   272,   272,   272
+block size = { 1024 1024 1024 }
+       28 leafs filled
+        0 leafs filled
+writing /work/input/source_map/a_sealed.prt
+--- EmitMetaStats ---
+        6 total meta surfaces
+        6 stripped surfaces
+        0 fanned surfaces
+        0 maxarea'd surfaces
+        0 patch meta surfaces
+        0 meta verts
+        0 meta triangles
+--- WriteSurfaceExtraFile ---
+Writing /work/input/source_map/a_sealed.srf
+Writing /work/input/source_map/a_sealed.bsp
+Wrote 0.0 MB (5716 bytes)
+        0 seconds elapsed

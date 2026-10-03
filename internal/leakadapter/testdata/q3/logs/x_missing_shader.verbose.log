@@ -1,0 +1,168 @@
+2.5.17n-git-68ecbed
+4 threads
+Q3Map         - v1.0r (c) 1999 Id Software Inc.
+Q3Map (ydnar) - v2.5.17n-git-68ecbed
+NetRadiant    - v1.6.0n-git-68ecbed Jan 14 2026 15:44:01
+Your map saw the pretty lights from q3map2's BFG
+/tools/bin/q3map2
+--- InitPaths ---
+VFS Init: /work/home/baseq3/
+VFS Init: /game/baseq3/
+
+-bsp argument unnecessary
+--- BSP ---
+Leaktest enabled
+Creating meta surfaces from brush faces
+entering scripts/shaderlist.txt
+entering scripts/q3018.shader
+        2 shaderInfo
+--- LoadMapFile ---
+entering /work/input/source_map/x_missing_shader.map
+detected brushType = QUAKE (Axial Projection)
+WARNING: Couldn't find image for shader textures/q3018/nothere
+        6 total world brushes
+        0 detail brushes
+        1 patches
+        0 boxbevels
+        0 edgebevels
+        3 entities
+       24 planes
+        0 areaportals
+Size:  -272,  -272,   -16 to   272,   272,   272
+--- ProcessDecals ---
+        0 decal projectors
+--- CreateMapFogs ---
+        0 fogs
+############### model 0 ###############
+block size = { 1024 1024 1024 }
+BSP bounds: { -272.000000 -272.000000 -16.000000 } { 272.000000 272.000000 272.000000 }
+--- PatchMapDrawSurfs ---
+        1 patches
+        1 patch LOD groups
+--- FaceBSP ---
+       36 faces
+       48 leafs
+--- MakeTreePortals ---
+        0 tiny portals
+        0 bad portals
+--- FilterStructuralBrushesIntoTree ---
+        6 structural brushes
+       16 cluster references
+--- FloodEntities ---
+        4 flooded leafs
+--- FillOutside ---
+       16 solid leafs
+       28 leafs filled
+        4 inside leafs
+--- CullSides ---
+       12 hidden faces culled
+        0 coincident faces culled
+--- ClipSidesIntoTree ---
+--- FaceBSP ---
+        6 faces
+       20 leafs
+--- MakeTreePortals ---
+        0 tiny portals
+        0 bad portals
+--- FilterStructuralBrushesIntoTree ---
+        6 structural brushes
+       22 cluster references
+--- FloodEntities ---
+        4 flooded leafs
+--- FillOutside ---
+       16 solid leafs
+        0 leafs filled
+        4 inside leafs
+--- NumberClusters ---
+        4 visclusters
+        4 visportals
+       16 solidfaces
+--- WritePortalFile ---
+writing /work/input/source_map/x_missing_shader.prt
+--- FloodAreas ---
+        1 areas
+--- AddTriangleModels ---
+--- AddEntitySurfaceModels ---
+--- FilterDetailBrushesIntoTree ---
+        0 detail brushes
+        0 cluster references
+----- FogDrawSurfs -----
+        0 fog polygon fragments
+        0 fog patch fragments
+        0 fogged drawsurfs
+--- SubdivideFaceSurfaces ---
+--- FixTJunctions ---
+       14 axial edge lines
+        0 non-axial edge lines
+        0 degenerate edges
+        0 verts added for T-junctions
+       24 total verts
+        6 naturally ordered
+        0 rotated orders
+        0 can't order
+        0 broken (degenerate) surfaces removed
+--- ClassifyEntitySurfaces ---
+--- TidyEntitySurfaces ---
+        0 empty or malformed surfaces deleted
+--- MakeEntityDecals ---
+ (0)
+        0 decal surfaces
+--- MakeEntityMetaTriangles ---
+0...1...2...3...4...5...6... (0)
+        6 total meta surfaces
+        6 stripped surfaces
+        0 fanned surfaces
+        0 maxarea'd surfaces
+        0 patch meta surfaces
+        8 meta verts
+       12 meta triangles
+--- TidyEntitySurfaces ---
+        6 empty or malformed surfaces deleted
+--- SmoothMetaTriangles ---
+ (0)
+        0 smoothed vertexes
+--- MergeMetaTriangles ---
+0...1...2...3...4...5...6...7...8...9... (0)
+        6 surfaces merged
+       24 vertexes merged
+--- FilterDrawsurfsIntoTree ---
+       20 references
+        7 (7) emitted drawsurfs
+        6 stripped face surfaces
+        0 fanned face surfaces
+        0 maxarea'd face surfaces
+        0 surface models generated
+        0 skybox surfaces generated
+        0 ESurfaceType::Bad surfaces
+        0 ESurfaceType::Face surfaces
+        1 ESurfaceType::Patch surfaces
+        0 ESurfaceType::Triangles surfaces
+        0 ESurfaceType::Flare surfaces
+        0 ESurfaceType::Foliage surfaces
+        0 ESurfaceType::ForcedMeta surfaces
+        6 ESurfaceType::Meta surfaces
+        0 ESurfaceType::Foghull surfaces
+        0 ESurfaceType::Decal surfaces
+        0 ESurfaceType::Shader surfaces
+       30 redundant indexes suppressed, saving 0 Kbytes
+--- FixBrushSides ---
+--- EndModel ---
+        1 bspModels in total
+--- EmitMetaStats ---
+        6 total meta surfaces
+        6 stripped surfaces
+        0 fanned surfaces
+        0 maxarea'd surfaces
+        0 patch meta surfaces
+        0 meta verts
+        0 meta triangles
+        1 light entities stripped
+--- ProcessAdvertisements ---
+        0 in-game advertisements
+--- EndBSPFile ---
+       28 BSP planes
+--- WriteSurfaceExtraFile ---
+Writing /work/input/source_map/x_missing_shader.srf
+Writing /work/input/source_map/x_missing_shader.bsp
+Wrote 0.0 MB (5780 bytes)
+        0 seconds elapsed

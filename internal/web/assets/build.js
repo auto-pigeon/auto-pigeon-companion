@@ -45,7 +45,9 @@
     await refreshPipelines();
     const pipeline = pipelines.find((item) => item.id === body.pipeline);
     if (!pipeline) {
-      return t("The leak-test pipeline is unavailable on this computer. Set up a Quake 1 compiler (qbsp) in Profiles, then review this request again.");
+      return body.game_profile === "quake3"
+        ? t("The Quake III leak-test pipeline is unavailable on this computer. Set up Q3Map2 in Profiles, then review this request again.")
+        : t("The leak-test pipeline is unavailable on this computer. Set up a Quake 1 compiler (qbsp) in Profiles, then review this request again.");
     }
     const name = body.name || body.asset_id;
     $("build-pipeline").value = body.pipeline;
@@ -67,9 +69,37 @@
   // How returning a leak build's result to the editor went, apart from what
   // the compiler found. A delivery that failed is sent again from here; that
   // never compiles anything.
-  function leakVerdict(manifest) {
+  function leakVerdict(manifest, leak) {
     const compile = (manifest.steps || []).find((step) => step.id === "compile");
-    const route = (manifest.outputs || []).some((output) => output.name === "pts" && output.path && !output.missing);
+    // A compiler whose run the Companion reads itself (Q3Map2) comes with its
+    // reading. Three facts stay apart in the sentence: how the process exited,
+    // how the step ended, and what the run says about leaks — a leaked Quake
+    // III map is exit 0, a failed step and a leak, all at once (Q3_018).
+    if (leak?.diagnostic) {
+      const how = t("Q3Map2 exited {code}; the compile step ended as {state}.", {
+        code: compile?.exit_code ?? "—", state: compile?.state || t("not run") });
+      const said = {
+        leak: leak.diagnostic.evidence?.includes("route")
+          ? t("Q3Map2 found a leak in this saved revision and wrote a line file (.lin) with {n} points, running from outside the map to the entity it reached.", { n: leak.diagnostic.route_points })
+          : t("Q3Map2 found a leak in this saved revision, and left no usable line file: there is no route to draw."),
+        no_leak: t("Q3Map2 found no leak in this saved revision. That is a statement about this run, not proof the map is sealed."),
+        no_interior: leak.diagnostic.evidence?.includes("entity_in_solid")
+          ? t("Not tested: every entity Q3Map2 could start from is inside a solid brush, so it flooded nothing. It prints “leaked” for that too; it is not a hole it found.")
+          : t("Not tested: no entity stands in open space, so Q3Map2 flooded nothing. It prints “leaked” for that too; it is not a hole it found."),
+        incomplete: t("No verdict: the run did not get far enough to say whether the map leaks ({why}). Its output says more.", {
+          why: (leak.diagnostic.evidence || []).join(", ") || t("unknown") }),
+      }[leak.diagnostic.outcome] || t("No verdict.");
+      const notes = [];
+      if (leak.diagnostic.evidence?.includes("shader_image_missing")) {
+        notes.push(t("Some shaders had no image or definition Q3Map2 could find; it gave them its default flags, so what counts as solid may differ from the game's."));
+      }
+      if (leak.diagnostic.evidence?.includes("version_unqualified")) {
+        notes.push(t("This Q3Map2 is not the version this reading was measured on (2.5.17n)."));
+      }
+      return [said, how, ...notes].join(" ");
+    }
+    if (leak?.unreadable) return t("This leak test left nothing to read: {why}", { why: leak.unreadable });
+    const route = (manifest.outputs || []).some((output) => output.name === (leak?.pointfile_output || "pts") && output.path && !output.missing);
     if (route) return t("The compiler wrote a leak route (.pts): this run found a leak in this saved revision.");
     if (!compile || compile.skipped || !compile.state) {
       return t("The leak test did not reach the compiler: {why}. That is not a result about leaks.", {
@@ -487,7 +517,7 @@
       inputs,
       label: $("build-label").value.trim() || undefined,
       strict: $("build-strict").checked,
-      leak_request_id: pipeline?.id === "auto-pigeon.q1.leak-test" ? leakRequestID || undefined : undefined,
+      leak_request_id: pipeline?.leak_test ? leakRequestID || undefined : undefined,
     };
   }
 
@@ -811,7 +841,7 @@
     }
     $("build-current-title").textContent =
       `${body.live ? "Building" : "Build"}: ${manifest.label || manifest.pipeline?.name || "this build"} — ${manifest.state}`;
-    if (!body.live && manifest.pipeline?.id === "auto-pigeon.q1.leak-test") {
+    if (!body.live && body.leak_test) {
       const resultButton = el("button", { text: t("Download leak result"), attrs: { type: "button", class: "secondary" } });
       resultButton.addEventListener("click", () => withBusy(resultButton, async () => {
         const response = await api(`/api/v1/leak-test/runs/${encodeURIComponent(manifest.build_id)}/result`);
@@ -828,7 +858,7 @@
       // What the compiler found, then how returning it went, then the file:
       // three things, kept apart (NEW_307W).
       const item = el("li", { className: "leak-outcome", children: [
-        el("p", { className: "leak-verdict", text: leakVerdict(manifest) }), resultButton] });
+        el("p", { className: "leak-verdict", text: leakVerdict(manifest, body.leak_test) }), resultButton] });
       list.append(item);
       renderLeakReturn(manifest, item);
     }

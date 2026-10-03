@@ -296,6 +296,18 @@ type apmapDocument struct {
 	Version    string `json:"apmap_version"`
 }
 
+// APMapGame is the `game` a saved APMap declares for itself: the profile every
+// decision about which compiler may read it is made from (`Q3_018`). It is
+// read from the file's own bytes, which the caller has already checked against
+// the revision's recorded digest.
+func APMapGame(path string) (string, error) {
+	header, err := apmapHeader(path)
+	if err != nil {
+		return "", err
+	}
+	return header.Game, nil
+}
+
 func apmapHeader(path string) (apmapDocument, error) {
 	var header apmapDocument
 	file, err := os.Open(path)

@@ -169,6 +169,9 @@ func (r *Runner) Run(ctx context.Context, request Request) (*Manifest, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := CheckConvertedGames(request, pipelineFamily(entry)); err != nil {
+		return nil, err
+	}
 
 	id, err := NewID(r.options.Now())
 	if err != nil {
@@ -258,6 +261,9 @@ func (r *Runner) Run(ctx context.Context, request Request) (*Manifest, error) {
 			// Cancelled by whoever started it: recorded as exactly that, and
 			// finished now, so nothing later mistakes it for a build the
 			// Companion abandoned by crashing.
+			// What was kept of the cancelled step is published too: its log
+			// is the difference between "stopped" and "said nothing".
+			_ = r.publish(pipeline, layout, wires, manifest)
 			return r.fail(manifest, job.Cancelled, failure.As(failure.Cancelled,
 				fmt.Errorf("cancelled while the %s step was running", resolved.Step.ID)))
 		}
@@ -329,6 +335,9 @@ func (r *Runner) Preview(request Request) (*Manifest, error) {
 	if manifest.Roots, err = checkRoots(request, steps); err != nil {
 		return nil, err
 	}
+	if err = CheckConvertedGames(request, manifest.EngineFamily); err != nil {
+		return nil, err
+	}
 	if stagesGameData(manifest.EngineFamily) {
 		if request, err = r.previewGameData(request, steps); err != nil {
 			return nil, err
@@ -394,6 +403,11 @@ func (r *Runner) Preview(request Request) (*Manifest, error) {
 			step.Outputs = append(step.Outputs, FileRecord{
 				Name: output.Name, Role: output.Role, Path: path, Optional: output.Optional,
 			})
+		}
+		if _, declared := wires[resolved.Step.ID+"."+profile.StepLogOutput]; !declared {
+			wires[resolved.Step.ID+"."+profile.StepLogOutput] = wire{
+				Path: stepLogName(resolved.Step.ID), Role: profile.StepLogRole, Optional: true,
+			}
 		}
 		manifest.Steps = append(manifest.Steps, step)
 	}
@@ -773,6 +787,10 @@ func (r *Runner) runStep(ctx context.Context, request Request, layout layout, re
 		stopped := r.stopJob(submitted.ID)
 		step.State, step.Error = job.Cancelled, "cancelled while this step was running"
 		step.FailureClass = failure.Cancelled
+		// What it had printed when it was stopped is still the record of this
+		// run, and the only one: kept, so "cancelled" can be read apart from
+		// "said nothing".
+		r.collectStepLog(layout, resolved, submitted.ID, wires)
 		if stopped != nil {
 			step.Command, step.ExitCode = stopped.Command, stopped.ExitCode
 			step.StartedAt, step.FinishedAt = stopped.StartedAt, stopped.FinishedAt
@@ -807,6 +825,7 @@ func (r *Runner) runStep(ctx context.Context, request Request, layout layout, re
 	// looks for it.
 	outputs, collectErr := r.collect(layout, resolved, finished, wires)
 	step.Outputs = outputs
+	r.collectStepLog(layout, resolved, finished.ID, wires)
 
 	switch {
 	case finished.State != job.Succeeded:
@@ -884,6 +903,72 @@ func (r *Runner) collect(layout layout, resolved profile.ResolvedStep, finished 
 		})
 	}
 	return records, nil
+}
+
+// CheckConvertedGames refuses a build whose pipeline is for one game and whose
+// converted map source declares another (`Q3_018`).
+//
+// The extractor converts an APMap by the game the APMap names, not by the
+// pipeline that asked: a Quake III document sent to a Quake 1 pipeline came out
+// as Quake III `.map` text and was handed to qbsp. Whatever qbsp then said was
+// recorded as a result. A pipeline that declares no family makes no claim and
+// is not checked.
+func CheckConvertedGames(request Request, family string) error {
+	if family == "" {
+		return nil
+	}
+	names := make([]string, 0, len(request.Conversions))
+	for name := range request.Conversions {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		game := request.Conversions[name].Game
+		if game != "" && game != family {
+			return failure.As(failure.InputInvalid, fmt.Errorf(
+				"the input %q is a %s map and this pipeline is for %s; nothing was run", name, game, family))
+		}
+	}
+	return nil
+}
+
+// stepLogName is the file a step's standard output is kept under in the build.
+func stepLogName(stepID string) string { return stepID + ".stdout.log" }
+
+// collectStepLog copies what a step's program wrote to its standard output
+// into the build directory and offers it as the reserved `<step>.stdout` wire.
+//
+// The source is the job's own stored log: written once, by the executor, when
+// the process ended — on success, on failure, on a timeout and on a cancel —
+// and bounded there. It is never the live buffer a page polls. An action that
+// declares an output named `stdout` itself keeps its own.
+func (r *Runner) collectStepLog(layout layout, resolved profile.ResolvedStep, jobID string, wires map[string]wire) {
+	for _, declared := range resolved.Action.Outputs {
+		if declared.Name == profile.StepLogOutput {
+			return
+		}
+	}
+	reference := resolved.Step.ID + "." + profile.StepLogOutput
+	missing := wire{Role: profile.StepLogRole, Optional: true, Missing: true}
+	raw, err := r.options.Service.Logs(jobID, "stdout", true)
+	if err != nil || len(raw) == 0 {
+		wires[reference] = missing
+		return
+	}
+	destination := filepath.Join(layout.Stage, resolved.Step.ID, profile.StepLogOutput, stepLogName(resolved.Step.ID))
+	if err := os.MkdirAll(filepath.Dir(destination), 0o700); err != nil {
+		wires[reference] = missing
+		return
+	}
+	if err := os.WriteFile(destination, raw, 0o600); err != nil {
+		wires[reference] = missing
+		return
+	}
+	digest := sha256.Sum256(raw)
+	wires[reference] = wire{
+		Path: destination, Role: profile.StepLogRole, Optional: true,
+		SHA256: "sha256:" + hex.EncodeToString(digest[:]), Size: int64(len(raw)),
+	}
 }
 
 // publish copies what the pipeline declared it produces into `output/`.

@@ -178,11 +178,55 @@ registered: yes
 A request shows as a notice above every area of an open Companion window within
 about two seconds, whichever area it is on and without a reload: the map's name,
 its saved revision and when it arrived. The Companion checks that the saved revision
-and content digest still match. **Review leak test** takes the pinned revision and
-the `auto-pigeon.q1.leak-test` pipeline into the Build area; the ordinary preview
-shows the exact command, and only **Build** runs EricW `qbsp -leaktest`.
-**Dismiss** forgets that request and no other. Signed out, the notice says so and
-offers Sign in; a revision that changed since the click is refused by name.
+and content digest still match, and reads **which game the saved map is for** out of
+that pinned revision's own bytes. **Review leak test** takes the pinned revision and
+that game's leak-test pipeline into the Build area; the ordinary preview shows the
+exact command, and only **Build** runs the compiler. **Dismiss** forgets that request
+and no other. Signed out, the notice says so and offers Sign in; a revision that
+changed since the click is refused by name.
+
+| the saved map is | pipeline | what **Build** runs | point file |
+| --- | --- | --- | --- |
+| Quake 1 | `auto-pigeon.q1.leak-test` | EricW `qbsp -leaktest` | `.pts`, from the entity to the outside |
+| Quake III | `auto-pigeon.q3.leak-test` | Q3Map2 `-bsp -leaktest` only — no vis, no light, no package, no engine | `.lin`, from the OUTSIDE to the entity |
+| anything else (Quake II included) | none | nothing: the notice says the game has no leak test here | — |
+
+The game is never taken from the link, from the page or from a toolbar: a link may
+carry a `profile=` hint, and one that disagrees with the saved revision is refused.
+A game with no row is not tested as Quake 1.
+
+```bash
+# What the Companion would run for a saved Quake III map, without running it.
+./companion build preview --pipeline auto-pigeon.q3.leak-test \
+  --input source_map=aub:map/<map id>@<revision id>
+# … q3map2 -bsp -game quake3 -fs_basepath … -fs_homepath <job workspace> -threads 4 -meta -leaktest -v <staged>.map
+```
+
+**A Quake III leak test is read by what Q3Map2 said and left, never by its exit
+status.** Measured on Q3Map2 2.5.17n: a leaked map **exits 0**, prints
+`Entity N, Brush 0: Entity leaked`, writes `<map>.lin` and writes no BSP. So three
+things are recorded apart, and the finished build's line says all three:
+
+| | a leaked Quake III test |
+| --- | --- |
+| how the process exited | `0` |
+| how the compile step ended | `failed` — its BSP is not there |
+| what the run says about leaks | `leak`, with a route |
+
+| Q3Map2 printed and left | reading |
+| --- | --- |
+| `Entity leaked`, a `.lin` | **leak**, with a route |
+| `Entity leaked`, no usable `.lin` | **leak**, without a route |
+| the `leaked` banner, no entity named, no `.lin` | **not tested** — no entity stands in open space (or every one is inside a brush), so nothing was flooded. Q3Map2 prints `leaked` for that too; it is not a hole |
+| the fill, `Writing ….bsp`, the footer, exit 0, the BSP there | **no leak in this run** — not proof the map is sealed |
+| an error it stopped on, a cancelled run, output cut short, another Q3Map2 version's clean run | **no verdict** |
+
+A curved patch or a detail brush across a gap does not seal it, and neither does a
+brush of a nonsolid shader: Q3Map2 tests structural brushes. A shader it could not
+find gets its default flags, and the result says so rather than guessing. Everything
+Q3Map2 printed is kept with the build as `compile_log` however the step ended, and
+the `.lin` is collected from the job's own fresh directory — never from beside your
+map. `companion build pipelines` lists both leak tests.
 
 A leaking map can make qbsp exit with failure and still produce a useful pointfile
 and log. The finished build says three things apart: what the compiler found (a
@@ -233,7 +277,12 @@ curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
 
 Set `BUILD_ID` to the finished leak-test build ID. The URL and token files are
 created by the Companion. The JSON records the pinned map identity and artifact
-hashes; it is a local result file, not a signed attestation.
+hashes; it is a local result file, not a signed attestation. A Quake 1 result is
+`aucom.leak-result/1.0`, unchanged. A Quake III result is `aucom.leak-result/1.1`:
+it also names `game_profile`, `compiler`, `pointfile_format` and
+`pointfile_direction`, keeps `content_sha256` (the saved revision) apart from
+`compiler_source_sha256` (the converted `.map` Q3Map2 read), and carries
+`diagnostic` — the reading above, with its evidence. The BSP is never in it.
 
 **Watching a build.** In **Jobs**, a job's name is a link to its page. While a
 compiler runs, its page and the **Activity** drawer show what it has printed so

@@ -45,6 +45,15 @@
     return Number.isNaN(date.getTime()) ? "" : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   }
 
+  // The two names a reader sees for what the server calls a game and a
+  // compiler. An id this page has no name for is shown as it is.
+  function gameName(id) {
+    return { quake1: t("Quake 1"), quake2: t("Quake II"), quake3: t("Quake III") }[id] || id || t("unknown game");
+  }
+  function compilerName(id) {
+    return { "ericw-qbsp": "qbsp (EricW)", q3map2: "Q3Map2" }[id] || id || t("the compiler");
+  }
+
   function button(text, kind, onClick) {
     const control = el("button", { text, attrs: { type: "button", class: kind } });
     control.addEventListener("click", () => withBusy(control, onClick));
@@ -80,11 +89,18 @@
           ? t("This account cannot read that map: {why}. Check that the Companion is signed in to the same server and account as the editor.", { why: details.body.error })
           : t("The saved revision could not be checked: {why}", { why: details.body.error || t("the account server did not answer") });
       if (details.status !== 409) actions.append(button(t("Retry"), "secondary", async () => resolve(true)));
+    } else if (details.body.unsupported) {
+      // Not a Quake 1 test by default, and not a Retry: the game has no leak
+      // test here, and nothing was run (Q3_018).
+      state.className = "leak-request__state message error";
+      state.textContent = t("This saved revision is a {game} map. The Companion has a leak test for {list} only, so nothing was run and nothing will be.", {
+        game: gameName(details.body.game_profile), list: (details.body.supported_profiles || []).map(gameName).join(", ") });
     } else if (reviewing === seen.request_id) {
       state.textContent = t("In review. The Build area shows the exact command; nothing runs until you press Build.");
       actions.append(button(t("Go to the review"), "secondary", async () => window.AUCOM.showArea("build")));
     } else {
-      state.textContent = t("Its content still matches what the editor asked about. Review the compiler command first; nothing runs until you press Build.");
+      state.textContent = t("Its content still matches what the editor asked about. It is a {game} map, so the test is {compiler}'s. Review the compiler command first; nothing runs until you press Build.", {
+        game: gameName(details.body.game_profile), compiler: compilerName(details.body.compiler) });
       actions.append(button(t("Review leak test"), "primary", review));
     }
     actions.prepend(dismiss);

@@ -173,6 +173,19 @@ func (p *PipelineProfile) Validate() error {
 	return c.problems.ErrorOrNil()
 }
 
+// StepLogOutput is the reserved output every step has without declaring it: the
+// text the step's program wrote to its standard output, as the executor stored
+// it when the process ended — however it ended (`Q3_018`).
+//
+// A pipeline wires it like any other artifact, `"from": "compile.stdout"`, with
+// the role [StepLogRole]. It exists because not every compiler writes a log
+// file: EricW's qbsp does and declares it; Q3Map2 prints and writes none, and
+// the only record of what it said about a leak is this.
+const (
+	StepLogOutput = "stdout"
+	StepLogRole   = "aucom.step.stdout"
+)
+
 // checkWire validates one `pipeline.<input>` or `<step>.<output>` reference.
 //
 // `produced` holds the steps whose outputs are visible at this point. `self` is
@@ -256,6 +269,10 @@ func (p *PipelineProfile) Resolve(r Resolver) ([]ResolvedStep, error) {
 				}
 				resolveStepInputs(c, step, action, available)
 				resolveStepOptions(c, step, action)
+				// Every step's own output text is an artifact too, under a
+				// reserved name. Declared first, so an action that names an
+				// output `stdout` itself keeps its own.
+				available[step.ID+"."+StepLogOutput] = StepLogRole
 				for _, o := range action.Outputs {
 					available[step.ID+"."+o.Name] = o.Role
 				}

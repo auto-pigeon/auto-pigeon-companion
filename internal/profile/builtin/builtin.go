@@ -121,6 +121,10 @@ const (
 	// The two Q3 pipelines, for the same reason there are two Q2 ones.
 	Q3FastPreview = "auto-pigeon.q3.fast-preview"
 	Q3Normal      = "auto-pigeon.q3.normal"
+	// Q3LeakTest is Q1LeakTest's counterpart and, like it, not a build: the
+	// BSP stage alone with the leak test on. It publishes the `.lin` line file
+	// and what Q3Map2 printed (`Q3_018`).
+	Q3LeakTest = "auto-pigeon.q3.leak-test"
 
 	// The curated Quake 1 engines. Each is one upstream project, and the id is
 	// the name that project calls itself.
@@ -166,7 +170,7 @@ var Q1Pipelines = []string{Q1FastPreview, Q1Normal, Q1Final}
 // DiagnosticPipelines answer a question about a map rather than build it: one
 // step, no playable output. Listed apart so "every build pipeline is compile,
 // vis, light" stays a statement about builds.
-var DiagnosticPipelines = []string{Q1LeakTest}
+var DiagnosticPipelines = []string{Q1LeakTest, Q3LeakTest}
 
 // Q2Engines is every curated Quake II engine profile this build ships, in the
 // order they are listed. Yamagi first because it is the one the Quake II path
