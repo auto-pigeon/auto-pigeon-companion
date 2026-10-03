@@ -43,6 +43,10 @@ import (
 type scratchDocument struct {
 	// Kind is tool, pipeline or engine.
 	Kind string `json:"kind"`
+	// BasedOn is the tested profile the fields were filled from (scratchfill.go),
+	// empty for one written from nothing. It decides nothing the fields say:
+	// it only keeps what the form has no field for.
+	BasedOn string `json:"based_on,omitempty"`
 	// GameFamily is optional for a tool or pipeline and required for an engine.
 	GameFamily string `json:"game_family,omitempty"`
 	GameSlug   string `json:"game_slug,omitempty"`
@@ -379,6 +383,7 @@ func scratchActions(list []scratchAction, engine bool) ([]any, error) {
 //	-fast [if fast]             only when the boolean option `fast` is true
 //	-level [if fast=false]      only when option `fast` equals `false`
 //	-wadpath [if folder content_root]   only when that optional folder is set
+//	-wad [if input wad]         only when the person supplied that input
 //
 // Nothing is split on spaces: one line is one argv element, which is what
 // keeps a path with a space in it one argument and keeps a shell out of it.
@@ -397,6 +402,9 @@ func scratchArg(line string) (any, error) {
 	condition = strings.TrimSuffix(condition, "]")
 	if role, isFolder := strings.CutPrefix(strings.TrimSpace(condition), "folder "); isFolder {
 		return map[string]any{"value": strings.TrimSpace(value), "when": map[string]any{"root": strings.TrimSpace(role)}}, nil
+	}
+	if name, isInput := strings.CutPrefix(strings.TrimSpace(condition), "input "); isInput {
+		return map[string]any{"value": strings.TrimSpace(value), "when": map[string]any{"input": strings.TrimSpace(name)}}, nil
 	}
 	option, equals, hasValue := strings.Cut(condition, "=")
 	when := map[string]any{"option": strings.TrimSpace(option)}

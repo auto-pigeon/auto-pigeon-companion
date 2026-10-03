@@ -55,24 +55,26 @@ import (
 
 func (s *Server) profileAPI() map[string]http.HandlerFunc {
 	return map[string]http.HandlerFunc{
-		"GET /api/v1/profiles":                 s.handleProfileList,
-		"GET /api/v1/profiles/templates":       s.handleProfileTemplates,
-		"GET /api/v1/profiles/{id}":            s.handleProfileGet,
-		"GET /api/v1/profiles/{id}/document":   s.handleProfileDocument,
-		"POST /api/v1/profiles/validate":       s.handleProfileValidate,
-		"POST /api/v1/profiles/compose":        s.handleProfileCompose,
-		"POST /api/v1/profiles/diff":           s.handleProfileDiff,
-		"POST /api/v1/profiles/import":         s.handleProfileImport,
-		"POST /api/v1/profiles/{id}/bind":      s.handleProfileBind,
-		"POST /api/v1/profiles/{id}/unbind":    s.handleProfileUnbind,
-		"POST /api/v1/profiles/{id}/grant":     s.handleProfileGrant,
-		"POST /api/v1/profiles/{id}/withdraw":  s.handleProfileWithdraw,
-		"POST /api/v1/profiles/{id}/remove":    s.handleProfileRemove,
-		"POST /api/v1/profiles/{id}/homepage":  s.handleProfileHomepage,
-		"POST /api/v1/profiles/{id}/arguments": s.handleProfileArguments,
+		"GET /api/v1/profiles":           s.handleProfileList,
+		"GET /api/v1/profiles/templates": s.handleProfileTemplates,
+		// A tested profile as the one form's fields (scratchfill.go).
+		"GET /api/v1/profiles/templates/{id}/scratch": s.handleProfileTemplateScratch,
+		"GET /api/v1/profiles/{id}":                   s.handleProfileGet,
+		"GET /api/v1/profiles/{id}/document":          s.handleProfileDocument,
+		"POST /api/v1/profiles/validate":              s.handleProfileValidate,
+		"POST /api/v1/profiles/compose":               s.handleProfileCompose,
+		"POST /api/v1/profiles/diff":                  s.handleProfileDiff,
+		"POST /api/v1/profiles/import":                s.handleProfileImport,
+		"POST /api/v1/profiles/{id}/bind":             s.handleProfileBind,
+		"POST /api/v1/profiles/{id}/unbind":           s.handleProfileUnbind,
+		"POST /api/v1/profiles/{id}/grant":            s.handleProfileGrant,
+		"POST /api/v1/profiles/{id}/withdraw":         s.handleProfileWithdraw,
+		"POST /api/v1/profiles/{id}/remove":           s.handleProfileRemove,
+		"POST /api/v1/profiles/{id}/homepage":         s.handleProfileHomepage,
+		"POST /api/v1/profiles/{id}/arguments":        s.handleProfileArguments,
 		// A pipeline's own parameters, per stage (arguments.go).
 		"POST /api/v1/profiles/{id}/stage-arguments": s.handleProfileStageArguments,
-		"GET /api/v1/profiles/{id}/commands":   s.handleProfileCommands,
+		"GET /api/v1/profiles/{id}/commands":         s.handleProfileCommands,
 	}
 }
 
@@ -401,7 +403,17 @@ func (s *Server) composeBase(request composeRequest) (map[string]any, string, er
 		if err != nil {
 			return nil, "", err
 		}
-		return tree, "", nil
+		// Filled from a tested profile: keep what the form has no field for.
+		if err := applyBasedOn(tree, request.Scratch.BasedOn); err != nil {
+			return nil, "", err
+		}
+		// A licence somebody changed is not the tested profile's licence: its
+		// notice, its URL and its source offer do not come along.
+		if license, ok := tree["license"].(map[string]any); ok && request.LicenseSPDX != "" &&
+			request.Scratch.BasedOn != "" && request.LicenseSPDX != text(license, "spdx") {
+			tree["license"] = map[string]any{"spdx": request.LicenseSPDX, "name": orDefault(request.LicenseName, request.LicenseSPDX)}
+		}
+		return tree, strings.TrimSpace(request.Scratch.BasedOn), nil
 	}
 	if request.Template == "" {
 		return nil, "", errors.New(

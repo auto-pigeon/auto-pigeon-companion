@@ -338,53 +338,134 @@
     detail.append(box);
   }
 
-  // --- your own arguments (NEW_265) ----------------------------------------
+  // --- your own arguments -----------------------------------------------------
   //
-  // One list of argv tokens per program, each box one argument exactly as
-  // typed. Nothing is split, quoted or passed through a shell: the Companion
-  // hands each box to the program as one argument, which is why a Windows
-  // path with spaces is one box and not several. The profile document is not
-  // changed; the tokens live with this machine's setup and survive a restart,
-  // a re-import and an update of the profile.
+  // Parameters belong to a PIPELINE's stages (operator, 2026-10-03): "in build
+  // tools you set up the paths and metadata of tools, in pipelines you pick a
+  // tool and add the parameters". So:
+  //
+  //   - a pipeline shows every stage with the tool that runs it here and one
+  //     list of argv tokens for that stage alone — the same tool twice in one
+  //     pipeline gets two lists;
+  //   - a build tool shows its commands and takes no tokens. Ones recorded on
+  //     it before this still apply, are shown, and can only be removed;
+  //   - an engine is not a stage of anything and keeps its own (NEW_265).
+  //
+  // Each box is one argument exactly as typed. Nothing is split, quoted or
+  // passed through a shell, which is why a Windows path with spaces is one box.
+  // The profile document is not changed; the tokens live with this machine's
+  // setup and survive a restart, a re-import and an update of the profile.
   function renderArguments(detail, body) {
+    if (body.kind === "pipeline") { renderStageArguments(detail, body); return; }
     const executables = executableNames(body);
     if (executables.length === 0) return;
-    const section = el("div", { className: "profile-arguments", attrs: { id: "profile-arguments" } });
-    section.append(el("h4", { text: t("Your own arguments") }));
-    section.append(el("p", {
-      className: "muted",
-      text: t("Extra words added to every command that runs one program, before its input files — for a flag this profile does not offer as an option. Each box is one argument exactly as you type it; nothing splits or quotes it. Only that program gets them: qbsp's arguments never reach vis or light."),
-    }));
+    const tool = body.kind === "tool";
     const saved = body.binding?.arguments || {};
+    const section = el("div", { className: "profile-arguments", attrs: { id: "profile-arguments" } });
     const previews = el("div", { className: "profile-arguments__previews" });
-
-    for (const executable of executables) {
-      section.append(argumentsEditor(body, executable, saved[executable.name] || [], previews));
+    if (tool) {
+      section.append(el("h4", { text: t("Parameters are set in pipelines") }));
+      section.append(el("p", {
+        className: "muted",
+        text: t("A build tool says where its programs are and what they can do. What each one is run with is set on the stage of the pipeline that runs it: open a pipeline in Profiles and add the arguments to its stage, or write a pipeline of your own with New profile."),
+      }));
+      const older = executables.filter((executable) => (saved[executable.name] || []).length > 0);
+      if (older.length > 0) {
+        section.append(el("p", {
+          className: "message",
+          text: t("Arguments recorded on this tool earlier still reach every pipeline that runs it. They can be removed here; new ones go on a pipeline's stage."),
+        }));
+        for (const executable of older) {
+          section.append(argumentsEditor({
+            profile: body, legend: `${executable.title || executable.name} (${executable.name})`, name: executable.name,
+            tokens: saved[executable.name], route: "arguments", key: "executable",
+            read: (out) => out.binding?.arguments?.[executable.name] || [], removeOnly: true, previews,
+          }));
+        }
+      }
+    } else {
+      section.append(el("h4", { text: t("Your own arguments") }));
+      section.append(el("p", {
+        className: "muted",
+        text: t("Extra words added to every command that runs one program, before its input files — for a flag this profile does not offer as an option. Each box is one argument exactly as you type it; nothing splits or quotes it. Only that program gets them."),
+      }));
+      for (const executable of executables) {
+        section.append(argumentsEditor({
+          profile: body, legend: `${executable.title || executable.name} (${executable.name})`, name: executable.name,
+          tokens: saved[executable.name] || [], route: "arguments", key: "executable",
+          read: (out) => out.binding?.arguments?.[executable.name] || [], previews,
+        }));
+      }
     }
     section.append(el("h5", { text: t("The commands, as they will run") }));
     section.append(el("p", {
       className: "muted small",
-      text: t("Your own arguments are highlighted. Parts in angle brackets are filled in when a job runs — its folder, its input files, the map."),
+      text: tool
+        ? t("Each program as this tool declares it. A pipeline's stage adds its own arguments before the input files. Parts in angle brackets are filled in when a job runs — its folder, its input files, the map.")
+        : t("Your own arguments are highlighted. Parts in angle brackets are filled in when a job runs — its folder, its input files, the map."),
     }));
     section.append(previews);
     detail.append(section);
     refreshPreviews(body.id, previews);
   }
 
-  function argumentsEditor(body, executable, tokens, previews) {
-    const id = "profile-args-" + executable.name;
+  // A pipeline's stages: which tool runs each one here, and that stage's own
+  // arguments.
+  function renderStageArguments(detail, body) {
+    const stages = body.stages || [];
+    if (stages.length === 0) return;
+    const section = el("div", { className: "profile-arguments", attrs: { id: "profile-arguments" } });
+    section.append(el("h4", { text: t("Stages and their parameters") }));
+    section.append(el("p", {
+      className: "muted",
+      text: t("Each stage is run by one tool. Add arguments for a stage here — a flag the tool does not offer as an option. Each box is one argument exactly as you type it; nothing splits or quotes it. They belong to this stage of this pipeline only: another pipeline using the same tool does not get them, and the same tool twice in one pipeline gets two lists. The Build area's last step shows the exact command before anything runs."),
+    }));
+    for (const stage of stages) {
+      const tool = stage.tool;
+      const legend = `${stage.title || stage.id} (${stage.id})`;
+      const notes = [el("p", {
+        className: "muted small",
+        text: tool
+          ? t("Run by {tool}: {action} — the program {program}.", { tool: tool.profile_name, action: tool.action_title || tool.action_id, program: tool.executable })
+          : t("No installed tool provides {capability} yet, so this stage cannot run here. Its arguments can still be set.", { capability: stage.capability }),
+      })];
+      const set = Object.entries(stage.options || {});
+      if (set.length > 0) {
+        notes.push(el("p", { className: "muted small", text: t("The pipeline itself sets: {options}.", { options: set.map(([name, value]) => `${name} = ${value}`).join(", ") }) }));
+      }
+      if ((stage.tool_arguments || []).length > 0) {
+        notes.push(el("p", {
+          className: "message",
+          text: t("{tool} also has arguments of its own recorded earlier, which reach this stage first: {tokens}. Remove them on the tool's page to keep everything here.", { tool: tool?.profile_name || "", tokens: stage.tool_arguments.join(" ") }),
+        }));
+      }
+      section.append(argumentsEditor({
+        profile: body, legend, name: stage.id, tokens: stage.arguments || [], route: "stage-arguments", key: "stage",
+        read: (out) => (out.stages || []).find((item) => item.id === stage.id)?.arguments || [], notes, stage: true,
+      }));
+    }
+    detail.append(section);
+  }
+
+  // One list of argument tokens with Add, Save and Reset. `route` and `key`
+  // say whose they are (a program of a profile, or a stage of a pipeline);
+  // `removeOnly` is a build tool's older tokens, which can only be taken away.
+  function argumentsEditor({ profile: body, legend, name, tokens, route, key, read, previews, notes = [], removeOnly = false, stage = false }) {
+    const id = (stage ? "profile-stage-args-" : "profile-args-") + name;
     const fieldset = el("fieldset", { className: "args-editor", attrs: { id } });
-    fieldset.append(el("legend", { text: `${executable.title || executable.name} (${executable.name})` }));
-    const list = el("ol", { className: "args-editor__list", attrs: { "aria-label": t("Arguments for {program}", { program: executable.name }) } });
+    fieldset.append(el("legend", { text: legend }));
+    for (const note of notes) fieldset.append(note);
+    const list = el("ol", { className: "args-editor__list", attrs: { "aria-label": t("Arguments for {program}", { program: name }) } });
     const status = el("p", { className: "message", attrs: { role: "status" } });
 
     const addRow = (value = "") => {
       const input = el("input", {
-        attrs: { type: "text", spellcheck: "false", autocomplete: "off", "aria-label": t("Argument"), "data-args-for": executable.name },
+        attrs: { type: "text", spellcheck: "false", autocomplete: "off", "aria-label": t("Argument"), "data-args-for": name },
       });
       input.value = value;
+      if (removeOnly) input.readOnly = true;
       const remove = el("button", { text: t("Remove"), attrs: { type: "button", class: "secondary" } });
-      const row = el("li", { className: "args-editor__row", children: [input, remove] });
+      const row = el("li", { className: "args-editor__row", children: removeOnly ? [input] : [input, remove] });
       remove.addEventListener("click", () => {
         const next = row.nextElementSibling?.querySelector("input") || row.previousElementSibling?.querySelector("input");
         row.remove();
@@ -398,35 +479,35 @@
     const add = el("button", { text: t("Add argument"), attrs: { type: "button", class: "secondary" } });
     add.addEventListener("click", () => addRow("").focus());
     const save = el("button", { text: t("Save arguments"), attrs: { type: "button", class: "primary" } });
-    const reset = el("button", { text: t("Reset to default"), attrs: { type: "button" } });
+    const reset = el("button", { text: removeOnly ? t("Remove these arguments") : t("Reset to default"), attrs: { type: "button" } });
 
     const send = (payload, done) =>
-      withBusy(save, async () => {
-        const { ok, body: out } = await api(`/api/v1/profiles/${encodeURIComponent(body.id)}/arguments`, {
-          method: "POST", body: { executable: executable.name, ...payload },
+      withBusy(removeOnly ? reset : save, async () => {
+        const { ok, body: out } = await api(`/api/v1/profiles/${encodeURIComponent(body.id)}/${route}`, {
+          method: "POST", body: { [key]: name, ...payload },
         });
         if (!ok) {
           setMessage(status, out.error || t("The arguments could not be saved."), "error");
           return;
         }
-        const now = out.binding?.arguments?.[executable.name] || [];
+        const now = read(out);
         list.replaceChildren();
         for (const token of now) addRow(token);
         setMessage(status, done(now), "ok");
-        record(`${executable.name}: ${now.length ? now.join(" ") : "no arguments of your own"}`, body.name, "ok");
-        renderPreviewItems(previews, out.commands || []);
+        record(`${name}: ${now.length ? now.join(" ") : "no arguments of your own"}`, body.name, "ok");
+        if (previews) renderPreviewItems(previews, out.commands || []);
       });
 
     save.addEventListener("click", () => {
       const values = [...list.querySelectorAll("input")].map((input) => input.value);
       send({ arguments: values }, (now) => now.length
-        ? t("Saved. {program} now gets {n} argument(s) of your own; it survives a restart.", { program: executable.name, n: now.length })
-        : t("Saved. {program} gets only the profile's own arguments.", { program: executable.name }));
+        ? t("Saved. {program} now gets {n} argument(s) of your own; it survives a restart.", { program: name, n: now.length })
+        : t("Saved. {program} gets only the profile's own arguments.", { program: name }));
     });
     reset.addEventListener("click", () => send({ reset: true }, () =>
-      t("Reset. {program} runs with the profile's own arguments only.", { program: executable.name })));
+      t("Reset. {program} runs with the profile's own arguments only.", { program: name })));
 
-    fieldset.append(list, el("div", { className: "row-actions", children: [add, reset, save] }), status);
+    fieldset.append(list, el("div", { className: "row-actions", children: removeOnly ? [reset] : [add, reset, save] }), status);
     return fieldset;
   }
 
@@ -674,121 +755,107 @@
     }
     $("wizard-back").disabled = step === 1;
     $("wizard-next").disabled = step === 4;
-    $("wizard-engine-fields").hidden = $("wizard-kind").value !== "engine";
+    const kind = $("wizard-kind").value;
+    $("wizard-engine-fields").hidden = kind !== "engine";
+    $("wizard-tool-fields").hidden = kind !== "tool";
+    $("wizard-homepage-field").hidden = kind === "pipeline";
+    $("wizard-step-3-title").textContent = kind === "pipeline" ? "Stages and their parameters" : "Programs and actions";
+    $("wizard-step-3-note").textContent = kind === "pipeline"
+      ? "A pipeline is where parameters are set. Add as many stages as you need, in the order they run; each one picks a tool, says where its inputs come from and carries its own parameters and arguments. The same tool may be a stage more than once."
+      : kind === "tool"
+        ? "A build tool says where its programs are and what each one can do. What they are run with is set in the pipelines that use them."
+        : "The engine's programs, and what each action starts.";
+    if (step === 3) window.AUCOM.scratch.render();
   }
 
   // pinnedTemplate is the template a `#new-profile/<id>` link asked for.
   let pinnedTemplate = "";
 
+  // The starting points for the kind being described: From scratch first and
+  // by default, then every tested profile of that kind (operator, 2026-10-03).
   async function refreshTemplates() {
     const kind = $("wizard-kind").value;
     const { ok, body } = await api("/api/v1/profiles/templates?kind=" + encodeURIComponent(kind));
     const select = $("wizard-template");
     select.replaceChildren();
+    select.append(el("option", { text: "From scratch", attrs: { value: "" } }));
     if (!ok) {
       setMessage("wizard-message", body.error, "error");
-      return;
+      templates = [];
+    } else {
+      templates = body.items || [];
     }
-    templates = body.items || [];
     for (const template of templates) {
       select.append(el("option", { text: `${template.name} — ${template.summary}`, attrs: { value: template.id } }));
     }
-    if (pinnedTemplate && templates.some((template) => template.id === pinnedTemplate)) select.value = pinnedTemplate;
-    describeTemplate();
+    select.value = pinnedTemplate && templates.some((template) => template.id === pinnedTemplate) ? pinnedTemplate : "";
+    await applyTemplate();
   }
 
   function currentTemplate() {
     return templates.find((template) => template.id === $("wizard-template").value);
   }
 
-  function describeTemplate() {
-    const template = currentTemplate();
-    if (!template) {
-      $("wizard-template-note").textContent = "No template of that kind is built in.";
-      return;
-    }
-    $("wizard-template-note").textContent =
-      `Version ${template.version}` + (template.summary ? ` · ${template.summary}` : "");
-    renderTemplateFields(template);
+  // The identity fields a starting point fills. What it filled follows the
+  // next starting point chosen; what the person typed is theirs and is kept.
+  const IDENTITY = {
+    "wizard-name": "name", "wizard-version": "version", "wizard-summary": "summary",
+    "wizard-publisher": "publisher_name", "wizard-license": "license_spdx", "wizard-homepage": "homepage",
+    "wizard-runtime": "runtime", "wizard-engine-version": "engine_version",
+  };
+
+  function offer(id, value) {
+    const field = $(id);
+    if (field.value && field.value !== field.dataset.offered) return;
+    field.value = value || "";
+    field.dataset.offered = field.value;
   }
 
-  function renderTemplateFields(template) {
-    const executables = $("wizard-executables");
-    executables.replaceChildren();
-    for (const executable of template.executables || []) {
-      const id = "wizard-exe-" + executable.name;
-      executables.append(
-        el("div", {
-          className: "field grow",
-          children: [
-            el("label", { text: `File name for "${executable.title || executable.name}"`, attrs: { for: id } }),
-            el("input", { attrs: { id, type: "text", value: executable.file, spellcheck: "false" } }),
-            el("span", {
-              className: "hint",
-              text: "The name of the program on disk. {platform.exe_suffix} becomes .exe on Windows and nothing elsewhere.",
-            }),
-          ],
-        })
-      );
+  // applyTemplate fills EVERY step's fields from the chosen starting point —
+  // identity, programs, actions, stages — or empties them for From scratch.
+  async function applyTemplate() {
+    const kind = $("wizard-kind").value;
+    const template = currentTemplate();
+    const scratch = window.AUCOM.scratch;
+    if (!template) {
+      scratch.clear(kind);
+      for (const id of Object.keys(IDENTITY)) offer(id, "");
+      $("wizard-template-note").textContent =
+        "Nothing is filled in: you write every field. Choose a tested profile above to have all of them filled, and change what is different about yours.";
+      scratch.render();
+      return;
     }
-    const actions = $("wizard-actions");
-    actions.replaceChildren();
-    for (const action of template.actions || []) {
-      const id = "wizard-action-" + action;
-      const label = el("label", { className: "check" });
-      const box = el("input", { attrs: { type: "checkbox", id, value: action, checked: "checked" } });
-      label.append(box);
-      label.append(document.createTextNode(" " + action));
-      actions.append(label);
+    const { ok, body } = await api(`/api/v1/profiles/templates/${encodeURIComponent(template.id)}/scratch`);
+    if (!ok) {
+      setMessage("wizard-message", body.error || "that profile could not be read", "error");
+      return;
     }
-    if (!$("wizard-runtime").value && template.runtime) $("wizard-runtime").value = template.runtime;
-    // A profile made from a template usually describes the same program, so
-    // its homepage is offered, and follows the template while it is still the
-    // offered one. What the person typed is theirs and is kept.
-    const homepage = $("wizard-homepage");
-    if (!homepage.value || homepage.value === homepage.dataset.offered) {
-      homepage.value = template.homepage || "";
-      homepage.dataset.offered = homepage.value;
-    }
-    if (!$("wizard-engine-version").value && template.engine_version) {
-      $("wizard-engine-version").value = template.engine_version;
-    }
+    scratch.fill(body.scratch);
+    for (const [id, key] of Object.entries(IDENTITY)) offer(id, body.identity?.[key]);
+    $("wizard-template-note").textContent =
+      `Filled in from ${template.name} ${template.version}` + (template.summary ? ` — ${template.summary}` : "") +
+      ". Every field in the next steps is yours to change, add to or remove; what the form has no field for is kept as tested.";
+    scratch.render();
   }
 
   function composeRequest(fromDocument) {
-    const template = currentTemplate();
-    const executables = {};
-    for (const executable of template?.executables || []) {
-      const value = $("wizard-exe-" + executable.name)?.value.trim();
-      if (value) executables[executable.name] = value;
-    }
-    const actions = [...$("wizard-actions").querySelectorAll("input[type=checkbox]")]
-      .filter((box) => box.checked)
-      .map((box) => box.value);
-
-    const request = {
-      template: $("wizard-template").value,
-      name: $("wizard-name").value.trim() || undefined,
-      version: $("wizard-version").value.trim() || undefined,
-      summary: $("wizard-summary").value.trim() || undefined,
-      publisher_name: $("wizard-publisher").value.trim() || undefined,
-      license_spdx: $("wizard-license").value.trim() || undefined,
-      homepage: $("wizard-homepage").value.trim() || undefined,
-      executables: Object.keys(executables).length ? executables : undefined,
-      actions: actions.length ? actions : undefined,
-    };
-    if ($("wizard-kind").value === "engine") {
-      request.runtime = $("wizard-runtime").value.trim() || undefined;
-      request.engine_version = $("wizard-engine-version").value.trim() || undefined;
-    }
     if (fromDocument) {
-      request.document = fromDocument;
       // Editing a document the user pasted: the form fields are not applied on
       // top of it, because they belong to a different document and would
       // silently rewrite what somebody pasted.
-      for (const key of Object.keys(request)) {
-        if (key !== "document" && key !== "template") delete request[key];
-      }
+      return { document: fromDocument, template: $("wizard-template").value };
+    }
+    const kind = $("wizard-kind").value;
+    const value = (id) => $(id).value.trim() || undefined;
+    const request = {
+      scratch: window.AUCOM.scratch.request(),
+      name: value("wizard-name"), version: value("wizard-version"), summary: value("wizard-summary"),
+      publisher_name: value("wizard-publisher"), license_spdx: value("wizard-license"),
+    };
+    if (kind !== "pipeline") request.homepage = value("wizard-homepage");
+    if (kind === "engine") {
+      request.runtime = value("wizard-runtime");
+      request.engine_version = value("wizard-engine-version");
     }
     return request;
   }
@@ -834,12 +901,12 @@
     );
 
     if (body.diff && !body.diff.empty) {
-      review.append(el("h4", { text: "What you changed from the template" }));
+      review.append(el("h4", { text: "What you changed from the tested profile" }));
       if (body.diff.escalates) {
         review.append(
           el("p", {
             className: "message error",
-            text: "This asks for more than the template did.",
+            text: "This asks for more than the tested profile did.",
           })
         );
       }
@@ -856,11 +923,11 @@
     }
   }
 
-  $("wizard-kind").addEventListener("change", () => {
-    refreshTemplates();
+  $("wizard-kind").addEventListener("change", async () => {
+    await refreshTemplates();
     setStep(step);
   });
-  $("wizard-template").addEventListener("change", describeTemplate);
+  $("wizard-template").addEventListener("change", (event) => withBusy(event.currentTarget, applyTemplate));
   $("wizard-back").addEventListener("click", () => setStep(step - 1));
   $("wizard-next").addEventListener("click", async (event) => {
     if (step === 3) {
@@ -962,6 +1029,16 @@
         "ok"
       );
       record(`Installed the profile ${body.name || ""}`.trim(), "", "ok");
+      // A pipeline's stage arguments are this machine's setup of it, not part
+      // of the document: recorded now that there is a profile to record them
+      // against. A stage whose tokens are refused says so and loses nothing
+      // else — the profile is installed either way.
+      if (composed?.id === body.id) {
+        for (const item of window.AUCOM.scratch.stageTokens()) {
+          const saved = await api(`/api/v1/profiles/${encodeURIComponent(body.id)}/stage-arguments`, { method: "POST", body: item });
+          if (!saved.ok) record(`The arguments of stage ${item.stage} were not saved`, saved.body.error || "", "failed");
+        }
+      }
       await window.AUCOM.openInstalledProfile(body.id);
     })
   );
@@ -1003,24 +1080,27 @@
     window.open(window.location.pathname + "?view=new-profile#new-profile", "_blank", "noopener");
   });
 
+  let creatorFor = null; // the starting point the form was last opened on
   window.AUCOM.areas["new-profile"] = {
-    // `#new-profile/<template id>` opens the creator on that template — the
-    // "Make your own copy" of a built-in profile's page.
+    // `#new-profile/<template id>` opens the creator filled in from that
+    // tested profile — the "Make your own copy" of a built-in profile's page.
+    // Opened again on the same starting point it keeps what was typed.
     async refresh(argument) {
       pinnedTemplate = argument ? decodeURIComponent(argument) : "";
-      if (pinnedTemplate) {
-        const kind = pinnedTemplate.includes(".engine.") ? "engine" : "tool";
-        if ($("wizard-kind").value !== kind) {
-          // Through the same change a person makes, so the kind tabs redraw;
-          // refreshTemplates honours the pinned template.
-          $("wizard-kind").value = kind;
-          $("wizard-kind").dispatchEvent(new Event("change", { bubbles: true }));
-          templates = [];
-        }
+      // Which tools are installed decides what a pipeline stage can pick.
+      await window.AUCOM.scratch.refresh();
+      if (creatorFor === pinnedTemplate) {
+        setStep(step);
+        return;
       }
-      if (templates.length === 0) await refreshTemplates();
-      setStep(step);
-      await window.AUCOM.scratch?.refresh?.();
+      creatorFor = pinnedTemplate;
+      if (pinnedTemplate) {
+        const { ok, body } = await api("/api/v1/profiles/templates");
+        const found = ok ? (body.items || []).find((item) => item.id === pinnedTemplate) : null;
+        if (found) $("wizard-kind").value = found.kind;
+      }
+      await refreshTemplates();
+      setStep(pinnedTemplate ? 1 : step);
     },
   };
 

@@ -226,7 +226,28 @@ func TestStageArgumentsAreValidatedPerStageResettableAndSurviveARestart(t *testi
 		t.Fatalf("the stage is described as %v", stage)
 	}
 
-	// The exact command a person reviews carries them, before the operands.
+	// The exact command a person reviews carries them, before the operands:
+	// the Build area's preview is the argv that will start.
+	m.signIn()
+	assetRef := "aub:" + m.backend.asset.assetType + "/" + m.backend.asset.assetID +
+		"@" + m.backend.asset.revisionID + "#" + m.backend.asset.fileName
+	status, preview := m.call(http.MethodPost, "/api/v1/build/preview", map[string]any{
+		"pipeline": "aucom.fixture.pipeline", "inputs": map[string]string{"source_map": assetRef},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("preview = %d: %v", status, preview["error"])
+	}
+	command, _ := preview["steps"].([]any)[0].(map[string]any)["command"].(map[string]any)
+	args := stringsOf(command["args"])
+	at := -1
+	for index, word := range args {
+		if word == "-nopercent" {
+			at = index
+		}
+	}
+	if at < 0 || at+1 >= len(args) || args[at+1] != spaced || at+2 >= len(args) {
+		t.Fatalf("the previewed command does not carry the stage's tokens before its operands: %v", args)
+	}
 	// The tool's own page shows nothing of it: the tokens are the pipeline's.
 	_, toolPage := m.call(http.MethodGet, "/api/v1/profiles/aucom.fixture.toolchain/commands", nil)
 	for _, item := range toolPage["items"].([]any) {

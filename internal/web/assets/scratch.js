@@ -1,22 +1,28 @@
-// Profiles → Write a profile from scratch (NEW_244D).
+// New profile: the form every profile is written with.
 //
-// The template wizard edits a tested document and cannot add an action. This
-// panel writes a tool, a pipeline or an engine from nothing: any number of
-// programs, actions with their arguments, inputs, outputs, parameters and
-// folders, and pipeline stages wired to each other with parameters of their
-// own.
+// One form, two ways of starting it (operator, 2026-10-03): from scratch, or
+// filled in from a tested profile — and filled in means FILLED IN: every
+// program, action, argument, input, output, parameter, folder and pipeline
+// stage of the tested profile becomes a field here that can be changed,
+// removed or added to. (NEW_244D's separate "template wizard" could rename a
+// program and drop an action, and nothing else; it is gone.)
 //
-// It follows the wizard's rule: the page never builds the document. It keeps
-// what the person typed as plain fields, posts them to /api/v1/profiles/compose
-// as `scratch`, and shows what the Companion composed, validated and digested.
-// Installing is the same import route every other document takes, and the
-// result is `local` — refused until somebody approves it in its review, where
-// its programs and folders are also set up.
+// A pipeline is where parameters are set: each stage picks a tool and carries
+// its own arguments, and the same tool may be a stage twice.
+//
+// It follows the rule the page always had: it never builds the document. It
+// keeps what the person typed as plain fields; profiles.js posts them to
+// /api/v1/profiles/compose as `scratch` and shows what the Companion composed,
+// validated and digested. A form filled from a tested profile says which
+// (`based_on`), so what the form has no field for is kept — see
+// internal/web/scratchfill.go. Installing is the same import route every other
+// document takes, and the result is `local`: refused until somebody approves
+// it in its review, where its programs and folders are also set up.
 
 "use strict";
 
 (() => {
-  const { $, el, api, setMessage, withBusy, record, t } = window.AUCOM;
+  const { $, el, api } = window.AUCOM;
 
   const ROOT_ROLES = ["content_root", "game_root", "project_root", "build_root", "tool_root"];
   const OPTION_TYPES = ["text", "bool", "integer", "enum"];
@@ -30,10 +36,10 @@
     engine: { programs: [], actions: [] },
     pipeline: { inputs: [], steps: [], outputs: [] },
   };
-  let composed = null;
   let providers = []; // installed actions a pipeline stage can use, by capability
+  let basedOn = ""; // the tested profile the fields were filled from, or ""
 
-  const kind = () => $("scratch-kind").value;
+  const kind = () => $("wizard-kind").value;
 
   // --- small builders --------------------------------------------------------
 
@@ -145,7 +151,7 @@
           className: "hint",
           text: "{input.NAME} {output.NAME} {option.NAME} {root.ROLE} are filled in when it runs. " +
             "A line ending in [if OPTION] is passed only when that yes/no parameter is on; [if OPTION=VALUE] when it equals VALUE; " +
-            "[if folder ROLE] when that optional folder is set.",
+            "[if folder ROLE] when that optional folder is set; [if input NAME] when that input was supplied.",
         }),
       ],
     }));
@@ -239,6 +245,38 @@
     return sources;
   }
 
+  // A stage id nobody has used yet, so adding the same tool a second time
+  // gives a stage of its own without the person inventing a name first.
+  function nextStageId(doc) {
+    for (let n = doc.steps.length + 1; ; n += 1) {
+      const id = "stage_" + n;
+      if (!doc.steps.some((step) => step.id === id)) return id;
+    }
+  }
+
+  // A stage's own arguments: one box, one argv element, exactly as typed.
+  // They are this machine's setup of the pipeline (its `step_arguments`), not
+  // part of the document, and are saved when the profile is installed.
+  function stageArguments(step) {
+    step.arguments = step.arguments || [];
+    const box = el("fieldset", { className: "scratch-list", children: [el("legend", { text: "Arguments for this stage" })] });
+    box.append(el("p", {
+      className: "muted",
+      text: "Extra words for this stage's command, before its input files — a flag the tool does not offer as a parameter. Each box is one argument exactly as you type it; nothing splits or quotes it. They stay on this computer: a profile you export carries none of them.",
+    }));
+    step.arguments.forEach((token, index) => {
+      box.append(el("div", {
+        className: "row scratch-row",
+        children: [
+          text("Argument", token, (v) => (step.arguments[index] = v), { placeholder: "-nopercent", grow: true }),
+          removeButton("Remove this argument", () => step.arguments.splice(index, 1)),
+        ],
+      }));
+    });
+    box.append(el("div", { className: "row-actions", children: [addButton("Add an argument", () => step.arguments.push(""))] }));
+    return box;
+  }
+
   function pipelineEditor() {
     const doc = state.pipeline;
     const box = el("div");
@@ -263,13 +301,17 @@
     }
     doc.steps.forEach((step, index) => {
       const card = el("div", { className: "panel scratch-card" });
-      const capabilities = [["", "choose…"], ...providers.map((item) => [item.capability, `${item.capability} — ${item.profileName}: ${item.title}`])];
+      // The tool is chosen by what it does here: an installed tool's action.
+      // A stage a tested pipeline names that nothing installed provides yet
+      // is still listed, so filling the form does not lose it.
+      const capabilities = [["", "choose a tool…"], ...providers.map((item) => [item.capability, `${item.profileName}: ${item.title} — ${item.capability}`])];
+      if (step.capability && !providerFor(step.capability)) capabilities.push([step.capability, `${step.capability} — no installed tool provides it yet`]);
       card.append(el("div", {
         className: "row scratch-row",
         children: [
-          text("Stage id", step.id, (v) => (step.id = v), { placeholder: "compile" }),
+          text("Stage id", step.id, (v) => (step.id = v), { placeholder: "compile", hint: "its own name in this pipeline; two stages may use the same tool" }),
           text("Title", step.title, (v) => (step.title = v), { placeholder: "Compile the map" }),
-          select("Capability", step.capability, capabilities, (v) => { step.capability = v; step.inputs = {}; step.options = {}; render(); }),
+          select("Tool", step.capability, capabilities, (v) => { step.capability = v; step.inputs = {}; step.options = {}; render(); }),
           removeButton("Remove this stage", () => doc.steps.splice(index, 1)),
         ],
       }));
@@ -298,11 +340,12 @@
         }
         card.append(params);
       }
+      card.append(stageArguments(step));
       stages.append(card);
     });
     stages.append(el("div", {
       className: "row-actions",
-      children: [addButton("Add a stage", () => doc.steps.push({ id: "", title: "", capability: "", inputs: {}, options: {} }))],
+      children: [addButton("Add a stage", () => doc.steps.push({ id: nextStageId(doc), title: "", capability: "", inputs: {}, options: {}, arguments: [] }))],
     }));
     box.append(stages);
 
@@ -326,86 +369,77 @@
     return box;
   }
 
-  // --- render, compose, install ---------------------------------------------
+  // --- render, and what is posted --------------------------------------------
 
   function render() {
     const body = $("scratch-body");
     body.replaceChildren();
     const current = kind();
-    $("scratch-tool-fields").hidden = current !== "tool";
-    $("scratch-engine-fields").hidden = current !== "engine";
     if (current === "tool" || current === "engine") {
       const doc = state[current];
       body.append(programsEditor(doc), actionsEditor(doc, current === "engine"));
     } else {
       body.append(pipelineEditor());
     }
-    composed = null;
-    $("scratch-install").disabled = true;
   }
 
+  // request is the `scratch` member of a compose request: the fields, and the
+  // tested profile they were filled from when there is one.
   function request() {
     const current = kind();
-    const scratch = { kind: current, game_family: $("scratch-game").value || undefined };
+    const scratch = { kind: current, game_family: $("scratch-game").value || undefined, based_on: basedOn || undefined };
     if (current === "tool" || current === "engine") {
       const doc = state[current];
       scratch.executables = doc.programs;
       scratch.actions = doc.actions.map((action) => ({ ...action, args: (action.args || []).filter((line) => line.trim()) }));
-      if (current === "tool") scratch.tool_version = $("scratch-tool-version").value.trim() || undefined;
+      if (current === "tool") scratch.tool_version = $("wizard-tool-version").value.trim() || undefined;
     } else {
       scratch.inputs = state.pipeline.inputs;
-      scratch.steps = state.pipeline.steps;
+      scratch.steps = state.pipeline.steps.map(({ arguments: _own, ...step }) => step);
       scratch.outputs = state.pipeline.outputs;
     }
-    return {
-      scratch,
-      name: $("scratch-name").value.trim() || undefined,
-      version: $("scratch-version").value.trim() || undefined,
-      summary: $("scratch-summary").value.trim() || undefined,
-      publisher_name: $("scratch-publisher").value.trim() || undefined,
-      license_spdx: $("scratch-license").value.trim() || undefined,
-      runtime: current === "engine" ? $("scratch-runtime").value.trim() || undefined : undefined,
-      engine_version: current === "engine" ? $("scratch-engine-version").value.trim() || undefined : undefined,
-    };
+    return scratch;
   }
 
-  async function compose() {
-    const { ok, body } = await api("/api/v1/profiles/compose", { method: "POST", body: request() });
-    const out = $("scratch-json");
-    composed = null;
-    $("scratch-install").disabled = true;
-    if (!ok) {
-      setMessage("scratch-message", body.error || "the profile could not be composed", "error");
-      out.textContent = "";
-      return;
-    }
-    out.textContent = JSON.stringify(body.document, null, 2);
-    if (!body.valid) {
-      setMessage("scratch-message", "Not valid yet — " + body.error, "error");
-      return;
-    }
-    composed = body;
-    $("scratch-install").disabled = false;
-    setMessage("scratch-message",
-      `Valid: ${body.name} ${body.version}. Nothing is installed until you press Install.`, "ok");
+  // stageTokens is every stage that has arguments of its own, for the
+  // installer to record after the document is in.
+  function stageTokens() {
+    if (kind() !== "pipeline") return [];
+    return state.pipeline.steps
+      .map((step) => ({ stage: step.id, arguments: (step.arguments || []).filter((token) => token !== "") }))
+      .filter((item) => item.stage && item.arguments.length > 0);
   }
 
-  async function install() {
-    if (!composed) return;
-    const { ok, body } = await api("/api/v1/profiles/import", {
-      method: "POST",
-      body: { document: composed.document, replace: $("scratch-replace").checked },
-    });
-    if (!ok) {
-      setMessage("scratch-message", body.error || "the profile could not be installed", "error");
-      return;
+  // clear empties the form for one kind: From scratch.
+  function clear(current) {
+    basedOn = "";
+    if (current === "pipeline") state.pipeline = { inputs: [], steps: [], outputs: [] };
+    else state[current] = { programs: [], actions: [] };
+  }
+
+  // fill puts a tested profile's fields into the form (the server's
+  // /templates/{id}/scratch answer). Everything it fills stays editable.
+  function fill(scratch) {
+    const current = scratch.kind;
+    basedOn = scratch.based_on || "";
+    $("scratch-game").value = scratch.game_family || "";
+    if (current === "pipeline") {
+      state.pipeline = {
+        inputs: (scratch.inputs || []).map((port) => ({ ...port, extensions: port.extensions || [] })),
+        steps: (scratch.steps || []).map((step) => ({ ...step, inputs: step.inputs || {}, options: step.options || {}, arguments: [] })),
+        outputs: scratch.outputs || [],
+      };
+    } else {
+      state[current] = {
+        programs: scratch.executables || [],
+        actions: (scratch.actions || []).map((action) => ({
+          ...action, args: action.args || [], inputs: action.inputs || [], outputs: action.outputs || [],
+          options: (action.options || []).map((option) => ({ ...option, values: option.values || [] })),
+          roots: action.roots || [],
+        })),
+      };
+      if (current === "tool") $("wizard-tool-version").value = scratch.tool_version || "";
     }
-    const id = composed.id;
-    record(`Installed ${composed.name}`, id, "ok");
-    setMessage("scratch-message",
-      `Installed ${composed.name} as a local profile. It cannot run until you approve it — opening its review and setup in Profiles.`, "ok");
-    await refreshProviders();
-    await window.AUCOM.openInstalledProfile(id);
   }
 
   async function refreshProviders() {
@@ -426,12 +460,8 @@
     providers.sort((a, b) => a.capability.localeCompare(b.capability));
   }
 
-  $("scratch-kind").addEventListener("change", render);
-  $("scratch-compose").addEventListener("click", (event) => withBusy(event.currentTarget, compose));
-  $("scratch-install").addEventListener("click", (event) => withBusy(event.currentTarget, install));
-
   window.AUCOM.scratch = {
-    state,
+    state, render, request, stageTokens, clear, fill,
     async refresh() {
       await refreshProviders();
       render();

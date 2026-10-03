@@ -252,18 +252,55 @@ curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
 
 Send the answer's `next` back as `offset` to read on; `source` names what was read.
 
-**Your own arguments.** **Profiles › Configure** has, per program, a list of
-extra arguments added to every command that runs it, before its input files —
-each box one argument exactly as typed, never split and never passed through a
-shell. qbsp's arguments never reach vis or light, the profile document is not
-changed, and **Reset to default** removes them. The job that used them names
-them. (EricW 0.18.1's `qbsp` has no `-threads`; `-nopercent` is a harmless one
-to try.)
+**Parameters belong to pipelines.** A build tool says where its programs are and
+what they can do; what each one is run with is set on the **stage of the pipeline
+that runs it**. Open a pipeline in **Profiles › Configure**: every stage is listed
+with the tool that runs it here and a list of extra arguments for that stage alone,
+added before its input files — each box one argument exactly as typed, never split
+and never passed through a shell. Another pipeline using the same tool does not get
+them, and the same tool twice in one pipeline gets two lists. The profile document
+is not changed, a profile you export carries none of them, and **Reset to default**
+removes them. The Build area's last step shows the exact command before anything
+runs, and the job that used them names them. (EricW 0.18.1's `qbsp` has no
+`-threads`; `-nopercent` is a harmless one to try.)
 
 ```console
-$ companion toolchain args auto-pigeon.ericw-tools.q1 qbsp --set=-nopercent
-$ companion toolchain args auto-pigeon.ericw-tools.q1                 # every program's command, as it will run
-$ companion toolchain args auto-pigeon.ericw-tools.q1 qbsp --reset
+$ companion toolchain args auto-pigeon.q1.normal compile --set=-nopercent
+$ companion toolchain args auto-pigeon.q1.normal                    # every stage and its arguments
+$ companion toolchain args auto-pigeon.q1.normal compile --reset
+```
+
+```bash
+curl -fsS -X POST -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
+  -H 'Content-Type: application/json' \
+  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/profiles/auto-pigeon.q1.normal/stage-arguments" \
+  -d '{"stage":"compile","arguments":["-nopercent"]}'
+```
+
+A build tool takes no new arguments. Ones recorded on a tool before this still
+reach every pipeline that runs it, are shown on each such stage, and can be removed
+on the tool's page or with `companion toolchain args <tool> <program> --reset`. An
+engine is not a stage of a pipeline and keeps its own, as before:
+
+```console
+$ companion toolchain args auto-pigeon.engine.darkplaces engine --set=-window
+```
+
+**Writing a profile.** **Profiles › New profile** is one form in four steps — kind
+and starting point, identity, programs and actions (or, for a pipeline, stages and
+their parameters), review and install. **Start from** is *From scratch* by default;
+choose a tested profile there and every field of every step is filled in from it,
+and stays yours to change, add to or remove. A pipeline can have any number of
+stages, each picking a tool, wiring its inputs and carrying its own parameters and
+arguments; the same tool may be a stage more than once. What the form has no field
+for is kept as the tested profile had it. Nothing is installed until you press
+**Install this profile**, and an installed profile is local and cannot run until you
+approve it.
+
+```bash
+# a tested profile as the form's fields, and the document composed back from them
+curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
+  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/profiles/templates/auto-pigeon.q1.fast-preview/scratch"
 ```
 
 **A map file of your own.** **My Maps › On this computer › Choose a map file…**
