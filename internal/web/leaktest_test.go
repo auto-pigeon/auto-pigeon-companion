@@ -377,7 +377,14 @@ func TestAFailedLeakReturnIsRecordedAndRetriedWithoutAnotherBuild(t *testing.T) 
 	if after := digestOf(); after != before {
 		t.Fatal("returning a result changed the build's own files")
 	}
-	statuses := strings.Join(m.leakStatusesSoon(t, 6), "|")
+	// Statuses are coalesced, so how MANY were sent is not a fact about the
+	// work; that the last one is `returned` is.
+	deadline := time.Now().Add(5 * time.Second)
+	statuses := ""
+	for !strings.HasSuffix(statuses, request.RequestID+" returned") && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+		statuses = strings.Join(m.leakStatusesSoon(t, 1), "|")
+	}
 	for _, want := range []string{request.RequestID + " returning", request.RequestID + " return_failed", request.RequestID + " returned"} {
 		if !strings.Contains(statuses, want) {
 			t.Errorf("the editor was never told %q: %s", want, statuses)

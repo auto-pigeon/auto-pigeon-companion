@@ -89,7 +89,7 @@ type leakSession struct {
 type leakTracked struct {
 	link aub.LeakTestLink
 	// The account and server this request's statuses are for: the first one
-	// that could have sent it. Another account never inherits them.
+	// AUB accepted a status from. Another account never inherits them.
 	bound          bool
 	server, userID string
 
@@ -369,15 +369,21 @@ func (q *leakSender) attempt(id string, item *leakTracked) bool {
 	if session.Send == nil {
 		return hold(leakRelaySignIn)
 	}
-	if !item.bound {
-		item.bound, item.server, item.userID = true, session.Server, session.UserID
-	} else if item.server != session.Server || item.userID != session.UserID {
+	if item.bound && (item.server != session.Server || item.userID != session.UserID) {
 		return hold(leakRelayAccount)
 	}
 	if item.rejectedToken != "" && item.rejectedToken == session.Token {
 		return hold(leakRelaySignIn)
 	}
 	payload, generation := item.desired, item.generation
+	if item.ackedGen != generation && item.ackedGen != 0 && sameLeakStatus(payload, item.acked) && item.waiting != leakRelayRetrying {
+		// The work went somewhere and came back while a POST was in the air
+		// (return_failed, returning, return_failed): AUB already says this.
+		item.acked, item.ackedGen, item.waiting = payload, generation, leakRelayDelivered
+		item.next = now.Add(leakStatusRefresh)
+		q.mu.Unlock()
+		return true
+	}
 	item.inFlight = true
 	q.mu.Unlock()
 
@@ -398,6 +404,9 @@ func (q *leakSender) attempt(id string, item *leakTracked) bool {
 		if item.failures > 0 || item.waiting == leakRelaySignIn || item.waiting == leakRelayAccount {
 			q.logf("leak status: request %s delivered `%s` after %d failed attempt(s)", shortLeakID(id), payload.State, item.failures)
 		}
+		// The request now belongs to the account AUB accepted it from. Not
+		// before: a session AUB refused never owned anything.
+		item.bound, item.server, item.userID = true, session.Server, session.UserID
 		item.acked, item.ackedGen = payload, generation
 		item.failures, item.rejectedToken, item.lastError, item.waiting = 0, "", "", leakRelayDelivered
 		if item.generation != generation {

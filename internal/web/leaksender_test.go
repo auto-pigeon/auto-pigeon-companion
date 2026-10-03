@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/http"
@@ -760,5 +761,64 @@ func TestPendingAnswersReplacedToAPageNamingAnOlderRequest(t *testing.T) {
 	if m.server.matchesPendingLeakRequest(older.RequestID, build.SourceRef{AssetType: aub.AssetTypeMap, AssetID: older.AssetID,
 		RevisionID: "r", Revision: older.Revision, ContentSHA256: older.ContentSHA256, Refetchable: true}) {
 		t.Fatal("a replaced request still matches a build")
+	}
+}
+
+// --- a session that ran out is "sign in", not an error to retry -------------
+
+// Found live (`NEW_307W1`): the Companion held a token that had expired a week
+// before. The notice printed AUB's raw 401 with a Retry; the editor was told
+// nothing. Both kinds are covered: a token that says it expired, which is not
+// worth sending at all, and one AUB refuses although it looks fine.
+func TestAnExpiredSessionAsksForSignInAndTheSameRequestThenResolves(t *testing.T) {
+	m := newMachine(t)
+	m.backend.asset.fileName = "fixture.apmap"
+	dir, err := m.server.configDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	link := aub.LeakTestLink{AssetID: m.backend.asset.assetID, Revision: m.backend.asset.revision,
+		ContentSHA256: m.backend.asset.digest(), RequestID: strings.Repeat("8", 32)}
+	if err := leakintent.Receive(leakintent.Path(dir), link, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	claims := base64.RawURLEncoding.EncodeToString([]byte(fmt.Sprintf(`{"exp":%d}`, time.Now().Add(-time.Hour).Unix())))
+	for name, token := range map[string]string{"a token past its own expiry": "h." + claims + ".s", "a token AUB refuses": "opaque-refused"} {
+		m.server.aubClient().SetToken(token)
+		m.backend.mu.Lock()
+		m.backend.rejectToken = token
+		m.backend.mu.Unlock()
+		served := m.backend.count()
+		status, body := m.call(http.MethodGet, "/api/v1/leak-test/pending?request_id="+link.RequestID, nil)
+		if status != http.StatusOK || body["sign_in_required"] != true || body["request_id"] != link.RequestID || body["source_ref"] != nil {
+			t.Fatalf("%s: %d %v", name, status, body)
+		}
+		if strings.Contains(name, "expiry") && m.backend.count() != served {
+			t.Errorf("%s was sent to the account server", name)
+		}
+		// The watch runs all the while, and says nothing to AUB.
+		for range 3 {
+			m.call(http.MethodGet, "/api/v1/leak-test/request", nil)
+		}
+	}
+	time.Sleep(150 * time.Millisecond)
+	m.backend.mu.Lock()
+	posts := m.backend.leakStatusPosts
+	m.backend.mu.Unlock()
+	if posts != 0 {
+		t.Fatalf("%d status POST(s) reached AUB with a session it refuses", posts)
+	}
+	if _, body := m.call(http.MethodGet, "/api/v1/leak-test/request", nil); body["relay"].(map[string]any)["state"] != leakRelaySignIn {
+		t.Fatalf("the page is told %v", body["relay"])
+	}
+
+	// Signing in is all it takes: the SAME request resolves and is acknowledged.
+	m.signIn()
+	status, body := m.call(http.MethodGet, "/api/v1/leak-test/pending?request_id="+link.RequestID, nil)
+	if status != http.StatusOK || body["sign_in_required"] != nil || body["request_id"] != link.RequestID || body["source_ref"] == nil {
+		t.Fatalf("after signing in: %d %v", status, body)
+	}
+	if got := m.leakStatusesSoon(t, 1); len(got) != 1 || got[0] != link.RequestID+" received" {
+		t.Fatalf("after signing in the editor was told %v", got)
 	}
 }

@@ -86,7 +86,7 @@ func (c *Client) AssetPackageArchive(ctx context.Context, id string) (io.ReadClo
 	if err != nil {
 		return nil, 0, fmt.Errorf("aub: building the package request: %w", err)
 	}
-	request.Header.Set("Authorization", c.token)
+	request.Header.Set("Authorization", c.Token())
 	response, err := c.httpClient.Do(request)
 	if err != nil {
 		return nil, 0, fmt.Errorf("aub: downloading the package: %w", err)

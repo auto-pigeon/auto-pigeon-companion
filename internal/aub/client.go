@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -43,7 +44,11 @@ type Client struct {
 	// token is the current auth token, sent as the Authorization header. It is
 	// held in memory here; persisting it across runs is internal/config's job,
 	// which is what keeps this package free of any file access.
-	token string
+	//
+	// Atomic since `NEW_307W1`: signing in writes it from a request while the
+	// leak-status worker reads it from its own goroutine, and the race
+	// detector said so. Read it through Token, write it through SetToken.
+	token atomic.Pointer[string]
 
 	// collection and tokenLifetime are the DEPLOYMENT's own answers, learned from
 	// its capability document. Empty and zero until something has read one, which
@@ -100,15 +105,20 @@ func New(baseURL string, httpClient *http.Client) (*Client, error) {
 func (c *Client) BaseURL() string { return c.baseURL.String() }
 
 // Token returns the current auth token, empty when unauthenticated.
-func (c *Client) Token() string { return c.token }
+func (c *Client) Token() string {
+	if held := c.token.Load(); held != nil {
+		return *held
+	}
+	return ""
+}
 
 // SetToken installs a token obtained elsewhere — typically one loaded from
 // local config at startup, so a returning user is not asked to log in again.
-func (c *Client) SetToken(token string) { c.token = token }
+func (c *Client) SetToken(token string) { c.token.Store(&token) }
 
 // Authenticated reports whether a token is set. It says nothing about whether
 // AUB still accepts it; only a request can establish that.
-func (c *Client) Authenticated() bool { return c.token != "" }
+func (c *Client) Authenticated() bool { return c.Token() != "" }
 
 // SessionExpired reports whether the stored session token says it has expired.
 //
@@ -119,7 +129,7 @@ func (c *Client) Authenticated() bool { return c.token != "" }
 // worth sending". A token that is not a JWT, or carries no `exp`, is not
 // reported expired: the server remains the authority on those.
 func (c *Client) SessionExpired(now time.Time) bool {
-	return TokenExpired(c.token, now)
+	return TokenExpired(c.Token(), now)
 }
 
 // TokenExpired is SessionExpired for a bare token.
@@ -204,8 +214,8 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 	if body != nil {
 		request.Header.Set("Content-Type", "application/json")
 	}
-	if c.token != "" {
-		request.Header.Set("Authorization", c.token)
+	if c.Token() != "" {
+		request.Header.Set("Authorization", c.Token())
 	}
 
 	response, err := c.httpClient.Do(request)
@@ -278,8 +288,9 @@ func (c *Client) ListRecords(ctx context.Context, collection string, query url.V
 // of DefaultTimeout — for the few transfers that are megabytes rather than a
 // JSON answer. The session and the deployment's answers are shared.
 func (c *Client) WithTimeout(d time.Duration) *Client {
-	copied := *c
-	transport := c.httpClient.Transport
-	copied.httpClient = &http.Client{Timeout: d, Transport: transport}
-	return &copied
+	// Field by field: the token is atomic and must not be copied as a value.
+	copied := &Client{baseURL: c.baseURL, collection: c.collection, tokenLifetime: c.tokenLifetime,
+		httpClient: &http.Client{Timeout: d, Transport: c.httpClient.Transport}}
+	copied.SetToken(c.Token())
+	return copied
 }

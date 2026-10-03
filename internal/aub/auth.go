@@ -80,7 +80,7 @@ func (c *Client) Login(ctx context.Context, email, password string) (Session, er
 	}
 
 	session := c.session(response)
-	c.token = session.Token
+	c.SetToken(session.Token)
 
 	return session, nil
 }
@@ -107,7 +107,7 @@ func (c *Client) Refresh(ctx context.Context) (Session, error) {
 	}
 
 	session := c.session(response)
-	c.token = session.Token
+	c.SetToken(session.Token)
 
 	return session, nil
 }
@@ -120,4 +120,4 @@ func (c *Client) Refresh(ctx context.Context) (Session, error) {
 // it out of config.json still holds a working one until it expires. Named
 // Logout because that is what it does from the user's side, documented here so
 // nobody mistakes it for revocation.
-func (c *Client) Logout() { c.token = "" }
+func (c *Client) Logout() { c.SetToken("") }

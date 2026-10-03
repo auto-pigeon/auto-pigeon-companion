@@ -65,7 +65,8 @@ func (s *Server) leakSession() leakSession {
 	s.mu.RLock()
 	client, session := s.client, s.settings.Session
 	s.mu.RUnlock()
-	if client == nil || !client.Authenticated() {
+	// An expired token is no session: posting with it would only be refused.
+	if client == nil || !client.Authenticated() || client.SessionExpired(time.Now()) {
 		return leakSession{}
 	}
 	return leakSession{Server: client.BaseURL(), UserID: session.UserID, Token: client.Token(), Send: client.PublishLeakStatus}

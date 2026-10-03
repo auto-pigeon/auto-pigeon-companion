@@ -106,7 +106,7 @@ func (c *Client) TextureExport(ctx context.Context, mapID string, revision int) 
 	if err != nil {
 		return nil, fmt.Errorf("aub: building the texture-export request: %w", err)
 	}
-	request.Header.Set("Authorization", c.token)
+	request.Header.Set("Authorization", c.Token())
 	request.Header.Set("Accept", TextureExportMediaType)
 
 	response, err := c.httpClient.Do(request)

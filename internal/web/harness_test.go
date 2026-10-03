@@ -218,6 +218,9 @@ type fixtureBackend struct {
 	failLeakStatus   int
 	leakStatusPosts  int
 	leakStatusBodies []map[string]any
+	// rejectToken is a session AUB no longer accepts: every Companion route
+	// answers 401 to it, the way a token past its lifetime is answered.
+	rejectToken string
 
 	// holdDetail, when set, holds every map-detail request until it is
 	// closed or the caller gives up: a slow AUB (NEW_265A).
@@ -317,9 +320,12 @@ func (b *fixtureBackend) serve(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if r.Header.Get("Authorization") == "" {
+	b.mu.Lock()
+	rejected := b.rejectToken != "" && r.Header.Get("Authorization") == b.rejectToken
+	b.mu.Unlock()
+	if r.Header.Get("Authorization") == "" || rejected {
 		w.WriteHeader(http.StatusUnauthorized)
-		write(map[string]any{"code": "unauthorized", "message": "no session"})
+		write(map[string]any{"code": "unauthorized", "message": "The request requires valid record authorization token."})
 		return
 	}
 	rest := strings.TrimPrefix(path, aub.CompanionPrefix)

@@ -442,8 +442,8 @@ func (c *Client) DownloadFile(ctx context.Context, assetType, assetID, revisionI
 	if err != nil {
 		return nil, fmt.Errorf("aub: building the download request: %w", err)
 	}
-	if c.token != "" {
-		request.Header.Set("Authorization", c.token)
+	if c.Token() != "" {
+		request.Header.Set("Authorization", c.Token())
 	}
 	if ifNoneMatch != "" {
 		request.Header.Set("If-None-Match", `"`+ifNoneMatch+`"`)

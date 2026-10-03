@@ -179,8 +179,8 @@ func (c *Client) UploadJoinPackage(ctx context.Context, manifest JoinContentMani
 	}
 	request.Header.Set("Content-Type", form.FormDataContentType())
 	request.Header.Set("Accept", "application/json")
-	if c.token != "" {
-		request.Header.Set("Authorization", c.token)
+	if c.Token() != "" {
+		request.Header.Set("Authorization", c.Token())
 	}
 	response, err := c.httpClient.Do(request)
 	if err != nil {
@@ -222,8 +222,8 @@ func (c *Client) DownloadJoinContentFile(ctx context.Context, gameID, destinatio
 	if err != nil {
 		return nil, err
 	}
-	if c.token != "" {
-		request.Header.Set("Authorization", c.token)
+	if c.Token() != "" {
+		request.Header.Set("Authorization", c.Token())
 	}
 	response, err := c.httpClient.Do(request)
 	if err != nil {

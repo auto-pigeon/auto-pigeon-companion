@@ -37,8 +37,8 @@ func (c *Client) BugReportRelay(ctx context.Context, method, path string, body [
 	if body != nil {
 		request.Header.Set("Content-Type", "application/json")
 	}
-	if path == BugReportPath && c.token != "" {
-		request.Header.Set("Authorization", c.token)
+	if path == BugReportPath && c.Token() != "" {
+		request.Header.Set("Authorization", c.Token())
 	}
 	response, err := c.httpClient.Do(request)
 	if err != nil {

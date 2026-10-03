@@ -54,8 +54,8 @@ func (c *Client) OperationalNotices(ctx context.Context, authenticated bool, ifN
 		return NoticeResult{}, fmt.Errorf("aub: building the notices request: %w", err)
 	}
 	request.Header.Set("Accept", "application/json")
-	if authenticated && c.token != "" {
-		request.Header.Set("Authorization", c.token)
+	if authenticated && c.Token() != "" {
+		request.Header.Set("Authorization", c.Token())
 	}
 	if tag := strings.TrimSpace(ifNoneMatch); tag != "" && len(tag) <= 128 {
 		request.Header.Set("If-None-Match", tag)

@@ -60,10 +60,18 @@ func (s *Server) handleLeakTestPending(w http.ResponseWriter, r *http.Request) {
 
 	s.adoptSessionFromDisk()
 	client := s.aubClient()
-	if client == nil || !client.Authenticated() {
+	// A session that has run out is "signed out" to the person looking at this
+	// notice. Found live (`NEW_307W1`): a token that expired a week earlier got
+	// past "is a token set", AUB answered 401, and the notice printed the raw
+	// refusal with a Retry that could only be refused again — where the one
+	// thing that helps is Sign in.
+	signIn := func() {
 		writeJSON(w, http.StatusOK, map[string]any{"pending": true, "sign_in_required": true,
 			"request_id": request.RequestID, "asset_id": request.AssetID, "revision": request.Revision,
 			"content_sha256": request.ContentSHA256, "received_at": received})
+	}
+	if client == nil || !client.Authenticated() || client.SessionExpired(time.Now()) {
+		signIn()
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
@@ -72,6 +80,12 @@ func (s *Server) handleLeakTestPending(w http.ResponseWriter, r *http.Request) {
 	// resolving @current and then submitting @current would compile different bytes.
 	revision, err := client.Revision(ctx, aub.AssetTypeMap, request.AssetID, aub.CurrentRevision)
 	if err != nil {
+		var refused *aub.APIError
+		if errors.As(err, &refused) && refused.Unauthorized() {
+			// AUB is the authority on a token that carries no expiry of its own.
+			signIn()
+			return
+		}
 		writeError(w, aubStatus(err), err)
 		return
 	}
