@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"os"
@@ -142,10 +143,16 @@ func TestLiveOutputOfASidecarOnlyCompilerAndPerExecutableArgumentsReachTheJob(t 
 	m := newMachine(t)
 	m.installLogToolchain()
 
-	// The person's own flags for this one program, through Profiles.
+	// The person's own flags for this one STAGE, through the pipeline: a
+	// build tool takes none since parameters moved to pipelines (2026-10-03).
 	tokens := []string{"--sidecar", "--slow=150", "--lines=8"}
-	status, body := m.call(http.MethodPost, "/api/v1/profiles/aucom.fixture.logtool/arguments",
-		map[string]any{"executable": "tool", "arguments": tokens})
+	if status, body := m.call(http.MethodPost, "/api/v1/profiles/aucom.fixture.logtool/arguments",
+		map[string]any{"executable": "tool", "arguments": tokens}); status != http.StatusBadRequest ||
+		!strings.Contains(fmt.Sprint(body["error"]), "pipeline stage") {
+		t.Fatalf("a build tool accepted new arguments: %d %v", status, body["error"])
+	}
+	status, body := m.call(http.MethodPost, "/api/v1/profiles/aucom.fixture.logpipeline/stage-arguments",
+		map[string]any{"stage": "compile", "arguments": tokens})
 	if status != http.StatusOK {
 		t.Fatalf("saving the arguments = %d: %v", status, body["error"])
 	}
@@ -178,63 +185,111 @@ func TestLiveOutputOfASidecarOnlyCompilerAndPerExecutableArgumentsReachTheJob(t 
 	}
 }
 
-func TestArgumentsAreValidatedPerExecutableResettableAndSurviveARestart(t *testing.T) {
+func TestStageArgumentsAreValidatedPerStageResettableAndSurviveARestart(t *testing.T) {
 	m := newMachine(t)
 	m.approveAndBindTool()
-	_, before := m.call(http.MethodGet, "/api/v1/profiles/aucom.fixture.toolchain", nil)
+	const pipeline = "/api/v1/profiles/aucom.fixture.pipeline"
+	_, before := m.call(http.MethodGet, pipeline, nil)
 
 	for _, bad := range []map[string]any{
-		{"executable": "tool", "arguments": []string{"{root.game_root}"}},
-		{"executable": "tool", "arguments": []string{""}},
-		{"executable": "tool", "arguments": []string{"-a\nb"}},
-		{"executable": "vis", "arguments": []string{"-fast"}},
-		{"executable": "", "arguments": []string{"-x"}},
+		{"stage": "compile", "arguments": []string{"{root.game_root}"}},
+		{"stage": "compile", "arguments": []string{""}},
+		{"stage": "compile", "arguments": []string{"-a\nb"}},
+		{"stage": "no-such-stage", "arguments": []string{"-fast"}},
+		{"stage": "", "arguments": []string{"-x"}},
 	} {
-		status, body := m.call(http.MethodPost, "/api/v1/profiles/aucom.fixture.toolchain/arguments", bad)
+		status, body := m.call(http.MethodPost, pipeline+"/stage-arguments", bad)
 		if status != http.StatusBadRequest || body["error"] == "" {
 			t.Errorf("%v was answered %d: %v", bad, status, body["error"])
 		}
 	}
+	// Stage arguments belong to pipelines; a tool is not one.
+	if status, _ := m.call(http.MethodPost, "/api/v1/profiles/aucom.fixture.toolchain/stage-arguments",
+		map[string]any{"stage": "compile", "arguments": []string{"-x"}}); status != http.StatusBadRequest {
+		t.Errorf("a tool accepted stage arguments: %d", status)
+	}
 
 	spaced := filepath.Join(m.dir, "a folder with spaces", "extra.txt")
-	status, body := m.call(http.MethodPost, "/api/v1/profiles/aucom.fixture.toolchain/arguments",
-		map[string]any{"executable": "tool", "arguments": []string{"-nopercent", spaced}})
+	status, body := m.call(http.MethodPost, pipeline+"/stage-arguments",
+		map[string]any{"stage": "compile", "arguments": []string{"-nopercent", spaced}})
 	if status != http.StatusOK {
 		t.Fatalf("saving = %d: %v", status, body["error"])
 	}
-	commands, _ := body["commands"].([]any)
-	preview, _ := commands[0].(map[string]any)
-	argv := stringsOf(preview["argv"])
-	at := int(preview["custom_at"].(float64))
-	if at <= 0 || at+1 >= len(argv) || argv[at] != "-nopercent" || argv[at+1] != spaced {
-		t.Fatalf("the preview puts the tokens at %d of %v", at, argv)
+	stages, _ := body["stages"].([]any)
+	if len(stages) == 0 {
+		t.Fatalf("the pipeline describes no stages: %v", body)
 	}
-	if !strings.Contains(argv[len(argv)-2], "<source_map>") {
-		t.Errorf("the tokens are not before the operands: %v", argv)
+	stage, _ := stages[0].(map[string]any)
+	tool, _ := stage["tool"].(map[string]any)
+	if stage["id"] != "compile" || !equalStrings(stringsOf(stage["arguments"]), []string{"-nopercent", spaced}) ||
+		tool["profile_id"] != "aucom.fixture.toolchain" || tool["executable"] != "tool" {
+		t.Fatalf("the stage is described as %v", stage)
+	}
+
+	// The exact command a person reviews carries them, before the operands.
+	// The tool's own page shows nothing of it: the tokens are the pipeline's.
+	_, toolPage := m.call(http.MethodGet, "/api/v1/profiles/aucom.fixture.toolchain/commands", nil)
+	for _, item := range toolPage["items"].([]any) {
+		if custom := stringsOf(item.(map[string]any)["custom_args"]); len(custom) != 0 {
+			t.Errorf("the tool's own command shows a pipeline's tokens: %v", custom)
+		}
 	}
 
 	// The document is not changed; the setup is.
-	_, after := m.call(http.MethodGet, "/api/v1/profiles/aucom.fixture.toolchain", nil)
+	_, after := m.call(http.MethodGet, pipeline, nil)
 	if after["digest"] != before["digest"] {
-		t.Errorf("saving arguments changed the profile document: %v -> %v", before["digest"], after["digest"])
+		t.Errorf("saving arguments changed the pipeline document: %v -> %v", before["digest"], after["digest"])
 	}
 
 	// A restart reads them back from the binding.
 	restarted := m.restart()
-	_, again := restarted.call(http.MethodGet, "/api/v1/profiles/aucom.fixture.toolchain", nil)
-	saved := again["binding"].(map[string]any)["arguments"].(map[string]any)["tool"]
+	_, again := restarted.call(http.MethodGet, pipeline, nil)
+	saved := again["binding"].(map[string]any)["step_arguments"].(map[string]any)["compile"]
 	if got := stringsOf(saved); !equalStrings(got, []string{"-nopercent", spaced}) {
 		t.Errorf("after a restart the arguments are %v", got)
 	}
 
-	// Reset to default removes them.
-	status, body = restarted.call(http.MethodPost, "/api/v1/profiles/aucom.fixture.toolchain/arguments",
-		map[string]any{"executable": "tool", "reset": true})
+	// Reset removes them.
+	status, body = restarted.call(http.MethodPost, pipeline+"/stage-arguments", map[string]any{"stage": "compile", "reset": true})
 	if status != http.StatusOK {
 		t.Fatalf("reset = %d: %v", status, body["error"])
 	}
-	if arguments := body["binding"].(map[string]any)["arguments"]; arguments != nil {
+	if arguments := body["binding"].(map[string]any)["step_arguments"]; arguments != nil {
 		t.Errorf("after reset the binding holds %v", arguments)
+	}
+}
+
+// Tokens somebody recorded on a build tool BEFORE parameters moved to
+// pipelines still reach its command, are shown on every stage that tool runs,
+// and can be removed — but not added to.
+func TestTokensRecordedOnAToolEarlierStillApplyAndCanOnlyBeRemoved(t *testing.T) {
+	m := newMachine(t)
+	m.approveAndBindTool()
+	entry, _, err := m.server.profileEntry("aucom.fixture.toolchain")
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta := entry.Profile.Metadata()
+	if _, err := binding.SetArguments(m.bindings, meta.ID, meta.Version, entry.Digest, entry.Trust, "tool", []string{"-legacy"}); err != nil {
+		t.Fatal(err)
+	}
+	_, commands := m.call(http.MethodGet, "/api/v1/profiles/aucom.fixture.toolchain/commands", nil)
+	if custom := stringsOf(commands["items"].([]any)[0].(map[string]any)["custom_args"]); !equalStrings(custom, []string{"-legacy"}) {
+		t.Fatalf("the tool's command carries %v", custom)
+	}
+	_, pipeline := m.call(http.MethodGet, "/api/v1/profiles/aucom.fixture.pipeline", nil)
+	stage := pipeline["stages"].([]any)[0].(map[string]any)
+	if got := stringsOf(stage["tool_arguments"]); !equalStrings(got, []string{"-legacy"}) {
+		t.Fatalf("the stage does not say the tool's older tokens reach it: %v", stage)
+	}
+	if status, _ := m.call(http.MethodPost, "/api/v1/profiles/aucom.fixture.toolchain/arguments",
+		map[string]any{"executable": "tool", "arguments": []string{"-more"}}); status != http.StatusBadRequest {
+		t.Fatalf("a build tool accepted new tokens: %d", status)
+	}
+	status, body := m.call(http.MethodPost, "/api/v1/profiles/aucom.fixture.toolchain/arguments",
+		map[string]any{"executable": "tool", "reset": true})
+	if status != http.StatusOK || body["binding"].(map[string]any)["arguments"] != nil {
+		t.Fatalf("removing the older tokens: %d %v", status, body["binding"])
 	}
 }
 

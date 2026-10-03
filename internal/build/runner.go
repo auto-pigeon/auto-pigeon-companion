@@ -466,8 +466,9 @@ func (r *Runner) previewStep(request Request, resolved profile.ResolvedStep, wir
 		}
 		// The same tokens the job service appends when the step runs, so the
 		// preview a person reviews is the argv that starts.
-		extra = local.Arguments[resolved.Action.Executable]
+		extra = append(extra, local.Arguments[resolved.Action.Executable]...)
 	}
+	extra = append(extra, r.stageArguments(request.PipelineID, resolved.Step.ID)...)
 	// The request's roots, over the binding's, exactly as [Runner.stepRequest]
 	// merges them. Preview and execution therefore resolve to the same argv
 	// after path substitution, which is the property comparePreview checks and
@@ -703,8 +704,20 @@ func (r *Runner) stepRequest(request Request, layout layout, resolved profile.Re
 		Inputs:    inputs,
 		Options:   options,
 		Roots:     roots,
+		StageArgs: r.stageArguments(request.PipelineID, resolved.Step.ID),
 		Label:     request.Label,
 	}, options, records, nil
+}
+
+// stageArguments is what this machine's setup of the pipeline adds to one
+// stage's command: the pipeline binding's `step_arguments`. Read in the two
+// places a stage's command is made — the preview and the run — so they agree.
+func (r *Runner) stageArguments(pipelineID, stepID string) []string {
+	local, bound := r.binding(pipelineID)
+	if !bound {
+		return nil
+	}
+	return append([]string(nil), local.StepArguments[stepID]...)
 }
 
 // runStep submits one step and waits for it.

@@ -148,6 +148,7 @@ func describeBinding(local binding.LocalBinding) map[string]any {
 		"executables":         local.Executables,
 		"roots":               local.Roots,
 		"arguments":           local.Arguments,
+		"step_arguments":      local.StepArguments,
 		"resolved_version":    local.ResolvedVersion,
 		"version_checked_at":  local.VersionCheckedAt,
 		"overrides":           local.Overrides,

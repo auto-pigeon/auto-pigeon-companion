@@ -73,6 +73,15 @@ type LocalBinding struct {
 	// the paths above: the document — the profile a user exports — is never
 	// changed by it, and a Companion update that ships a new document keeps it.
 	Arguments map[string][]string `json:"arguments,omitempty"`
+	// StepArguments maps a PIPELINE stage id to the argument tokens this user
+	// adds to that stage's command (operator, 2026-10-03: "in build tools you
+	// set up the paths and metadata of tools, in pipelines you pick a tool and
+	// add the parameters"). Recorded on the pipeline's binding, never on the
+	// tool's: two pipelines that share a compiler do not share its flags, and
+	// one pipeline can run the same tool twice with different ones. Machine
+	// state exactly as Arguments is — the document is not touched and an
+	// export carries none of it.
+	StepArguments map[string][]string `json:"step_arguments,omitempty"`
 	// ResolvedVersion is what the version probe reported, and VersionCheckedAt
 	// is when. Both, or neither: a version with no timestamp is a claim with no
 	// expiry, and a tool updated in place would keep the old number forever.
@@ -128,6 +137,15 @@ func (b LocalBinding) Validate() error {
 		}
 		if err := profile.ValidateCustomArgs(tokens); err != nil {
 			add("the arguments for the executable %q: %v", name, err)
+		}
+	}
+	for step, tokens := range b.StepArguments {
+		if strings.TrimSpace(step) == "" {
+			add("arguments are recorded for a pipeline stage with no id")
+			continue
+		}
+		if err := profile.ValidateCustomArgs(tokens); err != nil {
+			add("the arguments for the stage %q: %v", step, err)
 		}
 	}
 	for _, role := range sortedKeys(b.Roots) {

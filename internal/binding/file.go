@@ -171,3 +171,45 @@ func SetArguments(path, profileID, profileVersion, digest string, trust profile.
 	})
 	return out, err
 }
+
+// SetStepArguments records a person's own argument tokens for one stage of one
+// pipeline, or removes them when tokens is empty. The one writer of
+// `step_arguments`, used by the page, by the pipeline creator and by
+// `companion pipeline args` alike.
+//
+// Like [SetArguments], a pipeline with nothing recorded yet gets a binding
+// that holds only the tokens against the document as it is now; it grants
+// nothing, and an existing binding keeps its approval and digest.
+func SetStepArguments(path, profileID, profileVersion, digest string, trust profile.Trust, step string, tokens []string) (LocalBinding, error) {
+	if err := profile.ValidateCustomArgs(tokens); err != nil {
+		return LocalBinding{}, fmt.Errorf("the arguments for the stage %s: %w", step, err)
+	}
+	var out LocalBinding
+	_, err := Update(path, func(set *Set) error {
+		local, found := set.Find(profileID)
+		if !found {
+			local = LocalBinding{
+				ProfileID: profileID, ProfileVersion: profileVersion, ProfileDigest: digest,
+				Trust: trust, Acquisition: profile.AcquireUserPath,
+			}
+		}
+		if len(tokens) == 0 {
+			delete(local.StepArguments, step)
+		} else {
+			if local.StepArguments == nil {
+				local.StepArguments = map[string][]string{}
+			}
+			local.StepArguments[step] = append([]string(nil), tokens...)
+		}
+		if len(local.StepArguments) == 0 {
+			local.StepArguments = nil
+		}
+		local.UpdatedAt = time.Now().UTC()
+		if err := set.Put(local); err != nil {
+			return err
+		}
+		out, _ = set.Find(profileID)
+		return nil
+	})
+	return out, err
+}

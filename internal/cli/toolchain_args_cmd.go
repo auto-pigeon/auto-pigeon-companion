@@ -19,6 +19,18 @@ import (
 //	companion toolchain args <id> <program> --reset               back to the profile's own command
 //
 // Each --set is one argv element exactly as typed: nothing splits or quotes it.
+//
+// Since 2026-10-03 parameters belong to a PIPELINE's stages, not to the build
+// tool every pipeline shares (operator: "in build tools you set up the paths
+// and metadata of tools, in pipelines you pick a tool and add the
+// parameters"). The same command does it, given a pipeline and a stage:
+//
+//	companion toolchain args <pipeline>                           every stage, its tool and its tokens
+//	companion toolchain args <pipeline> <stage> --set=-nopercent  replace that stage's tokens
+//	companion toolchain args <pipeline> <stage> --reset           back to the pipeline's own command
+//
+// A build tool takes no new tokens; ones recorded before still apply and
+// `--reset` removes them. An engine is not a stage of anything and keeps its own.
 func toolchainArgs(env *Env, args []string) int {
 	set := newFlagSet(env, env.group()+" args")
 	var tokens stringList
@@ -47,6 +59,16 @@ func toolchainArgs(env *Env, args []string) int {
 		return fail(env, err)
 	}
 	meta := entry.Profile.Metadata()
+
+	if pipeline, isPipeline := entry.Profile.(*profile.PipelineProfile); isPipeline {
+		return pipelineStageArgs(env, entry, pipeline, bindingsPath, rest, tokens)
+	}
+	if _, isTool := entry.Profile.(*profile.ToolProfile); isTool && len(tokens) > 0 {
+		fmt.Fprintf(env.Stderr, "error: arguments are set on a pipeline stage, not on the build tool.\n"+
+			"       %s args <pipeline> <stage> --set=<token>...   (see `companion build pipelines`)\n"+
+			"       Tokens recorded on %s earlier still apply; --reset removes them.\n", env.group(), meta.ID)
+		return 1
+	}
 
 	var local binding.LocalBinding
 	if len(rest) == 2 {
@@ -83,6 +105,44 @@ func toolchainArgs(env *Env, args []string) int {
 		}
 		fmt.Fprintf(env.Stdout, "  %s\n", strings.Join(quoteAll(command.Argv), " "))
 	}
+	return 0
+}
+
+// pipelineStageArgs is `args` for a pipeline: the tokens of its stages.
+func pipelineStageArgs(env *Env, entry job.CatalogEntry, pipeline *profile.PipelineProfile, bindingsPath string, rest []string, tokens []string) int {
+	meta := entry.Profile.Metadata()
+	var local binding.LocalBinding
+	if len(rest) == 2 {
+		stage, known := rest[1], false
+		for _, step := range pipeline.Steps {
+			known = known || step.ID == stage
+		}
+		if !known {
+			fmt.Fprintf(env.Stderr, "error: %s has no stage called %q\n", meta.ID, stage)
+			return 1
+		}
+		var err error
+		local, err = binding.SetStepArguments(bindingsPath, meta.ID, meta.Version, entry.Digest, entry.Trust, stage, tokens)
+		if err != nil {
+			return fail(env, err)
+		}
+		if len(tokens) == 0 {
+			fmt.Fprintf(env.Stdout, "%s: stage %s runs with the pipeline's own arguments only\n", meta.ID, stage)
+		} else {
+			fmt.Fprintf(env.Stdout, "%s: stage %s now gets %d argument(s) of your own\n", meta.ID, stage, len(tokens))
+		}
+	} else if loaded, err := binding.LoadFile(bindingsPath); err == nil {
+		local, _ = loaded.Find(meta.ID)
+	}
+	for _, step := range pipeline.Steps {
+		fmt.Fprintf(env.Stdout, "\n%s (%s) — %s\n", step.Title, step.ID, step.Capability)
+		if own := local.StepArguments[step.ID]; len(own) > 0 {
+			fmt.Fprintf(env.Stdout, "  your own arguments: %s\n", strings.Join(quoteAll(own), " "))
+		} else {
+			fmt.Fprintf(env.Stdout, "  no arguments of your own\n")
+		}
+	}
+	fmt.Fprintf(env.Stdout, "\nThe exact command of each stage is shown by `companion build preview` and in the Build area's last step.\n")
 	return 0
 }
 

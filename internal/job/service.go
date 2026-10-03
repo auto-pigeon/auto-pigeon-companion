@@ -730,10 +730,13 @@ func (s *Service) resolve(id string, request Request, entry CatalogEntry, action
 		}
 	}
 
+	// A tool's own recorded tokens first (the older, per-tool form), then the
+	// stage's: what a pipeline says about its own stage is the more specific.
 	var extra []string
 	if local, found := s.binding(request.ProfileID); found {
-		extra = local.Arguments[action.Executable]
+		extra = append(extra, local.Arguments[action.Executable]...)
 	}
+	extra = append(extra, request.StageArgs...)
 	invocation, err := profile.Resolve(entry.Profile, action.ID, profile.Request{
 		Platform:    profile.Platform{OS: runtime.GOOS, Arch: runtime.GOARCH},
 		Roots:       s.roots(id, request),

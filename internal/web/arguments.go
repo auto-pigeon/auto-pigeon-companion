@@ -59,6 +59,16 @@ func (s *Server) handleProfileArguments(w http.ResponseWriter, r *http.Request) 
 	if request.Reset {
 		tokens = nil
 	}
+	// A build tool is where a program IS; what it is run with is said by the
+	// pipeline stage that runs it (operator, 2026-10-03). Tokens recorded on a
+	// tool before that still apply and can be removed here, and nothing new is
+	// added. An engine is not a stage of anything and keeps its own.
+	if _, isTool := entry.Profile.(*profile.ToolProfile); isTool && len(tokens) > 0 {
+		writeError(w, http.StatusBadRequest, fmt.Errorf(
+			"arguments are set on a pipeline stage, not on the build tool: open the pipeline that runs %s and add them to its stage "+
+				"(or `companion toolchain args <pipeline> <stage> --set=<token>`). Tokens recorded here earlier still apply and can be removed", name))
+		return
+	}
 	if err := profile.ValidateCustomArgs(tokens); err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("the arguments for %s: %w", name, err))
 		return
@@ -105,4 +115,130 @@ func effectiveCommands(document profile.Profile, local binding.LocalBinding) []m
 		items = append(items, item)
 	}
 	return items
+}
+
+// --- a pipeline's own parameters, per stage ----------------------------------
+//
+// The operator's rule (2026-10-03): "in build tools you set up the paths and
+// metadata of tools, in pipelines you pick a tool and add the parameters". So a
+// stage of a pipeline carries its own argument tokens, recorded in THIS
+// machine's binding for the pipeline — `step_arguments` — exactly as a tool's
+// were: the document is not touched, a built-in pipeline stays what shipped, an
+// export carries none of it, and each token is one argv element checked by
+// [profile.ValidateCustomArgs] here, in the binding and when the command is
+// resolved. Per stage rather than per program, so one pipeline can run the
+// same tool twice with different tokens.
+//
+//	POST /api/v1/profiles/{id}/stage-arguments  {"stage":"compile","arguments":["-nopercent"]}
+//	POST /api/v1/profiles/{id}/stage-arguments  {"stage":"compile","reset":true}
+//	GET  /api/v1/profiles/{id}                  `stages`: each stage, its tool and its tokens
+
+type stageArgumentsRequest struct {
+	Stage     string   `json:"stage"`
+	Arguments []string `json:"arguments"`
+	Reset     bool     `json:"reset,omitempty"`
+}
+
+func (s *Server) handleProfileStageArguments(w http.ResponseWriter, r *http.Request) {
+	var request stageArgumentsRequest
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	entry, _, err := s.profileEntry(r.PathValue("id"))
+	if err != nil {
+		writeError(w, jobStatus(err), err)
+		return
+	}
+	meta := entry.Profile.Metadata()
+	pipeline, isPipeline := entry.Profile.(*profile.PipelineProfile)
+	if !isPipeline {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("%s is not a pipeline; stage arguments belong to a pipeline's stages", meta.Name))
+		return
+	}
+	stage := strings.TrimSpace(request.Stage)
+	known := false
+	for _, step := range pipeline.Steps {
+		known = known || step.ID == stage
+	}
+	if stage == "" || !known {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("%s has no stage called %q", meta.Name, stage))
+		return
+	}
+	tokens := request.Arguments
+	if request.Reset {
+		tokens = nil
+	}
+	if err := profile.ValidateCustomArgs(tokens); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("the arguments for the stage %s: %w", stage, err))
+		return
+	}
+	path, err := s.bindingsPath()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	local, err := binding.SetStepArguments(path, meta.ID, meta.Version, entry.Digest, entry.Trust, stage, tokens)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.describeCatalogEntry(entry, local))
+}
+
+// describeStages is a pipeline's stages as the page shows them: what each one
+// needs done, which installed tool does it here, and the tokens this machine
+// adds. A stage nothing installed can run says so rather than being left out.
+func (s *Server) describeStages(pipeline *profile.PipelineProfile, local binding.LocalBinding) []map[string]any {
+	type provider struct {
+		entry  map[string]any
+		tokens []string
+	}
+	providers := map[string]provider{}
+	if catalog, err := s.catalog(); err == nil {
+		if entries, err := catalog.List(); err == nil {
+			set, _, _ := s.bindings()
+			for _, candidate := range entries {
+				tool, isTool := candidate.Profile.(*profile.ToolProfile)
+				if !isTool {
+					continue
+				}
+				for _, action := range tool.Actions {
+					if action.Capability == "" {
+						continue
+					}
+					if _, taken := providers[action.Capability]; taken {
+						continue
+					}
+					found := provider{entry: map[string]any{
+						"profile_id": tool.Meta.ID, "profile_name": tool.Meta.Name,
+						"action_id": action.ID, "action_title": action.Title, "executable": action.Executable,
+					}}
+					if set != nil {
+						if toolBinding, bound := set.Find(tool.Meta.ID); bound {
+							found.tokens = toolBinding.Arguments[action.Executable]
+						}
+					}
+					providers[action.Capability] = found
+				}
+			}
+		}
+	}
+	stages := make([]map[string]any, 0, len(pipeline.Steps))
+	for _, step := range pipeline.Steps {
+		stage := map[string]any{
+			"id": step.ID, "title": step.Title, "capability": step.Capability,
+			"options": step.Options, "optional": step.Optional,
+			"arguments": append([]string{}, local.StepArguments[step.ID]...),
+		}
+		if found, ok := providers[step.Capability]; ok {
+			stage["tool"] = found.entry
+			// Tokens recorded on the tool itself before parameters moved to
+			// pipelines: they still reach this stage, and the page says so.
+			if len(found.tokens) > 0 {
+				stage["tool_arguments"] = found.tokens
+			}
+		}
+		stages = append(stages, stage)
+	}
+	return stages
 }

@@ -18,7 +18,7 @@ import (
 // this program, not by anybody else's. A record this build does not fully
 // understand is refused rather than half-read, because a job record is what
 // says whether something ran.
-const SchemaVersion = "aucom.job/1.3"
+const SchemaVersion = "aucom.job/1.4"
 
 // SupportedSchemaVersions is every job record format this build reads, oldest
 // first.
@@ -35,7 +35,10 @@ const SchemaVersion = "aucom.job/1.3"
 // which the live output view reads while it runs — and `custom_args`, the
 // argument tokens this machine's profile setup appended (NEW_265). A record
 // without them is one from before either existed, and reads as "none".
-var SupportedSchemaVersions = []string{"aucom.job/1.0", "aucom.job/1.1", "aucom.job/1.2", "aucom.job/1.3"}
+// 1.4 added `stage_args` on the request: the tokens the pipeline STAGE this
+// job runs for was given, which a retry must carry because the stage, not the
+// tool, owns them.
+var SupportedSchemaVersions = []string{"aucom.job/1.0", "aucom.job/1.1", "aucom.job/1.2", "aucom.job/1.3", "aucom.job/1.4"}
 
 // SchemaSupported reports whether this build reads a job record format.
 func SchemaSupported(version string) bool {
@@ -67,6 +70,12 @@ type Request struct {
 	// before any acquisition mechanism exists.
 	Executables map[string]string `json:"executables,omitempty"`
 	Roots       map[string]string `json:"roots,omitempty"`
+	// StageArgs are the argument tokens of the pipeline stage this job runs
+	// for (the pipeline binding's `step_arguments`). They are appended where a
+	// tool's own recorded tokens go and are checked by the resolver's
+	// [profile.ValidateCustomArgs] like those: one argv element each, never a
+	// template, never a shell line. Empty for a job that is not a stage.
+	StageArgs []string `json:"stage_args,omitempty"`
 	// Label is a short human name for the job list. Optional.
 	Label string `json:"label,omitempty"`
 	// RetryOf names the job this one repeats. Set by Retry, never by a caller:

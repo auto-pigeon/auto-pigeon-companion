@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://auto-pigeon.invalid/schema/aucom.local-binding/1.3",
+  "title": "Auto-Pigeon Companion local binding 1.3",
+  "description": "The machine-local half of a profile. This document is NEVER published: every rule the portable profile schemas enforce is inverted here. Paths are absolute, the AUB Game Profile is identified by record id rather than by slug, and the grant records one person's decision on one computer. It is described here so the local file format is documented and versioned, not so it can be shared. 1.1 adds `installs`; a 1.0 file is still read, and is rewritten at 1.1 the next time it is saved.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "bindings"],
+  "properties": {
+    "schema_version": { "const": "aucom.local-binding/1.3" },
+    "bindings": { "type": "array", "items": { "$ref": "#/$defs/localBinding" } }
+  },
+  "$defs": {
+    "absolutePath": {
+      "type": "string",
+      "description": "An absolute path on this machine. A relative path is the fault here: a binding is resolved against nothing, so a relative path would depend on the Companion's working directory.",
+      "minLength": 1
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "grant": {
+      "type": "object",
+      "description": "What one user approved, keyed by the document's digest rather than by its version: a version is a claim the author makes, a digest is a fact about the bytes.",
+      "additionalProperties": false,
+      "required": ["profile_id", "digest", "granted", "granted_at"],
+      "properties": {
+        "profile_id": { "type": "string" },
+        "version": { "type": "string" },
+        "digest": { "$ref": "#/$defs/digest" },
+        "trust": { "enum": ["builtin", "verified", "community", "local"] },
+        "granted": { "type": "array", "items": { "type": "string" } },
+        "granted_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "pinnedInstall": {
+      "type": "object",
+      "description": "Legacy: a managed download a binding written before 2026-09-23 depended on. Still read so an existing file loads; never written, because the Companion downloads no program.",
+      "additionalProperties": false,
+      "required": ["package_id", "version", "digest", "pinned_at"],
+      "properties": {
+        "package_id": { "type": "string" },
+        "version": { "type": "string" },
+        "digest": { "$ref": "#/$defs/digest" },
+        "platform": { "type": "string" },
+        "pinned_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "override": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "name", "value", "set_at"],
+      "properties": {
+        "kind": { "enum": ["executable", "root", "version"] },
+        "name": { "type": "string" },
+        "value": { "type": "string" },
+        "reason": { "type": "string" },
+        "set_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "localBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "profile_id", "profile_digest", "updated_at"],
+      "properties": {
+        "schema_version": { "const": "aucom.local-binding/1.3" },
+        "profile_id": { "type": "string" },
+        "profile_version": { "type": "string" },
+        "profile_digest": { "$ref": "#/$defs/digest" },
+        "trust": { "enum": ["builtin", "verified", "community", "local"] },
+        "acquisition": { "enum": ["user_path", "system_path", "managed_download", "already_installed"] },
+        "executables": { "type": "object", "additionalProperties": { "$ref": "#/$defs/absolutePath" } },
+        "roots": {
+          "type": "object",
+          "description": "`workspace` may not appear: it is created per job by the executor, and a stored path would outlive the directory it names.",
+          "propertyNames": { "enum": ["project_root", "game_root", "content_root", "tool_root", "tool_cache"] },
+          "additionalProperties": { "$ref": "#/$defs/absolutePath" }
+        },
+        "arguments": {
+          "type": "object",
+          "description": "A person's own argument tokens per declared executable (NEW_265): each one argv element exactly as typed, appended before the action's operands. Never templates.",
+          "additionalProperties": {
+            "type": "array",
+            "maxItems": 32,
+            "items": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[^{}\\u0000-\\u001f\\u007f]+$" }
+          }
+        },
+        "step_arguments": {
+          "type": "object",
+          "description": "On a PIPELINE's binding: a person's own argument tokens per stage id (1.3). Each one argv element exactly as typed, appended before that stage's operands, for that stage only — so the same tool can run twice in one pipeline with different tokens. Never templates.",
+          "additionalProperties": {
+            "type": "array",
+            "maxItems": 32,
+            "items": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[^{}\\u0000-\\u001f\\u007f]+$" }
+          }
+        },
+        "resolved_version": { "type": "string" },
+        "version_checked_at": { "type": "string", "format": "date-time" },
+        "game_profile_id": { "type": "string" },
+        "installs": { "type": "array", "items": { "$ref": "#/$defs/pinnedInstall" } },
+        "grant": { "$ref": "#/$defs/grant" },
+        "overrides": { "type": "array", "items": { "$ref": "#/$defs/override" } },
+        "updated_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

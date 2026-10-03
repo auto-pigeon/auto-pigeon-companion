@@ -70,6 +70,8 @@ func (s *Server) profileAPI() map[string]http.HandlerFunc {
 		"POST /api/v1/profiles/{id}/remove":    s.handleProfileRemove,
 		"POST /api/v1/profiles/{id}/homepage":  s.handleProfileHomepage,
 		"POST /api/v1/profiles/{id}/arguments": s.handleProfileArguments,
+		// A pipeline's own parameters, per stage (arguments.go).
+		"POST /api/v1/profiles/{id}/stage-arguments": s.handleProfileStageArguments,
 		"GET /api/v1/profiles/{id}/commands":   s.handleProfileCommands,
 	}
 }
@@ -154,8 +156,12 @@ func (s *Server) describeCatalogEntry(entry job.CatalogEntry, local binding.Loca
 	// Whether its programs can start here: the one decision the engine list
 	// in Build & Run also reads (readiness.go). A pipeline starts nothing of
 	// its own and has no answer to give.
-	if _, isPipeline := entry.Profile.(*profile.PipelineProfile); !isPipeline {
+	if pipeline, isPipeline := entry.Profile.(*profile.PipelineProfile); !isPipeline {
 		body["readiness"] = installReadiness(entry, local).view()
+	} else {
+		// Each stage with the tool that runs it here and the tokens this
+		// machine adds to it: a pipeline is where parameters are set.
+		body["stages"] = s.describeStages(pipeline, local)
 	}
 	return body
 }
