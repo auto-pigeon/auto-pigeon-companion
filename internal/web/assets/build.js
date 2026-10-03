@@ -1017,12 +1017,46 @@
   // staged for a Quake III build, and each package the saved map is bound to
   // with the digest it was verified at. Every value is the manifest's own.
   function whatWasRead(manifest) {
+    const lines = readLines(manifest);
+    const data = manifest.game_data;
+    if (!lines.length && !manifest.failure_class) return null;
+    const item = el("li");
+    item.append(el("span", { className: "stage-name", text: t("What this build read") }));
+    if (manifest.failure_class) {
+      item.append(el("span", { className: "stage-detail failure-class", text: t("Kind of failure: {kind}", { kind: manifest.failure_class }) }));
+    }
+    if (lines.length) {
+      const details = el("details", { className: "stage-findings" });
+      details.open = Boolean((data?.findings || []).length);
+      details.append(el("summary", { text: t("Sources and staged game data") }));
+      details.append(el("pre", { className: "output", text: lines.join("\n") }));
+      item.append(details);
+    }
+    return item;
+  }
+
+  // readLines is that panel's text, one fact a line, and touches no element —
+  // so it can be run without a page (testdata/buildread.check.mjs).
+  function readLines(manifest) {
     const lines = [];
     for (const input of manifest.inputs || []) {
+      // The account's own name for what was built (Q3_012A). The document id
+      // and revision on the next line are the APMap's: a map saved three times
+      // read "revision 0" there and the panel named no account revision at all.
+      const s = input.source;
+      if (s && s.asset_id) {
+        lines.push(s.revision_id
+          ? t("{name}: from your account — {type} {title} ({asset}), account revision {revision}, revision id {revision_id}", {
+            name: input.name, type: s.asset_type, title: s.display_name || s.asset_id, asset: s.asset_id, revision: s.revision, revision_id: s.revision_id })
+          : t("{name}: from your account — {type} {title} ({asset}), account revision {revision}", {
+            name: input.name, type: s.asset_type, title: s.display_name || s.asset_id, asset: s.asset_id, revision: s.revision }));
+      }
       const c = input.conversion;
       if (!c) continue;
       lines.push(t("{name}: converted from the map document {document} (revision {revision}), {digest}", {
         name: input.name, document: c.document_id || c.source_name, revision: c.document_revision, digest: c.source_sha256 }));
+      // The bytes the compiler was handed: the `.map` the extractor wrote.
+      if (input.sha256) lines.push(t("{name}: the .map this build compiled — {digest}", { name: input.name, digest: input.sha256 }));
       if (c.manifest) {
         lines.push(t("Conversion record: {shaders} shader(s), {models} model(s), {warnings} warning(s) — {digest}", {
           shaders: c.manifest.shaders, models: c.manifest.models, warnings: c.manifest.warnings, digest: c.manifest.sha256 }));
@@ -1048,20 +1082,7 @@
       }
       for (const finding of data.findings || []) lines.push(finding.message);
     }
-    if (!lines.length && !manifest.failure_class) return null;
-    const item = el("li");
-    item.append(el("span", { className: "stage-name", text: t("What this build read") }));
-    if (manifest.failure_class) {
-      item.append(el("span", { className: "stage-detail failure-class", text: t("Kind of failure: {kind}", { kind: manifest.failure_class }) }));
-    }
-    if (lines.length) {
-      const details = el("details", { className: "stage-findings" });
-      details.open = Boolean((data?.findings || []).length);
-      details.append(el("summary", { text: t("Sources and staged game data") }));
-      details.append(el("pre", { className: "output", text: lines.join("\n") }));
-      item.append(details);
-    }
-    return item;
+    return lines;
   }
 
   // reattach opens the build this Companion is running when the page has none

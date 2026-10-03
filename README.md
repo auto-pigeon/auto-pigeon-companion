@@ -727,7 +727,25 @@ optional members of a diagnostic rule: `"fatal": true` (the line proves the
 stage's result is unusable although the program exited 0; requires severity
 `error`) and `"class": "<token>"`. On the Build page each stage lists its
 findings with the compiler's own line, links to its job, and *What this build
-read* shows the conversion, the staged game data and each bound package.
+read* shows the conversion, the staged game data and each bound package. For a
+map saved to the account it begins with which revision that was and which
+`.map` the compiler was handed — the APMap's own `document_id` and revision are
+not the account's, and a map saved three times still calls itself revision 0:
+
+```text
+source_map: from your account — map q3012_room (ske0lwo5s5mbd0u), account revision 3, revision id k5rlmolcyf33u88
+source_map: converted from the map document q3012_room:full_map (revision 0), sha256:987b82a4…
+source_map: the .map this build compiled — sha256:626cdf66…
+```
+
+The same three facts from the terminal are the manifest's `inputs[].source`
+(`asset_id`, `revision`, `revision_id`), `inputs[].conversion.source_sha256` and
+`inputs[].sha256`:
+
+```console
+$ companion build show <build id> --json | jq '.inputs[] | {source: .source | {asset_id, revision, revision_id}, apmap: .conversion.source_sha256, map: .sha256}'
+```
+
 A refusal is shown as its first line — an extractor refusal such as
 `apmap-to-q3map refused [q3map_shader_unsafe]: …` leads with the extractor's own
 reason — with everything else the program printed behind *Technical details*,
