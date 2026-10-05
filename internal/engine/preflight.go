@@ -237,7 +237,7 @@ func (c Checker) engineProblems(document profile.Profile, action profile.Action,
 			return Problems{{
 				Fault:   FaultMissingEngine,
 				Summary: fmt.Sprintf("Nothing on this machine says where %s's %q executable is.", document.Metadata().Name, action.Executable),
-				Fix:     "Point the Companion at the engine you have: `companion engine bind " + document.Metadata().ID + " --engine <path to the executable>`.",
+				Fix:     bindFix(document, "Point the Companion at the engine you have: `companion engine bind "+document.Metadata().ID+" --engine <path to the executable>`."),
 			}}
 		}
 		file := executableFile(document, action.Executable)
@@ -252,17 +252,34 @@ func (c Checker) engineProblems(document profile.Profile, action profile.Action,
 	case err != nil:
 		return Problems{{
 			Fault:   FaultMissingEngine,
-			Summary: fmt.Sprintf("The engine recorded for %s is not there: %s.", document.Metadata().Name, path),
-			Fix:     "It was moved, renamed or uninstalled. Bind it again with `companion engine bind " + document.Metadata().ID + " --engine <path>`.",
+			Summary: fmt.Sprintf("The %s recorded for %s is not there: %s.", recordedNoun(document, action), document.Metadata().Name, path),
+			Fix:     bindFix(document, "It was moved, renamed or uninstalled. Bind it again with `companion engine bind "+document.Metadata().ID+" --engine <path>`."),
 		}}
 	case info.IsDir():
 		return Problems{{
 			Fault:   FaultMissingEngine,
-			Summary: fmt.Sprintf("The engine recorded for %s is a directory, not a program: %s.", document.Metadata().Name, path),
+			Summary: fmt.Sprintf("The %s recorded for %s is a directory, not a program: %s.", recordedNoun(document, action), document.Metadata().Name, path),
 			Fix:     "Name the executable inside it.",
 		}}
 	}
 	return nil
+}
+
+// recordedNoun and bindFix keep the engine wording for engines. A build tool's
+// program is not an engine and is not bound by `engine bind` (NEW_310: a
+// missing qbsp read "The engine recorded for … is not there").
+func recordedNoun(document profile.Profile, action profile.Action) string {
+	if document.Metadata().Kind == profile.KindTool {
+		return fmt.Sprintf("program %q", action.Executable)
+	}
+	return "engine"
+}
+
+func bindFix(document profile.Profile, engineFix string) string {
+	if document.Metadata().Kind == profile.KindTool {
+		return "Choose it again under \"Where these programs are on this machine\" in Profiles, or run `companion acquire resolve <its profile file> --mode user_path --user-path <folder> --bind`."
+	}
+	return engineFix
 }
 
 func executableFile(document profile.Profile, name string) string {

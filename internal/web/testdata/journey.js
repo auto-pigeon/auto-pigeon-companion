@@ -216,16 +216,11 @@
     record("a revision can be chosen for a build", Boolean(window.AUCOM.chosenRevision),
       window.AUCOM.chosenRevision ? window.AUCOM.chosenRevision.revision_id : "nothing chosen");
     await waitFor("Build to open on the chosen map", () => visible($("area-build")) && visible($("build-step-2")));
-    // The inputs render after the pipeline list resolves, so the field is
-    // waited for rather than read the instant the panel appears. A machine with
-    // more than one installed pipeline takes longer to get here, which is the
-    // ordinary case rather than a special one.
-    await waitFor("the map field", () => $("build-input-source_map-source"));
-    record(
-      "Use in a build opens Build at the map step with the revision in the map field",
-      $("build-input-source_map-source")?.value === "asset" && textOf($("build-step-2")).includes("downloaded to this computer"),
-      `${$("build-input-source_map-source")?.value} · ${textOf($("build-step-summary-2"))}`
-    );
+    await waitFor("pipeline readiness to arrive", () => $("build-pipeline").options.length > 1);
+    record("an unready pipeline stays visible and disabled while the chosen revision is kept",
+      [...$("build-pipeline").options].find(o => o.value === settings.pipeline_id)?.disabled === true &&
+      Boolean(window.AUCOM.chosenRevision?.revision_id),
+      $("build-pipeline").value || "no unavailable pipeline selected");
 
     // --- 5. the toolchain has to be reviewed and approved -------------------
     await go("profiles");
@@ -282,7 +277,8 @@
 
     // --- 6. build -----------------------------------------------------------
     await go("build");
-    await waitFor("the pipeline list", () => $("build-pipeline").options.length > 0);
+    await waitFor("the configured pipeline to become selectable", () =>
+      [...$("build-pipeline").options].some(option => option.value === settings.pipeline_id && !option.disabled));
     setValue($("build-pipeline"), settings.pipeline_id);
     await waitFor("the pipeline's stages", () => $("build-stages").children.length > 0);
     record(
@@ -295,7 +291,7 @@
     // one, and choosing this one again (NEW_244D rehearsal: it was emptied).
     const typedMap = await waitFor("the map path field", () => $("build-input-source_map"));
     setValue(typedMap, "/a map chosen before switching.map");
-    const other = [...$("build-pipeline").options].find((option) => option.value !== settings.pipeline_id && /^Quake 1/.test(option.text));
+    const other = [...$("build-pipeline").options].find((option) => option.value !== settings.pipeline_id && !option.disabled && option.value === "aucom.fixture.pipeline-second");
     if (other) {
       setValue($("build-pipeline"), other.value);
       setValue($("build-pipeline"), settings.pipeline_id);
@@ -368,23 +364,13 @@
     // --- 7. set the engine up, and start it ---------------------------------
     await go("run");
     await waitFor("the engine list", () => $("run-engine").options.length > 0);
-    setValue($("run-engine"), settings.engine_id);
-    await waitFor("the engine detail", () => textOf($("run-engine-detail")).includes("About this profile"));
-    record(
-      "an engine that is not set up says what is stopping it",
-      textOf($("run-engine-detail")).includes("Before this can start"),
-      textOf($("run-engine-detail")).replace(/\s+/g, " ").slice(0, 140)
-    );
-    const runText = textOf($("run-engine-detail"));
-    record(
-      "what is stopping it points at the setup form, not at a command, an id or a placeholder",
-      !runText.includes("`companion ") && !runText.includes(settings.engine_id) && !runText.includes("{platform."),
-      (runText.match(new RegExp(".{0,80}(`companion |\\{platform\\.|" + settings.engine_id.replace(/\./g, "\\.") + ").{0,40}")) || ["clean"])[0]
-    );
-
-    // Setup happens in Profiles only (operator, 2026-09-23): Run's Setup opens
-    // the engine's page there, with Profiles lit in the side menu.
-    buttonIn($("run-engine-detail"), "Setup").click();
+    const unready = [...$("run-engine").options].find(option => option.value === settings.engine_id);
+    record("an engine needing setup is visible but cannot be selected", unready?.disabled === true, unready?.textContent || "missing");
+    // Configuration selectors and the Profiles navigation remain actionable.
+    await go("profiles");
+    setValue($("profiles-kind"), "engine");
+    const engineCard = await waitFor("the engine in Profiles", () => rowContaining($("profiles-list"), "Fixture Q1 engine"));
+    buttonIn(engineCard, "Review").click();
     await waitFor("the engine's page in Profiles", () =>
       visible($("area-profiles")) && visible($("profile-detail-panel")) && $("profile-exe-engine"));
     record(

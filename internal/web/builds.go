@@ -285,6 +285,7 @@ func (s *Server) handleBuildPipelines(w http.ResponseWriter, r *http.Request) {
 			"inputs": inputPayload(pipeline.Inputs, family), "outputs": pipeline.Outputs,
 			"steps": steps, "missing_capabilities": missing, "runnable": runnable,
 			"engine_family": family, "maturity": describeMaturity(family),
+			"readiness": pipelineReadiness(pipeline, runner.Resolver(), set).view(),
 		})
 		// A leak test is a question about a map, not a build of it. The page
 		// asks this flag rather than knowing a pipeline id (`Q3_018`).
@@ -521,6 +522,17 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 	}
 	if request.Pipeline == "" {
 		writeError(w, http.StatusBadRequest, errors.New("a build needs a pipeline id"))
+		return
+	}
+	// The readiness the pipeline selectors show is the one enforced here: a
+	// crafted or stale request for a pipeline whose setup is incomplete starts
+	// nothing and leaves no failed build behind (NEW_310).
+	if unready, ok := s.unreadyPipeline(request.Pipeline); ok {
+		writeJSON(w, http.StatusConflict, map[string]any{
+			"error":     "the pipeline " + request.Pipeline + " needs setup before it can build",
+			"class":     "pipeline_not_ready",
+			"readiness": unready.view(),
+		})
 		return
 	}
 
@@ -861,3 +873,34 @@ func (s *Server) handleBuildOutput(w http.ResponseWriter, r *http.Request) {
 
 // Server.Close, which stops every build this process is running, is in
 // lifecycle_api.go beside the rest of what a stopping Companion does.
+
+// unreadyPipeline answers whether an installed pipeline cannot run here yet,
+// with its readiness. An id that names no pipeline is left to the runner,
+// which already refuses it with its own error.
+func (s *Server) unreadyPipeline(id string) (readiness, bool) {
+	runner, err := s.buildRunner(nil)
+	if err != nil {
+		return readiness{}, false
+	}
+	catalog, err := s.catalog()
+	if err != nil {
+		return readiness{}, false
+	}
+	entries, err := catalog.List()
+	if err != nil {
+		return readiness{}, false
+	}
+	set, _, err := s.bindings()
+	if err != nil {
+		return readiness{}, false
+	}
+	for _, entry := range entries {
+		pipeline, isPipeline := entry.Profile.(*profile.PipelineProfile)
+		if !isPipeline || entry.Profile.Metadata().ID != id {
+			continue
+		}
+		state := pipelineReadiness(pipeline, runner.Resolver(), set)
+		return state, !state.Ready
+	}
+	return readiness{}, false
+}

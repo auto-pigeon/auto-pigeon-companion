@@ -344,7 +344,36 @@ stages, each picking a tool, wiring its inputs and carrying its own parameters a
 arguments; the same tool may be a stage more than once. What the form has no field
 for is kept as the tested profile had it. Nothing is installed until you press
 **Install this profile**, and an installed profile is local and cannot run until you
-approve it.
+approve it. **Next** keeps you at the current step when required fields or
+server validation fail. Review shows the current validated declaration; installing
+opens its approval and setup page. If saving stage arguments fails, setup stays
+incomplete and **Retry saving stage arguments** saves them without reinstalling.
+
+For example, select **Profiles → New profile → A build tool → From scratch**,
+enter its identity, add each program and action, then review and install.
+Read its declarations, press **I have read this — approve it**, enter executable
+paths and **Save these paths**. Engines also offer their working folder and
+declared environment settings; pipelines offer dependency setup and local stage
+arguments. Reopen the profile to inspect its readiness before building.
+
+Execution lists keep unavailable profiles and actions visible with their specific
+setup reasons, but disable their selection. **Profiles / setup** remains available
+beside these controls. Refresh after completing setup; a valid selection is kept,
+and a selection that has lost readiness is cleared.
+
+The server enforces the same readiness: starting a build with a pipeline whose
+setup is incomplete — a stale page, a hand-made call — is refused with HTTP 409
+before anything is fetched or run, and no failed build is left behind. The answer
+carries the same reasons the list shows:
+
+```bash
+curl -sS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
+  -H 'Content-Type: application/json' -X POST \
+  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/build/runs" \
+  -d '{"pipeline":"auto-pigeon.q1.final","inputs":{"source_map":"/path/to/room.map"}}'
+# {"class":"pipeline_not_ready","error":"the pipeline auto-pigeon.q1.final needs setup before it can build",
+#  "readiness":{"ready":false,"problems":[{"fault":"…","summary":"Compile the map: …","fix":"…"}]}}
+```
 
 ```bash
 # a tested profile as the form's fields, and the document composed back from them

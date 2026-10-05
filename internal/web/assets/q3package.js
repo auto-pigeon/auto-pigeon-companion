@@ -357,23 +357,22 @@
 
   // --- install ---------------------------------------------------------------
 
+  let engineRefresh = 0;
+  const engineReady = (engine) => engine?.set_up === true;
+  const actionReady = (action) => action?.ready === true;
   async function refreshEngines() {
+    const sequence = ++engineRefresh;
+    const owned = state;
     const { ok, body } = await api("/api/v1/q3/engines");
+    if (state !== owned || sequence !== engineRefresh) return;
     const select = $("q3pkg-engine");
     const kept = select.value;
-    select.replaceChildren();
     state.engines = ok ? body.engines || [] : [];
-    if (!ok) {
-      setMessage("q3pkg-install-message", body.error || t("The engines could not be listed."), "error");
-      return;
-    }
-    for (const engine of state.engines) {
-      const label = engine.set_up ? engine.name : t("{name} — not set up", { name: engine.name });
-      select.append(el("option", { text: label, attrs: { value: engine.id } }));
-    }
-    const ready = state.engines.find((engine) => engine.set_up);
-    select.value = state.engines.some((engine) => engine.id === kept) ? kept : (ready || state.engines[0] || {}).id || "";
+    window.AUCOM.executionChoices(select, state.engines, kept, engineReady,
+      (engine) => engine.name + (engineReady(engine) ? "" : " — needs setup: " + (engine.problem || "readiness is not known")),
+      "Choose a ready Quake III engine…", true);
     engineChanged();
+    if (!ok) setMessage("q3pkg-install-message", body.error || t("The engines could not be listed."), "error");
   }
 
   function currentEngine() {
@@ -384,9 +383,12 @@
     const engine = currentEngine();
     const note = $("q3pkg-engine-note");
     const actions = $("q3pkg-action");
+    const previousAction = actions.value;
     actions.replaceChildren();
     if (!engine) {
-      note.textContent = t("No Quake III engine profile is installed.");
+      note.replaceChildren(el("span", { text: "Choose a ready Quake III engine. " }), el("a", { text: "Profiles / setup", attrs: { href: "#profiles" } }));
+      $("q3pkg-install-preview").disabled = true;
+      $("q3pkg-run").disabled = true;
       $("q3pkg-install").disabled = true;
       return;
     }
@@ -397,11 +399,11 @@
     } else {
       note.textContent = t("Its game folder: {folder}", { folder: engine.game_root });
     }
-    $("q3pkg-install").disabled = !engine.game_root;
-    for (const action of engine.actions || []) {
-      const label = action.reports_map_load ? action.title : t("{title} — does not report a map load", { title: action.title });
-      actions.append(el("option", { text: label, attrs: { value: action.id } }));
-    }
+    $("q3pkg-install").disabled = !engineReady(engine);
+    $("q3pkg-install-preview").disabled = !engineReady(engine);
+    window.AUCOM.executionChoices(actions, engine.actions || [], previousAction, actionReady,
+      (action) => action.title + (actionReady(action) ? "" : " — needs setup: " + (action.problem || "readiness is not known")),
+      "Choose a ready action…", true);
     actionChanged();
   }
 
@@ -413,6 +415,7 @@
     const engine = currentEngine();
     const action = (engine?.actions || []).find((candidate) => candidate.id === $("q3pkg-action").value);
     const note = $("q3pkg-action-note");
+    $("q3pkg-run").disabled = !engineReady(engine) || !actionReady(action) || state.run?.state === "waiting" || Boolean(state.run?.engine_running);
     // The Port field belongs to the actions that declare a port. A client
     // action declares none: the field is not offered to it, and what was typed
     // for a server is not sent with it (the engine profile would refuse it).
@@ -438,7 +441,7 @@
   }
 
   async function install(button, previewOnly) {
-    if (!state.pkg) return;
+    if (!state.pkg || !engineReady(currentEngine())) return;
     await withBusy(button, async () => {
       busy("q3pkg-install-message", previewOnly ? t("Checking where it would go…") : t("Installing…"));
       const response = await api(previewOnly ? "/api/v1/q3/installs/preview" : "/api/v1/q3/installs",
@@ -489,6 +492,8 @@
   }
 
   async function uninstall(button) {
+    // Removing an installed package is setup, not a run: it stays available
+    // while the engine's run actions need setup.
     if (!state.installation) return;
     await withBusy(button, async () => {
       const response = await api("/api/v1/q3/installs/" + encodeURIComponent(state.installation.id), { method: "DELETE" });
@@ -512,7 +517,7 @@
   // --- run -------------------------------------------------------------------
 
   async function run(button) {
-    if (!state.installation) return;
+    if (!state.installation || !engineReady(currentEngine()) || !actionReady((currentEngine()?.actions || []).find(a => a.id === $("q3pkg-action").value))) return;
     await withBusy(button, async () => {
       busy("q3pkg-run-message", t("Starting the engine…"));
       const options = {};
@@ -576,7 +581,7 @@
     if (!run) return;
     const stop = $("q3pkg-stop");
     stop.hidden = !(run.state === "waiting" || run.engine_running);
-    $("q3pkg-run").disabled = run.state === "waiting" || Boolean(run.engine_running);
+    actionChanged();
 
     if (run.state === "waiting") {
       busy("q3pkg-run-message", t("The engine was started. Waiting for the engine itself to say the map loaded…"));
@@ -673,10 +678,10 @@
     if (state?.build !== build || !latest.ok || !latest.body.run) return;
     state.run = latest.body.run;
     // The engine and the action the run used are the ones to show selected.
-    if (state.engines.some((engine) => engine.id === state.run.engine)) {
+    if (state.engines.some((engine) => engine.id === state.run.engine && engineReady(engine))) {
       $("q3pkg-engine").value = state.run.engine;
       engineChanged();
-      $("q3pkg-action").value = state.run.action;
+      if (actionReady(currentEngine()?.actions.find(a => a.id === state.run.action))) $("q3pkg-action").value = state.run.action;
       actionChanged();
     }
     renderRun();

@@ -459,19 +459,18 @@
 
   // --- step 2: the build profile -------------------------------------------------
 
+  let pipelineRefresh = 0;
+  let engineRefresh = 0;
   async function loadPipelines() {
+    const sequence = ++pipelineRefresh;
     const { ok, body } = await api("/api/v1/build/pipelines");
-    if (!ok) return;
+    if (sequence !== pipelineRefresh) return;
+    if (!ok) { state.pipelines = []; state.pipeline = ""; $("play-pipeline").replaceChildren(); renderStages(); renderSteps(); return; }
     state.pipelines = body.items || [];
     const select = $("play-pipeline");
-    select.replaceChildren(el("option", { text: "Choose a build profile…", attrs: { value: "" } }));
-    for (const pipeline of state.pipelines) {
-      select.append(el("option", {
-        text: pipeline.name + (pipeline.runnable ? "" : " — not installed on this machine"),
-        attrs: { value: pipeline.id, disabled: pipeline.runnable ? null : "disabled" },
-      }));
-    }
-    if (state.pipeline) select.value = state.pipeline;
+    state.pipeline = window.AUCOM.executionChoices(select, state.pipelines, state.pipeline, window.AUCOM.pipelineReady,
+      (pipeline) => pipeline.name + (window.AUCOM.pipelineReady(pipeline) ? "" : " — needs setup: " + (pipeline.readiness?.problems || []).map((p) => p.summary).join(" ")),
+      "Choose a ready build profile…");
     renderStages();
   }
 
@@ -490,20 +489,16 @@
   // --- step 3: the engine ---------------------------------------------------------
 
   async function loadEngines() {
+    const sequence = ++engineRefresh;
     const { ok, body } = await api("/api/v1/engines");
-    if (!ok) return;
+    if (sequence !== engineRefresh) return;
+    if (!ok) { state.engines = []; state.engine = ""; $("play-engine").replaceChildren(); renderActions(); renderSteps(); return; }
     state.engines = body.items || [];
     const select = $("play-engine");
-    select.replaceChildren(el("option", { text: "Choose an engine…", attrs: { value: "" } }));
-    for (const engine of state.engines) {
-      // Whether it can start is in the option itself, as in Run (operator,
-      // 2026-09-23): a <select> holds no markup, so it is words.
-      select.append(el("option", {
-        text: `${engine.name} — ${engine.ready ? t("Ready to start") : t("Needs setup")}`,
-        attrs: { value: engine.id },
-      }));
-    }
-    if (state.engine) select.value = state.engine;
+    state.engine = window.AUCOM.executionChoices(select, state.engines, state.engine,
+      (engine) => Object.keys(ACTIONS).some((id) => window.AUCOM.actionReady(engine, id)),
+      (engine) => `${engine.name} — ${Object.keys(ACTIONS).some((id) => window.AUCOM.actionReady(engine, id)) ? t("Ready to start") : t("Needs setup") + ": " + (engine.readiness?.problems || []).map(p => p.summary).join(" ")}`,
+      "Choose a ready engine…");
     renderActions();
   }
 
@@ -521,19 +516,21 @@
       .map((id) => (engine?.actions || []).find((action) => action.id === id))
       .filter(Boolean);
     for (const action of offered) {
-      select.append(el("option", { text: action.title || action.id, attrs: { value: action.id } }));
+      select.append(el("option", { text: (action.title || action.id) + (window.AUCOM.actionReady(engine, action.id) ? "" : " — needs setup: " + (engine.action_problems?.[action.id] || []).map(p => p.summary).join(" ")), attrs: { value: action.id, disabled: window.AUCOM.actionReady(engine, action.id) ? null : "disabled" } }));
     }
-    if (state.action && offered.some((a) => a.id === state.action)) select.value = state.action;
-    else select.value = offered[0]?.id || "";
+    if (state.action && offered.some((a) => a.id === state.action && window.AUCOM.actionReady(engine, a.id))) select.value = state.action;
+    else select.value = offered.find((a) => window.AUCOM.actionReady(engine, a.id))?.id || "";
     state.action = select.value || "";
     for (const action of offered) {
       const meaning = ACTIONS[action.id];
       const input = el("input", {
         attrs: { type: "radio", name: "play-action-choice", value: action.id, id: "play-action-" + action.id },
       });
-      input.checked = action.id === state.action;
+      input.disabled = !window.AUCOM.actionReady(engine, action.id);
+      input.setAttribute("aria-disabled", String(input.disabled));
+      input.checked = !input.disabled && action.id === state.action;
       input.addEventListener("change", () => {
-        if (!input.checked) return;
+        if (input.disabled || !input.checked) return;
         select.value = action.id;
         select.dispatchEvent(new Event("change", { bubbles: true }));
       });

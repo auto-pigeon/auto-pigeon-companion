@@ -14,6 +14,7 @@
     maturityBadge, maturityNote, openCompatibilityReport, t } = window.AUCOM;
 
   let pipelines = [];
+  let pipelineRefresh = 0;
   let inputFields = new Map();
   let currentBuild = null;
   let poller = null;
@@ -44,7 +45,8 @@
     }
     await refreshPipelines();
     const pipeline = pipelines.find((item) => item.id === body.pipeline);
-    if (!pipeline) {
+    if (!pipeline || !window.AUCOM.pipelineReady(pipeline)) {
+      if (pipeline) return "This leak-test pipeline needs setup: " + (pipeline.readiness?.problems || []).map(p => p.summary).join(" ") + " Set it up in Profiles, then review again.";
       return body.game_profile === "quake3"
         ? t("The Quake III leak-test pipeline is unavailable on this computer. Set up Q3Map2 in Profiles, then review this request again.")
         : t("The leak-test pipeline is unavailable on this computer. Set up a Quake 1 compiler (qbsp) in Profiles, then review this request again.");
@@ -150,41 +152,29 @@
 
   async function refreshPipelines() {
     const select = $("build-pipeline");
+    const sequence = ++pipelineRefresh;
     const { ok, body } = await api("/api/v1/build/pipelines");
     // Read AFTER the await, not before: a refresh that started while the user
     // was choosing a pipeline must not put back the one that was selected
     // when it started (NEW_244D found two overlapping refreshes doing exactly
     // that, and a build then ran a pipeline nobody chose).
+    if (sequence !== pipelineRefresh) return;
     const previous = select.value;
     // What the user already filled in survives a refresh of the same pipeline.
     // Leaving Build to set a compiler up in Profiles and coming back used to
     // come back to an empty map field.
     const kept = previous ? keptInputs() : null;
     if (!ok) {
+      pipelines = [];
+      select.replaceChildren();
+      renderPipeline();
       setMessage("build-message", body.error || "could not read the pipelines", "error");
       return;
     }
     pipelines = body.items || [];
-    select.replaceChildren();
-    for (const pipeline of pipelines) {
-      // A <select> holds text and not markup, so the badge word goes into the
-      // option itself. It has to be visible *before* the pipeline is chosen:
-      // that is the moment the choice is made.
-      const mark = pipeline.maturity && pipeline.maturity.work_in_progress
-        ? ` [${pipeline.maturity.badge}]`
-        : "";
-      select.append(
-        el("option", {
-          text: `${pipeline.name}${mark} — ${pipeline.summary}`,
-          attrs: { value: pipeline.id },
-        })
-      );
-    }
-    if (pipelines.length === 0) {
-      setMessage("build-message", "No pipeline profiles are installed on this machine.", "error");
-      return;
-    }
-    if (previous && pipelines.some((item) => item.id === previous)) select.value = previous;
+    window.AUCOM.executionChoices(select, pipelines, previous, window.AUCOM.pipelineReady,
+      (pipeline) => `${pipeline.name}${pipeline.maturity?.work_in_progress ? ` [${pipeline.maturity.badge}]` : ""} — ${window.AUCOM.pipelineReady(pipeline) ? pipeline.summary : "needs setup: " + (pipeline.readiness?.problems || []).map((p) => p.summary).join(" ")}`,
+      "Choose a ready pipeline…", true);
     renderPipeline();
     if (kept && select.value === previous) restoreInputs(kept);
   }
@@ -217,7 +207,13 @@
     stages.replaceChildren();
     inputs.replaceChildren();
     inputFields = new Map();
-    if (!pipeline) return;
+    if (!pipeline) {
+      $("build-pipeline-note").textContent = "Choose a ready pipeline. Set up its dependencies in Profiles, then Refresh.";
+      $("build-preview").disabled = true;
+      $("build-start").disabled = true;
+      return;
+    }
+    $("build-preview").disabled = !window.AUCOM.pipelineReady(pipeline);
 
     $("build-pipeline-note").textContent = pipeline.runnable
       ? t("{n} stage(s). Version {version}.", { n: pipeline.steps.length, version: pipeline.version })
@@ -412,7 +408,7 @@
       else tab.removeAttribute("aria-current");
       $("build-step-summary-" + n).textContent = summaries[n];
     }
-    $("build-start").disabled = checked !== "ok";
+    $("build-start").disabled = checked !== "ok" || !window.AUCOM.pipelineReady(currentPipeline());
   }
 
   // showStep puts one panel on screen. Arriving at the check runs it, because a

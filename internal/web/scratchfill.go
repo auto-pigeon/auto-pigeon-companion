@@ -150,6 +150,14 @@ func scratchFromTree(tree map[string]any) (scratchDocument, scratchIdentity) {
 			ID: text(action, "id"), Title: text(action, "title"), Capability: text(action, "capability"),
 			Executable: text(action, "executable"), SessionRole: text(action, "session_role"),
 		}
+		if working, ok := action["working_dir"]; ok {
+			encoded, _ := json.Marshal(working)
+			_ = json.Unmarshal(encoded, &filled.WorkingDir)
+		}
+		if environment, ok := action["environment"]; ok {
+			encoded, _ := json.Marshal(environment)
+			_ = json.Unmarshal(encoded, &filled.Environment)
+		}
 		if seconds, ok := action["timeout_seconds"].(float64); ok {
 			filled.Timeout = int(seconds)
 		}
@@ -164,7 +172,7 @@ func scratchFromTree(tree map[string]any) (scratchDocument, scratchIdentity) {
 		for _, output := range objects(action, "outputs") {
 			filled.Outputs = append(filled.Outputs, scratchOutput{
 				Name: text(output, "name"), Title: text(output, "title"), Role: text(output, "role"),
-				Path: text(output, "path"), InPlace: text(output, "in_place"), Optional: flag(output, "optional"),
+				Path: text(output, "path"), InPlace: text(output, "in_place"), Extension: text(output, "extension"), Optional: flag(output, "optional"),
 			})
 		}
 		for _, option := range objects(action, "options") {
@@ -259,7 +267,7 @@ var formOwned = map[string][]string{
 	"actions": {"id", "title", "capability", "executable", "args", "inputs", "outputs", "options", "roots",
 		"timeout_seconds", "session_role"},
 	"actions.inputs":         {"name", "title", "role", "required", "extensions", "stage_with"},
-	"actions.outputs":        {"name", "title", "role", "path", "in_place", "optional"},
+	"actions.outputs":        {"name", "title", "role", "path", "in_place", "extension", "optional"},
 	"actions.options":        {"name", "title", "type", "default", "values"},
 	"actions.options.values": {"value"},
 	"actions.roots":          {"role", "optional", "access", "purpose"},

@@ -180,6 +180,11 @@ func TestFirstRunJourneyInABrowser(t *testing.T) {
 
 func runBrowserJourney(t *testing.T, browser, window string, width int) {
 	m := newMachine(t)
+	// A second pipeline with the same validated provider lets the browser
+	// exercise switching between runnable choices rather than disabled ones.
+	second := strings.ReplaceAll(string(fixturePipelineJSON()), "aucom.fixture.pipeline", "aucom.fixture.pipeline-second")
+	second = strings.ReplaceAll(second, "Fixture build", "Fixture second build")
+	m.writeProfile("second-pipeline.json", []byte(second))
 	script, err := os.ReadFile("testdata/journey.js")
 	if err != nil {
 		t.Fatal(err)

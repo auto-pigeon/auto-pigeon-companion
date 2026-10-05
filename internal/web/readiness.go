@@ -2,6 +2,7 @@ package web
 
 import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/engine"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
@@ -54,4 +55,38 @@ func installReadiness(entry job.CatalogEntry, local binding.LocalBinding) readin
 // view is the readiness as a response carries it.
 func (r readiness) view() map[string]any {
 	return map[string]any{"ready": r.Ready, "problems": describeProblems(r.Problems)}
+}
+
+// Pipeline setup uses the runner's resolver and each resolved action's same
+// checker as Profiles and engine execution. Map inputs are supplied later.
+func pipelineReadiness(pipeline *profile.PipelineProfile, resolver *build.Resolver, set *binding.Set) readiness {
+	out := readiness{Ready: true}
+	capabilities := make([]string, 0, len(pipeline.Steps))
+	for _, step := range pipeline.Steps {
+		capabilities = append(capabilities, step.Capability)
+	}
+	if err := resolver.CheckConflicts(capabilities); err != nil {
+		return readiness{Problems: engine.Problems{{Fault: "conflicting_providers", Summary: err.Error(), Fix: "Inspect the tool profiles in Profiles."}}}
+	}
+	if _, err := pipeline.Resolve(resolver); err != nil {
+		return readiness{Problems: engine.Problems{{Fault: "unresolved_pipeline", Summary: err.Error(), Fix: "Configure this pipeline's dependencies in Profiles."}}}
+	}
+	for _, step := range pipeline.Steps {
+		entry, exists := resolver.Entry(step.Capability)
+		_, action, provided := resolver.Provider(step.Capability)
+		if !exists || !provided {
+			continue
+		} // Resolve above owns missing capabilities.
+		local, _ := set.Find(entry.Profile.Metadata().ID)
+		problems := installReadiness(entry, local).PerAction[action.ID]
+		if step.Optional {
+			continue
+		}
+		for _, problem := range problems {
+			problem.Summary = step.Title + ": " + problem.Summary
+			out.Problems = append(out.Problems, problem)
+		}
+	}
+	out.Ready = len(out.Problems) == 0
+	return out
 }

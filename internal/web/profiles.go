@@ -164,6 +164,11 @@ func (s *Server) describeCatalogEntry(entry job.CatalogEntry, local binding.Loca
 		// Each stage with the tool that runs it here and the tokens this
 		// machine adds to it: a pipeline is where parameters are set.
 		body["stages"] = s.describeStages(pipeline, local)
+		if runner, err := s.buildRunner(nil); err == nil {
+			if set, _, err := s.bindings(); err == nil {
+				body["readiness"] = pipelineReadiness(pipeline, runner.Resolver(), set).view()
+			}
+		}
 	}
 	return body
 }
@@ -351,6 +356,13 @@ func (s *Server) handleProfileCompose(w http.ResponseWriter, r *http.Request) {
 		// beside the field it belongs to.
 		body["valid"] = false
 		body["error"] = decodeErr.Error()
+		if problems, ok := decodeErr.(profile.Problems); ok {
+			fields := make([]map[string]string, 0, len(problems))
+			for _, problem := range problems {
+				fields = append(fields, map[string]string{"path": problem.Path, "message": problem.Error()})
+			}
+			body["problems"] = fields
+		}
 		writeJSON(w, http.StatusOK, body)
 		return
 	}
@@ -405,6 +417,9 @@ func (s *Server) composeBase(request composeRequest) (map[string]any, string, er
 		}
 		// Filled from a tested profile: keep what the form has no field for.
 		if err := applyBasedOn(tree, request.Scratch.BasedOn); err != nil {
+			return nil, "", err
+		}
+		if err := applyScratchActionSettings(tree, request.Scratch.Actions); err != nil {
 			return nil, "", err
 		}
 		// A licence somebody changed is not the tested profile's licence: its

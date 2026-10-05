@@ -12,6 +12,7 @@
     maturityBadge, maturityNote, openCompatibilityReport, t } = window.AUCOM;
 
   let engines = [];
+  let engineRefresh = 0;
 
   function current() {
     return engines.find((engine) => engine.id === $("run-engine").value);
@@ -19,28 +20,21 @@
 
   async function refreshEngines() {
     const select = $("run-engine");
-    const previous = select.value;
+    const sequence = ++engineRefresh;
     const { ok, body } = await api("/api/v1/engines");
+    if (sequence !== engineRefresh) return;
+    const previous = select.value;
     if (!ok) {
+      engines = [];
+      select.replaceChildren();
+      renderEngine();
       setMessage("run-message", body.error || "could not read the engine profiles", "error");
       return;
     }
     engines = body.items || [];
-    select.replaceChildren();
-    for (const engine of engines) {
-      // The badge word goes into the option text, because a <select> holds no
-      // markup and the choice is made before the detail panel is drawn.
-      const mark = engine.maturity && engine.maturity.work_in_progress
-        ? ` [${engine.maturity.badge}]`
-        : "";
-      select.append(
-        el("option", {
-          text: `${engine.name}${mark} — ${engine.ready ? "ready" : "needs setup"}`,
-          attrs: { value: engine.id },
-        })
-      );
-    }
-    if (previous && engines.some((engine) => engine.id === previous)) select.value = previous;
+    window.AUCOM.executionChoices(select, engines, previous, (engine) => engine.ready === true,
+      (engine) => `${engine.name}${engine.maturity?.work_in_progress ? ` [${engine.maturity.badge}]` : ""} — ${engine.ready ? "ready" : "needs setup: " + (engine.readiness?.problems || []).map((p) => p.summary).join(" ")}`,
+      "Choose a ready engine…", true);
     renderEngine();
   }
 
@@ -48,14 +42,24 @@
     const engine = current();
     const detail = $("run-engine-detail");
     detail.replaceChildren();
-    if (!engine) return;
+    if (!engine) {
+      $("run-action").replaceChildren();
+      $("run-preview").disabled = true;
+      $("run-launch").disabled = true;
+      detail.append(el("p", { className: "muted", text: "Choose a ready engine. Set up unavailable engines in Profiles, then Refresh." }));
+      const setup = el("button", { text: "Profiles / setup", attrs: { type: "button" } });
+      setup.addEventListener("click", () => window.AUCOM.showArea("profiles"));
+      detail.append(setup);
+      return;
+    }
 
     // The engine at a glance: its name and trust, one sentence, and whether it
     // can start. Everything else a person rarely needs — where it looks for
     // content, what the profile author checked, what this machine recorded —
     // is behind a disclosure, so Start is not below a wall of facts.
+    renderActions(engine);
     const perAction = engine.action_problems || {};
-    const ready = !(perAction[$("run-action").value] || []).length && Boolean(engine.binding);
+    const ready = window.AUCOM.actionReady(engine, $("run-action").value);
     const card = el("div", { className: "engine-card" });
     const head = el("div", { className: "engine-card__head" });
     head.append(el("strong", { className: "engine-card__name", text: engine.name }));
@@ -167,8 +171,6 @@
       }
     }
     detail.append(problems);
-
-    renderActions(engine);
   }
 
   // The engine preflight writes each remedy for the terminal
@@ -205,17 +207,14 @@
   function renderActions(engine) {
     const select = $("run-action");
     const previous = select.value;
-    select.replaceChildren();
-    for (const action of engine.actions || []) {
-      const problems = (engine.action_problems || {})[action.id] || [];
-      select.append(
-        el("option", {
-          text: `${action.title || action.id}${problems.length ? " — needs setup" : ""}`,
-          attrs: { value: action.id, "data-role": action.session_role || "" },
-        })
-      );
-    }
-    if (previous && [...select.options].some((option) => option.value === previous)) select.value = previous;
+    window.AUCOM.executionChoices(select, engine.actions || [], previous,
+      (action) => window.AUCOM.actionReady(engine, action.id),
+      (action) => `${action.title || action.id}${window.AUCOM.actionReady(engine, action.id) ? "" : " — needs setup"}`,
+      "Choose a ready action…");
+    for (const option of select.options) option.dataset.role = engine.actions?.find((a) => a.id === option.value)?.session_role || "";
+    if (!select.value) select.value = (engine.actions || []).find((a) => window.AUCOM.actionReady(engine, a.id))?.id || "";
+    $("run-preview").disabled = !window.AUCOM.actionReady(engine, select.value);
+    $("run-launch").disabled = $("run-preview").disabled;
     renderSessionNote();
   }
 
@@ -239,6 +238,7 @@
   // invented its own spelling would resolve to nothing.
   function launchBody() {
     const engine = current();
+    if (!window.AUCOM.actionReady(engine, $("run-action").value)) return null;
     const runtime = {};
     const set = (name, value) => {
       if (value.trim()) runtime[name] = value.trim();
@@ -252,6 +252,7 @@
   }
 
   async function previewLaunch(button) {
+    if (!launchBody()) return;
     await withBusy(button, async () => {
       busy("run-message", "Resolving…");
       const { ok, body } = await api("/api/v1/jobs/preview", { method: "POST", body: launchBody() });
@@ -344,6 +345,7 @@
   }
 
   async function launch(button) {
+    if (!launchBody()) return;
     await withBusy(button, async () => {
       if (!(await stageChosenBuild())) return;
       busy("run-message", "Starting…");
@@ -398,10 +400,10 @@
       // this machine already has a setup for (its approval may just need
       // renewing after a profile update), rather than one nobody set up.
       const plays = (engine) => engine && (engine.actions || []).some((action) => action.id === "play_map");
-      const ready = (engine) => plays(engine) && !((engine.action_problems || {}).play_map || []).length;
+      const ready = (engine) => plays(engine) && window.AUCOM.actionReady(engine, "play_map");
       const setUp = (engine) => plays(engine) && engine.binding && Object.keys(engine.binding.executables || {}).length > 0;
       if (!ready(current())) {
-        const candidate = engines.find(ready) || (setUp(current()) ? null : engines.find(setUp));
+        const candidate = engines.find(ready);
         if (candidate) {
           $("run-engine").value = candidate.id;
           renderEngine();

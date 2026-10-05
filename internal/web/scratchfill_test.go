@@ -40,6 +40,9 @@ func composeFilled(t *testing.T, id string, edit func(*scratchDocument)) (map[st
 	if err := applyBasedOn(tree, sent.BasedOn); err != nil {
 		t.Fatalf("%s: %v", id, err)
 	}
+	if err := applyScratchActionSettings(tree, sent.Actions); err != nil {
+		t.Fatal(err)
+	}
 	composed, err := applyComposeFields(tree, composeRequest{
 		ID: id, Name: identity.Name, Version: identity.Version, Summary: identity.Summary, Description: identity.Description,
 		PublisherName: identity.PublisherName, PublisherURL: identity.PublisherURL, Homepage: identity.Homepage,
@@ -220,4 +223,34 @@ func treeDifferences(a, b any, path string) string {
 		}
 	}
 	return out
+}
+
+func TestActionSettingsAndLitExtensionSurviveComposition(t *testing.T) {
+	_, tree := composeFilled(t, "auto-pigeon.engine.vkquake", func(s *scratchDocument) {
+		s.Actions[0].WorkingDir = &profile.WorkingDir{Root: "content_root", Path: "maps"}
+		s.Actions[0].Environment = &profile.EnvironmentPolicy{Inherit: []string{"DISPLAY"}, Set: map[string]string{"APPIMAGE_EXTRACT_AND_RUN": "1"}}
+	})
+	actions := objects(tree, "actions")
+	working := actions[0]["working_dir"].(map[string]any)
+	if working["root"] != "content_root" || working["path"] != "maps" {
+		t.Fatalf("working directory lost: %v", working)
+	}
+	env := actions[0]["environment"].(map[string]any)
+	if len(env["inherit"].([]any)) != 1 || env["set"].(map[string]any)["APPIMAGE_EXTRACT_AND_RUN"] != "1" {
+		t.Fatalf("environment lost: %v", env)
+	}
+	_, tool := composeFilled(t, "auto-pigeon.ericw-tools.q1", nil)
+	for _, action := range objects(tool, "actions") {
+		if text(action, "id") == "light" {
+			found := false
+			for _, output := range objects(action, "outputs") {
+				if text(output, "name") == "lit" {
+					found = text(output, "extension") == ".lit"
+				}
+			}
+			if !found {
+				t.Fatal("light's .lit extension lost")
+			}
+		}
+	}
 }

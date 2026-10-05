@@ -1353,3 +1353,7 @@ main { padding: 1.25rem 1.75rem 3rem; }
 .leak-outcome { display: grid; gap: 0.4rem; justify-items: start; }
 .leak-outcome p { margin: 0; }
 .leak-verdict { font-weight: 600; }
+
+/* Execution entries stay visible while their setup is incomplete. */
+option:disabled { color: var(--ink-faint); }
+.choice-card:has(input:disabled) { opacity: .6; cursor: default; }

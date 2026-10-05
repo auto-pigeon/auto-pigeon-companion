@@ -1,8 +1,10 @@
 package web
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 	"runtime"
 	"strings"
 )
@@ -67,6 +69,9 @@ type scratchExecutable struct {
 }
 
 type scratchAction struct {
+	WorkingDir  *profile.WorkingDir        `json:"working_dir,omitempty"`
+	Environment *profile.EnvironmentPolicy `json:"environment,omitempty"`
+
 	ID         string          `json:"id"`
 	Title      string          `json:"title"`
 	Capability string          `json:"capability,omitempty"`
@@ -101,12 +106,13 @@ type scratchPort struct {
 }
 
 type scratchOutput struct {
-	Name     string `json:"name"`
-	Title    string `json:"title,omitempty"`
-	Role     string `json:"role"`
-	Path     string `json:"path,omitempty"`
-	InPlace  string `json:"in_place,omitempty"`
-	Optional bool   `json:"optional,omitempty"`
+	Extension string `json:"extension,omitempty"`
+	Name      string `json:"name"`
+	Title     string `json:"title,omitempty"`
+	Role      string `json:"role"`
+	Path      string `json:"path,omitempty"`
+	InPlace   string `json:"in_place,omitempty"`
+	Optional  bool   `json:"optional,omitempty"`
 }
 
 type scratchOption struct {
@@ -232,6 +238,9 @@ func scratchTree(scratch scratchDocument) (map[string]any, error) {
 	default:
 		return nil, fmt.Errorf("a profile from scratch is a tool, a pipeline or an engine, not %q", scratch.Kind)
 	}
+	if err := applyScratchActionSettings(tree, scratch.Actions); err != nil {
+		return nil, err
+	}
 	return tree, nil
 }
 
@@ -338,6 +347,9 @@ func scratchActions(list []scratchAction, engine bool) ([]any, error) {
 				item := map[string]any{"name": output.Name, "title": orDefault(output.Title, output.Name), "role": output.Role}
 				if output.InPlace != "" {
 					item["in_place"] = output.InPlace
+					if output.Extension != "" {
+						item["extension"] = output.Extension
+					}
 				} else {
 					item["path"] = output.Path
 				}
@@ -490,4 +502,31 @@ func sortedKeys(values map[string]string) []string {
 		}
 	}
 	return keys
+}
+
+// Expressed settings override a template's formerly unexpressed defaults.
+// A nil field retains the tested document's original declaration.
+func applyScratchActionSettings(tree map[string]any, actions []scratchAction) error {
+	for _, action := range actions {
+		for _, row := range objects(tree, "actions") {
+			if text(row, "id") != action.ID {
+				continue
+			}
+			for key, value := range map[string]any{"working_dir": action.WorkingDir, "environment": action.Environment} {
+				if key == "working_dir" && action.WorkingDir == nil || key == "environment" && action.Environment == nil {
+					continue
+				}
+				encoded, err := json.Marshal(value)
+				if err != nil {
+					return err
+				}
+				var fields map[string]any
+				if err := json.Unmarshal(encoded, &fields); err != nil {
+					return err
+				}
+				row[key] = fields
+			}
+		}
+	}
+	return nil
 }

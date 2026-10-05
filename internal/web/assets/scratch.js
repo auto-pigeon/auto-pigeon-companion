@@ -114,6 +114,9 @@
         ],
       })
     );
+    for (const row of rows) {
+      for (const input of row.querySelectorAll("input")) input.addEventListener("change", render);
+    }
     return list("Programs", "Every program this profile starts. There is no limit and no required name.",
       rows, "Add a program", () => doc.programs.push({ name: "", title: "", file: "" }));
   }
@@ -156,6 +159,25 @@
       ],
     }));
 
+    const working = action.working_dir || { root: "workspace" };
+    card.append(select("Working folder", working.root, ["workspace", ...ROOT_ROLES],
+      (v) => { action.working_dir = { ...(action.working_dir || working), root: v }; }));
+    card.append(text("Subfolder inside working folder", working.path || "", (v) => {
+      action.working_dir = { ...(action.working_dir || working), path: v };
+    }, { hint: "Relative path only. Machine paths are chosen later in setup." }));
+    card.append(text("Environment names to inherit", (action.environment?.inherit || []).join(", "), (v) => {
+      action.environment = { ...(action.environment || {}), inherit: splitList(v) };
+    }, { hint: "Names only, such as DISPLAY. The server refuses unsafe inherited variables." }));
+    const environment = action.environment?.set || {};
+    const envRows = Object.entries(environment).map(([name, value]) => ({ name, value }));
+    const updateEnvironment = () => { action.environment = { ...(action.environment || {}), set: Object.fromEntries(envRows.map((row) => [row.name, row.value])) }; };
+    card.append(list("Environment values", "Portable non-secret settings declared for this action, reviewed before approval.",
+      envRows.map((row, index) => el("div", { className: "row scratch-row", children: [
+        text("Variable name", row.name, (v) => { row.name = v; updateEnvironment(); }),
+        text("Value", row.value, (v) => { row.value = v; updateEnvironment(); }),
+        removeButton("Remove this environment variable", () => { envRows.splice(index, 1); updateEnvironment(); }),
+      ] })), "Add an environment variable", () => { envRows.push({ name: "", value: "" }); updateEnvironment(); }));
+
     card.append(list("Inputs", "Files the action is handed, each copied into the job's own folder first.",
       (action.inputs || []).map((port, i) => el("div", {
         className: "row scratch-row",
@@ -180,6 +202,7 @@
           text("Path", output.path, (v) => (output.path = v), { placeholder: "{option.name}.bsp" }),
           select("Or rewrites", output.in_place || "", [["", "—"], ...(action.inputs || []).map((p) => p.name).filter(Boolean)],
             (v) => (output.in_place = v)),
+          text("Extension when rewriting", output.extension, (v) => (output.extension = v), { placeholder: ".lit" }),
           check("Optional", output.optional, (v) => (output.optional = v)),
           removeButton("Remove this output", () => action.outputs.splice(i, 1)),
         ],
@@ -315,6 +338,17 @@
           removeButton("Remove this stage", () => doc.steps.splice(index, 1)),
         ],
       }));
+      const reorder = el("div", { className: "row-actions" });
+      for (const [title, offset] of [["Move up", -1], ["Move down", 1]]) {
+        const move = el("button", { text: title, attrs: { type: "button", class: "secondary", "aria-label": `${title}: ${step.id}` } });
+        move.disabled = index + offset < 0 || index + offset >= doc.steps.length;
+        move.addEventListener("click", () => {
+          [doc.steps[index], doc.steps[index + offset]] = [doc.steps[index + offset], doc.steps[index]];
+          render();
+        });
+        reorder.append(move);
+      }
+      card.append(reorder);
       const provider = providerFor(step.capability);
       if (provider) {
         card.append(el("p", { className: "muted", text: `Run by ${provider.profileName} (${provider.profileId}), action ${provider.actionId}.` }));

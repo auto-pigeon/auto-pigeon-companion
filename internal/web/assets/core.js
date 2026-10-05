@@ -640,8 +640,27 @@ function confirmModal({ title, body, confirm = "Continue", cancel = "Cancel" }) 
   });
 }
 
+// Unknown readiness is pending. Execution choices consume the server's per
+// action and pipeline results; configuration remains available in Profiles.
+function actionReady(engine, id) {
+  return Boolean(engine && Object.hasOwn(engine.action_problems || {}, id) && engine.action_problems[id].length === 0);
+}
+function pipelineReady(pipeline) { return pipeline?.readiness?.ready === true; }
+function executionChoices(select, items, previous, ready, label, placeholder, chooseReady = false) {
+  select.replaceChildren(el("option", { text: placeholder, attrs: { value: "" } }));
+  for (const item of items) {
+    const available = ready(item);
+    const option = el("option", { text: label(item), attrs: { value: item.id } });
+    option.disabled = !available;
+    select.append(option);
+  }
+  select.value = items.some((item) => item.id === previous && ready(item)) ? previous
+    : !previous && chooseReady ? items.find(ready)?.id || "" : "";
+  return select.value;
+}
+
 Object.assign(AUCOM, {
-  $, el, api, announce, setMessage, busy, withBusy, confirmModal,
+  $, el, api, announce, actionReady, pipelineReady, executionChoices, setMessage, busy, withBusy, confirmModal,
   record, renderActivity, clearActivity, pathField, downloadButton, tabsFor,
   badge, maturityBadge, maturityNote, bytes, when, terminal, programFileName, folderTitle,
   openCompatibilityReport, wireCompatibilityReport,

@@ -273,6 +273,7 @@ func (s *Server) handleQ3Engines(w http.ResponseWriter, r *http.Request) {
 		local, _ := set.Find(document.Meta.ID)
 		actions := []map[string]any{}
 		ready := ""
+		anyReady := false
 		for _, action := range document.ActionList() {
 			if !loadsAMap(action) {
 				continue
@@ -288,18 +289,23 @@ func (s *Server) handleQ3Engines(w http.ResponseWriter, r *http.Request) {
 				"reports_map_load": reportsMapLoad(action), "options": options,
 			}
 			if problem := q3run.Preflight(entry, local, action.ID, currentPlatform()); problem != nil {
+				view["ready"] = false
 				view["problem"] = problem.Error()
 				if ready == "" {
 					ready = problem.Error()
 				}
 			}
+			if _, blocked := view["problem"]; !blocked {
+				view["ready"] = true
+				anyReady = true
+			}
 			actions = append(actions, view)
 		}
 		engine := map[string]any{
 			"id": document.Meta.ID, "name": document.Meta.Name, "actions": actions,
-			"game_root": local.Roots[profile.RootGame], "set_up": local.Roots[profile.RootGame] != "" && ready == "",
+			"game_root": local.Roots[profile.RootGame], "set_up": local.Roots[profile.RootGame] != "" && anyReady,
 		}
-		if ready != "" {
+		if ready != "" && !anyReady {
 			engine["problem"] = ready
 		} else if local.Roots[profile.RootGame] == "" {
 			engine["problem"] = "This engine has no game folder set on this machine yet: choose it under Profiles › Engines."

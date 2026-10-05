@@ -16,6 +16,64 @@
   let templates = [];
   let composed = null;
   let step = 1;
+  let draftGeneration = 0;
+  let templateRequest = 0;
+  let templateReady = true;
+  let composeSequence = 0;
+  let validatedKey = "";
+  let validatedStageTokens = [];
+  let pendingInstallation = null;
+  let installing = false;
+
+  function invalidateDraft() {
+    draftGeneration += 1;
+    composed = null;
+    validatedKey = "";
+    $("wizard-import").disabled = true;
+    $("wizard-review").replaceChildren();
+  }
+
+  function draftKey() {
+    return JSON.stringify([composeRequest(null), window.AUCOM.scratch.stageTokens()]);
+  }
+
+  function fieldError(id, message) {
+    const input = $(id);
+    input.setAttribute("aria-invalid", "true");
+    let note = $(id + "-error");
+    if (!note) {
+      note = el("span", { className: "message error wizard-field-error", attrs: { id: id + "-error" } });
+      input.after(note);
+    }
+    note.textContent = message;
+    input.setAttribute("aria-describedby", note.id);
+    return input;
+  }
+
+  function validateStep() {
+    for (const note of document.querySelectorAll(".wizard-field-error")) note.remove();
+    for (const input of document.querySelectorAll('#area-new-profile [aria-invalid]')) {
+      input.removeAttribute("aria-invalid");
+    }
+    const errors = [];
+    if (step === 1 && $("wizard-kind").value === "engine" && !$("scratch-game").value) {
+      errors.push(fieldError("scratch-game", "Choose the engine's game family."));
+    }
+    if (step === 2) {
+      for (const [id, title] of [["wizard-name", "Name"], ["wizard-version", "Version"],
+        ["wizard-summary", "Summary"], ["wizard-publisher", "Publisher"], ["wizard-license", "Licence"]]) {
+        if (!$(id).value.trim()) errors.push(fieldError(id, title + " is required."));
+      }
+    }
+    if (errors.length) {
+      setMessage("wizard-message", "Complete the marked fields before continuing.", "error");
+      errors[0].focus();
+      return false;
+    }
+    setMessage("wizard-message", "");
+    return true;
+  }
+
 
   // --- installed profiles ---------------------------------------------------
 
@@ -754,7 +812,7 @@
       else markers[index].removeAttribute("aria-current");
     }
     $("wizard-back").disabled = step === 1;
-    $("wizard-next").disabled = step === 4;
+    $("wizard-next").disabled = step === 4 || !templateReady;
     const kind = $("wizard-kind").value;
     $("wizard-engine-fields").hidden = kind !== "engine";
     $("wizard-tool-fields").hidden = kind !== "tool";
@@ -775,7 +833,11 @@
   // by default, then every tested profile of that kind (operator, 2026-10-03).
   async function refreshTemplates() {
     const kind = $("wizard-kind").value;
+    templateReady = false;
+    $("wizard-next").disabled = true;
+    const requestID = ++templateRequest;
     const { ok, body } = await api("/api/v1/profiles/templates?kind=" + encodeURIComponent(kind));
+    if (requestID !== templateRequest || kind !== $("wizard-kind").value) return;
     const select = $("wizard-template");
     select.replaceChildren();
     select.append(el("option", { text: "From scratch", attrs: { value: "" } }));
@@ -817,15 +879,22 @@
     const kind = $("wizard-kind").value;
     const template = currentTemplate();
     const scratch = window.AUCOM.scratch;
+    const generation = draftGeneration;
+    templateReady = false;
+    $("wizard-next").disabled = true;
+    const requestID = ++templateRequest;
     if (!template) {
       scratch.clear(kind);
-      for (const id of Object.keys(IDENTITY)) offer(id, "");
+      for (const id of Object.keys(IDENTITY)) offer(id, ({ "wizard-version": "1.0.0", "wizard-publisher": "Local", "wizard-license": "NOASSERTION" })[id] || "");
       $("wizard-template-note").textContent =
         "Nothing is filled in: you write every field. Choose a tested profile above to have all of them filled, and change what is different about yours.";
       scratch.render();
+      templateReady = true;
+      $("wizard-next").disabled = step === 4;
       return;
     }
     const { ok, body } = await api(`/api/v1/profiles/templates/${encodeURIComponent(template.id)}/scratch`);
+    if (requestID !== templateRequest || generation !== draftGeneration || kind !== $("wizard-kind").value || template.id !== $("wizard-template").value) return;
     if (!ok) {
       setMessage("wizard-message", body.error || "that profile could not be read", "error");
       return;
@@ -836,6 +905,8 @@
       `Filled in from ${template.name} ${template.version}` + (template.summary ? ` — ${template.summary}` : "") +
       ". Every field in the next steps is yours to change, add to or remove; what the form has no field for is kept as tested.";
     scratch.render();
+    templateReady = true;
+    $("wizard-next").disabled = step === 4;
   }
 
   function composeRequest(fromDocument) {
@@ -861,17 +932,35 @@
   }
 
   async function compose(fromDocument) {
+    const generation = draftGeneration;
+    const sequence = ++composeSequence;
+    const key = draftKey();
+    const tokens = structuredClone(window.AUCOM.scratch.stageTokens());
+    composed = null;
+    $("wizard-import").disabled = true;
     const { ok, body } = await api("/api/v1/profiles/compose", {
-      method: "POST",
-      body: composeRequest(fromDocument),
+      method: "POST", body: composeRequest(fromDocument),
     });
-    if (!ok) {
-      setMessage("wizard-message", body.error || "the document could not be composed", "error");
+    if (generation !== draftGeneration || sequence !== composeSequence || key !== draftKey()) return null;
+    if (!ok || !body.valid) {
+      setMessage("wizard-message", body.error || "The document could not be validated. Retry without losing your draft.", "error");
+      const identityFields = { name: "wizard-name", version: "wizard-version", summary: "wizard-summary",
+        "publisher.name": "wizard-publisher", "license.spdx": "wizard-license", runtime: "wizard-runtime",
+        engine_version: "wizard-engine-version" };
+      let first = null;
+      for (const problem of body.problems || []) {
+        const id = identityFields[problem.path];
+        if (id) { setStep(2); first ||= fieldError(id, problem.message); }
+      }
+      (first || $("scratch-body").querySelector("input, select, textarea, button"))?.focus();
       return null;
     }
     composed = body;
+    validatedKey = key;
+    validatedStageTokens = tokens;
     $("wizard-json").value = JSON.stringify(body.document, null, 2);
     renderReview(body);
+    setMessage("wizard-message", "");
     return body;
   }
 
@@ -900,6 +989,16 @@
       })
     );
 
+    const profileDocument = body.document;
+    review.append(el("p", { text: `Kind: ${body.kind}. Publisher: ${profileDocument.publisher?.name || ""}. Licence: ${profileDocument.license?.spdx || ""}.` }));
+    const declarations = el("ul", { className: "plain" });
+    for (const program of profileDocument.executables || []) declarations.append(el("li", { text: `${program.name}: ${window.AUCOM.programFileName(program.file)}` }));
+    for (const action of profileDocument.actions || []) declarations.append(el("li", { text: `${action.title || action.id} (${action.id}) → ${action.executable}` }));
+    for (const stage of profileDocument.steps || []) declarations.append(el("li", { text: `${stage.title || stage.id} (${stage.id}) → ${stage.capability}` }));
+    review.append(declarations, el("p", { className: "muted", text: body.kind === "pipeline"
+      ? "Next: approve this pipeline, inspect its dependencies in Profiles and finish each tool's setup."
+      : "Next: approve these declarations, choose each executable and required folder, then check readiness in Profiles." }));
+
     if (body.diff && !body.diff.empty) {
       review.append(el("h4", { text: "What you changed from the tested profile" }));
       if (body.diff.escalates) {
@@ -923,17 +1022,34 @@
     }
   }
 
-  $("wizard-kind").addEventListener("change", async () => {
-    await refreshTemplates();
-    setStep(step);
+  $("area-new-profile").addEventListener("input", (event) => {
+    if (event.target.id !== "wizard-replace") invalidateDraft();
+  }, true);
+  $("area-new-profile").addEventListener("change", (event) => {
+    if (event.target.id !== "wizard-replace") invalidateDraft();
+  }, true);
+  $("scratch-body").addEventListener("click", (event) => {
+    if (event.target.closest("button")) invalidateDraft();
   });
-  $("wizard-template").addEventListener("change", (event) => withBusy(event.currentTarget, applyTemplate));
-  $("wizard-back").addEventListener("click", () => setStep(step - 1));
+  $("wizard-json").addEventListener("input", () => $("wizard-import").disabled = true);
+  $("wizard-kind").addEventListener("change", async () => {
+    invalidateDraft();
+    for (const kind of ["tool", "engine", "pipeline"]) window.AUCOM.scratch.clear(kind);
+    $("scratch-game").value = "";
+    await refreshTemplates();
+    setMessage("wizard-message", "Kind changed: programs and stages from the previous kind were cleared. Your identity fields are kept.");
+    setStep(1);
+  });
+  $("wizard-template").addEventListener("change", () => { invalidateDraft(); applyTemplate(); });
+  $("wizard-back").addEventListener("click", () => { if (!installing) setStep(step - 1); });
   $("wizard-next").addEventListener("click", async (event) => {
-    if (step === 3) {
-      await withBusy(event.currentTarget, () => compose(null));
+    if (installing || !templateReady || !validateStep()) return;
+    const currentStep = step;
+    if (currentStep === 3) {
+      const result = await withBusy(event.currentTarget, () => compose(null));
+      if (!result?.valid || step !== currentStep) return;
     }
-    setStep(step + 1);
+    setStep(currentStep + 1);
   });
 
   $("wizard-check-json").addEventListener("click", (event) =>
@@ -1005,43 +1121,51 @@
     })
   );
 
-  $("wizard-import").addEventListener("click", (event) =>
-    withBusy(event.currentTarget, async () => {
-      let parsed;
-      try {
-        parsed = JSON.parse($("wizard-json").value);
-      } catch (err) {
-        setMessage("wizard-message", "That is not JSON: " + err.message, "error");
-        return;
-      }
-      const { ok, status, body } = await api("/api/v1/profiles/import", {
-        method: "POST",
-        body: { document: parsed, replace: $("wizard-replace").checked },
-      });
-      if (!ok) {
-        setMessage("wizard-message", body.error || "the profile could not be installed", "error");
-        record("Profile import refused", body.error, "failed");
-        return;
-      }
-      setMessage(
-        "wizard-message",
-        `Installed ${body.name || "the profile"} (${body.trust}, not approved yet) — opening its review and setup in Profiles.`,
-        "ok"
-      );
-      record(`Installed the profile ${body.name || ""}`.trim(), "", "ok");
-      // A pipeline's stage arguments are this machine's setup of it, not part
-      // of the document: recorded now that there is a profile to record them
-      // against. A stage whose tokens are refused says so and loses nothing
-      // else — the profile is installed either way.
-      if (composed?.id === body.id) {
-        for (const item of window.AUCOM.scratch.stageTokens()) {
-          const saved = await api(`/api/v1/profiles/${encodeURIComponent(body.id)}/stage-arguments`, { method: "POST", body: item });
-          if (!saved.ok) record(`The arguments of stage ${item.stage} were not saved`, saved.body.error || "", "failed");
+  $("wizard-import").addEventListener("click", async (event) => {
+    if (installing || (!pendingInstallation && (!composed?.valid || validatedKey !== draftKey() ||
+        $("wizard-json").value !== JSON.stringify(composed.document, null, 2)))) return;
+    installing = true;
+    const controls = [...$("area-new-profile").querySelectorAll("button, input, select, textarea")];
+    const disabled = controls.map((node) => node.disabled);
+    controls.forEach((node) => node.disabled = true);
+    try {
+      if (!pendingInstallation) {
+        const { ok, body } = await api("/api/v1/profiles/import", {
+          method: "POST", body: { document: composed.document, replace: $("wizard-replace").checked },
+        });
+        if (!ok) {
+          setMessage("wizard-message", body.error || "The profile could not be installed. Your draft is kept.", "error");
+          record("Profile import refused", body.error, "failed");
+          return;
         }
+        pendingInstallation = { id: body.id, name: body.name, stages: structuredClone(validatedStageTokens) };
+        record(`Installed the profile ${body.name || ""}`.trim(), "", "ok");
       }
-      await window.AUCOM.openInstalledProfile(body.id);
-    })
-  );
+      while (pendingInstallation.stages.length) {
+        const item = pendingInstallation.stages[0];
+        const saved = await api(`/api/v1/profiles/${encodeURIComponent(pendingInstallation.id)}/stage-arguments`, {
+          method: "POST", body: item,
+        });
+        if (!saved.ok) {
+          setMessage("wizard-message", `Installed ${pendingInstallation.name}, but setup is incomplete: stage ${item.stage} arguments were not saved. ${saved.body.error || ""} Retry saves these arguments without installing again.`, "error");
+          $("wizard-import").textContent = "Retry saving stage arguments";
+          return;
+        }
+        pendingInstallation.stages.shift();
+      }
+      const id = pendingInstallation.id;
+      pendingInstallation = null;
+      composed = null;
+      await window.AUCOM.openInstalledProfile(id);
+    } finally {
+      installing = false;
+      controls.forEach((node, index) => node.disabled = disabled[index]);
+      $("wizard-import").disabled = !pendingInstallation && !composed?.valid;
+      if (pendingInstallation) {
+        controls.forEach((node) => { if (node !== $("wizard-import")) node.disabled = true; });
+      }
+    }
+  });
 
   $("profiles-refresh").addEventListener("click", (event) => withBusy(event.currentTarget, refreshList));
   $("profiles-kind").addEventListener("change", refreshList);

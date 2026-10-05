@@ -402,6 +402,7 @@
             <div class="field">
               <label for="play-pipeline">Build profile</label>
               <select id="play-pipeline"></select>
+              <p class="hint"><a href="#profiles">Profiles / setup</a> — configure unavailable choices, then refresh.</p>
             </div>
             <p id="play-pipeline-note" class="muted"></p>
             <ol id="play-stages" class="stages" aria-label="Stages of this build profile"></ol>
@@ -425,6 +426,7 @@
             <div class="field">
               <label for="play-engine">Engine</label>
               <select id="play-engine"></select>
+              <p class="hint"><a href="#profiles">Profiles / setup</a> — configure unavailable choices, then refresh.</p>
             </div>
             <!-- What the engine does with the map just built. Only the actions
                  that make sense for ONE freshly built map are offered, each
@@ -618,6 +620,7 @@
             <div class="field">
               <label for="build-pipeline">Pipeline</label>
               <select id="build-pipeline"></select>
+              <p class="hint"><a href="#profiles">Profiles / setup</a> — configure unavailable choices, then refresh.</p>
             </div>
             <p id="build-pipeline-note" class="muted"></p>
             <ol id="build-stages" class="stages" aria-label="Stages of this pipeline"></ol>
@@ -809,6 +812,7 @@
             <div class="field">
               <label for="run-engine">Installed engine profile</label>
               <select id="run-engine"></select>
+              <p class="hint"><a href="#profiles">Profiles / setup</a> — configure unavailable choices, then refresh.</p>
             </div>
             <div id="run-engine-detail"></div>
           </div>
@@ -1100,15 +1104,15 @@
                 </div>
               </details>
               <div class="row">
-                <button type="button" id="wizard-import" class="primary">Install this profile</button>
+                <button type="button" id="wizard-import" class="primary" disabled>Install this profile</button>
                 <label class="check">
                   <input type="checkbox" id="wizard-replace" />
                   Replace the installed profile with the same id
                 </label>
               </div>
-              <p id="wizard-message" class="message" role="alert"></p>
             </div>
 
+            <p id="wizard-message" class="message" role="alert"></p>
             <div class="row wizard-nav">
               <button type="button" id="wizard-back" class="secondary">Back</button>
               <button type="button" id="wizard-next">Next</button>
