@@ -733,27 +733,27 @@
     {
       "name": "qbsp",
       "title": "Map compiler",
-      "file": "bin/qbsp{platform.exe_suffix}"
+      "file": "qbsp{platform.exe_suffix}"
     },
     {
       "name": "vis",
       "title": "Visibility",
-      "file": "bin/vis{platform.exe_suffix}"
+      "file": "vis{platform.exe_suffix}"
     },
     {
       "name": "light",
       "title": "Lighting",
-      "file": "bin/light{platform.exe_suffix}"
+      "file": "light{platform.exe_suffix}"
     },
     {
       "name": "bspinfo",
       "title": "BSP reporter",
-      "file": "bin/bspinfo{platform.exe_suffix}"
+      "file": "bspinfo{platform.exe_suffix}"
     },
     {
       "name": "bsputil",
       "title": "BSP utility",
-      "file": "bin/bsputil{platform.exe_suffix}"
+      "file": "bsputil{platform.exe_suffix}"
     }
   ],
   "capabilities": [
@@ -814,41 +814,17 @@
     "args": [],
     "parse": {
       "kind": "after_marker",
-      "marker": "ericw-tools v",
+      "marker": "ericw-tools ",
       "stream": "stdout"
     },
     "timeout_seconds": 10
   },
   "acquisition": [
     {
-      "mode": "managed_download",
-      "title": "Download the official v0.18.1 release",
-      "catalog_package": "ericw-tools.q1",
-      "platforms": [
-        {
-          "os": "linux",
-          "arch": "amd64"
-        },
-        {
-          "os": "windows",
-          "arch": "amd64"
-        },
-        {
-          "os": "windows",
-          "arch": "386"
-        },
-        {
-          "os": "darwin",
-          "arch": "amd64"
-        }
-      ],
-      "note": "The four archives upstream published for v0.18.1, each pinned by size and SHA-256 in the signed catalogue. There is no arm64 build to pin, on any operating system, so arm64 is not offered here."
-    },
-    {
       "mode": "user_path",
       "title": "Use a copy you already have",
-      "hint": "choose the unpacked ericw-tools folder \u2014 the one with bin/qbsp inside it",
-      "note": "The route for arm64, for a distribution package, and for a build you made yourself from the v0.18.1 tag. Nothing verifies it against the catalogue: you are the authority for what you pointed at."
+      "hint": "choose the unpacked ericw-tools 2.x folder \u2014 the one with qbsp directly inside it",
+      "note": "My own copy of the 2.0.0-alpha11 pre-release, or a build of its tag. Nothing verifies it: you are the authority for what you pointed at."
     },
     {
       "mode": "system_path",
@@ -860,7 +836,7 @@
         "bspinfo",
         "bsputil"
       ],
-      "note": "Whatever version is first on PATH. Run the version probe afterwards: this route cannot tell 0.18.1 from anything else."
+      "note": "Whatever version is first on PATH. Run the version probe afterwards: this route cannot tell 2.0.0-alpha11 from anything else."
     }
   ],
   "platforms": [
@@ -877,7 +853,7 @@
         "arch": "amd64"
       },
       "status": "unverified",
-      "note": "the official win64 build is pinned in the catalogue; nobody here has run it"
+      "note": "nobody here has run the 2.0.0-alpha11 win64 build"
     },
     {
       "platform": {
@@ -885,7 +861,7 @@
         "arch": "386"
       },
       "status": "unverified",
-      "note": "the official win32 build is pinned in the catalogue; nobody here has run it"
+      "note": "nobody here has run the 2.0.0-alpha11 32-bit build"
     },
     {
       "platform": {
@@ -893,7 +869,7 @@
         "arch": "amd64"
       },
       "status": "unverified",
-      "note": "the 2018 Darwin build is unsigned and unnotarized; recent macOS will refuse it until the user allows it"
+      "note": "nobody here has run a 2.0.0-alpha11 macOS build"
     },
     {
       "platform": {
@@ -912,7 +888,7 @@
       "note": "no arm64 build exists upstream; build it from the tagged source or point the Companion at your own"
     }
   ],
-  "tool_version": "0.18.1",
+  "tool_version": "2.0.0-alpha11",
   "game_profile": {
     "slug": "quake1",
     "engine_family": "quake1"
@@ -926,13 +902,13 @@
     "spdx": "GPL-3.0-or-later",
     "name": "GNU General Public License v3.0 or later",
     "url": "https://www.gnu.org/licenses/gpl-3.0.html",
-    "corresponding_source": "https://github.com/ericwa/ericw-tools/tree/v0.18.1",
-    "notice": "ericw-tools is somebody else's program, under its own licence, and describing it here changes nothing about that. Its own source terms are GPL-2.0-or-later; the official binaries link Embree, and its README states that builds using Embree are licensed under GPLv3+ for compatibility with the Apache licence, so GPL-3.0-or-later is what the downloadable build is conveyed under. The corresponding source for exactly this version is the v0.18.1 tag named above. Auto-Pigeon Companion is MIT and separate: it runs these programs as separate processes and does not contain, link or relicense them."
+    "corresponding_source": "https://github.com/ericwa/ericw-tools/tree/2.0.0-alpha11",
+    "notice": "ericw-tools is somebody else's program, under its own licence, and describing it here changes nothing about that. Its own source terms are GPL-2.0-or-later; the official binaries link Embree, and its README states that builds using Embree are licensed under GPLv3+ for compatibility with the Apache licence, so GPL-3.0-or-later is what the downloadable build is conveyed under. The corresponding source for exactly this version is the 2.0.0-alpha11 tag named above. Auto-Pigeon Companion is MIT and separate: it runs these programs as separate processes and does not contain, link or relicense them."
   },
   "source": {
     "homepage": "https://ericwa.github.io/ericw-tools/",
     "repository": "https://github.com/ericwa/ericw-tools",
-    "release_notes": "https://github.com/ericwa/ericw-tools/releases/tag/v0.18.1"
+    "release_notes": "https://github.com/ericwa/ericw-tools/releases/tag/2.0.0-alpha11"
   },
   "publisher": {
     "name": "A mapper",
@@ -940,7 +916,7 @@
   },
   "description": "This is the twin `TestBuiltinAndUserAuthoredResolveToTheSameCommand` compares against. It is a different document by every measure a digest can see \u2014 different id, different publisher, different prose, arguments written in the object spelling where the built-in uses the plain string one \u2014 and it resolves through the same function to the same argv. If a privileged path for built-in profiles is ever added, that test is what fails.",
   "summary": "A hand-written profile for the same five programs, to prove nothing is privileged.",
-  "name": "My ericw-tools 0.18.1",
+  "name": "My ericw-tools 2.0.0-alpha11",
   "version": "1.0.0",
   "id": "community.mapper.ericw-q1",
   "kind": "tool",

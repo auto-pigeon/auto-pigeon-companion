@@ -41,7 +41,7 @@ installed by the user and stay under their own licences.
 | `@auto-pigeon/incident-contract` data (`incident-codes.json`, `redaction-rules.json`), from auto-pigeon-libraries | Apache-2.0 | embedded byte for byte (`internal/incident/contract/`) | yes, inside the binary |
 | `@auto-pigeon/incident-contract` 1.4.0 (`src/*.mjs`, `schema/*.json`), from auto-pigeon-libraries | Apache-2.0 | vendored byte for byte into the embedded page (`internal/web/assets/vendor/incident-contract/`) | yes, inside the binary |
 | auto-pigeon-extractor (AUE) | **LicenseRef-Auto-Pigeon-Proprietary** (Auto-Pigeon Proprietary Software License; all rights reserved) | separate process, shipped as its own file (`auto-pigeon-extractor[.exe]`) beside the Companion in a release bundle | named in the bundle manifest; the text is in the extractor's repository |
-| ericw-tools 0.18.1 (qbsp, vis, light, bspinfo, bsputil) | **GPL-3.0-or-later** as distributed (GPL-2.0-or-later source) | separate process, **obtained by the user** from its homepage; nothing is downloaded | no |
+| ericw-tools 2.0.0-alpha11 (qbsp, vis, light, bspinfo, bsputil; the Quake 1 line) | **GPL-3.0-or-later** as distributed (GPL-2.0-or-later source) | separate process, **obtained by the user** from its homepage; nothing is downloaded | no |
 | ericw-tools 2.0.0-alpha7 (the Quake II line) | **GPL-3.0-or-later** as distributed (GPL-2.0-or-later source) | separate process, **obtained by the user** from its homepage; nothing is downloaded | no |
 | Q3Map2 2.5.17n (NetRadiant-custom `20260114`) | **GPL-2.0-or-later** | separate process, **found by the user**; nothing is downloaded | no |
 | ioquake3, and any id Tech 3 engine | **GPL-2.0-or-later** | separate process, already installed | no |
@@ -299,9 +299,42 @@ Consequently:
   `catalog_package` field of older documents are still read, so those documents
   load, and are never taken.
 
-### ericw-tools 0.18.1
+### ericw-tools 2.0.0-alpha11
 
-The tool the built-in Quake 1 profile describes.
+The tool the built-in Quake 1 profile describes since 2026-10-07 (HITL). Until
+then it described v0.18.1; that section is kept below as the record of what was
+measured.
+
+| | |
+| --- | --- |
+| Program | **ericw-tools** — `qbsp`, `vis`, `light`, `bspinfo`, `bsputil` |
+| Version | **2.0.0-alpha11**, published by upstream as a pre-release |
+| Author | Eric Wasylishen, continuing Kevin Shanahan's *tyrutils* |
+| Project | <https://ericwa.github.io/ericw-tools/> |
+| Source | <https://github.com/ericwa/ericw-tools> |
+| Corresponding source for this build | <https://github.com/ericwa/ericw-tools/tree/2.0.0-alpha11> |
+| Licence of the project's source | **GPL-2.0-or-later** |
+| Licence of the distributed binaries | **GPL-3.0-or-later** — for the reason given for v0.18.1 below |
+| Also inside the archive | Embree 4 and Intel TBB, **Apache-2.0** |
+
+The Linux build ships `libembree4.so.4`, `libtbb.so.12` and `libtbbmalloc.so.2`
+beside the programs — at the top of the folder, with no `bin/` — and carries
+`gpl_v3.txt` and `LICENSE-embree.txt`. `auto-pigeon-tools` pins that build as its
+compiler oracle and recorded, from the files beside it,
+`GPL-3.0-or-later (conveyed with Apache-2.0, unidentified components)`; its
+`ericw-tools-contract.json` holds the executables' digests. No other platform's
+archive was measured here.
+
+#### Why a 2.0 pre-release for Quake 1
+
+Because it is what Auto-Pigeon's acceptance compiles every map with. `NEW_317`
+moved `auto-pigeon-tools`' pinned oracle from v0.18.1 to 2.0.0-alpha11, the
+latest upstream release, and on 2026-10-07 HITL moved this profile with it, so
+what the Quake 1 profile describes and what the acceptance gates are measured
+against are again the same build. Upstream still marks the whole 2.0 line
+`prerelease: true`; the profile says so where a user reads it.
+
+### ericw-tools 0.18.1 (described until 2026-10-07)
 
 | | |
 | --- | --- |
@@ -356,7 +389,7 @@ All four are at
 `https://github.com/ericwa/ericw-tools/releases/download/v0.18.1/`. There is no
 arm64 build on any operating system, because upstream published none.
 
-#### Why v0.18.1 and not 2.0 for Quake 1
+#### Why v0.18.1 and not 2.0 for Quake 1, until 2026-10-07
 
 v0.18.1 is the newest release upstream has **not** marked a pre-release: the
 whole 2.0 line is published as `prerelease: true`. It is also the build

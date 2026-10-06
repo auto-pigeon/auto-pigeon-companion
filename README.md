@@ -130,14 +130,18 @@ deployments by name — **Auto-Pigeon** (`https://auto-pigeon.com`) and
 **Auto-Pigeon beta** (`https://beta.auto-pigeon.com`). Nothing is contacted
 until you pick one.
 
-**Tools.** For Quake 1 the qualified compiler is ericw-tools **v0.18.1**.
-Download it from its homepage (the profile's **Homepage** button), unpack it,
-then in **Profiles › Configure › ericw-tools** choose that folder. From a
-terminal, with the profile document from this repository:
+**Tools.** For Quake 1 the qualified compiler is ericw-tools **2.0.0-alpha11**
+(upstream calls it a pre-release; it is the build Auto-Pigeon's own acceptance
+compiles with, and v0.18.1 is retired). Download it from its homepage (the
+profile's **Homepage** button), unpack it, then in **Profiles › Configure ›
+ericw-tools** choose that folder — the one with `qbsp` directly inside it: the 2.0
+release has no `bin/` folder, and an unpacked 0.18.1 is refused naming the
+programs it is missing. From a terminal, with the profile document from this
+repository:
 
 ```console
 $ companion acquire resolve internal/profile/builtin/ericw-tools-q1.tool.json \
-    --mode user_path --user-path ~/tools/ericw-tools-v0.18.1 --bind
+    --mode user_path --user-path ~/tools/ericw-tools-2.0.0-alpha11 --bind
 ```
 
 A profile only runs after you approve what it does (**Profiles**, or
@@ -310,8 +314,8 @@ and never passed through a shell. Another pipeline using the same tool does not 
 them, and the same tool twice in one pipeline gets two lists. The profile document
 is not changed, a profile you export carries none of them, and **Reset to default**
 removes them. The Build area's last step shows the exact command before anything
-runs, and the job that used them names them. (EricW 0.18.1's `qbsp` has no
-`-threads`; `-nopercent` is a harmless one to try.)
+runs, and the job that used them names them. (`-nopercent` is a harmless one
+to try.)
 
 ```console
 $ companion toolchain args auto-pigeon.q1.normal compile --set=-nopercent

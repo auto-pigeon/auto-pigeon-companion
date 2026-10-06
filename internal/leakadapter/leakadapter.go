@@ -57,7 +57,8 @@ const (
 // Which end of a point file is the entity the compiler reached.
 //
 // Measured, both: EricW 0.18.1's `.pts` begins at the occupant and ends
-// outside; Q3Map2 2.5.17n's `.lin` begins OUTSIDE and its last point is the
+// outside, and so does 2.0.0-alpha11's (2026-10-07: AUT's leaking room, first
+// point the info_player_start's origin, log lines unchanged); Q3Map2 2.5.17n's `.lin` begins OUTSIDE and its last point is the
 // entity's origin. A reader that assumed the first is the occupant would look
 // for the entity in the void.
 const (
@@ -124,7 +125,7 @@ var adapters = map[string]Adapter{
 		Profile: ProfileQuake1, PipelineID: "auto-pigeon.q1.leak-test",
 		Compiler: CompilerEricwQbsp, PointfileFormat: FormatEricwPts, Direction: DirectionOccupantFirst,
 		PointfileOutput: "pts", LogOutput: "compile_log",
-		ResultSchema: Schema10, QualifiedVersions: []string{"v0.18.1", "0.18.1"},
+		ResultSchema: Schema10, QualifiedVersions: []string{"v0.18.1", "0.18.1", "2.0.0-alpha11"},
 	},
 	ProfileQuake3: {
 		Profile: ProfileQuake3, PipelineID: "auto-pigeon.q3.leak-test",

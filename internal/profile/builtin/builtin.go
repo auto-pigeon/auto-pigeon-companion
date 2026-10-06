@@ -85,7 +85,8 @@ var files embed.FS
 // in a job record and in a build manifest, and a typo in one of those places is
 // a lookup that fails in a way nobody reads as a typo.
 const (
-	// EricwQ1 is the qualified Quake 1 toolchain: ericw-tools 0.18.1.
+	// EricwQ1 is the qualified Quake 1 toolchain: ericw-tools 2.0.0-alpha11
+	// (HITL, 2026-10-07: the build AUT's acceptance pins; 0.18.1 is retired).
 	EricwQ1 = "auto-pigeon.ericw-tools.q1"
 	// EricwQ2 is the experimental Quake II toolchain: ericw-tools 2.0.0-alpha7.
 	//

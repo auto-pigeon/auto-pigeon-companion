@@ -45,7 +45,7 @@ is not one.
 
 | game | pipeline | compiler | point file | direction | envelope |
 | --- | --- | --- | --- | --- | --- |
-| `quake1` | `auto-pigeon.q1.leak-test` | `ericw-qbsp` (EricW 0.18.1) | `ericw-pts` | `occupant_to_outside` | `aucom.leak-result/1.0` |
+| `quake1` | `auto-pigeon.q1.leak-test` | `ericw-qbsp` (EricW 2.0.0-alpha11; 0.18.1 also qualified) | `ericw-pts` | `occupant_to_outside` | `aucom.leak-result/1.0` |
 | `quake3` | `auto-pigeon.q3.leak-test` | `q3map2` (2.5.17n-git-68ecbed) | `q3map2-lin` | `outside_to_occupant` | `aucom.leak-result/1.1` |
 
 **A game with no row is unsupported, by name. It is never Quake 1.** Quake II has a `qbsp`; that

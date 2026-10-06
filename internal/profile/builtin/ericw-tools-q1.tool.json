@@ -3,9 +3,9 @@
   "kind": "tool",
   "id": "auto-pigeon.ericw-tools.q1",
   "version": "1.0.0",
-  "name": "ericw-tools 0.18.1 (Quake 1)",
+  "name": "ericw-tools 2.0.0-alpha11 (Quake 1)",
   "summary": "The qbsp, vis and light map compilers for Quake 1, plus bspinfo and bsputil.",
-  "description": "ericw-tools is Eric Wasylishen's continuation of Tyrann's tyrutils. This profile describes release v0.18.1, which is the newest release upstream has not marked a pre-release: the whole 2.0 line, up to 2.0.0-alpha11, is published as a pre-release and is not what a Q1 build should default to. A profile for that line is a separate document and a separate decision.\n\nThe five programs are one profile because they are one download, one licence and one version. What each of them does is measured, not assumed: qbsp writes the .bsp, and beside it the .prt that vis needs, the .pts point file when the map leaks, and its own .log. vis and light do not write a new file — they read the .bsp they were handed and save it back over itself, which is why their outputs are declared `in_place` rather than at a path this document invented. vis additionally opens the .prt of the same stem in the same directory without being told to, which is why the .prt is declared `stage_with` the .bsp: staged into its own directory, as every other input is, it would be somewhere vis never looks.\n\nEvery adjustable knob is a declared, typed option. There is no free-text argument box, so the command preview a user approves is the command that runs.",
+  "description": "ericw-tools is Eric Wasylishen's continuation of Tyrann's tyrutils. This profile describes 2.0.0-alpha11, the latest upstream release. Upstream publishes the whole 2.0 line as a pre-release; it is the Q1 default anyway, by decision (HITL, 2026-10-07), because it is the build Auto-Pigeon's own acceptance compiles every map with (AUT's pinned oracle since NEW_317) and 0.18.1, the last release not marked a pre-release, is retired for that work. The 2.0 release keeps its programs at the top of the folder, beside the Embree and TBB libraries, not inside bin/ as 0.18.1 did.\n\nThe five programs are one profile because they are one download, one licence and one version. What each of them does is measured, not assumed: qbsp writes the .bsp, and beside it the .prt that vis needs, the .pts point file when the map leaks, and its own .log. vis and light do not write a new file — they read the .bsp they were handed and save it back over itself, which is why their outputs are declared `in_place` rather than at a path this document invented. vis additionally opens the .prt of the same stem in the same directory without being told to, which is why the .prt is declared `stage_with` the .bsp: staged into its own directory, as every other input is, it would be somewhere vis never looks.\n\nEvery adjustable knob is a declared, typed option. There is no free-text argument box, so the command preview a user approves is the command that runs.",
   "publisher": {
     "name": "Auto-Pigeon",
     "url": "https://github.com/auto-pigeon/auto-pigeon-companion"
@@ -13,14 +13,14 @@
   "source": {
     "homepage": "https://ericwa.github.io/ericw-tools/",
     "repository": "https://github.com/ericwa/ericw-tools",
-    "release_notes": "https://github.com/ericwa/ericw-tools/releases/tag/v0.18.1"
+    "release_notes": "https://github.com/ericwa/ericw-tools/releases/tag/2.0.0-alpha11"
   },
   "license": {
     "spdx": "GPL-3.0-or-later",
     "name": "GNU General Public License v3.0 or later",
     "url": "https://www.gnu.org/licenses/gpl-3.0.html",
-    "corresponding_source": "https://github.com/ericwa/ericw-tools/tree/v0.18.1",
-    "notice": "ericw-tools is somebody else's program, under its own licence, and describing it here changes nothing about that. Its own source terms are GPL-2.0-or-later; the official binaries link Embree, and its README states that builds using Embree are licensed under GPLv3+ for compatibility with the Apache licence, so GPL-3.0-or-later is what the downloadable build is conveyed under. The corresponding source for exactly this version is the v0.18.1 tag named above. Auto-Pigeon Companion is MIT and separate: it runs these programs as separate processes and does not contain, link or relicense them."
+    "corresponding_source": "https://github.com/ericwa/ericw-tools/tree/2.0.0-alpha11",
+    "notice": "ericw-tools is somebody else's program, under its own licence, and describing it here changes nothing about that. Its own source terms are GPL-2.0-or-later; the official binaries ship Embree beside them and carry both `gpl_v3.txt` and `LICENSE-embree.txt`, and upstream's README states that builds using Embree are licensed under GPLv3+ for compatibility with the Apache licence, so GPL-3.0-or-later is what the downloadable build is conveyed under. The corresponding source for exactly this pre-release is the 2.0.0-alpha11 tag named above. Auto-Pigeon Companion is MIT and separate: it runs these programs as separate processes and does not contain, link or relicense them."
   },
   "compatibility": {
     "companion": { "at_least": "0.1.0" }
@@ -29,12 +29,12 @@
     "slug": "quake1",
     "engine_family": "quake1"
   },
-  "tool_version": "0.18.1",
+  "tool_version": "2.0.0-alpha11",
   "platforms": [
-    { "platform": { "os": "linux", "arch": "amd64" }, "status": "supported" },
-    { "platform": { "os": "windows", "arch": "amd64" }, "status": "unverified", "note": "the official win64 build exists upstream; nobody here has run it" },
-    { "platform": { "os": "windows", "arch": "386" }, "status": "unverified", "note": "the official win32 build exists upstream; nobody here has run it" },
-    { "platform": { "os": "darwin", "arch": "amd64" }, "status": "unverified", "note": "the 2018 Darwin build is unsigned and unnotarized; recent macOS will refuse it until the user allows it" },
+    { "platform": { "os": "linux", "arch": "amd64" }, "status": "supported", "note": "the pinned 2.0.0-alpha11 build is AUT's acceptance compiler on this platform, and AUT's Q1 gate builds through this profile with it" },
+    { "platform": { "os": "windows", "arch": "amd64" }, "status": "unverified", "note": "nobody here has run the 2.0.0-alpha11 win64 build" },
+    { "platform": { "os": "windows", "arch": "386" }, "status": "unverified", "note": "nobody here has run a 32-bit 2.0.0-alpha11 build" },
+    { "platform": { "os": "darwin", "arch": "amd64" }, "status": "unverified", "note": "nobody here has run a 2.0.0-alpha11 macOS build; an unsigned, unnotarized build is refused by recent macOS until the user allows it" },
     { "platform": { "os": "darwin", "arch": "arm64" }, "status": "unverified", "note": "no arm64 build exists upstream; the amd64 build runs under Rosetta 2, or point the Companion at your own" },
     { "platform": { "os": "linux", "arch": "arm64" }, "status": "unverified", "note": "no arm64 build exists upstream; build it from the tagged source or point the Companion at your own" }
   ],
@@ -42,20 +42,20 @@
     {
       "mode": "user_path",
       "title": "Use a copy you already have",
-      "hint": "choose the unpacked ericw-tools folder — the one with bin/qbsp inside it",
-      "note": "Download the release for your platform from the ericw-tools homepage and unpack it, or use a distribution package or your own build of the v0.18.1 tag. You are the authority for what you pointed at."
+      "hint": "choose the unpacked ericw-tools 2.x folder — the one with qbsp directly inside it, not inside bin/",
+      "note": "Download the 2.0.0-alpha11 pre-release for your platform from the ericw-tools homepage and unpack it, or use your own build of the 2.0.0-alpha11 tag. You are the authority for what you pointed at, and another version may behave differently from the one this document measured: the version probe says which one you have."
     },
     {
       "mode": "system_path",
       "title": "Find them on PATH",
       "commands": ["qbsp", "vis", "light", "bspinfo", "bsputil"],
-      "note": "Whatever version is first on PATH. Run the version probe afterwards: this route cannot tell 0.18.1 from anything else."
+      "note": "Whatever version is first on PATH. Run the version probe afterwards: this route cannot tell 2.0.0-alpha11 from anything else, and on most machines what is on PATH is the 0.18.1 line."
     }
   ],
   "version_probe": {
     "executable": "qbsp",
     "args": [],
-    "parse": { "kind": "after_marker", "marker": "ericw-tools v", "stream": "stdout" },
+    "parse": { "kind": "after_marker", "marker": "ericw-tools ", "stream": "stdout" },
     "timeout_seconds": 10
   },
   "capabilities": [
@@ -92,11 +92,11 @@
     }
   ],
   "executables": [
-    { "name": "qbsp", "title": "Map compiler", "file": "bin/qbsp{platform.exe_suffix}" },
-    { "name": "vis", "title": "Visibility", "file": "bin/vis{platform.exe_suffix}" },
-    { "name": "light", "title": "Lighting", "file": "bin/light{platform.exe_suffix}" },
-    { "name": "bspinfo", "title": "BSP reporter", "file": "bin/bspinfo{platform.exe_suffix}" },
-    { "name": "bsputil", "title": "BSP utility", "file": "bin/bsputil{platform.exe_suffix}" }
+    { "name": "qbsp", "title": "Map compiler", "file": "qbsp{platform.exe_suffix}" },
+    { "name": "vis", "title": "Visibility", "file": "vis{platform.exe_suffix}" },
+    { "name": "light", "title": "Lighting", "file": "light{platform.exe_suffix}" },
+    { "name": "bspinfo", "title": "BSP reporter", "file": "bspinfo{platform.exe_suffix}" },
+    { "name": "bsputil", "title": "BSP utility", "file": "bsputil{platform.exe_suffix}" }
   ],
   "actions": [
     {
@@ -155,6 +155,7 @@
         { "id": "leakfile", "match": "Leak file written", "severity": "info", "message": "A point file was written; it is the `pts` artifact of this build." },
         { "id": "leaktest_abort", "match": "Aborting because -leaktest", "severity": "error", "message": "qbsp stopped rather than write a BSP for a map that leaks.", "hint": "Turn the leak test off if you want the BSP anyway; it will have no visibility data." },
         { "id": "brush_faces", "match": "WARNING 09", "severity": "error", "message": "A brush produced no faces, so the compiler dropped it.", "hint": "Its plane triples enclose no volume. Check the winding of the faces the editor wrote." },
+        { "id": "no_visible_sides", "match": "no visible sides on brush", "severity": "error", "message": "A brush has no volume, so the compiler dropped it (ericw-tools 2.0 wording).", "hint": "Every side clipped every other away: its plane triples enclose no volume. The line number in the log is the brush in the .map; check the winding of the faces the editor wrote." },
         { "id": "no_wad", "match": "WARNING 01", "severity": "error", "message": "The map names no WAD the compiler could open, so every face is untextured.", "hint": "Add the .wad as the pipeline's `wad` input, or fix the `wad` key in worldspawn." },
         { "id": "texture_missing", "match": "WARNING 16", "severity": "error", "message": "A texture the map uses is not in any WAD that was opened.", "hint": "The BSP will build, with a placeholder where that texture should be." },
         { "id": "no_valid_wad", "match": "No valid WAD filenames", "severity": "error", "message": "ericw-tools 2.0 opened none of the WADs the map names, so every face is untextured.", "hint": "The `archive … not found` lines just before it name the paths it tried. Build & Run refuses a build like this." },
@@ -175,7 +176,7 @@
     {
       "id": "vis",
       "title": "Compute visibility",
-      "description": "vis rewrites the BSP it is given. It also opens the .prt of the same stem in the same directory, which is why that file is an input here and is staged beside the BSP.",
+      "description": "vis rewrites the BSP it is given. It also opens the .prt of the same stem in the same directory, which is why that file is an input here and is staged beside the BSP. Its log is written where `-logfile` says: left to itself, 2.0 names it after the BSP (`level-vis.log`).",
       "capability": "q1.bsp.vis",
       "executable": "vis",
       "working_dir": { "root": "workspace" },
@@ -185,6 +186,8 @@
         { "value": "-fast", "when": { "option": "fast" } },
         { "value": "-level", "when": { "option": "fast", "equals": "false" } },
         { "value": "{option.level}", "when": { "option": "fast", "equals": "false" } },
+        "-logfile",
+        "{output.log}",
         "{input.bsp}"
       ],
       "inputs": [
@@ -213,7 +216,7 @@
     {
       "id": "light",
       "title": "Compute lighting",
-      "description": "light rewrites the BSP it is given, and writes the coloured lightmap beside it as a .lit when that is asked for.",
+      "description": "light rewrites the BSP it is given, and writes the coloured lightmap beside it as a .lit when that is asked for. Its log is written where `-logfile` says: left to itself, 2.0 names it after the BSP (`level-light.log`).",
       "capability": "q1.bsp.light",
       "executable": "light",
       "working_dir": { "root": "workspace" },
@@ -228,6 +231,8 @@
         { "value": "1", "when": { "option": "bounce" } },
         { "value": "-gate", "when": { "option": "gate" } },
         { "value": "{option.gate}", "when": { "option": "gate" } },
+        "-logfile",
+        "{output.log}",
         "{input.bsp}"
       ],
       "inputs": [
