@@ -14,6 +14,16 @@ for every one of its 28 headings, and
 accounting on every run: a rule that went missing, or a destination that has since been deleted,
 fails the gate. **No rule was dropped for looking historical.**
 
+## No questions to HITL between 00:00 and 09:00, Brussels time
+
+Never ask HITL a question between **00:00 and 09:00 Europe/Brussels time** (`TZ=Europe/Brussels
+date`), unless HITL has said otherwise: HITL is asleep. A question asked then goes unseen, the
+session waits, its context expires, and the prompt has to be stopped and restarted.
+
+In those hours, when you have a question, reason it through and pick what HITL would have chosen in
+that situation — from the prompt, earlier HITL decisions in handoffs, `DESIGN.md` and the code — and
+keep working. Record in the handoff what you chose, why, and the alternatives, marked for HITL review.
+
 ## Do not read or run `run-sequence.sh`
 
 `run-sequence.sh` is the operator's unattended queue drainer. At ~250 KB it is the largest file in
