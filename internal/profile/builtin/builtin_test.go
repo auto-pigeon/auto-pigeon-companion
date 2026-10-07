@@ -150,7 +150,8 @@ func TestBuiltinAndUserAuthoredResolveToTheSameCommand(t *testing.T) {
 		t.Error("the two invocations report the same profile id; they should differ in identity and agree in effect")
 	}
 	// And the shared effect is the real thing, not an empty command.
-	if len(fromBuiltin.Command.Args) != 4 {
+	// -leaktest, -verbose, -forcegoodtree (on by default since NEW_317B), the map and the BSP
+	if len(fromBuiltin.Command.Args) != 5 {
 		t.Errorf("unexpected argv: %v", fromBuiltin.Command.Args)
 	}
 	if want := filepath.Join(request.Roots[profile.RootWorkspace], "start.bsp"); fromBuiltin.Outputs["bsp"] != want {

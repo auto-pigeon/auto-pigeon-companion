@@ -86,6 +86,12 @@
           }
         },
         {
+          "value": "-forcegoodtree",
+          "when": {
+            "option": "forcegoodtree"
+          }
+        },
+        {
           "value": "{input.source_map}"
         },
         {
@@ -227,6 +233,14 @@
           "type": "integer",
           "minimum": 32,
           "maximum": 1024,
+          "advanced": true
+        },
+        {
+          "name": "forcegoodtree",
+          "title": "Careful tree build",
+          "description": "My own copy: on by default, as the built-in profile does.",
+          "type": "bool",
+          "default": "true",
           "advanced": true
         }
       ],

@@ -144,6 +144,18 @@ $ companion acquire resolve internal/profile/builtin/ericw-tools-q1.tool.json \
     --mode user_path --user-path ~/tools/ericw-tools-2.0.0-alpha11 --bind
 ```
 
+The Quake 1 compile step passes `-forcegoodtree` by default (the **Careful tree
+build** option, under the advanced options). 2.0.0-alpha11's quicker tree build can
+lose part of a wall and report a leak through solid material on a map that is
+sealed; the careful build costs compile time and seals those maps. Every built-in
+Quake 1 pipeline, including the editor's **Leaks** test, compiles with it. To
+compare with it off for one build:
+
+```console
+$ companion build run --pipeline auto-pigeon.q1.leak-test --input source_map=level.map \
+    --option compile.forcegoodtree=false
+```
+
 A profile only runs after you approve what it does (**Profiles**, or
 `companion toolchain grant`).
 

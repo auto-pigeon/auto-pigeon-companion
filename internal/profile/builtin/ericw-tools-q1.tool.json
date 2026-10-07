@@ -119,6 +119,7 @@
         { "value": "-wrbrushes", "when": { "option": "wrbrushes" } },
         { "value": "-subdivide", "when": { "option": "subdivide" } },
         { "value": "{option.subdivide}", "when": { "option": "subdivide" } },
+        { "value": "-forcegoodtree", "when": { "option": "forcegoodtree" } },
         { "value": "-wadpath", "when": { "root": "content_root" } },
         { "value": "{root.content_root}", "when": { "root": "content_root" } },
         "{input.source_map}",
@@ -148,7 +149,8 @@
         { "name": "nodetail", "title": "Treat func_detail as structural", "type": "bool", "default": "false", "advanced": true },
         { "name": "notex", "title": "Placeholder textures only", "type": "bool", "default": "false", "advanced": true },
         { "name": "wrbrushes", "title": "Write brush data (bspx)", "type": "bool", "default": "false", "advanced": true },
-        { "name": "subdivide", "title": "Texture subdivision", "description": "qbsp's default is 240. Leave it unset to use it.", "type": "integer", "minimum": 32, "maximum": 1024, "advanced": true }
+        { "name": "subdivide", "title": "Texture subdivision", "description": "qbsp's default is 240. Leave it unset to use it.", "type": "integer", "minimum": 32, "maximum": 1024, "advanced": true },
+        { "name": "forcegoodtree", "title": "Careful tree build", "description": "qbsp's -forcegoodtree: the expensive BrushBSP processing, on by default. Measured on 2.0.0-alpha11 (Auto-Pigeon NEW_317, upstream note 1, `splitbrush-wedge-leak.map`): its quicker mid-split tree build can give a wedge of a wall to the wrong side of a split, so an EMPTY leaf spans the wall and a sealed map reports a leak through solid material. With this on, all twelve BEND acceptance rows that leaked that way sealed. It does not fix every 2.0 leak through a wall: a clip-hull 2 loss measured on four deformed cells (upstream note 4) leaks either way. Turn it off only to compare.", "type": "bool", "default": "true", "advanced": true }
       ],
       "diagnostics": [
         { "id": "leak", "match": "Reached occupant", "severity": "error", "message": "The map leaks: there is a gap between the inside and the void.", "hint": "Load the .pts point file this build published in your editor and follow it to the hole." },
