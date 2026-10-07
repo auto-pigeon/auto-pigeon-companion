@@ -63,7 +63,7 @@ func uriFirstUse(env *Env, settings config.Config, now time.Time) string {
 
 	switch {
 	case state.Registered:
-		if record == nil || !samePath(record.Executable, self) {
+		if record == nil || !samePath(goos, record.Executable, self) {
 			if err := recordURIHandler(env, self, state.Method, now, "found"); err != nil {
 				return "link handler: already this Companion; recording it failed: " + err.Error()
 			}
@@ -74,7 +74,7 @@ func uriFirstUse(env *Env, settings config.Config, now time.Time) string {
 	case state.Handler == "":
 		return "link handler: removed since " + record.At.Format(time.RFC3339) +
 			"; not registered again (Settings › Links from Auto-Pigeon has the button)"
-	case samePath(state.Handler, record.Executable):
+	case samePath(goos, state.Handler, record.Executable):
 		// The Companion registered before, from somewhere else: take it over.
 	default:
 		return "link handler: " + state.Detail + "; another program was chosen, left as it is"
@@ -112,12 +112,27 @@ func recordURIHandler(env *Env, executable, method string, now time.Time, how st
 	return err
 }
 
-// samePath compares two executable paths the way the platform does: Windows
-// paths without regard to case.
-func samePath(a, b string) bool {
-	a, b = filepath.Clean(strings.TrimSpace(a)), filepath.Clean(strings.TrimSpace(b))
-	if a == "." || b == "." {
+// samePath compares two executable paths the way the platform the registrar
+// acts for does (NEW_310A): Windows paths without regard to case or to which
+// slash separates them, every other platform byte for byte after cleaning. The
+// registrar's platform, not this process's — Windows rules are tested on Linux
+// through a fake registrar, and a Linux handler at /opt/Companion is not the
+// one at /opt/companion.
+func samePath(goos, a, b string) bool {
+	a, b = strings.TrimSpace(a), strings.TrimSpace(b)
+	if a == "" || b == "" {
 		return false
 	}
-	return strings.EqualFold(a, b)
+	if goos == "windows" {
+		clean := func(p string) string {
+			p = strings.ReplaceAll(p, "/", `\`)
+			for strings.Contains(p, `\\`) && !strings.HasPrefix(p, `\\`) {
+				p = strings.ReplaceAll(p, `\\`, `\`)
+			}
+			return strings.TrimSuffix(p, `\`)
+		}
+		return strings.EqualFold(clean(a), clean(b))
+	}
+	a, b = filepath.Clean(a), filepath.Clean(b)
+	return a != "." && a == b
 }

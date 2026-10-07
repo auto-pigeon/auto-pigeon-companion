@@ -32,6 +32,7 @@ package leakadapter
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -191,7 +192,17 @@ type Binding struct {
 	Log         string `json:"log_output"`
 	BSP         string `json:"bsp_output,omitempty"`
 	CompileStep string `json:"compile_step"`
+	// LogFrom is set when the pipeline publishes no log of its own: the
+	// compiler's text is then the compile step's reserved `<step>.stdout`,
+	// which the build publishes for the leak test under Log (LeakLogOutput).
+	LogFrom string `json:"log_from,omitempty"`
 }
+
+// LeakLogOutput is the name a leak-test build publishes its compile step's
+// own text under when the pinned pipeline publishes no log (NEW_310A): a
+// user's own pipeline that publishes the point file is eligible without also
+// having to republish the text every step already has.
+const LeakLogOutput = "aucom_leak_log"
 
 // Bind says whether pipeline can be this game's leak test, and how its outputs
 // are read. A refusal names what is missing, for the person choosing one.
@@ -221,10 +232,16 @@ func (a Adapter) Bind(pipeline Pipeline) (Binding, error) {
 			}
 		}
 	}
-	switch {
-	case binding.Pointfile == "":
+	if binding.Pointfile == "" {
 		return Binding{}, fmt.Errorf("it publishes no %s output (the point file a leak leaves)", a.PointfileRole)
-	case binding.Log == "":
+	}
+	// No published log: the text of the step that produced the point file —
+	// the compiler that ran the leak test — is the evidence. Never another
+	// step's: the point file's own stage is the one that flooded.
+	if binding.Log == "" && slices.Contains(a.LogRoles, StepLogRole) && binding.CompileStep != "" {
+		binding.Log, binding.LogFrom = LeakLogOutput, binding.CompileStep+".stdout"
+	}
+	if binding.Log == "" {
 		return Binding{}, fmt.Errorf("it publishes no compiler log (an output with role %s)", strings.Join(a.LogRoles, " or "))
 	}
 	return binding, nil

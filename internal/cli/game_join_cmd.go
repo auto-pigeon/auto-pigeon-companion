@@ -2,8 +2,10 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -380,27 +382,41 @@ func gameOpen(env *Env, args []string) int {
 // runningServer is the address of a Companion page already running for this
 // configuration, confirmed by asking it with its own token.
 func runningServer(dir string) (string, bool) {
+	address, _, ok := runningCompanion(dir)
+	return address, ok
+}
+
+// runningCompanion is [runningServer] with the version the running Companion
+// reports, so a launch that defers to it can say which build is answering
+// rather than implying it is the one just started.
+func runningCompanion(dir string) (address, version string, ok bool) {
 	token, err := web.ReadToken(web.TokenPath(dir))
 	if err != nil {
-		return "", false
+		return "", "", false
 	}
-	address, err := web.ReadURL(web.URLPath(dir))
+	address, err = web.ReadURL(web.URLPath(dir))
 	if err != nil {
-		return "", false
+		return "", "", false
 	}
 	request, err := http.NewRequest(http.MethodGet, strings.TrimRight(address, "/")+"/api/status", nil)
 	if err != nil {
-		return "", false
+		return "", "", false
 	}
 	request.Header.Set("X-AUCOM-Token", token)
 	client := &http.Client{Timeout: 3 * time.Second}
 	response, err := client.Do(request)
 	if err != nil {
-		return "", false
+		return "", "", false
 	}
-	response.Body.Close()
-
-	return address, response.StatusCode == http.StatusOK
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return "", "", false
+	}
+	var status struct {
+		Version string `json:"version"`
+	}
+	_ = json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&status)
+	return address, status.Version, true
 }
 
 func configDir(env *Env) (string, error) {

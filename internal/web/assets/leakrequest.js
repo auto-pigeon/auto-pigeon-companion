@@ -214,6 +214,9 @@
   let askedFor = null; // the request whose dialog opened by itself, once
   let pinGame = "";
   let pinThenReview = false;
+  // The request the dialog was opened for, and the generation it was seen in:
+  // a pin confirmed after that request was replaced reviews nothing.
+  let pinFor = null;
   let pinGeneration = 0;
   const pinModal = $("leak-pin-modal");
 
@@ -243,6 +246,7 @@
   async function openPin(game, thenReview) {
     pinGame = game;
     pinThenReview = thenReview;
+    pinFor = seen ? { request: seen.request_id, generation } : null;
     $("leak-pin-intro").textContent = t("Which pipeline should test {game} maps for leaks on this computer? The Companion ships profiles; the compilers are programs you install yourself, so the choice is yours. It is kept for every later request and can be changed here.", { game: gameName(game) });
     $("leak-pin-confirm").textContent = thenReview ? t("Pin and review") : t("Pin");
     pinModal.hidden = false;
@@ -269,8 +273,13 @@
     // for it, then ask again, so the review is of the pinned pipeline (found
     // live on Windows: the continuation reviewed a stale "nothing pinned").
     while (resolving) await new Promise((done) => setTimeout(done, 100));
+    const asked = pinFor;
     await resolve(true);
-    if (continueToReview && details?.ok && details.body.pipeline && !details.body.needs_pipeline) await review();
+    // Review only the request the dialog was opened for, still current, and
+    // only with the pipeline just pinned (NEW_310A): a request that replaced
+    // it meanwhile, or a pin changed elsewhere, is shown, never started.
+    const still = asked && seen && seen.request_id === asked.request && generation === asked.generation;
+    if (continueToReview && still && details?.ok && details.body.pipeline === pipeline && !details.body.needs_pipeline) await review();
   }));
   for (const close of [$("leak-pin-cancel"), $("leak-pin-close")]) close.addEventListener("click", closePin);
   pinModal.querySelector("[data-dismiss=leak-pin]")?.addEventListener("click", closePin);

@@ -1,7 +1,10 @@
 package web
 
 import (
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/leakadapter"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -109,5 +112,53 @@ func TestAPinnedLeakPipelineThatIsGoneIsAskedForAgain(t *testing.T) {
 	problem, _ := body["pinned_problem"].(string)
 	if body["needs_pipeline"] != true || body["pipeline"] != nil || !strings.Contains(problem, "local.pipeline.removed") {
 		t.Errorf("a pin to a removed pipeline: %v", body)
+	}
+}
+
+// A leak result is read from the binding its own build recorded, never from
+// today's pin: a user's pipeline that published its route and its text under
+// its own output names is read by those names after the pin has moved on, and
+// the compiler's version is the version of the tool that ran the bound compile
+// stage, not of the first tool the manifest lists (NEW_310A §4.2).
+func TestALeakResultIsReadFromItsOwnBuildsBindingNotTodaysPin(t *testing.T) {
+	m := newMachine(t)
+	const id = "20261007T000000Z-00000042"
+	manifest := m.q3LeakBuild(id, "b_gap", job.Failed, true, false)
+	for i := range manifest.Outputs {
+		switch manifest.Outputs[i].Name {
+		case "lin":
+			manifest.Outputs[i].Name = "route"
+		case "compile_log":
+			manifest.Outputs[i].Name = "stdout_text"
+		}
+	}
+	manifest.Pipeline = build.DocumentRef{ID: "local.pipeline.my-q3"}
+	manifest.LeakTest = &leakadapter.Binding{Game: "quake3", Pipeline: "local.pipeline.my-q3",
+		Pointfile: "route", Log: "stdout_text", BSP: "bsp", CompileStep: "compile"}
+	manifest.Tools = []build.ToolRecord{
+		{Profile: build.DocumentRef{ID: "local.tool.other"}, ToolVersion: "9.9.9"},
+		{Profile: build.DocumentRef{ID: "local.tool.my-q3map2"}, ToolVersion: "2.5.17n-git-68ecbed"},
+	}
+	manifest.Steps[0].Profile = build.DocumentRef{ID: "local.tool.my-q3map2"}
+	if err := manifest.Save(filepath.Join(m.builds, id)); err != nil {
+		t.Fatal(err)
+	}
+	// The pin has since moved to the built-in pipeline.
+	m.server.mu.Lock()
+	m.server.settings.LeakTestPipelines = map[string]string{"quake3": "auto-pigeon.q3.leak-test"}
+	m.server.mu.Unlock()
+
+	status, body := m.call(http.MethodGet, "/api/v1/leak-test/runs/"+id+"/result", nil)
+	if status != http.StatusOK {
+		t.Fatalf("%d %v", status, body)
+	}
+	if pointfile, _ := body["pointfile"].(string); !strings.HasPrefix(pointfile, "280.000000 136.000000 128.000000") {
+		t.Errorf("the route was not read from the build's own output name: %v", body["pointfile"])
+	}
+	if log, _ := body["log"].(string); !strings.Contains(log, "Entity leaked") {
+		t.Errorf("the compiler's text was not read from the build's own output name")
+	}
+	if body["compiler_version"] != "2.5.17n-git-68ecbed" {
+		t.Errorf("the compiler version is %v, not the bound compile stage's tool's", body["compiler_version"])
 	}
 }

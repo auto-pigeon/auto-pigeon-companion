@@ -38,11 +38,13 @@ const resolved = (request, name) => ({ ...request, name, revision_id: "rev-" + r
 // Load the page with a watch the test can fire.
 function load() {
   const box = element("div");
+  const ids = { "leak-request": box };
+  const byId = (id) => (ids[id] ||= Object.assign(element(id === "leak-pin-select" ? "select" : "div"), { id, value: "", focus() {}, disabled: false }));
   const calls = [], waiting = [], adopted = [];
   let watch = null;
   const window = {
     AUCOM: {
-      $: () => box, el: element, record() {}, showArea() {},
+      $: byId, el: element, record() {}, showArea() {},
       pipelineReady: (item) => item?.readiness?.ready === true,
       executionChoices: (select, items, previous, ready) => items.find(ready)?.id || "",
       t: (message, slots = {}) => message.replace(/\{(\w+)\}/g, (_, key) => String(slots[key])),
@@ -69,7 +71,7 @@ function load() {
     return entry.call;
   };
   const unanswered = (path) => waiting.filter((entry) => entry.call.path.startsWith(path)).length;
-  return { box, calls, adopted, answer, unanswered, tick: async () => { watch(); await settle(); }, settle };
+  return { box, byId, calls, adopted, answer, unanswered, tick: async () => { watch(); await settle(); }, settle };
 }
 
 const REQUEST = "/api/v1/leak-test/request";
@@ -200,4 +202,85 @@ const PENDING = "/api/v1/leak-test/pending";
   assert.equal(p.unanswered("/api/v1/leak-test/pipelines?game=quake1"), 1, "the choice did not open by itself");
 }
 
-console.log("leakrequest: replacement, stale answers, dismiss, relay notice and unpinned game — ok");
+// 8. NEW_310A: Cancel starts nothing and keeps the request; the dialog can
+//    open again from the notice.
+{
+  const p = load();
+  await p.answer(REQUEST, 200, A);
+  const { pipeline: _none, ...unpinned } = resolved(A, "first");
+  await p.answer(PENDING, 200, { ...unpinned, game_profile: "quake1", needs_pipeline: true });
+  await p.answer("/api/v1/leak-test/pipelines?game=quake1", 200, { pinned: "", choices: [{ id: "auto-pigeon.q1.leak-test", readiness: { ready: true } }] });
+  assert.equal(p.byId("leak-pin-modal").hidden, false, "the dialog did not open");
+  p.byId("leak-pin-cancel").listeners.click();
+  await p.settle();
+  assert.equal(p.byId("leak-pin-modal").hidden, true, "Cancel did not close the dialog");
+  assert.ok(!p.calls.some((c) => c.method === "POST"), "Cancel posted something: " + p.calls.filter((c) => c.method === "POST").map((c) => c.path));
+  assert.equal(p.adopted.length, 0, "Cancel started a review");
+  assert.match(text(p.box), /first, saved revision 3/, "Cancel forgot the request");
+  assert.ok(buttonNamed(p.box, "Choose leak-test pipeline"), "the notice no longer offers the choice");
+}
+
+// 9. NEW_310A: a pin confirmed after the request it was opened for was
+//    replaced reviews nothing; B is shown, never started.
+{
+  const p = load();
+  await p.answer(REQUEST, 200, A);
+  const { pipeline: _none, ...unpinned } = resolved(A, "first");
+  await p.answer(PENDING, 200, { ...unpinned, game_profile: "quake1", needs_pipeline: true });
+  await p.answer("/api/v1/leak-test/pipelines?game=quake1", 200, { pinned: "", choices: [{ id: "auto-pigeon.q1.leak-test", readiness: { ready: true } }] });
+  // B replaces A while the dialog is open.
+  await p.tick();
+  await p.answer(REQUEST, 200, B);
+  p.byId("leak-pin-select").value = "auto-pigeon.q1.leak-test";
+  p.byId("leak-pin-confirm").listeners.click();
+  await p.settle();
+  await p.answer("/api/v1/leak-test/pipelines", 200, { game: "quake1", pinned: "auto-pigeon.q1.leak-test" });
+  // Whatever resolves are outstanding answer for B, pinned now.
+  while (p.unanswered(PENDING)) await p.answer(PENDING, 200, resolved(B, "second"));
+  await p.settle();
+  assert.equal(p.unanswered("/api/v1/leak-test/reviewing"), 0, "a pin made for A started a review of B");
+  assert.equal(p.adopted.length, 0);
+  assert.match(text(p.box), /second, saved revision 9/);
+}
+
+// 10. NEW_310A: the pin is confirmed, but the request comes back pinned to
+//     another pipeline (changed elsewhere): it is shown, not reviewed.
+{
+  const p = load();
+  await p.answer(REQUEST, 200, A);
+  const { pipeline: _none, ...unpinned } = resolved(A, "first");
+  await p.answer(PENDING, 200, { ...unpinned, game_profile: "quake1", needs_pipeline: true });
+  await p.answer("/api/v1/leak-test/pipelines?game=quake1", 200, { pinned: "", choices: [{ id: "auto-pigeon.q1.leak-test", readiness: { ready: true } }] });
+  p.byId("leak-pin-select").value = "auto-pigeon.q1.leak-test";
+  p.byId("leak-pin-confirm").listeners.click();
+  await p.settle();
+  await p.answer("/api/v1/leak-test/pipelines", 200, { game: "quake1", pinned: "auto-pigeon.q1.leak-test" });
+  await p.answer(PENDING, 200, { ...resolved(A, "first"), pipeline: "local.pipeline.someone-elses" });
+  assert.equal(p.unanswered("/api/v1/leak-test/reviewing"), 0, "a review started with a pipeline that was not the one pinned");
+  // And with the pipeline just pinned, it does continue to Review.
+  const q = load();
+  await q.answer(REQUEST, 200, A);
+  await q.answer(PENDING, 200, { ...unpinned, game_profile: "quake1", needs_pipeline: true });
+  await q.answer("/api/v1/leak-test/pipelines?game=quake1", 200, { pinned: "", choices: [{ id: "auto-pigeon.q1.leak-test", readiness: { ready: true } }] });
+  q.byId("leak-pin-select").value = "auto-pigeon.q1.leak-test";
+  q.byId("leak-pin-confirm").listeners.click();
+  await q.settle();
+  await q.answer("/api/v1/leak-test/pipelines", 200, { game: "quake1", pinned: "auto-pigeon.q1.leak-test" });
+  await q.answer(PENDING, 200, resolved(A, "first"));
+  assert.equal(q.unanswered("/api/v1/leak-test/reviewing"), 1, "the pinned request did not continue to Review");
+}
+
+// 11. NEW_310A: the pin is gone or unusable: the notice says why and offers
+//     the choice again; nothing is chosen for the user.
+{
+  const p = load();
+  await p.answer(REQUEST, 200, A);
+  const { pipeline: _none, ...unpinned } = resolved(A, "first");
+  await p.answer(PENDING, 200, { ...unpinned, game_profile: "quake1", needs_pipeline: true, pinned_problem: "the pipeline local.pipeline.removed is not installed" });
+  assert.match(text(p.box), /cannot be used any more: the pipeline local.pipeline.removed is not installed/);
+  assert.equal(buttonNamed(p.box, "Review leak test"), undefined);
+  assert.ok(buttonNamed(p.box, "Choose leak-test pipeline"));
+  assert.ok(!p.calls.some((c) => c.method === "POST"), "a pipeline was pinned for the user");
+}
+
+console.log("leakrequest: replacement, stale answers, dismiss, relay notice, unpinned game, cancel, pin ordering and recovery — ok");

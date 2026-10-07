@@ -12,6 +12,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/config"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/leakadapter"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/maturity"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
@@ -30,6 +31,8 @@ const buildUsage = `usage:
   companion build list    [--limit <n>] [--json]
   companion build show    <build-id> [--json]
   companion build pipelines [--json]                       what can be built on this machine
+  companion build leak-pipeline --game <game> [--pin <id> | --unpin] [--json]
+                                                           which pipeline answers that game's leak test
 `
 
 func runBuild(env *Env, args []string) int {
@@ -49,6 +52,8 @@ func runBuild(env *Env, args []string) int {
 		return buildShow(env, rest)
 	case "pipelines":
 		return buildPipelines(env, rest)
+	case "leak-pipeline":
+		return buildLeakPipeline(env, rest)
 	case "-h", "--help", "help":
 		fmt.Fprint(env.Stdout, buildUsage)
 		return 0
@@ -677,4 +682,105 @@ func printGameData(env *Env, m *build.Manifest) {
 	for _, finding := range m.GameData.Findings {
 		fmt.Fprintf(env.Stdout, "            %s: %s\n", finding.Class, finding.Message)
 	}
+}
+
+// buildLeakPipeline is the page's "Choose the leak-test pipeline" for a
+// terminal (NEW_310, HITL 2026-10-06; CLI parity NEW_310A): what is pinned for
+// a game, which installed pipelines could be, and — with --pin or --unpin —
+// the change, written to config.json through the one settings writer. A
+// pipeline that cannot answer that game's leak test is refused by name, as the
+// page refuses it; nothing is ever pinned for the user.
+func buildLeakPipeline(env *Env, args []string) int {
+	set := newFlagSet(env, "build leak-pipeline")
+	game := set.String("game", "", "the game: quake1 or quake3")
+	pin := set.String("pin", "", "pin this pipeline id for the game")
+	unpin := set.Bool("unpin", false, "remove the game's pin")
+	asJSON := set.Bool("json", false, "print as JSON")
+	if _, code, ok := parseFlags(env, set, args); !ok {
+		return code
+	}
+	if *pin != "" && *unpin {
+		fmt.Fprintln(env.Stderr, "error: --pin and --unpin are two different changes; choose one")
+		return 2
+	}
+	adapter, err := leakadapter.ForProfile(strings.TrimSpace(*game))
+	if err != nil {
+		return fail(env, err)
+	}
+	ctx, stop := signalContext()
+	defer stop()
+	service, settings, err := openJobs(ctx, env, false, nil)
+	if err != nil {
+		return fail(env, err)
+	}
+	defer service.Close()
+	entries, err := service.Catalog().List()
+	if err != nil {
+		return fail(env, err)
+	}
+	type choice struct {
+		ID      string `json:"id"`
+		Name    string `json:"name"`
+		Builtin bool   `json:"builtin"`
+	}
+	var choices []choice
+	eligible := map[string]string{}
+	for _, entry := range entries {
+		pipeline, isPipeline := entry.Profile.(*profile.PipelineProfile)
+		if !isPipeline {
+			continue
+		}
+		meta := entry.Profile.Metadata()
+		if _, err := adapter.Bind(build.LeakPipeline(meta.ID, pipeline)); err != nil {
+			eligible[meta.ID] = err.Error()
+			continue
+		}
+		eligible[meta.ID] = ""
+		choices = append(choices, choice{ID: meta.ID, Name: meta.Name, Builtin: meta.ID == adapter.PipelineID})
+	}
+	sort.SliceStable(choices, func(i, j int) bool { return choices[i].Builtin && !choices[j].Builtin })
+
+	pinned := settings.LeakTestPipelines[adapter.Profile]
+	if *pin != "" || *unpin {
+		if *pin != "" {
+			why, installed := eligible[*pin]
+			switch {
+			case !installed:
+				return fail(env, fmt.Errorf("the pipeline %q is not installed", *pin))
+			case why != "":
+				return fail(env, fmt.Errorf("%s cannot be the %s leak test: %s", *pin, adapter.Profile, why))
+			}
+		}
+		updated, err := updateSettings(env, func(c *config.Config) error {
+			if *unpin {
+				delete(c.LeakTestPipelines, adapter.Profile)
+				return nil
+			}
+			if c.LeakTestPipelines == nil {
+				c.LeakTestPipelines = map[string]string{}
+			}
+			c.LeakTestPipelines[adapter.Profile] = *pin
+			return nil
+		})
+		if err != nil {
+			return fail(env, err)
+		}
+		pinned = updated.LeakTestPipelines[adapter.Profile]
+	}
+	if *asJSON {
+		return printJSON(env, map[string]any{"game": adapter.Profile, "pinned": pinned, "choices": choices})
+	}
+	if pinned == "" {
+		fmt.Fprintf(env.Stdout, "%s leak tests: nothing pinned; the next request asks which pipeline to use\n", adapter.Profile)
+	} else {
+		fmt.Fprintf(env.Stdout, "%s leak tests: %s\n", adapter.Profile, pinned)
+	}
+	for _, c := range choices {
+		mark := " "
+		if c.ID == pinned {
+			mark = "*"
+		}
+		fmt.Fprintf(env.Stdout, "  %s %s  %s\n", mark, c.ID, c.Name)
+	}
+	return 0
 }

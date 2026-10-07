@@ -199,3 +199,64 @@ func TestFirstUseOnMacOSWritesNothing(t *testing.T) {
 		t.Fatalf("line %q", line)
 	}
 }
+
+// Paths are compared by the rules of the platform the registrar acts for, not
+// of the machine running this test (NEW_310A): Windows without regard to case
+// or slash direction, Linux byte for byte.
+func TestHandlerPathsAreComparedByTheRegistrarsPlatform(t *testing.T) {
+	for _, c := range []struct {
+		goos, a, b string
+		same       bool
+	}{
+		{"windows", `C:\Users\Bario\Desktop\new310-dev\companion.exe`, `c:\users\bario\desktop\NEW310-DEV\Companion.EXE`, true},
+		{"windows", `C:\Users\bario\companion.exe`, `C:/Users/bario/companion.exe`, true},
+		{"windows", `C:\Users\bario\companion.exe`, `C:\Users\bario\other\companion.exe`, false},
+		{"linux", "/opt/Companion/companion", "/opt/companion/companion", false},
+		{"linux", "/opt/companion//companion", "/opt/companion/companion", true},
+		{"linux", "", "/opt/companion/companion", false},
+	} {
+		if got := samePath(c.goos, c.a, c.b); got != c.same {
+			t.Errorf("%s: samePath(%q, %q) = %v, want %v", c.goos, c.a, c.b, got, c.same)
+		}
+	}
+}
+
+// Windows: the record names the same executable in other casing. It is the
+// predecessor's own registration of THIS path, so the handler is this
+// Companion's and nothing is rewritten or taken over.
+func TestAWindowsHandlerInOtherCasingIsThisCompanion(t *testing.T) {
+	reg := &fakeRegistry{command: `"` + strings.ToUpper(thisCompanion) + `" game open "%1"`}
+	env := windowsEnv(t, thisCompanion, reg)
+	settings := config.Config{URIHandler: &config.URIHandler{Executable: strings.ToUpper(thisCompanion), At: time.Now().Add(-time.Hour)}}
+	uriFirstUse(env, settings, time.Now())
+	if reg.adds != 0 {
+		t.Errorf("a handler naming this executable in other casing was rewritten: %q", reg.command)
+	}
+}
+
+// Linux: the record names this Companion's own path and the handler runs a
+// path that differs from it only by case. On Linux that is a different file —
+// somebody else's handler — so it stays; case-insensitive comparison would
+// have read it as this Companion's earlier registration and taken it over.
+func TestALinuxHandlerDifferingOnlyInCaseIsLeftAlone(t *testing.T) {
+	env, _, _ := testEnv(t)
+	registrar := env.URIRegistrar
+	dir, name := filepath.Split(registrar.Executable)
+	elsewhere := filepath.Join(dir, strings.ToUpper(name))
+	if err := os.WriteFile(elsewhere, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	other := &urischeme.Registrar{GOOS: "linux", Executable: elsewhere, DataHome: registrar.DataHome, Run: registrar.Run}
+	if _, err := other.Register(); err != nil {
+		t.Fatal(err)
+	}
+	settings := config.Config{URIHandler: &config.URIHandler{Executable: registrar.Executable, At: time.Now().Add(-time.Hour)}}
+	line := uriFirstUse(env, settings, time.Now())
+	state, err := registrar.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(state.Handler, strings.ToUpper(name)) || strings.Contains(line, "taken over") {
+		t.Errorf("a foreign Linux handler was taken over: handler %q, line %q", state.Handler, line)
+	}
+}

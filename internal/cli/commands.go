@@ -17,6 +17,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/incident"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/joinintent"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/leakintent"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/lockfile"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/release"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/web"
 )
@@ -216,14 +217,48 @@ func runServe(env *Env, args []string) int {
 	// Auto-build twice. Asked before anything here is opened, so a refused
 	// start touches nothing. Server mode is unchanged: scripts and harnesses
 	// choose their own config and port.
+	//
+	// Two double-clicks a moment apart must not both find nobody and both
+	// start (NEW_310A): the check and the start are one critical section,
+	// serialised by the per-configuration lock file every writer of local state
+	// already uses (internal/lockfile). The lock is held from before the check
+	// until this process has published its address, so a second launch that
+	// waited for it finds the first one running. Released at once by a launch
+	// that defers to a running Companion.
+	var startLock *lockfile.Lock
+	releaseStart := func() {
+		if startLock != nil {
+			_ = startLock.Release()
+			startLock = nil
+		}
+	}
+	defer releaseStart()
 	if *interactive {
-		if address, running := runningServer(configDir); running {
+		lock, err := lockfile.Acquire(filepath.Join(configDir, StartLockName), lockfile.Options{
+			Timeout: 2 * time.Minute, Program: "companion " + env.Version + " (starting)"})
+		if err != nil {
+			// A refusal, never a second server: a start that cannot tell
+			// whether another is in progress says who holds the lock.
+			fmt.Fprintf(env.Stderr, "error: another Auto-Pigeon Companion is starting for this configuration: %v\n", err)
+			return 1
+		}
+		startLock = lock
+		if address, version, running := runningCompanion(configDir); running {
+			releaseStart()
 			page := strings.TrimRight(address, "/") + "/"
 			switch *openArea {
 			case "games", "build":
 				page += "#" + *openArea
 			}
-			fmt.Fprintf(env.Stdout, "Auto-Pigeon Companion is already open at %s\n", page)
+			// Which build answers, honestly: the running one, not this binary.
+			running := "Auto-Pigeon Companion"
+			if version != "" {
+				running += " " + version
+			}
+			fmt.Fprintf(env.Stdout, "%s is already open at %s\n", running, page)
+			if version != "" && version != env.Version {
+				fmt.Fprintf(env.Stdout, "This launch (%s) started nothing; quit the running one first to use this build.\n", env.Version)
+			}
 			if *open {
 				opener := env.OpenBrowser
 				if opener == nil {
@@ -419,6 +454,8 @@ func runServe(env *Env, args []string) int {
 		logf("warning: %v", err)
 	}
 	defer web.RemoveURL(urlPath)
+	// Published: a launch waiting on the start lock now finds this one.
+	releaseStart()
 	_ = joinintent.Prune(joinintent.Path(configDir), time.Now().UTC())
 	_ = leakintent.Prune(leakintent.Path(configDir), time.Now().UTC())
 
@@ -475,7 +512,16 @@ func runServe(env *Env, args []string) int {
 	// and records it in config.json (NEW_310, HITL). Server mode never does:
 	// scripts and tests run that, and a handler is somebody's desktop.
 	if *interactive {
-		go func() { logf("%s", uriFirstUse(env, settings, time.Now())) }()
+		// In the background, so a slow registry or desktop database never
+		// delays the page; waited for before this function returns (and so
+		// before the log is closed), so a quick stop never leaves it writing
+		// into a configuration directory that is being torn down.
+		firstUseDone := make(chan struct{})
+		go func() {
+			defer close(firstUseDone)
+			logf("%s", uriFirstUse(env, settings, time.Now()))
+		}()
+		defer func() { <-firstUseDone }()
 	}
 
 	// The lifecycle decides; web.Serve stops when it has.

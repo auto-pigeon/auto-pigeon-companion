@@ -23,6 +23,7 @@ topics:
 paths:
   - internal/leakadapter/**
   - internal/web/leaktest.go
+  - internal/web/leakpipeline.go
   - internal/web/leakrelay.go
   - internal/aub/leaklink.go
   - internal/profile/builtin/q1-leak-test.pipeline.json
@@ -43,26 +44,47 @@ leak" for which game. The editor (`frontend/src/domain/leakPointfile.ts`) and th
 (`internal/companion/leakresult.go`) hold the same rows, because each of them refuses a claim that
 is not one.
 
-| game | pipeline | compiler | point file | direction | envelope |
+| game | built-in pipeline | compiler | point file | direction | envelope |
 | --- | --- | --- | --- | --- | --- |
 | `quake1` | `auto-pigeon.q1.leak-test` | `ericw-qbsp` (EricW 2.0.0-alpha11; 0.18.1 also qualified) | `ericw-pts` | `occupant_to_outside` | `aucom.leak-result/1.0` |
 | `quake3` | `auto-pigeon.q3.leak-test` | `q3map2` (2.5.17n-git-68ecbed) | `q3map2-lin` | `outside_to_occupant` | `aucom.leak-result/1.1` |
+
+The pipeline column is the built-in one. It is not what runs unless the user chose it — see the
+next section.
 
 **A game with no row is unsupported, by name. It is never Quake 1.** Quake II has a `qbsp`; that
 is not a measurement, and it has no row.
 
 **The game is the saved document's own word**: the `game` field of the pinned, digest-checked
 APMap. The review reads it from the asset cache's verified bytes (`savedMapGame`); the build start
-reads it again from the bytes it just staged (`leakAdapterForBuild`); the result builder refuses a
+reads it again from the bytes it just staged (`leakBindingForBuild`); the result builder refuses a
 build whose conversion record names another game than its pipeline's. A link's `profile=` hint, the
 pipeline a page selected and the state of any toolbar are checked against it and never used instead
 of it. `build.CheckConvertedGames` applies the same rule to every pipeline: a map of one game is
 not handed to another game's compiler.
 
+## Which pipeline answers: the user's pin (HITL, 2026-10-06)
+
+The Companion ships profiles; the compilers are programs the user installs. So **which pipeline
+answers a game's leak test is the user's choice, per game, with no default**: `leak_test_pipelines`
+in config.json, `GET/POST /api/v1/leak-test/pipelines`, and a chooser the Companion opens when a
+request arrives for a game with nothing pinned (eligible pipelines, built-in first, unready ones
+disabled with their reasons, a way to Profiles). There is no "first ready" fallback and no automatic
+pin; Cancel starts nothing and keeps the request; a pin that is gone or unusable is reported and
+asked for again, never replaced by another.
+
+A pipeline is ELIGIBLE when `leakadapter.Adapter.Bind` binds it: it is for that game and publishes,
+by ROLE, the point file and the compiler's text (a role-named log, or the reserved
+`aucom.step.stdout` of the step producing the point file). A friendly name or an output's file name
+is not evidence. The binding — game, pipeline, point-file/log/BSP output names and the compile step
+— is recorded in the build manifest (schema 1.4, `leak_test`), and the result is read from THAT
+record, never from today's pin or a fixed step id.
+
 ## What the pipeline owns
 
-- One step, the compiler's structural/BSP stage with its leak test on. No visibility, no lighting,
-  no package, no engine.
+- The built-in leak test is one step, the compiler's structural/BSP stage with its leak test on.
+  A user's pinned pipeline may have more stages; its leak stops at the bound compile stage, and the
+  later stages are skipped, never run on a BSP that was not written.
 - The compiler's own text is the reserved step output `<step>.stdout` (role `aucom.step.stdout`):
   the job's stored log, written once when the process ends — success, failure, timeout or cancel —
   and never the live buffer a page polls. A compiler that writes a log file of its own (qbsp)

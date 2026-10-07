@@ -207,10 +207,18 @@ func TestAPinnedPipelineIsBoundByRoleNotByName(t *testing.T) {
 		t.Errorf("log %q", binding.Log)
 	}
 
+	// NEW_310A: a pipeline publishing only the point file is bound to the text
+	// of the stage that produced it — the stage that flooded — which the
+	// build then publishes for the leak test.
+	pointOnly, err := q1.Bind(Pipeline{ID: "local.pipeline.scratch", Games: []string{"quake1"},
+		Outputs: []PipelineOutput{{Name: "bsp", Role: "q1.bsp.lit", From: "light.bsp"}, {Name: "pts", Role: "q1.pts", From: "compile.pts"}}})
+	if err != nil || pointOnly.Log != LeakLogOutput || pointOnly.LogFrom != "compile.stdout" || pointOnly.CompileStep != "compile" {
+		t.Errorf("a point-file-only pipeline: %+v %v", pointOnly, err)
+	}
+
 	for name, refused := range map[string]Pipeline{
-		"another game":    {ID: "x.y", Games: []string{"quake3"}, Outputs: mine.Outputs},
-		"no point file":   {ID: "x.y", Games: []string{"quake1"}, Outputs: mine.Outputs[1:]},
-		"no compiler log": {ID: "x.y", Games: []string{"quake1"}, Outputs: mine.Outputs[:1]},
+		"another game":  {ID: "x.y", Games: []string{"quake3"}, Outputs: mine.Outputs},
+		"no point file": {ID: "x.y", Games: []string{"quake1"}, Outputs: mine.Outputs[1:]},
 	} {
 		if _, err := q1.Bind(refused); err == nil {
 			t.Errorf("%s: bound", name)

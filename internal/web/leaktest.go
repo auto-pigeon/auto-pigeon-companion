@@ -394,19 +394,24 @@ func (s *Server) buildLeakResult(id string) (leakResult, error) {
 	result := leakResult{SchemaVersion: adapter.ResultSchema, BuildID: manifest.BuildID,
 		MapID: source.AssetID, RevisionID: source.RevisionID, Revision: source.Revision, ContentSHA256: source.ContentSHA256,
 		BuildState: string(manifest.State)}
-	for _, tool := range manifest.Tools {
-		if tool.ToolVersion != "" {
-			result.CompilerVersion = tool.ToolVersion
-			break
-		}
-	}
-	stepState := ""
+	stepState, compilerProfile := "", ""
 	for _, step := range manifest.Steps {
 		if step.ID == binding.CompileStep {
 			result.CompileExitCode, stepState = step.ExitCode, string(step.State)
+			compilerProfile = step.Profile.ID
 			if step.Skipped {
 				stepState = ""
 			}
+			break
+		}
+	}
+	// The compiler's version is the version of the tool that ran the bound
+	// compile stage — not of whichever tool the manifest lists first: with a
+	// stage that names its tool, a build may carry more than one (NEW_310A).
+	// A manifest written before steps recorded their profile has one tool.
+	for _, tool := range manifest.Tools {
+		if (compilerProfile == "" || tool.Profile.ID == compilerProfile) && tool.ToolVersion != "" {
+			result.CompilerVersion = tool.ToolVersion
 			break
 		}
 	}

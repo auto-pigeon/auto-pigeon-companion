@@ -24,6 +24,11 @@ import (
 // happened.
 const DetailLogName = "companion.log"
 
+// StartLockName is the file whose lock (internal/lockfile) serialises an
+// interactive start: the check for a running Companion and the start of a new
+// one are one critical section per configuration directory.
+const StartLockName = "companion-start"
+
 // detailLogLimit bounds the log file. A compiler can print hundreds of
 // megabytes; the log is the server's own lines, and past this it says so and
 // stops rather than filling a disk.

@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -526,8 +527,9 @@ func TestASecondLaunchShowsTheRunningCompanionInsteadOfStartingAnother(t *testin
 	default:
 		t.Error("the second launch opened no page")
 	}
-	if !strings.Contains(stdout.String(), "already open at "+want) {
-		t.Errorf("the second launch said %q", stdout.String())
+	if !strings.Contains(stdout.String(), "Auto-Pigeon Companion 1.500 is already open at "+want) ||
+		!strings.Contains(stdout.String(), "This launch (1.501) started nothing") {
+		t.Errorf("the second launch did not say which build answers: %q", stdout.String())
 	}
 	if token, err := web.ReadToken(web.TokenPath(dir)); err != nil || token != first.token {
 		t.Errorf("the running Companion's token was replaced: %v", err)
@@ -538,5 +540,109 @@ func TestASecondLaunchShowsTheRunningCompanionInsteadOfStartingAnother(t *testin
 	}
 	if status, _ := first.api(http.MethodGet, "/api/status", ""); status != http.StatusOK {
 		t.Errorf("the running Companion stopped answering: %d", status)
+	}
+}
+
+// Launches a moment apart, from cold, end with exactly one Companion for the
+// configuration (NEW_310A): the check for a running one and the start are one
+// critical section under the per-configuration start lock, so the launches
+// that lose the race find the winner rather than both starting. One server,
+// one log with one start in it and no hole, one token, and every launcher is
+// shown that one page.
+func TestLaunchesAMomentApartStartOneCompanion(t *testing.T) {
+	config := filepath.Join(t.TempDir(), "config.json")
+	const launches = 4
+	type launch struct {
+		stdout, stderr *syncBuffer
+		opened         chan string
+		done           chan int
+	}
+	all := make([]*launch, launches)
+	start := make(chan struct{})
+	for i := range all {
+		l := &launch{stdout: &syncBuffer{}, stderr: &syncBuffer{}, opened: make(chan string, 1), done: make(chan int, 1)}
+		all[i] = l
+		env := &Env{Stdout: l.stdout, Stderr: l.stderr, Version: fmt.Sprintf("1.50%d", i), ConfigPath: config,
+			Lookenv: func(string) (string, bool) { return "", false }, URIRegistrar: isolatedRegistrar(t),
+			OpenBrowser: func(page string) error { l.opened <- page; return nil }}
+		go func() {
+			<-start
+			l.done <- Run(env, []string{"serve", "--interactive", "--open"})
+		}()
+	}
+	close(start)
+
+	// Every launcher opens a page; all but one then exit.
+	pages := map[string]bool{}
+	for i, l := range all {
+		select {
+		case page := <-l.opened:
+			pages[page] = true
+		case <-time.After(30 * time.Second):
+			t.Fatalf("launch %d opened no page; stdout %q stderr %q", i, l.stdout.String(), l.stderr.String())
+		}
+	}
+	if len(pages) != 1 {
+		t.Fatalf("the launches were shown %d different Companions: %v", len(pages), pages)
+	}
+	running := -1
+	deadline := time.After(30 * time.Second)
+	for exited := 0; exited < launches-1; {
+		select {
+		case <-deadline:
+			t.Fatalf("%d of %d launches are still running: more than one Companion started", launches-exited, launches)
+		default:
+		}
+		exited = 0
+		running = -1
+		for i, l := range all {
+			select {
+			case code := <-l.done:
+				l.done <- code
+				exited++
+				if code != 0 {
+					t.Fatalf("launch %d exited %d; stderr %q", i, code, l.stderr.String())
+				}
+			default:
+				running = i
+			}
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if running < 0 {
+		t.Fatal("no launch is running a Companion")
+	}
+
+	dir := filepath.Dir(config)
+	logged, err := os.ReadFile(filepath.Join(dir, DetailLogName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(string(logged), "listening on http://"); n != 1 {
+		t.Errorf("the log records %d starts, want 1:\n%s", n, logged)
+	}
+	if strings.ContainsRune(string(logged), 0) {
+		t.Errorf("the log has a hole of NULs: two writers truncated it")
+	}
+	token, err := web.ReadToken(web.TokenPath(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	address, err := web.ReadURL(web.URLPath(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, _ := http.NewRequest(http.MethodPost, strings.TrimRight(address, "/")+"/api/lifecycle/quit",
+		strings.NewReader(`{"cancel_active":false}`))
+	request.Header.Set("X-AUCOM-Token", token)
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("the one Companion does not answer with the published token: %v", err)
+	}
+	response.Body.Close()
+	select {
+	case <-all[running].done:
+	case <-time.After(20 * time.Second):
+		t.Error("the one Companion did not stop on Quit")
 	}
 }

@@ -263,6 +263,15 @@ type ToolResolver interface {
 	ProviderFrom(tool, capability string) (*ToolProfile, Action, bool)
 }
 
+// NamedToolExplainer is a [ToolResolver] that can say WHY a named tool does
+// not resolve: not installed, installed but not a tool, or a tool without the
+// capability. A stage that names its tool never falls back to another
+// provider, so the refusal is the only thing a person gets and has to be
+// specific (NEW_310A).
+type NamedToolExplainer interface {
+	ExplainNamedTool(tool, capability string) (problem, fix string)
+}
+
 // providerFor resolves one step: from its named tool when it names one.
 func providerFor(r Resolver, step PipelineStep) (*ToolProfile, Action, bool) {
 	if step.Tool == "" {
@@ -302,6 +311,11 @@ func (p *PipelineProfile) Resolve(r Resolver) ([]ResolvedStep, error) {
 			c.child(index(i), func(c *collector) {
 				profile, action, ok := providerFor(r, step)
 				if !ok && step.Tool != "" {
+					if explainer, can := r.(NamedToolExplainer); can {
+						problem, fix := explainer.ExplainNamedTool(step.Tool, step.Capability)
+						c.fixf(fix, "%s", problem)
+						return
+					}
 					c.fixf("install "+step.Tool+", or choose another tool for this stage",
 						"needs the capability %q from the tool %s, and no installed profile %s provides it",
 						step.Capability, step.Tool, step.Tool)

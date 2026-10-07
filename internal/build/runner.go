@@ -976,7 +976,16 @@ func (r *Runner) collectStepLog(layout layout, resolved profile.ResolvedStep, jo
 func (r *Runner) publish(pipeline *profile.PipelineProfile, layout layout, wires map[string]wire, manifest *Manifest) error {
 	manifest.Outputs = nil
 	var missing []string
-	for _, declared := range pipeline.Outputs {
+	declaredOutputs := pipeline.Outputs
+	// A leak test whose pinned pipeline publishes no log publishes the compile
+	// step's own text for it, under the name its binding records (NEW_310A).
+	if leak := manifest.LeakTest; leak != nil && leak.LogFrom != "" {
+		declaredOutputs = append(append([]profile.PipelineOutput(nil), pipeline.Outputs...), profile.PipelineOutput{
+			Name: leak.Log, Title: "Compiler text for the leak test", Role: profile.StepLogRole,
+			From: leak.LogFrom, Optional: true,
+		})
+	}
+	for _, declared := range declaredOutputs {
 		source, produced := wires[declared.From]
 		if !produced || source.Missing {
 			manifest.Outputs = append(manifest.Outputs, FileRecord{

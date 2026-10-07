@@ -30,18 +30,6 @@ import (
 // is the same pipelineReadiness Build & Run uses. The game is still the saved
 // APMap's own word; a pin never decides it.
 
-// leakPipelineDoc is a pipeline document in the form leakadapter reads.
-func leakPipelineDoc(id string, pipeline *profile.PipelineProfile) leakadapter.Pipeline {
-	doc := leakadapter.Pipeline{ID: id}
-	if pipeline.GameProfile != nil {
-		doc.Games = append(doc.Games, pipeline.GameProfile.Slug, pipeline.GameProfile.EngineFamily)
-	}
-	for _, output := range pipeline.Outputs {
-		doc.Outputs = append(doc.Outputs, leakadapter.PipelineOutput{Name: output.Name, Role: output.Role, From: output.From})
-	}
-	return doc
-}
-
 // pinnedLeakPipeline is the pipeline pinned for a game, or "".
 func (s *Server) pinnedLeakPipeline(game string) string {
 	s.mu.RLock()
@@ -67,7 +55,7 @@ func (s *Server) leakBinding(game, pipelineID string) (leakadapter.Binding, erro
 	if !ok {
 		return leakadapter.Binding{}, fmt.Errorf("%q is not a pipeline", pipelineID)
 	}
-	binding, err := adapter.Bind(leakPipelineDoc(pipelineID, pipeline))
+	binding, err := adapter.Bind(build.LeakPipeline(pipelineID, pipeline))
 	if err != nil {
 		return leakadapter.Binding{}, fmt.Errorf("%s cannot be the %s leak test: %w", pipeline.Meta.Name, game, err)
 	}
@@ -104,7 +92,7 @@ func (s *Server) leakChoices(game string) ([]map[string]any, error) {
 			continue
 		}
 		meta := entry.Profile.Metadata()
-		if _, err := adapter.Bind(leakPipelineDoc(meta.ID, pipeline)); err != nil {
+		if _, err := adapter.Bind(build.LeakPipeline(meta.ID, pipeline)); err != nil {
 			continue
 		}
 		readiness := pipelineReadiness(pipeline, runner.Resolver(), set)

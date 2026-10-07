@@ -82,8 +82,22 @@ your settings, log and jobs:
 
 ```console
 $ ./companion
-Auto-Pigeon Companion is already open at http://127.0.0.1:8789/
+Auto-Pigeon Companion 1.214 is already open at http://127.0.0.1:8789/
 ```
+
+It names the build that answers. When that is not the one you just started — an
+older copy still open — it says so, and nothing of the new one runs until you quit
+the open one:
+
+```console
+$ ./companion
+Auto-Pigeon Companion 1.213 is already open at http://127.0.0.1:8789/
+This launch (1.214) started nothing; quit the running one first to use this build.
+```
+
+Two starts a moment apart (a double double-click, or a link clicked while the
+program is still starting) end with one Companion: the second waits for the
+first to finish starting and then shows it.
 
 Closing its last browser tab stops it about 15 seconds later; the wait is so
 a reload, or another tab of it, keeps it running. A build, a game or a download
@@ -219,6 +233,17 @@ game that publishes the point file and the compiler's log, the built-in one
 first, the ones that need setup greyed with their reasons and **Profiles / setup**
 beside them. The choice is kept in `config.json` as `leak_test_pipelines` and can
 be changed from the notice (**Change pipeline**).
+
+```console
+$ ./companion build leak-pipeline --game quake1
+quake1 leak tests: nothing pinned; the next request asks which pipeline to use
+    auto-pigeon.q1.leak-test  Quake 1 — leak test
+    local.pipeline.new310-win-scratch-q1-build  NEW310 Win Scratch Q1 Build
+$ ./companion build leak-pipeline --game quake1 --pin local.pipeline.new310-win-scratch-q1-build
+$ ./companion build leak-pipeline --game quake1 --unpin
+```
+
+The same over HTTP:
 
 ```bash
 # What is pinned for Quake 1, and what could be.
@@ -400,7 +425,11 @@ arguments; the same tool may be a stage more than once. A stage names the tool
 profile that runs it (`"tool"` in the document), so your own EricW profile and the
 built-in one can both be installed: each pipeline runs the one its stages name, and
 the built-in pipelines name the built-in tools. Only a stage that names no tool is
-refused when two installed tools provide what it needs. What the form has no field
+refused when two installed tools provide what it needs. A stage whose named tool
+cannot run it is refused for that reason — not installed, not a tool, or without
+that step — and is never run by another tool instead; nor is it when that tool's
+approval is withdrawn. The build record names the tool and digest that ran each
+stage. What the form has no field
 for is kept as the tested profile had it. Nothing is installed until you press
 **Install this profile**, and an installed profile is local and cannot run until you
 approve it. **Next** keeps you at the current step when required fields or

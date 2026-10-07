@@ -30,6 +30,9 @@ type Resolver struct {
 	// byTool is every tool's own providers, for a stage that names its tool:
 	// tool profile id, then capability.
 	byTool map[string]map[string]provider
+	// kinds is every installed profile's kind, by id, so a stage naming a
+	// pipeline or an engine as its tool is told so rather than "not installed".
+	kinds map[string]profile.Kind
 	// Conflicts is every capability more than one installed profile claimed,
 	// with the profiles that claimed it. Held rather than returned so that a
 	// build fails on a conflict it actually needed, and a conflict in some
@@ -49,8 +52,10 @@ func NewResolver(catalog Catalog) (*Resolver, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := &Resolver{providers: map[string]provider{}, byTool: map[string]map[string]provider{}, Conflicts: map[string][]string{}}
+	r := &Resolver{providers: map[string]provider{}, byTool: map[string]map[string]provider{},
+		kinds: map[string]profile.Kind{}, Conflicts: map[string][]string{}}
 	for _, entry := range entries {
+		r.kinds[entry.Profile.Metadata().ID] = entry.Profile.Metadata().Kind
 		tool, isTool := entry.Profile.(*profile.ToolProfile)
 		if !isTool {
 			continue
@@ -95,6 +100,32 @@ func (r *Resolver) ProviderFrom(tool, capability string) (*profile.ToolProfile, 
 		return nil, profile.Action{}, false
 	}
 	return found.tool, found.action, true
+}
+
+// ExplainNamedTool implements [profile.NamedToolExplainer]: why a stage's
+// named tool does not provide its capability here. Never answered by naming
+// another provider — a named stage does not fall back.
+func (r *Resolver) ExplainNamedTool(tool, capability string) (problem, fix string) {
+	kind, installed := r.kinds[tool]
+	switch {
+	case !installed:
+		return fmt.Sprintf("names the tool %s, which is not installed", tool),
+			"install " + tool + ", or choose another tool for this stage"
+	case kind != profile.KindTool:
+		return fmt.Sprintf("names %s as its tool, but %s is a %s profile, not a tool", tool, tool, kind),
+			"choose a tool profile for this stage"
+	}
+	own := make([]string, 0, len(r.byTool[tool]))
+	for c := range r.byTool[tool] {
+		own = append(own, c)
+	}
+	sort.Strings(own)
+	provides := "nothing"
+	if len(own) > 0 {
+		provides = strings.Join(own, ", ")
+	}
+	return fmt.Sprintf("names the tool %s, which does not provide %q (it provides %s)", tool, capability, provides),
+		"choose a tool that provides " + capability + " for this stage"
 }
 
 // EntryForStep is the catalog entry that resolves one pipeline step: the named
