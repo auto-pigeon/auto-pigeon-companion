@@ -33,6 +33,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 )
 
 // The games with a row.
@@ -80,7 +81,9 @@ var ErrUnsupported = errors.New("leak testing is not available for this game")
 type Adapter struct {
 	// Profile is the APMap `game` this row answers for.
 	Profile string
-	// PipelineID is the only pipeline a leak request for this game may run.
+	// PipelineID is this game's built-in leak-test pipeline. Since NEW_310 it is
+	// not the only one a request may run: the user pins the pipeline for each
+	// game in the Companion, and this is the one offered first.
 	PipelineID string
 	// Compiler and PointfileFormat are the envelope's names for what ran and
 	// what it wrote; Direction says which end of the point file is the entity.
@@ -100,6 +103,13 @@ type Adapter struct {
 	// qbsp does not: it names every output after its `basename` option
 	// (`level.pts`), whatever the map is called.
 	PointfileBesideSource bool
+	// PointfileRole, LogRoles and BSPRole are the artifact roles a pipeline's
+	// outputs must carry for that pipeline to answer this game's leak test:
+	// a pipeline the user pinned is read by ROLE, never by output name
+	// (NEW_310, HITL). BSPRole is empty when the BSP is not evidence.
+	PointfileRole string
+	LogRoles      []string
+	BSPRole       string
 	// ResultSchema is the envelope this row's results are returned in.
 	ResultSchema string
 	// QualifiedVersions are the compiler versions this row's reading of the
@@ -125,12 +135,14 @@ var adapters = map[string]Adapter{
 		Profile: ProfileQuake1, PipelineID: "auto-pigeon.q1.leak-test",
 		Compiler: CompilerEricwQbsp, PointfileFormat: FormatEricwPts, Direction: DirectionOccupantFirst,
 		PointfileOutput: "pts", LogOutput: "compile_log",
+		PointfileRole: "q1.pts", LogRoles: []string{"q1.compile.log", StepLogRole},
 		ResultSchema: Schema10, QualifiedVersions: []string{"v0.18.1", "0.18.1", "2.0.0-alpha11"},
 	},
 	ProfileQuake3: {
 		Profile: ProfileQuake3, PipelineID: "auto-pigeon.q3.leak-test",
 		Compiler: CompilerQ3Map2, PointfileFormat: FormatQ3Map2Lin, Direction: DirectionOutsideFirst,
 		PointfileOutput: "lin", LogOutput: "compile_log", BSPOutput: "bsp", PointfileBesideSource: true,
+		PointfileRole: "q3.lin", LogRoles: []string{StepLogRole}, BSPRole: "q3.bsp",
 		ResultSchema: Schema11, QualifiedVersions: []string{Q3Map2MeasuredVersion},
 		Classify: ClassifyQ3Map2,
 	},
@@ -146,6 +158,83 @@ func ForProfile(game string) (Adapter, error) {
 		return Adapter{}, fmt.Errorf("%w: %q (supported: %s)", ErrUnsupported, game, supported())
 	}
 	return adapter, nil
+}
+
+// StepLogRole is the role of every step's own output text
+// (profile.StepLogRole), repeated so this table stays free of the profile
+// package's types.
+const StepLogRole = "aucom.step.stdout"
+
+// Pipeline is what this package needs to know about a pipeline document to
+// say whether it can answer a game's leak test. internal/web fills it from
+// the installed profile.
+type Pipeline struct {
+	ID string
+	// Games are the game_profile slug and engine family the document declares.
+	Games []string
+	// Outputs are the pipeline's published outputs: name, role, and the
+	// `<step>.<output>` it is wired from.
+	Outputs []PipelineOutput
+}
+
+// PipelineOutput is one published output of a [Pipeline].
+type PipelineOutput struct{ Name, Role, From string }
+
+// Binding is how one pipeline answers one game's leak test: which of its
+// outputs is the point file, which the compiler's text, which the BSP, and
+// which step compiled. Recorded on the build, so a result is read from the
+// build's own record and not from whatever is pinned today.
+type Binding struct {
+	Game        string `json:"game"`
+	Pipeline    string `json:"pipeline"`
+	Pointfile   string `json:"pointfile_output"`
+	Log         string `json:"log_output"`
+	BSP         string `json:"bsp_output,omitempty"`
+	CompileStep string `json:"compile_step"`
+}
+
+// Bind says whether pipeline can be this game's leak test, and how its outputs
+// are read. A refusal names what is missing, for the person choosing one.
+func (a Adapter) Bind(pipeline Pipeline) (Binding, error) {
+	game := false
+	for _, declared := range pipeline.Games {
+		game = game || declared == a.Profile
+	}
+	if !game {
+		return Binding{}, fmt.Errorf("it is not a %s pipeline", a.Profile)
+	}
+	binding := Binding{Game: a.Profile, Pipeline: pipeline.ID}
+	for _, output := range pipeline.Outputs {
+		switch {
+		case output.Role == a.PointfileRole && binding.Pointfile == "":
+			binding.Pointfile = output.Name
+			binding.CompileStep, _, _ = strings.Cut(output.From, ".")
+		case a.BSPRole != "" && output.Role == a.BSPRole && binding.BSP == "":
+			binding.BSP = output.Name
+		}
+	}
+	// The compiler's own text, in the order the row prefers it.
+	for _, role := range a.LogRoles {
+		for _, output := range pipeline.Outputs {
+			if binding.Log == "" && output.Role == role {
+				binding.Log = output.Name
+			}
+		}
+	}
+	switch {
+	case binding.Pointfile == "":
+		return Binding{}, fmt.Errorf("it publishes no %s output (the point file a leak leaves)", a.PointfileRole)
+	case binding.Log == "":
+		return Binding{}, fmt.Errorf("it publishes no compiler log (an output with role %s)", strings.Join(a.LogRoles, " or "))
+	}
+	return binding, nil
+}
+
+// Builtin is the row's own pipeline read the way a pinned one is.
+func (a Adapter) Builtin() Binding {
+	step := "compile"
+	return Binding{Game: a.Profile, Pipeline: a.PipelineID, Pointfile: a.PointfileOutput,
+		Log: a.LogOutput, BSP: a.BSPOutput, CompileStep: step}
 }
 
 // ForPipeline is the row whose pipeline this is.

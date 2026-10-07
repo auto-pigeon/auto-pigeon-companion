@@ -42,6 +42,10 @@
   // What "Who can see it" says at the start of every launch. See state.listing.
   const FRESH_VISIBILITY = "private";
 
+  // Every textures question is numbered, and only the latest answer is shown
+  // (refreshPlan, checkOwnWads).
+  let texturesAsked = 0;
+
   // The whole of this page's state. Exact identities, never display labels: a
   // request carrying "dm1, latest" would mean something different tomorrow.
   const state = {
@@ -767,12 +771,18 @@
     // Run afterwards costs nothing extra. What is never done is INVENTING the
     // list: until this returns, the review says the textures will be fetched.
     if (body.textures && body.textures.known === false && window.AUCOM.status?.authenticated) {
+      const asked = ++texturesAsked;
       const { ok: gotTextures, body: textures } = await api(
         `/api/v1/play/textures?asset_id=${encodeURIComponent(state.map.asset_id)}` +
         `&revision=${encodeURIComponent(state.revision.revision)}`
       );
       // A plan that changed underneath this is one whose textures are not these.
       if (state.planKey !== key) return;
+      // Nor is an answer a later question has already replaced: this fetch
+      // verifies the bundle and can take seconds, and "Use this folder" pressed
+      // meanwhile is answered first — this one landing on top of it would put
+      // the WAD warning back over the answer the person asked for.
+      if (asked !== texturesAsked) return;
       if (gotTextures && textures.known) {
         state.plan.textures = textures;
         renderReview(state.plan);
@@ -946,7 +956,10 @@
     const input = el("input", {
       attrs: { type: "text", id: "play-own-wads-dir", spellcheck: "false", "aria-label": t("Folder with your own WADs") },
     });
-    input.value = state.ownWadsDir || (state.gameRoot ? state.gameRoot.replace(/[\\/]+$/, "") + "/id1" : "");
+    // The suggestion is spelled with this machine's own separator: a Windows
+    // game folder followed by "/id1" read as a typo (NEW_310).
+    const separator = /\\/.test(state.gameRoot || "") ? "\\" : "/";
+    input.value = state.ownWadsDir || (state.gameRoot ? state.gameRoot.replace(/[\\/]+$/, "") + separator + "id1" : "");
     const use = el("button", { text: t("Use this folder"), className: "primary", attrs: { type: "button" } });
     use.addEventListener("click", () => window.AUCOM.withBusy(use, async () => {
       state.ownWadsDir = input.value.trim();
@@ -992,7 +1005,9 @@
     const query = new URLSearchParams({
       asset_id: state.map.asset_id, revision: String(state.revision.revision), own_wads_dir: state.ownWadsDir,
     });
+    const asked = ++texturesAsked;
     const { ok, body } = await api("/api/v1/play/textures?" + query.toString());
+    if (asked !== texturesAsked) return;
     if (!ok) {
       setMessage("play-review-message", body.error, "error");
       return;

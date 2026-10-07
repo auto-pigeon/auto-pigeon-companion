@@ -108,6 +108,7 @@ func (s *Server) playService() (*playrun.Service, error) {
 		Convert:         s.playConvert,
 		BoundPackages:   s.playBoundPackages,
 		MapInputName:    s.playMapInputName,
+		DeclaresRoot:    s.pipelineDeclaresRoot,
 		Build:           s.playBuild,
 		PlanInstall:     s.playPlanInstall,
 		Install:         s.playInstall,
@@ -296,6 +297,39 @@ func (s *Server) playMapInputName(pipelineID string) (string, error) {
 	}
 
 	return "", fmt.Errorf("%s declares no map source to build from", pipelineID)
+}
+
+// pipelineDeclaresRoot says whether a step of the pipeline, resolved the way
+// a build of it would be, declares the root role.
+func (s *Server) pipelineDeclaresRoot(pipelineID, role string) (bool, error) {
+	catalog, err := s.catalog()
+	if err != nil {
+		return false, err
+	}
+	entry, err := catalog.Lookup(pipelineID)
+	if err != nil {
+		return false, err
+	}
+	pipeline, isPipeline := entry.Profile.(*profile.PipelineProfile)
+	if !isPipeline {
+		return false, fmt.Errorf("%s is not a build profile", pipelineID)
+	}
+	runner, err := s.buildRunner(nil)
+	if err != nil {
+		return false, err
+	}
+	steps, err := pipeline.Resolve(runner.Resolver())
+	if err != nil {
+		return false, err
+	}
+	for _, step := range steps {
+		for _, root := range step.Action.Roots {
+			if root.Role == role {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 func (s *Server) playBuild(ctx context.Context, request build.Request,

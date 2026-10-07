@@ -502,7 +502,9 @@
         className: "muted small",
         text: tool
           ? t("Run by {tool}: {action} — the program {program}.", { tool: tool.profile_name, action: tool.action_title || tool.action_id, program: tool.executable })
-          : t("No installed tool provides {capability} yet, so this stage cannot run here. Its arguments can still be set.", { capability: stage.capability }),
+          : stage.named_tool
+            ? t("This stage names the tool {tool}, which is not installed, so it cannot run here. Its arguments can still be set.", { tool: stage.named_tool })
+            : t("No installed tool provides {capability} yet, so this stage cannot run here. Its arguments can still be set.", { capability: stage.capability }),
       })];
       const set = Object.entries(stage.options || {});
       if (set.length > 0) {

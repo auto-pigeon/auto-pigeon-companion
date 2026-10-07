@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/leakadapter"
 	"io"
 	"os"
 	"path/filepath"
@@ -140,6 +141,9 @@ type Request struct {
 	Options map[string]map[string]string
 	// Label is a short human name for the build list.
 	Label string
+	// LeakTest marks a build that answers an editor's leak test, and says how
+	// its outputs are read. Recorded on the manifest as it is.
+	LeakTest *leakadapter.Binding
 	// Strict fails the build when any step recorded an error-severity
 	// diagnostic, even where the tool itself exited zero.
 	Strict bool
@@ -191,6 +195,7 @@ func (r *Runner) Run(ctx context.Context, request Request) (*Manifest, error) {
 		Label:         request.Label,
 		Pipeline:      documentRef(entry),
 		EngineFamily:  pipelineFamily(entry),
+		LeakTest:      request.LeakTest,
 		State:         job.Running,
 		Strict:        request.Strict,
 		StartedAt:     r.options.Now(),
@@ -366,7 +371,7 @@ func (r *Runner) Preview(request Request) (*Manifest, error) {
 			State:             job.Queued,
 			PreviewDifference: "predicted: resolved against where this build would stage each file, not against files that exist",
 		}
-		if catalogEntry, ok := r.resolver.Entry(resolved.Step.Capability); ok {
+		if catalogEntry, ok := r.resolver.EntryForStep(resolved.Step); ok {
 			step.Profile = documentRef(catalogEntry)
 		}
 		invocation, options, inputs, err := r.previewStep(request, resolved, wires)
@@ -533,11 +538,7 @@ func (r *Runner) pipeline(id string) (*profile.PipelineProfile, job.CatalogEntry
 }
 
 func (r *Runner) resolveSteps(pipeline *profile.PipelineProfile) ([]profile.ResolvedStep, error) {
-	needed := make([]string, 0, len(pipeline.Steps))
-	for _, step := range pipeline.Steps {
-		needed = append(needed, step.Capability)
-	}
-	if err := r.resolver.CheckConflicts(needed); err != nil {
+	if err := r.resolver.CheckSteps(pipeline.Steps); err != nil {
 		return nil, err
 	}
 	steps, err := pipeline.Resolve(r.resolver)
@@ -622,7 +623,7 @@ func (r *Runner) tools(steps []profile.ResolvedStep) []ToolRecord {
 			continue
 		}
 		seen[id] = true
-		entry, _ := r.resolver.Entry(resolved.Step.Capability)
+		entry, _ := r.resolver.EntryForStep(resolved.Step)
 		record := ToolRecord{Profile: documentRef(entry), ToolVersion: resolved.Profile.ToolVersion}
 		local, bound := r.binding(id)
 		if bound {
@@ -743,7 +744,7 @@ func (r *Runner) runStep(ctx context.Context, request Request, layout layout, re
 		ActionID:   resolved.Action.ID,
 		State:      job.Failed,
 	}
-	if entry, ok := r.resolver.Entry(resolved.Step.Capability); ok {
+	if entry, ok := r.resolver.EntryForStep(resolved.Step); ok {
 		step.Profile = documentRef(entry)
 	}
 

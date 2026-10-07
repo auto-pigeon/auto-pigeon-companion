@@ -144,8 +144,18 @@ func (s *Server) handleLeakTestPending(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, base)
 		return
 	}
-	base["pipeline"], base["compiler"], base["files"] = adapter.PipelineID, adapter.Compiler, revision.Files
+	base["compiler"], base["files"] = adapter.Compiler, revision.Files
 	base["source_ref"] = fmt.Sprintf("aub:map/%s@%s#%s", request.AssetID, revision.ID, source)
+	// The pipeline is the one the user pinned for this game (NEW_310). None
+	// pinned, or one that cannot answer this game's leak test any more: the
+	// page asks, and nothing is reviewed until it has an answer.
+	if pinned := s.pinnedLeakPipeline(game); pinned == "" {
+		base["needs_pipeline"] = true
+	} else if _, err := s.leakBinding(game, pinned); err != nil {
+		base["needs_pipeline"], base["pinned_problem"] = true, err.Error()
+	} else {
+		base["pipeline"] = pinned
+	}
 	writeJSON(w, http.StatusOK, base)
 }
 
@@ -197,22 +207,26 @@ func (s *Server) savedMapGame(ctx context.Context, client *aub.Client, assetID, 
 	return assetref.APMapGame(input.Path)
 }
 
-// leakAdapterForBuild is the one resolver the build start uses, and it is the
-// review's: the adapter of the game the pinned APMap itself declares. A request
-// naming any other pipeline is refused.
-func leakAdapterForBuild(pipelineID string, conversion build.Conversion, converted bool) (leakadapter.Adapter, error) {
+// leakBindingForBuild is the one resolver the build start uses, and it is the
+// review's: the game the pinned APMap itself declares, and the pipeline the
+// user pinned for that game (NEW_310). A request naming any other pipeline is
+// refused, and so is one for a game with nothing pinned.
+func (s *Server) leakBindingForBuild(pipelineID string, conversion build.Conversion, converted bool) (leakadapter.Binding, error) {
 	if !converted || conversion.Game == "" {
-		return leakadapter.Adapter{}, errors.New("the pinned map source is not an APMap whose game can be read, so no compiler is chosen for it")
+		return leakadapter.Binding{}, errors.New("the pinned map source is not an APMap whose game can be read, so no compiler is chosen for it")
 	}
-	adapter, err := leakadapter.ForProfile(conversion.Game)
-	if err != nil {
-		return leakadapter.Adapter{}, err
+	if _, err := leakadapter.ForProfile(conversion.Game); err != nil {
+		return leakadapter.Binding{}, err
 	}
-	if adapter.PipelineID != pipelineID {
-		return leakadapter.Adapter{}, fmt.Errorf("this saved revision is a %s map, and its leak test is %q, not %q",
-			conversion.Game, adapter.PipelineID, pipelineID)
+	pinned := s.pinnedLeakPipeline(conversion.Game)
+	if pinned == "" {
+		return leakadapter.Binding{}, fmt.Errorf("no leak-test pipeline is pinned for %s maps; choose one in the Companion first", conversion.Game)
 	}
-	return adapter, nil
+	if pinned != pipelineID {
+		return leakadapter.Binding{}, fmt.Errorf("this saved revision is a %s map, and its leak test is %q, not %q",
+			conversion.Game, pinned, pipelineID)
+	}
+	return s.leakBinding(conversion.Game, pipelineID)
 }
 
 func (s *Server) matchesPendingLeakRequest(requestID string, source build.SourceRef) bool {
@@ -352,7 +366,7 @@ func (s *Server) buildLeakResult(id string) (leakResult, error) {
 	if err != nil {
 		return leakResult{}, err
 	}
-	adapter, isLeakTest := leakadapter.ForPipeline(manifest.Pipeline.ID)
+	adapter, binding, isLeakTest := leakBindingFor(manifest)
 	if !isLeakTest {
 		return leakResult{}, errors.New("this is not a leak-test build")
 	}
@@ -388,7 +402,7 @@ func (s *Server) buildLeakResult(id string) (leakResult, error) {
 	}
 	stepState := ""
 	for _, step := range manifest.Steps {
-		if step.ID == "compile" {
+		if step.ID == binding.CompileStep {
 			result.CompileExitCode, stepState = step.ExitCode, string(step.State)
 			if step.Skipped {
 				stepState = ""
@@ -400,11 +414,11 @@ func (s *Server) buildLeakResult(id string) (leakResult, error) {
 	for _, output := range manifest.Outputs {
 		var limit int64
 		switch output.Name {
-		case adapter.PointfileOutput:
+		case binding.Pointfile:
 			limit = leakadapter.MaxPointfileBytes
-		case adapter.LogOutput:
+		case binding.Log:
 			limit = 16 << 20
-		case adapter.BSPOutput:
+		case binding.BSP:
 			// Only whether this run left one. Its bytes never leave this
 			// machine in a leak result.
 			present := !output.Missing && output.Path != ""
@@ -421,17 +435,17 @@ func (s *Server) buildLeakResult(id string) (leakResult, error) {
 		// collected it from the job's fresh workspace, and — for a compiler
 		// that names its point file after its input — it is named after the
 		// source this build staged. Nothing is ever looked for by pattern.
-		if output.Name == adapter.PointfileOutput && adapter.PointfileBesideSource && !sameStem(output.Path, staged.Path) {
+		if output.Name == binding.Pointfile && adapter.PointfileBesideSource && !sameStem(output.Path, staged.Path) {
 			return leakResult{}, errors.New("the recorded point file is not named after this build's map source")
 		}
 		content, err := readLeakOutput(dir, manifest.BuildID, output, limit)
 		if err != nil {
 			return leakResult{}, err
 		}
-		if output.Name == adapter.PointfileOutput {
+		if output.Name == binding.Pointfile {
 			result.Pointfile, result.PointfileSHA256 = content, strings.TrimPrefix(output.SHA256, "sha256:")
 		}
-		if output.Name == adapter.LogOutput {
+		if output.Name == binding.Log {
 			result.Log, result.LogSHA256 = content, strings.TrimPrefix(output.SHA256, "sha256:")
 		}
 	}
@@ -510,13 +524,13 @@ func readLeakOutput(buildDir, id string, output build.FileRecord, limit int64) (
 // output is the route, and — when this program reads the run itself — what the
 // run says. Nil for a build that is not a leak test.
 func (s *Server) leakTestView(manifest *build.Manifest) map[string]any {
-	adapter, ok := leakadapter.ForPipeline(manifest.Pipeline.ID)
+	adapter, binding, ok := leakBindingFor(manifest)
 	if !ok {
 		return nil
 	}
 	view := map[string]any{
-		"game_profile": adapter.Profile, "compiler": adapter.Compiler,
-		"pointfile_output": adapter.PointfileOutput, "pointfile_format": adapter.PointfileFormat,
+		"game_profile": adapter.Profile, "compiler": adapter.Compiler, "compile_step": binding.CompileStep,
+		"pointfile_output": binding.Pointfile, "pointfile_format": adapter.PointfileFormat,
 		"pointfile_direction": adapter.Direction,
 	}
 	if adapter.Classify == nil || !manifest.State.Terminal() {

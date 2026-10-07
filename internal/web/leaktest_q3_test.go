@@ -92,9 +92,10 @@ func TestALeakLinkWhoseProfileHintDisagreesWithTheSavedRevisionIsRefused(t *test
 // pipeline for the map's game, a game with no adapter and a source whose game
 // cannot be read all start nothing.
 func TestALeakBuildMayOnlyRunThePipelineOfTheMapsOwnGame(t *testing.T) {
+	pinned := newMachine(t)
 	q3 := build.Conversion{Game: "quake3"}
-	if adapter, err := leakAdapterForBuild("auto-pigeon.q3.leak-test", q3, true); err != nil || adapter.Profile != "quake3" {
-		t.Fatalf("the right pipeline: %+v %v", adapter, err)
+	if binding, err := pinned.server.leakBindingForBuild("auto-pigeon.q3.leak-test", q3, true); err != nil || binding.Game != "quake3" {
+		t.Fatalf("the right pipeline: %+v %v", binding, err)
 	}
 	for name, c := range map[string]struct {
 		pipeline  string
@@ -108,8 +109,8 @@ func TestALeakBuildMayOnlyRunThePipelineOfTheMapsOwnGame(t *testing.T) {
 		"a map naming no game":           {"auto-pigeon.q1.leak-test", "", true},
 		"a source that was not an APMap": {"auto-pigeon.q1.leak-test", "quake1", false},
 	} {
-		if adapter, err := leakAdapterForBuild(c.pipeline, build.Conversion{Game: c.game}, c.converted); err == nil {
-			t.Errorf("%s: accepted as %+v", name, adapter)
+		if binding, err := pinned.server.leakBindingForBuild(c.pipeline, build.Conversion{Game: c.game}, c.converted); err == nil {
+			t.Errorf("%s: accepted as %+v", name, binding)
 		}
 	}
 

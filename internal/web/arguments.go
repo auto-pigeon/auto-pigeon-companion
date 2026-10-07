@@ -194,6 +194,11 @@ func (s *Server) describeStages(pipeline *profile.PipelineProfile, local binding
 		tokens []string
 	}
 	providers := map[string]provider{}
+	// A stage that names its tool is run by that tool (NEW_310): keyed by
+	// tool and capability, so the page never names a different provider of
+	// the same capability — found live on Windows, where a stage naming the
+	// user's own EricW was shown as run by the built-in one.
+	byTool := map[string]provider{}
 	if catalog, err := s.catalog(); err == nil {
 		if entries, err := catalog.List(); err == nil {
 			set, _, _ := s.bindings()
@@ -206,9 +211,6 @@ func (s *Server) describeStages(pipeline *profile.PipelineProfile, local binding
 					if action.Capability == "" {
 						continue
 					}
-					if _, taken := providers[action.Capability]; taken {
-						continue
-					}
 					found := provider{entry: map[string]any{
 						"profile_id": tool.Meta.ID, "profile_name": tool.Meta.Name,
 						"action_id": action.ID, "action_title": action.Title, "executable": action.Executable,
@@ -218,7 +220,12 @@ func (s *Server) describeStages(pipeline *profile.PipelineProfile, local binding
 							found.tokens = toolBinding.Arguments[action.Executable]
 						}
 					}
-					providers[action.Capability] = found
+					if _, taken := byTool[tool.Meta.ID+"\x00"+action.Capability]; !taken {
+						byTool[tool.Meta.ID+"\x00"+action.Capability] = found
+					}
+					if _, taken := providers[action.Capability]; !taken {
+						providers[action.Capability] = found
+					}
 				}
 			}
 		}
@@ -230,7 +237,14 @@ func (s *Server) describeStages(pipeline *profile.PipelineProfile, local binding
 			"options": step.Options, "optional": step.Optional,
 			"arguments": append([]string{}, local.StepArguments[step.ID]...),
 		}
-		if found, ok := providers[step.Capability]; ok {
+		if step.Tool != "" {
+			stage["named_tool"] = step.Tool
+		}
+		found, ok := providers[step.Capability]
+		if step.Tool != "" {
+			found, ok = byTool[step.Tool+"\x00"+step.Capability]
+		}
+		if ok {
 			stage["tool"] = found.entry
 			// Tokens recorded on the tool itself before parameters moved to
 			// pipelines: they still reach this stage, and the page says so.

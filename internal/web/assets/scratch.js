@@ -261,14 +261,18 @@
 
   // --- a pipeline ------------------------------------------------------------
 
-  function providerFor(capability) {
-    return providers.find((item) => item.capability === capability);
+  // providerFor is the installed action a stage runs: the named tool's when the
+  // stage names one (NEW_310), otherwise the only tool providing it.
+  function providerFor(capability, tool) {
+    if (tool) return providers.find((item) => item.capability === capability && item.profileId === tool);
+    const all = providers.filter((item) => item.capability === capability);
+    return all.length === 1 ? all[0] : undefined;
   }
 
   function sourcesBefore(stepIndex) {
     const sources = state.pipeline.inputs.filter((p) => p.name).map((p) => [`pipeline.${p.name}`, `the pipeline's ${p.name}`]);
     state.pipeline.steps.slice(0, stepIndex).forEach((step) => {
-      for (const output of providerFor(step.capability)?.outputs || []) {
+      for (const output of providerFor(step.capability, step.tool)?.outputs || []) {
         sources.push([`${step.id}.${output.name}`, `${step.id} → ${output.name}`]);
       }
     });
@@ -334,14 +338,24 @@
       // The tool is chosen by what it does here: an installed tool's action.
       // A stage a tested pipeline names that nothing installed provides yet
       // is still listed, so filling the form does not lose it.
-      const capabilities = [["", "choose a tool…"], ...providers.map((item) => [item.capability, `${item.profileName}: ${item.title} — ${item.capability}`])];
-      if (step.capability && !providerFor(step.capability)) capabilities.push([step.capability, `${step.capability} — no installed tool provides it yet`]);
+      // A choice is a tool AND what it does: two installed tools that both
+      // provide q1.bsp.compile are two choices, and the stage records which
+      // one it named (NEW_310) — never "whichever is installed".
+      const choiceOf = (tool, capability) => `${tool} ${capability}`;
+      const capabilities = [["", "choose a tool…"], ...providers.map((item) => [choiceOf(item.profileId, item.capability), `${item.profileName}: ${item.title} — ${item.capability}`])];
+      if (step.capability && !providerFor(step.capability, step.tool)) {
+        capabilities.push([choiceOf(step.tool || "", step.capability), `${step.capability}${step.tool ? " from " + step.tool : ""} — no installed tool provides it yet`]);
+      }
+      const chosen = step.capability ? choiceOf(step.tool || providerFor(step.capability)?.profileId || "", step.capability) : "";
       card.append(el("div", {
         className: "row scratch-row",
         children: [
           text("Stage id", step.id, (v) => (step.id = v), { placeholder: "compile", hint: "its own name in this pipeline; two stages may use the same tool" }),
           text("Title", step.title, (v) => (step.title = v), { placeholder: "Compile the map" }),
-          select("Tool", step.capability, capabilities, (v) => { step.capability = v; step.inputs = {}; step.options = {}; render(); }),
+          select("Tool", chosen, capabilities, (v) => {
+            const [tool, capability] = v ? v.split(" ") : ["", ""];
+            step.tool = tool; step.capability = capability; step.inputs = {}; step.options = {}; render();
+          }),
           removeButton("Remove this stage", () => doc.steps.splice(index, 1)),
         ],
       }));
@@ -356,7 +370,7 @@
         reorder.append(move);
       }
       card.append(reorder);
-      const provider = providerFor(step.capability);
+      const provider = providerFor(step.capability, step.tool);
       if (provider) {
         card.append(el("p", { className: "muted", text: `Run by ${provider.profileName} (${provider.profileId}), action ${provider.actionId}.` }));
         const wiring = el("fieldset", { className: "scratch-list", children: [el("legend", { text: "Where each input comes from" })] });
@@ -392,7 +406,7 @@
 
     const outputSources = [];
     doc.steps.forEach((step) => {
-      for (const output of providerFor(step.capability)?.outputs || []) outputSources.push([`${step.id}.${output.name}`, `${step.id} → ${output.name}`]);
+      for (const output of providerFor(step.capability, step.tool)?.outputs || []) outputSources.push([`${step.id}.${output.name}`, `${step.id} → ${output.name}`]);
     });
     box.append(list("Results", "Which stage outputs the build publishes.",
       doc.outputs.map((output, i) => el("div", {
@@ -505,7 +519,7 @@
     for (const item of body.items || []) {
       if (item.kind !== "tool") continue;
       for (const action of item.actions || []) {
-        if (!action.capability || providers.some((p) => p.capability === action.capability)) continue;
+        if (!action.capability || providers.some((p) => p.capability === action.capability && p.profileId === item.id)) continue;
         providers.push({
           capability: action.capability, title: action.title, actionId: action.id,
           profileId: item.id, profileName: item.name,
@@ -513,7 +527,7 @@
         });
       }
     }
-    providers.sort((a, b) => a.capability.localeCompare(b.capability));
+    providers.sort((a, b) => a.capability.localeCompare(b.capability) || a.profileName.localeCompare(b.profileName));
   }
 
   window.AUCOM.scratch = {

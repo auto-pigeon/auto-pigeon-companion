@@ -411,7 +411,7 @@ func (s *Server) api() map[string]http.HandlerFunc {
 		s.jobAPI(), s.profileAPI(), s.libraryAPI(),
 		s.engineAPI(), s.buildAPI(), s.playAPI(), s.settingsAPI(), s.siteLinksRoutes(), s.hostingRoutes(), s.bugReportRoutes(), s.pathAPI(),
 		s.feedbackAPI(), s.aboutAPI(), s.accountAPI(), s.gamesAPI(), s.noticesAPI(),
-		s.lifecycleAPI(), s.leakTestAPI(), s.uriAPI(), s.autobuildAPI(), s.q3API(),
+		s.lifecycleAPI(), s.leakTestAPI(), s.leakPipelineAPI(), s.uriAPI(), s.autobuildAPI(), s.q3API(),
 	} {
 		for pattern, handler := range table {
 			if _, clash := routes[pattern]; clash {

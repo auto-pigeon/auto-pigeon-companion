@@ -884,6 +884,37 @@ func (i installed) Provider(capability string) (*profile.ToolProfile, profile.Ac
 	return nil, profile.Action{}, false
 }
 
+// ProviderFrom answers a stage that names its tool: only this one tool is
+// installed here, so a stage naming any other resolves to nothing.
+func (i installed) ProviderFrom(tool, capability string) (*profile.ToolProfile, profile.Action, bool) {
+	if tool != i.tool.Meta.ID {
+		return nil, profile.Action{}, false
+	}
+	return i.Provider(capability)
+}
+
+// Every built-in pipeline stage names the built-in tool of its family (NEW_310,
+// HITL): a user's own tool that provides the same capability must never make a
+// built-in pipeline ambiguous, nor be used by it unasked.
+func TestEveryBuiltinPipelineStageNamesItsFamilysBuiltinTool(t *testing.T) {
+	want := map[string]string{"quake1": EricwQ1, "quake2": EricwQ2, "quake3": Q3Map2}
+	entries, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		pipeline, ok := e.Profile.(*profile.PipelineProfile)
+		if !ok {
+			continue
+		}
+		for _, step := range pipeline.Steps {
+			if step.Tool != want[pipeline.GameProfile.EngineFamily] {
+				t.Errorf("%s step %s names tool %q, want %q", e.File, step.ID, step.Tool, want[pipeline.GameProfile.EngineFamily])
+			}
+		}
+	}
+}
+
 // A Quake 1 join names its base directory as ".", the working directory the job
 // already sets to the game root, and puts no folder path on the command line at
 // all. vkQuake 1.36.0 keeps only the first 255 characters of its whole command

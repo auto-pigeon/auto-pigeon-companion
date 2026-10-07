@@ -206,6 +206,37 @@ func runServe(env *Env, args []string) int {
 	}
 	configDir := filepath.Dir(tokenPath)
 
+	// One application per configuration. A second double-click while the
+	// Companion is already open shows the one that is running; it does not
+	// start another beside it. Two would share every file here: the second
+	// truncates the log the first is still writing (found on Windows,
+	// NEW_310: a log with a hole of NULs where the first one's lines were),
+	// replaces the token the first one's page and CLI use, marks the first
+	// one's running jobs interrupted in its recovery pass, and polls
+	// Auto-build twice. Asked before anything here is opened, so a refused
+	// start touches nothing. Server mode is unchanged: scripts and harnesses
+	// choose their own config and port.
+	if *interactive {
+		if address, running := runningServer(configDir); running {
+			page := strings.TrimRight(address, "/") + "/"
+			switch *openArea {
+			case "games", "build":
+				page += "#" + *openArea
+			}
+			fmt.Fprintf(env.Stdout, "Auto-Pigeon Companion is already open at %s\n", page)
+			if *open {
+				opener := env.OpenBrowser
+				if opener == nil {
+					opener = web.OpenBrowser
+				}
+				if err := opener(page); err != nil {
+					fmt.Fprintf(env.Stderr, "warning: %v\nopen %s yourself\n", err, page)
+				}
+			}
+			return 0
+		}
+	}
+
 	// Where the server's own lines go. Server mode: stderr, as always.
 	// Interactive: the log file, so the terminal keeps to what a person reads.
 	var detail io.Writer = env.Stderr

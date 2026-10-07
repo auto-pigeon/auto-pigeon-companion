@@ -124,11 +124,14 @@ type scratchOption struct {
 }
 
 type scratchStep struct {
-	ID         string            `json:"id"`
-	Title      string            `json:"title,omitempty"`
-	Capability string            `json:"capability"`
-	Inputs     map[string]string `json:"inputs,omitempty"`
-	Options    map[string]string `json:"options,omitempty"`
+	ID         string `json:"id"`
+	Title      string `json:"title,omitempty"`
+	Capability string `json:"capability"`
+	// Tool is the tool profile the stage names (NEW_310): the one that must
+	// provide Capability. Empty leaves it to what is installed.
+	Tool    string            `json:"tool,omitempty"`
+	Inputs  map[string]string `json:"inputs,omitempty"`
+	Options map[string]string `json:"options,omitempty"`
 }
 
 type scratchPipelineOutput struct {
@@ -208,6 +211,9 @@ func scratchTree(scratch scratchDocument) (map[string]any, error) {
 			entry := map[string]any{
 				"id": step.ID, "title": orDefault(step.Title, step.ID),
 				"capability": step.Capability, "inputs": wired,
+			}
+			if tool := strings.TrimSpace(step.Tool); tool != "" {
+				entry["tool"] = tool
 			}
 			options := map[string]any{}
 			for _, name := range sortedKeys(step.Options) {

@@ -39,6 +39,7 @@
       "id": "compile",
       "title": "Compile the map",
       "capability": "q3.bsp.compile",
+      "tool": "auto-pigeon.q3map2",
       "inputs": [
         {
           "name": "source_map",

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/fsshare"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/leakadapter"
 	"os"
 	"path/filepath"
 	"sort"
@@ -23,7 +24,7 @@ import (
 // what somebody else reads to find out what produced it, and may be read by a
 // build of the Companion older or newer than the one that wrote it. So it is
 // versioned by name and refused rather than half-read.
-const SchemaVersion = "aucom.build-manifest/1.3"
+const SchemaVersion = "aucom.build-manifest/1.4"
 
 // readableSchemas is every version this build can read.
 //
@@ -39,12 +40,16 @@ const SchemaVersion = "aucom.build-manifest/1.3"
 // working, and a test pins that. What 1.3 adds (`Q3_010`) is [Manifest.GameData]
 // — what a Quake III build staged and was allowed to read — the failure class
 // beside a failed build's and a failed step's sentence, and the conversion
-// record on an input that was an APMap. Additive again.
+// record on an input that was an APMap. Additive again. What 1.4 adds
+// (`NEW_310`) is [Manifest.LeakTest]: which game a leak test was for and which
+// of the pipeline's outputs are its point file and log — the pipeline is the
+// one the user pinned, so the build says how to read it.
 var readableSchemas = map[string]bool{
 	"aucom.build-manifest/1.0": true,
 	"aucom.build-manifest/1.1": true,
 	"aucom.build-manifest/1.2": true,
 	"aucom.build-manifest/1.3": true,
+	"aucom.build-manifest/1.4": true,
 }
 
 // ManifestFileName is what the manifest is called inside a build directory.
@@ -328,9 +333,12 @@ type Manifest struct {
 	// with its digest, the loose file count, and what was left out. Nil for a
 	// family that stages nothing. Added by `aucom.build-manifest/1.3`.
 	GameData *q3vfs.Stage `json:"game_data,omitempty"`
-	Tools    []ToolRecord `json:"tools,omitempty"`
-	Steps    []Step       `json:"steps"`
-	Outputs  []FileRecord `json:"outputs,omitempty"`
+	// LeakTest says this build answered an editor's leak test, for which game,
+	// and how its outputs are read. Nil for every other build. Added by 1.4.
+	LeakTest *leakadapter.Binding `json:"leak_test,omitempty"`
+	Tools    []ToolRecord         `json:"tools,omitempty"`
+	Steps    []Step               `json:"steps"`
+	Outputs  []FileRecord         `json:"outputs,omitempty"`
 
 	// ReproducibleKey is a digest over the *recipe*: the pipeline document, the
 	// tools that ran, the inputs, the options and the argv, with the paths and

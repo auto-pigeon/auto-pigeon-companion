@@ -76,6 +76,15 @@ On Windows, double-click `companion.exe` (SmartScreen: **More info › Run
 anyway**). On macOS, open `Auto-Pigeon Companion.app`; the first time, macOS
 blocks it until you allow it in **System Settings › Privacy & Security**.
 
+Starting it again while it is open shows the one that is running — a new tab
+of it — and starts nothing else, so there is only ever one Companion using
+your settings, log and jobs:
+
+```console
+$ ./companion
+Auto-Pigeon Companion is already open at http://127.0.0.1:8789/
+```
+
 Closing its last browser tab stops it about 15 seconds later; the wait is so
 a reload, or another tab of it, keeps it running. A build, a game or a download
 it started keeps it running until that ends, and its window says what it is
@@ -202,6 +211,25 @@ scheme:     autopigeon://
 registered: yes
 ```
 
+**Which pipeline tests a game's maps is yours to choose, once per game.** The
+Companion ships profiles; the compilers are programs you install yourself, so
+nothing is chosen out of the box. The first request for a Quake 1 (or Quake III)
+map opens **Choose the leak-test pipeline**: every installed pipeline for that
+game that publishes the point file and the compiler's log, the built-in one
+first, the ones that need setup greyed with their reasons and **Profiles / setup**
+beside them. The choice is kept in `config.json` as `leak_test_pipelines` and can
+be changed from the notice (**Change pipeline**).
+
+```bash
+# What is pinned for Quake 1, and what could be.
+curl -s -H "X-AUCOM-Token: $(cat "$CONFIG_DIR/api-token")" \
+  "http://127.0.0.1:8789/api/v1/leak-test/pipelines?game=quake1"
+# Pin one (an empty pipeline unpins).
+curl -s -H "X-AUCOM-Token: $(cat "$CONFIG_DIR/api-token")" -H 'Content-Type: application/json' \
+  -d '{"game":"quake1","pipeline":"auto-pigeon.q1.leak-test"}' \
+  http://127.0.0.1:8789/api/v1/leak-test/pipelines
+```
+
 A request shows as a notice above every area of an open Companion window within
 about two seconds, whichever area it is on and without a reload: the map's name,
 its saved revision and when it arrived. The Companion checks that the saved revision
@@ -212,7 +240,7 @@ exact command, and only **Build** runs the compiler. **Dismiss** forgets that re
 and no other. Signed out, the notice says so and offers Sign in; a revision that
 changed since the click is refused by name.
 
-| the saved map is | pipeline | what **Build** runs | point file |
+| the saved map is | pipeline offered first | what **Build** runs | point file |
 | --- | --- | --- | --- |
 | Quake 1 | `auto-pigeon.q1.leak-test` | EricW `qbsp -leaktest` | `.pts`, from the entity to the outside |
 | Quake III | `auto-pigeon.q3.leak-test` | Q3Map2 `-bsp -leaktest` only — no vis, no light, no package, no engine | `.lin`, from the OUTSIDE to the entity |
@@ -368,7 +396,11 @@ their parameters), review and install. **Start from** is *From scratch* by defau
 choose a tested profile there and every field of every step is filled in from it,
 and stays yours to change, add to or remove. A pipeline can have any number of
 stages, each picking a tool, wiring its inputs and carrying its own parameters and
-arguments; the same tool may be a stage more than once. What the form has no field
+arguments; the same tool may be a stage more than once. A stage names the tool
+profile that runs it (`"tool"` in the document), so your own EricW profile and the
+built-in one can both be installed: each pipeline runs the one its stages name, and
+the built-in pipelines name the built-in tools. Only a stage that names no tool is
+refused when two installed tools provide what it needs. What the form has no field
 for is kept as the tested profile had it. Nothing is installed until you press
 **Install this profile**, and an installed profile is local and cannot run until you
 approve it. **Next** keeps you at the current step when required fields or

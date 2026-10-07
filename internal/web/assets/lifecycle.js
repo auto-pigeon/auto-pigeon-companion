@@ -40,7 +40,13 @@
   function showStopped(cause) {
     if (stopped) return;
     stopped = true;
-    $("quit-modal").hidden = true;
+    // Every other dialog goes: nothing in one can work now, and one left open
+    // showed around the stopped notice (NEW_310, the leak-test pipeline dialog
+    // on Windows).
+    for (const modal of document.querySelectorAll(".auth-modal")) {
+      if (modal.id !== "stopped-modal") modal.hidden = true;
+    }
+    for (const dialog of document.querySelectorAll("dialog[open]")) dialog.close();
     $("stopped-text").textContent = t(causeText[cause] || "It is no longer answering.");
     $("stopped-modal").hidden = false;
     document.title = t("Stopped — Auto-Pigeon Companion");

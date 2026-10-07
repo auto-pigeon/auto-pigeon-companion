@@ -168,6 +168,33 @@
       </div>
     </div>
 
+    <!-- The pipeline this computer tests a game's maps for leaks with (NEW_310):
+         the user's choice, kept per game. Opened when the editor's request for
+         a game with nothing pinned arrives, and from "Change pipeline". -->
+    <div id="leak-pin-modal" class="auth-modal" hidden>
+      <div class="auth-overlay" data-dismiss="leak-pin"></div>
+      <div class="auth-dialog__layer">
+        <section id="leak-pin-dialog" class="auth-dialog" role="dialog" aria-modal="true" aria-labelledby="leak-pin-heading" aria-describedby="leak-pin-intro">
+          <div class="auth-dialog__head">
+            <h2 id="leak-pin-heading">Choose the leak-test pipeline</h2>
+            <p id="leak-pin-intro"></p>
+            <button type="button" id="leak-pin-close" class="auth-dialog__close" aria-label="Close">×</button>
+          </div>
+          <div class="field">
+            <label for="leak-pin-select">Pipeline</label>
+            <select id="leak-pin-select"></select>
+          </div>
+          <ul id="leak-pin-problems" class="plain" aria-label="Pipelines that need setup first"></ul>
+          <p class="hint"><button type="button" id="leak-pin-setup" class="link">Profiles / setup</button> — install and approve the compiler, then come back; the list refreshes.</p>
+          <div class="row">
+            <button type="button" id="leak-pin-confirm" class="primary" disabled>Pin and review</button>
+            <button type="button" id="leak-pin-cancel" class="secondary">Not now</button>
+          </div>
+          <p id="leak-pin-message" class="message" role="alert"></p>
+        </section>
+      </div>
+    </div>
+
     <!-- Quit Auto-Pigeon Companion: what is still running, and the choice to
          cancel it and quit or to keep the Companion running. -->
     <div id="quit-modal" class="auth-modal" hidden>

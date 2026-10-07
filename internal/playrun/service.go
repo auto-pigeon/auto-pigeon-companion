@@ -48,6 +48,12 @@ type Deps struct {
 	// Asked of the pipeline document rather than assumed, so this package works
 	// for a pipeline it has never seen.
 	MapInputName func(pipelineID string) (string, error)
+	// DeclaresRoot says whether any step of a pipeline, as resolved on this
+	// machine, declares a root role. The texture folder is supplied as
+	// `content_root` only to a pipeline that reads one: a tool written by hand
+	// that never asks for it is refused a root it would not read (NEW_310,
+	// found on Windows). Nil supplies it, as before.
+	DeclaresRoot func(pipelineID, role string) (bool, error)
 
 	// PlanInstall reads a finished build and the verified bundle and says what
 	// goes into the mod directory. Separate from Install so "what would be

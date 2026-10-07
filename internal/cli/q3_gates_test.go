@@ -77,7 +77,7 @@ func TestAQuake3BuildReadsOnlyWhatWasStagedForIt(t *testing.T) {
 	if code != 0 || manifest == nil {
 		t.Fatalf("exit code = %d\n%s", code, stderr)
 	}
-	if manifest.SchemaVersion != "aucom.build-manifest/1.3" {
+	if manifest.SchemaVersion != build.SchemaVersion {
 		t.Errorf("schema = %q", manifest.SchemaVersion)
 	}
 	if manifest.GameData == nil || manifest.GameData.BaseGame != "baseq3" || manifest.GameData.FSGame != "" {

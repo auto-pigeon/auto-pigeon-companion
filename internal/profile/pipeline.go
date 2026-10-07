@@ -21,6 +21,18 @@ import (
 // `q1.bsp.compile` is a question answered on the machine, by what the user has
 // installed and granted; the pipeline says only that the stage happens, what it
 // consumes and where its output goes next.
+//
+// # A stage may name its tool (NEW_310, HITL 2026-10-06)
+//
+// A capability alone stops answering "which tool" the moment a second installed
+// tool provides it — and the New profile wizard invites exactly that: a user's
+// own EricW profile declares `q1.bsp.compile` like the built-in one. Before this
+// every pipeline needing the capability was refused, the built-in leak test
+// included, found live on Windows. HITL chose explicit over ranked: a stage may
+// carry `tool`, the id of the tool profile that must provide its capability.
+// A stage that names its tool is never ambiguous; a stage that does not keeps
+// the refusal when two tools provide its capability. The built-in pipelines
+// name the built-in tools.
 
 // PipelineStep is one stage.
 type PipelineStep struct {
@@ -31,6 +43,10 @@ type PipelineStep struct {
 	// tool action at execution time, against the profiles the user has
 	// installed and granted.
 	Capability string `json:"capability" aucom:"required"`
+	// Tool is the id of the tool profile that must provide Capability, when
+	// the stage says. Empty means any installed tool that provides it — and a
+	// refusal when more than one does. See the package note above.
+	Tool string `json:"tool,omitempty"`
 	// Inputs wire this step's declared inputs to earlier artifacts.
 	Inputs []PipelineWire `json:"inputs,omitempty"`
 	// Options are values for the resolved action's declared options. They are
@@ -124,6 +140,9 @@ func (p *PipelineProfile) Validate() error {
 			c.child(field("title"), func(c *collector) { checkText(c, s.Title, maxNameLength, true) })
 			c.child(field("description"), func(c *collector) { checkText(c, s.Description, maxTextLength, false) })
 			c.child(field("capability"), func(c *collector) { checkArtifactRole(c, s.Capability) })
+			if s.Tool != "" {
+				c.child(field("tool"), func(c *collector) { checkID(c, s.Tool) })
+			}
 			c.child(field("inputs"), func(c *collector) {
 				for i, w := range s.Inputs {
 					c.child(index(i), func(c *collector) {
@@ -236,6 +255,26 @@ type Resolver interface {
 	Provider(capability string) (*ToolProfile, Action, bool)
 }
 
+// ToolResolver is a [Resolver] that can also answer for one named tool: the
+// action of tool profile `tool` that provides `capability`. A stage that names
+// its tool is resolved through it; a resolver without it cannot resolve one.
+type ToolResolver interface {
+	Resolver
+	ProviderFrom(tool, capability string) (*ToolProfile, Action, bool)
+}
+
+// providerFor resolves one step: from its named tool when it names one.
+func providerFor(r Resolver, step PipelineStep) (*ToolProfile, Action, bool) {
+	if step.Tool == "" {
+		return r.Provider(step.Capability)
+	}
+	named, ok := r.(ToolResolver)
+	if !ok {
+		return nil, Action{}, false
+	}
+	return named.ProviderFrom(step.Tool, step.Capability)
+}
+
 // ResolvedStep is one step bound to a concrete action.
 type ResolvedStep struct {
 	Step    PipelineStep
@@ -261,7 +300,13 @@ func (p *PipelineProfile) Resolve(r Resolver) ([]ResolvedStep, error) {
 	c.child(field("steps"), func(c *collector) {
 		for i, step := range p.Steps {
 			c.child(index(i), func(c *collector) {
-				profile, action, ok := r.Provider(step.Capability)
+				profile, action, ok := providerFor(r, step)
+				if !ok && step.Tool != "" {
+					c.fixf("install "+step.Tool+", or choose another tool for this stage",
+						"needs the capability %q from the tool %s, and no installed profile %s provides it",
+						step.Capability, step.Tool, step.Tool)
+					return
+				}
 				if !ok {
 					c.fixf("install and grant a tool that provides it",
 						"needs the capability %q, and no installed profile provides it", step.Capability)

@@ -257,14 +257,14 @@ func (s *Server) handleBuildPipelines(w http.ResponseWriter, r *http.Request) {
 			row := map[string]any{
 				"id": step.ID, "title": step.Title, "capability": step.Capability,
 			}
-			tool, action, provided := runner.Resolver().Provider(step.Capability)
+			tool, action, provided := runner.Resolver().ProviderForStep(step)
 			if provided {
 				toolMeta := tool.Metadata()
 				row["provider"] = map[string]any{
 					"id": toolMeta.ID, "name": toolMeta.Name,
 					"version": toolMeta.Version, "action": action.ID,
 				}
-				if toolEntry, ok := runner.Resolver().Entry(step.Capability); ok {
+				if toolEntry, ok := runner.Resolver().EntryForStep(step); ok {
 					local, _ := set.Find(toolMeta.ID)
 					row["provider_trust"] = toolEntry.Trust
 					row["provider_authorized"] = profile.Authorize(
@@ -289,7 +289,7 @@ func (s *Server) handleBuildPipelines(w http.ResponseWriter, r *http.Request) {
 		})
 		// A leak test is a question about a map, not a build of it. The page
 		// asks this flag rather than knowing a pipeline id (`Q3_018`).
-		if _, leak := leakadapter.ForPipeline(meta.ID); leak {
+		if s.isLeakPipeline(meta.ID) {
 			items[len(items)-1]["leak_test"] = true
 		}
 	}
@@ -566,6 +566,7 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 	// Set below, once the editor's request is taken: a leak build tells the
 	// editor which step is running (leakrelay.go).
 	var leakRequest *aub.LeakTestLink
+	var leakBinding *leakadapter.Binding
 	announce := func(manifest *build.Manifest) {
 		if leakRequest != nil {
 			s.reportLeakBuild(*leakRequest, manifest)
@@ -595,11 +596,13 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 		// request that names another one — a stale page, a hand-made call —
 		// starts nothing.
 		conversion, converted := conversions["source_map"]
-		if _, err := leakAdapterForBuild(request.Pipeline, conversion, converted); err != nil {
+		binding, err := s.leakBindingForBuild(request.Pipeline, conversion, converted)
+		if err != nil {
 			cancel()
 			writeError(w, http.StatusConflict, err)
 			return
 		}
+		leakBinding = &binding
 		configDir, err := s.configDir()
 		if err != nil {
 			cancel()
@@ -628,6 +631,7 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 			RootSources: rootSources,
 			Options:     request.Options,
 			Label:       request.Label,
+			LeakTest:    leakBinding,
 			Strict:      request.Strict,
 			Mirror:      run.log,
 		})

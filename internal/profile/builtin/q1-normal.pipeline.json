@@ -47,6 +47,7 @@
       "id": "compile",
       "title": "Compile the map",
       "capability": "q1.bsp.compile",
+      "tool": "auto-pigeon.ericw-tools.q1",
       "inputs": [
         {
           "name": "source_map",
@@ -66,6 +67,7 @@
       "id": "vis",
       "title": "Compute visibility",
       "capability": "q1.bsp.vis",
+      "tool": "auto-pigeon.ericw-tools.q1",
       "inputs": [
         {
           "name": "bsp",
@@ -86,6 +88,7 @@
       "id": "light",
       "title": "Compute lighting",
       "capability": "q1.bsp.light",
+      "tool": "auto-pigeon.ericw-tools.q1",
       "inputs": [
         {
           "name": "bsp",

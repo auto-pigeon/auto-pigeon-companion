@@ -27,6 +27,9 @@ type Catalog interface {
 // Resolver answers a pipeline's capability questions from a profile catalog.
 type Resolver struct {
 	providers map[string]provider
+	// byTool is every tool's own providers, for a stage that names its tool:
+	// tool profile id, then capability.
+	byTool map[string]map[string]provider
 	// Conflicts is every capability more than one installed profile claimed,
 	// with the profiles that claimed it. Held rather than returned so that a
 	// build fails on a conflict it actually needed, and a conflict in some
@@ -46,7 +49,7 @@ func NewResolver(catalog Catalog) (*Resolver, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := &Resolver{providers: map[string]provider{}, Conflicts: map[string][]string{}}
+	r := &Resolver{providers: map[string]provider{}, byTool: map[string]map[string]provider{}, Conflicts: map[string][]string{}}
 	for _, entry := range entries {
 		tool, isTool := entry.Profile.(*profile.ToolProfile)
 		if !isTool {
@@ -55,6 +58,14 @@ func NewResolver(catalog Catalog) (*Resolver, error) {
 		for _, action := range tool.Actions {
 			if action.Capability == "" {
 				continue
+			}
+			own := r.byTool[tool.Meta.ID]
+			if own == nil {
+				own = map[string]provider{}
+				r.byTool[tool.Meta.ID] = own
+			}
+			if _, seen := own[action.Capability]; !seen {
+				own[action.Capability] = provider{entry: entry, tool: tool, action: action}
 			}
 			if first, taken := r.providers[action.Capability]; taken {
 				r.Conflicts[action.Capability] = uniqueSorted(append(r.Conflicts[action.Capability],
@@ -74,6 +85,48 @@ func (r *Resolver) Provider(capability string) (*profile.ToolProfile, profile.Ac
 		return nil, profile.Action{}, false
 	}
 	return found.tool, found.action, true
+}
+
+// ProviderFrom implements [profile.ToolResolver]: the action of the named tool
+// profile that provides the capability, whatever else provides it too.
+func (r *Resolver) ProviderFrom(tool, capability string) (*profile.ToolProfile, profile.Action, bool) {
+	found, ok := r.byTool[tool][capability]
+	if !ok {
+		return nil, profile.Action{}, false
+	}
+	return found.tool, found.action, true
+}
+
+// EntryForStep is the catalog entry that resolves one pipeline step: the named
+// tool's when the step names one, otherwise the capability's sole provider.
+func (r *Resolver) EntryForStep(step profile.PipelineStep) (job.CatalogEntry, bool) {
+	if step.Tool != "" {
+		found, ok := r.byTool[step.Tool][step.Capability]
+		return found.entry, ok
+	}
+	return r.Entry(step.Capability)
+}
+
+// ProviderForStep is [Resolver.Provider] for one pipeline step: from its named
+// tool when it names one.
+func (r *Resolver) ProviderForStep(step profile.PipelineStep) (*profile.ToolProfile, profile.Action, bool) {
+	if step.Tool != "" {
+		return r.ProviderFrom(step.Tool, step.Capability)
+	}
+	return r.Provider(step.Capability)
+}
+
+// CheckSteps refuses a pipeline whose steps leave the tool to the machine and
+// need a capability two installed profiles both claim. A step that names its
+// tool is not ambiguous and is not checked.
+func (r *Resolver) CheckSteps(steps []profile.PipelineStep) error {
+	unnamed := make([]string, 0, len(steps))
+	for _, step := range steps {
+		if step.Tool == "" {
+			unnamed = append(unnamed, step.Capability)
+		}
+	}
+	return r.CheckConflicts(unnamed)
 }
 
 // Entry returns the catalog entry behind a capability, which is what carries
@@ -97,7 +150,7 @@ func (r *Resolver) CheckConflicts(capabilities []string) error {
 	}
 	return fmt.Errorf("build: more than one installed profile provides a capability this pipeline needs:\n%s\n"+
 		"This is refused rather than ranked: picking one would decide which compiler built your map by a rule "+
-		"nobody told you. Remove or rename one of them.", strings.Join(problems, "\n"))
+		"nobody told you. Name the tool on the pipeline's stage, or remove one of them.", strings.Join(problems, "\n"))
 }
 
 // Capabilities lists what the resolver can provide, for the message a user gets

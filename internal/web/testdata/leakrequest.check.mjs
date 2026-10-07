@@ -43,6 +43,8 @@ function load() {
   const window = {
     AUCOM: {
       $: () => box, el: element, record() {}, showArea() {},
+      pipelineReady: (item) => item?.readiness?.ready === true,
+      executionChoices: (select, items, previous, ready) => items.find(ready)?.id || "",
       t: (message, slots = {}) => message.replace(/\{(\w+)\}/g, (_, key) => String(slots[key])),
       withBusy: (_control, work) => work(),
       areas: { build: { adoptLeakRequest: async (request) => { adopted.push(request); return ""; } } },
@@ -185,4 +187,17 @@ const PENDING = "/api/v1/leak-test/pending";
   assert.equal(p.unanswered(PENDING), 0, "a relay change asked the account server again");
 }
 
-console.log("leakrequest: replacement, stale answers, dismiss and relay notice — ok");
+// 7. NEW_310: nothing is pinned for the map's game. The notice says so, offers
+//    no Review, and the choice opens by itself, asking for that game's choices.
+{
+  const p = load();
+  await p.answer(REQUEST, 200, A);
+  const { pipeline: _none, ...unpinned } = resolved(A, "first");
+  await p.answer(PENDING, 200, { ...unpinned, game_profile: "quake1", compiler: "ericw-qbsp", needs_pipeline: true });
+  assert.match(text(p.box), /No pipeline is chosen yet for testing Quake 1 maps/);
+  assert.equal(buttonNamed(p.box, "Review leak test"), undefined, "an unpinned request became reviewable");
+  assert.ok(buttonNamed(p.box, "Choose leak-test pipeline"));
+  assert.equal(p.unanswered("/api/v1/leak-test/pipelines?game=quake1"), 1, "the choice did not open by itself");
+}
+
+console.log("leakrequest: replacement, stale answers, dismiss, relay notice and unpinned game — ok");

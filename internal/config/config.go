@@ -139,6 +139,11 @@ type Config struct {
 	// use and when the handler is registered from Settings; absent means the
 	// Companion has never registered it. See internal/cli/urihandler_firstuse.go.
 	URIHandler *URIHandler `json:"uri_handler,omitempty"`
+	// LeakTestPipelines is the pipeline the user pinned for each game's leak
+	// test, keyed by the APMap game ("quake1", "quake3"). Nothing is pinned
+	// out of the box (NEW_310, HITL): the Companion asks when the editor's
+	// first request for that game arrives.
+	LeakTestPipelines map[string]string `json:"leak_test_pipelines,omitempty"`
 }
 
 // URIHandler is the record of a registered `autopigeon://` handler.

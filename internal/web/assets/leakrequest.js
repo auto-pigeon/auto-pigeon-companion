@@ -25,7 +25,7 @@
 "use strict";
 
 (() => {
-  const { $, el, api, withBusy, record, t } = window.AUCOM;
+  const { $, el, api, withBusy, record, t, pipelineReady, executionChoices } = window.AUCOM;
 
   const WATCH_MS = 2000;
   const box = $("leak-request");
@@ -95,12 +95,22 @@
       state.className = "leak-request__state message error";
       state.textContent = t("This saved revision is a {game} map. The Companion has a leak test for {list} only, so nothing was run and nothing will be.", {
         game: gameName(details.body.game_profile), list: (details.body.supported_profiles || []).map(gameName).join(", ") });
+    } else if (details.body.needs_pipeline) {
+      // Nothing is pinned for this game (NEW_310, HITL): the user chooses
+      // which installed pipeline tests it, once, and the Companion keeps it.
+      state.textContent = (details.body.pinned_problem
+        ? t("The pipeline pinned for {game} leak tests cannot be used any more: {why}.", { game: gameName(details.body.game_profile), why: details.body.pinned_problem }) + " "
+        : t("No pipeline is chosen yet for testing {game} maps for leaks on this computer.", { game: gameName(details.body.game_profile) }) + " ")
+        + t("Choose one; it is kept for every later request.");
+      actions.append(button(t("Choose leak-test pipeline"), "primary", async () => openPin(details.body.game_profile, true)));
+      if (askedFor !== seen.request_id) { askedFor = seen.request_id; openPin(details.body.game_profile, true); }
     } else if (reviewing === seen.request_id) {
       state.textContent = t("In review. The Build area shows the exact command; nothing runs until you press Build.");
       actions.append(button(t("Go to the review"), "secondary", async () => window.AUCOM.showArea("build")));
     } else {
       state.textContent = t("Its content still matches what the editor asked about. It is a {game} map, so the test is {compiler}'s. Review the compiler command first; nothing runs until you press Build.", {
         game: gameName(details.body.game_profile), compiler: compilerName(details.body.compiler) });
+      actions.append(button(t("Change pipeline"), "secondary", async () => openPin(details.body.game_profile, false)));
       actions.append(button(t("Review leak test"), "primary", review));
     }
     actions.prepend(dismiss);
@@ -177,6 +187,7 @@
 
   async function review() {
     if (!seen || !details?.ok || !sameRequest(details.body, seen)) return;
+    if (details.body.needs_pipeline || !details.body.pipeline) return; // nothing pinned: the dialog asks first
     const own = generation;
     const request = details.body;
     const told = await api("/api/v1/leak-test/reviewing", { method: "POST", body: { request_id: request.request_id } });
@@ -192,6 +203,81 @@
     reviewing = request.request_id;
     render();
   }
+
+  // --- choosing the pipeline -------------------------------------------------
+  //
+  // The dialog lists every installed pipeline that can answer this game's leak
+  // test (the server decides which can), with the readiness Build & Run shows:
+  // one that needs setup is listed, greyed, with its reasons, and cannot be
+  // chosen; "Profiles / setup" is beside it. Pinning sends the choice to the
+  // server, which refuses a pipeline that cannot be this game's leak test.
+  let askedFor = null; // the request whose dialog opened by itself, once
+  let pinGame = "";
+  let pinThenReview = false;
+  let pinGeneration = 0;
+  const pinModal = $("leak-pin-modal");
+
+  async function loadPin() {
+    const own = ++pinGeneration;
+    const select = $("leak-pin-select");
+    const problems = $("leak-pin-problems");
+    const message = $("leak-pin-message");
+    message.textContent = "";
+    const { ok, body } = await api("/api/v1/leak-test/pipelines?game=" + encodeURIComponent(pinGame));
+    if (own !== pinGeneration) return; // A newer refresh owns the dialog.
+    if (!ok) {
+      message.className = "message error";
+      message.textContent = body.error || t("The pipelines could not be listed.");
+      return;
+    }
+    const choices = body.choices || [];
+    const label = (item) => item.name + (item.builtin ? " — " + t("built in") : "") +
+      (pipelineReady(item) ? "" : " — " + t("needs setup"));
+    executionChoices(select, choices, select.value || body.pinned || "", pipelineReady, label,
+      choices.length ? t("Choose a pipeline…") : t("No installed pipeline can test these maps"));
+    problems.replaceChildren(...choices.filter((item) => !pipelineReady(item)).map((item) =>
+      el("li", { text: `${item.name}: ` + ((item.readiness?.problems || []).map((p) => p.summary).join(" ") || t("not ready")) })));
+    $("leak-pin-confirm").disabled = !select.value;
+  }
+
+  async function openPin(game, thenReview) {
+    pinGame = game;
+    pinThenReview = thenReview;
+    $("leak-pin-intro").textContent = t("Which pipeline should test {game} maps for leaks on this computer? The Companion ships profiles; the compilers are programs you install yourself, so the choice is yours. It is kept for every later request and can be changed here.", { game: gameName(game) });
+    $("leak-pin-confirm").textContent = thenReview ? t("Pin and review") : t("Pin");
+    pinModal.hidden = false;
+    await loadPin();
+    $("leak-pin-select").focus();
+  }
+
+  function closePin() { pinModal.hidden = true; pinGeneration += 1; }
+
+  $("leak-pin-select").addEventListener("change", () => { $("leak-pin-confirm").disabled = !$("leak-pin-select").value; });
+  $("leak-pin-confirm").addEventListener("click", () => withBusy($("leak-pin-confirm"), async () => {
+    const pipeline = $("leak-pin-select").value;
+    if (!pipeline) return;
+    const { ok, body } = await api("/api/v1/leak-test/pipelines", { method: "POST", body: { game: pinGame, pipeline } });
+    if (!ok) {
+      $("leak-pin-message").className = "message error";
+      $("leak-pin-message").textContent = body.error || t("The pipeline could not be pinned.");
+      return;
+    }
+    record(t("Leak tests for {game} use {pipeline}", { game: gameName(pinGame), pipeline }), "", "ok");
+    closePin();
+    const continueToReview = pinThenReview;
+    // A read that started before the pin answers for the time before it: wait
+    // for it, then ask again, so the review is of the pinned pipeline (found
+    // live on Windows: the continuation reviewed a stale "nothing pinned").
+    while (resolving) await new Promise((done) => setTimeout(done, 100));
+    await resolve(true);
+    if (continueToReview && details?.ok && details.body.pipeline && !details.body.needs_pipeline) await review();
+  }));
+  for (const close of [$("leak-pin-cancel"), $("leak-pin-close")]) close.addEventListener("click", closePin);
+  pinModal.querySelector("[data-dismiss=leak-pin]")?.addEventListener("click", closePin);
+  pinModal.addEventListener("keydown", (event) => { if (event.key === "Escape") closePin(); });
+  $("leak-pin-setup").addEventListener("click", () => { closePin(); window.AUCOM.showArea("profiles"); });
+  // Back from Profiles with the dialog's game still unanswered: list again.
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && !pinModal.hidden) loadPin(); });
 
   // Dismiss names the request it is dismissing, so a newer one that arrived
   // while this notice was on screen is not the one forgotten.

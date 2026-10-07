@@ -213,6 +213,12 @@ func (s *Service) compile(ctx context.Context, record *Record) error {
 	if len(placed) > 0 {
 		s.detail(record, "texture WADs also placed where the map declares them: "+strings.Join(placed, ", "))
 	}
+	readsTextures := true
+	if s.deps.DeclaresRoot != nil {
+		if readsTextures, err = s.deps.DeclaresRoot(record.Request.PipelineID, profile.RootContent); err != nil {
+			return err
+		}
+	}
 	request := build.Request{
 		PipelineID: record.Request.PipelineID,
 		Inputs:     map[string]string{},
@@ -223,6 +229,11 @@ func (s *Service) compile(ctx context.Context, record *Record) error {
 		Options: record.Request.Options,
 		Strict:  record.Request.Strict,
 		Label:   record.Request.Label,
+	}
+	if !readsTextures {
+		request.Roots, request.RootSources = nil, nil
+		s.detail(record, "no step of this build profile reads a texture folder, so none is given; "+
+			"the WADs are where the map declares them")
 	}
 	if record.MapSource != nil {
 		request.Sources = map[string]build.SourceRef{}

@@ -181,3 +181,44 @@ func TestPointFilesAreFiniteTriplesWithinBounds(t *testing.T) {
 		}
 	}
 }
+
+// A pipeline the user pins is read by role (NEW_310): any output names, as
+// long as it is for the game and publishes the point file and the log.
+func TestAPinnedPipelineIsBoundByRoleNotByName(t *testing.T) {
+	q1, err := ForProfile(ProfileQuake1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mine := Pipeline{ID: "local.pipeline.my-leak", Games: []string{"quake1"}, Outputs: []PipelineOutput{
+		{Name: "route", Role: "q1.pts", From: "qbsp.pts"},
+		{Name: "said", Role: StepLogRole, From: "qbsp.stdout"},
+	}}
+	binding, err := q1.Bind(mine)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if binding.Pointfile != "route" || binding.Log != "said" || binding.CompileStep != "qbsp" || binding.Game != "quake1" {
+		t.Errorf("bound as %+v", binding)
+	}
+
+	// The game's own log role is preferred to the step's text.
+	mine.Outputs = append(mine.Outputs, PipelineOutput{Name: "qbsp_log", Role: "q1.compile.log", From: "qbsp.log"})
+	if binding, _ := q1.Bind(mine); binding.Log != "qbsp_log" {
+		t.Errorf("log %q", binding.Log)
+	}
+
+	for name, refused := range map[string]Pipeline{
+		"another game":    {ID: "x.y", Games: []string{"quake3"}, Outputs: mine.Outputs},
+		"no point file":   {ID: "x.y", Games: []string{"quake1"}, Outputs: mine.Outputs[1:]},
+		"no compiler log": {ID: "x.y", Games: []string{"quake1"}, Outputs: mine.Outputs[:1]},
+	} {
+		if _, err := q1.Bind(refused); err == nil {
+			t.Errorf("%s: bound", name)
+		}
+	}
+
+	// The built-in row reads its own pipeline exactly as before.
+	if got := q1.Builtin(); got.Pointfile != "pts" || got.Log != "compile_log" || got.CompileStep != "compile" {
+		t.Errorf("built in: %+v", got)
+	}
+}

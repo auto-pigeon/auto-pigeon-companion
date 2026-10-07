@@ -734,3 +734,45 @@ func TestABuildOnlyRunStopsAfterTheCompileAndStartsNoGame(t *testing.T) {
 		}
 	}
 }
+
+// The texture folder is the build's `content_root`, and it is given only to a
+// build profile that reads one. A pipeline whose tools never ask for it — a
+// tool written by hand without `-wadpath` — is built without it rather than
+// refused for being handed a folder nothing would read (NEW_310, found on
+// Windows: Build & Run failed at compiling with exactly that refusal).
+func TestTheTextureFolderIsGivenOnlyToABuildThatReadsOne(t *testing.T) {
+	for _, reads := range []bool{true, false} {
+		h := newHarness(t)
+		var asked []string
+		var roots map[string]string
+		h.deps.DeclaresRoot = func(pipeline, role string) (bool, error) {
+			asked = append(asked, pipeline+" "+role)
+			return reads, nil
+		}
+		h.buildRun = func(_ context.Context, request build.Request, announce func(*build.Manifest)) (*build.Manifest, error) {
+			roots = request.Roots
+			manifest := &build.Manifest{BuildID: "20260921T000000Z-abcdef", State: job.Succeeded}
+			announce(manifest)
+			return manifest, nil
+		}
+		service, err := playrun.NewService(h.store, h.deps)
+		if err != nil {
+			t.Fatal(err)
+		}
+		started, err := service.Start(goodRequest())
+		if err != nil {
+			t.Fatal(err)
+		}
+		h.service = service
+		record := h.await(started.ID)
+		if record.State != playrun.Succeeded {
+			t.Fatalf("reads=%v: %s at %s: %s", reads, record.State, record.FailedAt, record.Error)
+		}
+		if len(asked) != 1 || asked[0] != goodRequest().PipelineID+" content_root" {
+			t.Errorf("reads=%v: the pipeline was asked %v", reads, asked)
+		}
+		if _, given := roots["content_root"]; given != reads {
+			t.Errorf("reads=%v: the build was given roots %v", reads, roots)
+		}
+	}
+}

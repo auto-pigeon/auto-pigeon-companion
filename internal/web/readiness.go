@@ -61,19 +61,15 @@ func (r readiness) view() map[string]any {
 // checker as Profiles and engine execution. Map inputs are supplied later.
 func pipelineReadiness(pipeline *profile.PipelineProfile, resolver *build.Resolver, set *binding.Set) readiness {
 	out := readiness{Ready: true}
-	capabilities := make([]string, 0, len(pipeline.Steps))
-	for _, step := range pipeline.Steps {
-		capabilities = append(capabilities, step.Capability)
-	}
-	if err := resolver.CheckConflicts(capabilities); err != nil {
+	if err := resolver.CheckSteps(pipeline.Steps); err != nil {
 		return readiness{Problems: engine.Problems{{Fault: "conflicting_providers", Summary: err.Error(), Fix: "Inspect the tool profiles in Profiles."}}}
 	}
 	if _, err := pipeline.Resolve(resolver); err != nil {
 		return readiness{Problems: engine.Problems{{Fault: "unresolved_pipeline", Summary: err.Error(), Fix: "Configure this pipeline's dependencies in Profiles."}}}
 	}
 	for _, step := range pipeline.Steps {
-		entry, exists := resolver.Entry(step.Capability)
-		_, action, provided := resolver.Provider(step.Capability)
+		entry, exists := resolver.EntryForStep(step)
+		_, action, provided := resolver.ProviderForStep(step)
 		if !exists || !provided {
 			continue
 		} // Resolve above owns missing capabilities.

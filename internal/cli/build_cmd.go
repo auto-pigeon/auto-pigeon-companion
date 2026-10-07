@@ -367,7 +367,7 @@ func buildPipelines(env *Env, args []string) int {
 			Family: family, Maturity: string(maturity.Of(family).State)}
 		for _, step := range pipeline.Steps {
 			r.Steps = append(r.Steps, step.ID)
-			if _, _, provided := runner.Resolver().Provider(step.Capability); !provided {
+			if _, _, provided := runner.Resolver().ProviderForStep(step); !provided {
 				r.Missing = append(r.Missing, step.Capability)
 				r.Runnable = false
 			}

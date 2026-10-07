@@ -72,7 +72,7 @@
   // the compiler found. A delivery that failed is sent again from here; that
   // never compiles anything.
   function leakVerdict(manifest, leak) {
-    const compile = (manifest.steps || []).find((step) => step.id === "compile");
+    const compile = (manifest.steps || []).find((step) => step.id === (leak?.compile_step || "compile"));
     // A compiler whose run the Companion reads itself (Q3Map2) comes with its
     // reading. Three facts stay apart in the sentence: how the process exited,
     // how the step ended, and what the run says about leaks — a leaked Quake

@@ -200,7 +200,7 @@ func scratchFromTree(tree map[string]any) (scratchDocument, scratchIdentity) {
 		}
 		for _, step := range objects(tree, "steps") {
 			filled := scratchStep{
-				ID: text(step, "id"), Title: text(step, "title"), Capability: text(step, "capability"),
+				ID: text(step, "id"), Title: text(step, "title"), Capability: text(step, "capability"), Tool: text(step, "tool"),
 				Inputs: map[string]string{}, Options: map[string]string{},
 			}
 			for _, wire := range objects(step, "inputs") {
@@ -273,7 +273,7 @@ var formOwned = map[string][]string{
 	"actions.roots":          {"role", "optional", "access", "purpose"},
 	"capabilities":           {"id", "title", "consumes", "produces"},
 	"inputs":                 {"name", "title", "role", "required", "extensions"},
-	"steps":                  {"id", "title", "capability", "inputs", "options"},
+	"steps":                  {"id", "title", "capability", "tool", "inputs", "options"},
 	"outputs":                {"name", "title", "role", "from", "optional"},
 }
 

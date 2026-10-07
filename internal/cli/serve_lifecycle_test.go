@@ -486,3 +486,57 @@ func TestTheStartupNoticeIsCompleteAndNamesTheAddressOnce(t *testing.T) {
 		}
 	}
 }
+
+// A second launch while the Companion is open shows the running one and
+// starts nothing: it does not truncate the first one's log, replace its
+// token, or listen beside it (NEW_310, found on Windows — a double-click while
+// a Companion was already open started a second on a fallback port, and the
+// shared log came out with a hole of NULs).
+func TestASecondLaunchShowsTheRunningCompanionInsteadOfStartingAnother(t *testing.T) {
+	first := startServe(t, []string{"serve", "--interactive", "--open"}, nil)
+	first.lease()
+	dir := filepath.Dir(first.env.ConfigPath)
+	logPath := filepath.Join(dir, DetailLogName)
+	before, err := os.ReadFile(logPath)
+	if err != nil || !strings.Contains(string(before), "listening on http://") {
+		t.Fatalf("the first Companion's log: %v %q", err, before)
+	}
+
+	stdout, stderr := &syncBuffer{}, &syncBuffer{}
+	opened := make(chan string, 1)
+	second := &Env{Stdout: stdout, Stderr: stderr, Version: "1.501", ConfigPath: first.env.ConfigPath,
+		Lookenv: func(string) (string, bool) { return "", false }, URIRegistrar: isolatedRegistrar(t),
+		OpenBrowser: func(page string) error { opened <- page; return nil }}
+	done := make(chan int, 1)
+	go func() { done <- Run(second, []string{"serve", "--interactive", "--open", "--open-area=build"}) }()
+	select {
+	case code := <-done:
+		if code != 0 {
+			t.Fatalf("the second launch exited %d; stderr %q", code, stderr.String())
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("the second launch is still running: it started a second Companion")
+	}
+	want := "http://" + first.address + "/#build"
+	select {
+	case page := <-opened:
+		if page != want {
+			t.Errorf("the second launch opened %q, want the running one's %q", page, want)
+		}
+	default:
+		t.Error("the second launch opened no page")
+	}
+	if !strings.Contains(stdout.String(), "already open at "+want) {
+		t.Errorf("the second launch said %q", stdout.String())
+	}
+	if token, err := web.ReadToken(web.TokenPath(dir)); err != nil || token != first.token {
+		t.Errorf("the running Companion's token was replaced: %v", err)
+	}
+	after, _ := os.ReadFile(logPath)
+	if !strings.HasPrefix(string(after), string(before)) || strings.Contains(string(after), "1.501") {
+		t.Errorf("the running Companion's log was truncated or written by the second launch:\n%q", after)
+	}
+	if status, _ := first.api(http.MethodGet, "/api/status", ""); status != http.StatusOK {
+		t.Errorf("the running Companion stopped answering: %d", status)
+	}
+}
