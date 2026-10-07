@@ -3,6 +3,7 @@ package web
 import (
 	"errors"
 	"fmt"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 	"net/http"
 	"strings"
 
@@ -189,6 +190,19 @@ func (s *Server) handleProfileStageArguments(w http.ResponseWriter, r *http.Requ
 // needs done, which installed tool does it here, and the tokens this machine
 // adds. A stage nothing installed can run says so rather than being left out.
 func (s *Server) describeStages(pipeline *profile.PipelineProfile, local binding.LocalBinding) []map[string]any {
+	catalog, err := s.catalog()
+	if err != nil {
+		return s.describeStagesFrom(pipeline, local, nil, nil)
+	}
+	entries, _ := catalog.List()
+	set, _, _ := s.bindings()
+	return s.describeStagesFrom(pipeline, local, entries, set)
+}
+
+// describeStagesFrom is [Server.describeStages] over a catalog listing and
+// bindings the caller has already read.
+func (s *Server) describeStagesFrom(pipeline *profile.PipelineProfile, local binding.LocalBinding,
+	entries []job.CatalogEntry, set *binding.Set) []map[string]any {
 	type provider struct {
 		entry  map[string]any
 		tokens []string
@@ -199,34 +213,29 @@ func (s *Server) describeStages(pipeline *profile.PipelineProfile, local binding
 	// the same capability — found live on Windows, where a stage naming the
 	// user's own EricW was shown as run by the built-in one.
 	byTool := map[string]provider{}
-	if catalog, err := s.catalog(); err == nil {
-		if entries, err := catalog.List(); err == nil {
-			set, _, _ := s.bindings()
-			for _, candidate := range entries {
-				tool, isTool := candidate.Profile.(*profile.ToolProfile)
-				if !isTool {
-					continue
+	for _, candidate := range entries {
+		tool, isTool := candidate.Profile.(*profile.ToolProfile)
+		if !isTool {
+			continue
+		}
+		for _, action := range tool.Actions {
+			if action.Capability == "" {
+				continue
+			}
+			found := provider{entry: map[string]any{
+				"profile_id": tool.Meta.ID, "profile_name": tool.Meta.Name,
+				"action_id": action.ID, "action_title": action.Title, "executable": action.Executable,
+			}}
+			if set != nil {
+				if toolBinding, bound := set.Find(tool.Meta.ID); bound {
+					found.tokens = toolBinding.Arguments[action.Executable]
 				}
-				for _, action := range tool.Actions {
-					if action.Capability == "" {
-						continue
-					}
-					found := provider{entry: map[string]any{
-						"profile_id": tool.Meta.ID, "profile_name": tool.Meta.Name,
-						"action_id": action.ID, "action_title": action.Title, "executable": action.Executable,
-					}}
-					if set != nil {
-						if toolBinding, bound := set.Find(tool.Meta.ID); bound {
-							found.tokens = toolBinding.Arguments[action.Executable]
-						}
-					}
-					if _, taken := byTool[tool.Meta.ID+"\x00"+action.Capability]; !taken {
-						byTool[tool.Meta.ID+"\x00"+action.Capability] = found
-					}
-					if _, taken := providers[action.Capability]; !taken {
-						providers[action.Capability] = found
-					}
-				}
+			}
+			if _, taken := byTool[tool.Meta.ID+"\x00"+action.Capability]; !taken {
+				byTool[tool.Meta.ID+"\x00"+action.Capability] = found
+			}
+			if _, taken := providers[action.Capability]; !taken {
+				providers[action.Capability] = found
 			}
 		}
 	}

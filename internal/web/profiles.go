@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/fsshare"
 	"io"
 	"net/http"
@@ -96,12 +97,20 @@ func (s *Server) handleProfileList(w http.ResponseWriter, r *http.Request) {
 	}
 	kind := r.URL.Query().Get("kind")
 	items := make([]map[string]any, 0, len(entries))
+	// One catalog, one resolver and one bindings read for the whole list
+	// (NEW_310A): describing each pipeline used to read all three again, three
+	// catalog listings per pipeline, and on Windows the list took 17 s — the
+	// empty first step of New profile and the slow Approve were this.
+	shared := &describeShared{entries: entries, set: set}
+	if runner, err := s.buildRunner(nil); err == nil {
+		shared.resolver = runner.Resolver()
+	}
 	for _, entry := range entries {
 		if kind != "" && string(entry.Profile.Metadata().Kind) != kind {
 			continue
 		}
 		local, _ := set.Find(entry.Profile.Metadata().ID)
-		items = append(items, s.describeCatalogEntry(entry, local))
+		items = append(items, s.describeCatalogEntryWith(entry, local, shared))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
@@ -140,6 +149,19 @@ func (s *Server) profileEntry(id string) (job.CatalogEntry, binding.LocalBinding
 // and grant: a caller that has to compute "may this run" from three fields is a
 // caller that will one day compute it wrong.
 func (s *Server) describeCatalogEntry(entry job.CatalogEntry, local binding.LocalBinding) map[string]any {
+	return s.describeCatalogEntryWith(entry, local, nil)
+}
+
+// describeShared is what describing many profiles in one answer reads once:
+// the catalog's entries, the resolver over them and the bindings. Nil fields
+// are read when needed, as describing one profile does.
+type describeShared struct {
+	entries  []job.CatalogEntry
+	resolver *build.Resolver
+	set      *binding.Set
+}
+
+func (s *Server) describeCatalogEntryWith(entry job.CatalogEntry, local binding.LocalBinding, shared *describeShared) map[string]any {
 	body := describeProfile(entry)
 	// The declared programs, so a setup form can offer one field per program
 	// rather than assuming there is exactly one. A pipeline declares none.
@@ -163,10 +185,15 @@ func (s *Server) describeCatalogEntry(entry job.CatalogEntry, local binding.Loca
 	} else {
 		// Each stage with the tool that runs it here and the tokens this
 		// machine adds to it: a pipeline is where parameters are set.
-		body["stages"] = s.describeStages(pipeline, local)
-		if runner, err := s.buildRunner(nil); err == nil {
-			if set, _, err := s.bindings(); err == nil {
-				body["readiness"] = pipelineReadiness(pipeline, runner.Resolver(), set).view()
+		if shared != nil && shared.resolver != nil && shared.set != nil {
+			body["stages"] = s.describeStagesFrom(pipeline, local, shared.entries, shared.set)
+			body["readiness"] = pipelineReadiness(pipeline, shared.resolver, shared.set).view()
+		} else {
+			body["stages"] = s.describeStages(pipeline, local)
+			if runner, err := s.buildRunner(nil); err == nil {
+				if set, _, err := s.bindings(); err == nil {
+					body["readiness"] = pipelineReadiness(pipeline, runner.Resolver(), set).view()
+				}
 			}
 		}
 	}

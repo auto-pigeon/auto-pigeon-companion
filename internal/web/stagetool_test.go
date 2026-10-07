@@ -2,6 +2,7 @@ package web
 
 import (
 	"encoding/json"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
@@ -135,5 +136,32 @@ func TestTheStoppedNoticeClosesEveryOtherDialog(t *testing.T) {
 	out, err := exec.Command("node", "testdata/lifecycle.check.mjs").CombinedOutput()
 	if err != nil {
 		t.Fatalf("lifecycle.check.mjs: %v\n%s", err, out)
+	}
+}
+
+// The profile list reads the catalog once and describes every pipeline from
+// it (NEW_310A: it read it three times per pipeline, 17 s on Windows); what
+// it says about each pipeline is exactly what the profile's own page says.
+func TestTheProfileListDescribesEachPipelineAsItsOwnPageDoes(t *testing.T) {
+	m := newMachine(t)
+	status, list := m.call(http.MethodGet, "/api/v1/profiles?kind=pipeline", nil)
+	if status != http.StatusOK {
+		t.Fatalf("list: %d", status)
+	}
+	items, _ := list["items"].([]any)
+	if len(items) == 0 {
+		t.Fatal("no pipelines listed")
+	}
+	for _, raw := range items {
+		item := raw.(map[string]any)
+		id := item["id"].(string)
+		_, one := m.call(http.MethodGet, "/api/v1/profiles/"+id, nil)
+		for _, key := range []string{"stages", "readiness"} {
+			a, _ := json.Marshal(item[key])
+			b, _ := json.Marshal(one[key])
+			if string(a) != string(b) {
+				t.Errorf("%s %s: the list says %s, its page says %s", id, key, a, b)
+			}
+		}
 	}
 }
