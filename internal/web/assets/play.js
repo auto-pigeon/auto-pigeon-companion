@@ -1109,10 +1109,11 @@
       ...(listingBody() ? line(t("Live Games"), `${listingBody().title} · ${$("play-listing-visibility").selectedOptions[0]?.textContent || ""}` +
         ` · ${listingBody().endpoint_host}:${listingBody().endpoint_port}`) : []),
     );
-    const ready = textures?.compiler_ready !== false ||
-      Boolean(textures?.ready_with_own_wads && textures.own_wads_dir === state.ownWadsDir);
+    const reviewed = Boolean(state.plan);
+    const ready = reviewed && (textures?.compiler_ready !== false ||
+      Boolean(textures?.ready_with_own_wads && textures.own_wads_dir === state.ownWadsDir));
     $("play-start").disabled = !ready;
-    setMessage("play-start-message", ready ? "" :
+    setMessage("play-start-message", ready ? "" : !reviewed ? t("The review is not ready yet — see step 4.") :
       "This map's textures are not complete enough to compile — see step 4.", ready ? "" : "error");
   }
 
@@ -1675,6 +1676,13 @@
         state.planKey = "";
         $("play-review").replaceChildren(el("p", { className: "muted", text: t("Loading the map this page was opened on…") }));
       }
+      // The one button is pressed only after a review of these exact choices.
+      // A reload (or a link) that named step 5 has no review any more, and
+      // whatever the person confirmed in it — their own WADs among it — is
+      // not remembered: so it lands on the review, which is worked out again,
+      // rather than on a button that would start the old choices unseen
+      // (NEW_310A, live on Windows).
+      if (state.step === 5) state.step = 4;
       show(state.step);
       let settle;
       ready = new Promise((resolve) => { settle = resolve; });

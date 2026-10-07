@@ -347,6 +347,26 @@
       String($("play-start").disabled)
     );
     await snap("refusal-button-disabled");
+
+    // --- a reload on the last step lands on the review ------------------------
+    // The URL remembers step 5, but not the review nor the folder confirmed in
+    // it. Found live on Windows (NEW_310A): after a reload the one button was
+    // enabled with no review at all, and would have started the old choices
+    // unseen. Coming back to the area is what a reload does to it.
+    await window.AUCOM.areas.play.refresh();
+    record(
+      "a reload that named the last step shows the review again",
+      visible($("play-step-4")) && !visible($("play-step-5")),
+      `step 4 ${visible($("play-step-4")) ? "shown" : "hidden"}, step 5 ${visible($("play-step-5")) ? "shown" : "hidden"}`
+    );
+    // Straight to the last step, before the review has come back.
+    stepButton(5).click();
+    await waitFor("the final step", () => visible($("play-step-5")));
+    record(
+      "and nothing can be started without that review",
+      $("play-start").disabled === true,
+      `start disabled=${$("play-start").disabled}, message=${textOf($("play-start-message"))}`
+    );
     // Jobs keeps the finished run.
     await go("jobs");
     await sleep(600);
