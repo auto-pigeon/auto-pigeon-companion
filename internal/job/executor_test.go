@@ -93,9 +93,20 @@ func TestASuccessfulJobRecordsWhatItRanAndPublishesItsOutputs(t *testing.T) {
 	}
 
 	// The workspace is gone and the artifact is not: that is the contract a
-	// successful job publishes under.
-	if _, err := os.Stat(finished.Workspace); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("the workspace survived a successful job: %v", err)
+	// successful job publishes under. The terminal state is saved BEFORE the
+	// workspace is removed, so Wait can return first; on Windows the removal
+	// is slow enough to be seen (NEW_317B's release run). Give it a moment.
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		_, err := os.Stat(finished.Workspace)
+		if errors.Is(err, os.ErrNotExist) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Errorf("the workspace survived a successful job: %v", err)
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 	if _, err := os.Stat(artifact.Path); err != nil {
 		t.Errorf("the artifact did not survive cleanup: %v", err)

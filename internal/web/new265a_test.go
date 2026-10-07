@@ -144,7 +144,15 @@ func TestTheAutoBuildSwitchAnswersPromptlyWhileAUBIsHeld(t *testing.T) {
 	}
 	saveRevision(6)
 	dueNow()
-	body = await("the build of revision 6", func(b map[string]any) bool { return b["running"] != nil || b["last_built"] != nil })
+	// The attempt is recorded as running BEFORE the run it starts has an id
+	// (autobuild records the claim, starts the run, then writes the id), so
+	// an attempt is only followed once it names its run.
+	named := func(attempt any) bool {
+		row, _ := attempt.(map[string]any)
+		id, _ := row["run_id"].(string)
+		return id != ""
+	}
+	body = await("the build of revision 6", func(b map[string]any) bool { return named(b["running"]) || named(b["last_built"]) })
 	attempt, _ := body["running"].(map[string]any)
 	if attempt == nil {
 		attempt, _ = body["last_built"].(map[string]any)
