@@ -232,8 +232,8 @@ func (s *Service) compile(ctx context.Context, record *Record) error {
 	}
 	if !readsTextures {
 		request.Roots, request.RootSources = nil, nil
-		s.detail(record, "no step of this build profile reads a texture folder, so none is given; "+
-			"the WADs are where the map declares them")
+		s.detail(record, "no step of this build profile reads a texture folder, so none is given: "+
+			"the compiler cannot open the map's WADs, and the BSP will carry no textures")
 	}
 	if record.MapSource != nil {
 		request.Sources = map[string]build.SourceRef{}

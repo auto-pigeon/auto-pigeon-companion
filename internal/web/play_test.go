@@ -151,6 +151,13 @@ func TestBuildAndRunDoesTheWholeSequenceFromOneConfirmation(t *testing.T) {
 	if textures["known"] != false {
 		t.Errorf("a plan claimed to know a bundle it has not fetched: %v", textures)
 	}
+	// NEW_310A: the review says whether the compiler will be given the map's
+	// textures, and warns exactly when it will not.
+	reads, said := plan["reads_textures"].(bool)
+	_, warned := plan["textures_warning"].(string)
+	if !said || warned == reads {
+		t.Errorf("reads_textures %v (said %v), warning %v", reads, said, warned)
+	}
 
 	// One confirmation.
 	status, started := m.call(http.MethodPost, "/api/v1/play/runs", playBody(m))

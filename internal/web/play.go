@@ -1066,6 +1066,18 @@ func (s *Server) handlePlayPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	plan["map_input"] = inputName
+	// Whether the compiler will be given the map's textures at all (NEW_310A,
+	// the dark dm2 on Windows): a build profile whose stages read no texture
+	// folder compiles a map whose WADs it cannot open, and the BSP carries no
+	// textures — the level loads untextured. Said here, before anything runs.
+	if reads, err := s.pipelineDeclaresRoot(request.PipelineID, profile.RootContent); err == nil {
+		plan["reads_textures"] = reads
+		if !reads {
+			plan["textures_warning"] = "No stage of this build profile reads a texture folder, so the compiler " +
+				"cannot open the map's WADs: the BSP will carry no textures and the level loads untextured (dark). " +
+				"Give its compile stage's tool a texture folder (-wadpath) in Profiles, or choose a build profile that has one."
+		}
+	}
 
 	// The engine's argv, resolved through the same resolver the executor uses.
 	// Where a fact depends on a file that does not exist yet, it is marked.

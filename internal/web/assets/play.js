@@ -827,6 +827,9 @@
     ]));
 
     review.append(texturesSection(plan.textures));
+    if (plan.textures_warning) {
+      review.append(el("p", { className: "message error", attrs: { role: "alert" }, text: t(plan.textures_warning) }));
+    }
 
     const programs = [line(t("Build profile"), nameOfPipeline(plan.build.pipeline))];
     const pipeline = state.pipelines.find((p) => p.id === plan.build.pipeline);
