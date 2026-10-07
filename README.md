@@ -167,11 +167,22 @@ The command is `game open` with **no approval flag at all**: opening a link
 checks its shape, shows it in the Companion and starts nothing. Joining is a
 separate step you take after reviewing the exact command the page shows.
 
-**Testing an editor map for leaks.** Tell this computer that the Companion opens
-`autopigeon://` links — **Settings › Links from Auto-Pigeon › Open Auto-Pigeon links
-with this Companion**, or `./companion uri register` — save the map to your account
-in the editor, and press **Leaks → Test in Companion**. Without that handler the
-editor's click reaches nothing and the editor waits for a result that cannot come.
+**Testing an editor map for leaks.** The Companion tells this computer that it opens
+`autopigeon://` links the first time you start it by double-click (or with no
+subcommand), and records that it did in `config.json` as `uri_handler`, so it happens
+once: a later start leaves a handler you removed, or pointed at another program,
+alone. A newer Companion unpacked into another folder takes over the handler an
+older one registered. On macOS the `.app` bundle declares it and nothing is written.
+`companion serve` (server mode) never registers. To do it by hand: **Settings › Links
+from Auto-Pigeon › Open Auto-Pigeon links with this Companion**, or
+`./companion uri register`. Then save the map to your account in the editor and press
+**Leaks → Test in Companion**. Without that handler the editor's click reaches nothing
+and the editor waits for a result that cannot come.
+
+```console
+$ ./companion            # first start: the log says "link handler: registered at first use: …"
+$ ./companion uri status
+```
 
 ```console
 $ ./companion uri status

@@ -134,6 +134,26 @@ type Config struct {
 	// Migrate idempotent without deleting the Launcher's own file — see
 	// migrate.go.
 	MigratedFromLauncher bool `json:"migrated_from_launcher,omitempty"`
+	// URIHandler records that this machine's `autopigeon://` handler was
+	// registered for the Companion, and for which program. Written at first
+	// use and when the handler is registered from Settings; absent means the
+	// Companion has never registered it. See internal/cli/urihandler_firstuse.go.
+	URIHandler *URIHandler `json:"uri_handler,omitempty"`
+}
+
+// URIHandler is the record of a registered `autopigeon://` handler.
+type URIHandler struct {
+	// Executable is the program the handler was pointed at.
+	Executable string `json:"executable"`
+	// Method is how: urischeme.MethodRegistry, MethodXDG.
+	Method string `json:"method,omitempty"`
+	// At is when, in UTC.
+	At time.Time `json:"at"`
+	// How says whether the Companion registered it at first use
+	// ("registered"), took it over from an older Companion ("taken over"),
+	// found it already pointing here ("found"), or a person pressed the
+	// button in Settings ("settings").
+	How string `json:"how,omitempty"`
 }
 
 // EnvAUBBaseURL names the environment variable that supplies AUB's address

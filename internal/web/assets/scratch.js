@@ -114,8 +114,15 @@
         ],
       })
     );
+    // A program's name feeds every action's Program choice, so a changed row
+    // redraws the editor. Deferred: "change" fires while the mouse is going
+    // down in the NEXT field, before that field has focus, and a redraw then
+    // destroyed the field the person had just clicked — the first click after
+    // an edit landed nowhere and the typing after it was lost (NEW_310, found
+    // live on Windows). After the deferral the click's field has focus, and
+    // render() gives it back.
     for (const row of rows) {
-      for (const input of row.querySelectorAll("input")) input.addEventListener("change", render);
+      for (const input of row.querySelectorAll("input")) input.addEventListener("change", () => setTimeout(render));
     }
     return list("Programs", "Every program this profile starts. There is no limit and no required name.",
       rows, "Add a program", () => doc.programs.push({ name: "", title: "", file: "" }));
@@ -407,6 +414,14 @@
 
   function render() {
     const body = $("scratch-body");
+    // The field that has focus is found again after the redraw by its place
+    // among the controls — the redraw rebuilds every node, and the ids are
+    // new — and gets focus and its caret back, so redrawing never takes a
+    // field away from the person typing in it.
+    const controls = () => [...body.querySelectorAll("input, select, textarea, button")];
+    const active = document.activeElement;
+    const at = active && body.contains(active) ? controls().indexOf(active) : -1;
+    const caret = at >= 0 && typeof active.selectionStart === "number" ? [active.selectionStart, active.selectionEnd] : null;
     body.replaceChildren();
     const current = kind();
     if (current === "tool" || current === "engine") {
@@ -414,6 +429,13 @@
       body.append(programsEditor(doc), actionsEditor(doc, current === "engine"));
     } else {
       body.append(pipelineEditor());
+    }
+    const again = at >= 0 ? controls()[at] : null;
+    if (again) {
+      again.focus({ preventScroll: true });
+      if (caret && typeof again.setSelectionRange === "function") {
+        try { again.setSelectionRange(caret[0], caret[1]); } catch { /* not a text field */ }
+      }
     }
   }
 

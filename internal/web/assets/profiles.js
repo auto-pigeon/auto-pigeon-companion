@@ -383,6 +383,10 @@
   // list gives, from the same server-side decision.
   function renderReadiness(detail, body) {
     if (!body.readiness) return;
+    detail.append(readinessBox(body));
+  }
+
+  function readinessBox(body) {
     const box = el("div", { className: "readiness", attrs: { id: "profile-readiness" } });
     if (body.readiness.ready) {
       box.append(el("p", { className: "message ok", text: t("Ready: everything its programs need is on this machine.") }));
@@ -393,7 +397,20 @@
         children: (body.readiness.problems || []).map((problem) => el("li", { text: problem.summary })),
       }));
     }
-    detail.append(box);
+    return box;
+  }
+
+  // refreshReadiness asks the server again after a binding was recorded and
+  // replaces the box in place. Without it the page went on saying "Nothing on
+  // this machine says where qbsp is" right under "Found all 3 programs"
+  // (NEW_310, live on Windows) until the profile was reopened. The same
+  // server-side decision as Build & Run's lists — nothing is worked out here.
+  async function refreshReadiness(id) {
+    const current = document.getElementById("profile-readiness");
+    if (!current) return;
+    const { ok, body } = await api("/api/v1/profiles/" + encodeURIComponent(id));
+    if (!ok || !body.readiness || document.getElementById("profile-readiness") !== current) return;
+    current.replaceWith(readinessBox(body));
   }
 
   // --- your own arguments -----------------------------------------------------
@@ -765,6 +782,7 @@
         setMessage(saveStatus, "Recorded. It survives a restart.", "ok");
         record(`Recorded where ${body.name} is`, Object.values(paths).filter(Boolean).join(", "), "ok");
         describeProvenance(out.binding);
+        await refreshReadiness(body.id);
       })
     );
     useFolder.addEventListener("click", () =>
@@ -786,6 +804,7 @@
         describeProvenance(out.binding);
         setMessage(folderStatus, `Found all ${fields.size} programs. Recorded as a local binding; it survives a restart.`, "ok");
         record(`Recorded where ${body.name} is`, chosen, "ok");
+        await refreshReadiness(body.id);
       })
     );
     detail.append(el("div", { className: "row-actions", children: [save] }));

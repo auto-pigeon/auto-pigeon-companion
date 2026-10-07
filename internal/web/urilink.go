@@ -3,7 +3,9 @@ package web
 import (
 	"errors"
 	"net/http"
+	"time"
 
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/config"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/urischeme"
 )
 
@@ -52,6 +54,17 @@ func (s *Server) handleURIRegister(w http.ResponseWriter, _ *http.Request) {
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
+	}
+	// Recorded like the first-use registration (NEW_310), so a later launch
+	// knows this program's handler is the one a person chose.
+	if s.updateConfig != nil && state.Handler != "" {
+		if _, err := s.updateConfig(func(c *config.Config) error {
+			c.URIHandler = &config.URIHandler{Executable: state.Handler, Method: state.Method,
+				At: time.Now().UTC(), How: "settings"}
+			return nil
+		}); err != nil {
+			s.logf("link handler: registered, but recording it in config.json failed: %v", err)
+		}
 	}
 	writeJSON(w, http.StatusOK, state)
 }

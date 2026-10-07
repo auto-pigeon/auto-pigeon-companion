@@ -440,6 +440,13 @@ func runServe(env *Env, args []string) int {
 		}
 	}
 
+	// First use of the application registers the autopigeon:// handler, once,
+	// and records it in config.json (NEW_310, HITL). Server mode never does:
+	// scripts and tests run that, and a handler is somebody's desktop.
+	if *interactive {
+		go func() { logf("%s", uriFirstUse(env, settings, time.Now())) }()
+	}
+
 	// The lifecycle decides; web.Serve stops when it has.
 	go lifecycle.Run(ctx, server.ActiveWork)
 	serveCtx, stopServing := context.WithCancel(ctx)

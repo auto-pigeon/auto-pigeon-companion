@@ -107,6 +107,9 @@ func startServe(t *testing.T, args []string, openErr error) *servedCompanion {
 		Version:    "1.500",
 		ConfigPath: filepath.Join(t.TempDir(), "config.json"),
 		Lookenv:    func(string) (string, bool) { return "", false },
+		// --interactive registers the link handler at first use: never this
+		// machine's own.
+		URIRegistrar: isolatedRegistrar(t),
 	}
 	s := &servedCompanion{t: t, env: env, stdout: stdout, stderr: stderr,
 		opened: make(chan string, 1), done: make(chan int, 1)}

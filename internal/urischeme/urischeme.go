@@ -108,6 +108,11 @@ type State struct {
 	Locations []string `json:"locations,omitempty"`
 	// Detail is one sentence for a person: what happened, or why nothing did.
 	Detail string `json:"detail,omitempty"`
+	// Handler is the program the registered handler runs now, whichever
+	// Companion that is, and empty when nothing handles the scheme. It is what
+	// tells "nobody registered" from "an older Companion did" (first-use
+	// registration, NEW_310).
+	Handler string `json:"handler,omitempty"`
 }
 
 // Registrar performs the registration. Every field has a working default; they
@@ -171,6 +176,12 @@ func (r *Registrar) executable() (string, error) {
 		return "", fmt.Errorf("%w: %s", ErrNoExecutable, absolute)
 	}
 	return absolute, nil
+}
+
+// Self is the program a handler registered now would point at: this one,
+// resolved and checked.
+func (r *Registrar) Self() (string, error) {
+	return r.executable()
 }
 
 // dataHome is where XDG puts per-user application data.
@@ -283,6 +294,7 @@ func (r *Registrar) xdgStatus() (State, error) {
 	// it, which is the Windows finding of NEW_307W on the other platform. A
 	// link would start THAT program, with whatever it can no longer read.
 	handler := execProgram(string(body))
+	state.Handler = handler
 	if self, err := r.executable(); err == nil && handler != "" && filepath.Clean(handler) != filepath.Clean(self) {
 		state.Detail = MIMEType + " is handled by " + handler + ", not by this Companion (" + self +
 			"); registering this one takes it over"
@@ -317,7 +329,7 @@ func (r *Registrar) xdgRegister() (State, error) {
 	// xdg-utils still has them.
 	_, _ = r.run("update-desktop-database", filepath.Dir(entry))
 
-	return State{Scheme: Scheme, Platform: r.goos(), Method: MethodXDG, Registered: true,
+	return State{Scheme: Scheme, Platform: r.goos(), Method: MethodXDG, Registered: true, Handler: executable,
 		Command:   command,
 		Locations: []string{entry, mimeapps},
 		Detail:    MIMEType + " now opens " + strings.Join(command, " "),
@@ -547,6 +559,7 @@ func (r *Registrar) windowsStatus() (State, error) {
 	}
 	line := strings.TrimSpace(lastValue(string(out)))
 	state.Command = strings.Fields(line)
+	state.Handler = firstArgument(line)
 	// The key existing is not this program handling the links (NEW_307W). A
 	// handler left pointing at an older or deleted Companion opens THAT one —
 	// or nothing — and said "registered" while the editor's leak request went
@@ -602,6 +615,7 @@ func (r *Registrar) windowsRegister() (State, error) {
 		}
 	}
 	return State{Scheme: Scheme, Platform: "windows", Method: MethodRegistry, Registered: true,
+		Handler:   executable,
 		Command:   command,
 		Locations: []string{WindowsKey, windowsCommandKey},
 		Detail:    Scheme + ":// now opens " + line,

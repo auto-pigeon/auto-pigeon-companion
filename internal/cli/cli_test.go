@@ -74,6 +74,9 @@ func testEnv(t *testing.T) (*Env, *bytes.Buffer, *bytes.Buffer) {
 		Version:    "test-version",
 		ConfigPath: filepath.Join(t.TempDir(), "config.json"),
 		Lookenv:    func(string) (string, bool) { return "", false },
+		// A launch with no subcommand registers the autopigeon:// handler at
+		// first use; a test never touches this machine's desktop.
+		URIRegistrar: isolatedRegistrar(t),
 	}
 	return env, &stdout, &stderr
 }
