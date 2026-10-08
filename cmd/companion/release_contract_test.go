@@ -958,3 +958,14 @@ func TestAcceptanceRefusesAnotherMachinesPlatform(t *testing.T) {
 func runtimeTarget() string {
 	return release.ReadBuild().Target
 }
+
+// A release cannot diagnose browser startup with the signal its own cleanup
+// sent. Drive the harness's delayed-start, transient-read and process tests on
+// every native OS running go test, without requiring an installed browser here.
+func TestReleaseBrowserStartupHarness(t *testing.T) {
+	command := exec.Command(python(t), "-B", filepath.Join(repoRoot(t), "build", "test_release_acceptance.py"))
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("release browser startup harness: %v\n%s", err, output)
+	}
+}
+

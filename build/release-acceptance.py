@@ -260,7 +260,7 @@ class Browser:
     and no automation library: closing a tab here is the browser closing a tab,
     exactly as a person's click does, and the page's own lease script runs."""
 
-    def __init__(self, executable, work):
+    def __init__(self, executable, work, startup_timeout=120):
         self.profile = os.path.join(work, "browser-profile")
         os.makedirs(self.profile, exist_ok=True)
         args = [executable, "--headless=new", "--remote-debugging-port=0", f"--user-data-dir={self.profile}",
@@ -269,9 +269,19 @@ class Browser:
             # A hosted Linux runner's AppArmor refuses Chrome's user-namespace
             # sandbox; the only page it loads is this Companion's.
             args.insert(1, "--no-sandbox")
-        self.process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # A file cannot fill a pipe and stall Chrome before DevTools starts.
+        # Keep its tail for a failed startup; never report our cleanup signal
+        # as Chrome's own exit (release run 37821483904 did both).
+        self.stderr = tempfile.TemporaryFile()
+        try:
+            self.process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=self.stderr)
+        except BaseException:
+            self.stderr.close()
+            shutil.rmtree(self.profile, ignore_errors=True)
+            raise
         active = os.path.join(self.profile, "DevToolsActivePort")
-        deadline = time.monotonic() + 30
+        started = time.monotonic()
+        deadline = started + startup_timeout
         self.port = None
         unread = None
         while time.monotonic() < deadline and self.process.poll() is None:
@@ -281,7 +291,8 @@ class Browser:
                 # is refused (Errno 13, release run 37039959203). That is the
                 # file not being ready yet, which is what this loop waits for.
                 try:
-                    first = open(active, encoding="utf-8").read().splitlines()[:1]
+                    with open(active, encoding="utf-8") as handle:
+                        first = handle.read().splitlines()[:1]
                 except OSError as error:
                     unread, first = error, []
                 if first and first[0].strip().isdigit():
@@ -289,9 +300,19 @@ class Browser:
                     break
             time.sleep(0.1)
         if self.port is None:
+            code = self.process.poll()
+            elapsed = time.monotonic() - started
+            state = "process still running" if code is None else f"exit {code}"
+            self.stderr.seek(0, os.SEEK_END)
+            self.stderr.seek(max(0, self.stderr.tell() - 4096))
+            diagnostic = self.stderr.read().decode("utf-8", errors="replace").strip()
+            detail = (f"{os.path.basename(executable)} did not start its DevTools endpoint "
+                      f"after {elapsed:.1f}s ({state}"
+                      + (f"; last read: {unread}" if unread else "") + ")")
+            if diagnostic:
+                detail += f"; browser stderr tail: {diagnostic!r}"
             self.close()
-            raise RuntimeError(f"the browser did not start its DevTools endpoint (exit {self.process.poll()}"
-                               + (f"; last read: {unread}" if unread else "") + ")")
+            raise RuntimeError(detail)
 
     def call(self, path, method="GET"):
         status, body = loopback_http(self.port, method, path)
@@ -306,14 +327,17 @@ class Browser:
         self.call(f"/json/close/{target}")
 
     def close(self):
-        if self.process.poll() is None:
-            self.process.terminate()
-            try:
-                self.process.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                self.process.kill()
-                self.process.wait()
-        shutil.rmtree(self.profile, ignore_errors=True)
+        try:
+            if self.process.poll() is None:
+                self.process.terminate()
+                try:
+                    self.process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    self.process.kill()
+                    self.process.wait()
+        finally:
+            self.stderr.close()
+            shutil.rmtree(self.profile, ignore_errors=True)
 
 
 def browser_close(run, companion, work, grace_seconds=3):
@@ -327,7 +351,10 @@ def browser_close(run, companion, work, grace_seconds=3):
     if not executable:
         return None, "no Chromium-family browser on this machine (set AUCOM_TEST_BROWSER to name one)"
     child = subprocess.Popen([companion, "serve", "--interactive", f"--close-grace={grace_seconds}s",
-                              "--startup-window=180s"], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              # The runner's browser may take 120s to start,
+                              # then its first page has a separate 90s bound.
+                              # This harness allowance is not an app default.
+                              "--startup-window=300s"], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                              text=True, env=run.env())
     lines = []
     threading.Thread(target=lambda: [lines.append(line) for line in child.stdout], daemon=True).start()
@@ -599,3 +626,4 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+

@@ -159,8 +159,22 @@ start `serve --interactive`, the no-argument launch minus the system opener,
 and both are headless evidence: neither is a person's double-click, and
 neither moves a row of `native-support.json`.
 
+**Browser cold startup is measured separately from closing an AUCOM page.**
+Release run `37821483904` passed every build and the raw-socket lifecycle gate,
+then timed out waiting for Chrome's DevTools profile file. The harness now
+allows 120 seconds for browser startup, retains a bounded stderr tail on
+failure, and records the process state before cleanup so its own termination
+signal is not presented as Chrome's exit. The harness-only application startup
+window allows that cold start plus the first page's existing wait; production
+startup and close-grace defaults are unchanged. A present browser that cannot
+start still fails acceptance. `build/test_release_acceptance.py`, driven by
+`go test`, checks delayed startup, real process exit, transient file access and
+cleanup; the native gate still validates two actual browser tabs and AUCOM's
+leases.
+
 **Reruns compare and never overwrite.** Archives are written by
 `releaselib.write_zip` with fixed times, order and permissions, so one commit
 gives one set of bytes. `reconcile` fails on any attached asset whose digest
 differs, is missing, or was not produced by the build.
+
 
