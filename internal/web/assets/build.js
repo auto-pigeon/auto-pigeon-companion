@@ -497,6 +497,7 @@
   function requestBody() {
     const pipeline = currentPipeline();
     const inputs = {};
+    const roots = {};
     for (const [name, row] of inputFields) {
       if (row.source.value === "asset") {
         const chosen = window.AUCOM.chosenRevision;
@@ -505,12 +506,20 @@
         inputs[name] =
           `aub:${chosen.asset_type}/${chosen.asset_id}@${chosen.revision_id || "current"}${file}`;
       } else if (row.file.input.value.trim()) {
-        inputs[name] = row.file.input.value.trim();
+        // NEW_322: a textures row is a FOLDER (246I), and a folder is a root,
+        // never an input — an input is one file. It used to be sent as
+        // `inputs.wad`, so the check said "Everything is in place" and the
+        // build then failed with "is not a regular file". It travels as the
+        // build's own `content_root`, the folder the compile stage is given
+        // with -wadpath, for this build only.
+        if (row.kind === "textures") roots.content_root = row.file.input.value.trim();
+        else inputs[name] = row.file.input.value.trim();
       }
     }
     return {
       pipeline: pipeline?.id || "",
       inputs,
+      roots: Object.keys(roots).length ? roots : undefined,
       label: $("build-label").value.trim() || undefined,
       strict: $("build-strict").checked,
       leak_request_id: pipeline?.leak_test ? leakRequestID || undefined : undefined,
