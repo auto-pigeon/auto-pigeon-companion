@@ -968,4 +968,3 @@ func TestReleaseBrowserStartupHarness(t *testing.T) {
 		t.Fatalf("release browser startup harness: %v\n%s", err, output)
 	}
 }
-
