@@ -1,6 +1,7 @@
 package q3deps_test
 
 import (
+	"archive/zip"
 	"bufio"
 	"os"
 	"path/filepath"
@@ -276,5 +277,95 @@ func TestTheReportStatesItsOwnLimits(t *testing.T) {
 		if resolution.Review == "" {
 			t.Error("a model reference is not held for review at all")
 		}
+	}
+}
+
+// An archive BELOW the top of a game directory is a file to the compiler and to
+// every engine, never an archive (`Q3_012B` §3; `q3vfs` stages it as a loose
+// file for the same reason). So a texture that exists only inside one is a
+// texture nothing can load: the scan says `missing`, and it names the archive
+// it did not open rather than leaving a reader to wonder why.
+//
+// Authored here: the fixture's own wall image, moved into `tools/x.pk3`.
+func TestAnArchiveBelowTheGameDirectoryIsNotSearched(t *testing.T) {
+	content := filepath.Join(t.TempDir(), "content")
+	copyTree(t, fixtureContent, content)
+	image := filepath.Join(content, "textures", "aucom", "wall.tga")
+	data, err := os.ReadFile(image)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	if err := os.Remove(image); err != nil {
+		t.Fatalf("%v", err)
+	}
+	writeZip(t, filepath.Join(content, "tools", "x.pk3"), map[string][]byte{"textures/aucom/wall.tga": data})
+
+	report, err := q3deps.Discover([]string{fixtureMap}, q3deps.Scan{ContentRoots: []string{content}})
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	for _, resolution := range report.Resolutions {
+		if resolution.Name != "textures/aucom/wall" {
+			continue
+		}
+		if resolution.Status != q3deps.StatusMissing {
+			t.Errorf("the wall is %q: its only image is inside an archive nothing loads", resolution.Status)
+		}
+		for _, file := range resolution.Files {
+			if strings.Contains(file.Source, "x.pk3") {
+				t.Errorf("%s was resolved out of the nested archive: %s", file.Path, file.Source)
+			}
+		}
+	}
+	joined := strings.Join(report.Limits, "\n")
+	if !strings.Contains(joined, "tools/x.pk3") || !strings.Contains(joined, "not directly in the game directory") {
+		t.Errorf("the limits do not say the nested archive was left unopened:\n%s", joined)
+	}
+
+	// The same archive at the top of the game directory IS one, and is searched.
+	if err := os.Rename(filepath.Join(content, "tools", "x.pk3"), filepath.Join(content, "x.pk3")); err != nil {
+		t.Fatalf("%v", err)
+	}
+	report, err = q3deps.Discover([]string{fixtureMap}, q3deps.Scan{ContentRoots: []string{content}})
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	for _, resolution := range report.Resolutions {
+		if resolution.Name == "textures/aucom/wall" && resolution.Status == q3deps.StatusMissing {
+			t.Error("the wall is missing although a top-level archive holds its image")
+		}
+	}
+	if strings.Contains(strings.Join(report.Limits, "\n"), "x.pk3") {
+		t.Errorf("a top-level archive is named as unopened:\n%s", strings.Join(report.Limits, "\n"))
+	}
+}
+
+func writeZip(t *testing.T, path string, members map[string][]byte) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatalf("%v", err)
+	}
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	defer file.Close()
+	writer := zip.NewWriter(file)
+	names := make([]string, 0, len(members))
+	for name := range members {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		part, err := writer.Create(name)
+		if err != nil {
+			t.Fatalf("%v", err)
+		}
+		if _, err := part.Write(members[name]); err != nil {
+			t.Fatalf("%v", err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("%v", err)
 	}
 }

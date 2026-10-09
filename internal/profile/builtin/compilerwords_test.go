@@ -88,6 +88,22 @@ func TestQ3Map2sExitZeroFindingsAreClassedAndAMissingModelIsFatal(t *testing.T) 
 			t.Errorf("%s: %q classified as %+v, want %s class %s fatal %t", c.action, c.raw, rule, c.id, c.class, c.fatal)
 		}
 	}
+	// `Q3_012B` §2, measured: the line under Q3Map2's error banner when a file an
+	// entity names (`alphamap`, `_indexmap`) is not in the game data. Exit 1, so
+	// nothing here is `fatal` — the class is what replaces a bare `tool_failed`.
+	for raw, id := range map[string]string{
+		"LoadPCX: Couldn't read q3012b_index.pcx": "map_file_unreadable_pcx",
+		"Couldn't read q3012b_index.tga":          "map_file_unreadable",
+	} {
+		rule, ok := classify(t, Q3Map2, "compile", "stdout", raw)
+		if !ok || rule.ID != id || rule.Class != "map_file_missing" || rule.Severity != profile.SeverityError || rule.Hint == "" {
+			t.Errorf("%q classified as %+v, want %s class map_file_missing with a hint", raw, rule, id)
+		}
+	}
+	// The image warning has the same two words in it and is a different thing.
+	if rule, _ := classify(t, Q3Map2, "compile", "stdout", "WARNING: Couldn't find image for shader textures/q3004/floor"); rule.Class != "shader_image_missing" {
+		t.Errorf("the image warning is now %+v", rule)
+	}
 	// A line that merely mentions a file being unreadable is not the model line.
 	if rule, ok := classify(t, Q3Map2, "compile", "stdout", "Unable to open file"); ok && rule.Fatal {
 		t.Errorf("a bare phrase matched the fatal rule: %+v", rule)

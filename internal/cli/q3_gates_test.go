@@ -429,3 +429,91 @@ func TestAQuake3PreviewRefusesWhatTheRunWouldRefuse(t *testing.T) {
 		t.Errorf("the preview does not show the staged directory:\n%s", stdout)
 	}
 }
+
+// `Q3_012B` §2. A map names its terrain index image by bare file name
+// (`alphamap`), and its authors keep that image beside the `.map`. Q3Map2
+// 2.5.17n was measured to look for it in the game data only, so the build of a
+// FILE map does not copy a sibling of the map anywhere: it would be compiling a
+// map the compiler itself refuses in place, and a build of a saved revision —
+// which has no "beside" at all — would then behave differently from a build of
+// the file it was saved from. What the build owes instead is to say what kind
+// of thing stopped it, and where the file has to be.
+//
+// Authored here: the synthetic room and a terrain entity naming `aucom_index.pcx`.
+func TestAFileAMapNamesIsLookedForInTheGameDataAndItsAbsenceIsClassed(t *testing.T) {
+	const terrain = "\n{\n\"classname\" \"func_group\"\n\"terrain\" \"1\"\n\"alphamap\" \"aucom_index.pcx\"\n\"layers\" \"2\"\n\"shader\" \"aucom/terrain\"\n}\n"
+	source := func(t *testing.T) string {
+		path := q3Source(t, "terrain.map", "")
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, append(body, terrain...), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	finding := func(m *build.Manifest) *job.Diagnostic {
+		for _, step := range m.Steps {
+			for i := range step.Diagnostics {
+				if step.Diagnostics[i].Class == "map_file_missing" {
+					return &step.Diagnostics[i]
+				}
+			}
+		}
+		return nil
+	}
+
+	for _, beside := range []bool{false, true} {
+		name := "the file is nowhere"
+		if beside {
+			name = "the file is beside the map, where the compiler does not look"
+		}
+		t.Run(name, func(t *testing.T) {
+			env, _, _ := testEnv(t)
+			contentRoot, _ := q3Content(t)
+			bindQ3Map2(t, env, contentRoot, contentRoot)
+			path := source(t)
+			if beside {
+				if err := os.WriteFile(filepath.Join(filepath.Dir(path), "aucom_index.pcx"), []byte("an index image"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			manifest, code, _ := q3Build(t, env, path)
+			if code == 0 || manifest == nil {
+				t.Fatalf("exit code = %d", code)
+			}
+			if manifest.State != job.Failed || manifest.FailureClass != "map_file_missing" {
+				t.Errorf("state %s, class %q (want map_file_missing, not the bare %s): %s",
+					manifest.State, manifest.FailureClass, failure.ToolFailed, manifest.Error)
+			}
+			found := finding(manifest)
+			if found == nil {
+				t.Fatalf("the compiler's own line is not a finding: %+v", manifest.Steps[0].Diagnostics)
+			}
+			if !strings.Contains(found.Raw, "aucom_index.pcx") {
+				t.Errorf("the finding does not carry the line that names the file: %q", found.Raw)
+			}
+			if !strings.Contains(found.Message, "names") || !strings.Contains(found.Hint, "game directory") ||
+				!strings.Contains(found.Hint, "beside the map") {
+				t.Errorf("the finding does not say where the file has to be: %q / %q", found.Message, found.Hint)
+			}
+		})
+	}
+
+	t.Run("the file is in the game data, at the path the key names", func(t *testing.T) {
+		env, _, _ := testEnv(t)
+		contentRoot, vfs := q3Content(t)
+		if err := os.WriteFile(filepath.Join(vfs, "aucom_index.pcx"), []byte("an index image"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		bindQ3Map2(t, env, contentRoot, contentRoot)
+		manifest, code, stderr := q3Build(t, env, source(t))
+		if code != 0 || manifest == nil || manifest.State != job.Succeeded {
+			t.Fatalf("exit code = %d: %s", code, stderr)
+		}
+		if finding(manifest) != nil {
+			t.Error("a build that found the file still reports it missing")
+		}
+	})
+}

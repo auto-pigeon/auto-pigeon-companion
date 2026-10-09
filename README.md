@@ -834,10 +834,35 @@ carries `class` in the HTTP error:
 | `archive_damaged` | a PK3 in an approved folder, or a bound package, is not a readable archive |
 | `content_refused` | a link out of the approved folders, a same-named different archive, an unreadable package record |
 | `fs_game_invalid`, `fs_game_not_found` | the mod directory is not a name, or no folder has it |
-| `leak`, `model_missing`, `model_unreadable`, `shader_image_missing` | the compiler's own findings, classed by its profile |
+| `leak`, `model_missing`, `model_unreadable`, `shader_image_missing`, `map_file_missing` | the compiler's own findings, classed by its profile |
 | `input_invalid`, `output_invalid`, `output_missing` | a stage's file is not what its role says, or is not there |
 | `conversion_refused`, `converter_unavailable` | the extractor would not, or was not there to, write a `.map` |
 | `tool_failed`, `timed_out`, `cancelled` | the program's own failure status, its time bound, or you |
+
+**A file the map names is looked for in the game data, never beside the map.**
+A terrain entity names its index image by file name (`"alphamap" "hills.pcx"`,
+or `_indexmap`). Measured on Q3Map2 2.5.17n with an authored map: it reads that
+name at `<game directory>/hills.pcx` — loose in your game folder or content
+folder, or inside a `.pk3` directly in the game directory — and nowhere else.
+Not beside the `.map`, not in its working directory, not in an archive kept in a
+subfolder. So a build does not copy files from beside your map: a map saved to
+the account has no folder to copy from, and a file build would otherwise compile
+a map the compiler refuses where it lies. When the file is not there the build
+fails with the class `map_file_missing`, and the compile stage lists the
+compiler's own line under a sentence that says where the file has to be:
+
+```console
+$ companion build run --pipeline auto-pigeon.q3.fast-preview --input source_map=terrain.map \
+    --root game_root=/opt/quake3 --root content_root=/home/you/q3-project
+
+build 20261009T054512Z-5c1f0e2a — failed
+  error     the compile step: job: q3map2 exited with status 1
+  class     map_file_missing
+
+$ cp hills.pcx /home/you/q3-project/baseq3/hills.pcx     # the path the key's value gives, under the game directory
+$ companion build run --pipeline auto-pigeon.q3.fast-preview --input source_map=terrain.map \
+    --root game_root=/opt/quake3 --root content_root=/home/you/q3-project
+```
 
 A tool profile declares the two things only its author can know with two
 optional members of a diagnostic rule: `"fatal": true` (the line proves the
@@ -893,6 +918,20 @@ turns ONE finished Quake III build into ONE archive,
 the files you say may be redistributed. The base game is never packaged, and
 nothing is inferred from a file's name or from where it was found. Quake and
 Quake II packaging is `package preview` / `package create`, unchanged.
+
+**Only an archive directly in a game directory is an archive.** Q3Map2 and the
+engines load `<game>/*.pk3` and nothing deeper, so a `.pk3` kept in a subfolder
+(`baseq3/tools/x.pk3`) is a file to them: the build stages it as one, the review
+does not open it, nothing inside it is a dependency, and the plan's `limits`
+name it — *not loaded by the compiler, because it is not directly in the game
+directory*. Move it up into the game directory if the map is meant to use it;
+building again without moving it changes nothing, and the review no longer asks
+for that.
+
+```console
+$ companion package map preview --build 20261001T101838Z-413d8d7a --own-loose --json | jq -r '.limits[]'
+what is inside baseq3/tools/x.pk3: not loaded by the compiler, because it is not directly in the game directory. …
+```
 
 **What the map needs is worked out twice**, because the compiler and an engine
 read different things: from the map source (what Q3Map2 looked for) and from the

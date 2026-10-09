@@ -1008,6 +1008,9 @@
       if (finding.class) row.append(el("span", { className: "stage-detail", text: " [" + finding.class + "]" }));
       if (finding.fatal) row.append(el("span", { className: "stage-detail", text: " " + t("This line is what failed the stage.") }));
       if (finding.raw && finding.raw !== finding.message) row.append(el("pre", { className: "output", text: finding.raw }));
+      // What to do about it. The terminal has always printed a rule's hint; the
+      // page showed the sentence and the line and left out the remedy (Q3_012B).
+      if (finding.hint) row.append(el("div", { className: "muted stage-finding-hint", text: finding.hint }));
       rows.append(row);
     }
     details.append(rows);

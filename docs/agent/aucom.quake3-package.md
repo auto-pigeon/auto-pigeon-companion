@@ -71,6 +71,19 @@ by the grant for its archive or folder: only a grant naming that path is.
 printed back and recorded, and there must never be a flag that skips the review.
 A duplicate path and an unsafe path are NOT acceptable by a reason.
 
+**An archive below the top of a game directory is a file, and is not opened**
+(`Q3_012B`). Q3Map2 and every engine load `<game>/*.pk3` and nothing deeper —
+measured again with an authored index image: found in a top-level `.pk3`, not
+found in `baseq3/tools/x.pk3` — and `q3vfs` stages a deeper one as the loose file
+it is. `q3deps` used to open any `.pk3` it walked past, so a shader script inside
+a nested tool pack became a dependency "found in" an archive the build never
+staged, and `package map` stopped with *Build the map again*, which changes
+nothing. The scan now opens only archives directly in a game directory and names
+the rest in `limits` as *not loaded by the compiler: not directly in the game
+directory*. Do not widen the walk back: a file only a nested archive holds is a
+file no program can open, and reporting it found is the incomplete package this
+review exists to prevent.
+
 **There is one PK3 writer, `internal/pack`.** `q3pack` plans and calls
 `pack.Create`. Do not add a second ZIP writer, do not lower-case or otherwise
 respell a member path (a loose file keeps the capitalisation it has on disk, an

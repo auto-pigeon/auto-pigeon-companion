@@ -455,6 +455,9 @@ func consequenceOf(kind Kind) string {
 // limits are the sentences about what the scan did not do. They are computed
 // from what it actually met rather than printed always, so that a report about
 // a map with no models does not carry a paragraph about models.
+// maxNestedNamed bounds how many unopened archives one sentence names.
+const maxNestedNamed = 8
+
 func limits(idx *index, report *Report) []string {
 	var out []string
 	models := false
@@ -471,6 +474,17 @@ func limits(idx *index, report *Report) []string {
 	out = append(out, "what a base-game shader pulls in; its own script is read, and anything defined "+
 		"there is reported as the base game's, which is the answer that decides whether you may ship it")
 	out = append(out, "anything a mod's gamecode loads by name while the map is running")
+	if nested := idx.nestedArchives(); len(nested) > 0 {
+		shown, more := nested, ""
+		if len(shown) > maxNestedNamed {
+			shown, more = nested[:maxNestedNamed], fmt.Sprintf(" and %d more", len(nested)-maxNestedNamed)
+		}
+		out = append(out, fmt.Sprintf("what is inside %s%s: not loaded by the compiler, because it is not directly "+
+			"in the game directory. Q3Map2 and the engine open only the archives at the top of a game directory, so "+
+			"nothing in it was searched and nothing from it is a dependency. Building again changes nothing; move "+
+			"the archive up into the game directory if the map is meant to use it",
+			strings.Join(shown, ", "), more))
+	}
 	if truncated := idx.truncatedRoots(); len(truncated) > 0 {
 		out = append(out, fmt.Sprintf("the whole of %s: the scan stopped at its own limit there, so a "+
 			"`missing` verdict against it may be wrong", strings.Join(truncated, ", ")))

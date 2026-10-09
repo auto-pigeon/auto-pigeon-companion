@@ -766,3 +766,51 @@ func archiveNames(t *testing.T, path string) []string {
 	}
 	return names
 }
+
+// `Q3_012B` §3. A content folder that keeps an archive in a SUBDIRECTORY of its
+// game directory (`baseq3/tools/x.pk3`): Q3Map2 loads archives only from the
+// game directory itself, the build staged that file as a loose file and
+// recorded no archive, and the package review used to open it anyway, find a
+// shader script inside, and stop with "not an archive this build recorded
+// staging. Build the map again" — which building again cannot change.
+//
+// Authored here: the nested archive holds a shader script of its own and a
+// copy of the fixture's wall image.
+func TestAnArchiveBelowTheGameDirectoryIsNotASource(t *testing.T) {
+	fixture := makeBuild(t, fixtureOptions{loose: true, mutate: func(dir string) {
+		scratch := filepath.Join(filepath.Dir(dir), "nested")
+		// The script is a copy of the fixture's own under a name that sorts first, so the
+		// shaders this map uses are defined inside the nested archive too.
+		copyFile(t, filepath.Join(dir, "scripts", "apq3011.shader"), filepath.Join(scratch, "scripts", "aa_toolpack.shader"))
+		copyFile(t, filepath.Join(dir, "textures", "apq3011", "wall.tga"), filepath.Join(scratch, "textures", "toolpack", "marker.tga"))
+		zipTree(t, scratch, filepath.Join(dir, "tools", "x.pk3"), []string{"scripts/aa_toolpack.shader", "textures/toolpack/marker.tga"}, nil)
+	}})
+	prepared, err := q3pack.Prepare(q3pack.Request{
+		Manifest: fixture.manifest, Grants: []q3pack.Grant{{Loose: true, Basis: q3pack.BasisOwnWork}}, WorkDir: t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("an archive the compiler never read stopped the package: %v", err)
+	}
+	t.Cleanup(func() { _ = prepared.Close() })
+	plan := prepared.Plan
+	if len(plan.Problems) != 0 {
+		t.Errorf("problems: %+v", plan.Problems)
+	}
+	for _, path := range memberPaths(plan) {
+		if strings.Contains(path, "toolpack") || strings.HasSuffix(path, ".pk3") {
+			t.Errorf("%s was packaged out of, or as, an archive nothing loads", path)
+		}
+	}
+	for _, source := range plan.Sources {
+		if source.Kind == "archive" {
+			t.Errorf("the nested archive is listed as a source: %+v", source)
+		}
+	}
+	joined := strings.Join(plan.Limits, "\n")
+	if !strings.Contains(joined, "tools/x.pk3") || !strings.Contains(joined, "not directly in the game directory") {
+		t.Errorf("the review does not say the nested archive was left unopened:\n%s", joined)
+	}
+	if strings.Contains(joined, "Build the map again") {
+		t.Errorf("the review asks for a rebuild that changes nothing:\n%s", joined)
+	}
+}

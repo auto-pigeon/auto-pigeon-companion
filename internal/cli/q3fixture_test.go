@@ -124,6 +124,21 @@ func fixtureQ3BSP(parsed q3Args) int {
 	fmt.Printf("entering %s\n", parsed.source)
 	q3TextureWarnings(string(source), parsed.basePaths)
 
+	// Measured (Q3_012B, `LLM/runs/auto-pigeon/Q3_012B/s2-lookup/lookup.json`): an
+	// entity's `alphamap` / `_indexmap` names a file, and Q3Map2 2.5.17n looks for
+	// it in the game data ONLY — `<basepath>/<game>/<value>` loose, or a top-level
+	// PK3. Never beside the map and never in its working directory. Absent, it
+	// prints its error banner and this line on stdout, writes nothing, exits 1.
+	if name := q3IndexMap(string(source)); name != "" && !q3GameFileExists(name, parsed.basePaths) {
+		fmt.Println("************ ERROR ************")
+		if strings.HasSuffix(strings.ToLower(name), ".pcx") {
+			fmt.Printf("LoadPCX: Couldn't read %s\n", name)
+		} else {
+			fmt.Printf("Couldn't read %s\n", name)
+		}
+		return 1
+	}
+
 	base := stem(parsed.source)
 	// A leak: measured, Q3Map2 writes the line file, writes no BSP, and exits
 	// zero. The build fails because a required output is not there, which is
@@ -295,6 +310,28 @@ func q3TextureExists(name string, basePaths []string) bool {
 			if _, err := os.Stat(candidate); err == nil {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// q3IndexMap is the file an entity's `alphamap` or `_indexmap` key names, or "".
+func q3IndexMap(source string) string {
+	for _, line := range strings.Split(source, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 2 && (fields[0] == `"alphamap"` || fields[0] == `"_indexmap"`) {
+			return strings.Trim(fields[1], `"`)
+		}
+	}
+	return ""
+}
+
+// q3GameFileExists says whether a base path's game directory holds the file,
+// loose. That is the whole of where the real program looks for a loose one.
+func q3GameFileExists(name string, basePaths []string) bool {
+	for _, base := range basePaths {
+		if _, err := os.Stat(filepath.Join(base, "baseq3", filepath.FromSlash(name))); err == nil {
+			return true
 		}
 	}
 	return false

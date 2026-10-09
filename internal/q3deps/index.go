@@ -51,6 +51,9 @@ type root struct {
 	// truncated records that the walk hit a limit, so a `missing` verdict from
 	// this root can say it might be wrong.
 	truncated bool
+	// nested are the `.pk3` files below the top of this game directory, as
+	// slash-separated paths relative to it. They are files, and were not opened.
+	nested []string
 }
 
 // index is every root, in lookup order.
@@ -114,7 +117,21 @@ func indexRoot(dir string, base bool) (*root, error) {
 		if _, taken := r.files[vfs]; !taken {
 			r.files[vfs] = path
 		}
-		if strings.HasSuffix(strings.ToLower(path), ".pk3") && archives < maxArchivesPerDir {
+		if !strings.HasSuffix(strings.ToLower(path), ".pk3") {
+			return nil
+		}
+		// An archive is one only at the top of a game directory. Q3Map2 and
+		// every engine load `<game>/*.pk3` and nothing deeper (measured,
+		// `Q3_012`; `q3vfs` stages a deeper one as the loose file it is), so a
+		// file found INSIDE a nested archive would be a file no program can
+		// open — and `package map` would then look for the archive among the
+		// ones the build staged, not find it, and ask for a rebuild that
+		// changes nothing (`Q3_012B` §3). It stays a file, and is named.
+		if filepath.Dir(path) != absolute {
+			r.nested = append(r.nested, filepath.ToSlash(relative))
+			return nil
+		}
+		if archives < maxArchivesPerDir {
 			archives++
 			indexArchive(r, path)
 		}
@@ -238,6 +255,19 @@ func (i *index) findImage(name string) located {
 }
 
 // truncatedRoots names the roots whose walk hit a limit.
+// nestedArchives is every `.pk3` the scan met below the top of a game
+// directory and did not open, as `<game directory>/<path>`, sorted.
+func (i *index) nestedArchives() []string {
+	var out []string
+	for _, r := range i.roots {
+		for _, name := range r.nested {
+			out = append(out, filepath.Base(r.path)+"/"+name)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 func (i *index) truncatedRoots() []string {
 	var out []string
 	for _, r := range i.roots {
