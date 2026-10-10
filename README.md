@@ -552,6 +552,25 @@ curl -sS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
 #  "readiness":{"ready":false,"problems":[{"fault":"…","summary":"Compile the map: …","fix":"…"}]}}
 ```
 
+**Reading a build back.** A build is read by its id, and the list reads every
+build this machine has. Each answer carries the build's manifest and `live` —
+whether this Companion is running that build right now — and the two always
+describe the same moment: an answer that is not `live` carries the manifest the
+build ended on, with its final state, its error, every stage's result and the
+outputs that can be downloaded. Poll until `live` is `false`, then read
+`manifest.state`. A build left `running` by a Companion that stopped is answered
+`interrupted`, and nothing is run again.
+
+```bash
+api="$(cat ~/.config/auto-pigeon-companion/api-url)"; token="$(cat ~/.config/auto-pigeon-companion/api-token)"
+# every build, newest first: {"items":[{"manifest":{"build_id":"…","state":"succeeded",…},"live":false}]}
+curl -fsS -H "X-AUCOM-Token: $token" "$api/api/v1/build/runs?limit=5"
+# one build; `log` is its output so far when this Companion is the one running it
+curl -fsS -H "X-AUCOM-Token: $token" "$api/api/v1/build/runs/<build id>"
+# a declared output of a finished build, by the name the pipeline gave it
+curl -fsS -H "X-AUCOM-Token: $token" -OJ "$api/api/v1/build/runs/<build id>/output/bsp"
+```
+
 ```bash
 # a tested profile as the form's fields, and the document composed back from them
 curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \

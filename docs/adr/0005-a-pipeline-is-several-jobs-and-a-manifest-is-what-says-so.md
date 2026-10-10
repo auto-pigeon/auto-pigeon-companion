@@ -159,6 +159,45 @@ build, downloaded through the signed catalogue and run through the Companion.
   with its own BSP29 reader, and checks that the archive the catalogue would
   download is the archive it pinned as its oracle. It is.
 
+## Addendum, 2026-10-10 — one answer about a build describes one moment (`NEW_323B`)
+
+`GET /api/v1/build/runs/{id}` and `GET /api/v1/build/runs` answer a manifest and
+a `live` flag, and they used to be read at two different moments: the manifest
+from disk, then whether this process still had the run. A build that ended
+between the two was answered `live: false` beside the `running` manifest from
+before it ended — which a page reads as "the build running" and stops polling
+on (release run 38040182778). The list ended worse: it took such a run for one a
+stopped Companion had abandoned, and `build.Reconcile` wrote `interrupted` over a
+manifest that said `succeeded`.
+
+**The invariant.** In one answer, `live` and the manifest describe the same
+moment. An answer that is not live carries the manifest the build ENDED on —
+state, error, stage results, outputs and duration of the same build — and never
+one from while it ran.
+
+- A run this process has recorded as over is answered with its own copy of the
+  manifest it ended on, taken with the completion, under the run's lock
+  (`buildRun.finish`). Whatever was read from disk is ignored for that run.
+- A run this process has not yet recorded as over is `live` exactly while the
+  manifest read from disk is not terminal. The runner writes the terminal
+  manifest a moment before the run is recorded as over; a read in that moment
+  holds the final document and says so.
+- A build this process did not start is never live, and a manifest it left
+  `running` is reconciled to `interrupted`. That is the only case reconciliation
+  is for: a run of this process is never reconciled.
+
+`answerBuild` in `internal/web/builds.go` is the one place that decides this, for
+both routes. Nothing in it waits for a compiler and nothing is read under the
+registry's lock.
+
+**The write is the completion.** The outputs are copied into `output/` before
+the terminal manifest is written, and the terminal manifest is written before
+the run is recorded as over, so an answer that says `succeeded` is an answer
+whose declared outputs can be downloaded. A build whose terminal manifest cannot
+be written did not succeed in any way a later read can see: `Runner.finish`
+returns it `failed` with the write's own error, and a manifest that cannot be
+written part-way ends the build failed with its manifest instead of with none.
+
 ## Follow-up work
 
 - A tool profile may declare a `version_probe`, and nothing runs one. The
@@ -167,7 +206,7 @@ build, downloaded through the signed catalogue and run through the Companion.
   banner string (build manifests no longer record the catalogue package — ADR-0008) — but a probe that never runs is a declared feature that does
   nothing, and running it means either a second execution path or a way to
   express a probe as an action.
-- There is no HTTP or GUI surface for builds. `companion build` is the whole of
-  it.
+- ~~There is no HTTP or GUI surface for builds.~~ There is one now
+  (`internal/web/builds.go`); the addendum above is its completion contract.
 - A build directory is never collected; nothing prunes `builds/`. (`companion acquire gc`
   and the tool cache it pruned were removed by ADR-0008.)

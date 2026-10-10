@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -65,11 +66,22 @@ func (s *Server) leakSession() leakSession {
 	s.mu.RLock()
 	client, session := s.client, s.settings.Session
 	s.mu.RUnlock()
-	// An expired token is no session: posting with it would only be refused.
-	if client == nil || !client.Authenticated() || client.SessionExpired(time.Now()) {
+	if client == nil {
 		return leakSession{}
 	}
-	return leakSession{Server: client.BaseURL(), UserID: session.UserID, Token: client.Token(), Send: client.PublishLeakStatus}
+	// The token is read ONCE. That reading is what is judged here, what the
+	// sender compares, and what Send puts on the wire — so whatever the session
+	// becomes a moment later, an attempt is sent as the session it was admitted
+	// under and as no other (NEW_323B).
+	token := client.Token()
+	// An expired token is no session: posting with it would only be refused.
+	if token == "" || aub.TokenExpired(token, time.Now()) {
+		return leakSession{}
+	}
+	return leakSession{Server: client.BaseURL(), UserID: session.UserID, Token: token,
+		Send: func(ctx context.Context, requestID string, status aub.LeakStatus) error {
+			return client.PublishLeakStatusAs(ctx, token, requestID, status)
+		}}
 }
 
 // reportLeakBuild says which step of a leak build is running.

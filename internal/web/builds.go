@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -52,6 +53,19 @@ import (
 type buildRuns struct {
 	mu   sync.Mutex
 	runs map[string]*buildRun
+	// observed is called after each thing a read of a build looked at — the
+	// run's own completion, the manifest on disk — with the build it was about,
+	// or "" for the whole list. Nil outside a test: it is the one place a test
+	// can finish a build BETWEEN two of a response's observations, which is the
+	// interleaving NEW_323B was about and which no amount of waiting produces
+	// on demand.
+	observed func(id string)
+}
+
+func (r *buildRuns) observe(id string) {
+	if r.observed != nil {
+		r.observed(id)
+	}
 }
 
 func newBuildRuns() *buildRuns { return &buildRuns{runs: map[string]*buildRun{}} }
@@ -74,10 +88,17 @@ type buildRun struct {
 	// the user asked to stop goes through the executor. See the file comment.
 	cancel context.CancelFunc
 
-	mu       sync.Mutex
-	done     bool
-	err      string
-	manifest *build.Manifest
+	// What finish recorded, all of it under mu and all of it at once: that the
+	// run is over, what it ended with, and the manifest it ended on. Three
+	// separate facts read at three separate moments is what NEW_323B repaired.
+	mu   sync.Mutex
+	done bool
+	err  string
+	// final is this process's own copy of the manifest the run ended on, and
+	// nothing writes to it after finish: not the runner, which never sees this
+	// pointer, and not a reader, which is why reconcileBuild is never handed
+	// it. Nil until the run is over.
+	final *build.Manifest
 }
 
 func (r *buildRuns) put(run *buildRun) {
@@ -109,19 +130,111 @@ func (r *buildRuns) active() []*buildRun {
 	return out
 }
 
+// finish records that the run is over, with the manifest it ended on.
+//
+// Called once, by the goroutine that ran the build, after the runner has
+// returned — which is after it published the outputs and wrote the terminal
+// manifest, or failed to and said so. The manifest is copied through its own
+// encoding rather than kept: the runner's document has slices and maps a
+// pointer would share, and the copy is exactly the document a read of the file
+// would decode, including when the file could not be written.
 func (r *buildRun) finish(manifest *build.Manifest, err error) {
+	final := frozenManifest(manifest)
+	if final != nil && !final.State.Terminal() {
+		// The runner returns a finished manifest or none. One that still says
+		// it is running would be answered as a build nothing is doing.
+		final.State = job.Failed
+		if final.Error == "" && err != nil {
+			final.Error = err.Error()
+		}
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.done, r.manifest = true, manifest
+	r.done, r.final = true, final
 	if err != nil {
 		r.err = err.Error()
 	}
+}
+
+func frozenManifest(manifest *build.Manifest) *build.Manifest {
+	if manifest == nil {
+		return nil
+	}
+	encoded, err := json.Marshal(manifest)
+	if err != nil {
+		return nil
+	}
+	var copied build.Manifest
+	if json.Unmarshal(encoded, &copied) != nil {
+		return nil
+	}
+	return &copied
 }
 
 func (r *buildRun) state() (finished bool, message string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.done, r.err
+}
+
+// completion is the three facts finish recorded, read together.
+func (r *buildRun) completion() (finished bool, message string, final *build.Manifest) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.done, r.err, r.final
+}
+
+// buildAnswer is what one read says about one build: the manifest, whether
+// this process is still running it, and what it ended with.
+type buildAnswer struct {
+	manifest *build.Manifest
+	live     bool
+	message  string
+	// run is the run this process has for the build, nil for a build it did
+	// not start.
+	run *buildRun
+}
+
+// answerBuild decides what a read says about a build, given the manifest that
+// read found on disk.
+//
+// THE INVARIANT (NEW_323B): `live` and the manifest in one answer describe the
+// same moment. An answer that is not live carries the manifest the build ended
+// on; it never carries one from while it ran.
+//
+//   - A run this process has recorded as over is answered with the manifest it
+//     ended on (buildRun.final), whatever the caller read from disk — that
+//     read may be from before the run ended, which is the interleaving that
+//     paired `live: false` with a `running` manifest and failed a release.
+//   - A run this process has not recorded as over is live exactly while the
+//     manifest read from disk is not terminal. The runner writes the terminal
+//     manifest a moment before the run is recorded as over; a read in that
+//     moment has the final document in its hands and says so.
+//   - A build this process did not start is not live, and a manifest it left
+//     `running` is reconciled: that is a stopped Companion's build, and the
+//     only case reconciliation is for. A run of this process is never
+//     reconciled — taking one for abandoned wrote `interrupted` over a manifest
+//     that said `succeeded`.
+//
+// Nothing here waits, and nothing here is read under the registry's lock.
+func (s *Server) answerBuild(persisted *build.Manifest) buildAnswer {
+	run, tracked := s.builds.get(persisted.BuildID)
+	s.builds.observe(persisted.BuildID)
+	if !tracked {
+		s.reconcileBuild(persisted)
+		return buildAnswer{manifest: persisted}
+	}
+	finished, message, final := run.completion()
+	switch {
+	case finished && final != nil:
+		return buildAnswer{manifest: final, message: message, run: run}
+	case finished:
+		// Over, with no manifest of its own to show. The file is the record.
+		return buildAnswer{manifest: persisted, message: message, run: run}
+	case persisted.State.Terminal():
+		return buildAnswer{manifest: persisted, message: persisted.Error, run: run}
+	}
+	return buildAnswer{manifest: persisted, live: true, run: run}
 }
 
 // tailBuffer keeps the last bytes of a stream and counts what fell off.
@@ -681,6 +794,7 @@ func (s *Server) handleBuildList(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	s.builds.observe("")
 	if raw := r.URL.Query().Get("limit"); raw != "" {
 		limit, err := strconv.Atoi(raw)
 		if err != nil || limit < 0 {
@@ -694,17 +808,12 @@ func (s *Server) handleBuildList(w http.ResponseWriter, r *http.Request) {
 	// Which of these this process is still running. A manifest left in
 	// `running` by a previous run of the Companion is NOT running, and a page
 	// that could not tell the difference would offer a Cancel button for a
-	// build nothing is doing.
-	live := map[string]bool{}
-	for _, run := range s.builds.active() {
-		live[run.ID] = true
-	}
+	// build nothing is doing. Each row is decided the way the detail route
+	// decides it; see answerBuild.
 	items := make([]map[string]any, 0, len(manifests))
 	for _, manifest := range manifests {
-		if !live[manifest.BuildID] {
-			s.reconcileBuild(manifest)
-		}
-		items = append(items, map[string]any{"manifest": manifest, "live": live[manifest.BuildID]})
+		answer := s.answerBuild(manifest)
+		items = append(items, map[string]any{"manifest": answer.manifest, "live": answer.live})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
@@ -721,10 +830,10 @@ func (s *Server) handleBuildGet(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, err)
 		return
 	}
-	if _, running := s.builds.get(id); !running {
-		s.reconcileBuild(manifest)
-	}
-	body := map[string]any{"manifest": manifest, "live": false}
+	s.builds.observe(id)
+	answer := s.answerBuild(manifest)
+	manifest = answer.manifest
+	body := map[string]any{"manifest": manifest, "live": answer.live}
 	// The statement about the family this build was for, so the progress panel
 	// can carry it and offer the report without a second request. Empty for a
 	// family this build makes no claim about, and the page draws nothing then.
@@ -733,11 +842,9 @@ func (s *Server) handleBuildGet(w http.ResponseWriter, r *http.Request) {
 	if leak := s.leakTestView(manifest); leak != nil {
 		body["leak_test"] = leak
 	}
-	if run, running := s.builds.get(id); running {
-		finished, message := run.state()
-		body["live"] = !finished
-		if message != "" {
-			body["error"] = message
+	if run := answer.run; run != nil {
+		if answer.message != "" {
+			body["error"] = answer.message
 		}
 		text, dropped := run.log.String()
 		body["log"] = text
@@ -774,7 +881,9 @@ func (s *Server) handleBuildCancel(w http.ResponseWriter, r *http.Request) {
 			"build %s is not running in this Companion; nothing here can stop it", id))
 		return
 	}
-	if finished, _ := run.state(); finished {
+	// The manifest too: the runner writes the terminal one a moment before the
+	// run is recorded as over, and a build in that moment has nothing to stop.
+	if finished, _ := run.state(); finished || manifest.State.Terminal() {
 		writeError(w, http.StatusConflict, fmt.Errorf("build %s has already finished", id))
 		return
 	}

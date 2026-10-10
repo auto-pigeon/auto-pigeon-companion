@@ -2,6 +2,7 @@ package aub
 
 import (
 	"context"
+	"net/http"
 	"regexp"
 )
 
@@ -46,9 +47,23 @@ type LeakStatus struct {
 // ask this program directly — a page may not call the reader's loopback — so
 // the account's own server carries the line. It is progress, never evidence.
 func (c *Client) PublishLeakStatus(ctx context.Context, requestID string, status LeakStatus) error {
+	return c.PublishLeakStatusAs(ctx, c.Token(), requestID, status)
+}
+
+// PublishLeakStatusAs is PublishLeakStatus under the session the caller names.
+//
+// The status worker admits an attempt against one reading of the session and
+// posts a moment later, on its own goroutine, while a sign-in or a sign-out
+// may be rewriting the client's token. Posting under the client's token of
+// that later moment sent a status under a session nothing had admitted
+// (NEW_323B). An empty token is refused here: a status is never anonymous.
+func (c *Client) PublishLeakStatusAs(ctx context.Context, token, requestID string, status LeakStatus) error {
 	if !leakReturnID.MatchString(requestID) {
 		return &APIError{Path: LeakStatusPath, Message: "invalid leak request id"}
 	}
+	if token == "" {
+		return &APIError{StatusCode: http.StatusUnauthorized, Path: LeakStatusPath, Message: "no session to send this status under"}
+	}
 	status.SchemaVersion = LeakStatusSchema
-	return c.do(ctx, "POST", LeakStatusPath+requestID, nil, status, nil)
+	return c.doAs(ctx, token, "POST", LeakStatusPath+requestID, nil, status, nil)
 }

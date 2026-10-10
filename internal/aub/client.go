@@ -191,6 +191,17 @@ const maxErrorBody = 8 << 10
 // do issues one request against path (rooted at the base URL), encoding body as
 // JSON when non-nil and decoding a 2xx response into out when non-nil.
 func (c *Client) do(ctx context.Context, method, path string, query url.Values, body, out any) error {
+	return c.doAs(ctx, c.Token(), method, path, query, body, out)
+}
+
+// doAs is do under a session the caller names, rather than whichever one the
+// client holds when the request is built.
+//
+// For a caller that decided to send on the strength of one particular session
+// and must not find itself sending under another: the token is read once, by
+// the caller, and that reading is both what was judged and what goes on the
+// wire. An empty token sends no Authorization header.
+func (c *Client) doAs(ctx context.Context, token, method, path string, query url.Values, body, out any) error {
 	endpoint := *c.baseURL
 	endpoint.Path = strings.TrimRight(endpoint.Path, "/") + path
 	if len(query) > 0 {
@@ -214,8 +225,8 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 	if body != nil {
 		request.Header.Set("Content-Type", "application/json")
 	}
-	if c.Token() != "" {
-		request.Header.Set("Authorization", c.Token())
+	if token != "" {
+		request.Header.Set("Authorization", token)
 	}
 
 	response, err := c.httpClient.Do(request)

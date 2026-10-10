@@ -78,6 +78,17 @@ func (wallClock) After(d time.Duration) (<-chan time.Time, func()) {
 
 // leakSession is who this program is signed in as at the moment of asking, and
 // the way to post as them. Send is nil when nobody is signed in.
+//
+// It is ONE reading. Send posts as the session this value describes — Token —
+// and never as whatever the sign-in has become since, so the session an
+// attempt was admitted under, the one on the wire and the one its answer is
+// recorded against are the same session.
+//
+// What that means for a POST already in the air when the session changes: it
+// is the old session's, and stays so. It is not cancelled (only close cancels
+// one) and it is not re-attributed. Accepted, the status is delivered and the
+// request is the account's that sent it; refused, that token is remembered as
+// refused and the request is looked at again under the session there is now.
 type leakSession struct {
 	Server string
 	UserID string
@@ -391,6 +402,18 @@ func (q *leakSender) attempt(id string, item *leakTracked) bool {
 	err := session.Send(ctx, id, payload)
 	cancel()
 
+	// Whose answer this is. The POST belonged to `session`, the one it was
+	// admitted under, and it was sent as that session whatever happened to the
+	// sign-in meanwhile. A refusal is a fact about THAT session; whether it
+	// holds the request depends on whether anybody still has it.
+	var apiErr *aub.APIError
+	refused := errors.As(err, &apiErr) && apiErr.Unauthorized()
+	sessionMoved := false
+	if refused && q.ctx.Err() == nil {
+		current := q.session()
+		sessionMoved = current.Token != session.Token || current.Server != session.Server
+	}
+
 	now = q.clock.Now()
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -398,7 +421,6 @@ func (q *leakSender) attempt(id string, item *leakTracked) bool {
 	if q.ctx.Err() != nil {
 		return false
 	}
-	var apiErr *aub.APIError
 	switch {
 	case err == nil:
 		if item.failures > 0 || item.waiting == leakRelaySignIn || item.waiting == leakRelayAccount {
@@ -414,7 +436,18 @@ func (q *leakSender) attempt(id string, item *leakTracked) bool {
 		} else {
 			item.next = now.Add(leakStatusRefresh)
 		}
-	case errors.As(err, &apiErr) && apiErr.Unauthorized():
+	case refused && sessionMoved:
+		// AUB refused a session that has been replaced since the POST left:
+		// someone signed in, or out, while it was unanswered. That token is
+		// remembered as refused, and the request is due at once under whatever
+		// the session is now — which the next attempt reads for itself, and
+		// holds for a sign-in only if there is still nobody to send it as.
+		// Parking it here made a person who had just signed in wait out a
+		// recheck for a refusal that was no longer about them.
+		q.logf("leak status: request %s was refused (HTTP %d) under a session that has since changed; it is looked at again now", shortLeakID(id), apiErr.StatusCode)
+		item.rejectedToken, item.waiting, item.lastError = session.Token, leakRelayPending, ""
+		item.next = now
+	case refused:
 		// AUB refused the session. Asking again with the same token would be
 		// the same refusal every few seconds.
 		q.logf("leak status: request %s was refused (HTTP %d); nothing more is sent until someone signs in", shortLeakID(id), apiErr.StatusCode)

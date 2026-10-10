@@ -232,7 +232,7 @@ func (r *Runner) Run(ctx context.Context, request Request) (*Manifest, error) {
 			return r.fail(manifest, job.Failed, err)
 		}
 		if err := manifest.Save(dir); err != nil {
-			return nil, err
+			return r.unrecorded(manifest, err)
 		}
 	}
 
@@ -242,7 +242,7 @@ func (r *Runner) Run(ctx context.Context, request Request) (*Manifest, error) {
 	}
 	manifest.Tools = r.tools(steps)
 	if err := manifest.Save(dir); err != nil {
-		return nil, err
+		return r.unrecorded(manifest, err)
 	}
 
 	for i, resolved := range steps {
@@ -259,7 +259,7 @@ func (r *Runner) Run(ctx context.Context, request Request) (*Manifest, error) {
 		step, err := r.runStep(ctx, request, layout, resolved, wires, manifest, started)
 		manifest.Steps[i] = step
 		if saveErr := manifest.Save(dir); saveErr != nil {
-			return nil, saveErr
+			return r.unrecorded(manifest, saveErr)
 		}
 		r.options.Announce(manifest)
 		if err != nil && ctx.Err() != nil {
@@ -1046,16 +1046,39 @@ func (r *Runner) fail(manifest *Manifest, state job.State, cause error) (*Manife
 	return finished, cause
 }
 
+// finish stamps the manifest and writes it. The write is the completion.
+//
+// A build whose outcome could not be written has not succeeded in any way a
+// later read, a download or another Companion can see: the file still says
+// `running`. So a manifest that was about to say `succeeded` says `failed`,
+// with the write's own error, and Run returns that error. A manifest that
+// already carries a failure keeps it — the cause is the diagnostic, and the
+// write error travels beside it as Run's error (NEW_323B).
 func (r *Runner) finish(manifest *Manifest) (*Manifest, error) {
 	manifest.FinishedAt = r.options.Now()
 	manifest.DurationMS = manifest.FinishedAt.Sub(manifest.StartedAt).Milliseconds()
 	manifest.computeKey(r.generalizeRoots(manifest))
 	if manifest.Directory != "" {
 		if err := manifest.Save(manifest.Directory); err != nil {
+			if manifest.State == job.Succeeded {
+				manifest.State, manifest.Error = job.Failed, err.Error()
+				manifest.FailureClass = failure.Of(err)
+			}
 			return manifest, err
 		}
 	}
 	return manifest, nil
+}
+
+// unrecorded ends a build whose manifest could not be written part-way.
+//
+// It used to return no manifest at all, which left the caller that is watching
+// the build with a run that was over and nothing to say what it had been: the
+// file on disk still `running`, and no document in memory. The build is failed
+// with the write's error instead, and the write is tried once more by finish —
+// a full disk a moment ago is not always a full disk now.
+func (r *Runner) unrecorded(manifest *Manifest, cause error) (*Manifest, error) {
+	return r.fail(manifest, job.Failed, fmt.Errorf("recording the build: %w", cause))
 }
 
 // generalizeRoots is every directory whose name is a fact about this machine

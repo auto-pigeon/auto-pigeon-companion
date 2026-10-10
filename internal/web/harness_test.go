@@ -45,6 +45,10 @@ import (
 // depended on one would be testing around the thing it is meant to exercise.
 const buildHelperFlag = "-aucom-web-build-helper"
 
+// holdUntilMarker starts the source line that holds the fixture compiler; see
+// buildHelperMain.
+const holdUntilMarker = "// hold-until "
+
 func TestMain(m *testing.M) {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
@@ -131,6 +135,7 @@ func buildHelperMain(args []string) int {
 			_ = out.Sync()
 		}
 	}
+	holdIfAsked(source)
 	if failing {
 		// The shape a real compiler's failure has: a message a person can read,
 		// on stderr, and a non-zero status.
@@ -149,6 +154,33 @@ func buildHelperMain(args []string) int {
 	}
 	fmt.Println("wrote", filepath.Base(destination))
 	return 0
+}
+
+// holdIfAsked keeps the fixture compiler running while its source says to.
+//
+// A source that says `// hold-until <path>` holds until that file exists: a
+// test decides when this build finishes, rather than guessing how long one
+// takes (NEW_323B). In the source because the source is the one thing a test
+// hands the compiler without changing the tool profile every other test's
+// digests are computed over. A source that cannot be read holds nothing; the
+// compile reports that itself.
+func holdIfAsked(source string) {
+	contents, err := os.ReadFile(source)
+	if err != nil {
+		return
+	}
+	for _, line := range strings.Split(string(contents), "\n") {
+		gate, held := strings.CutPrefix(strings.TrimSpace(line), holdUntilMarker)
+		if !held {
+			continue
+		}
+		fmt.Println("holding")
+		for deadline := time.Now().Add(60 * time.Second); time.Now().Before(deadline); time.Sleep(5 * time.Millisecond) {
+			if _, err := os.Stat(strings.TrimSpace(gate)); err == nil {
+				break
+			}
+		}
+	}
 }
 
 // --- the fake backend -------------------------------------------------------
@@ -218,9 +250,19 @@ type fixtureBackend struct {
 	failLeakStatus   int
 	leakStatusPosts  int
 	leakStatusBodies []map[string]any
-	// rejectToken is a session AUB no longer accepts: every Companion route
-	// answers 401 to it, the way a token past its lifetime is answered.
-	rejectToken string
+	// refusedTokens is every session AUB no longer accepts: each Companion
+	// route answers 401 to one, the way a token past its lifetime is answered.
+	// A set, and nothing leaves it. It was one token, replaced when a test
+	// moved on to its next scenario — so a POST still in the air from the
+	// scenario before arrived to find its own token forgotten and was ACCEPTED,
+	// which is what failed the Windows release run (NEW_323B). A server does
+	// not start accepting a session because a different one was refused later.
+	refusedTokens map[string]bool
+	// leakStatusTokens is the session each progress POST arrived with, in
+	// order, refused or not; leakStatusArrival, when set, runs as one arrives
+	// and before it is answered, so a test can hold a POST in the air.
+	leakStatusTokens  []string
+	leakStatusArrival func(token string)
 
 	// holdDetail, when set, holds every map-detail request until it is
 	// closed or the caller gives up: a slow AUB (NEW_265A).
@@ -231,6 +273,24 @@ func (b *fixtureBackend) refusesLeakResult() bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.refuseLeakResult
+}
+
+// refuse makes AUB refuse a session from now on.
+func (b *fixtureBackend) refuse(token string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.refusedTokens == nil {
+		b.refusedTokens = map[string]bool{}
+	}
+	b.refusedTokens[token] = true
+}
+
+// statusArrivals is the session of every progress POST that reached AUB since
+// the first `from` of them, refused or not.
+func (b *fixtureBackend) statusArrivals(from int) []string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return append([]string(nil), b.leakStatusTokens[from:]...)
 }
 
 func (b *fixtureBackend) count() int {
@@ -328,8 +388,17 @@ func (b *fixtureBackend) serve(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	if strings.HasPrefix(path, aub.CompanionPrefix+"/leak-status/") && r.Method == http.MethodPost {
+		b.mu.Lock()
+		b.leakStatusTokens = append(b.leakStatusTokens, r.Header.Get("Authorization"))
+		arrival := b.leakStatusArrival
+		b.mu.Unlock()
+		if arrival != nil {
+			arrival(r.Header.Get("Authorization"))
+		}
+	}
 	b.mu.Lock()
-	rejected := b.rejectToken != "" && r.Header.Get("Authorization") == b.rejectToken
+	rejected := b.refusedTokens[r.Header.Get("Authorization")]
 	b.mu.Unlock()
 	if r.Header.Get("Authorization") == "" || rejected {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -908,6 +977,13 @@ func (m *machine) waitForBuild(id string) map[string]any {
 		}
 		manifest, _ := body["manifest"].(map[string]any)
 		if body["live"] != true {
+			// Not live is a claim that the manifest beside it is the final
+			// one. An answer that says both "over" and "running" is the
+			// server's defect (NEW_323B), and is reported as that rather than
+			// handed to the caller as a build in an impossible state.
+			if state, _ := manifest["state"].(string); state == "running" || state == "queued" || state == "" {
+				m.t.Fatalf("build %s was answered live=%v with a manifest that says %q", id, body["live"], state)
+			}
 			return manifest
 		}
 		if time.Now().After(deadline) {
