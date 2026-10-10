@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
-	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile/builtin"
 )
 
 // One way to write a profile (operator, 2026-10-03): "unify Start from a tested
@@ -57,21 +56,32 @@ type scratchIdentity struct {
 //
 //	GET /api/v1/profiles/templates/{id}/scratch
 func (s *Server) handleProfileTemplateScratch(w http.ResponseWriter, r *http.Request) {
-	entry, err := builtin.Find(r.PathValue("id"))
+	document, own, err := s.startingPoint(r.PathValue("id"))
 	if err != nil {
 		writeError(w, http.StatusNotFound, err)
 		return
 	}
-	tree, err := profileTree(entry.Profile)
+	tree, err := profileTree(document)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
 	scratch, identity := scratchFromTree(tree)
-	scratch.BasedOn = entry.Profile.Metadata().ID
-	writeJSON(w, http.StatusOK, map[string]any{
-		"id": scratch.BasedOn, "kind": scratch.Kind, "scratch": scratch, "identity": identity,
-	})
+	scratch.BasedOn = document.Metadata().ID
+	body := map[string]any{
+		"id": scratch.BasedOn, "kind": scratch.Kind, "scratch": scratch, "identity": identity, "installed": own,
+	}
+	// A pipeline written here has this machine's own arguments per stage. They
+	// are not in the document, and a form filled from it that left them out
+	// would be a copy that compiles differently from what it copied (NEW_323A).
+	if _, isPipeline := document.(*profile.PipelineProfile); isPipeline && own {
+		if set, _, err := s.bindings(); err == nil {
+			if local, found := set.Find(scratch.BasedOn); found && len(local.StepArguments) > 0 {
+				body["stage_arguments"] = local.StepArguments
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, body)
 }
 
 func profileTree(document profile.Profile) (map[string]any, error) {
@@ -406,16 +416,16 @@ func matchingItem(candidates []any, item map[string]any) map[string]any {
 
 // applyBasedOn is the step composeBase takes for a form that was filled from a
 // tested profile.
-func applyBasedOn(tree map[string]any, basedOn string) error {
+func (s *Server) applyBasedOn(tree map[string]any, basedOn string) error {
 	basedOn = strings.TrimSpace(basedOn)
 	if basedOn == "" {
 		return nil
 	}
-	entry, err := builtin.Find(basedOn)
+	document, _, err := s.startingPoint(basedOn)
 	if err != nil {
-		return fmt.Errorf("the profile these fields were filled from is not a tested one: %w", err)
+		return fmt.Errorf("the profile these fields were filled from is neither a tested one nor one installed here: %w", err)
 	}
-	base, err := profileTree(entry.Profile)
+	base, err := profileTree(document)
 	if err != nil {
 		return err
 	}

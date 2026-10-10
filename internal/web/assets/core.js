@@ -656,7 +656,28 @@ function executionChoices(select, items, previous, ready, label, placeholder, ch
   }
   select.value = items.some((item) => item.id === previous && ready(item)) ? previous
     : !previous && chooseReady ? items.find(ready)?.id || "" : "";
+  setupActions(select, items.filter((item) => !ready(item)));
   return select.value;
+}
+
+// A choice that cannot be made yet is greyed out in the list, and a greyed-out
+// line is a dead end unless something beside it says where to go (NEW_323A).
+// Each profile that needs setup gets a link to its own page in Profiles, right
+// under the list it is disabled in.
+function setupActions(select, waiting) {
+  const field = select.parentNode;
+  if (!field?.querySelector) return;
+  let aside = field.querySelector(".choice-setup");
+  if (!waiting.length) { aside?.remove(); return; }
+  if (!aside) {
+    aside = el("p", { className: "hint choice-setup" });
+    select.after(aside);
+  }
+  aside.replaceChildren(document.createTextNode(AUCOM.t("Not ready, so not offered above:") + " "));
+  waiting.forEach((item, index) => {
+    if (index) aside.append(document.createTextNode(" · "));
+    aside.append(el("a", { text: AUCOM.t("Set up {name}", { name: item.name || item.id }), attrs: { href: "#profiles/" + encodeURIComponent(item.id) } }));
+  });
 }
 
 Object.assign(AUCOM, {

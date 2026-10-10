@@ -65,6 +65,13 @@
         if (!$(id).value.trim()) errors.push(fieldError(id, title + " is required."));
       }
     }
+    if (step === 3 && $("wizard-kind").value === "pipeline" && window.AUCOM.scratch.pendingReview?.()) {
+      // A tool change is waiting for an answer inside the stage. Moving on
+      // would answer it for the person, one way or the other.
+      setMessage("wizard-message", `Stage ${window.AUCOM.scratch.pendingReview()} has a tool change waiting: keep the current tool or change it, then continue.`, "error");
+      $("scratch-body").querySelector('[data-switch="keep"]')?.focus();
+      return false;
+    }
     if (errors.length) {
       setMessage("wizard-message", "Complete the marked fields before continuing.", "error");
       errors[0].focus();
@@ -869,7 +876,11 @@
       templates = body.items || [];
     }
     for (const template of templates) {
-      select.append(el("option", { text: `${template.name} — ${template.summary}`, attrs: { value: template.id } }));
+      // One written on this computer says so and says which version: nobody
+      // tested it but whoever wrote it.
+      select.append(el("option", { text: template.installed
+        ? `${template.name} ${template.version} (installed here) — ${template.summary}`
+        : `${template.name} — ${template.summary}`, attrs: { value: template.id } }));
     }
     select.value = pinnedTemplate && templates.some((template) => template.id === pinnedTemplate) ? pinnedTemplate : "";
     await applyTemplate();
@@ -920,11 +931,14 @@
       setMessage("wizard-message", body.error || "that profile could not be read", "error");
       return;
     }
-    scratch.fill(body.scratch);
+    scratch.fill(body.scratch, body.stage_arguments || {});
     for (const [id, key] of Object.entries(IDENTITY)) offer(id, body.identity?.[key]);
     $("wizard-template-note").textContent =
       `Filled in from ${template.name} ${template.version}` + (template.summary ? ` — ${template.summary}` : "") +
-      ". Every field in the next steps is yours to change, add to or remove; what the form has no field for is kept as tested.";
+      ". Every field in the next steps is yours to change, add to or remove; what the form has no field for is kept as " +
+      (template.installed
+        ? "installed. Keep its name to make a new version of it (change the version, and tick the replace box when you install); give it another name to make a separate profile."
+        : "tested.");
     scratch.render();
     templateReady = true;
     $("wizard-next").disabled = step === 4;
@@ -1004,9 +1018,11 @@
     review.append(
       el("p", {
         className: "muted",
-        text:
-          "Installing this does not approve it. It will be listed as local — nobody has vouched for it, " +
-          "including you — and it cannot run until you have approved it.",
+        text: body.kind === "pipeline"
+          ? "Installing this does not approve it. It will be listed as local — nobody has vouched for it, including you. " +
+            "A pipeline starts nothing of its own: each stage runs a tool, and a tool runs only once it is approved and set up."
+          : "Installing this does not approve it. It will be listed as local — nobody has vouched for it, " +
+            "including you — and it cannot run until you have approved it.",
       })
     );
 
@@ -1016,17 +1032,25 @@
     for (const program of profileDocument.executables || []) declarations.append(el("li", { text: `${program.name}: ${window.AUCOM.programFileName(program.file)}` }));
     for (const action of profileDocument.actions || []) declarations.append(el("li", { text: `${action.title || action.id} (${action.id}) → ${action.executable}` }));
     for (const stage of profileDocument.steps || []) declarations.append(el("li", { text: `${stage.title || stage.id} (${stage.id}) → ${stage.capability}` }));
-    review.append(declarations, el("p", { className: "muted", text: body.kind === "pipeline"
-      ? "Next: approve this pipeline, inspect its dependencies in Profiles and finish each tool's setup."
-      : "Next: approve these declarations, choose each executable and required folder, then check readiness in Profiles." }));
+    review.append(declarations);
+    for (const stage of profileDocument.steps || []) {
+      // A stage's wiring and parameters, as the document has them: what the
+      // review is for, and what a tool change must not have emptied.
+      const wires = (stage.inputs || []).map((wire) => `${wire.name} ← ${wire.from}`);
+      const options = Object.entries(stage.options || {}).map(([name, value]) => `${name} = ${value}`);
+      declarations.append(el("li", { className: "muted", text:
+        `${stage.id}: ${stage.tool ? "run by " + stage.tool : "run by whichever installed tool provides it"}; ` +
+        `inputs ${wires.length ? wires.join(", ") : "none wired"}; parameters ${options.length ? options.join(", ") : "all default"}` }));
+    }
+    review.append(setupSummary(body));
 
     if (body.diff && !body.diff.empty) {
-      review.append(el("h4", { text: "What you changed from the tested profile" }));
+      review.append(el("h4", { text: "What you changed from the profile you started from" }));
       if (body.diff.escalates) {
         review.append(
           el("p", {
             className: "message error",
-            text: "This asks for more than the tested profile did.",
+            text: "This asks for more than the profile you started from did.",
           })
         );
       }
@@ -1041,6 +1065,39 @@
       }
       review.append(list);
     }
+  }
+
+  // What is left to do after Install, from the Companion's own readiness
+  // answer for this document (composesetup.go) — the same one Profiles and
+  // Build & Run read. Installed is not ready, and the review says which.
+  function setupSummary(body) {
+    const box = el("div", { className: "wizard-setup", attrs: { id: "wizard-setup" } });
+    const setup = body.setup;
+    if (!setup) {
+      box.append(el("p", { className: "muted", text: "What this still needs could not be read. Its page in Profiles says, once it is installed." }));
+      return box;
+    }
+    box.append(el("h4", { text: setup.ready
+      ? (body.kind === "pipeline" ? "Every stage's tool is ready: this can build once installed" : "Ready to run once installed")
+      : "Installing does not make it ready. Still to do:" }));
+    const list = el("ul", { className: "plain" });
+    // The checker names a missing approval itself for a tool or an engine;
+    // it is said once.
+    if (!setup.approved && !(setup.problems || []).some((problem) => problem.fault === "not_authorized")) {
+      list.append(el("li", { text: body.kind === "pipeline"
+        ? "Not approved yet. Its page in Profiles opens when you install it: read its stages there and approve it."
+        : "Approve it. Nobody has yet, and nothing unapproved runs. Its page in Profiles opens when you install it; Approve is there." }));
+    }
+    for (const problem of setup.problems || []) {
+      list.append(el("li", { text: [problem.summary, problem.fix].filter(Boolean).join(" ") }));
+    }
+    if (list.children.length) box.append(list);
+    if (!setup.ready) {
+      box.append(el("p", { className: "muted", text: body.kind === "pipeline"
+        ? "A pipeline starts nothing of its own: it is ready when it is approved and every stage's tool is."
+        : "Where each program is on this computer is chosen on its page in Profiles, never written in the profile." }));
+    }
+    return box;
   }
 
   $("area-new-profile").addEventListener("input", (event) => {

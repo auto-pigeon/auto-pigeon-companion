@@ -61,9 +61,19 @@
       const [optionValue, optionText] = Array.isArray(choice) ? choice : [choice, choice];
       node.append(el("option", { text: optionText, attrs: { value: optionValue } }));
     }
+    // A value none of the choices offers is still the draft's value: it is
+    // listed, named as what it is, and marked — never shown as an empty box
+    // over a value the request would still send (NEW_323A).
+    const known = [...node.options].some((option) => option.value === (value ?? ""));
+    if (!known) {
+      node.append(el("option", { text: `${value} — not available here`, attrs: { value } }));
+      node.setAttribute("aria-invalid", "true");
+    }
     node.value = value ?? "";
     node.addEventListener("change", () => onChange(node.value));
-    return el("div", { className: "field", children: [el("label", { text: label, attrs: { for: id } }), node] });
+    const children = [el("label", { text: label, attrs: { for: id } }), node];
+    if (!known) children.push(el("span", { className: "message error", text: "Nothing here provides this any more. Choose another, or put back what provided it." }));
+    return el("div", { className: "field", children });
   }
 
   function check(label, value, onChange) {
@@ -269,6 +279,130 @@
     return all.length === 1 ? all[0] : undefined;
   }
 
+  // What each source a stage may read produces, by reference: the pipeline's
+  // own inputs, and every earlier stage's outputs.
+  function sourceRolesBefore(stepIndex) {
+    const roles = {};
+    for (const port of state.pipeline.inputs) if (port.name) roles[`pipeline.${port.name}`] = port.role;
+    state.pipeline.steps.slice(0, stepIndex).forEach((step) => {
+      for (const output of providerFor(step.capability, step.tool)?.outputs || []) roles[`${step.id}.${output.name}`] = output.role;
+    });
+    return roles;
+  }
+
+  // Everything that reads a stage's outputs: later stages' inputs and the
+  // pipeline's results. `set` repoints one of them.
+  function readersOf(stepIndex) {
+    const doc = state.pipeline;
+    const readers = [];
+    doc.steps.slice(stepIndex + 1).forEach((later) => {
+      for (const [name, ref] of Object.entries(later.inputs || {})) {
+        if (ref) readers.push({ ref, label: `stage ${later.id}, input ${name}`, set: (value) => (later.inputs[name] = value) });
+      }
+    });
+    for (const output of doc.outputs) {
+      if (output.from) readers.push({ ref: output.from, label: `result ${output.name || "(unnamed)"}`, set: (value) => (output.from = value) });
+    }
+    return readers;
+  }
+
+  // A tool change waiting for the person's answer, and the note about the last
+  // one that was made — by stage, and never part of what is posted.
+  const pendingSwitch = new WeakMap();
+  const switchNote = new WeakMap();
+  let focusNext = null; // a control to give focus after the next redraw
+
+  // chooseTool is the stage's Tool choice. It compares before it changes
+  // anything (stageswitch.js): a change that loses nothing is made and said; a
+  // change that would lose something waits, with the stage untouched.
+  function chooseTool(step, index, tool, capability) {
+    pendingSwitch.delete(step);
+    switchNote.delete(step);
+    const to = capability ? providerFor(capability, tool) : undefined;
+    const result = window.AUCOM.stageSwitch.plan({
+      step, to, from: providerFor(step.capability, step.tool),
+      sourceRoles: sourceRolesBefore(index), readers: readersOf(index),
+    });
+    // An uninstalled tool has no declarations to compare with; it is only ever
+    // offered as the stage's own current choice.
+    if (capability && !to) { result.tool = tool; result.capability = capability; }
+    if (result.noop) return;
+    if (result.findings.length > 0) {
+      pendingSwitch.set(step, result);
+      focusNext = "keep";
+      return;
+    }
+    applySwitch(step, index, result);
+  }
+
+  function applySwitch(step, index, result) {
+    const readers = readersOf(index);
+    window.AUCOM.stageSwitch.apply(step, result, (before, after) => {
+      for (const reader of readers) if (reader.ref === before) reader.set(after);
+    });
+    pendingSwitch.delete(step);
+    switchNote.set(step, result);
+  }
+
+  // The review of a tool change that cannot carry everything: each field that
+  // would go, its value and why, and the two ways on. Nothing has changed yet.
+  function switchReview(step, index, result) {
+    const box = el("div", { className: "stage-switch-review", attrs: { role: "alertdialog", "aria-label": "Review this tool change" } });
+    const name = providers.find((item) => item.profileId === result.tool && item.capability === result.capability);
+    const target = name ? `${name.profileName}: ${name.title}` : result.tool || "no tool";
+    box.append(el("p", { children: [el("strong", { text: `Changing this stage to ${target} cannot keep everything.` }),
+      document.createTextNode(" Nothing has changed yet. These would be removed from the stage:")] }));
+    const lost = el("ul", { className: "plain" });
+    for (const finding of result.findings) lost.append(el("li", { text: `${finding.field}${finding.kind.startsWith("output") ? "" : " (" + finding.value + ")"} — ${finding.reason}.` }));
+    box.append(lost);
+    const carried = [...result.kept, ...result.renamed];
+    if (carried.length) box.append(el("p", { className: "muted", text: "Kept: " + carried.join("; ") + "." }));
+    if (result.needs.length) box.append(el("p", { className: "muted", text: "It would then still need: " + result.needs.join(", ") + "." }));
+    const keep = el("button", { text: "Keep the current tool", attrs: { type: "button", class: "secondary", "data-switch": "keep" } });
+    keep.addEventListener("click", () => { pendingSwitch.delete(step); focusNext = "tool"; render(); });
+    const change = el("button", { text: "Change the tool and revise this stage", attrs: { type: "button", "data-switch": "change" } });
+    change.addEventListener("click", () => { applySwitch(step, index, result); focusNext = "tool"; render(); });
+    box.append(el("div", { className: "row-actions", children: [keep, change] }));
+    return box;
+  }
+
+  // What the last tool change did, so "kept" is something the person can read
+  // rather than take on trust.
+  function switchSummary(result) {
+    const parts = [];
+    if (result.kept.length) parts.push("Kept: " + result.kept.join("; ") + ".");
+    if (result.renamed.length) parts.push("Carried over under the new tool's names: " + result.renamed.join("; ") + ".");
+    if (result.findings.length) parts.push("Removed: " + result.findings.map((finding) => finding.field).join(", ") + ".");
+    if (!parts.length) parts.push("The stage had nothing set yet.");
+    return el("p", { className: "muted stage-switch-note", attrs: { role: "status" }, text: "Tool changed. " + parts.join(" ") });
+  }
+
+  // What still stops this stage, from the fields as they are now. The
+  // Companion decides when the profile is checked; this says it where the
+  // field is, before then.
+  function stageProblems(step, index, provider) {
+    const problems = [];
+    if (!step.capability) return ["No tool is chosen."];
+    if (!provider) return [`No installed tool provides ${step.capability}${step.tool ? " as " + step.tool : ""}. Install it, or choose another tool.`];
+    const roles = sourceRolesBefore(index);
+    for (const input of provider.inputs || []) {
+      const source = step.inputs[input.name];
+      if (!source) { if (input.required) problems.push(`${input.name} is required and not supplied.`); continue; }
+      if (!(source in roles)) problems.push(`${input.name} reads ${source}, which nothing before this stage produces.`);
+      else if (input.role && roles[source] !== input.role) problems.push(`${input.name} takes a ${input.role}, and ${source} is a ${roles[source]}.`);
+    }
+    for (const name of Object.keys(step.inputs || {})) {
+      if (step.inputs[name] && !(provider.inputs || []).some((input) => input.name === name)) problems.push(`${name} is wired, and this tool has no input of that name.`);
+    }
+    for (const [name, value] of Object.entries(step.options || {})) {
+      if (value === "" || value == null) continue;
+      const option = (provider.options || []).find((item) => item.name === name);
+      const problem = option ? window.AUCOM.stageSwitch.optionProblem(option, String(value)) : "this tool has no parameter of that name";
+      if (problem) problems.push(`${name}: ${problem}.`);
+    }
+    return problems;
+  }
+
   function sourcesBefore(stepIndex) {
     const sources = state.pipeline.inputs.filter((p) => p.name).map((p) => [`pipeline.${p.name}`, `the pipeline's ${p.name}`]);
     state.pipeline.steps.slice(0, stepIndex).forEach((step) => {
@@ -354,7 +488,8 @@
           text("Title", step.title, (v) => (step.title = v), { placeholder: "Compile the map" }),
           select("Tool", chosen, capabilities, (v) => {
             const [tool, capability] = v ? v.split(" ") : ["", ""];
-            step.tool = tool; step.capability = capability; step.inputs = {}; step.options = {}; render();
+            chooseTool(step, index, tool, capability);
+            render();
           }),
           removeButton("Remove this stage", () => doc.steps.splice(index, 1)),
         ],
@@ -370,9 +505,17 @@
         reorder.append(move);
       }
       card.append(reorder);
+      card.querySelector("select").dataset.switch = "tool";
+      const waiting = pendingSwitch.get(step);
+      if (waiting) card.append(switchReview(step, index, waiting));
+      else if (switchNote.has(step)) card.append(switchSummary(switchNote.get(step)));
       const provider = providerFor(step.capability, step.tool);
+      const problems = stageProblems(step, index, provider);
+      if (problems.length) {
+        card.append(el("p", { className: "message error stage-incomplete", text: "This stage is not complete: " + problems.join(" ") }));
+      }
       if (provider) {
-        card.append(el("p", { className: "muted", text: `Run by ${provider.profileName} (${provider.profileId}), action ${provider.actionId}.` }));
+        card.append(el("p", { className: "muted", text: `Run by ${provider.profileName} (${provider.profileId}), action ${provider.actionId}.` + (provider.ready ? "" : " This tool still needs setup in Profiles before the pipeline can run.") }));
         const wiring = el("fieldset", { className: "scratch-list", children: [el("legend", { text: "Where each input comes from" })] });
         for (const input of provider.inputs || []) {
           wiring.append(select(`${input.name}${input.required ? " (required)" : ""}`, step.inputs[input.name] || "",
@@ -445,12 +588,37 @@
       body.append(pipelineEditor());
     }
     const again = at >= 0 ? controls()[at] : null;
-    if (again) {
+    // A tool change's review takes focus when it opens, and gives it back to
+    // the Tool choice when it closes.
+    const wanted = focusNext;
+    focusNext = null;
+    const target = wanted && at >= 0 ? nearest(controls(), at, wanted) : null;
+    if (target) {
+      target.focus({ preventScroll: false });
+    } else if (again) {
       again.focus({ preventScroll: true });
       if (caret && typeof again.setSelectionRange === "function") {
         try { again.setSelectionRange(caret[0], caret[1]); } catch { /* not a text field */ }
       }
     }
+  }
+
+  // The control marked `data-switch=<which>` nearest the one that had focus:
+  // the stage being changed, not another stage's.
+  function nearest(all, at, which) {
+    let best = null;
+    all.forEach((node, index) => {
+      if (node.dataset?.switch !== which) return;
+      if (best === null || Math.abs(index - at) < Math.abs(best - at)) best = index;
+    });
+    return best === null ? null : all[best];
+  }
+
+  // pendingReview names the stage whose tool change is still waiting for an
+  // answer, or "" — the wizard does not move on over an open question.
+  function pendingReview() {
+    const step = state.pipeline.steps.find((item) => pendingSwitch.has(item));
+    return step ? step.id || "(unnamed)" : "";
   }
 
   // request is the `scratch` member of a compose request: the fields, and the
@@ -489,14 +657,15 @@
 
   // fill puts a tested profile's fields into the form (the server's
   // /templates/{id}/scratch answer). Everything it fills stays editable.
-  function fill(scratch) {
+  function fill(scratch, stageArguments = {}) {
     const current = scratch.kind;
     basedOn = scratch.based_on || "";
     $("scratch-game").value = scratch.game_family || "";
     if (current === "pipeline") {
       state.pipeline = {
         inputs: (scratch.inputs || []).map((port) => ({ ...port, extensions: port.extensions || [] })),
-        steps: (scratch.steps || []).map((step) => ({ ...step, inputs: step.inputs || {}, options: step.options || {}, arguments: [] })),
+        // A pipeline written on this computer brings its stages' own arguments.
+        steps: (scratch.steps || []).map((step) => ({ ...step, inputs: step.inputs || {}, options: step.options || {}, arguments: [...(stageArguments[step.id] || [])] })),
         outputs: scratch.outputs || [],
       };
     } else {
@@ -522,7 +691,7 @@
         if (!action.capability || providers.some((p) => p.capability === action.capability && p.profileId === item.id)) continue;
         providers.push({
           capability: action.capability, title: action.title, actionId: action.id,
-          profileId: item.id, profileName: item.name,
+          profileId: item.id, profileName: item.name, ready: item.readiness?.ready === true,
           inputs: action.inputs || [], outputs: action.outputs || [], options: action.options || [],
         });
       }
@@ -531,7 +700,7 @@
   }
 
   window.AUCOM.scratch = {
-    state, render, request, stageTokens, clear, fill,
+    state, render, request, stageTokens, clear, fill, pendingReview,
     async refresh() {
       await refreshProviders();
       render();

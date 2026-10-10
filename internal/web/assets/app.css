@@ -252,6 +252,18 @@ details.more > button { margin-top: 0.35rem; }
   font-weight: 600; font-size: 0.8125rem; color: var(--accent-strong);
   text-transform: uppercase; letter-spacing: .04em;
 }
+/* A tool change that cannot keep everything (NEW_323A): a question set apart
+   by a rule in the warning colour, not an error — nothing has gone wrong and
+   nothing has changed. What would be lost is listed in ordinary ink so it can
+   be read; the two answers sit under it. */
+#scratch-body .stage-switch-review {
+  border-left: 2px solid var(--warn); background: var(--warn-soft);
+  padding: 0.75rem 1rem; margin: 0.75rem 0;
+}
+#scratch-body .stage-switch-review p { margin: 0 0 0.5rem; }
+#scratch-body .stage-switch-review ul { margin: 0 0 0.5rem; }
+#scratch-body .stage-switch-note { margin: 0.5rem 0; }
+.choice-setup { margin: 0.35rem 0 0; }
 #scratch-panel .scratch-list legend + * { clear: left; }
 #scratch-panel .scratch-list > .muted { margin: 0 0 0.75rem; font-size: 0.8125rem; }
 #scratch-panel .scratch-row {

@@ -437,6 +437,64 @@ server validation fail. Review shows the current validated declaration; installi
 opens its approval and setup page. If saving stage arguments fails, setup stays
 incomplete and **Retry saving stage arguments** saves them without reinstalling.
 
+**Start from** also lists every profile written on this computer, after the tested
+ones and marked *(installed here)* with its version. A form filled from one of those
+brings its stages' own arguments with it. Keep its name to make a new version of it —
+change the version and tick **Replace the installed profile with the same id**; the
+same version can never be rewritten, and the new version needs its own approval. Give
+it another name and it is a separate profile, and the one you started from is
+untouched.
+
+**Changing a stage's tool compares; it does not reset.** Choosing another tool for a
+stage keeps where each input comes from and every parameter the new tool also
+declares, and says so under the choice (*Tool changed. Kept: …*). The stage's id,
+title, place in the order and its own arguments are never the tool's and are never
+touched. The rules, in full:
+
+- an input the new tool declares under the same name keeps its source, provided that
+  source produces the kind of file the input takes;
+- an input or output the new tool declares under *another* name is carried over only
+  when both tools declare exactly one port of that role — the role is the declaration.
+  Position is never used, and two candidates are a question for you, not a guess. A
+  renamed output repoints the later stages and results that read it;
+- a parameter keeps its value when the value passes the new tool's declaration (type,
+  range, choices);
+- anything else opens a review inside the stage, naming each field, its value and why
+  the new tool cannot take it. **Nothing has changed** while it is open, and **Next**
+  waits for an answer. *Keep the current tool* leaves the stage exactly as it was.
+  *Change the tool and revise this stage* removes what was listed, and the stage then
+  says what it still needs. Nothing removed is remembered: choosing the old tool again
+  does not bring it back.
+
+A stage that is not complete says so where it is (*This stage is not complete: …*),
+and a field holding a value nothing provides any more shows that value, marked, rather
+than an empty box.
+
+**Installed is not ready.** The review ends with what is still to do for *this*
+document on *this* computer — approve it, say where each program is, set up a stage's
+tool — from the same readiness answer Profiles and Build & Run give. A pipeline whose
+stages do not fit the tools installed here (an input the tool does not declare, a
+required input left unwired, a parameter it does not have) is not valid yet: the form
+stays on the stages step, and the import route refuses the same document with HTTP 422
+and installs nothing, whoever sends it:
+
+```bash
+curl -sS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
+  -H 'Content-Type: application/json' -X POST \
+  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/profiles/compose" \
+  -d '{"name":"My build","version":"1.0.0","summary":"One stage.","publisher_name":"Me","license_spdx":"NOASSERTION",
+       "scratch":{"kind":"pipeline",
+         "inputs":[{"name":"source_map","role":"q1.map.source","required":true,"extensions":[".map"]}],
+         "steps":[{"id":"compile","title":"Compile","capability":"q1.bsp.compile","tool":"auto-pigeon.ericw-tools.q1","inputs":{}}]}}'
+# → {"valid": false, "error": "this pipeline's stages do not fit the tools installed here: … does not wire the required input \"source_map\" …"}
+```
+
+A valid answer carries `setup`: `{"approved": false, "ready": false, "problems": [...]}`.
+A stage whose tool is not installed at all is different — nothing can be said about
+its wiring, so the pipeline installs and is listed as needing that tool. A pipeline
+starts nothing of its own, so it is ready when every stage's tool is approved and set
+up; its own approval is reported beside that, not folded into it.
+
 For example, select **Profiles → New profile → A build tool → From scratch**,
 enter its identity, add each program and action, then review and install.
 Read its declarations, press **I have read this — approve it**, enter executable
@@ -445,8 +503,9 @@ declared environment settings; pipelines offer dependency setup and local stage
 arguments. Reopen the profile to inspect its readiness before building.
 
 Execution lists keep unavailable profiles and actions visible with their specific
-setup reasons, but disable their selection. **Profiles / setup** remains available
-beside these controls. Refresh after completing setup; a valid selection is kept,
+setup reasons, but disable their selection. Under each list, every profile that is
+not offered has its own **Set up …** link to its page in Profiles, and **Profiles /
+setup** remains available beside these controls. Refresh after completing setup; a valid selection is kept,
 and a selection that has lost readiness is cleared.
 
 The server enforces the same readiness: starting a build with a pipeline whose

@@ -272,7 +272,62 @@ func (s *Server) handleProfileTemplates(w http.ResponseWriter, r *http.Request) 
 		}
 		items = append(items, item)
 	}
+	// And every profile written on this machine (NEW_323A): a pipeline somebody
+	// made and got working is the obvious thing to start the next one from, and
+	// the form could only ever be filled from a built-in. They are marked —
+	// nobody tested them but their author — and listed after the tested ones.
+	for _, entry := range s.ownProfiles() {
+		meta := entry.Profile.Metadata()
+		if kind != "" && string(meta.Kind) != kind {
+			continue
+		}
+		items = append(items, map[string]any{
+			"id": meta.ID, "kind": meta.Kind, "name": meta.Name,
+			"summary": meta.Summary, "version": meta.Version, "homepage": homepageOf(meta),
+			"digest": entry.Digest, "installed": true,
+			"capabilities": capabilitiesOf(entry.Profile),
+			"actions":      actionIDs(entry.Profile),
+			"permissions":  profile.PermissionIDs(entry.Profile),
+		})
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+// ownProfiles is every document in this machine's own profile directory: what
+// an import wrote, and so what the form may be filled from besides a built-in.
+func (s *Server) ownProfiles() []job.CatalogEntry {
+	catalog, err := s.catalog()
+	if err != nil {
+		return nil
+	}
+	entries, err := catalog.List()
+	if err != nil {
+		return nil
+	}
+	own := make([]job.CatalogEntry, 0, len(entries))
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Source, s.profilesPrefix()) {
+			own = append(own, entry)
+		}
+	}
+	return own
+}
+
+// startingPoint is the profile a form was filled from: a tested built-in, or
+// one written on this machine. `own` says which.
+func (s *Server) startingPoint(id string) (document profile.Profile, own bool, err error) {
+	id = strings.TrimSpace(id)
+	if entry, findErr := builtin.Find(id); findErr == nil {
+		return entry.Profile, false, nil
+	} else {
+		err = findErr
+	}
+	for _, entry := range s.ownProfiles() {
+		if entry.Profile.Metadata().ID == id {
+			return entry.Profile, true, nil
+		}
+	}
+	return nil, false, err
 }
 
 func capabilitiesOf(p profile.Profile) []string {
@@ -393,6 +448,18 @@ func (s *Server) handleProfileCompose(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, body)
 		return
 	}
+	// A pipeline that contradicts the tools installed here is not valid yet,
+	// however well its JSON parses (composesetup.go).
+	if pipeline, isPipeline := document.(*profile.PipelineProfile); isPipeline {
+		if runner, runnerErr := s.buildRunner(nil); runnerErr == nil {
+			if refusal := pipelineWiringRefusal(pipeline, runner.Resolver()); refusal != nil {
+				body["valid"] = false
+				body["error"] = refusal.Error()
+				writeJSON(w, http.StatusOK, body)
+				return
+			}
+		}
+	}
 	digest, err := profile.Digest(document)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
@@ -418,6 +485,7 @@ func (s *Server) handleProfileCompose(w http.ResponseWriter, r *http.Request) {
 	body["report"] = profile.ProfileReport(document, profile.TrustLocal)
 	body["trust"] = profile.TrustLocal
 	body["actions"] = actionIDs(document)
+	body["setup"] = s.composeSetup(document, digest)
 
 	if source, err := s.templateProfile(from); err == nil {
 		if difference, err := profile.DiffProfiles(source, document); err == nil {
@@ -443,7 +511,7 @@ func (s *Server) composeBase(request composeRequest) (map[string]any, string, er
 			return nil, "", err
 		}
 		// Filled from a tested profile: keep what the form has no field for.
-		if err := applyBasedOn(tree, request.Scratch.BasedOn); err != nil {
+		if err := s.applyBasedOn(tree, request.Scratch.BasedOn); err != nil {
 			return nil, "", err
 		}
 		if err := applyScratchActionSettings(tree, request.Scratch.Actions); err != nil {
@@ -477,11 +545,8 @@ func (s *Server) composeBase(request composeRequest) (map[string]any, string, er
 }
 
 func (s *Server) templateProfile(id string) (profile.Profile, error) {
-	entry, err := builtin.Find(id)
-	if err != nil {
-		return nil, err
-	}
-	return entry.Profile, nil
+	document, _, err := s.startingPoint(id)
+	return document, err
 }
 
 // applyComposeFields edits a decoded document tree.
@@ -705,6 +770,16 @@ func (s *Server) handleProfileImport(w http.ResponseWriter, r *http.Request) {
 			"valid": false, "error": err.Error(),
 		})
 		return
+	}
+	// The same refusal compose gives, for a request that never went near the
+	// page: wiring an installed tool does not declare is not installed.
+	if pipeline, isPipeline := document.(*profile.PipelineProfile); isPipeline {
+		if runner, runnerErr := s.buildRunner(nil); runnerErr == nil {
+			if refusal := pipelineWiringRefusal(pipeline, runner.Resolver()); refusal != nil {
+				writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"valid": false, "error": refusal.Error()})
+				return
+			}
+		}
 	}
 	meta := document.Metadata()
 	digest, err := profile.Digest(document)

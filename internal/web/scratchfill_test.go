@@ -37,7 +37,7 @@ func composeFilled(t *testing.T, id string, edit func(*scratchDocument)) (map[st
 	if err != nil {
 		t.Fatalf("%s: %v", id, err)
 	}
-	if err := applyBasedOn(tree, sent.BasedOn); err != nil {
+	if err := newMachine(t).server.applyBasedOn(tree, sent.BasedOn); err != nil {
 		t.Fatalf("%s: %v", id, err)
 	}
 	if err := applyScratchActionSettings(tree, sent.Actions); err != nil {
@@ -154,19 +154,21 @@ func TestEditsToAFilledFormAreKeptAndNothingRemovedComesBack(t *testing.T) {
 }
 
 // A form that says pipeline cannot be filled from a tool, and a profile that
-// is not a tested one cannot be named as the source.
+// is neither a tested one nor installed on this machine cannot be named as the
+// source.
 func TestBasedOnNamesATestedProfileOfTheSameKind(t *testing.T) {
+	s := newMachine(t).server
 	tree, err := scratchTree(scratchDocument{Kind: "pipeline"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := applyBasedOn(tree, "auto-pigeon.ericw-tools.q1"); err == nil {
+	if err := s.applyBasedOn(tree, "auto-pigeon.ericw-tools.q1"); err == nil {
 		t.Error("a pipeline form was filled from a tool")
 	}
-	if err := applyBasedOn(tree, "local.something"); err == nil {
-		t.Error("a profile that is not built in was accepted as tested")
+	if err := s.applyBasedOn(tree, "local.something"); err == nil {
+		t.Error("a profile that is neither built in nor installed was accepted as a starting point")
 	}
-	if err := applyBasedOn(tree, ""); err != nil {
+	if err := s.applyBasedOn(tree, ""); err != nil {
 		t.Errorf("from scratch: %v", err)
 	}
 }
