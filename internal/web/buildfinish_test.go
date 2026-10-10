@@ -362,3 +362,97 @@ func TestABuildThatFinishesDuringTheListIsNotRecordedInterrupted(t *testing.T) {
 			listed["state"], listed["finished_at"], manifest["state"], manifest["finished_at"])
 	}
 }
+
+// Cancelling goes through the same answer: the build ends `cancelled`, the
+// compiler it was running is gone, and there is nothing left to cancel.
+func TestCancellingARunningBuildEndsItAndTheProcessItOwned(t *testing.T) {
+	m := newMachine(t)
+	m.approveAndBindTool()
+	id, _, _ := m.heldBuild(nil)
+
+	status, body := m.call(http.MethodPost, "/api/v1/build/runs/"+id+"/cancel", nil)
+	if status != http.StatusAccepted {
+		t.Fatalf("cancelling the build = %d: %v", status, body["error"])
+	}
+	jobs, _ := body["cancelled_jobs"].([]any)
+	if len(jobs) != 1 {
+		t.Fatalf("cancelling a build in its compile stage stopped %v; want that stage's job", body["cancelled_jobs"])
+	}
+	manifest := m.waitForBuild(id)
+	if manifest["state"] != "cancelled" {
+		t.Fatalf("the cancelled build is recorded %v: %v", manifest["state"], manifest["error"])
+	}
+	_, answer := m.call(http.MethodGet, "/api/v1/build/runs/"+id, nil)
+	requireCoherent(t, "the cancelled build", answer["live"], manifest)
+	if message, _ := answer["error"].(string); message == "" || message != manifest["error"] {
+		t.Fatalf("the cancelled build is answered with %q beside a manifest that records %q", message, manifest["error"])
+	}
+	// The process is over, not merely disowned: the executor recorded the job
+	// it signalled as ended, and the compiler never got to write its output.
+	if stopped := m.waitForJob(jobs[0].(string)); stopped["state"] != "cancelled" {
+		t.Fatalf("the cancelled stage's job is %v", stopped["state"])
+	}
+	if output := bspOutput(t, manifest); output["missing"] != true {
+		t.Fatalf("a cancelled compile records its bsp as %v", output)
+	}
+	if status, _ := m.call(http.MethodPost, "/api/v1/build/runs/"+id+"/cancel", nil); status != http.StatusConflict {
+		t.Fatalf("cancelling a build that is over = %d, want 409", status)
+	}
+}
+
+// The case reconciliation IS for, kept: a manifest a stopped Companion left
+// `running` is answered `interrupted` by the next one, on both routes and on
+// disk, and nothing is run again.
+func TestABuildAStoppedCompanionLeftRunningIsStillAnsweredInterrupted(t *testing.T) {
+	m := newMachine(t)
+	m.approveAndBindTool()
+	status, body := m.call(http.MethodPost, "/api/v1/build/runs", map[string]any{
+		"pipeline": "aucom.fixture.pipeline",
+		"inputs":   map[string]string{"source_map": m.writeSourceMap()},
+	})
+	if status != http.StatusAccepted {
+		t.Fatalf("starting the build = %d: %v", status, body["error"])
+	}
+	id, _ := body["build"].(string)
+	m.waitForBuild(id)
+
+	// What a Companion killed mid-compile leaves behind: the manifest as it
+	// was while the stage ran, and a job that is no longer active.
+	abandoned, err := build.Find(m.builds, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	abandoned.State, abandoned.Error, abandoned.Outputs = job.Running, "", nil
+	abandoned.FinishedAt, abandoned.DurationMS = time.Time{}, 0
+	abandoned.Steps[0].State = job.Running
+	if err := abandoned.Save(abandoned.Directory); err != nil {
+		t.Fatal(err)
+	}
+	before := len(m.jobIDs())
+
+	next := m.restart()
+	for _, path := range []string{"/api/v1/build/runs", "/api/v1/build/runs/" + id} {
+		status, body := next.call(http.MethodGet, path, nil)
+		if status != http.StatusOK {
+			t.Fatalf("GET %s = %d: %v", path, status, body["error"])
+		}
+		item := body
+		if items, listed := body["items"].([]any); listed {
+			item, _ = items[0].(map[string]any)
+		}
+		manifest, _ := item["manifest"].(map[string]any)
+		requireCoherent(t, "GET "+path+" after the restart", item["live"], manifest)
+		if manifest["state"] != "interrupted" || manifest["error"] != build.InterruptedNote {
+			t.Fatalf("GET %s after the restart: %v (%v)", path, manifest["state"], manifest["error"])
+		}
+	}
+	if recorded, err := build.Find(m.builds, id); err != nil || recorded.State != job.Interrupted {
+		t.Fatalf("after the restart the manifest on disk says %v (%v)", recorded.State, err)
+	}
+	if after := len(next.jobIDs()); after != before {
+		t.Fatalf("reading an interrupted build started %d job(s)", after-before)
+	}
+	if status, _ := next.call(http.MethodPost, "/api/v1/build/runs/"+id+"/cancel", nil); status != http.StatusConflict {
+		t.Fatalf("cancelling a build this Companion is not running = %d, want 409", status)
+	}
+}
