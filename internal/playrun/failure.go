@@ -76,6 +76,10 @@ func convertRemedy(cause error) string {
 	}
 }
 
+// retiredNotSentRemedyPrefix is how the pre-`NEW_313A` remedy for a WAD that
+// was not sent began. Only the beginning is kept here, to recognise it.
+const retiredNotSentRemedyPrefix = "Auto-Pigeon cannot redistribute "
+
 // CurrentRemedy is the remedy to show for a record now.
 //
 // A failed conversion's remedy is derived again from the recorded error, so a
@@ -83,9 +87,18 @@ func convertRemedy(cause error) string {
 // extractor setup is not still shown advice that blames the map. Every other
 // stage keeps the remedy it recorded — the texture refusal's, in particular,
 // names AUB's specific reasons and is not re-derivable from the error alone.
+//
+// One recorded texture remedy IS replaced: the sentence written before
+// `NEW_313A` for a WAD that was not sent, which went on to say whose the file
+// was. That was never known, so a run recorded then is shown the current
+// sentence, derived from the refusals the record still holds.
 func CurrentRemedy(record *Record) string {
 	if record.State == Failed && record.FailedAt == Converting && record.Error != "" {
 		return convertRemedy(errors.New(record.Error))
+	}
+	if record.State == Failed && record.FailedAt == DownloadingTextures && record.Bundle != nil &&
+		strings.HasPrefix(record.Remedy, retiredNotSentRemedyPrefix) {
+		return compilerRefusalRemedy(record.Bundle.CompilerRefusals, record.WADSources)
 	}
 
 	return record.Remedy

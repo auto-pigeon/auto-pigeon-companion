@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/texturebundle"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/texturebundle/fixturewad"
 )
 
 // A fixture bundle is built the way AUB builds one, because a test that
@@ -59,6 +60,10 @@ type fixture struct {
 	omitLicenses bool
 	// rawManifest replaces the encoded manifest entirely.
 	rawManifest []byte
+	// notices are the third-party notice files a 1.2 bundle carries.
+	notices []fixtureNotice
+	// installedNotice is the manifest's `installed_notice`.
+	installedNotice string
 }
 
 type fixtureRequirement struct {
@@ -68,6 +73,23 @@ type fixtureRequirement struct {
 	included bool
 	note     string
 	paths    []string
+	// revision and redistribution are the 1.2 fields.
+	revision       int
+	redistribution *texturebundle.Redistribution
+}
+
+// fixtureNotice is one notice file: listed in the manifest and written to the
+// archive, unless a case says otherwise.
+type fixtureNotice struct {
+	path    string
+	body    []byte
+	sources []string
+	// digest overrides what the manifest declares, for the mismatch case.
+	digest string
+	// unlisted writes the member without listing it; absent lists it without
+	// writing the member.
+	unlisted bool
+	absent   bool
 }
 
 func digestOf(body []byte) string {
@@ -109,6 +131,7 @@ func (f fixture) build(t testing.TB) []byte {
 			Order: order, Name: requirement.name, Game: f.game, Kind: "wad",
 			Origin: requirement.origin, Status: requirement.status,
 			Included: requirement.included, Note: requirement.note,
+			Revision: requirement.revision, Redistribution: requirement.redistribution,
 			Files: []texturebundle.File{},
 		}
 		for _, path := range requirement.paths {
@@ -122,7 +145,19 @@ func (f fixture) build(t testing.TB) []byte {
 		MapName: "dm_1", ExportedAt: "2026-09-21T00:00:00Z",
 		WADsDeclared: f.wads, Requirements: requirements, Files: declared,
 		CompilerReady: f.compilerReady, CompilerRefusals: f.compilerRefusals,
-		Unresolved: f.unresolved,
+		Unresolved: f.unresolved, InstalledNotice: f.installedNotice,
+	}
+	for _, notice := range f.notices {
+		if notice.unlisted {
+			continue
+		}
+		digest := notice.digest
+		if digest == "" {
+			digest = digestOf(notice.body)
+		}
+		manifest.Notices = append(manifest.Notices, texturebundle.Notice{
+			Path: notice.path, SHA256: digest, Bytes: int64(len(notice.body)), Sources: notice.sources,
+		})
 	}
 	if manifest.CompilerRefusals == nil {
 		manifest.CompilerRefusals = []string{}
@@ -150,6 +185,11 @@ func (f fixture) build(t testing.TB) []byte {
 	}
 	for _, file := range f.extra {
 		write(file)
+	}
+	for _, notice := range f.notices {
+		if !notice.absent {
+			write(fixtureFile{path: notice.path, body: notice.body})
+		}
 	}
 	if !f.omitLicenses {
 		write(fixtureFile{path: texturebundle.LicensesName, body: []byte("# Attribution\n")})
@@ -188,6 +228,47 @@ func twoOrderedWADs() fixture {
 		requirements: []fixtureRequirement{
 			{name: "first.wad", status: "resolved", included: true, paths: []string{"first.wad"}},
 			{name: "second.wad", status: "resolved", included: true, paths: []string{"second.wad"}},
+		},
+		compilerReady: true,
+	}
+}
+
+// creditsNotice is the text of the fixture's third-party notice. Written for
+// this test; it is nobody's real licence.
+var creditsNotice = []byte("Fixture textures by the Auto-Pigeon test suite.\nFree to redistribute with this notice.\n")
+
+// declaredInstalledWAD is the 1.2 shape `NEW_313A` adds: `first.wad` uploaded by
+// a user, and `second.wad` INSTALLED on the deployment and carried because its
+// operator declared those exact bytes redistributable — with the credit, the
+// terms and the notice file that travel with them. The WAD bytes are made by
+// fixturewad; nothing here is a real texture.
+func declaredInstalledWAD() fixture {
+	first := fixturewad.WAD("fx_first", 16)
+	second := fixturewad.WAD("fx_second", 32)
+
+	return fixture{
+		mapID: "map0000000001", revision: 7, game: "quake1",
+		wads: []string{"first.wad", "second.wad"},
+		files: []fixtureFile{
+			{path: "first.wad", body: first, source: "first.wad"},
+			{path: "second.wad", body: second, source: "second.wad"},
+		},
+		requirements: []fixtureRequirement{
+			{name: "first.wad", status: "resolved", origin: "user", revision: 3,
+				included: true, paths: []string{"first.wad"}},
+			{name: "second.wad", status: "resolved", origin: "installed",
+				included: true, paths: []string{"second.wad"},
+				redistribution: &texturebundle.Redistribution{
+					Decision: texturebundle.DecisionIncluded, Reason: texturebundle.ReasonDeclared,
+					SHA256: digestOf(second), Bytes: int64(len(second)),
+					Source: "Fixture texture set", Credit: "The Auto-Pigeon test suite",
+					Terms:         "Free to redistribute with this notice.",
+					PrimaryNotice: "CREDITS.txt in the fixture set", NoticeVersion: "2026-10-10",
+					NoticePaths: []string{"NOTICES/CREDITS.txt"},
+				}},
+		},
+		notices: []fixtureNotice{
+			{path: "NOTICES/CREDITS.txt", body: creditsNotice, sources: []string{"second.wad"}},
 		},
 		compilerReady: true,
 	}

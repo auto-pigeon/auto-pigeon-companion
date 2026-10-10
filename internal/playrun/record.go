@@ -161,8 +161,8 @@ type Request struct {
 	Label string `json:"label,omitempty"`
 
 	// OwnWADsDir is a folder on this machine the person named in the review,
-	// holding their own copy of WADs Auto-Pigeon may not redistribute. Used
-	// only for the WADs AUB refused to carry, each by its exact file name, and
+	// holding their own copy of WADs the deployment did not send. Used
+	// only for the WADs AUB did not carry, each by its exact file name, and
 	// every one is recorded. Empty means none: a bundle that is not
 	// compiler-ready stops the run, as it always did. See ownwads.go.
 	OwnWADsDir string `json:"own_wads_dir,omitempty"`
@@ -294,6 +294,40 @@ type StagedFile struct {
 	Bytes  int64  `json:"bytes"`
 }
 
+// The origins a staged WAD may have. The first three are AUB's own words for
+// where a texture source lives; the last is this program's, for a file taken
+// from the folder a person named.
+const (
+	OriginInstalled = "installed"
+	OriginUser      = "user"
+	OriginEmbedded  = "embedded"
+	OriginOwnCopy   = "own_copy"
+)
+
+// WADSource is one declared WAD and the source that supplied it.
+type WADSource struct {
+	Name string `json:"name"`
+	// Origin is where the bytes came from: [OriginInstalled], [OriginUser],
+	// [OriginEmbedded] or [OriginOwnCopy]. Empty when the bundle did not say.
+	Origin string `json:"origin,omitempty"`
+	// Staged says whether verified bytes for this WAD are in the build's
+	// texture folder. It is set from files that were hashed, never from a
+	// manifest's `included` flag.
+	Staged   bool   `json:"staged"`
+	Revision int    `json:"revision,omitempty"`
+	SHA256   string `json:"sha256,omitempty"`
+	Bytes    int64  `json:"bytes,omitempty"`
+	// Source and Credit are what the deployment operator's redistribution
+	// declaration states about an installed source that was carried. Relayed,
+	// not asserted by this program.
+	Source string `json:"source,omitempty"`
+	Credit string `json:"credit,omitempty"`
+	// NotSentReason is AUB's reason code for a source that was not sent —
+	// `undeclared`, `digest_mismatch`, … — kept when a person's own copy then
+	// completed it, so the record says both what happened and why.
+	NotSentReason string `json:"not_sent_reason,omitempty"`
+}
+
 // Record is the whole durable record of one Build & Run.
 type Record struct {
 	SchemaVersion string `json:"schema_version"`
@@ -334,6 +368,16 @@ type Record struct {
 	// complete a bundle AUB could not carry them in, with the digest each was
 	// copied at. Empty for an ordinary run.
 	OwnWADs []StagedFile `json:"own_wads,omitempty"`
+	// WADSources says which source supplied each WAD the map declares, in the
+	// map's order: its origin, its revision when it has one, the digest it was
+	// verified at and — for an installed source carried under a declaration —
+	// the credit that declaration states. A WAD nothing supplied is listed too,
+	// with the reason it was not sent. It is what Technical details shows.
+	WADSources []WADSource `json:"wad_sources,omitempty"`
+	// Notices are the third-party notice files that arrived with a carried
+	// source, and NoticesDir where they are stored on this machine.
+	Notices    []StagedFile `json:"notices,omitempty"`
+	NoticesDir string       `json:"notices_dir,omitempty"`
 
 	// Extractor identifies the AUE that ran, and whether it was verified.
 	Extractor *ExtractorRef `json:"extractor,omitempty"`

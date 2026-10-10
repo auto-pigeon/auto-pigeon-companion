@@ -110,6 +110,15 @@ type BundleResult struct {
 	// ContentRoot is the verified directory of original files on this machine,
 	// and is what the build is given for the `content_root` role.
 	ContentRoot string
+	// Sources says, for each WAD the map declares and in its order, which
+	// source supplied it — or why none did. Optional: a fetcher that knows
+	// only the refusal codes still produces a run, with the neutral wording.
+	Sources []WADSource
+	// Notices are the third-party notice files the bundle delivered with a
+	// carried source, and NoticesDir the directory on this machine they are
+	// stored under, at those paths.
+	Notices    []StagedFile
+	NoticesDir string
 }
 
 // ConvertResult is what [Deps.Convert] produced.
@@ -152,9 +161,9 @@ type InstallResult struct {
 // ErrNotCompilerReady stops a run before the extractor or a compiler starts.
 //
 // Its own error because it is not a failure of this program: AUB has said which
-// texture sources it cannot redistribute, and the answer is a list of named
-// refusals rather than a retry. Nothing falls back to the installed `id1` WADs
-// or to a similarly named local file.
+// texture sources it did not send, and the answer is a list of named refusals
+// rather than a retry. Nothing falls back to a WAD in the game folder or to a
+// similarly named local file.
 var ErrNotCompilerReady = errors.New("playrun: this map's texture bundle is not compiler-ready")
 
 // Live is the set of runs this process is executing, and how to stop each.

@@ -60,7 +60,7 @@ func (d *playDriveHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// bundle for a revision this machine already holds is reused offline —
 		// correctly — and swapping the backend's answer under it would be
 		// testing nothing. What this reproduces is the real case: somebody
-		// declares a WAD the deployment cannot redistribute, saves, and comes
+		// declares a WAD the deployment does not send, saves, and comes
 		// back to build.
 		d.backend.asset.revision++
 		d.backend.asset.revisionID = fmt.Sprintf("rev-%06d", d.backend.asset.revision)

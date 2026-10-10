@@ -13,30 +13,34 @@ import (
 	"strings"
 )
 
-// Your own copy of a WAD Auto-Pigeon may not hand out.
+// Your own copy of a WAD the deployment did not send.
 //
-// Most Quake maps name one of id Software's texture WADs — metal.wad, base.wad
-// — and an Auto-Pigeon deployment holds its copy of those but may not
-// redistribute it, so the bundle arrives without it and AUB says the map is
-// not compiler-ready (`wad_bytes_not_carried`). Before this, such a map could
-// not be built by Build & Run at all, however many copies of Quake the person
-// owned.
+// A map names its texture WADs, and an Auto-Pigeon deployment sends the bytes
+// of a WAD it has installed only when its operator has a redistribution
+// permission on record for those exact bytes (`NEW_313A`). When it has none,
+// the bundle arrives without the file and AUB says the map is not
+// compiler-ready (`wad_bytes_not_carried`). That is the whole of what is known
+// here: nothing on record permits handing those bytes out. It is NOT a
+// statement about whose work the file is or where a copy of it comes from, and
+// nothing in this program may say that it is.
+//
+// The remedy is local: the person supplies their own copy of the file.
 //
 // The rule that did not change: the Companion never QUIETLY uses a similarly
-// named WAD from the person's game folder. Here the person names a folder, in
-// the review, for this run; only the WADs AUB refused to carry are taken from
-// it, each by its exact file name; and every one is recorded — name, SHA-256,
-// size — in the run and in the build manifest, beside the bundle it completed.
-// A refusal of any other kind (a private source, a texture nobody supplies)
-// still stops the run: an own copy is an answer to "may not redistribute" and
-// to nothing else.
+// named WAD from a folder on the person's machine. Here the person names a
+// folder, in the review, for this run; only the WADs AUB did not carry are
+// taken from it, each by its exact file name; and every one is recorded — name,
+// SHA-256, size — in the run and in the build manifest, beside the bundle it
+// completed. A refusal of any other kind (a private source, a texture nobody
+// supplies) still stops the run: an own copy is an answer to "was not sent"
+// and to nothing else.
 
-// OwnWADsNeeded reports the WADs a bundle lacks only because AUB may not
-// redistribute them, and whether that is the only thing wrong with it.
+// OwnWADsNeeded reports the WADs a bundle lacks only because AUB did not send
+// their bytes, and whether that is the only thing wrong with it.
 //
 // `wad_inventory_incomplete` accompanies a WAD that was not carried — AUB
 // cannot list the contents of bytes it does not ship — so it does not count as
-// a separate problem when at least one WAD was refused for redistribution.
+// a separate problem when at least one WAD was not carried.
 func OwnWADsNeeded(refusals []string) ([]string, bool) {
 	var names []string
 	for _, refusal := range refusals {
@@ -220,6 +224,66 @@ func (s *Service) completeWithOwnWADs(record *Record, bundleRoot string, names [
 	}
 
 	return root, staged, nil
+}
+
+// withOwnCopies marks, in the per-WAD source list, the declarations a person's
+// own copy completed: the origin becomes [OriginOwnCopy] and the digest is the
+// one the file was copied at. The reason it was not sent stays.
+func withOwnCopies(sources []WADSource, own []StagedFile) []WADSource {
+	out := append([]WADSource(nil), sources...)
+	for _, file := range own {
+		matched := false
+		for index := range out {
+			if out[index].Staged || !strings.EqualFold(wadFileName(out[index].Name), file.Path) {
+				continue
+			}
+			out[index].Origin, out[index].Staged = OriginOwnCopy, true
+			out[index].SHA256, out[index].Bytes = file.SHA256, file.Bytes
+			out[index].Revision, out[index].Source, out[index].Credit = 0, "", ""
+			matched = true
+		}
+		if !matched {
+			out = append(out, WADSource{
+				Name: file.Path, Origin: OriginOwnCopy, Staged: true, SHA256: file.SHA256, Bytes: file.Bytes,
+			})
+		}
+	}
+
+	return out
+}
+
+// notSentReason is AUB's reason code for one declared WAD, or "" when the
+// bundle did not give one — a 1.1 manifest never does.
+func notSentReason(sources []WADSource, subject string) string {
+	for _, source := range sources {
+		if !source.Staged && (source.Name == subject ||
+			strings.EqualFold(wadFileName(source.Name), wadFileName(subject))) {
+			return source.NotSentReason
+		}
+	}
+
+	return ""
+}
+
+// NotSentSentence is why a WAD was not sent, as a sentence, chosen by AUB's
+// reason code. An unknown or absent code — every 1.1 manifest — gets the one
+// sentence that is true of all of them: no redistribution permission is on
+// record for that file's exact bytes. None of these says whose the file is.
+func NotSentSentence(wad, reason string) string {
+	switch reason {
+	case "declared_withheld":
+		return wad + " was not sent: the operator of this Auto-Pigeon deployment has declared that its bytes are not to be redistributed."
+	case "digest_mismatch":
+		return wad + " was not sent: the deployment's copy is not the exact file its redistribution permission names."
+	case "declaration_incomplete":
+		return wad + " was not sent: the deployment's redistribution record for it does not state a credit and terms."
+	case "source_unreadable":
+		return wad + " was not sent: the deployment could not read its copy of the file."
+	case "policy_unavailable":
+		return wad + " was not sent: the deployment's redistribution records could not be read."
+	default:
+		return wad + " was not sent: this Auto-Pigeon deployment has no redistribution permission on record for that file's exact bytes."
+	}
 }
 
 func copyFile(from, to string) (string, int64, error) {

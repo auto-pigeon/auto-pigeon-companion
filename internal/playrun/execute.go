@@ -104,6 +104,8 @@ func (s *Service) downloadTextures(ctx context.Context, record *Record) error {
 		return errors.New("playrun: the texture bundle produced no verified content root")
 	}
 	record.Bundle, record.BundleRoot = result.Ref, result.ContentRoot
+	record.WADSources = result.Sources
+	record.Notices, record.NoticesDir = result.Notices, result.NoticesDir
 
 	// The pairing, checked here as well as at the two places that fetched the
 	// halves. A current export must never be paired with a historical map
@@ -121,8 +123,8 @@ func (s *Service) downloadTextures(ctx context.Context, record *Record) error {
 	// said it could not complete.
 	if !result.Ref.CompilerReady {
 		// The one exception, and only when the person asked for it in the
-		// review: WADs AUB may not redistribute, taken from the folder they
-		// named. See ownwads.go.
+		// review: WADs AUB did not send, taken from the folder they named.
+		// See ownwads.go.
 		names, onlyNotCarried := OwnWADsNeeded(result.Ref.CompilerRefusals)
 		if onlyNotCarried && record.Request.OwnWADsDir != "" {
 			root, own, err := s.completeWithOwnWADs(record, result.ContentRoot, names)
@@ -133,32 +135,52 @@ func (s *Service) downloadTextures(ctx context.Context, record *Record) error {
 				return fmt.Errorf("%w: %v", ErrNotCompilerReady, err)
 			}
 			record.BundleRoot, record.OwnWADs = root, own
+			record.WADSources = withOwnCopies(record.WADSources, own)
 			s.detail(record, fmt.Sprintf("%d file(s), bundle %s, completed with your own copy of %s",
 				len(result.Ref.Files), result.Ref.Digest, strings.Join(names, ", ")))
 
 			return nil
 		}
-		record.Remedy = compilerRefusalRemedy(result.Ref.CompilerRefusals)
+		record.Remedy = compilerRefusalRemedy(result.Ref.CompilerRefusals, result.Sources)
 
 		return fmt.Errorf("%w: %s", ErrNotCompilerReady,
 			strings.Join(result.Ref.CompilerRefusals, "; "))
 	}
-	s.detail(record, fmt.Sprintf("%d file(s), bundle %s", len(result.Ref.Files), result.Ref.Digest))
+	s.detail(record, fmt.Sprintf("%d file(s), bundle %s%s",
+		len(result.Ref.Files), result.Ref.Digest, describeCarried(result.Sources, result.Notices)))
 
 	return nil
+}
+
+// describeCarried is the clause of the stage's technical sentence that names an
+// installed source the deployment carried under a declaration, with its credit.
+func describeCarried(sources []WADSource, notices []StagedFile) string {
+	var carried []string
+	for _, source := range sources {
+		if source.Staged && source.Origin == OriginInstalled {
+			carried = append(carried, source.Name+" (credit: "+source.Credit+")")
+		}
+	}
+	if len(carried) == 0 {
+		return ""
+	}
+
+	return fmt.Sprintf("; installed on the deployment and sent under its declared terms: %s; %d notice file(s) kept with the bundle",
+		strings.Join(carried, ", "), len(notices))
 }
 
 // compilerRefusalRemedy turns AUB's refusal codes into the sentence a person
 // acts on. An unrecognised code is passed through rather than flattened: a
 // deployment that adds one must not make the panel say nothing.
-func compilerRefusalRemedy(refusals []string) string {
+func compilerRefusalRemedy(refusals []string, sources []WADSource) string {
 	for _, refusal := range refusals {
 		code, subject, _ := strings.Cut(refusal, ":")
 		subject = strings.TrimSpace(subject)
 		switch strings.TrimSpace(code) {
 		case "wad_bytes_not_carried":
-			return "Auto-Pigeon cannot redistribute " + subject + " — it is the deployment's copy of " +
-				"somebody else's game. Upload your own copy of that WAD, or declare one the map can use."
+			return NotSentSentence(subject, notSentReason(sources, subject)) +
+				" Supply your own copy of that file — Build & Run can take it from a folder you name, " +
+				"or you can upload it as a texture source — or declare a WAD the map can use."
 		case "texture_source_private":
 			return "The texture source " + subject + " belongs to somebody else. Ask its owner to share it, " +
 				"or declare a source you can read."

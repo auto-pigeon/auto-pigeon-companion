@@ -66,7 +66,7 @@
     gameRoot: "",
     plan: null,
     // ownWadsDir is the folder the person confirmed, in the review, for WADs
-    // Auto-Pigeon may not redistribute. Never remembered in the URL: it is a
+    // the deployment did not send. Never remembered in the URL: it is a
     // path on this machine.
     ownWadsDir: "",
     // lanListings is the Auto-Pigeon server's answer, not a choice: whether it
@@ -903,14 +903,43 @@
     return el("section", { className: "panel review-card", children });
   }
 
+  // Why a WAD was not sent, by the reason AUB gives for it (NEW_313A). What is
+  // known is what the deployment has on record about those exact bytes — never
+  // whose the file is, which nothing here may claim. A bundle that gives no
+  // reason (every 1.1 manifest), or one this page does not know, gets the one
+  // sentence that is true of all of them.
+  function notSentSentence(wad, reason) {
+    switch (reason) {
+      case "declared_withheld":
+        return t("{wad} was not sent: the operator of this Auto-Pigeon deployment has declared that its bytes are not to be redistributed.", { wad });
+      case "digest_mismatch":
+        return t("{wad} was not sent: the deployment's copy is not the exact file its redistribution permission names.", { wad });
+      case "declaration_incomplete":
+        return t("{wad} was not sent: the deployment's redistribution record for it does not state a credit and terms.", { wad });
+      case "source_unreadable":
+        return t("{wad} was not sent: the deployment could not read its copy of the file.", { wad });
+      case "policy_unavailable":
+        return t("{wad} was not sent: the deployment's redistribution records could not be read.", { wad });
+      default:
+        return t("{wad} was not sent: this Auto-Pigeon deployment has no redistribution permission on record for that file's exact bytes.", { wad });
+    }
+  }
+
+  // The reason AUB gave for one declared WAD, matched by its file name.
+  function notSentReason(textures, name) {
+    const base = (value) => String(value || "").split(/[\\/]/).pop().toLowerCase();
+    const wad = (textures?.wads || []).find((w) => !w.included && base(w.name) === base(name));
+    return wad?.redistribution?.reason || "";
+  }
+
   // The refusal codes AUB gives, as sentences a person can act on. A code this
   // page does not know is still shown, as it came, rather than dropped.
-  function refusalSentence(refusal) {
+  function refusalSentence(refusal, textures) {
     const [code, ...rest] = String(refusal).split(":");
     const subject = rest.join(":").trim();
     switch (code.trim()) {
       case "wad_bytes_not_carried":
-        return t("Auto-Pigeon may not hand out {wad}: it is part of somebody else's game.", { wad: subject });
+        return notSentSentence(subject, notSentReason(textures, subject));
       case "wad_inventory_incomplete":
         return t("Auto-Pigeon could not list what is inside one of the map's WADs.");
       case "texture_source_private":
@@ -930,37 +959,42 @@
         el("p", { children: [el("strong", { text: t("This map cannot be compiled yet.") })] }),
         el("ul", {
           className: "plain",
-          children: (textures.compiler_refusals || []).map((r) => el("li", { text: refusalSentence(r) })),
+          children: (textures.compiler_refusals || []).map((r) => el("li", { text: refusalSentence(r, textures) })),
         }),
         el("p", {
           className: "muted",
-          text: t("The Companion will not start the extractor or a compiler, and will not quietly use a similarly named WAD from your own game folder."),
+          text: t("The Companion will not start the extractor or a compiler, and will not quietly use a similarly named WAD from a folder on this computer."),
         }),
       ],
     });
   }
 
-  // "Use my own copy": the answer to a WAD Auto-Pigeon may not redistribute,
-  // and only to that. The person names the folder and presses the button;
-  // nothing is taken from a game folder on the page's own initiative.
+  // "Use my own copy": the answer to a WAD the deployment did not send, and
+  // only to that. The person names the folder and presses the button; nothing
+  // is taken from a folder on this machine on the page's own initiative.
   function ownWadsOffer(textures) {
     const names = textures.own_wads_needed || [];
     const confirmed = textures.own_wads_dir && textures.own_wads_dir === state.ownWadsDir;
     const box = el("div", { className: "own-wads" });
     box.append(el("p", {
-      children: [el("strong", {
-        text: t("Auto-Pigeon may not hand out {wads} — it is part of the game you own.", { wads: names.join(", ") }),
-      })],
+      children: [el("strong", { text: t("Not sent with this map's textures: {wads}.", { wads: names.join(", ") }) })],
+    }));
+    box.append(el("ul", {
+      className: "plain",
+      children: names.map((name) => el("li", { text: notSentSentence(name, notSentReason(textures, name)) })),
     }));
     box.append(el("p", {
       className: "muted small",
-      text: t("Use your own copy: name the folder that has it (usually your game's id1). Only these files are taken from it, by their exact names, and the build records each one."),
+      text: t("You can supply your own copy: name the folder that has it. Only these files are taken from it, by their exact names, and the build records each one."),
     }));
     const input = el("input", {
       attrs: { type: "text", id: "play-own-wads-dir", spellcheck: "false", "aria-label": t("Folder with your own WADs") },
     });
-    // The suggestion is spelled with this machine's own separator: a Windows
-    // game folder followed by "/id1" read as a typo (NEW_310).
+    // The suggestion is where a compiler conventionally looks for WADs, and is
+    // only a starting point the person can overwrite — it is not a claim that
+    // the file is there or belongs there. It is spelled with this machine's
+    // own separator: a Windows game folder followed by "/id1" read as a typo
+    // (NEW_310).
     const separator = /\\/.test(state.gameRoot || "") ? "\\" : "/";
     input.value = state.ownWadsDir || (state.gameRoot ? state.gameRoot.replace(/[\\/]+$/, "") + separator + "id1" : "");
     const use = el("button", { text: t("Use this folder"), className: "primary", attrs: { type: "button" } });
@@ -1492,12 +1526,42 @@
     return el("section", { className: "panel activity-run", children });
   }
 
+  function wadOrigin(origin) {
+    switch (origin) {
+      case "installed": return t("installed on the deployment");
+      case "user": return t("uploaded texture source");
+      case "embedded": return t("carried inside the map");
+      case "own_copy": return t("your own copy");
+      default: return origin || t("origin not stated");
+    }
+  }
+
+  function wadSourceText(source) {
+    if (!source.staged) return notSentSentence(source.name, source.not_sent_reason);
+    const parts = [wadOrigin(source.origin)];
+    if (source.revision) parts.push(t("revision {n}", { n: source.revision }));
+    if (source.sha256) parts.push(`sha256 ${source.sha256}`);
+    if (source.credit) parts.push(t("credit: {credit}", { credit: source.credit }));
+    return parts.join(" · ");
+  }
+
   function details(run) {
     const rows = [];
     if (run.revision) rows.push(...line("Map revision", String(run.revision)));
     if (run.bundle) {
       rows.push(...line("Texture bundle", run.bundle.digest));
       rows.push(...line("WADs, in order", (run.bundle.wads_declared || []).join(", ")));
+    }
+    // Which source supplied each WAD the build read (NEW_313A): its origin,
+    // its revision when it has one, the digest it was verified at and, for a
+    // WAD installed on the deployment and sent under a declaration, the credit
+    // that declaration states.
+    for (const source of run.wad_sources || []) {
+      rows.push(...line(t("WAD {name}", { name: source.name }), wadSourceText(source)));
+    }
+    if ((run.notices || []).length) {
+      rows.push(...line(t("Third-party notices"),
+        `${run.notices.map((n) => n.path).join(", ")} — ${run.notices_dir}`));
     }
     if (run.extractor) {
       rows.push(...line("Extractor",

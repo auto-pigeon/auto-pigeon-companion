@@ -535,6 +535,45 @@ folder there as for any file. Nothing is uploaded and the file is only read.
 **Build & Run** lists your maps with the most recently saved first. An engine
 it calls **Needs setup** says what is missing, in the same words Profiles uses.
 
+**The map's texture WADs.** Build & Run downloads the map's texture bundle from
+the Auto-Pigeon server and checks every file in it against the SHA-256 the
+bundle's manifest declares before a compiler is started. A bundle that says a
+WAD is included and does not carry it, whose bytes or notices do not match their
+digests, or that names a path outside its own folder is refused, and nothing is
+built.
+
+A WAD installed on the Auto-Pigeon deployment is sent when the deployment's
+operator has declared that file's exact bytes redistributable. It is then staged
+like any other; you are not asked for a folder. The credit and terms it is sent
+under arrive as notice files, which are kept unchanged in a `NOTICES` folder
+beside the verified bundle (next to its `LICENSES.md`). A run's **Technical
+details** lists, for each WAD, where it came from — installed on the deployment,
+an uploaded texture source, carried inside the map, or your own copy — with its
+revision when it has one, its SHA-256 and, for a declared installed WAD, its
+credit, and says where the notices are.
+
+When a WAD is **not sent**, what is known is that the deployment has no
+redistribution permission on record for that file's exact bytes; the review says
+so, with the server's reason when it gives one. You can supply your own copy:
+name the folder that has it, and only the missing WADs are taken from it, by
+their exact file names, each recorded with its SHA-256.
+
+```bash
+# what a map revision's texture bundle carries, and why any WAD was not sent
+curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
+  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/play/textures?asset_id=<map-id>&revision=<n>"
+# the same, checking a folder of your own for the WADs that were not sent
+curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
+  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/play/textures?asset_id=<map-id>&revision=<n>&own_wads_dir=/path/to/your/wads"
+```
+
+Each WAD in the answer has `origin`, `included` and its files' `sha256`; an
+installed one also has `redistribution` — `decision` (`included` or `withheld`),
+`reason`, and for a carried one its `source`, `credit`, `terms` and
+`notice_paths`. `notices` lists the notice files kept with the bundle. Both the
+current manifest (`aub-map-texture-export/1.2`) and the previous one (`1.1`,
+which never carries an installed WAD and gives no reason) are read.
+
 **Auto-build.** Under the map in **Build & Run**, **Auto-build this map** checks
 it about every 30 seconds while the Companion runs and builds each newly saved
 revision — once — with the chosen build profile. It never starts the game.

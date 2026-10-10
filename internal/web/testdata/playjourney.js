@@ -11,7 +11,7 @@
 //   - changing the revision CLEARS the review and says so;
 //   - Activity shows the run, recovers it after a reload, and offers Retry;
 //   - a not-compiler-ready bundle disables the button and names the refusals
-//     (for a WAD that may not be redistributed, it offers "use your own copy");
+//     (for a WAD the server did not send, it offers "use your own copy");
 //   - nothing in the DOM, the URL or the visible text carries the token, a
 //     private download URL or a path on this machine.
 
@@ -319,12 +319,12 @@
     await waitFor("the new revision", () => $("play-revision").value !== settings.revision_id, 20000);
     setValue($("play-map-name"), "dm2");
     stepButton(4).click();
-    // The fixture's only refusal is a WAD the server may not redistribute, so
+    // The fixture's only refusal is a WAD the server did not send, so
     // the review offers "use your own copy" rather than a dead end; the button
     // stays disabled until a folder holding it is confirmed.
     await waitFor(
       "the refusal",
-      () => /cannot be compiled yet|may not hand out/.test(textOf($("play-review"))),
+      () => /cannot be compiled yet|Not sent with this map/.test(textOf($("play-review"))),
       40000
     ).catch((err) => {
       throw new Error(`${err.message}; revision=${$("play-revision").value}, ` +

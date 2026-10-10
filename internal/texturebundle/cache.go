@@ -60,6 +60,11 @@ type Receipt struct {
 	TotalBytes int64     `json:"total_bytes"`
 	Licenses   bool      `json:"licenses"`
 	VerifiedAt time.Time `json:"verified_at"`
+
+	// Notices are the third-party notice files stored in this entry under
+	// `NOTICES/`, each with the digest it was verified at and the sources it
+	// travels with. Empty for a bundle that carried none.
+	Notices []NoticeMember `json:"notices,omitempty"`
 }
 
 // Entry is one verified bundle on this machine.
@@ -223,8 +228,44 @@ func (c *Cache) load(dir string) (Entry, error) {
 	}, nil
 }
 
-// Verify re-hashes every file the receipt records.
+// NoticePath is where one of this entry's notices is on this machine.
+func (e Entry) NoticePath(notice NoticeMember) (string, error) {
+	return safeJoin(e.Dir, notice.Path)
+}
+
+// Verify re-hashes every file the receipt records, and every notice.
+//
+// The notices are part of what was verified: a carried source whose notice has
+// been removed or edited since is no longer the thing the bundle delivered, so
+// the entry is not reused and the bundle is fetched again.
 func (e Entry) Verify() error {
+	// The manifest beside the receipt is the bundle's own. Every notice it
+	// lists must be one the receipt recorded as verified — a receipt edited to
+	// forget a notice must not make an entry look complete.
+	recorded := map[string]bool{}
+	for _, notice := range e.Receipt.Notices {
+		recorded[notice.Path] = true
+	}
+	for _, notice := range e.Manifest.Notices {
+		if !recorded[notice.Path] {
+			return fmt.Errorf("texturebundle: this cached bundle has no verified record of the notice %s", notice.Path)
+		}
+	}
+	for _, notice := range e.Receipt.Notices {
+		target, err := e.NoticePath(notice)
+		if err != nil {
+			return err
+		}
+		digest, size, err := digestFile(target)
+		switch {
+		case errors.Is(err, fs.ErrNotExist):
+			return fmt.Errorf("texturebundle: the notice %s is missing from this cached bundle", notice.Path)
+		case err != nil:
+			return err
+		case size != notice.Bytes || !strings.EqualFold(digest, notice.SHA256):
+			return fmt.Errorf("texturebundle: the notice %s no longer hashes to what was verified", notice.Path)
+		}
+	}
 	for _, file := range e.Receipt.Files {
 		target, err := safeJoin(e.ContentRoot, file.Path)
 		if err != nil {
@@ -317,6 +358,7 @@ func (c *Cache) Publish(ctx context.Context, bundle []byte, want Expect) (Entry,
 		TotalBytes:       total,
 		Licenses:         unpacked.licenses,
 		VerifiedAt:       c.now(),
+		Notices:          unpacked.notices,
 	}
 	encoded, err := json.MarshalIndent(receipt, "", "  ")
 	if err != nil {

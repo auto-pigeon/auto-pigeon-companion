@@ -75,7 +75,17 @@ type extracted struct {
 	dir      string
 	manifest Manifest
 	files    []Member
+	notices  []NoticeMember
 	licenses bool
+}
+
+// NoticeMember is one verified third-party notice file on disk, under the
+// entry directory at its manifest path.
+type NoticeMember struct {
+	Path    string   `json:"path"`
+	SHA256  string   `json:"sha256"`
+	Bytes   int64    `json:"bytes"`
+	Sources []string `json:"sources,omitempty"`
 }
 
 // Member is one verified file on disk.
@@ -135,11 +145,19 @@ func extract(ctx context.Context, parent string, bundle []byte, want Expect, lim
 	if err != nil {
 		return nil, err
 	}
-	// Nothing undeclared, except the two documents the contract names. A
-	// bundle that carried an extra executable would otherwise land in a
-	// directory the build reads.
+	// parseManifest has already checked the list; this is the same list, keyed.
+	notices, err := declaredNotices(manifest)
+	if err != nil {
+		return nil, err
+	}
+	// Nothing undeclared, except the two documents the contract names and the
+	// notices the manifest lists. A bundle that carried an extra executable
+	// would otherwise land in a directory the build reads.
 	for name := range names {
 		if name == ManifestName || name == LicensesName {
+			continue
+		}
+		if _, ok := notices[name]; ok {
 			continue
 		}
 		if _, ok := declared[name]; !ok {
@@ -151,6 +169,12 @@ func extract(ctx context.Context, parent string, bundle []byte, want Expect, lim
 		if _, ok := names[name]; !ok {
 			return nil, fmt.Errorf(
 				"texturebundle: the manifest declares %s, which the bundle does not carry", name)
+		}
+	}
+	for name := range notices {
+		if _, ok := names[name]; !ok {
+			return nil, fmt.Errorf(
+				"texturebundle: the manifest lists the notice %s, which the bundle does not carry", name)
 		}
 	}
 
@@ -206,6 +230,50 @@ func extract(ctx context.Context, parent string, bundle []byte, want Expect, lim
 				name, digest, file.SHA256))
 		}
 		out.files = append(out.files, Member{Path: name, Source: file.Source, SHA256: strings.ToLower(digest), Bytes: size})
+	}
+
+	// The notices, each once, at their manifest path under the ENTRY directory —
+	// beside LICENSES.md and outside the content root a compiler reads. They are
+	// third-party texts that travel with the bytes they are about; they are
+	// stored as they arrived and never folded into this program's own licence.
+	noticePaths := make([]string, 0, len(notices))
+	for name := range notices {
+		noticePaths = append(noticePaths, name)
+	}
+	sort.Strings(noticePaths)
+	for _, name := range noticePaths {
+		if ctx.Err() != nil {
+			return fail(fmt.Errorf("%w: %v", ErrCancelled, ctx.Err()))
+		}
+		notice := notices[name]
+		total += notice.Bytes
+		if total > limits.UncompressedBytes {
+			return fail(fmt.Errorf(
+				"texturebundle: this bundle's files total more than the %d bytes the Companion will extract",
+				limits.UncompressedBytes))
+		}
+		destination, joinErr := safeJoin(filepath.Join(dir, NoticesDir), strings.TrimPrefix(name, NoticesDir+"/"))
+		if joinErr != nil {
+			return fail(joinErr)
+		}
+		if err = os.MkdirAll(filepath.Dir(destination), 0o700); err != nil {
+			return fail(fmt.Errorf("texturebundle: creating %s: %w", filepath.Dir(destination), err))
+		}
+		digest, size, writeErr := writeMember(names[name], destination, MaxNoticeBytes)
+		if writeErr != nil {
+			return fail(writeErr)
+		}
+		if size != notice.Bytes {
+			return fail(fmt.Errorf("texturebundle: the notice %s is %d bytes and its manifest declares %d",
+				name, size, notice.Bytes))
+		}
+		if !strings.EqualFold(digest, notice.SHA256) {
+			return fail(fmt.Errorf("texturebundle: the notice %s hashes to %s and its manifest declares %s",
+				name, digest, notice.SHA256))
+		}
+		out.notices = append(out.notices, NoticeMember{
+			Path: name, SHA256: strings.ToLower(digest), Bytes: size, Sources: notice.Sources,
+		})
 	}
 
 	if entry, ok := names[LicensesName]; ok {

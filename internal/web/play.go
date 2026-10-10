@@ -217,7 +217,67 @@ func bundleResult(entry texturebundle.Entry, backend string) playrun.BundleResul
 		})
 	}
 
-	return playrun.BundleResult{Ref: ref, ContentRoot: entry.ContentRoot}
+	result := playrun.BundleResult{Ref: ref, ContentRoot: entry.ContentRoot, Sources: wadSources(entry)}
+	for _, notice := range entry.Receipt.Notices {
+		result.Notices = append(result.Notices, playrun.StagedFile{
+			Path: notice.Path, SHA256: notice.SHA256, Bytes: notice.Bytes,
+		})
+	}
+	if len(result.Notices) > 0 {
+		result.NoticesDir = entry.Dir
+	}
+
+	return result
+}
+
+// wadSources says which source supplied each WAD the map declares, in the
+// map's own order.
+//
+// `Staged` is decided by the receipt — the files this machine hashed against
+// the manifest's digests — and never by the manifest's `included` flag: a
+// requirement is staged when every member it names is one of the verified
+// files. The credit is the deployment's declaration, relayed for an installed
+// source that was carried.
+func wadSources(entry texturebundle.Entry) []playrun.WADSource {
+	verified := map[string]texturebundle.Member{}
+	for _, file := range entry.Receipt.Files {
+		verified[file.Path] = file
+	}
+	wads := entry.Manifest.OrderedWADs()
+	out := make([]playrun.WADSource, 0, len(wads))
+	for _, wad := range wads {
+		source := playrun.WADSource{Name: wad.Name, Origin: wad.Origin, Revision: wad.Revision}
+		staged := len(wad.Files) > 0
+		for _, file := range wad.Files {
+			member, ok := verified[file.Path]
+			if !ok || !strings.EqualFold(member.SHA256, file.SHA256) {
+				staged = false
+
+				break
+			}
+			source.Bytes += member.Bytes
+		}
+		source.Staged = staged
+		switch {
+		case !staged:
+			source.Bytes = 0
+		case len(wad.Files) == 1:
+			source.SHA256 = strings.ToLower(wad.Files[0].SHA256)
+		default:
+			source.SHA256 = strings.ToLower(wad.SourceSHA256)
+		}
+		if verdict := wad.Redistribution; verdict != nil {
+			if staged && verdict.Decision == texturebundle.DecisionIncluded {
+				source.Source, source.Credit = verdict.Source, verdict.Credit
+			}
+			if !staged {
+				source.NotSentReason = verdict.Reason
+			}
+		}
+		out = append(out, source)
+	}
+
+	return out
 }
 
 func (s *Server) backendAddress() string {
@@ -505,8 +565,8 @@ type playRequestBody struct {
 	Mod    string `json:"mod,omitempty"`
 	Map    string `json:"map"`
 	Label  string `json:"label,omitempty"`
-	// OwnWADsDir is the folder the person named in the review for WADs
-	// Auto-Pigeon may not redistribute. See playrun/ownwads.go.
+	// OwnWADsDir is the folder the person named in the review for WADs the
+	// deployment did not send. See playrun/ownwads.go.
 	OwnWADsDir string `json:"own_wads_dir,omitempty"`
 	// Listing lists a hosted game in Live Games. See hosting.go.
 	Listing *playListingBody `json:"listing,omitempty"`
@@ -834,6 +894,36 @@ func playView(record *playrun.Record, now time.Time) map[string]any {
 			"files":             bundleFileView(record.Bundle.Files),
 		}
 	}
+	// Which source supplied each WAD the build read: Technical details.
+	if len(record.WADSources) > 0 {
+		sources := make([]map[string]any, 0, len(record.WADSources))
+		for _, source := range record.WADSources {
+			row := map[string]any{"name": source.Name, "origin": source.Origin, "staged": source.Staged}
+			if source.Revision > 0 {
+				row["revision"] = source.Revision
+			}
+			if source.SHA256 != "" {
+				row["sha256"], row["bytes"] = source.SHA256, source.Bytes
+			}
+			if source.Credit != "" {
+				row["credit"], row["source"] = source.Credit, source.Source
+			}
+			if source.NotSentReason != "" {
+				row["not_sent_reason"] = source.NotSentReason
+			}
+			sources = append(sources, row)
+		}
+		out["wad_sources"] = sources
+	}
+	if len(record.Notices) > 0 {
+		notices := make([]map[string]any, 0, len(record.Notices))
+		for _, notice := range record.Notices {
+			notices = append(notices, map[string]any{
+				"path": notice.Path, "sha256": notice.SHA256, "bytes": notice.Bytes,
+			})
+		}
+		out["notices"], out["notices_dir"] = notices, record.NoticesDir
+	}
 	if record.Extractor != nil {
 		out["extractor"] = map[string]any{
 			"version": record.Extractor.Version, "protocol": record.Extractor.Protocol,
@@ -921,7 +1011,7 @@ func (s *Server) handlePlayTextures(w http.ResponseWriter, r *http.Request) {
 }
 
 // withOwnWADs adds to a texture view what "use my own copy" could do for it:
-// which WADs AUB refused only because it may not redistribute them, and —
+// which WADs are missing only because AUB did not send their bytes, and —
 // when the person named a folder — which of those that folder holds. The
 // review draws its offer from this; nothing here decides a run.
 func withOwnWADs(view map[string]any, entry texturebundle.Entry, dir string) map[string]any {
@@ -964,10 +1054,31 @@ func textureView(entry texturebundle.Entry, wasCached bool) map[string]any {
 				"path": file.Path, "sha256": file.SHA256, "bytes": file.Bytes,
 			})
 		}
-		wads = append(wads, map[string]any{
+		row := map[string]any{
 			"order": wad.Order, "name": wad.Name, "status": wad.Status,
 			"origin": wad.Origin, "included": wad.Included, "note": wad.Note,
 			"files": files,
+		}
+		if wad.Revision > 0 {
+			row["revision"] = wad.Revision
+		}
+		// The deployment's decision about an installed source, as it gave it:
+		// the reason a withheld one was not sent, or the source, credit and
+		// terms a carried one travels under.
+		if verdict := wad.Redistribution; verdict != nil {
+			row["redistribution"] = map[string]any{
+				"decision": verdict.Decision, "reason": verdict.Reason,
+				"source": verdict.Source, "credit": verdict.Credit, "terms": verdict.Terms,
+				"primary_notice": verdict.PrimaryNotice, "notice_version": verdict.NoticeVersion,
+				"notice_paths": verdict.NoticePaths,
+			}
+		}
+		wads = append(wads, row)
+	}
+	notices := make([]map[string]any, 0, len(entry.Receipt.Notices))
+	for _, notice := range entry.Receipt.Notices {
+		notices = append(notices, map[string]any{
+			"path": notice.Path, "sha256": notice.SHA256, "bytes": notice.Bytes, "sources": notice.Sources,
 		})
 	}
 
@@ -986,6 +1097,9 @@ func textureView(entry texturebundle.Entry, wasCached bool) map[string]any {
 		"total_bytes":       entry.Receipt.TotalBytes,
 		"licenses":          entry.Receipt.Licenses,
 		"installed_notice":  entry.Manifest.InstalledNotice,
+		// The third-party notice files kept with this bundle, by name and
+		// digest. Never a path on this machine.
+		"notices": notices,
 	}
 }
 

@@ -1,6 +1,7 @@
 package playrun
 
 import (
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -8,7 +9,7 @@ import (
 	"testing"
 )
 
-// An own copy answers "may not redistribute" and nothing else.
+// An own copy answers "was not sent" and nothing else.
 func TestOwnWADsNeededOnlyForWADsAUBMayNotCarry(t *testing.T) {
 	cases := []struct {
 		refusals []string
@@ -115,5 +116,77 @@ func TestFindOwnWADsRecordsTheSpellingOnDisk(t *testing.T) {
 		if found[1].Found {
 			t.Errorf("base.wad is a directory and was accepted: %+v", found[1])
 		}
+	}
+}
+
+// NEW_313A. What is known about a WAD that was not sent is what the deployment
+// has on record about its exact bytes. The remedy says that, by AUB's reason
+// when the bundle gave one, and never whose the file is.
+func TestTheRemedyForAWADThatWasNotSentSaysWhatIsKnown(t *testing.T) {
+	refusals := []string{"wad_bytes_not_carried: metal.wad"}
+	for _, c := range []struct{ reason, want string }{
+		{"", "no redistribution permission on record for that file's exact bytes"},
+		{"undeclared", "no redistribution permission on record for that file's exact bytes"},
+		{"a_code_from_the_future", "no redistribution permission on record for that file's exact bytes"},
+		{"declared_withheld", "declared that its bytes are not to be redistributed"},
+		{"digest_mismatch", "not the exact file its redistribution permission names"},
+		{"declaration_incomplete", "does not state a credit and terms"},
+		{"source_unreadable", "could not read its copy of the file"},
+		{"policy_unavailable", "redistribution records could not be read"},
+	} {
+		var sources []WADSource
+		if c.reason != "" {
+			sources = []WADSource{{Name: "metal.wad", Origin: OriginInstalled, NotSentReason: c.reason}}
+		}
+		remedy := compilerRefusalRemedy(refusals, sources)
+		if !strings.Contains(remedy, "metal.wad was not sent") || !strings.Contains(remedy, c.want) ||
+			!strings.Contains(remedy, "your own copy") {
+			t.Errorf("reason %q: remedy = %q", c.reason, remedy)
+		}
+		for _, claim := range []string{"somebody else", "game", "id Software", "cannot redistribute"} {
+			if strings.Contains(remedy, claim) {
+				t.Errorf("reason %q: the remedy says %q: %q", c.reason, claim, remedy)
+			}
+		}
+	}
+}
+
+// A run recorded before NEW_313A stored the sentence that said whose the file
+// was. It is shown the current one, derived from the refusals it still holds.
+func TestARunRecordedUnderTheRetiredWordingIsShownTheCurrentRemedy(t *testing.T) {
+	record := &Record{
+		State: Failed, FailedAt: DownloadingTextures,
+		Bundle: &build.BundleRef{CompilerRefusals: []string{"wad_bytes_not_carried: metal.wad"}},
+		Remedy: retiredNotSentRemedyPrefix + "metal.wad — and then a claim about whose it is.",
+	}
+	got := CurrentRemedy(record)
+	if !strings.Contains(got, "metal.wad was not sent") || strings.Contains(got, "whose it is") {
+		t.Fatalf("remedy = %q", got)
+	}
+}
+
+// A person's own copy completes the declaration it answers, and the record
+// keeps both facts: whose bytes were used, and why the deployment sent none.
+func TestAnOwnCopyIsRecordedAgainstTheDeclarationItCompleted(t *testing.T) {
+	sources := []WADSource{
+		{Name: "first.wad", Origin: OriginUser, Staged: true, Revision: 3, SHA256: strings.Repeat("a", 64), Bytes: 10},
+		{Name: "gfx/metal.wad", Origin: OriginInstalled, NotSentReason: "undeclared"},
+	}
+	own := []StagedFile{{Path: "metal.wad", SHA256: strings.Repeat("b", 64), Bytes: 20}}
+
+	got := withOwnCopies(sources, own)
+	if len(got) != 2 {
+		t.Fatalf("sources = %+v", got)
+	}
+	if got[0] != sources[0] {
+		t.Errorf("a WAD the bundle carried was changed: %+v", got[0])
+	}
+	metal := got[1]
+	if metal.Origin != OriginOwnCopy || !metal.Staged || metal.SHA256 != own[0].SHA256 ||
+		metal.Bytes != 20 || metal.NotSentReason != "undeclared" || metal.Credit != "" {
+		t.Errorf("metal.wad = %+v", metal)
+	}
+	if sources[1].Staged {
+		t.Error("the bundle's own source list was written to")
 	}
 }
