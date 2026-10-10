@@ -163,6 +163,10 @@ func TestBuiltinAndUserAuthoredResolveToTheSameCommand(t *testing.T) {
 // "which tool runs this step" a question a pipeline could not answer, and the
 // answer would depend on iteration order. It is why the unqualified Q1 sample
 // was retired rather than kept beside the qualified profile.
+//
+// The one exception is a declared ALTERNATIVE (the Auto-Pigeon build of
+// ericw-tools): the resolver never offers one to a stage that names no tool, so
+// it cannot make that question ambiguous. It is held to a stricter rule below.
 func TestNoTwoBuiltinToolsProvideTheSameCapability(t *testing.T) {
 	entries, err := Load()
 	if err != nil {
@@ -171,7 +175,7 @@ func TestNoTwoBuiltinToolsProvideTheSameCapability(t *testing.T) {
 	provider := map[string]string{}
 	for _, e := range entries {
 		tool, isTool := e.Profile.(*profile.ToolProfile)
-		if !isTool {
+		if !isTool || IsAlternativeTool(tool.Meta.ID) {
 			continue
 		}
 		for _, a := range tool.Actions {
@@ -182,6 +186,77 @@ func TestNoTwoBuiltinToolsProvideTheSameCapability(t *testing.T) {
 				t.Errorf("%s and %s both provide %q", first, e.File, a.Capability)
 			}
 			provider[a.Capability] = e.File
+		}
+	}
+}
+
+// An alternative build is the same compiler from another publisher, so it does
+// what its family default does and nothing else: the same capabilities, the same
+// actions and options, the same game. What differs is where it comes from and
+// where its programs sit in the folder — and those are stated, not left to be
+// the default's by inheritance.
+func TestTheAutoPigeonBuildsAreAlternativesThatPointAtTheirGitHubReleases(t *testing.T) {
+	const releases = "https://github.com/auto-pigeon/ericw-tools/releases"
+	for _, id := range []string{EricwAutoPigeonQ1, EricwAutoPigeonQ2} {
+		entry, err := Find(id)
+		if err != nil {
+			t.Fatalf("%s: %v", id, err)
+		}
+		fork := entry.Profile.(*profile.ToolProfile)
+		base, err := Find(AlternativeOf(id))
+		if err != nil {
+			t.Fatalf("%s stands beside %q: %v", id, AlternativeOf(id), err)
+		}
+		upstream := base.Profile.(*profile.ToolProfile)
+
+		if fork.GameProfile.EngineFamily != upstream.GameProfile.EngineFamily {
+			t.Errorf("%s is for %s, its default for %s", id, fork.GameProfile.EngineFamily, upstream.GameProfile.EngineFamily)
+		}
+		if len(fork.Actions) != len(upstream.Actions) {
+			t.Fatalf("%s has %d actions, its default %d", id, len(fork.Actions), len(upstream.Actions))
+		}
+		for index, action := range fork.Actions {
+			want := upstream.Actions[index]
+			if action.ID != want.ID || action.Capability != want.Capability || action.Executable != want.Executable ||
+				len(action.Options) != len(want.Options) || len(action.Args) != len(want.Args) {
+				t.Errorf("%s action %s differs from its default's %s", id, action.ID, want.ID)
+			}
+		}
+
+		// Where it comes from: the fork's releases page, by name.
+		if fork.Source.Homepage != releases {
+			t.Errorf("%s homepage = %q, want the GitHub releases page", id, fork.Source.Homepage)
+		}
+		if !strings.HasPrefix(fork.Source.ReleaseNotes, releases+"/tag/") ||
+			!strings.HasPrefix(fork.Source.Repository, "https://github.com/auto-pigeon/ericw-tools") ||
+			!strings.HasPrefix(fork.License.CorrespondingSource, "https://github.com/auto-pigeon/ericw-tools/tree/") {
+			t.Errorf("%s source = %+v, corresponding source %q", id, fork.Source, fork.License.CorrespondingSource)
+		}
+		if !strings.Contains(fork.ToolVersion, "+auto-pigeon.") {
+			t.Errorf("%s tool_version = %q, want the fork's own banner", id, fork.ToolVersion)
+		}
+		pointsAtReleases := false
+		for _, route := range fork.Acquisition {
+			// Nothing is downloaded on the user's behalf: the profile names the page.
+			if route.Mode != profile.AcquireUserPath && route.Mode != profile.AcquireSystemPath {
+				t.Errorf("%s offers the acquisition route %q; this profile downloads nothing", id, route.Mode)
+			}
+			if strings.Contains(route.Note, releases) {
+				pointsAtReleases = true
+			}
+		}
+		if !pointsAtReleases {
+			t.Errorf("%s: no acquisition route tells the user where the releases are", id)
+		}
+		// The release keeps its programs in bin/.
+		for _, executable := range fork.Executables {
+			if !strings.HasPrefix(executable.File, "bin/") {
+				t.Errorf("%s executable %s is at %q, want it under bin/", id, executable.Name, executable.File)
+			}
+		}
+		// It is honest about not being upstream's.
+		if !strings.Contains(fork.Description, "not an upstream release") {
+			t.Errorf("%s does not say it is not an upstream release", id)
 		}
 	}
 }

@@ -7,6 +7,7 @@ import (
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile/builtin"
 )
 
 // Which installed tool implements a capability, and what happens when two do.
@@ -71,6 +72,12 @@ func NewResolver(catalog Catalog) (*Resolver, error) {
 			}
 			if _, seen := own[action.Capability]; !seen {
 				own[action.Capability] = provider{entry: entry, tool: tool, action: action}
+			}
+			// A built-in ALTERNATIVE build of a compiler (the Auto-Pigeon build of
+			// ericw-tools) is reached only by a stage that names it: it is neither
+			// the provider of an unnamed stage nor a conflict with the default.
+			if entry.Trust == profile.TrustBuiltin && builtin.IsAlternativeTool(tool.Meta.ID) {
+				continue
 			}
 			if first, taken := r.providers[action.Capability]; taken {
 				r.Conflicts[action.Capability] = uniqueSorted(append(r.Conflicts[action.Capability],

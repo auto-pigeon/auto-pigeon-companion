@@ -182,6 +182,36 @@ $ companion build run --pipeline auto-pigeon.q1.leak-test --input source_map=lev
 A profile only runs after you approve what it does (**Profiles**, or
 `companion toolchain grant`).
 
+**The Auto-Pigeon build of ericw-tools.** Beside the upstream compilers,
+**Profiles** lists two more tool profiles: **EricW tools, Auto-Pigeon build
+(Quake 1)** and **(Quake II, experimental)**. They describe Auto-Pigeon's own
+fork of ericw-tools, published at
+<https://github.com/auto-pigeon/ericw-tools/releases> — the profile's
+**Homepage** button opens that page. It is not an upstream release: it is
+upstream's 2.0.0-alpha11 line plus one change to qbsp that closes a clip-hull
+leak through thin brushes, and upstream has not reviewed it. The Companion
+downloads nothing: fetch the archive for your platform from the releases page,
+check it against the `SHA256SUMS` published beside it, unpack it, and choose the
+unpacked folder — the one that **contains** `bin/`:
+
+```console
+$ companion acquire resolve internal/profile/builtin/ericw-tools-auto-pigeon-q1.tool.json \
+    --mode user_path --user-path ~/tools/auto-pigeon-ericw-tools-1.4505-linux-amd64 --bind
+$ companion toolchain grant auto-pigeon.ericw-tools.auto-pigeon-build.q1      # read it, then approve
+$ companion job run --profile auto-pigeon.ericw-tools.auto-pigeon-build.q1 --action compile \
+    --input source_map="$PWD/level.map" --root content_root="$PWD" --wait
+# … ---- qbsp / ericw-tools 2.0.0-alpha11-19-g1faae828+auto-pigeon.1.4505 ----
+```
+
+These two are **alternatives**, not replacements. Every built-in build profile
+keeps naming the upstream compiler, and a stage of your own that names no tool
+still resolves to the upstream one, so nothing you already build changes. To
+build with the Auto-Pigeon one, duplicate a build profile in **Profiles** and
+choose it as the tool of each stage (in a profile document: `"tool":
+"auto-pigeon.ericw-tools.auto-pigeon-build.q1"`). The Quake II profile carries
+the built-in Quake II profile's steps unchanged; its Quake II mode has not been
+measured with this build.
+
 **Stopping.** Closing the Companion's last browser window stops it, 15 seconds
 later, so a reload does not. A build or a game you started keeps it running
 until that finishes. **Quit Auto-Pigeon Companion…** in the cog menu, or Ctrl+C

@@ -95,6 +95,15 @@ const (
 	// log names and different outputs, and because the Q1 line must not be
 	// moved onto a pre-release to gain a Q2 mode.
 	EricwQ2 = "auto-pigeon.ericw-tools.q2"
+	// EricwAutoPigeonQ1 and EricwAutoPigeonQ2 are the Auto-Pigeon fork's build of
+	// ericw-tools, as published on its GitHub releases page (HITL, 2026-10-10).
+	//
+	// They are ALTERNATIVES to the two documents above, not replacements: each
+	// provides exactly its family default's capabilities, and no built-in
+	// pipeline names one. A stage reaches one only by naming it. See
+	// [IsAlternativeTool].
+	EricwAutoPigeonQ1 = "auto-pigeon.ericw-tools.auto-pigeon-build.q1"
+	EricwAutoPigeonQ2 = "auto-pigeon.ericw-tools.auto-pigeon-build.q2"
 	// The three Q1 pipelines, which differ only in the options they set.
 	Q1FastPreview = "auto-pigeon.q1.fast-preview"
 	Q1Normal      = "auto-pigeon.q1.normal"
@@ -255,3 +264,30 @@ func Find(id string) (Entry, error) {
 	}
 	return Entry{}, fmt.Errorf("builtin: no built-in profile has the id %q", id)
 }
+
+// alternativeTools maps each built-in alternative tool to the family default it
+// stands beside.
+var alternativeTools = map[string]string{
+	EricwAutoPigeonQ1: EricwQ1,
+	EricwAutoPigeonQ2: EricwQ2,
+}
+
+// IsAlternativeTool reports whether a built-in tool profile is a second build of
+// a compiler this program already ships a default profile for.
+//
+// A capability two installed profiles both claim is refused for a stage that
+// names no tool, because ranking them would make "which compiler built this"
+// depend on a rule nobody was told. Shipping a second built-in provider would
+// therefore break every pipeline whose stages leave the tool to the machine —
+// on every installation, the day it updated. So an alternative is never a
+// candidate for an unnamed stage and never counts as a conflict: an unnamed
+// stage goes on resolving to the default exactly as before, and the alternative
+// runs only for a stage that names it.
+func IsAlternativeTool(id string) bool {
+	_, ok := alternativeTools[id]
+
+	return ok
+}
+
+// AlternativeOf is the default tool an alternative stands beside, or "".
+func AlternativeOf(id string) string { return alternativeTools[id] }
