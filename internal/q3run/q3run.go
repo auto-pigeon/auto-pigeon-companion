@@ -126,6 +126,13 @@ type Result struct {
 	// needs. A map can load and still be drawn with missing textures.
 	Complete   bool     `json:"complete"`
 	NotCarried []string `json:"not_carried,omitempty"`
+	// SuppliedByPackages is how many of NotCarried a bound package of the
+	// installation has, so the engine finds them on this machine.
+	SuppliedByPackages int `json:"supplied_by_packages,omitempty"`
+	// PackagesNotStaged names the packages the saved map is bound to that this
+	// installation does not give the engine: a game-folder install writes one
+	// file. A managed install has none — it refuses instead.
+	PackagesNotStaged []string `json:"packages_not_staged,omitempty"`
 }
 
 // OK reports a run whose engine said it loaded the map.
@@ -238,7 +245,8 @@ func Launch(ctx context.Context, jobs Jobs, request Request) (*Result, error) {
 		return nil, err
 	}
 	installation := request.Installation
-	// The archive, again, immediately before the engine is started on it.
+	// The archive and every bound package staged with it, again, immediately
+	// before the engine is started on them.
 	if err := q3install.Verify(installation); err != nil {
 		return nil, err
 	}
@@ -271,6 +279,9 @@ func Launch(ctx context.Context, jobs Jobs, request Request) (*Result, error) {
 		BasePath:       installation.BasePath,
 		Complete:       installation.Complete,
 		NotCarried:     installation.NotCarried,
+
+		SuppliedByPackages: installation.SuppliedByPackages,
+		PackagesNotStaged:  installation.NotStaged(),
 	}
 	if previewed, err := jobs.Preview(submission); err == nil && previewed != nil && previewed.Command != nil {
 		result.Executable = previewed.Command.Executable
@@ -347,6 +358,20 @@ func Launch(ctx context.Context, jobs Jobs, request Request) (*Result, error) {
 
 // finish adds what is true of every result.
 func finish(result *Result) *Result {
+	if supplied := result.SuppliedByPackages; result.MapLoad == Accepted && !result.Complete && supplied > 0 {
+		// Not carried is not the same as not there: the bound packages this
+		// installation gives the engine have some of them, and saying all of
+		// them are missing would send somebody looking for files that are drawn.
+		rest := len(result.NotCarried) - supplied
+		result.Hint = fmt.Sprintf("The map loaded. This package does not carry %d file(s) the map needs; %d of them "+
+			"are in the bound package(s) this installation gives the engine, on this machine", len(result.NotCarried), supplied)
+		if rest > 0 {
+			result.Hint += fmt.Sprintf(", and the other %d are missing or default in the engine.", rest)
+		} else {
+			result.Hint += ". Somebody you give the package to does not have them."
+		}
+		return result
+	}
 	if result.MapLoad == Accepted && !result.Complete {
 		result.Hint = fmt.Sprintf("The map loaded, and this package does not carry %d file(s) the map needs "+
 			"(%s): those surfaces, models or sounds are missing or default in the engine.",

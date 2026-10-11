@@ -14,7 +14,8 @@
 // game directory of the user's is one link. The engine is pointed at the
 // managed directory, reads the user's game through the links, and nothing is
 // written into the user's game folder at all. Taking it away removes a
-// directory this program made.
+// directory this program made. The packages the saved map is bound to are
+// staged there too, from the Companion's cache and by digest — packages.go.
 //
 // **GameFolder** is the explicit target, for somebody who wants the archive in
 // their real game: ONE file, written beside what is there, never over anything,
@@ -52,11 +53,19 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/failure"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/joincontent"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/q3pack"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/q3packages"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/q3vfs"
 )
 
-// SchemaVersion versions [Installation].
-const SchemaVersion = "aucom.q3-install/1.0"
+// SchemaVersion versions [Installation]. 1.1 (`Q3_017A`) added `packages`: the
+// archives the saved map is bound to, as the installation has them.
+const SchemaVersion = "aucom.q3-install/1.1"
+
+// schemaVersion10 is the record before bound packages were staged. It is still
+// read — an installation made by an earlier build can be listed, run and
+// removed — and it says nothing about packages, so installing the same package
+// again replaces it with one that does.
+const schemaVersion10 = "aucom.q3-install/1.0"
 
 // RecordFileName is an installation's record, in its own directory.
 const RecordFileName = "q3-install.json"
@@ -98,6 +107,10 @@ type Request struct {
 	Game string
 	// Dir is where installations are recorded, and where managed ones live.
 	Dir string
+	// Cache is the content-addressed store a build keeps a map's bound packages
+	// in. A managed install reads them from it, by digest. Nil holds nothing:
+	// a package bound to one is then refused, by name.
+	Cache q3packages.Cache
 	// Now is the clock. Nil means time.Now.
 	Now func() time.Time
 
@@ -172,13 +185,21 @@ type Installation struct {
 	// if it is empty.
 	CreatedGameDir bool `json:"created_game_dir,omitempty"`
 	// Links are what a managed base directory holds besides the archive.
-	Links     []Link    `json:"links,omitempty"`
+	Links []Link `json:"links,omitempty"`
+	// Packages are the archives the saved map is bound to: staged into a
+	// managed base directory, already in the game folder, or — for a
+	// game-folder install — named as something the engine will not find.
+	Packages  []Package `json:"packages,omitempty"`
 	LoadOrder LoadOrder `json:"load_order"`
 	// Complete is the package's own: false when it lacks something an engine
 	// needs. NotCarried is what.
-	Complete    bool      `json:"complete"`
-	NotCarried  []string  `json:"not_carried,omitempty"`
-	InstalledAt time.Time `json:"installed_at"`
+	Complete   bool     `json:"complete"`
+	NotCarried []string `json:"not_carried,omitempty"`
+	// SuppliedByPackages is how many of NotCarried a bound package in this
+	// installation has: files the map's archive does not carry and the engine
+	// finds all the same, on this machine.
+	SuppliedByPackages int       `json:"supplied_by_packages,omitempty"`
+	InstalledAt        time.Time `json:"installed_at"`
 
 	// Directory is where this record is.
 	Directory string `json:"directory,omitempty"`
@@ -187,8 +208,11 @@ type Installation struct {
 // ErrNotInstalled reports an installation that is not there.
 var ErrNotInstalled = errors.New("q3install: no such installation")
 
-// Preview says where a package would be installed and what would be searched
-// before it, and writes nothing. It refuses exactly what [Install] refuses.
+// Preview says where a package would be installed, what would be searched
+// before it and which bound packages would be staged with it, and writes
+// nothing. It refuses what [Install] refuses, with one difference: a preview
+// checks that each bound package is in the cache and is the size the build
+// recorded, and the install is what hashes it.
 func Preview(request Request) (*Installation, error) {
 	plan, err := resolve(request)
 	if err != nil {
@@ -338,11 +362,17 @@ func resolve(request Request) (*planned, error) {
 		}
 	}
 
-	order, err := loadOrder(record, userGame, userGameExists)
+	packages, err := resolvePackages(request, record, root, baseGame, game, installation.BasePath)
+	if err != nil {
+		return nil, err
+	}
+	installation.Packages = packages
+	order, err := loadOrder(record, installation, root)
 	if err != nil {
 		return nil, err
 	}
 	installation.LoadOrder = order
+	installation.SuppliedByPackages = suppliedByPackages(installation)
 	bsp := "maps/" + record.Plan.Map.Name + ".bsp"
 	for _, shadow := range order.Shadowed {
 		if strings.EqualFold(shadow.Path, bsp) {
@@ -366,20 +396,32 @@ func installID(kind Kind, root, game, archive, digest string) string {
 
 // Install performs an install. A failure, or a cancelled context, leaves
 // nothing behind: what this call wrote is removed before it returns.
+//
+// A managed installation is built as a generation of its own, beside where it
+// will be, and is given its name only once the archive and every bound package
+// in it have been checked. So an install that fails or is cancelled leaves the
+// installation that was there before exactly as it was — still listed, still
+// runnable — and one that succeeds replaces it in one rename.
 func Install(ctx context.Context, request Request) (*Installation, error) {
 	plan, err := resolve(request)
 	if err != nil {
 		return nil, err
 	}
 	installation := plan.installation
-	if plan.already != nil {
+	if plan.already != nil && (request.Kind == GameFolder || samePackages(plan.already.Packages, installation.Packages)) {
 		// The same package in the same place. Checked rather than trusted: the
-		// archive is re-hashed where it is.
+		// archive, and each bound package, is re-hashed where it is.
 		if err := Verify(plan.already); err == nil {
+			if request.Kind == GameFolder && !samePackages(plan.already.Packages, installation.Packages) {
+				// A game-folder install places no bound package; what it SAYS
+				// about them follows what is in the game folder now.
+				plan.already.Packages = installation.Packages
+				plan.already.SuppliedByPackages = installation.SuppliedByPackages
+				if err := save(plan.already.Directory, plan.already); err != nil {
+					return nil, err
+				}
+			}
 			return plan.already, nil
-		}
-		if err := Remove(request.Dir, plan.already.ID); err != nil {
-			return nil, err
 		}
 	}
 	if err := ctx.Err(); err != nil {
@@ -389,17 +431,25 @@ func Install(ctx context.Context, request Request) (*Installation, error) {
 	if request.Now != nil {
 		now = request.Now
 	}
+	if err := os.MkdirAll(request.Dir, 0o700); err != nil {
+		return nil, fmt.Errorf("q3install: %w", err)
+	}
+	sweep(request.Dir, now())
+	if request.Kind == Managed {
+		return installManaged(ctx, request, plan, now)
+	}
 
+	if plan.already != nil {
+		if err := Remove(request.Dir, plan.already.ID); err != nil {
+			return nil, err
+		}
+	}
 	undo := &undoLog{}
 	fail := func(cause error) (*Installation, error) {
 		if err := undo.run(); err != nil {
 			return nil, fmt.Errorf("%w (and undoing it failed too: %v)", cause, err)
 		}
 		return nil, cause
-	}
-
-	if err := os.MkdirAll(request.Dir, 0o700); err != nil {
-		return nil, fmt.Errorf("q3install: %w", err)
 	}
 	if _, err := os.Lstat(installation.Directory); err == nil {
 		// Left by an install that was interrupted before its record existed.
@@ -413,19 +463,12 @@ func Install(ctx context.Context, request Request) (*Installation, error) {
 	}
 	undo.add(func() error { return removeManaged(installation.Directory) })
 
-	switch request.Kind {
-	case Managed:
-		if err := buildManaged(ctx, installation, plan, undo); err != nil {
-			return fail(err)
+	if !plan.userGameExists {
+		if err := os.Mkdir(plan.userGame, 0o755); err != nil {
+			return fail(fmt.Errorf("q3install: creating %s: %w", plan.userGame, err))
 		}
-	default:
-		if !plan.userGameExists {
-			if err := os.Mkdir(plan.userGame, 0o755); err != nil {
-				return fail(fmt.Errorf("q3install: creating %s: %w", plan.userGame, err))
-			}
-			installation.CreatedGameDir = true
-			undo.add(func() error { return os.Remove(plan.userGame) })
-		}
+		installation.CreatedGameDir = true
+		undo.add(func() error { return os.Remove(plan.userGame) })
 	}
 	if err := copyArchive(ctx, request.Package.ArchivePath, installation.Archive, undo); err != nil {
 		return fail(err)
@@ -437,19 +480,139 @@ func Install(ctx context.Context, request Request) (*Installation, error) {
 		return fail(failure.As(failure.Cancelled, fmt.Errorf("q3install: the install was cancelled: %w", err)))
 	}
 	installation.InstalledAt = now().UTC()
-	if err := save(installation); err != nil {
+	if err := save(installation.Directory, installation); err != nil {
 		return fail(err)
 	}
 	return installation, nil
 }
 
-// buildManaged lays out the managed base directory: the target game directory
-// as a real directory of links, and every other game directory as one link.
+// installManaged builds a managed installation as a generation beside its
+// place, verifies it, and publishes it by renaming.
+func installManaged(ctx context.Context, request Request, plan *planned, now func() time.Time) (*Installation, error) {
+	installation := plan.installation
+	final := installation.Directory
+	if info, err := os.Lstat(final); err == nil && (info.Mode()&fs.ModeSymlink != 0 || !info.IsDir()) {
+		return nil, fmt.Errorf("q3install: %s is not a directory this program made, and was left alone", final)
+	}
+	building, err := os.MkdirTemp(request.Dir, buildingPrefix)
+	if err != nil {
+		return nil, fmt.Errorf("q3install: %w", err)
+	}
+	undo := &undoLog{}
+	undo.add(func() error { return removeManaged(building) })
+	fail := func(cause error) (*Installation, error) {
+		if err := undo.run(); err != nil {
+			return nil, fmt.Errorf("%w (and undoing it failed too: %v)", cause, err)
+		}
+		return nil, cause
+	}
+
+	// Everything is built under the generation's own name and recorded under
+	// the name it will have.
+	rebase(installation, final, building)
+	if err := buildManaged(ctx, installation, plan, undo); err != nil {
+		return fail(err)
+	}
+	if err := stagePackages(ctx, installation, undo); err != nil {
+		return fail(err)
+	}
+	if err := copyArchive(ctx, request.Package.ArchivePath, installation.Archive, undo); err != nil {
+		return fail(err)
+	}
+	if request.afterCopy != nil {
+		request.afterCopy()
+	}
+	if err := ctx.Err(); err != nil {
+		return fail(failure.As(failure.Cancelled, fmt.Errorf("q3install: the install was cancelled: %w", err)))
+	}
+	// Checked where it is, once more, as the engine will find it.
+	if err := Verify(installation); err != nil {
+		return fail(err)
+	}
+	rebase(installation, building, final)
+	installation.InstalledAt = now().UTC()
+	if err := save(building, installation); err != nil {
+		return fail(err)
+	}
+
+	// Published. The generation that was there is moved aside first and put
+	// back if the new one cannot take its name.
+	retired := ""
+	if _, err := os.Lstat(final); err == nil {
+		retired = filepath.Join(request.Dir, retiredPrefix+filepath.Base(building)[len(buildingPrefix):])
+		if err := os.Rename(final, retired); err != nil {
+			return fail(fmt.Errorf("q3install: replacing the installation that is there: %w", err))
+		}
+	}
+	if err := os.Rename(building, final); err != nil {
+		if retired != "" {
+			if backErr := os.Rename(retired, final); backErr != nil {
+				return fail(fmt.Errorf("q3install: publishing the installation: %w (and the previous one is now at %s: %v)",
+					err, retired, backErr))
+			}
+		}
+		return fail(fmt.Errorf("q3install: publishing the installation: %w", err))
+	}
+	if retired != "" {
+		// Its files are this program's own. Where something still holds them
+		// open and the system will not let them go, the next install's sweep
+		// takes them.
+		_ = removeManaged(retired)
+	}
+	return installation, nil
+}
+
+// rebase rewrites every path an installation records under one directory to
+// the same path under another.
+func rebase(installation *Installation, from, to string) {
+	move := func(path string) string {
+		if path == from {
+			return to
+		}
+		if rest, inside := strings.CutPrefix(path, from+string(filepath.Separator)); inside {
+			return filepath.Join(to, rest)
+		}
+		return path
+	}
+	installation.Directory = move(installation.Directory)
+	installation.BasePath = move(installation.BasePath)
+	installation.Archive.Path = move(installation.Archive.Path)
+	for i := range installation.Packages {
+		installation.Packages[i].Path = move(installation.Packages[i].Path)
+	}
+}
+
+// buildManaged lays out the managed base directory. The game directory the
+// archive goes into, and any other a bound package is staged in, is a real
+// directory holding one link per entry of the user's own; every other game
+// directory is one link.
 func buildManaged(ctx context.Context, installation *Installation, plan *planned, undo *undoLog) error {
 	base := installation.BasePath
-	target := filepath.Join(base, installation.Game)
-	if err := os.MkdirAll(target, 0o700); err != nil {
-		return fmt.Errorf("q3install: %w", err)
+	real := []string{installation.Game}
+	for _, pkg := range installation.Packages {
+		if pkg.State != PackageStaged {
+			continue
+		}
+		listed := false
+		for _, name := range real {
+			listed = listed || strings.EqualFold(name, pkg.Game)
+		}
+		if !listed {
+			real = append(real, pkg.Game)
+		}
+	}
+	isReal := func(name string) bool {
+		for _, game := range real {
+			if strings.EqualFold(name, game) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, game := range real {
+		if err := os.MkdirAll(filepath.Join(base, game), 0o700); err != nil {
+			return fmt.Errorf("q3install: %w", err)
+		}
 	}
 	// The other game directories of the user's game folder: the base game when
 	// the archive goes into a mod, and any mod beside it. One link each.
@@ -467,7 +630,7 @@ func buildManaged(ctx context.Context, installation *Installation, plan *planned
 		name := entry.Name()
 		source := filepath.Join(installation.GameRoot, name)
 		info, err := os.Stat(source)
-		if err != nil || !info.IsDir() || strings.HasPrefix(name, ".") || strings.EqualFold(name, installation.Game) {
+		if err != nil || !info.IsDir() || strings.HasPrefix(name, ".") || isReal(name) {
 			continue
 		}
 		link := filepath.Join(base, name)
@@ -476,30 +639,44 @@ func buildManaged(ctx context.Context, installation *Installation, plan *planned
 		}
 		installation.Links = append(installation.Links, Link{Name: name, Target: source, Method: "junction-or-symlink"})
 	}
-	if !plan.userGameExists {
+	for _, game := range real {
+		if err := linkGame(ctx, installation, game); err != nil {
+			return err
+		}
+	}
+	sort.Slice(installation.Links, func(i, j int) bool { return installation.Links[i].Name < installation.Links[j].Name })
+	return nil
+}
+
+// linkGame fills one real game directory of a managed base with a link per
+// entry of the user's own directory of that name, so what this install adds
+// can sit beside what is there without being written into it. A directory the
+// user does not have stays empty.
+func linkGame(ctx context.Context, installation *Installation, game string) error {
+	userGame := filepath.Join(installation.GameRoot, game)
+	if info, err := os.Stat(userGame); err != nil || !info.IsDir() {
 		return nil
 	}
-	// The user's own directory of the target game, one link per entry, so the
-	// archive can sit beside what is there without being written into it.
-	inside, err := os.ReadDir(plan.userGame)
+	target := filepath.Join(installation.BasePath, game)
+	inside, err := os.ReadDir(userGame)
 	if err != nil {
-		return failure.As(failure.GameDataMissing, fmt.Errorf("q3install: reading %s: %w", plan.userGame, err))
+		return failure.As(failure.GameDataMissing, fmt.Errorf("q3install: reading %s: %w", userGame, err))
 	}
 	if len(inside) > maxEntries {
-		return fmt.Errorf("q3install: %s holds more than %d entries", plan.userGame, maxEntries)
+		return fmt.Errorf("q3install: %s holds more than %d entries", userGame, maxEntries)
 	}
 	for _, entry := range inside {
 		if err := ctx.Err(); err != nil {
 			return failure.As(failure.Cancelled, err)
 		}
 		name := entry.Name()
-		source := filepath.Join(plan.userGame, name)
+		source := filepath.Join(userGame, name)
 		info, err := os.Stat(source)
 		if err != nil {
 			continue // a link to something that is not there
 		}
 		link := filepath.Join(target, name)
-		relative := filepath.ToSlash(filepath.Join(installation.Game, name))
+		relative := filepath.ToSlash(filepath.Join(game, name))
 		if info.IsDir() {
 			if err := joincontent.LinkDir(source, link); err != nil {
 				return fmt.Errorf("q3install: linking %s: %w", relative, err)
@@ -525,7 +702,6 @@ func buildManaged(ctx context.Context, installation *Installation, plan *planned
 		}
 		installation.Links = append(installation.Links, Link{Name: relative, Target: source, Method: method})
 	}
-	sort.Slice(installation.Links, func(i, j int) bool { return installation.Links[i].Name < installation.Links[j].Name })
 	return nil
 }
 
@@ -533,6 +709,18 @@ func buildManaged(ctx context.Context, installation *Installation, plan *planned
 // destination, checks what it wrote against the package's digest, and only
 // then gives it its name — without replacing anything.
 func copyArchive(ctx context.Context, source string, archive Archive, undo *undoLog) error {
+	return copyVerified(ctx, source, archive, undo, func(written int64, digest string) error {
+		return fmt.Errorf("q3install: the package's archive changed while it was being installed: %d bytes, "+
+			"sha256 %s, and the package is %d bytes, sha256 %s", written, digest, archive.Size, archive.SHA256)
+	})
+}
+
+// copyVerified is the one way this package writes a file an engine will read:
+// under a temporary name, hashed as it is written, named only when the bytes
+// are the ones expected, and never over anything.
+func copyVerified(ctx context.Context, source string, archive Archive, undo *undoLog,
+	mismatch func(written int64, digest string) error,
+) error {
 	dir := filepath.Dir(archive.Path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("q3install: %w", err)
@@ -555,7 +743,7 @@ func copyArchive(ctx context.Context, source string, archive Archive, undo *undo
 	}
 	defer from.Close()
 	hash := sha256.New()
-	written, err := io.Copy(io.MultiWriter(staged, hash), &contextReader{ctx: ctx, reader: from})
+	written, err := copyContext(ctx, io.MultiWriter(staged, hash), from)
 	if closeErr := staged.Close(); err == nil {
 		err = closeErr
 	}
@@ -566,8 +754,7 @@ func copyArchive(ctx context.Context, source string, archive Archive, undo *undo
 		return fmt.Errorf("q3install: writing %s: %w", archive.Name, err)
 	}
 	if digest := hex.EncodeToString(hash.Sum(nil)); written != archive.Size || digest != archive.SHA256 {
-		return fmt.Errorf("q3install: the package's archive changed while it was being installed: %d bytes, "+
-			"sha256 %s, and the package is %d bytes, sha256 %s", written, digest, archive.Size, archive.SHA256)
+		return mismatch(written, digest)
 	}
 	if err := os.Chmod(stagedPath, 0o644); err != nil {
 		return fmt.Errorf("q3install: %w", err)
@@ -593,6 +780,11 @@ func copyArchive(ctx context.Context, source string, archive Archive, undo *undo
 	}
 	undo.add(func() error { return removeIfOurs(archive) })
 	return nil
+}
+
+// copyContext is io.Copy that stops when its context is cancelled.
+func copyContext(ctx context.Context, to io.Writer, from io.Reader) (int64, error) {
+	return io.Copy(to, &contextReader{ctx: ctx, reader: from})
 }
 
 // contextReader stops a copy when its context is cancelled.
@@ -669,12 +861,14 @@ func removeManaged(dir string) error {
 	return os.RemoveAll(dir)
 }
 
-func save(installation *Installation) error {
+// save writes an installation's record into dir — the installation's own
+// directory, or the generation that is about to become it.
+func save(dir string, installation *Installation) error {
 	data, err := json.MarshalIndent(installation, "", "  ")
 	if err != nil {
 		return fmt.Errorf("q3install: %w", err)
 	}
-	path := filepath.Join(installation.Directory, RecordFileName)
+	path := filepath.Join(dir, RecordFileName)
 	if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
 		return fmt.Errorf("q3install: recording the install: %w", err)
 	}
@@ -698,9 +892,9 @@ func Load(dir, id string) (*Installation, error) {
 	if err := json.Unmarshal(data, &installation); err != nil {
 		return nil, fmt.Errorf("q3install: the record of %s does not parse: %w", id, err)
 	}
-	if installation.SchemaVersion != SchemaVersion {
-		return nil, fmt.Errorf("q3install: the record of %s is %q, and this build reads %q",
-			id, installation.SchemaVersion, SchemaVersion)
+	if installation.SchemaVersion != SchemaVersion && installation.SchemaVersion != schemaVersion10 {
+		return nil, fmt.Errorf("q3install: the record of %s is %q, and this build reads %q and %q",
+			id, installation.SchemaVersion, SchemaVersion, schemaVersion10)
 	}
 	installation.Directory = directory
 	return &installation, nil
@@ -729,7 +923,8 @@ func List(dir string) ([]*Installation, error) {
 }
 
 // Verify re-checks an installation immediately before an engine is started on
-// it: the archive is where it was put and is still the bytes that were put.
+// it: the archive is where it was put and is still the bytes that were put, and
+// so is every bound package the engine is about to read.
 func Verify(installation *Installation) error {
 	info, err := os.Lstat(installation.Archive.Path)
 	if err != nil {
@@ -747,7 +942,7 @@ func Verify(installation *Installation) error {
 			"%d bytes, sha256 %s were installed). Install the package again",
 			installation.Archive.Path, size, digest, installation.Archive.Size, installation.Archive.SHA256)
 	}
-	return nil
+	return verifyPackages(installation)
 }
 
 // Remove takes an installation away: a managed one's whole directory, or the
@@ -769,104 +964,6 @@ func Remove(dir, id string) error {
 		}
 	}
 	return removeManaged(installation.Directory)
-}
-
-// loadOrder looks each member of the package up in what the engine searches
-// before, and after, the package's archive in its game directory.
-func loadOrder(record *q3pack.Record, userGame string, exists bool) (LoadOrder, error) {
-	order := LoadOrder{Limits: []string{
-		"the engine's own home directory (`~/.q3a` on Linux): an engine searches it before the game folder, " +
-			"and what is in it is the player's configuration, not something an install reads",
-	}}
-	if !exists {
-		return order, nil
-	}
-	members := map[string]string{}
-	for _, member := range record.Plan.Members {
-		members[strings.ToLower(member.Path)] = member.Path
-	}
-
-	entries, err := os.ReadDir(userGame)
-	if err != nil {
-		return order, failure.As(failure.GameDataMissing, fmt.Errorf("q3install: reading %s: %w", userGame, err))
-	}
-	var archives []string
-	for _, entry := range entries {
-		name := entry.Name()
-		if strings.EqualFold(filepath.Ext(name), ".pk3") && !strings.EqualFold(name, record.Archive.File) {
-			if info, err := os.Stat(filepath.Join(userGame, name)); err == nil && info.Mode().IsRegular() {
-				archives = append(archives, name)
-			}
-		}
-	}
-	if len(archives) > maxArchives {
-		return order, fmt.Errorf("q3install: %s holds more than %d PK3 archives", userGame, maxArchives)
-	}
-	// Later name first, without regard to case: the engine's own order.
-	sort.Slice(archives, func(i, j int) bool { return strings.ToLower(archives[i]) > strings.ToLower(archives[j]) })
-
-	// Loose files beat every archive.
-	order.Searched = append(order.Searched, "loose files in "+filepath.Base(userGame))
-	loose := 0
-	walkErr := filepath.WalkDir(userGame, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil || entry.IsDir() {
-			return nil
-		}
-		loose++
-		if loose > maxLooseFiles {
-			order.Limits = append(order.Limits, fmt.Sprintf(
-				"the loose files of %s past the first %d", userGame, maxLooseFiles))
-			return filepath.SkipAll
-		}
-		relative, relErr := filepath.Rel(userGame, path)
-		if relErr != nil {
-			return nil
-		}
-		if member, ours := members[strings.ToLower(filepath.ToSlash(relative))]; ours {
-			order.Shadowed = append(order.Shadowed, Shadow{Path: member, By: "the loose file " + filepath.ToSlash(relative)})
-		}
-		return nil
-	})
-	if walkErr != nil {
-		return order, fmt.Errorf("q3install: reading %s: %w", userGame, walkErr)
-	}
-
-	ours := strings.ToLower(record.Archive.File)
-	shadowed := map[string]bool{}
-	for _, shadow := range order.Shadowed {
-		shadowed[shadow.Path] = true
-	}
-	for _, name := range archives {
-		before := strings.ToLower(name) > ours
-		if before {
-			order.Searched = append(order.Searched, name)
-		}
-		names, truncated, err := archiveMembers(filepath.Join(userGame, name))
-		if err != nil {
-			order.Limits = append(order.Limits, fmt.Sprintf("%s, which could not be read as an archive (%v)", name, err))
-			continue
-		}
-		if truncated {
-			order.Limits = append(order.Limits, fmt.Sprintf("the members of %s past the first %d", name, maxArchiveMembers))
-		}
-		for _, inside := range names {
-			member, isOurs := members[strings.ToLower(inside)]
-			if !isOurs {
-				continue
-			}
-			if before {
-				if !shadowed[member] {
-					shadowed[member] = true
-					order.Shadowed = append(order.Shadowed, Shadow{Path: member, By: name})
-				}
-				continue
-			}
-			order.Overrides = append(order.Overrides, Shadow{Path: member, By: name})
-		}
-	}
-	sort.Slice(order.Shadowed, func(i, j int) bool { return order.Shadowed[i].Path < order.Shadowed[j].Path })
-	sort.Slice(order.Overrides, func(i, j int) bool { return order.Overrides[i].Path < order.Overrides[j].Path })
-	return order, nil
 }
 
 // archiveMembers lists the names in a PK3's central directory. Nothing is

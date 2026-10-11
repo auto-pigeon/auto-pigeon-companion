@@ -277,6 +277,60 @@ func TestAnIncompletePackageSaysSoWhenTheMapLoads(t *testing.T) {
 	}
 }
 
+// Not carried is not the same as not there (Q3_017A): files the archive lacks
+// and a staged bound package has are counted apart from the ones the engine
+// really will not find, and a package the installation does not give the
+// engine is named.
+func TestARunSaysWhatTheStagedPackagesSupplyAndWhatIsNotStaged(t *testing.T) {
+	jobs := &fakeJobs{catalog: builtinCatalog(t)}
+	jobs.engine([]string{lineInitGame}, nil)
+	installation := installed(t)
+	installation.Complete = false
+	installation.NotCarried = []string{"textures/x/a.tga", "textures/x/b.tga", "textures/x/c.tga"}
+	installation.SuppliedByPackages = 2
+	installation.Packages = []q3install.Package{
+		{Name: "zz_other.pk3", Game: "baseq3", State: q3install.PackageNotStaged},
+	}
+	result, err := Launch(context.Background(), jobs, Request{
+		Installation: installation, EngineProfileID: ioquake3, ActionID: "host_dedicated", Wait: 5 * time.Second,
+	})
+	if err != nil || !result.OK() {
+		t.Fatalf("%v %+v", err, result)
+	}
+	if !strings.Contains(result.Hint, "does not carry 3 file(s)") || !strings.Contains(result.Hint, "2 of them") ||
+		!strings.Contains(result.Hint, "the other 1 are missing") {
+		t.Errorf("the hint: %s", result.Hint)
+	}
+	if len(result.PackagesNotStaged) != 1 || result.PackagesNotStaged[0] != "baseq3/zz_other.pk3" {
+		t.Errorf("not staged: %v", result.PackagesNotStaged)
+	}
+}
+
+// A staged bound package that is gone, or is other bytes, stops a run before
+// any engine is started: the map would be drawn without it.
+func TestARunIsRefusedWhenAStagedPackageIsNoLongerThere(t *testing.T) {
+	jobs := &fakeJobs{catalog: builtinCatalog(t)}
+	installation := installed(t)
+	installation.Packages = []q3install.Package{{
+		Name: "zz_bound.pk3", Game: "baseq3", State: q3install.PackageStaged,
+		Path: filepath.Join(filepath.Dir(installation.Archive.Path), "zz_bound.pk3"), SHA256: strings.Repeat("0", 64), Size: 4,
+	}}
+	_, err := Launch(context.Background(), jobs, Request{Installation: installation, EngineProfileID: ioquake3, ActionID: "host_dedicated"})
+	if failure.Of(err) != failure.GameDataMissing || !strings.Contains(err.Error(), "zz_bound.pk3") {
+		t.Errorf("a staged package that is gone: %v", err)
+	}
+	if err := os.WriteFile(installation.Packages[0].Path, []byte("abcd"), 0o644); err != nil {
+		t.Fatalf("%v", err)
+	}
+	_, err = Launch(context.Background(), jobs, Request{Installation: installation, EngineProfileID: ioquake3, ActionID: "host_dedicated"})
+	if failure.Of(err) != failure.ArchiveDamaged {
+		t.Errorf("a staged package that is other bytes: %v", err)
+	}
+	if jobs.mirror != nil {
+		t.Error("an engine job was submitted for a run that was refused")
+	}
+}
+
 // What is refused before any engine is started.
 func TestWhatARunRefusesBeforeStartingAnything(t *testing.T) {
 	jobs := &fakeJobs{catalog: builtinCatalog(t)}

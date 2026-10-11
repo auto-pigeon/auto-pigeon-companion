@@ -111,6 +111,45 @@ loses to `pak0.pk3`. A map something else would supply is refused
 (`load_order_shadowed`); do not "fix" that by renaming the archive to sort
 last — a name chosen to win is a name that silently overrides the user's game.
 
+**A managed install stages the packages the saved map is bound to; nothing
+else does, and nothing ships them** (`Q3_017A`). `Q3_014A` got a textured map in
+an engine only by linking the bound PK3 beside the map by hand: the install
+placed the map's archive and the game's links and knew nothing of what the
+compiler had read from `vfs/content_root`. The identity was already recorded —
+`q3pack` copies each staged bound package into the plan as a source with an
+`origin` (name, game folder, SHA-256, size) — so `q3install` reads it from the
+package's own record, asks `q3packages.Resolve` for the cache file BY DIGEST with
+no account (an install fetches nothing), and stages it under the folder and name
+the binding gives. The rules that keep that safe:
+
+- **Never from a name.** What is staged is what the record lists with a digest.
+  Do not find a package by a texture or archive name, do not scan the cache, and
+  do not widen it to "whatever was in `content_root`" without deciding what a
+  user's own loose content folder means for an engine first.
+- **Verified where it is, then published.** A managed installation is built as a
+  `.installing-*` generation beside its place, every staged file is hashed there
+  against the build's digest and size, and only then is it renamed into place
+  (the one it replaces is moved to `.retired-*` first and put back if the rename
+  fails). So a failed or cancelled install leaves the previous installation
+  listed and runnable. Do not go back to removing the old one first.
+- **Missing is said before launch.** `Preview` refuses an absent package and one
+  of the wrong size (`game_data_missing`, `archive_damaged`), `Install` also
+  refuses wrong bytes, and `Verify` — which `q3run.Launch` calls — re-hashes
+  every staged package. A preview does not hash: that is the install's job.
+- **The name is the precedence.** A staged package keeps the binding's name, and
+  `Package.searched_before` / `shadowed` / `overrides` say what that means in
+  the engine's order, by name. Do not rename one to make it win or lose, and do
+  not claim the engine's order equals Q3Map2's: the compiler read bound packages
+  from a root of their own.
+- **`GameFolder` copies none.** It is one file. Bound packages are recorded
+  `not_staged` with where they would have to be, and a run repeats it.
+- **Staged is not granted.** Local engine use is not redistribution. `q3pack`
+  plans from the build's staged data and its grants and never from an
+  installation; `TestABoundPackageStagedForTheEngineStaysOutOfTheMapsArchive`
+  pins that.
+
+The record is `aucom.q3-install/1.1`; `1.0` is still read.
+
 ## Whether it ran
 
 **A live process is not a loaded map.** `q3run.Launch` reads the engine's output

@@ -587,7 +587,15 @@ func packageMapInstall(env *Env, args []string) int {
 	if err != nil {
 		return fail(env, err)
 	}
-	request := q3install.Request{Package: record, Kind: kind, GameRoot: root, Game: *mod, BaseGame: *baseGame, Dir: dir}
+	// The cache the build kept the map's bound packages in. A managed install
+	// reads them from it by digest; nothing is fetched here.
+	cache, err := openStore(env)
+	if err != nil {
+		return fail(env, err)
+	}
+	request := q3install.Request{
+		Package: record, Kind: kind, GameRoot: root, Game: *mod, BaseGame: *baseGame, Dir: dir, Cache: cache,
+	}
 
 	var installation *q3install.Installation
 	if *dryRun {
@@ -612,10 +620,58 @@ func packageMapInstall(env *Env, args []string) int {
 	fmt.Fprintf(env.Stdout, "  target        %s\n", describeTarget(installation))
 	fmt.Fprintf(env.Stdout, "  engine reads  fs_basepath %s, fs_game %s\n", installation.BasePath, installation.FSGame)
 	printLoadOrder(env, installation)
+	printBoundPackages(env, installation, *dryRun)
 	if !installation.Complete {
 		fmt.Fprintf(env.Stdout, "  INCOMPLETE: the package does not carry %d file(s) an engine needs\n", len(installation.NotCarried))
+		if installation.SuppliedByPackages > 0 {
+			fmt.Fprintf(env.Stdout, "    %d of them are in the bound package(s) above, on this machine; %d are not\n",
+				installation.SuppliedByPackages, len(installation.NotCarried)-installation.SuppliedByPackages)
+		}
 	}
 	return 0
+}
+
+// printBoundPackages says what became of each package the saved map is bound
+// to: placed for the engine, already in the game, or not there at all.
+func printBoundPackages(env *Env, installation *q3install.Installation, dryRun bool) {
+	if len(installation.Packages) == 0 {
+		return
+	}
+	fmt.Fprintln(env.Stdout, "  packages the saved map is bound to:")
+	for _, pkg := range installation.Packages {
+		where := pkg.Game + "/" + pkg.Name
+		switch pkg.State {
+		case q3install.PackageStaged:
+			verb := "STAGED"
+			if dryRun {
+				verb = "WOULD STAGE"
+			}
+			how := ""
+			if pkg.Method != "" {
+				how = ", " + pkg.Method
+			}
+			fmt.Fprintf(env.Stdout, "    %s %s   sha256 %s, %d bytes%s — %d file(s) an engine needs\n",
+				verb, where, pkg.SHA256, pkg.Size, how, pkg.RuntimeFiles)
+		case q3install.PackageInGameFolder:
+			fmt.Fprintf(env.Stdout, "    IN YOUR GAME %s   sha256 %s — %s\n", where, pkg.SHA256, pkg.Reason)
+		default:
+			fmt.Fprintf(env.Stdout, "    NOT STAGED %s   sha256 %s\n      %s\n", where, pkg.SHA256, pkg.Reason)
+		}
+		if len(pkg.Searched) > 0 {
+			fmt.Fprintf(env.Stdout, "      searched before it in %s: %s\n", pkg.Game, strings.Join(pkg.Searched, ", "))
+		}
+		printShadows(env, "LOSES: %s is also in %s, which the engine reads first", pkg.Shadowed, pkg.ShadowedCount)
+		printShadows(env, "hides: %s in %s", pkg.Overrides, pkg.OverridesCount)
+	}
+}
+
+func printShadows(env *Env, format string, listed []q3install.Shadow, total int) {
+	for _, shadow := range listed {
+		fmt.Fprintf(env.Stdout, "      "+format+"\n", shadow.Path, shadow.By)
+	}
+	if total > len(listed) {
+		fmt.Fprintf(env.Stdout, "      … and %d more; `--json` counts them\n", total-len(listed))
+	}
 }
 
 func describeTarget(installation *q3install.Installation) string {
@@ -669,6 +725,9 @@ func packageMapInstalled(env *Env, args []string) int {
 	for _, installation := range installations {
 		fmt.Fprintf(env.Stdout, "%s\n  map %s, %s\n  %s\n", installation.ID, installation.MapName,
 			describeTarget(installation), installation.Archive.Path)
+		for _, pkg := range installation.Packages {
+			fmt.Fprintf(env.Stdout, "  bound package %s/%s: %s\n", pkg.Game, pkg.Name, strings.ReplaceAll(pkg.State, "_", " "))
+		}
 	}
 	return 0
 }
@@ -820,6 +879,9 @@ func printRun(env *Env, result *q3run.Result) {
 	}
 	if result.EngineStopped {
 		fmt.Fprintln(env.Stdout, "the engine was stopped")
+	}
+	for _, name := range result.PackagesNotStaged {
+		fmt.Fprintf(env.Stdout, "NOT STAGED %s: the map is bound to it and this installation does not give it to the engine\n", name)
 	}
 }
 

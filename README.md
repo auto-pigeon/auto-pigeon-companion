@@ -1153,8 +1153,8 @@ of your choosing instead of the package store).
 
 **Installing** puts the archive beside a game. The default, `--into managed`,
 does not write into your game folder at all: the engine is given a directory the
-Companion keeps, in which the game directory is real and holds the archive plus
-a link to each thing in yours. `--into game-folder` writes exactly one file into
+Companion keeps, in which the game directory is real and holds the archive, the
+packages the saved map is bound to, and a link to each thing in yours. `--into game-folder` writes exactly one file into
 your game folder, never over another, and `uninstall` removes it only while it
 is still the file that was written.
 
@@ -1180,6 +1180,67 @@ beside it. A map that something else would supply is refused
 (`load_order_shadowed`); any other member that would lose is listed.
 `--mod <name>` installs into a mod directory instead, where nothing of the base
 game is searched first.
+
+**The packages a saved map is bound to are staged for the engine** (`Q3_017A`).
+A map saved from the editor names the texture packages it is built with, by
+digest; the build fetches exactly those archives, keeps them in the Companion's
+cache and shows them to Q3Map2. A managed install now reads the same identities
+out of the package's own record (`plan.sources[]` with an `origin`: name, game
+folder, SHA-256, size), finds each archive in the cache **by digest**, and puts
+it in the managed base under the folder and the name the binding gives — so
+build → package → install → run needs no PK3 linked or copied by hand:
+
+```console
+$ companion build run --pipeline auto-pigeon.q3.fast-preview \
+    --input source_map=aub:map/46pjkt2s773n550@7 --root game_root=/opt/quake3
+$ companion package map create --build 20261010T142021Z-62584000 \
+    --accept-missing --reason "the bound texture package is not mine to redistribute"
+$ companion package map install auto-pigeon-46pjkt2s773n550-7-66293b87db87 \
+    --engine auto-pigeon.engine.ioquake3 --dry-run        # the preview: writes nothing
+would install …/q3-installs/auto-pigeon-46pjkt2s773n550-7-managed-6272228aa47b/base/baseq3/auto-pigeon-46pjkt2s773n550-7.pk3
+  searched before it in baseq3: loose files in baseq3, zz_textures.pk3, pak8.pk3, …, pak0.pk3
+  packages the saved map is bound to:
+    WOULD STAGE baseq3/zz_textures.pk3   sha256 ec50c832…b3df, 5584063 bytes — 73 file(s) an engine needs
+      searched before it in baseq3: loose files in baseq3
+      hides: scripts/common.shader in pak0.pk3
+  INCOMPLETE: the package does not carry 82 file(s) an engine needs
+    73 of them are in the bound package(s) above, on this machine; 9 are not
+$ companion package map install auto-pigeon-46pjkt2s773n550-7-66293b87db87 \
+    --engine auto-pigeon.engine.ioquake3 --json | jq '.packages[] | {name, game, state, method, sha256}'
+$ companion package map run auto-pigeon-46pjkt2s773n550-7-managed-6272228aa47b \
+    --engine auto-pigeon.engine.ioquake3 --action play_map
+```
+
+- **Verified, then published.** Each staged file is hashed where it was put and
+  compared with the digest and size the build recorded; the installation gets
+  its name only after that, in one rename. A package that is no longer in the
+  cache (`game_data_missing`, by name, with *Build the map again*) or is not
+  those bytes (`archive_damaged`) is refused by the **preview** and by the
+  install — before anything says an engine could be started — and `package map
+  run` checks every staged package again before it starts the engine. A failed
+  or cancelled install leaves the installation that was there as it was.
+- **The name decides the order, and the order is reported.** A staged package is
+  searched exactly where its name puts it in its game directory. Every path it
+  takes from, or loses to, the game's own archives, a loose file, the map's
+  archive or another bound package is listed by name (the first 50; `--json`
+  counts all). Q3Map2 read the bound packages from a content folder of their
+  own and an engine reads one directory in name order, so the listing is the
+  engine's and is not assumed to match the compiler's. A bound package that
+  would supply the map itself is the `load_order_shadowed` refusal.
+- **Your game folder is still not written.** A file of the bound name already in
+  your game directory is used as it is when it is the same bytes
+  (`in_game_folder`) and refused as an `install_conflict` when it is not.
+  `--into game-folder` keeps its one-file contract: it copies **no** bound
+  package, lists each as `NOT STAGED` with the digest and the directory it would
+  have to be in, and `package map run` repeats that.
+- **Staged is not shipped.** A bound package placed in the Companion's own
+  directory has gone nowhere. `package map create` still writes into the map's
+  archive only what a grant covers, and nothing an install staged is read back
+  into one.
+
+The installation record is `aucom.q3-install/1.1` (it gained `packages`); a
+`1.0` record from an earlier build is still listed, run and removed, and
+installing the same package again replaces it with one that has the packages.
 
 **Running** starts the engine and waits for the engine's own word. "The process
 started" is not "the map loaded": told to load a map it cannot find, ioquake3

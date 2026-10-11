@@ -488,7 +488,42 @@
     for (const shadow of order.overrides || []) {
       out.append(el("p", { className: "muted", text: t("{path} in this package hides the one in {by}.", { path: shadow.path, by: shadow.by }) }));
     }
+    renderBoundPackages(out, installation, previewOnly);
     for (const limit of order.limits || []) out.append(el("p", { className: "muted", text: t("Not looked at: {limit}", { limit }) }));
+  }
+
+  // The packages the saved map is bound to, and what this installation does
+  // with each: the server decides, this prints.
+  function renderBoundPackages(out, installation, previewOnly) {
+    const packages = installation.packages || [];
+    if (!packages.length) return;
+    out.append(el("h4", { text: t("Packages the saved map is bound to") }));
+    for (const pkg of packages) {
+      const where = `${pkg.game}/${pkg.name}`;
+      if (pkg.state === "staged") {
+        out.append(el("p", { className: "message ok", text: previewOnly
+          ? t("{where} would be staged for the engine from this machine's cache ({n} file(s) the engine needs). sha256 {digest}", { where, n: pkg.runtime_files, digest: pkg.sha256 })
+          : t("{where} is staged for the engine ({n} file(s) the engine needs). sha256 {digest}", { where, n: pkg.runtime_files, digest: pkg.sha256 }) }));
+      } else if (pkg.state === "in_game_folder") {
+        out.append(el("p", { className: "muted", text: t("{where} is already in your game folder, with the same bytes. sha256 {digest}", { where, digest: pkg.sha256 }) }));
+      } else {
+        out.append(el("p", { className: "message warning", text: t("{where} is NOT given to the engine: {reason}", { where, reason: pkg.reason || "" }) }));
+      }
+      if ((pkg.searched_before || []).length) {
+        out.append(el("p", { className: "muted", text: t("Searched before {name}: {list}", { name: pkg.name, list: pkg.searched_before.join(", ") }) }));
+      }
+      for (const shadow of pkg.shadowed || []) {
+        out.append(el("p", { className: "message warning", text: t("{path} is also in {by}, which the engine reads first — the engine uses that one.", { path: shadow.path, by: shadow.by }) }));
+      }
+      const moreShadowed = (pkg.shadowed_count || 0) - (pkg.shadowed || []).length;
+      if (moreShadowed > 0) out.append(el("p", { className: "muted", text: t("… and {n} more file(s) of {name} the engine reads from elsewhere.", { n: moreShadowed, name: pkg.name }) }));
+      if (pkg.overrides_count) {
+        out.append(el("p", { className: "muted", text: t("{name} hides {n} file(s) of the same path in archives searched after it.", { name: pkg.name, n: pkg.overrides_count }) }));
+      }
+    }
+    if (!installation.complete && installation.supplied_by_packages) {
+      out.append(el("p", { className: "muted", text: t("{n} of the {total} file(s) the map's archive does not carry are in these packages, on this machine.", { n: installation.supplied_by_packages, total: (installation.not_carried || []).length }) }));
+    }
   }
 
   async function uninstall(button) {
@@ -604,6 +639,9 @@
       if (result.evidence) fact(t("The engine said"), result.evidence);
       if (result.failure_class) fact(t("Kind of failure"), result.failure_class);
       if (result.hint) out.append(el("p", { className: result.map_load === "accepted" ? "message warning" : "muted", text: result.hint }));
+      for (const name of result.packages_not_staged || []) {
+        out.append(el("p", { className: "message warning", text: t("{name}: the map is bound to it, and this installation does not give it to the engine.", { name }) }));
+      }
     }
     const pid = run.engine_pid || result?.pid;
     fact(t("Engine process"), pid ? `pid ${pid}` : t("none yet"));

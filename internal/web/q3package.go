@@ -372,8 +372,14 @@ func (s *Server) q3InstallRequest(body q3InstallBody) (q3install.Request, error)
 	if kind == "" {
 		kind = q3install.Managed
 	}
+	// The cache the build kept the map's bound packages in: a managed install
+	// reads them from it by digest, and fetches nothing.
+	cache, err := s.assets()
+	if err != nil {
+		return q3install.Request{}, err
+	}
 	return q3install.Request{
-		Package: record, Kind: kind, GameRoot: root, Game: body.Mod, BaseGame: body.BaseGame, Dir: dir,
+		Package: record, Kind: kind, GameRoot: root, Game: body.Mod, BaseGame: body.BaseGame, Dir: dir, Cache: cache,
 	}, nil
 }
 

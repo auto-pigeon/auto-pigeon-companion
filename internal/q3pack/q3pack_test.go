@@ -37,6 +37,8 @@ type built struct {
 	content  string
 	game     string
 	archive  string // the content archive's digest, in hex
+	// cache is where a BOUND archive is on this machine, digest → file.
+	cache map[string]string
 }
 
 type fixtureOptions struct {
@@ -48,6 +50,9 @@ type fixtureOptions struct {
 	fsGame   string              // stage as a mod
 	zipNames map[string]string   // content path -> the name it gets inside the archive
 	archives map[string][]string // extra archives: name -> content paths
+	// bound stages the content archive the way a saved map's bound package is
+	// staged: from a cache file, by digest, with no content folder at all.
+	bound bool
 }
 
 func makeBuild(t *testing.T, options fixtureOptions) built {
@@ -109,11 +114,26 @@ func makeBuild(t *testing.T, options fixtureOptions) built {
 	}
 
 	buildDir := filepath.Join(root, "build")
-	stage, err := q3vfs.Build(q3vfs.Request{
+	request := q3vfs.Request{
 		FSGame: options.fsGame,
 		Roots:  map[string]string{profile.RootGame: game, profile.RootContent: content},
 		Dir:    filepath.Join(buildDir, "vfs"),
-	})
+	}
+	cache := map[string]string{}
+	if options.bound {
+		object := filepath.Join(root, "cache", archiveDigest)
+		mustMkdir(t, filepath.Dir(object))
+		if err := os.Rename(filepath.Join(content, gameDir, fixtureArchive), object); err != nil {
+			t.Fatalf("%v", err)
+		}
+		cache[archiveDigest] = object
+		request.Roots = map[string]string{profile.RootGame: game}
+		request.Packages = []q3vfs.Package{{
+			Root: gameDir, ArchiveName: fixtureArchive, SHA256: "sha256:" + archiveDigest,
+			Path: object, Origin: q3vfs.OriginCache,
+		}}
+	}
+	stage, err := q3vfs.Build(request)
 	if err != nil {
 		t.Fatalf("staging the fixture: %v", err)
 	}
@@ -136,7 +156,7 @@ func makeBuild(t *testing.T, options fixtureOptions) built {
 		}},
 		Directory: buildDir,
 	}
-	return built{manifest: manifest, content: content, game: game, archive: archiveDigest}
+	return built{manifest: manifest, content: content, game: game, archive: archiveDigest, cache: cache}
 }
 
 func prepare(t *testing.T, fixture built, grants []q3pack.Grant, include ...string) *q3pack.Prepared {
