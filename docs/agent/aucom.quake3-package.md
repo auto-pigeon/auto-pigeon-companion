@@ -141,6 +141,18 @@ the binding gives. The rules that keep that safe:
   the engine's order, by name. Do not rename one to make it win or lose, and do
   not claim the engine's order equals Q3Map2's: the compiler read bound packages
   from a root of their own.
+- **The user's own copy is used under the user's own spelling, and "nothing
+  was added" is counted from the directory.** A file of the bound name in the
+  game folder — the name compared without regard to case, as the engine does —
+  with the bound bytes IS the package (`in_game_folder`): the managed base
+  reaches it through its link, spelled as the user spelled it, and nothing is
+  staged. Other bytes under that name are `install_conflict`. A test of either
+  reads the directory's entries and counts the ones the engine would call that
+  name; it never asks whether the other spelling's path exists. On macOS and
+  Windows that path resolves to the user's own file, so an `Lstat` of
+  `zz_bound.pk3` beside `ZZ_Bound.pk3` reports a second archive that is not
+  there — which failed both native jobs on `2efa71f` with nothing wrong in the
+  product (`NEW_323C`). `TestAFileOfTheBoundNameInTheGameFolder` is the pattern.
 - **`GameFolder` copies none.** It is one file. Bound packages are recorded
   `not_staged` with where they would have to be, and a run repeats it.
 - **Staged is not granted.** Local engine use is not redistribution. `q3pack`

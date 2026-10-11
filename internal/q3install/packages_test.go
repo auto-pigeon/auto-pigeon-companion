@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -533,6 +534,38 @@ func TestAnInstallationRecordedBeforePackagesWereStagedIsStillRead(t *testing.T)
 	}
 }
 
+// entryNames are the names a directory STORES, as it spells them, sorted. It
+// reads the directory rather than asking for a path: on a filesystem that
+// folds case, asking whether `zz_bound.pk3` exists answers for `ZZ_Bound.pk3`,
+// so a path that resolves says nothing about how many entries there are.
+func entryNames(t *testing.T, dir string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		names = append(names, entry.Name())
+	}
+	sort.Strings(names)
+	return names
+}
+
+// entriesNamed are the stored entries of a directory that are `name` to the
+// engine — without regard to case, the comparison sameNamed makes. One alias
+// of one file is one element here on every filesystem; two files are two.
+func entriesNamed(t *testing.T, dir, name string) []string {
+	t.Helper()
+	var out []string
+	for _, entry := range entryNames(t, dir) {
+		if strings.EqualFold(entry, name) {
+			out = append(out, entry)
+		}
+	}
+	return out
+}
+
 // What the user's own game folder already holds under the bound name. The same
 // bytes are the package, and nothing is added; other bytes are two different
 // archives wanting one name, and the engine is not given the wrong one.
@@ -545,36 +578,101 @@ func TestAFileOfTheBoundNameInTheGameFolder(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 	// The same bytes, under the name in other capitals.
-	theirs := filepath.Join(w.gameRoot, "baseq3", "ZZ_Bound.pk3")
+	userGame := filepath.Join(w.gameRoot, "baseq3")
+	theirs := filepath.Join(userGame, "ZZ_Bound.pk3")
 	write(t, theirs, data)
+	before := snapshot(t, w.gameRoot)
+	theirsBefore, err := os.Lstat(theirs)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	userEntries := entryNames(t, userGame)
+	if named := entriesNamed(t, userGame, "zz_bound.pk3"); len(named) != 1 || named[0] != "ZZ_Bound.pk3" {
+		t.Fatalf("the fixture's game folder holds %v under the bound name", named)
+	}
+
 	installation, err := Install(context.Background(), w.request(Managed)) // no cache is needed for it
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
+	if len(installation.Packages) != 1 {
+		t.Fatalf("%+v", installation.Packages)
+	}
+	managedGame := filepath.Join(installation.BasePath, "baseq3")
 	pkg := installation.Packages[0]
-	if pkg.State != PackageInGameFolder || pkg.Path != filepath.Join(installation.BasePath, "baseq3", "ZZ_Bound.pk3") {
+	if pkg.State != PackageInGameFolder || pkg.Path != filepath.Join(managedGame, "ZZ_Bound.pk3") ||
+		pkg.SHA256 != digest || pkg.Size != int64(len(data)) || pkg.Method != "" {
 		t.Errorf("%+v", pkg)
 	}
+	// ONE entry of that name in what the engine reads, spelled as the user's
+	// file is — counted from the directory's own listing, so the bound
+	// spelling resolving to the user's file on a filesystem that folds case is
+	// not mistaken for a second archive, and a second archive anywhere is.
+	if named := entriesNamed(t, managedGame, "zz_bound.pk3"); len(named) != 1 || named[0] != "ZZ_Bound.pk3" {
+		t.Errorf("the engine's directory holds %v under the bound name, and one ZZ_Bound.pk3 was wanted: "+
+			"the package was staged beside the user's own copy of it", named)
+	}
+	// And nothing else was added to it but the map's own archive.
+	wanted := append(append([]string{}, userEntries...), testArchive)
+	sort.Strings(wanted)
+	if got := entryNames(t, managedGame); strings.Join(got, "\n") != strings.Join(wanted, "\n") {
+		t.Errorf("the engine's directory holds %v, and the user's entries and the map's archive are %v", got, wanted)
+	}
+	// That entry is the user's file — reached, not copied — with the bytes the
+	// build bound.
 	assertLinked(t, pkg.Path, theirs, symlinksAllowed(t))
-	if _, err := os.Lstat(filepath.Join(installation.BasePath, "baseq3", "zz_bound.pk3")); !os.IsNotExist(err) && symlinksAllowed(t) {
-		t.Error("the package was staged beside the user's own copy of it")
+	reached, err := os.Stat(pkg.Path)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	theirsAfter, err := os.Lstat(theirs)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	if !os.SameFile(reached, theirsAfter) {
+		t.Errorf("%s is not the user's own %s", pkg.Path, theirs)
+	}
+	if found, size, err := hashFile(pkg.Path); err != nil || found != digest || size != int64(len(data)) {
+		t.Errorf("the entry the engine reads is %s, %d bytes (%v), and the build bound %s, %d bytes", found, size, err, digest, len(data))
+	}
+	// The user's file is as it was, and so is everything beside it.
+	if !theirsAfter.Mode().IsRegular() || theirsAfter.Size() != theirsBefore.Size() ||
+		theirsAfter.Mode() != theirsBefore.Mode() || !theirsAfter.ModTime().Equal(theirsBefore.ModTime()) {
+		t.Errorf("the user's file was %v %d %v and is %v %d %v", theirsBefore.Mode(), theirsBefore.Size(),
+			theirsBefore.ModTime(), theirsAfter.Mode(), theirsAfter.Size(), theirsAfter.ModTime())
+	}
+	if after := snapshot(t, w.gameRoot); after != before {
+		t.Errorf("the game folder changed:\n%s\n---\n%s", before, after)
 	}
 	if err := Verify(installation); err != nil {
 		t.Errorf("%v", err)
 	}
 
-	// Other bytes.
-	w = newWorld(t, "baseq3")
-	cache = fileCache{}
-	w.bind(cache, "baseq3", "zz_bound.pk3", map[string]string{"textures/a.tga": "a"})
-	write(t, filepath.Join(w.gameRoot, "baseq3", "zz_bound.pk3"), zipBytes(t, map[string]string{"textures/a.tga": "another"}))
-	before := snapshot(t, w.gameRoot)
-	_, err = Install(context.Background(), w.bound(Managed, cache))
-	if failure.Of(err) != failure.InstallConflict || !strings.Contains(err.Error(), "zz_bound.pk3") {
-		t.Fatalf("%v", err)
-	}
-	if after := snapshot(t, w.gameRoot); after != before {
-		t.Error("the user's file was touched")
+	// Other bytes, under the bound spelling and under another one. Refused by
+	// the name the user's file has; nothing is staged under a name beside it,
+	// the user's file is not touched and no installation is recorded.
+	for _, spelling := range []string{"zz_bound.pk3", "ZZ_Bound.pk3"} {
+		w = newWorld(t, "baseq3")
+		cache = fileCache{}
+		w.bind(cache, "baseq3", "zz_bound.pk3", map[string]string{"textures/a.tga": "a"})
+		write(t, filepath.Join(w.gameRoot, "baseq3", spelling), zipBytes(t, map[string]string{"textures/a.tga": "another"}))
+		before = snapshot(t, w.gameRoot)
+		_, err = Install(context.Background(), w.bound(Managed, cache))
+		if failure.Of(err) != failure.InstallConflict || !strings.Contains(err.Error(), spelling) {
+			t.Fatalf("%s: %v", spelling, err)
+		}
+		if after := snapshot(t, w.gameRoot); after != before {
+			t.Errorf("%s: the user's file was touched", spelling)
+		}
+		if named := entriesNamed(t, filepath.Join(w.gameRoot, "baseq3"), "zz_bound.pk3"); len(named) != 1 || named[0] != spelling {
+			t.Errorf("%s: the game folder holds %v under the bound name", spelling, named)
+		}
+		if list, _ := List(w.installs); len(list) != 0 {
+			t.Errorf("%s: a refused install was recorded: %+v", spelling, list)
+		}
+		if entries, _ := os.ReadDir(w.installs); len(entries) != 0 {
+			t.Errorf("%s: a refused install left %d entries behind", spelling, len(entries))
+		}
 	}
 	// A bound package with the map's own archive name.
 	w = newWorld(t, "baseq3")
