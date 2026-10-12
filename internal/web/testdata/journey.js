@@ -332,14 +332,14 @@
     record("the build succeeds", true, textOf($("build-progress")).replace(/\s+/g, " ").trim().slice(0, 120));
     record(
       "the finished build lists its artifacts",
-      textOf($("build-progress")).includes("Artifacts"),
-      textOf($("build-progress")).includes("Artifacts") ? "listed" : "no artifacts shown"
+      visible($("build-files")) && textOf($("build-extras")).includes("Artifacts"),
+      textOf($("build-extras")).includes("Artifacts") ? "listed under Files and sources" : "no artifacts shown"
     );
 
     // The artifact. It is a button and not a link, because every API route
     // wants the token in a header and a plain navigation cannot send one — so
     // this checks the file actually comes back rather than that a link exists.
-    const artifactRow = [...$("build-progress").children].find((row) =>
+    const artifactRow = [...$("build-extras").children].find((row) =>
       row.textContent.includes("Artifacts")
     );
     const artifactButton = artifactRow && artifactRow.querySelector("button");

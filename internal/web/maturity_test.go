@@ -285,7 +285,8 @@ func TestAWorkInProgressNoteIsRemovedFromWhereItIsPut(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 	for _, want := range []string{
-		`$("build-current-title").parentElement.querySelectorAll(".wip")`,
+		// The build's note has a place of its own, emptied as it is filled: one note however many polls.
+		`$("build-note").replaceChildren(`,
 		`$("build-pipeline-note").parentElement.querySelectorAll(".wip")`,
 	} {
 		if !strings.Contains(string(build), want) {

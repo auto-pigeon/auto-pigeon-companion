@@ -17,15 +17,14 @@ func TestBuildPageShowsAFindingsHint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
-	start := strings.Index(string(source), "function findingsList(step)")
-	if start < 0 {
-		t.Fatal("build.js has no findingsList(step): this test reads what a stage's findings render")
+	// The findings of every stage are gathered (problemGroups) and drawn (renderProblems) as one list.
+	start := strings.Index(string(source), "function problemGroups(manifest)")
+	end := strings.Index(string(source), "function renderProgress(body)")
+	if start < 0 || end < start {
+		t.Fatal("build.js has no problemGroups(manifest) before renderProgress: this test reads what the build's findings render")
 	}
-	body := string(source)[start:]
-	if end := strings.Index(body, "\n  }\n"); end > 0 {
-		body = body[:end]
-	}
-	for _, want := range []string{"finding.message", "finding.class", "finding.raw", "finding.hint"} {
+	body := string(source)[start:end]
+	for _, want := range []string{"finding.message", "finding.class", "finding.raw", "finding.hint", "group.message", "group.class", "group.raws", "group.hint"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the findings list does not render %s", want)
 		}

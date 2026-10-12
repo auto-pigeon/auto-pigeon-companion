@@ -33,6 +33,9 @@
   let inputFields = new Map();
   let currentBuild = null;
   let poller = null;
+  // The last answer drawn, so a choice made on the page (fold or unfold the
+  // output) redraws at once instead of waiting for the next poll.
+  let lastBody = null;
   // The wizard. `step` is the panel on screen; `checked` is what the last check
   // (step 3) found for the choices as they are now — "ok", "blocked", or null
   // once anything in steps 1 and 2 changed after it; `outcome` is the state of
@@ -844,6 +847,126 @@
     tick();
   }
 
+  // duration says a span the way a person reads one. A lighting pass printed
+  // as "708399 ms" was a number nobody could place.
+  function duration(ms) {
+    if (!(ms >= 0)) return "";
+    if (ms < 1000) return t("{n} ms", { n: Math.round(ms) });
+    const seconds = ms / 1000;
+    if (seconds < 60) return t("{n} s", { n: seconds < 10 ? seconds.toFixed(1) : Math.round(seconds) });
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return t("{m} min {s} s", { m: minutes, s: Math.round(seconds - minutes * 60) });
+    return t("{h} h {m} min", { h: Math.floor(minutes / 60), m: minutes % 60 });
+  }
+  const since = (stamp) => {
+    const at = Date.parse(stamp || "");
+    return Number.isFinite(at) && at > 0 ? Math.max(0, Date.now() - at) : NaN;
+  };
+
+  // What somebody opened or closed stays that way. The panel is rebuilt from
+  // the manifest on every poll, so a <details> made fresh each time snapped
+  // back to its default seven times in five seconds; the choice is kept here,
+  // per build, and given back to the element that replaces the one it was made on.
+  const openChoices = new Map();
+  function sticky(details, key, openByDefault) {
+    const id = `${currentBuild}:${key}`;
+    details.open = openChoices.has(id) ? openChoices.get(id) : Boolean(openByDefault);
+    details.addEventListener("toggle", () => openChoices.set(id, details.open));
+    return details;
+  }
+
+  // foldRepeats shortens a run of consecutive lines that differ only in their
+  // numbers — a compiler that warns once per entity prints the same sentence
+  // forty times — to its first two lines and a count. Nothing is reordered and
+  // nothing else is touched; the stage's own job always holds every line.
+  function foldRepeats(text) {
+    const lines = String(text).split("\n");
+    const shape = (line) => line.replace(/-?\d+(?:\.\d+)?/g, "#");
+    const out = [];
+    let hidden = 0;
+    for (let at = 0; at < lines.length;) {
+      let end = at + 1;
+      const key = shape(lines[at]);
+      while (end < lines.length && key.trim() && shape(lines[end]) === key) end += 1;
+      if (end - at >= 4) {
+        out.push(lines[at], lines[at + 1], "    " + t("… {n} more lines like the two above", { n: end - at - 2 }));
+        hidden += end - at - 2;
+      } else for (let k = at; k < end; k += 1) out.push(lines[k]);
+      at = end;
+    }
+    return { text: out.join("\n"), hidden };
+  }
+
+  // problemGroups is every error and warning of every stage, the same finding
+  // counted once: errors first, then the most repeated. A stage that warned
+  // forty times about forty lights is one row that says forty.
+  function problemGroups(manifest) {
+    const groups = new Map();
+    for (const step of manifest.steps || []) {
+      for (const finding of step.diagnostics || []) {
+        if (finding.severity !== "error" && finding.severity !== "warning") continue;
+        const key = [finding.severity, finding.class || "", finding.rule_id || "", finding.message || finding.raw || ""].join("\u0000");
+        let group = groups.get(key);
+        if (!group) {
+          group = { severity: finding.severity, message: finding.message || finding.raw || "", class: finding.class, hint: finding.hint,
+            fatal: false, count: 0, stages: [], raws: [] };
+          groups.set(key, group);
+        }
+        group.count += 1;
+        group.fatal = group.fatal || Boolean(finding.fatal);
+        const stage = step.title || step.id;
+        if (!group.stages.includes(stage)) group.stages.push(stage);
+        if (finding.raw && finding.raw !== finding.message && !group.raws.includes(finding.raw)) group.raws.push(finding.raw);
+      }
+    }
+    return [...groups.values()].sort((a, b) =>
+      (a.severity === b.severity ? 0 : a.severity === "error" ? -1 : 1) || Number(b.fatal) - Number(a.fatal) || b.count - a.count);
+  }
+
+  function renderProblems(manifest) {
+    const groups = problemGroups(manifest);
+    const section = $("build-problems");
+    const list = $("build-problems-list");
+    list.replaceChildren();
+    section.hidden = !groups.length;
+    if (!groups.length) return;
+    const errors = groups.filter((g) => g.severity === "error").reduce((n, g) => n + g.count, 0);
+    const warnings = groups.filter((g) => g.severity === "warning").reduce((n, g) => n + g.count, 0);
+    $("build-problems-heading").textContent = errors && warnings
+      ? t("Errors and warnings — {errors} error(s), {warnings} warning(s)", { errors, warnings })
+      : errors ? t("Errors — {errors}", { errors }) : t("Warnings — {warnings}", { warnings });
+    const SHOWN = 30;
+    groups.slice(0, SHOWN).forEach((group, index) => {
+      const row = el("li", { className: "problem " + group.severity });
+      const head = el("div", { className: "problem__head" });
+      head.append(badge(group.severity, group.severity === "error" ? "failed" : "warning"));
+      head.append(el("span", { className: "problem__message", text: group.message }));
+      if (group.count > 1) head.append(el("span", { className: "problem__count", text: t("× {n}", { n: group.count }) }));
+      row.append(head);
+      const meta = [t("in {stages}", { stages: group.stages.join(", ") })];
+      if (group.class) meta.push("[" + group.class + "]");
+      if (group.fatal) meta.push(t("This is what failed the stage."));
+      row.append(el("div", { className: "problem__meta muted", text: meta.join(" · ") }));
+      if (group.raws.length || group.hint) {
+        // Open for an error, closed for a warning: the sentence above is the
+        // finding, and this is the evidence and the remedy for whoever wants them.
+        const details = sticky(el("details", { className: "problem__more" }), "problem:" + index + ":" + group.message, group.severity === "error");
+        details.append(el("summary", { text: group.raws.length
+          ? t("The compiler's own line, and what to do") : t("What to do") }));
+        if (group.raws.length) {
+          details.append(el("pre", { className: "output", text: group.raws.slice(0, 5).join("\n")
+            + (group.raws.length > 5 ? "\n" + t("… and {n} more different lines in the stage's job", { n: group.raws.length - 5 }) : "") }));
+        }
+        if (group.hint) details.append(el("p", { className: "muted stage-finding-hint", text: group.hint }));
+        row.append(details);
+      }
+      list.append(row);
+    });
+    const more = $("build-problems-more");
+    more.hidden = groups.length <= SHOWN;
+    more.textContent = groups.length > SHOWN ? t("{more} more kinds of finding are in the stages' own jobs.", { more: groups.length - SHOWN }) : "";
+  }
+
   function renderProgress(body) {
     const manifest = body.manifest;
     const list = $("build-progress");
@@ -852,7 +975,7 @@
     // A finished build has nothing to cancel; the button is not left standing
     // there disabled and red.
     $("build-cancel").hidden = !body.live;
-    $("build-output-heading").textContent = body.live ? "Output so far" : "Output";
+    $("build-output-heading").textContent = body.live ? t("Output so far") : t("Output");
     $("build-current-empty").hidden = true;
     // Play this build: a finished build with a level goes straight to Run.
     // A Quake III map is not played by dropping its BSP into a mod folder: its
@@ -867,8 +990,31 @@
       outcome = manifest.state;
       renderSteps();
     }
-    $("build-current-title").textContent =
-      `${body.live ? "Building" : "Build"}: ${manifest.label || manifest.pipeline?.name || "this build"} — ${manifest.state}`;
+    // The title is what was built and the badge is how it stands: the state is
+    // not buried at the end of a sentence.
+    const title = $("build-current-title");
+    title.replaceChildren(document.createTextNode((manifest.label || manifest.pipeline?.name || t("this build")) + " "), badge(manifest.state));
+
+    // One line: where the build is, and for how long.
+    const steps = manifest.steps || [];
+    const runningAt = steps.findIndex((step) => step.state === "running");
+    const whole = body.live ? since(manifest.started_at) : Date.parse(manifest.finished_at || "") - Date.parse(manifest.started_at || "");
+    const status = $("build-status");
+    if (body.live && runningAt >= 0) {
+      const elapsed = since(steps[runningAt].started_at);
+      status.textContent = t("Stage {n} of {total} — {title}", { n: runningAt + 1, total: steps.length, title: steps[runningAt].title || steps[runningAt].id })
+        + (Number.isFinite(elapsed) ? " · " + t("running for {time}", { time: duration(elapsed) }) : "")
+        + (Number.isFinite(whole) ? " · " + t("the whole build so far: {time}", { time: duration(whole) }) : "");
+    } else if (body.live) {
+      status.textContent = t("Starting…");
+    } else {
+      const ran = steps.filter((step) => step.state).length;
+      status.textContent = t("{ran} of {total} stage(s) ran", { ran, total: steps.length })
+        + (Number.isFinite(whole) && whole > 0 ? " · " + t("{time} in all", { time: duration(whole) }) : "");
+    }
+
+    const leak = $("build-leak");
+    leak.replaceChildren();
     if (!body.live && body.leak_test) {
       const resultButton = el("button", { text: t("Download leak result"), attrs: { type: "button", class: "secondary" } });
       resultButton.addEventListener("click", () => withBusy(resultButton, async () => {
@@ -887,20 +1033,19 @@
       // three things, kept apart (NEW_307W).
       const item = el("li", { className: "leak-outcome", children: [
         el("p", { className: "leak-verdict", text: leakVerdict(manifest, body.leak_test) }), resultButton] });
-      list.append(item);
+      leak.append(item);
       renderLeakReturn(manifest, item);
     }
+    leak.hidden = !leak.childElementCount;
 
     // The finished build is the other moment a compatibility report is worth
     // offering: the user has just seen what happened and has the build id that
     // fills in the diagnostics. The manifest carries the family (see
     // internal/build/manifest.go), so this needs no second lookup.
-    // Removed from where it is PUT: beside the title, inside the panel's head.
-    // The selector here used to be `#build-current-panel > .wip`, which names a
-    // child of the panel; the note is a grandchild, so nothing was ever
-    // removed and every poll of a build added another copy — three on a
-    // three-poll build, seven on a slower one (operator, 2026-10-01).
-    for (const stale of $("build-current-title").parentElement.querySelectorAll(".wip")) stale.remove();
+    // The note has a place of its own (`#build-note`) and that place is emptied
+    // before it is filled: every poll of a build used to add another copy —
+    // three on a three-poll build, seven on a slower one (operator, 2026-10-01)
+    // — and, sitting inside the head, it pushed Cancel out of the title's row.
     const buildNote = maturityNote(
       { work_in_progress: true, badge: "Work in progress", message: body.maturity_message, feedback_invited: true },
       () =>
@@ -911,9 +1056,11 @@
           about: `About the build "${manifest.label || manifest.pipeline?.name || "untitled"}" with ${manifest.pipeline?.name || "this pipeline"}.`,
         })
     );
-    if (body.maturity_message && buildNote) $("build-current-title").after(buildNote);
+    $("build-note").replaceChildren(...(body.maturity_message && buildNote ? [buildNote] : []));
 
-    for (const step of manifest.steps || []) {
+    renderProblems(manifest);
+
+    for (const step of steps) {
       // While the build is live, a stage it has not reached yet is waiting. The
       // manifest pre-marks those as skipped ("the build stopped before this
       // step") so a crash leaves a true record; on a running build that
@@ -925,46 +1072,42 @@
       // A step the build never reached has no tool resolved for it yet; the badge
       // already says it was skipped, so nothing stands in for a name.
       const provider = step.profile?.name ? `${step.profile.name} ${step.profile.version}` : step.skipped ? "" : "no tool recorded";
-      line.append(el("span", { className: "stage-detail", text: provider }));
-      if (step.duration_ms) {
-        line.append(el("span", { className: "stage-detail", text: `${step.duration_ms} ms` }));
-      }
+      line.append(el("span", { className: "stage-detail stage-tool", text: provider }));
+      const elapsed = step.state === "running" ? since(step.started_at) : step.duration_ms;
+      line.append(el("span", { className: "stage-detail stage-time", text: elapsed ? duration(elapsed) : "",
+        attrs: step.duration_ms ? { title: `${step.duration_ms} ms` } : {} }));
       const warnings = (step.diagnostics || []).filter((d) => d.severity === "warning").length;
       const errors = (step.diagnostics || []).filter((d) => d.severity === "error").length;
-      if (warnings || errors) {
-        line.append(
-          el("span", {
-            className: "stage-detail",
-            text: t("{errors} error finding(s), {warnings} warning(s)", { errors, warnings }),
-          })
-        );
-      }
-      if (step.error && !pending) line.append(el("span", { className: "stage-detail", text: step.error }));
+      // Only what there is: "0 error finding(s), 1 warning(s)" made a reader subtract.
+      const counts = [];
+      if (errors) counts.push(t("{n} error finding(s)", { n: errors }));
+      if (warnings) counts.push(t("{n} warning(s)", { n: warnings }));
+      line.append(el("span", { className: "stage-detail stage-count" + (errors ? " stage-error" : ""), text: counts.join(", ") }));
+      // The stage's own job: its whole output, live while it runs, and its
+      // artifacts. A link, so it opens from the keyboard and survives a reload.
+      line.append(step.job_id
+        ? el("a", { className: "stage-detail stage-job", text: t("Job and full output"), attrs: { href: "#jobs/" + encodeURIComponent(step.job_id) } })
+        : el("span", { className: "stage-detail stage-job" }));
+      if (step.error && !pending) line.append(el("span", { className: "stage-detail stage-wide stage-error", text: step.error }));
       // What KIND of failure it was, as the token the manifest carries
       // (Q3_010): "the map leaks" and "the compiler is not installed" are told
       // apart by this, not by their wording.
       if (step.failure_class && !pending) {
-        line.append(el("span", { className: "stage-detail failure-class", text: t("Kind of failure: {kind}", { kind: step.failure_class }) }));
+        line.append(el("span", { className: "stage-detail stage-wide failure-class", text: t("Kind of failure: {kind}", { kind: step.failure_class }) }));
       }
-      // The stage's own job: its whole output, live while it runs, and its
-      // artifacts. A link, so it opens from the keyboard and survives a reload.
-      if (step.job_id) {
-        line.append(el("a", { className: "stage-detail stage-job", text: t("Open this stage's job and its output"),
-          attrs: { href: "#jobs/" + encodeURIComponent(step.job_id) } }));
-      }
-      const found = findingsList(step);
-      if (found) line.append(found);
       if (step.command?.shell) {
-        const details = el("details");
-        details.append(el("summary", { text: "command" }));
+        const details = sticky(el("details", { className: "stage-wide" }), "command:" + step.id, false);
+        details.append(el("summary", { text: t("The command this stage ran") }));
         details.append(el("pre", { className: "output", text: step.command.shell }));
         line.append(details);
       }
       list.append(line);
     }
 
+    const extras = $("build-extras");
+    extras.replaceChildren();
     const read = whatWasRead(manifest);
-    if (read) list.append(read);
+    if (read) extras.append(read);
 
     if (manifest.outputs?.length) {
       const outputs = el("li");
@@ -991,8 +1134,9 @@
         );
 
       }
-      list.append(outputs);
+      extras.prepend(outputs);
     }
+    $("build-files").hidden = !extras.childElementCount;
 
     const log = $("build-log");
     if (body.log === undefined) {
@@ -1000,47 +1144,26 @@
       // job records hold the output, and showing the previous build's log here
       // would be showing somebody the wrong bytes.
       log.textContent = "";
+      log.hidden = true;
+      $("build-log-fold").parentElement.hidden = true;
       $("build-log-note").textContent =
         "This build is not running in this Companion. Each stage's own job holds its output.";
     } else {
+      log.hidden = false;
+      $("build-log-fold").parentElement.hidden = false;
       const wasAtBottom = log.scrollTop + log.clientHeight >= log.scrollHeight - 8;
-      log.textContent = body.log;
+      const folded = $("build-log-fold").checked ? foldRepeats(body.log) : { text: body.log, hidden: 0 };
+      // Only when it changed: writing the same text again throws away a selection somebody is copying.
+      if (log.textContent !== folded.text) log.textContent = folded.text;
       if (wasAtBottom) log.scrollTop = log.scrollHeight;
-      $("build-log-note").textContent = body.log_dropped
-        ? `Showing the last ${log.textContent.length} characters; ${body.log_dropped} earlier bytes were not kept in this view. Each stage's own job holds the full log.`
-        : "Each stage's own job holds the full log.";
+      const notes = [];
+      if (folded.hidden) notes.push(t("{n} repeated line(s) are folded above; untick the box to see every one.", { n: folded.hidden }));
+      notes.push(body.log_dropped
+        ? `Showing the last ${body.log.length} characters; ${body.log_dropped} earlier bytes were not kept in this view. Each stage's own job holds the full log.`
+        : "Each stage's own job holds the full log.");
+      $("build-log-note").textContent = notes.join(" ");
     }
-  }
-
-  // findingsList is every error and warning a stage's rules recognised, with
-  // the compiler's own line beside the rule's sentence. The count alone used to
-  // be all the page showed (Q3_007: a missing model and a missing image were
-  // "1 error finding(s), 1 warning(s)" and nothing said which).
-  function findingsList(step) {
-    const findings = (step.diagnostics || []).filter((d) => d.severity === "error" || d.severity === "warning");
-    if (!findings.length) return null;
-    const details = el("details", { className: "stage-findings" });
-    // Open when the stage failed or warned: these are why.
-    details.open = true;
-    details.append(el("summary", { text: t("Findings ({count})", { count: findings.length }) }));
-    const rows = el("ul");
-    for (const finding of findings.slice(0, 50)) {
-      const row = el("li");
-      row.append(badge(finding.severity, finding.severity === "error" ? "failed" : "queued"));
-      row.append(document.createTextNode(" " + (finding.message || finding.raw || "")));
-      if (finding.class) row.append(el("span", { className: "stage-detail", text: " [" + finding.class + "]" }));
-      if (finding.fatal) row.append(el("span", { className: "stage-detail", text: " " + t("This line is what failed the stage.") }));
-      if (finding.raw && finding.raw !== finding.message) row.append(el("pre", { className: "output", text: finding.raw }));
-      // What to do about it. The terminal has always printed a rule's hint; the
-      // page showed the sentence and the line and left out the remedy (Q3_012B).
-      if (finding.hint) row.append(el("div", { className: "muted stage-finding-hint", text: finding.hint }));
-      rows.append(row);
-    }
-    details.append(rows);
-    if (findings.length > 50) {
-      details.append(el("p", { className: "muted", text: t("{more} more in the stage's job.", { more: findings.length - 50 }) }));
-    }
-    return details;
+    lastBody = body;
   }
 
   // whatWasRead says what the build compiled and what the compiler was allowed
@@ -1057,8 +1180,7 @@
       item.append(el("span", { className: "stage-detail failure-class", text: t("Kind of failure: {kind}", { kind: manifest.failure_class }) }));
     }
     if (lines.length) {
-      const details = el("details", { className: "stage-findings" });
-      details.open = Boolean((data?.findings || []).length);
+      const details = sticky(el("details", { className: "stage-findings stage-wide" }), "read", Boolean((data?.findings || []).length));
       details.append(el("summary", { text: t("Sources and staged game data") }));
       details.append(el("pre", { className: "output", text: lines.join("\n") }));
       item.append(details);
@@ -1232,6 +1354,7 @@
     window.AUCOM.showArea("run");
     await window.AUCOM.areas.run?.chooseBuild?.(currentBuild);
   });
+  $("build-log-fold").addEventListener("change", () => { if (lastBody) renderProgress(lastBody); });
   $("build-cancel").addEventListener("click", (event) =>
     withBusy(event.currentTarget, async () => {
       if (!currentBuild) return;

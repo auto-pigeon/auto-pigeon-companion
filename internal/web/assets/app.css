@@ -305,6 +305,57 @@ fieldset { min-width: 0; }
   border-bottom: 1px solid var(--line); padding: 0.7rem 0.9rem; flex-wrap: wrap; gap: 0.35rem 0.75rem;
 }
 #area-build .stages > li:last-child { border-bottom: none; }
+
+/* One build, read top to bottom: what and how far, what went wrong, each stage
+   on a line, the files, then the compiler's own words. The sections share one
+   rhythm so the eye finds the next heading where the last one taught it to. */
+#area-build .build-head { align-items: center; margin-bottom: 0.25rem; }
+#area-build .build-head h3 { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0; }
+#area-build .build-status { margin: 0 0 0.6rem; color: var(--ink-muted); font-size: 0.9rem; }
+#area-build .build-status:empty, #area-build #build-note:empty { display: none; }
+#area-build .build-section { margin: 1.1rem 0 0; }
+#area-build .build-section > h4, #area-build .build-output > summary {
+  font-size: 0.8125rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--ink-muted); margin: 0 0 0.4rem;
+}
+#area-build .build-output > summary { cursor: pointer; }
+#area-build .build-output__fold { margin: 0.2rem 0 0; font-size: 0.85rem; color: var(--ink-muted); }
+#area-build .build-leak { margin: 0 0 0.6rem; }
+
+/* Every finding of every stage, the same one counted once. The sentence is the
+   row; the compiler's line and the remedy are one click under it. */
+.problems { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.problem {
+  border-left: 3px solid var(--warn); background: var(--surface-2);
+  border-radius: 0 var(--radius) var(--radius) 0; padding: 0.55rem 0.8rem;
+}
+.problem.error { border-left-color: var(--bad); }
+.problem__head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.6rem; }
+.problem__message { flex: 1 1 24rem; line-height: 1.4; }
+.problem__count { font-family: var(--mono); font-size: 0.85rem; color: var(--ink-muted); white-space: nowrap; }
+.problem__meta { font-size: 0.8rem; margin-top: 0.2rem; }
+.problem__more { margin-top: 0.35rem; font-size: 0.85rem; }
+.problem__more > summary { cursor: pointer; color: var(--ink-muted); }
+.problem__more .stage-finding-hint { margin: 0.4rem 0 0; line-height: 1.45; }
+
+/* The stages as a table without being one: the same five columns on every
+   line, so states, tools and times read down as well as across. Anything a
+   stage has more to say (its error, its command) takes the whole width under it. */
+#area-build .stage-table > li {
+  display: grid; align-items: baseline; gap: 0.3rem 0.9rem;
+  grid-template-columns: minmax(9rem, 1.4fr) 6.5rem minmax(8rem, 2fr) 6.5rem minmax(7rem, 1.6fr) auto;
+}
+#area-build .stage-table .stage-time { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+#area-build .stage-table .stage-job { justify-self: end; white-space: nowrap; }
+#area-build .stage-table .stage-wide { grid-column: 1 / -1; }
+#area-build .stage-table .stage-error { color: var(--bad); }
+#area-build .stage-table details > summary { cursor: pointer; color: var(--ink-muted); font-size: 0.85rem; }
+#area-build .stages .stage-wide { flex: 1 1 100%; }
+@media (max-width: 52rem) {
+  #area-build .stage-table > li { grid-template-columns: 1fr auto; }
+  #area-build .stage-table .stage-time { text-align: left; }
+  #area-build .stage-table .stage-job { justify-self: start; }
+}
 #area-build .rows > li {
   background: transparent; border: none; border-radius: 0; border-bottom: 1px solid var(--line);
   padding: 0.8rem 0; margin: 0;

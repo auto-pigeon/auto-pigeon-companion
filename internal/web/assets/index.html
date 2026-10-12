@@ -692,15 +692,44 @@
           <div class="panel bwiz-panel" id="build-step-4" data-step="4" hidden>
             <p class="muted" id="build-current-empty">Nothing has been built in this window yet. Go through the steps above, or open a past build below.</p>
             <div id="build-current-panel" hidden>
-              <div class="panel-head">
+              <!-- One build, top to bottom in the order somebody watching it needs
+                   it: what it is and how far it has got, what went wrong or
+                   was warned about, each stage on a line, the files, and last
+                   the compiler's own output — folded, because it is long. -->
+              <div class="panel-head build-head">
                 <h3 id="build-current-title">Building</h3>
                 <button type="button" id="build-cancel" class="danger">Cancel this build</button>
               </div>
+              <p id="build-status" class="build-status" role="status"></p>
               <p id="build-result" class="message" role="status"></p>
-              <ol id="build-progress" class="stages" aria-label="Build progress"></ol>
-              <h4 id="build-output-heading">Output so far</h4>
-              <pre id="build-log" class="output" aria-label="Live build output" tabindex="0"></pre>
-              <p id="build-log-note" class="muted"></p>
+              <ul id="build-leak" class="stages build-leak" aria-label="Leak test result"></ul>
+              <div id="build-note"></div>
+
+              <section id="build-problems" class="build-section" aria-labelledby="build-problems-heading" hidden>
+                <h4 id="build-problems-heading">Warnings and errors</h4>
+                <ul id="build-problems-list" class="problems"></ul>
+                <p id="build-problems-more" class="muted" hidden></p>
+              </section>
+
+              <section class="build-section" aria-labelledby="build-stages-heading">
+                <h4 id="build-stages-heading">Stages</h4>
+                <ol id="build-progress" class="stages stage-table" aria-label="Build progress"></ol>
+              </section>
+
+              <section id="build-files" class="build-section" aria-labelledby="build-files-heading" hidden>
+                <h4 id="build-files-heading">Files and sources</h4>
+                <ul id="build-extras" class="stages"></ul>
+              </section>
+
+              <details id="build-output" class="build-section build-output" open>
+                <summary><span id="build-output-heading">Output so far</span></summary>
+                <label class="check build-output__fold">
+                  <input type="checkbox" id="build-log-fold" checked />
+                  Fold runs of lines that differ only in their numbers
+                </label>
+                <pre id="build-log" class="output" aria-label="Live build output" tabindex="0"></pre>
+                <p id="build-log-note" class="muted"></p>
+              </details>
             </div>
 
             <!-- Quake III: Package → Install → Run. Shown under a finished

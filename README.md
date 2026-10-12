@@ -1129,9 +1129,21 @@ $ companion build run --pipeline auto-pigeon.q3.fast-preview --input source_map=
 A tool profile declares the two things only its author can know with two
 optional members of a diagnostic rule: `"fatal": true` (the line proves the
 stage's result is unusable although the program exited 0; requires severity
-`error`) and `"class": "<token>"`. On the Build page each stage lists its
-findings with the compiler's own line, links to its job, and *What this build
-read* shows the conversion, the staged game data and each bound package. For a
+`error`) and `"class": "<token>"`. On the Build page a build reads top to
+bottom: its name, state and a one-line status (which stage, for how long); then
+*Warnings and errors*, the findings of every stage as one list — the same
+finding counted once, errors first, the compiler's own line and the remedy one
+click under each; then the stages on a line each (state, tool, time, findings,
+a link to the stage's job), *Files and sources*, and last the compiler's
+output, where a run of lines that differ only in their numbers is folded to two
+and a count (untick the box to see every line; the stage's job always holds the
+full log). The same findings are in the manifest:
+
+```sh
+companion build show <build-id> --json | jq '.steps[] | {id, state, duration_ms, findings: [.diagnostics[]? | select(.severity != "info") | {severity, class, message}]}'
+```
+
+*What this build read* shows the conversion, the staged game data and each bound package. For a
 map saved to the account it begins with which revision that was and which
 `.map` the compiler was handed — the APMap's own `document_id` and revision are
 not the account's, and a map saved three times still calls itself revision 0:
