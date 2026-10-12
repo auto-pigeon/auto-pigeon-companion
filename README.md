@@ -584,6 +584,11 @@ vis      incompatible       v0.18.1  /opt/ericw-tools-v0.18.1/bin/vis
 $ echo $?
 1
 $ companion toolchain check auto-pigeon.ericw-tools.q1 --json   # the same answers, with each file's SHA-256
+$ companion build pipelines                                     # the listing says what Build & Run says, and why
+auto-pigeon.q1.fast-preview      1.0.0    builtin   compile -> vis -> light  needs setup
+    compile (tool_incompatible): The qbsp recorded for ericw-tools 2.0.0-alpha11 (Quake 1) is not the program this profile was written for (it calls itself v0.18.1; this profile accepts 2.…): …
+    vis (tool_incompatible): The vis recorded for … is not the program this profile was written for …
+$ companion build pipelines --json    # per pipeline: "runnable" (every capability has a provider), "ready", and "problems" by step
 ```
 
 ```bash

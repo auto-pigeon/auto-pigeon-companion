@@ -32,9 +32,17 @@ func TestBuildPipelinesListsTheBuiltInQ1Pipelines(t *testing.T) {
 		}
 	}
 	// Every built-in pipeline resolves against the built-in toolchain, so none
-	// of them is listed as needing something.
-	if strings.Contains(out, "needs ") {
-		t.Errorf("a built-in pipeline does not resolve on a fresh machine:\n%s", out)
+	// of them is listed as needing a CAPABILITY. On a machine where no program
+	// has been chosen yet each is "needs setup", with the reason under it
+	// (NEW_323D): the listing used to print "ready" there, and for a pipeline
+	// bound to the wrong programs, because resolving was all it asked.
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, "auto-pigeon.") && strings.Contains(strings.ReplaceAll(line, "needs setup", ""), "needs ") {
+			t.Errorf("a built-in pipeline does not resolve on a fresh machine:\n%s", line)
+		}
+	}
+	if !strings.Contains(out, "needs setup") || !strings.Contains(out, "compile (missing_engine)") {
+		t.Errorf("a pipeline with no program chosen is not listed as needing setup:\n%s", out)
 	}
 }
 

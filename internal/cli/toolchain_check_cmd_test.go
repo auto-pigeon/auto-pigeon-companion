@@ -108,6 +108,37 @@ func TestTheCommandLineRefusesWhatThePageRefuses(t *testing.T) {
 		t.Errorf("toolchain check, as text (%d): %s", code, out)
 	}
 
+	// The LISTING says it too (NEW_323D, found live): `build pipelines` printed "ready" for all four
+	// built-in Quake 1 pipelines while Profiles and Build & Run said "needs setup", because it only asked
+	// whether some profile provides each capability. The qbsp-only leak test is still ready: its program is right.
+	code, out, _ = runCLI(t, env, "build", "pipelines", "--json")
+	var listed []struct {
+		ID       string `json:"id"`
+		Runnable bool   `json:"runnable"`
+		Ready    bool   `json:"ready"`
+		Problems []struct{ Step, Fault, Summary string }
+	}
+	if err := json.Unmarshal([]byte(out), &listed); code != 0 || err != nil {
+		t.Fatalf("build pipelines --json (%d): %v in %s", code, err, out)
+	}
+	ready := map[string]bool{}
+	for _, row := range listed {
+		ready[row.ID] = row.Ready
+		if row.ID == "auto-pigeon.q1.fast-preview" {
+			if !row.Runnable || len(row.Problems) != 2 || row.Problems[0].Step != "vis" || row.Problems[0].Fault != "tool_incompatible" ||
+				!strings.Contains(row.Problems[0].Summary, "v0.18.1") || row.Problems[1].Step != "light" {
+				t.Errorf("fast-preview on a mixed installation: %+v", row)
+			}
+		}
+	}
+	if ready["auto-pigeon.q1.fast-preview"] || ready["auto-pigeon.q1.normal"] || ready["auto-pigeon.q1.final"] || !ready["auto-pigeon.q1.leak-test"] {
+		t.Errorf("build pipelines readiness on a mixed installation: %v", ready)
+	}
+	code, out, _ = runCLI(t, env, "build", "pipelines")
+	if code != 0 || !strings.Contains(out, "needs setup") || !strings.Contains(out, "vis (tool_incompatible)") {
+		t.Errorf("build pipelines, as text (%d): %s", code, out)
+	}
+
 	// `job run` on the incompatible stage: refused, not run.
 	code, out, errOut = runCLI(t, env, "job", "run", "--profile", ericwQ1, "--action", "vis",
 		"--input", "bsp="+source, "--input", "prt="+source)
@@ -142,6 +173,15 @@ func TestTheCommandLineRefusesWhatThePageRefuses(t *testing.T) {
 		"qbsp": "2.0.0-alpha11", "vis": "2.0.0-alpha11", "light": "2.0.0-alpha11", "bspinfo": "2.0.0-alpha11", "bsputil": "2.0.0-alpha11"}))
 	if code, out, errOut = runCLI(t, env, "toolchain", "check", ericwQ1); code != 0 || strings.Contains(out, "incompatible") {
 		t.Errorf("toolchain check on supported programs exited %d: %s%s", code, out, errOut)
+	}
+	code, out, _ = runCLI(t, env, "build", "pipelines")
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, "auto-pigeon.q1.") && (code != 0 || !strings.Contains(line, " ready") || strings.Contains(line, "needs setup")) {
+			t.Errorf("build pipelines on supported programs (%d): %s", code, line)
+		}
+	}
+	if strings.Contains(out, "tool_incompatible") {
+		t.Errorf("build pipelines on supported programs still names an incompatible program: %s", out)
 	}
 	// A toolchain that requires nothing has nothing to check, and says that.
 	if code, out, _ = runCLI(t, env, "toolchain", "check", "auto-pigeon.q3map2"); code != 0 || !strings.Contains(out, "requires nothing") {

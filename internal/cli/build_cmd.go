@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/config"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/engine"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/leakadapter"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/maturity"
@@ -347,18 +349,35 @@ func buildPipelines(env *Env, args []string) int {
 	}
 
 	type row struct {
-		ID           string   `json:"id"`
-		Version      string   `json:"version"`
-		Name         string   `json:"name"`
-		Summary      string   `json:"summary"`
-		Trust        string   `json:"trust"`
-		Steps        []string `json:"steps"`
-		Missing      []string `json:"missing_capabilities,omitempty"`
-		Runnable     bool     `json:"runnable"`
-		Family       string   `json:"engine_family,omitempty"`
-		Maturity     string   `json:"maturity,omitempty"`
-		Capabilities []string `json:"-"`
+		ID       string   `json:"id"`
+		Version  string   `json:"version"`
+		Name     string   `json:"name"`
+		Summary  string   `json:"summary"`
+		Trust    string   `json:"trust"`
+		Steps    []string `json:"steps"`
+		Missing  []string `json:"missing_capabilities,omitempty"`
+		Runnable bool     `json:"runnable"`
+		// Ready and Problems are what Profiles and Build & Run say about the same
+		// pipeline (NEW_323D): every mandatory step's program asked of the same
+		// checker, against this machine's bindings. Runnable only ever said that a
+		// profile PROVIDES each capability, and printed "ready" for a pipeline whose
+		// vis was the wrong program.
+		Ready        bool          `json:"ready"`
+		Problems     []stepProblem `json:"problems,omitempty"`
+		Family       string        `json:"engine_family,omitempty"`
+		Maturity     string        `json:"maturity,omitempty"`
+		Capabilities []string      `json:"-"`
 	}
+	_, _, bindingsPath, err := statePaths(env, settings)
+	if err != nil {
+		return fail(env, err)
+	}
+	// No binding file is a machine where nothing has been chosen yet: every step then says so itself.
+	bindings, err := binding.LoadFile(bindingsPath)
+	if err != nil && !errors.Is(err, binding.ErrNoFile) {
+		return fail(env, err)
+	}
+	checker := engine.Checker{Platform: currentPlatform()}
 	var rows []row
 	for _, entry := range entries {
 		pipeline, isPipeline := entry.Profile.(*profile.PipelineProfile)
@@ -372,11 +391,26 @@ func buildPipelines(env *Env, args []string) int {
 			Family: family, Maturity: string(maturity.Of(family).State)}
 		for _, step := range pipeline.Steps {
 			r.Steps = append(r.Steps, step.ID)
-			if _, _, provided := runner.Resolver().ProviderForStep(step); !provided {
+			provider, action, provided := runner.Resolver().ProviderForStep(step)
+			if !provided {
 				r.Missing = append(r.Missing, step.Capability)
 				r.Runnable = false
+				continue
+			}
+			if step.Optional {
+				continue // an optional stage that cannot start is skipped, not a reason to refuse the pipeline
+			}
+			tool, exists := runner.Resolver().EntryForStep(step)
+			if !exists {
+				continue
+			}
+			local, _ := bindings.Find(provider.Metadata().ID)
+			for _, problem := range checker.Check(tool.Profile, tool.Trust, tool.Digest, local, action.ID) {
+				r.Problems = append(r.Problems, stepProblem{Step: step.ID, Fault: string(problem.Fault),
+					Summary: problem.Summary, Fix: problem.Fix})
 			}
 		}
+		r.Ready = r.Runnable && len(r.Problems) == 0
 		rows = append(rows, r)
 	}
 	if *asJSON {
@@ -391,6 +425,8 @@ func buildPipelines(env *Env, args []string) int {
 		status := "ready"
 		if !r.Runnable {
 			status = "needs " + strings.Join(r.Missing, ", ")
+		} else if !r.Ready {
+			status = "needs setup"
 		}
 		badge := maturityBadge(r.Family)
 		fmt.Fprintf(env.Stdout, "%-32s %-8s %-9s %-24s %-8s %s\n",
@@ -398,12 +434,24 @@ func buildPipelines(env *Env, args []string) int {
 		if badge != "" {
 			families[r.Family] = true
 		}
+		for _, problem := range r.Problems {
+			fmt.Fprintf(env.Stdout, "    %s (%s): %s\n", problem.Step, problem.Fault, problem.Summary)
+		}
 	}
 	for _, family := range sortedFamilies(families) {
 		fmt.Fprintln(env.Stdout)
 		printMaturityNote(env, family, "")
 	}
 	return 0
+}
+
+// stepProblem is one reason a pipeline's mandatory step cannot start on this
+// machine, in the words Profiles uses for it.
+type stepProblem struct {
+	Step    string `json:"step"`
+	Fault   string `json:"fault"`
+	Summary string `json:"summary"`
+	Fix     string `json:"fix"`
 }
 
 func printBuildPreview(env *Env, m *build.Manifest) {

@@ -109,4 +109,7 @@ state); `internal/job/compat_test.go` (shell fixtures that record their own argv
 invoked" is read from what the program wrote); `internal/job/compat_installed_test.go` (the real
 0.18.1, alpha11 and fork, named by `AUCOM_TEST_ERICW_LEGACY`, `_ALPHA11`, `_FORK`);
 `internal/engine/compat_test.go`; `internal/web/compat_test.go` and
-`internal/cli/toolchain_check_cmd_test.go` (page, API and CLI give one answer).
+`internal/cli/toolchain_check_cmd_test.go` (page, API and CLI give one answer — including the
+`build pipelines` LISTING, which asked only whether a profile provides each capability and printed
+"ready" for a pipeline bound to the wrong programs until the live journey of `NEW_323D` read the
+two side by side; it now asks the same `engine.Checker` per mandatory step).
