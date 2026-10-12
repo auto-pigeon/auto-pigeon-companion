@@ -184,7 +184,7 @@ var commands = []Command{
 		// /companion-profiles routes are unchanged — a rename chased into a stable
 		// contract is a break, not a clarification.
 		Name: "toolchain", Aliases: []string{"profile"},
-		Usage:   "validate | show | canonicalize | digest | diff | list | schema | review | grant | withdraw | homepage | args",
+		Usage:   "validate | show | canonicalize | digest | diff | list | schema | review | grant | withdraw | homepage | args | check",
 		Summary: "read, check and compare tool, engine and pipeline toolchains, and approve one to run",
 		Run:     runToolchain,
 	},

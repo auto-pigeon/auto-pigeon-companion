@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/compat"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
 
@@ -47,6 +48,14 @@ const (
 	FaultUnboundRoot Fault = "unbound_root"
 	// FaultMissingRoot: it has a path, and the path is not there.
 	FaultMissingRoot Fault = "missing_root"
+	// FaultToolIncompatible: the program is there and said what it is, and it
+	// is not what the profile was written for (NEW_323D, internal/compat).
+	FaultToolIncompatible Fault = "tool_incompatible"
+	// FaultToolUnusable: the file is there and cannot be run here.
+	FaultToolUnusable Fault = "tool_unusable"
+	// FaultToolUnverified: nothing has established what the program is — it
+	// has not been asked since it was chosen or changed, or gave no answer.
+	FaultToolUnverified Fault = "tool_unverified"
 )
 
 // Problem is one reason a launch will not work.
@@ -181,7 +190,11 @@ func (c Checker) Check(document profile.Profile, trust profile.Trust, digest str
 	}
 
 	problems = append(problems, c.platformProblems(document, action)...)
-	problems = append(problems, c.engineProblems(document, action, local)...)
+	missing := c.engineProblems(document, action, local)
+	problems = append(problems, missing...)
+	if len(missing) == 0 {
+		problems = append(problems, c.compatibilityProblems(document, action, local, len(problems) == 0)...)
+	}
 	problems = append(problems, c.rootProblems(document, action, local)...)
 	return problems
 }
@@ -263,6 +276,50 @@ func (c Checker) engineProblems(document profile.Profile, action profile.Action,
 		}}
 	}
 	return nil
+}
+
+// compatibilityProblems reports a program that is where the binding says and
+// is not what the profile requires (NEW_323D).
+//
+// It starts nothing. It reads the answer the executor recorded when the
+// program was last asked ([binding.ExecutableFact]) and believes it only for
+// the file as it is now — same path, same size, same modification time — and
+// for the requirement the document makes now. Anything else is "not asked",
+// which is a problem of its own and not a guess either way: a page that called
+// a replaced vis compatible because the old one was would be the stale badge
+// this exists to remove. The executor's own check, before it starts anything,
+// reads the file's SHA-256 and does not rely on this one.
+//
+// askable is false while something else already stops the action — an
+// approval that is missing, most of all. A program nothing has approved cannot
+// be asked, so "not asked yet" is left unsaid there; an answer that IS on
+// record is still reported.
+func (c Checker) compatibilityProblems(document profile.Profile, action profile.Action, local binding.LocalBinding, askable bool) Problems {
+	_, requirement, required := compat.Requirement(document, action)
+	if !required {
+		return nil
+	}
+	path := local.Executables[action.Executable]
+	if path == "" {
+		return nil
+	}
+	info, err := c.stat(path)
+	if err != nil {
+		return nil
+	}
+	var fact *binding.ExecutableFact
+	if recorded, found := local.Compatibility[action.Executable]; found &&
+		recorded.Describes(path, info.Size(), info.ModTime().UTC(), requirement) {
+		fact = &recorded
+	}
+	if fact == nil && !askable {
+		return nil
+	}
+	finding := compat.Judge(document, action.Executable, path, fact)
+	if finding == nil {
+		return nil
+	}
+	return Problems{{Fault: Fault(finding.Kind), Summary: finding.Summary, Fix: finding.Fix}}
 }
 
 // recordedNoun and bindFix keep the engine wording for engines. A build tool's

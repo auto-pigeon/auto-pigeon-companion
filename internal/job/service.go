@@ -78,6 +78,11 @@ type Options struct {
 	// package knowing incidents exist. Called synchronously from the worker,
 	// so it must not block; nil means nobody is listening.
 	OnFinished func(j *Job, correlationID string)
+	// RecordFacts keeps what a profile's programs said about themselves when
+	// asked (compat.go), so the answer survives this process. Nil keeps them
+	// in memory only, which is right for a test and for a store with no
+	// binding file.
+	RecordFacts func(profileID string, facts map[string]binding.ExecutableFact) error
 }
 
 // Service is the job runtime.
@@ -93,6 +98,7 @@ type Service struct {
 	keep        bool
 	logf        func(string, ...any)
 	onFinished  func(*Job, string)
+	recordFacts func(string, map[string]binding.ExecutableFact) error
 
 	queue chan string
 
@@ -111,7 +117,11 @@ type Service struct {
 	// live holds a running job's two captures, so its output can be read while
 	// it is still being written (output.go). Dropped once the job is recorded
 	// as finished, after which the stored logs are the answer.
-	live   map[string]*liveCaptures
+	live map[string]*liveCaptures
+	// facts is what programs said about themselves in this process, by
+	// [factKey]. It is what makes an answer for a path a job overrode — which
+	// no binding holds — usable twice, and it never outlives the process.
+	facts  map[string]binding.ExecutableFact
 	closed bool
 
 	workers sync.WaitGroup
@@ -154,6 +164,8 @@ func NewService(options Options) (*Service, error) {
 		keep:         options.KeepWorkspace,
 		logf:         options.Logf,
 		onFinished:   options.OnFinished,
+		recordFacts:  options.RecordFacts,
+		facts:        map[string]binding.ExecutableFact{},
 		queue:        make(chan string, depth),
 		mirrors:      map[string]io.Writer{},
 		owned:        map[string]bool{},
@@ -284,6 +296,25 @@ func (s *Service) worker() {
 // action does not declare — so that a rejected request produces one clear error
 // instead of a failed job the user has to open to find out why.
 func (s *Service) Submit(request Request) (*Job, error) {
+	j, err := s.admit(request)
+	if err != nil {
+		return nil, err
+	}
+	select {
+	case s.queue <- j.ID:
+	default:
+		s.finish(j, Failed, "the job queue is full; wait for the running jobs to finish", nil)
+		return nil, fmt.Errorf("job: the queue is full (%d waiting)", cap(s.queue))
+	}
+	s.logf("job %s queued: %s", j.ID, j.summarise())
+	return j.Clone(), nil
+}
+
+// admit is everything Submit does short of queueing: the refusals, and the
+// record. It is separate so that the one other way a job starts — a
+// compatibility probe, run where it is needed rather than behind whatever the
+// queue holds (compat.go) — is admitted by exactly the same code.
+func (s *Service) admit(request Request) (*Job, error) {
 	s.mu.Lock()
 	closed, started := s.closed, s.started
 	s.mu.Unlock()
@@ -314,7 +345,14 @@ func (s *Service) Submit(request Request) (*Job, error) {
 	// Resolved once here so a request that cannot become a command is refused
 	// rather than queued. The result is thrown away: the job resolves again
 	// when it runs, against its own staged inputs.
-	if _, err := s.resolve(id, request, entry, action, false); err != nil {
+	invocation, err := s.resolve(id, request, entry, action, false)
+	if err != nil {
+		return nil, err
+	}
+	// The program the command names is asked what it is before a job exists,
+	// when its profile requires something of it: an incompatible compiler is
+	// refused here, with no record of a build that was never going to work.
+	if err := s.ensureCompatible(entry, action, invocation.Command.Executable, request); err != nil {
 		return nil, err
 	}
 
@@ -349,15 +387,7 @@ func (s *Service) Submit(request Request) (*Job, error) {
 		s.correlations[id] = request.CorrelationID
 	}
 	s.mu.Unlock()
-
-	select {
-	case s.queue <- id:
-	default:
-		s.finish(j, Failed, "the job queue is full; wait for the running jobs to finish", nil)
-		return nil, fmt.Errorf("job: the queue is full (%d waiting)", cap(s.queue))
-	}
-	s.logf("job %s queued: %s", id, j.summarise())
-	return j.Clone(), nil
+	return j, nil
 }
 
 // SubmitWatched is Submit with a writer that receives the program's output as
@@ -814,6 +844,12 @@ func (s *Service) execute(id string) {
 
 	invocation, err := s.resolve(id, j.Request, entry, action, true)
 	if err != nil {
+		s.fail(j, err)
+		return
+	}
+	// Asked again, for the same reason the digest is re-read above: the file
+	// at that path may not be the file that was there when this was queued.
+	if err := s.ensureCompatible(entry, action, invocation.Command.Executable, j.Request); err != nil {
 		s.fail(j, err)
 		return
 	}

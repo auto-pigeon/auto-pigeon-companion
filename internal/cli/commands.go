@@ -416,6 +416,9 @@ func runServe(env *Env, args []string) int {
 	// runs, whatever number of pages are open. It asks AUB only about maps a
 	// person switched Auto-build on for.
 	server.StartAutoBuild(ctx)
+	// Bindings recorded before programs were asked what they are, or changed
+	// while this was not running: asked once, beside the page (NEW_323D).
+	go server.RefreshCompatibility()
 
 	listener, err := web.Listen(chosen)
 	if err != nil {

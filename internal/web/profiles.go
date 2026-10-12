@@ -16,6 +16,7 @@ import (
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/approval"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/compat"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile/builtin"
@@ -68,11 +69,13 @@ func (s *Server) profileAPI() map[string]http.HandlerFunc {
 		"POST /api/v1/profiles/import":                s.handleProfileImport,
 		"POST /api/v1/profiles/{id}/bind":             s.handleProfileBind,
 		"POST /api/v1/profiles/{id}/unbind":           s.handleProfileUnbind,
-		"POST /api/v1/profiles/{id}/grant":            s.handleProfileGrant,
-		"POST /api/v1/profiles/{id}/withdraw":         s.handleProfileWithdraw,
-		"POST /api/v1/profiles/{id}/remove":           s.handleProfileRemove,
-		"POST /api/v1/profiles/{id}/homepage":         s.handleProfileHomepage,
-		"POST /api/v1/profiles/{id}/arguments":        s.handleProfileArguments,
+		// Ask the profile's programs what they are, again (compat.go).
+		"POST /api/v1/profiles/{id}/check":     s.handleProfileCheck,
+		"POST /api/v1/profiles/{id}/grant":     s.handleProfileGrant,
+		"POST /api/v1/profiles/{id}/withdraw":  s.handleProfileWithdraw,
+		"POST /api/v1/profiles/{id}/remove":    s.handleProfileRemove,
+		"POST /api/v1/profiles/{id}/homepage":  s.handleProfileHomepage,
+		"POST /api/v1/profiles/{id}/arguments": s.handleProfileArguments,
 		// A pipeline's own parameters, per stage (arguments.go).
 		"POST /api/v1/profiles/{id}/stage-arguments": s.handleProfileStageArguments,
 		"GET /api/v1/profiles/{id}/commands":         s.handleProfileCommands,
@@ -181,7 +184,20 @@ func (s *Server) describeCatalogEntryWith(entry job.CatalogEntry, local binding.
 	// in Build & Run also reads (readiness.go). A pipeline starts nothing of
 	// its own and has no answer to give.
 	if pipeline, isPipeline := entry.Profile.(*profile.PipelineProfile); !isPipeline {
-		body["readiness"] = installReadiness(entry, local).view()
+		state := installReadiness(entry, local)
+		body["readiness"] = state.view()
+		// Per action, as an engine's are: a tool whose qbsp can start and whose
+		// vis cannot is "ready" by the any-action rule above, and the pipeline
+		// that needs vis is not. Both are true, and a page shown only the
+		// first would call Profiles and Build & Run inconsistent (NEW_323D).
+		perAction := make(map[string]any, len(state.PerAction))
+		for id, problems := range state.PerAction {
+			perAction[id] = describeProblems(problems)
+		}
+		body["action_problems"] = perAction
+		if rows := describeCompatibility(entry, local); rows != nil {
+			body["compatibility"] = rows
+		}
 	} else {
 		// Each stage with the tool that runs it here and the tokens this
 		// machine adds to it: a pipeline is where parameters are set.
@@ -913,7 +929,18 @@ func (s *Server) handleProfileGrant(w http.ResponseWriter, r *http.Request) {
 		writeError(w, approvalStatus(err), err)
 		return
 	}
-	writeJSON(w, http.StatusOK, s.describeCatalogEntry(decision.Entry, decision.Binding))
+	local := decision.Binding
+	if len(compat.ProbedExecutables(decision.Entry.Profile)) > 0 {
+		// Approved, so its programs may now be asked what they are. The grant
+		// above stands whatever they answer.
+		if err := s.checkPrograms(r.PathValue("id"), false); err != nil {
+			s.logf("compatibility: checking %s after it was approved: %v", r.PathValue("id"), err)
+		}
+		if _, refreshed, err := s.profileEntry(r.PathValue("id")); err == nil {
+			local = refreshed
+		}
+	}
+	writeJSON(w, http.StatusOK, s.describeCatalogEntry(decision.Entry, local))
 }
 
 // handleProfileWithdraw takes an approval back. The paths stay: where a program
@@ -1379,6 +1406,20 @@ func (s *Server) handleProfileBind(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		local = decision.Binding
+	}
+	// A path was recorded or an approval given: either can have changed which
+	// program an action would start, or whether it may be asked at all. Asked
+	// now, by the executor, so the answer this response carries is about the
+	// programs that are there (compat.go). Failing to ask is not failing to
+	// bind — the readiness below then says "not asked", which is true.
+	if len(compat.ProbedExecutables(document)) > 0 && (len(executables) > 0 || request.Approve) &&
+		profile.Authorize(document, entry.Trust, entry.Digest, local.Grant) == nil {
+		if err := s.checkPrograms(meta.ID, false); err != nil {
+			s.logf("compatibility: checking %s after it was set up: %v", meta.ID, err)
+		}
+		if _, refreshed, err := s.profileEntry(meta.ID); err == nil {
+			local = refreshed
+		}
 	}
 	writeJSON(w, http.StatusOK, s.describeCatalogEntry(entry, local))
 }

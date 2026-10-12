@@ -38,6 +38,7 @@ approving an installed profile (by id, against the same catalog the executor rea
   companion profile withdraw <id> --confirm
   companion profile homepage <id> <url>         set one of your own toolchains' homepage (--clear removes it)
   companion profile args <id> [<program> --set=<token>... | --reset]   your own arguments per program
+  companion profile check <id> [--json]         ask its programs what they are, and whether it was written for them
 
 publishing and installing (these reach a backend):
   companion profile preview <file>              what publishing it would disclose
@@ -74,6 +75,7 @@ approving an installed toolchain (by id, against the same catalog the executor r
   companion toolchain withdraw <id> --confirm
   companion toolchain homepage <id> <url>       set one of your own toolchains' homepage (--clear removes it)
   companion toolchain args <id> [<program> --set=<token>... | --reset]   your own arguments per program
+  companion toolchain check <id> [--json]       ask its programs what they are, and whether it was written for them
 
 publishing and installing (these reach a backend):
   companion toolchain preview <file>            what publishing it would disclose
@@ -138,6 +140,8 @@ func runToolchain(env *Env, args []string) int {
 		return toolchainHomepage(env, args[1:])
 	case "args":
 		return toolchainArgs(env, args[1:])
+	case "check":
+		return toolchainCheck(env, args[1:])
 	case "preview":
 		return profilePreview(env, args[1:])
 	case "publish":

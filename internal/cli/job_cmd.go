@@ -199,6 +199,11 @@ func openJobs(ctx context.Context, env *Env, started bool, logf func(string, ...
 		// only, never the command, its arguments or a path. See
 		// internal/incident/job.go.
 		OnFinished: incident.JobHook(env.incidents(settings), nil),
+		// What a program said when the executor asked it what it is, kept in
+		// the binding it belongs to (NEW_323D).
+		RecordFacts: func(profileID string, facts map[string]binding.ExecutableFact) error {
+			return binding.RecordFacts(bindingsPath, profileID, facts)
+		},
 	})
 	if err != nil {
 		return nil, settings, err

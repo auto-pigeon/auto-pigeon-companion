@@ -314,6 +314,12 @@ func (e *execution) classify(reason stopReason, waitErr error, code int, exited 
 		}
 		return nil
 	}
+	// A program asked what it is has answered by exiting at all: what it
+	// printed is read, and its status is not a verdict (compat.go). 0.18.1
+	// exits 1 after its usage and upstream 2.0.0-alpha11 exits 0.
+	if _, probe := profile.CompatibilityProbeExecutable(e.action.ID); probe {
+		return nil
+	}
 	for _, success := range e.invocation.SuccessExitCodes {
 		if code == success {
 			return nil

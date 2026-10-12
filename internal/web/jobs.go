@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/failure"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/incident"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
@@ -50,6 +51,11 @@ func jobStatus(err error) int {
 		return http.StatusForbidden
 	case errors.Is(err, job.ErrEscapesRoot):
 		return http.StatusBadRequest
+	case failure.Of(err) == failure.ToolIncompatible, failure.Of(err) == failure.ToolUnverified:
+		// The request is well formed; the program it would start is not what
+		// its profile was written for (NEW_323D). The same status a pipeline
+		// that needs setup is refused with.
+		return http.StatusConflict
 	}
 	var transition *job.TransitionError
 	if errors.As(err, &transition) {

@@ -49,6 +49,29 @@ func installReadiness(entry job.CatalogEntry, local binding.LocalBinding) readin
 	if !out.Ready && primary != "" {
 		out.Problems = out.PerAction[primary]
 	}
+	// A program that is not what the profile was written for makes the whole
+	// installation one that needs setting up, whichever of its other programs
+	// can start (NEW_323D). Without this a tool whose qbsp is right and whose
+	// vis is 0.18.1 read "ready" here — one action can start — while every
+	// pipeline that uses it read "needs setup". PerAction is untouched: an
+	// action whose own program is fine is still startable on its own.
+	seen := map[string]bool{}
+	var wrong engine.Problems
+	for _, action := range actions {
+		for _, problem := range out.PerAction[action.ID] {
+			switch problem.Fault {
+			case engine.FaultToolIncompatible, engine.FaultToolUnusable, engine.FaultToolUnverified:
+				if !seen[problem.Summary] {
+					seen[problem.Summary] = true
+					wrong = append(wrong, problem)
+				}
+			}
+		}
+	}
+	if len(wrong) > 0 {
+		out.Ready = false
+		out.Problems = wrong
+	}
 	return out
 }
 

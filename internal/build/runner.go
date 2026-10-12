@@ -176,6 +176,19 @@ func (r *Runner) Run(ctx context.Context, request Request) (*Manifest, error) {
 	if err := CheckConvertedGames(request, pipelineFamily(entry)); err != nil {
 		return nil, err
 	}
+	// Every mandatory stage's program is what its profile was written for, or
+	// nothing starts (NEW_323D). Asked of the executor, which is what refuses
+	// the stage itself: a pipeline whose qbsp is 2.0 and whose vis is 0.18.1
+	// used to compile and then fail, leaving a build that was never going to
+	// finish. An optional stage is left to its own turn, as before.
+	for _, resolved := range steps {
+		if resolved.Step.Optional {
+			continue
+		}
+		if err := r.options.Service.Compatible(resolved.Profile.Metadata().ID, resolved.Action.ID); err != nil {
+			return nil, fmt.Errorf("build: the %s step cannot start: %w", resolved.Step.ID, err)
+		}
+	}
 
 	id, err := NewID(r.options.Now())
 	if err != nil {

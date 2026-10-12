@@ -404,7 +404,61 @@
         children: (body.readiness.problems || []).map((problem) => el("li", { text: problem.summary })),
       }));
     }
+    if ((body.compatibility || []).length) box.append(compatibilityBox(body, box));
     return box;
+  }
+
+  // compatibilityBox is what each program said it is when the Companion asked
+  // it (NEW_323D): one row per program the profile holds to a version, with
+  // the answer the SERVER recorded. Nothing is decided here. "Check these
+  // programs" asks again — after a compiler was replaced where it stood — and
+  // changes no path and no approval.
+  const COMPATIBILITY_STATES = {
+    compatible: ["matches this profile", "ok"],
+    incompatible: ["not the version this profile was written for", "blocked"],
+    unknown_output: ["did not say what it is", "blocked"],
+    timed_out: ["did not answer", "blocked"],
+    missing: ["not there", "blocked"],
+    not_permitted: ["may not be run", "blocked"],
+    wrong_architecture: ["not a program for this computer", "blocked"],
+    failed: ["could not be asked", "blocked"],
+    not_checked: ["not checked since it changed", "queued"],
+    not_bound: ["no path yet", "queued"],
+  };
+  function compatibilityBox(body, box) {
+    const section = el("div", { className: "compatibility", attrs: { id: "profile-compatibility" } });
+    section.append(el("p", { className: "muted", text: t("What each program said it is when the Companion asked it:") }));
+    section.append(el("ul", {
+      className: "plain",
+      children: body.compatibility.map((row) => {
+        const [label, kind] = COMPATIBILITY_STATES[row.state] || [row.state, "blocked"];
+        const item = el("li", { attrs: { "data-executable": row.executable, "data-state": row.state } });
+        item.append(el("strong", { text: row.executable }), document.createTextNode(" — "));
+        item.append(document.createTextNode(row.identity ? t("version {version}", { version: row.identity }) + " " : ""));
+        item.append(badge(t(label), kind));
+        if (row.path) item.append(el("span", { className: "muted", text: " " + row.path }));
+        return item;
+      }),
+    }));
+    if (body.compatibility.some((row) => row.state !== "not_bound")) {
+      const check = el("button", { text: t("Check these programs"), attrs: { type: "button", class: "secondary", id: "profile-check-programs" } });
+      const status = el("p", { className: "message", attrs: { role: "status" } });
+      check.addEventListener("click", () =>
+        withBusy(check, async () => {
+          const { ok, body: out } = await api(`/api/v1/profiles/${encodeURIComponent(body.id)}/check`, { method: "POST" });
+          if (!ok) {
+            setMessage(status, out.error || t("could not check these programs"), "error");
+            return;
+          }
+          record(t("Checked what {name}'s programs are", { name: body.name }),
+            (out.compatibility || []).map((row) => `${row.executable}: ${row.identity || row.state}`).join(", "),
+            out.readiness?.ready ? "ok" : "error");
+          if (document.getElementById("profile-readiness") === box) box.replaceWith(readinessBox(out));
+        })
+      );
+      section.append(el("div", { className: "row-actions", children: [check] }), status);
+    }
+    return section;
   }
 
   // refreshReadiness asks the server again after a binding was recorded and
