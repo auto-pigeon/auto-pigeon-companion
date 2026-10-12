@@ -646,7 +646,12 @@ function actionReady(engine, id) {
   return Boolean(engine && Object.hasOwn(engine.action_problems || {}, id) && engine.action_problems[id].length === 0);
 }
 function pipelineReady(pipeline) { return pipeline?.readiness?.ready === true; }
-function executionChoices(select, items, previous, ready, label, placeholder, chooseReady = false) {
+// `retain` keeps a previous choice that is no longer ready SELECTED, greyed and
+// with its reason, instead of emptying the list (NEW_323E): an emptied list is
+// filled by `chooseReady` on the next refresh, and the first ready pipeline then
+// stood where the user's own choice had been. A caller that retains must not
+// start anything while the selected item is not ready.
+function executionChoices(select, items, previous, ready, label, placeholder, chooseReady = false, retain = false) {
   select.replaceChildren(el("option", { text: placeholder, attrs: { value: "" } }));
   for (const item of items) {
     const available = ready(item);
@@ -654,7 +659,7 @@ function executionChoices(select, items, previous, ready, label, placeholder, ch
     option.disabled = !available;
     select.append(option);
   }
-  select.value = items.some((item) => item.id === previous && ready(item)) ? previous
+  select.value = items.some((item) => item.id === previous && (retain || ready(item))) ? previous
     : !previous && chooseReady ? items.find(ready)?.id || "" : "";
   setupActions(select, items.filter((item) => !ready(item)));
   return select.value;

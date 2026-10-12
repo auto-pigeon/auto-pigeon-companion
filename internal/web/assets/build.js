@@ -15,6 +15,21 @@
 
   let pipelines = [];
   let pipelineRefresh = 0;
+  // The pipeline the USER chose, kept across refreshes, reloads and a pipeline
+  // losing its readiness (NEW_323E). Without it a choice that stopped being
+  // ready emptied the list, and the next refresh put the first ready pipeline
+  // there: a different pipeline behind the user's choice. Storage can be absent
+  // or refused; then the choice lasts as long as the page.
+  const CHOSEN_PIPELINE = "aucom.build.pipeline";
+  let chosenPipeline = "";
+  try { chosenPipeline = window.localStorage.getItem(CHOSEN_PIPELINE) || ""; } catch { /* not kept */ }
+  function rememberPipeline(id) {
+    chosenPipeline = id || "";
+    try {
+      if (chosenPipeline) window.localStorage.setItem(CHOSEN_PIPELINE, chosenPipeline);
+      else window.localStorage.removeItem(CHOSEN_PIPELINE);
+    } catch { /* not kept */ }
+  }
   let inputFields = new Map();
   let currentBuild = null;
   let poller = null;
@@ -53,6 +68,7 @@
     }
     const name = body.name || body.asset_id;
     $("build-pipeline").value = body.pipeline;
+    rememberPipeline(body.pipeline);
     window.AUCOM.chosenRevision = { asset_type: "map", asset_id: body.asset_id,
       display_name: name, revision_id: body.revision_id, revision: body.revision,
       files: body.files };
@@ -159,7 +175,7 @@
     // when it started (NEW_244D found two overlapping refreshes doing exactly
     // that, and a build then ran a pipeline nobody chose).
     if (sequence !== pipelineRefresh) return;
-    const previous = select.value;
+    const previous = select.value || chosenPipeline;
     // What the user already filled in survives a refresh of the same pipeline.
     // Leaving Build to set a compiler up in Profiles and coming back used to
     // come back to an empty map field.
@@ -174,7 +190,7 @@
     pipelines = body.items || [];
     window.AUCOM.executionChoices(select, pipelines, previous, window.AUCOM.pipelineReady,
       (pipeline) => `${pipeline.name}${pipeline.maturity?.work_in_progress ? ` [${pipeline.maturity.badge}]` : ""} — ${window.AUCOM.pipelineReady(pipeline) ? pipeline.summary : "needs setup: " + (pipeline.readiness?.problems || []).map((p) => p.summary).join(" ")}`,
-      "Choose a ready pipeline…", true);
+      "Choose a ready pipeline…", true, true);
     renderPipeline();
     if (kept && select.value === previous) restoreInputs(kept);
   }
@@ -221,6 +237,13 @@
         (pipeline.missing_capabilities.length === 1 ? "one of its stages" : `${pipeline.missing_capabilities.length} of its stages`) +
         ". Install the tool that does, then approve it in Profiles.";
     $("build-pipeline-note").className = pipeline.runnable ? "muted" : "message error";
+    if (pipeline.runnable && !window.AUCOM.pipelineReady(pipeline)) {
+      // Still selected because it is the one that was chosen; nothing can be
+      // previewed or started with it until it is set up.
+      $("build-pipeline-note").textContent = t("This is the pipeline you chose, and it needs setup: {problems} Nothing else was chosen for you. Set it up in Profiles, or choose another pipeline.",
+        { problems: (pipeline.readiness?.problems || []).map((p) => p.summary).join(" ") });
+      $("build-pipeline-note").className = "message error";
+    }
 
     // Above the stages and above the Build button, because this is the surface
     // where a Quake II map is compiled and exported.
@@ -1176,6 +1199,7 @@
   // inputs are matched by name, so only what both pipelines declare carries
   // over (NEW_244D rehearsal: switching fast preview to normal emptied the map).
   $("build-pipeline").addEventListener("change", () => {
+    rememberPipeline($("build-pipeline").value);
     const kept = keptInputs();
     renderPipeline();
     restoreInputs(kept);
