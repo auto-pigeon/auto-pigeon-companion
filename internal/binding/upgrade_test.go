@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -36,6 +37,12 @@ func TestAnOlderBindingStoreIsReadWrittenAtThisVersionAndUnchanged(t *testing.T)
 			original, err := os.ReadFile(source)
 			if err != nil {
 				t.Fatal(err)
+			}
+			if runtime.GOOS == "windows" && source == sources[0] {
+				// The authored store names POSIX paths, and a binding's paths
+				// must be absolute on the machine that reads it: give them a
+				// drive. Nothing else about the store differs.
+				original = []byte(strings.NewReplacer(`"/opt/`, `"C:/opt/`, `"/home/`, `"C:/home/`).Replace(string(original)))
 			}
 			var raw struct {
 				SchemaVersion string           `json:"schema_version"`
