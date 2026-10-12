@@ -26,6 +26,10 @@ const (
 	// the token after the marker, on whichever line carries it.
 	forkLight = "---- ClearLightmapSurfaces ----\n---- light / ericw-tools 2.0.0-alpha11-19-g1faae828+auto-pigeon.1.4505 ----\nlight compiles lightmap data for BSPs\n\n  -logfile \"path\"               File to output logging data to. If unchanged, it is set by the tool.\n"
 	forkVis   = "---- vis / ericw-tools 2.0.0-alpha11-19-g1faae828+auto-pigeon.1.4505 ----\n  -logfile \"path\"               File to output logging data to.\n"
+	// Release 1.4513, measured the same way on 2026-10-12 (NEW_323E): the
+	// release the fork's profile is pinned to.
+	pinnedLight = "---- ClearLightmapSurfaces ----\n---- light / ericw-tools 2.0.0-alpha11-27-g69db3ffa+auto-pigeon.1.4513 ----\nlight compiles lightmap data for BSPs\n\n  -logfile \"path\"               File to output logging data to. If unchanged, it is set by the tool.\n"
+	pinnedQbsp  = "---- qbsp / ericw-tools 2.0.0-alpha11-27-g69db3ffa+auto-pigeon.1.4513 ----\nqbsp performs geometric level processing of Quake .MAP files to create\nQuake .BSP files.\n"
 )
 
 func tool(t *testing.T, id string) *profile.ToolProfile {
@@ -65,7 +69,14 @@ func TestAProgramIsJudgedByItsOwnWords(t *testing.T) {
 		// are 2.x and list -logfile); the upstream ones do not satisfy the
 		// fork's, which is written for the Auto-Pigeon build by name.
 		{"fork vis under the 2.0 profile", upstream, "vis", forkVis, binding.FactCompatible, "2.0.0-alpha11-19-g1faae828+auto-pigeon.1.4505", ""},
-		{"fork light under the fork profile", fork, "light", forkLight, binding.FactCompatible, "2.0.0-alpha11-19-g1faae828+auto-pigeon.1.4505", ""},
+		{"1.4513 light under the fork profile", fork, "light", pinnedLight, binding.FactCompatible, "2.0.0-alpha11-27-g69db3ffa+auto-pigeon.1.4513", ""},
+		{"1.4513 qbsp under the fork profile", fork, "qbsp", pinnedQbsp, binding.FactCompatible, "2.0.0-alpha11-27-g69db3ffa+auto-pigeon.1.4513", ""},
+		{"1.4513 qbsp under the 2.0 profile", upstream, "qbsp", pinnedQbsp, binding.FactCompatible, "2.0.0-alpha11-27-g69db3ffa+auto-pigeon.1.4513", ""},
+		// Release 1.4505 is a 2.x Auto-Pigeon build that lists -logfile, and
+		// the fork's own profile still does not build with it: it names that
+		// release as one that puts solid in a map's air (NEW_323E). The same
+		// file under the upstream profile, which names nothing, is unchanged.
+		{"1.4505 light under the fork profile", fork, "light", forkLight, binding.FactIncompatible, "2.0.0-alpha11-19-g1faae828+auto-pigeon.1.4505", ""},
 		{"alpha11 vis under the fork profile", fork, "vis", modernVis, binding.FactIncompatible, "2.0.0-alpha11", ""},
 		// A 2.x banner over a usage that does not list the option the action
 		// passes: named, accepted, and still proven wrong by its own usage.
@@ -173,6 +184,53 @@ func TestARequirementIsAboutOneExecutableAndChangesWithTheDocument(t *testing.T)
 	changed.Executables = []profile.ProbedExecutable{{Name: "qbsp"}, {Name: "vis", Mentions: []string{"-logfile", "-nostate"}}, {Name: "light", Mentions: []string{"-logfile"}}}
 	if changed.Requirement("vis") == vis || changed.Requirement("light") != light {
 		t.Error("a different required option for vis must change vis's requirement and nobody else's")
+	}
+}
+
+// A release a profile names as defective is refused in that profile's own
+// words, by that profile only, and the sentence a reader gets says which
+// release it is, what is wrong with it and what to do (NEW_323E).
+func TestAReleaseAProfileNamesAsDefectiveIsRefusedInItsOwnWords(t *testing.T) {
+	fork, upstream := tool(t, forkID), tool(t, upstreamID)
+	for _, banner := range []string{
+		"---- qbsp / ericw-tools 2.0.0-alpha11-16-gd4e4a75f+auto-pigeon.1.4502 ----\n",
+		"---- qbsp / ericw-tools 2.0.0-alpha11-19-g1faae828+auto-pigeon.1.4505 ----\n",
+	} {
+		state, identity, _, detail := Classify(fork.CompatibilityProbe, "qbsp", banner, "")
+		if state != binding.FactIncompatible {
+			t.Fatalf("%s under the fork profile: %s", identity, state)
+		}
+		release := identity[strings.LastIndex(identity, ".")-1:]
+		for _, want := range []string{identity, "release " + release, "solid in a map's air", "newer release"} {
+			if !strings.Contains(detail, want) {
+				t.Errorf("%s: the sentence does not say %q: %s", identity, want, detail)
+			}
+		}
+		finding := Judge(fork, "qbsp", "/tools/bin/qbsp", &binding.ExecutableFact{State: state, Identity: identity, Detail: detail})
+		if finding == nil || finding.Kind != Incompatible || !strings.Contains(finding.Summary, "solid in a map's air") {
+			t.Errorf("%s: the finding a page shows does not carry the reason: %+v", identity, finding)
+		}
+		if state, _, _, _ := Classify(upstream.CompatibilityProbe, "qbsp", banner, ""); state != binding.FactCompatible {
+			t.Errorf("%s under the upstream profile, which names no release: %s", identity, state)
+		}
+	}
+	// An answer recorded for the fork's profile before it named them is about
+	// another requirement and is not believed; the upstream profile's
+	// requirement is the one it had before the member existed, so nothing
+	// recorded for it went stale.
+	for name, want := range map[string]string{
+		"qbsp":  "sha256:28dea6d7f612a9e875bffa864c92b938e2e7e482b0674c621f0e7ec85d7efc00",
+		"vis":   "sha256:045bdf1a59cb14cb7e3b477592ecb05df7067126fdabb5d9897a70e23a808109",
+		"light": "sha256:0295c81b482e0325de1fd26a8922373cbaba996fdc750408bcd7d0b7f728436a",
+	} {
+		if got := upstream.CompatibilityProbe.Requirement(name); got != want {
+			t.Errorf("the upstream profile's requirement of %s changed: %s, was %s", name, got, want)
+		}
+	}
+	without := *fork.CompatibilityProbe
+	without.Refuse = nil
+	if without.Requirement("qbsp") == fork.CompatibilityProbe.Requirement("qbsp") {
+		t.Error("naming the defective releases did not change the fork profile's requirement")
 	}
 }
 

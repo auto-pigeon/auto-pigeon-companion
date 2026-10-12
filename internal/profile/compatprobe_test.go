@@ -61,6 +61,12 @@ func TestACompatibilityProbeIsValidatedLikeTheRestOfTheDocument(t *testing.T) {
 		"an unbounded probe":          {func(d map[string]any) { probe(d)["timeout_seconds"] = 3600 }, "between 0 and 300"},
 		"a shell line as an argument": {func(d map[string]any) { probe(d)["args"] = []any{"--version; rm -rf ~"} }, ""},
 		"an unknown member":           {func(d map[string]any) { probe(d)["fallback"] = "0.18.1" }, "fallback"},
+		"a refusal that names nothing": {func(d map[string]any) {
+			probe(d)["refuse"] = []any{map[string]any{"reason": "it is old"}}
+		}, "refuses every program"},
+		"a refusal that gives no reason": {func(d map[string]any) {
+			probe(d)["refuse"] = []any{map[string]any{"suffix": "+auto-pigeon.1.4505"}}
+		}, "required and missing"},
 	} {
 		err := probedTool(t, c.mutate)
 		if err == nil {
@@ -71,6 +77,58 @@ func TestACompatibilityProbeIsValidatedLikeTheRestOfTheDocument(t *testing.T) {
 			t.Errorf("%s: refused for another reason: %v", name, err)
 		}
 	}
+}
+
+// A document may name identities it must NOT be run with (NEW_323E). The entry
+// is literal like an accepted one, it is about that exact identity and never
+// "this and everything older", and naming one changes the requirement — so an
+// answer recorded before the document named it is stale — while a document that
+// names none keeps the requirement it always had.
+func TestARefusedIdentityIsNamedLiterallyAndChangesTheRequirement(t *testing.T) {
+	entry := RefusedIdentity{Suffix: "+auto-pigeon.1.4505", Reason: "it puts solid in a map's air"}
+	for identity, want := range map[string]bool{
+		"2.0.0-alpha11-19-g1faae828+auto-pigeon.1.4505":  true,
+		"2.0.0-alpha11-19-g1faae828+auto-pigeon.1.45051": false,
+		"2.0.0-alpha11-16-gd4e4a75f+auto-pigeon.1.4502":  false,
+		"2.0.0-alpha11-24-gd278362b+auto-pigeon.1.4510":  false,
+		"2.0.0-alpha11": false,
+	} {
+		if got := entry.Matches(identity); got != want {
+			t.Errorf("%q: %v, want %v", identity, got, want)
+		}
+	}
+
+	plain := &CompatibilityProbe{
+		Parse:       VersionParse{Kind: "after_marker", Marker: "ericw-tools ", Stream: "stdout"},
+		Accept:      []IdentityRule{{Prefix: "2."}},
+		Executables: []ProbedExecutable{{Name: "qbsp"}},
+	}
+	// The digest of a document that names nothing, as it was before the member
+	// existed: every binding written by an earlier build still describes it.
+	const before = "sha256:"
+	if got := plain.Requirement("qbsp"); !strings.HasPrefix(got, before) || strings.Contains(mustJSON(t, plain), "refuse") {
+		t.Fatalf("a probe that refuses nothing is written with a refuse member: %s %s", got, mustJSON(t, plain))
+	}
+	naming := *plain
+	naming.Refuse = []RefusedIdentity{entry}
+	if plain.Requirement("qbsp") == naming.Requirement("qbsp") {
+		t.Error("naming a refused identity did not change the requirement: an earlier answer would still be believed")
+	}
+	if _, named := naming.Refused("2.0.0-alpha11-19-g1faae828+auto-pigeon.1.4505"); !named {
+		t.Error("the named identity is not found")
+	}
+	if _, named := plain.Refused("2.0.0-alpha11-19-g1faae828+auto-pigeon.1.4505"); named {
+		t.Error("a document that names nothing refused an identity")
+	}
+}
+
+func mustJSON(t *testing.T, value any) string {
+	t.Helper()
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(encoded)
 }
 
 // The probe is an action only by its reserved id: it cannot be declared, it is

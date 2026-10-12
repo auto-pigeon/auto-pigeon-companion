@@ -140,6 +140,10 @@ func Classify(probe *profile.CompatibilityProbe, executable, stdout, stderr stri
 		return binding.FactIncompatible, identity, nil,
 			fmt.Sprintf("it calls itself %s; this profile accepts %s", identity, probe.AcceptText())
 	}
+	if refused, named := probe.Refused(identity); named {
+		return binding.FactIncompatible, identity, nil,
+			fmt.Sprintf("it calls itself %s, which this profile names as a release not to build with: %s", identity, refused.Reason)
+	}
 	probed, _ := probe.For(executable)
 	for _, mention := range probed.Mentions {
 		// Either stream: 0.18.1 prints usage on stdout and some builds on stderr.

@@ -37,6 +37,14 @@ type CompatibilityProbe struct {
 	// Accept is the identities this document was written for. The identity a
 	// program prints must satisfy at least one rule.
 	Accept []IdentityRule `json:"accept" aucom:"required"`
+	// Refuse is identities this document NAMES as ones it must not be run with,
+	// each with the reason a reader is shown (NEW_323E). It is a statement about
+	// measured releases of the program this document describes — the built-in
+	// Auto-Pigeon build names 1.4502 and 1.4505, which put solid in a map's air
+	// — and it is matched literally, like Accept, never as "older than". Only
+	// the selected profile's own list is ever applied: another profile bound to
+	// the same file is not affected by it.
+	Refuse []RefusedIdentity `json:"refuse,omitempty"`
 	// Executables is which of the profile's executables are held to this, and
 	// what else each one's own output must show. An executable not named here
 	// is not probed and nothing is required of it.
@@ -54,6 +62,24 @@ type IdentityRule struct {
 // Matches reports whether an identity satisfies the rule.
 func (r IdentityRule) Matches(identity string) bool {
 	return strings.HasPrefix(identity, r.Prefix) && strings.Contains(identity, r.Contains)
+}
+
+// RefusedIdentity is an identity a document names as one it must not be run
+// with, and why. Suffix is there because a release number is the END of what
+// these programs print: `+auto-pigeon.1.4505` as a substring would also name a
+// later `1.45051`.
+type RefusedIdentity struct {
+	Prefix   string `json:"prefix,omitempty"`
+	Contains string `json:"contains,omitempty"`
+	Suffix   string `json:"suffix,omitempty"`
+	// Reason is one sentence, shown as written: what is wrong with it and what
+	// to use instead.
+	Reason string `json:"reason" aucom:"required"`
+}
+
+// Matches reports whether an identity is the one this entry names.
+func (r RefusedIdentity) Matches(identity string) bool {
+	return strings.HasPrefix(identity, r.Prefix) && strings.Contains(identity, r.Contains) && strings.HasSuffix(identity, r.Suffix)
 }
 
 // ProbedExecutable is one executable held to the probe.
@@ -109,6 +135,16 @@ func (p *CompatibilityProbe) Accepts(identity string) bool {
 	return false
 }
 
+// Refused returns the entry that names an identity, if one does.
+func (p *CompatibilityProbe) Refused(identity string) (RefusedIdentity, bool) {
+	for _, entry := range p.Refuse {
+		if entry.Matches(identity) {
+			return entry, true
+		}
+	}
+	return RefusedIdentity{}, false
+}
+
 // AcceptText renders the accepted identities for a sentence.
 func (p *CompatibilityProbe) AcceptText() string {
 	parts := make([]string, 0, len(p.Accept))
@@ -134,13 +170,16 @@ func (p *CompatibilityProbe) Requirement(executable string) string {
 	if !ok {
 		return ""
 	}
+	// Refuse is omitted when empty, so a document that names nothing keeps the
+	// digest it had before the member existed and no recorded answer goes stale.
 	material, err := json.Marshal(struct {
-		Args     []Arg            `json:"args"`
-		Parse    VersionParse     `json:"parse"`
-		Accept   []IdentityRule   `json:"accept"`
-		Probed   ProbedExecutable `json:"probed"`
-		Contract string           `json:"contract"`
-	}{p.Args, p.Parse, p.Accept, probed, "aucom.compatibility-probe/1"})
+		Args     []Arg             `json:"args"`
+		Parse    VersionParse      `json:"parse"`
+		Accept   []IdentityRule    `json:"accept"`
+		Refuse   []RefusedIdentity `json:"refuse,omitempty"`
+		Probed   ProbedExecutable  `json:"probed"`
+		Contract string            `json:"contract"`
+	}{p.Args, p.Parse, p.Accept, p.Refuse, probed, "aucom.compatibility-probe/1"})
 	if err != nil {
 		return ""
 	}
@@ -199,6 +238,29 @@ func (p *CompatibilityProbe) validate(c *collector, executables map[string]bool)
 				}
 				c.child(field("prefix"), func(c *collector) { checkText(c, rule.Prefix, 128, false) })
 				c.child(field("contains"), func(c *collector) { checkText(c, rule.Contains, 128, false) })
+			})
+		}
+	})
+	c.child(field("refuse"), func(c *collector) {
+		if len(p.Refuse) > maxListLength {
+			c.addf("has %d entries, over the %d limit", len(p.Refuse), maxListLength)
+			return
+		}
+		for i, entry := range p.Refuse {
+			c.child(index(i), func(c *collector) {
+				if entry.Prefix == "" && entry.Contains == "" && entry.Suffix == "" {
+					c.fixf("give a `prefix`, a `contains`, a `suffix`, or several", "is empty, and an empty entry refuses every program")
+				}
+				c.child(field("prefix"), func(c *collector) { checkText(c, entry.Prefix, 128, false) })
+				c.child(field("contains"), func(c *collector) { checkText(c, entry.Contains, 128, false) })
+				c.child(field("suffix"), func(c *collector) { checkText(c, entry.Suffix, 128, false) })
+				c.child(field("reason"), func(c *collector) {
+					if strings.TrimSpace(entry.Reason) == "" {
+						c.fixf("say in one sentence what is wrong with it and what to use instead", "is required and empty")
+						return
+					}
+					checkText(c, entry.Reason, 400, false)
+				})
 			})
 		}
 	})

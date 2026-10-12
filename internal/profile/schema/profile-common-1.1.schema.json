@@ -473,6 +473,34 @@
         }
       }
     },
+    "refusedIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "An identity this document names as one it must not be run with, matched literally by prefix, substring and suffix, and the one sentence a reader is shown.",
+      "required": [
+        "reason"
+      ],
+      "minProperties": 2,
+      "properties": {
+        "prefix": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "contains": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "suffix": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 400
+        }
+      }
+    },
     "probedExecutable": {
       "type": "object",
       "additionalProperties": false,
@@ -525,6 +553,13 @@
           "maxItems": 256,
           "items": {
             "$ref": "#/$defs/identityRule"
+          }
+        },
+        "refuse": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/refusedIdentity"
           }
         },
         "executables": {

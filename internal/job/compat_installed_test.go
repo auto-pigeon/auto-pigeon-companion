@@ -21,7 +21,9 @@ import (
 //
 //	AUCOM_TEST_ERICW_LEGACY   an unpacked 0.18.1's bin/
 //	AUCOM_TEST_ERICW_ALPHA11  an unpacked 2.0.0-alpha11
-//	AUCOM_TEST_ERICW_FORK     an Auto-Pigeon build's bin/
+//	AUCOM_TEST_ERICW_FORK     an Auto-Pigeon build's bin/ (1.4510 or later)
+//	AUCOM_TEST_ERICW_FORK_DEFECTIVE  release 1.4502's or 1.4505's bin/, which
+//	                          the fork's own profile names and refuses (NEW_323E)
 //
 // None is downloaded and none is assumed: a release that is not named is
 // skipped, by name.
@@ -36,6 +38,7 @@ func TestTheBuiltInProfilesJudgeTheInstalledReleases(t *testing.T) {
 		{"AUCOM_TEST_ERICW_LEGACY", binding.FactIncompatible, binding.FactIncompatible, "v0.18.1"},
 		{"AUCOM_TEST_ERICW_ALPHA11", binding.FactCompatible, binding.FactIncompatible, "2.0.0-alpha11"},
 		{"AUCOM_TEST_ERICW_FORK", binding.FactCompatible, binding.FactCompatible, "+auto-pigeon."},
+		{"AUCOM_TEST_ERICW_FORK_DEFECTIVE", binding.FactCompatible, binding.FactIncompatible, "+auto-pigeon.1.450"},
 	}
 	ran := false
 	for _, release := range releases {
@@ -95,6 +98,6 @@ func TestTheBuiltInProfilesJudgeTheInstalledReleases(t *testing.T) {
 		}
 	}
 	if !ran {
-		t.Skip("no installed ericw-tools release was named (AUCOM_TEST_ERICW_LEGACY, _ALPHA11, _FORK); the built-in profiles were NOT judged against real programs")
+		t.Skip("no installed ericw-tools release was named (AUCOM_TEST_ERICW_LEGACY, _ALPHA11, _FORK, _FORK_DEFECTIVE); the built-in profiles were NOT judged against real programs")
 	}
 }
