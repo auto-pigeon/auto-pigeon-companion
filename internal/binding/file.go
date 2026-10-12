@@ -213,3 +213,31 @@ func SetStepArguments(path, profileID, profileVersion, digest string, trust prof
 	})
 	return out, err
 }
+
+// RecordFacts stores what a profile's programs said about themselves, inside
+// the same cross-process lock every other change to the store takes.
+//
+// It writes evidence and nothing else. The grant, the paths, the trust and the
+// digest are exactly what they were — a probe that passed approves nothing, and
+// one that failed withdraws nothing. A profile with no binding has nowhere to
+// keep an answer, and is left without one: recording a fact must never be what
+// creates a binding.
+func RecordFacts(path, profileID string, facts map[string]ExecutableFact) error {
+	if len(facts) == 0 {
+		return nil
+	}
+	_, err := Update(path, func(set *Set) error {
+		local, found := set.Find(profileID)
+		if !found {
+			return nil
+		}
+		if local.Compatibility == nil {
+			local.Compatibility = map[string]ExecutableFact{}
+		}
+		for name, fact := range facts {
+			local.Compatibility[name] = fact
+		}
+		return set.Put(local)
+	})
+	return err
+}

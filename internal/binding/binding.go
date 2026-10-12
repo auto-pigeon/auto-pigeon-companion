@@ -87,6 +87,10 @@ type LocalBinding struct {
 	// expiry, and a tool updated in place would keep the old number forever.
 	ResolvedVersion  string    `json:"resolved_version,omitempty"`
 	VersionCheckedAt time.Time `json:"version_checked_at,omitempty"`
+	// Compatibility is what each program said about itself when it was last
+	// asked, by executable name (NEW_323D). Evidence and never a permission:
+	// see [ExecutableFact].
+	Compatibility map[string]ExecutableFact `json:"compatibility,omitempty"`
 	// GameProfileID is AUB's record id for the Game Profile the document names
 	// by slug. Resolving the slug is an account-and-deployment question, which
 	// is why the answer lives here and the question lives in the document.
@@ -155,6 +159,11 @@ func (b LocalBinding) Validate() error {
 		}
 		if !filepath.IsAbs(b.Roots[role]) {
 			add("the path for the %q root is %q, which is not absolute", role, b.Roots[role])
+		}
+	}
+	for _, name := range sortedFactKeys(b.Compatibility) {
+		if err := b.Compatibility[name].validate(); err != nil {
+			add("the compatibility record for the executable %q: %v", name, err)
 		}
 	}
 	if b.ResolvedVersion != "" && b.VersionCheckedAt.IsZero() {

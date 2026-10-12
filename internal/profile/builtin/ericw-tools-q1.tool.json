@@ -58,6 +58,17 @@
     "parse": { "kind": "after_marker", "marker": "ericw-tools ", "stream": "stdout" },
     "timeout_seconds": 10
   },
+  "compatibility_probe": {
+    "args": [],
+    "parse": { "kind": "after_marker", "marker": "ericw-tools ", "stream": "stdout" },
+    "timeout_seconds": 10,
+    "accept": [{ "prefix": "2." }],
+    "executables": [
+      { "name": "qbsp" },
+      { "name": "vis", "mentions": ["-logfile"] },
+      { "name": "light", "mentions": ["-logfile"] }
+    ]
+  },
   "capabilities": [
     {
       "id": "q1.bsp.compile",

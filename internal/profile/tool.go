@@ -25,6 +25,9 @@ type ToolProfile struct {
 	Acquisition []AcquisitionOption `json:"acquisition" aucom:"required"`
 	// VersionProbe asks an installed copy what it actually is.
 	VersionProbe *VersionProbe `json:"version_probe,omitempty"`
+	// CompatibilityProbe is what this document requires of each program a
+	// user points it at, and how each one is asked (compatprobe.go).
+	CompatibilityProbe *CompatibilityProbe `json:"compatibility_probe,omitempty"`
 	// Capabilities is what this tool can do, in terms a pipeline can name.
 	Capabilities []Capability `json:"capabilities,omitempty"`
 	Executables  []Executable `json:"executables" aucom:"required"`
@@ -38,7 +41,20 @@ func (t *ToolProfile) Metadata() Meta { return t.Meta }
 func (t *ToolProfile) ActionList() []Action { return t.Actions }
 
 // ActionByID implements [Profile].
-func (t *ToolProfile) ActionByID(id string) (Action, bool) { return findAction(t.Actions, id) }
+//
+// A compatibility probe is an action too, one per probed executable, so that
+// asking a program what it is goes through the one executor like everything
+// else (ADR-0003). It is not in ActionList: it is not something a user runs,
+// and no pipeline can name it.
+func (t *ToolProfile) ActionByID(id string) (Action, bool) {
+	if executable, isProbe := CompatibilityProbeExecutable(id); isProbe {
+		if _, probed := t.CompatibilityProbe.For(executable); probed {
+			return t.CompatibilityProbe.action(executable), true
+		}
+		return Action{}, false
+	}
+	return findAction(t.Actions, id)
+}
 
 func findAction(actions []Action, id string) (Action, bool) {
 	for _, a := range actions {
@@ -96,6 +112,9 @@ func (t *ToolProfile) Validate() error {
 	})
 	if t.VersionProbe != nil {
 		c.child(field("version_probe"), func(c *collector) { t.VersionProbe.validate(c, executables) })
+	}
+	if t.CompatibilityProbe != nil {
+		c.child(field("compatibility_probe"), func(c *collector) { t.CompatibilityProbe.validate(c, executables) })
 	}
 	capabilities := capabilitySet(t.Capabilities)
 	c.child(field("capabilities"), func(c *collector) {

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://auto-pigeon.invalid/schema/aucom.profile/1.1/common",
-  "title": "Auto-Pigeon Companion profile \u2014 shared definitions",
+  "title": "Auto-Pigeon Companion profile — shared definitions",
   "description": "Definitions shared by the tool, engine and pipeline profile schemas. This document is normative for anything outside the Companion that reads or writes profiles; inside the Companion the Go types in internal/profile are the enforcement point, and a test asserts that the two describe the same members. 1.1 adds `stage_with` to an input and `in_place` to an output, and the `build_root` root role; a 1.0 document uses none of them and is still read.",
   "$defs": {
     "version": {
@@ -458,6 +458,85 @@
         }
       }
     },
+    "identityRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "prefix": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "contains": {
+          "type": "string",
+          "maxLength": 128
+        }
+      }
+    },
+    "probedExecutable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/token"
+        },
+        "mentions": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        }
+      }
+    },
+    "compatibilityProbe": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "What this document requires of each program a user points it at, and how each one is asked. Only the executables named here are probed; an identity is accepted by literal prefix and substring and is never ordered.",
+      "required": [
+        "parse",
+        "accept",
+        "executables"
+      ],
+      "properties": {
+        "args": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/arg"
+          }
+        },
+        "parse": {
+          "$ref": "#/$defs/versionParse"
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 300
+        },
+        "accept": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/identityRule"
+          }
+        },
+        "executables": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/probedExecutable"
+          }
+        }
+      }
+    },
     "executable": {
       "type": "object",
       "additionalProperties": false,
@@ -556,7 +635,7 @@
         },
         "stage_with": {
           "$ref": "#/$defs/token",
-          "description": "Stage this input into the same directory as the named input. For a sidecar file a tool opens by convention rather than by argument \u2014 the .prt that vis reads beside the .bsp it was handed. One level only: the named input may not itself be staged with a third."
+          "description": "Stage this input into the same directory as the named input. For a sidecar file a tool opens by convention rather than by argument — the .prt that vis reads beside the .bsp it was handed. One level only: the named input may not itself be staged with a third."
         }
       }
     },
@@ -591,7 +670,7 @@
           "type": "string",
           "maxLength": 16,
           "pattern": "^\\.[^./\\\\ ]+$",
-          "description": "The extension of a companion file the tool wrote beside the file it was handed \u2014 light writes level.lit next to level.bsp. Only meaningful with `in_place`."
+          "description": "The extension of a companion file the tool wrote beside the file it was handed — light writes level.lit next to level.bsp. Only meaningful with `in_place`."
         },
         "optional": {
           "type": "boolean"

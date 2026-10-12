@@ -169,27 +169,31 @@ func (v VersionProbe) validate(c *collector, executables map[string]bool) {
 			c.child(index(i), func(c *collector) { arg.validate(c, s) })
 		}
 	})
-	c.child(field("parse"), func(c *collector) {
-		c.child(field("kind"), func(c *collector) {
-			if !contains(versionParseKinds, v.Parse.Kind) {
-				c.fixf("use one of: "+strings.Join(versionParseKinds, ", "), "is %q", v.Parse.Kind)
-			}
-		})
-		c.child(field("marker"), func(c *collector) {
-			checkText(c, v.Parse.Marker, 128, false)
-			if v.Parse.Kind != "first_line" && strings.TrimSpace(v.Parse.Marker) == "" {
-				c.fixf("give the literal text to look for", "is empty, and %q needs a marker", v.Parse.Kind)
-			}
-		})
-		c.child(field("stream"), func(c *collector) {
-			if v.Parse.Stream != "" && !contains([]string{"stdout", "stderr"}, v.Parse.Stream) {
-				c.fixf("use `stdout` or `stderr`", "is %q", v.Parse.Stream)
-			}
-		})
-	})
+	c.child(field("parse"), v.validateParse)
 	c.child(field("timeout_seconds"), func(c *collector) {
 		if v.TimeoutSeconds < 0 || v.TimeoutSeconds > 300 {
 			c.addf("is %d; a version probe's timeout must be between 0 and 300 seconds", v.TimeoutSeconds)
+		}
+	})
+}
+
+// validateParse checks the literal rule that reads an identity out of output.
+// A compatibility probe reads one the same way (compatprobe.go).
+func (v VersionProbe) validateParse(c *collector) {
+	c.child(field("kind"), func(c *collector) {
+		if !contains(versionParseKinds, v.Parse.Kind) {
+			c.fixf("use one of: "+strings.Join(versionParseKinds, ", "), "is %q", v.Parse.Kind)
+		}
+	})
+	c.child(field("marker"), func(c *collector) {
+		checkText(c, v.Parse.Marker, 128, false)
+		if v.Parse.Kind != "first_line" && strings.TrimSpace(v.Parse.Marker) == "" {
+			c.fixf("give the literal text to look for", "is empty, and %q needs a marker", v.Parse.Kind)
+		}
+	})
+	c.child(field("stream"), func(c *collector) {
+		if v.Parse.Stream != "" && !contains([]string{"stdout", "stderr"}, v.Parse.Stream) {
+			c.fixf("use `stdout` or `stderr`", "is %q", v.Parse.Stream)
 		}
 	})
 }

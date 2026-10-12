@@ -24,6 +24,15 @@ const (
 	// ToolUnavailable: the program a step needs is not on this machine, or
 	// what is there cannot be started.
 	ToolUnavailable = "tool_unavailable"
+	// ToolIncompatible: the program is there, and it is not the program the
+	// profile was written for — it said so itself when asked, or would not
+	// say what it is. Refused before the action is started (NEW_323D).
+	ToolIncompatible = "tool_incompatible"
+	// ToolUnverified: nothing has established what the program is — it did
+	// not answer when asked, or printed nothing that names it. Not proof of
+	// an incompatibility, and refused all the same: a build is not where to
+	// find out.
+	ToolUnverified = "tool_unverified"
 	// PlatformUnsupported: the profile declares it does not run here.
 	PlatformUnsupported = "platform_unsupported"
 	// GameDataMissing: a game data root the build needs is not bound, or holds
