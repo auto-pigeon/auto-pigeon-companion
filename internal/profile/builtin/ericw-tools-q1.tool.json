@@ -31,7 +31,7 @@
   },
   "tool_version": "2.0.0-alpha11",
   "platforms": [
-    { "platform": { "os": "linux", "arch": "amd64" }, "status": "supported", "note": "the pinned 2.0.0-alpha11 build is AUT's acceptance compiler on this platform, and AUT's Q1 gate builds through this profile with it" },
+    { "platform": { "os": "linux", "arch": "amd64" }, "status": "supported", "note": "AUT's Q1 gate builds through this profile: with 2.0.0-alpha11 until 2026-10-12, since then with the Auto-Pigeon build 1.4513, which this profile accepts" },
     { "platform": { "os": "windows", "arch": "amd64" }, "status": "unverified", "note": "nobody here has run the 2.0.0-alpha11 win64 build" },
     { "platform": { "os": "windows", "arch": "386" }, "status": "unverified", "note": "nobody here has run a 32-bit 2.0.0-alpha11 build" },
     { "platform": { "os": "darwin", "arch": "amd64" }, "status": "unverified", "note": "nobody here has run a 2.0.0-alpha11 macOS build; an unsigned, unnotarized build is refused by recent macOS until the user allows it" },
