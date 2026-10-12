@@ -26,10 +26,13 @@ const (
 	// the token after the marker, on whichever line carries it.
 	forkLight = "---- ClearLightmapSurfaces ----\n---- light / ericw-tools 2.0.0-alpha11-19-g1faae828+auto-pigeon.1.4505 ----\nlight compiles lightmap data for BSPs\n\n  -logfile \"path\"               File to output logging data to. If unchanged, it is set by the tool.\n"
 	forkVis   = "---- vis / ericw-tools 2.0.0-alpha11-19-g1faae828+auto-pigeon.1.4505 ----\n  -logfile \"path\"               File to output logging data to.\n"
-	// Release 1.4513, measured the same way on 2026-10-12 (NEW_323E): the
-	// release the fork's profile is pinned to.
-	pinnedLight = "---- ClearLightmapSurfaces ----\n---- light / ericw-tools 2.0.0-alpha11-27-g69db3ffa+auto-pigeon.1.4513 ----\nlight compiles lightmap data for BSPs\n\n  -logfile \"path\"               File to output logging data to. If unchanged, it is set by the tool.\n"
-	pinnedQbsp  = "---- qbsp / ericw-tools 2.0.0-alpha11-27-g69db3ffa+auto-pigeon.1.4513 ----\nqbsp performs geometric level processing of Quake .MAP files to create\nQuake .BSP files.\n"
+	// Release 1.4518, measured the same way on 2026-10-12 (NEW_323F): the
+	// release the fork's profile is pinned to. Its programs print what 1.4513's
+	// did (NEW_323E) but for the identity.
+	pinnedLight = "---- ClearLightmapSurfaces ----\n---- light / ericw-tools 2.0.0-alpha11-32-g0c787d7a+auto-pigeon.1.4518 ----\nlight compiles lightmap data for BSPs\n\n  -logfile \"path\"               File to output logging data to. If unchanged, it is set by the tool.\n"
+	pinnedQbsp  = "---- qbsp / ericw-tools 2.0.0-alpha11-32-g0c787d7a+auto-pigeon.1.4518 ----\nqbsp performs geometric level processing of Quake .MAP files to create\nQuake .BSP files.\n"
+	// Release 1.4513: superseded, and still a release the fork profile builds with.
+	earlierQbsp = "---- qbsp / ericw-tools 2.0.0-alpha11-27-g69db3ffa+auto-pigeon.1.4513 ----\nqbsp performs geometric level processing of Quake .MAP files to create\nQuake .BSP files.\n"
 )
 
 func tool(t *testing.T, id string) *profile.ToolProfile {
@@ -69,9 +72,13 @@ func TestAProgramIsJudgedByItsOwnWords(t *testing.T) {
 		// are 2.x and list -logfile); the upstream ones do not satisfy the
 		// fork's, which is written for the Auto-Pigeon build by name.
 		{"fork vis under the 2.0 profile", upstream, "vis", forkVis, binding.FactCompatible, "2.0.0-alpha11-19-g1faae828+auto-pigeon.1.4505", ""},
-		{"1.4513 light under the fork profile", fork, "light", pinnedLight, binding.FactCompatible, "2.0.0-alpha11-27-g69db3ffa+auto-pigeon.1.4513", ""},
-		{"1.4513 qbsp under the fork profile", fork, "qbsp", pinnedQbsp, binding.FactCompatible, "2.0.0-alpha11-27-g69db3ffa+auto-pigeon.1.4513", ""},
-		{"1.4513 qbsp under the 2.0 profile", upstream, "qbsp", pinnedQbsp, binding.FactCompatible, "2.0.0-alpha11-27-g69db3ffa+auto-pigeon.1.4513", ""},
+		{"1.4518 light under the fork profile", fork, "light", pinnedLight, binding.FactCompatible, "2.0.0-alpha11-32-g0c787d7a+auto-pigeon.1.4518", ""},
+		{"1.4518 qbsp under the fork profile", fork, "qbsp", pinnedQbsp, binding.FactCompatible, "2.0.0-alpha11-32-g0c787d7a+auto-pigeon.1.4518", ""},
+		{"1.4518 qbsp under the 2.0 profile", upstream, "qbsp", pinnedQbsp, binding.FactCompatible, "2.0.0-alpha11-32-g0c787d7a+auto-pigeon.1.4518", ""},
+		// 1.4513 has a measured limit (a whole brush thinner than 0.02 units)
+		// that the profile describes and does not refuse: the operator chose to
+		// publish it with that limit stated, and a binding to it keeps working.
+		{"1.4513 qbsp under the fork profile", fork, "qbsp", earlierQbsp, binding.FactCompatible, "2.0.0-alpha11-27-g69db3ffa+auto-pigeon.1.4513", ""},
 		// Release 1.4505 is a 2.x Auto-Pigeon build that lists -logfile, and
 		// the fork's own profile still does not build with it: it names that
 		// release as one that puts solid in a map's air (NEW_323E). The same

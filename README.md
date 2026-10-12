@@ -188,9 +188,9 @@ A profile only runs after you approve what it does (**Profiles**, or
 fork of ericw-tools, published at
 <https://github.com/auto-pigeon/ericw-tools/releases> — the profile's
 **Homepage** button opens that page. It is not an upstream release: it is
-upstream's 2.0.0-alpha11 line plus four changes to qbsp, and upstream has not
-reviewed them. The profiles are written for **release 1.4513**
-(`auto-pigeon-ericw-v1.4513`), which the fork's own workflow built, tested and
+upstream's 2.0.0-alpha11 line plus five changes to qbsp, and upstream has not
+reviewed them. The profiles are written for **release 1.4518**
+(`auto-pigeon-ericw-v1.4518`), which the fork's own workflow built, tested and
 accepted from the extracted archive on Linux x86-64, Windows x86-64, macOS Intel
 and macOS Apple silicon; the profile's setup route gives each archive's name and
 SHA-256. The Companion downloads nothing: fetch the archive for your platform,
@@ -199,12 +199,12 @@ its own, and choose the unpacked folder — the one that **contains** `bin/`:
 
 ```console
 $ companion acquire resolve internal/profile/builtin/ericw-tools-auto-pigeon-q1.tool.json \
-    --mode user_path --user-path ~/tools/auto-pigeon-ericw-tools-1.4513-linux-amd64 --bind
+    --mode user_path --user-path ~/tools/auto-pigeon-ericw-tools-1.4518-linux-amd64 --bind
 $ companion toolchain grant auto-pigeon.ericw-tools.auto-pigeon-build.q1      # read it, then approve
 $ companion toolchain check auto-pigeon.ericw-tools.auto-pigeon-build.q1      # asks qbsp, vis and light what they are
 $ companion job run --profile auto-pigeon.ericw-tools.auto-pigeon-build.q1 --action compile \
     --input source_map="$PWD/level.map" --root content_root="$PWD" --wait
-# … ---- qbsp / ericw-tools 2.0.0-alpha11-27-g69db3ffa+auto-pigeon.1.4513 ----
+# … ---- qbsp / ericw-tools 2.0.0-alpha11-32-g0c787d7a+auto-pigeon.1.4518 ----
 ```
 
 **Releases 1.4502 and 1.4505 are not built with.** Measured, they put solid in a
@@ -215,16 +215,22 @@ Profiles and in every pipeline list, and says which release it found and to
 unpack a newer one. Your binding is kept as it is until you choose another
 folder; nothing is downloaded or chosen for you. This is that one profile's
 statement about its own program: a profile of your own that names an old
-release on purpose, and the upstream profile, are not affected. Release 1.4510
-has the same compiler as 1.4513 and is accepted.
+release on purpose, and the upstream profile, are not affected. Releases 1.4510
+and 1.4513 are accepted and described, not refused: they build, with the limit
+below.
 
-What 1.4513 does not do, measured: a **whole brush thinner than 0.02 units** is
-not compiled correctly (a plate that thin which alone closes a hole is reported
-as a leak; a free fin that thin can become a sheet that divides the room, with
-no leak) — 0.0201 units and thicker, and thinner slivers of thicker brushes, are
-right in the cases measured. And without `-forcegoodtree`, which every built-in
-Quake 1 pipeline passes, one face of a 712-brush hollow pipe is still partly
-missing.
+What 1.4518 repaired, measured: a **whole brush thinner than 0.02 units**. With
+1.4510 and 1.4513 a free fin 0.012 units thick could fill half of its room with
+solid, with no leak and exit status 0, and a plate that thin which alone closed
+a hole was reported as a leak; 1.4518 compiles both exactly, with and without
+`-forcegoodtree`, and draws the one face of a 712-brush hollow pipe those
+releases left partly missing without it.
+
+What 1.4518 does not do, measured: a whole brush thinner than **0.001 units** is
+dropped (no material, and no solid in the map's air; a room it alone seals is
+reported as a leak); where two slabs thinner than 0.2 units cross, the hairline
+column they share is solid where the map has air, with nothing drawn; and a
+brush of zero thickness crashes qbsp, as the upstream compiler does.
 
 These two are **alternatives**, not replacements. Every built-in build profile
 keeps naming the upstream compiler, and a stage of your own that names no tool

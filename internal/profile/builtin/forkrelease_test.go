@@ -102,6 +102,7 @@ func TestTheForkProfilesNameTheReleaseTheManifestDescribes(t *testing.T) {
 		"2.0.0-alpha11-16-gd4e4a75f+auto-pigeon.1.4502": true,
 		"2.0.0-alpha11-19-g1faae828+auto-pigeon.1.4505": true,
 		"2.0.0-alpha11-24-gd278362b+auto-pigeon.1.4510": false,
+		"2.0.0-alpha11-27-g69db3ffa+auto-pigeon.1.4513": false,
 		manifest.Banner: false,
 	} {
 		if !probe.Accepts(identity) {

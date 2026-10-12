@@ -2,122 +2,122 @@
   "assets": [
     {
       "acceptance": {
-        "commands_run": 28,
-        "steps_passed": 10,
+        "commands_run": 32,
+        "steps_passed": 11,
         "verdict": "pass"
       },
       "kind": "toolchain",
-      "name": "auto-pigeon-ericw-tools-1.4513-linux-amd64.zip",
+      "name": "auto-pigeon-ericw-tools-1.4518-linux-amd64.zip",
       "platform": "linux-amd64",
-      "sha256": "f687bac4dab9280cca6fccca0a75c2f16a2573c961a5b4b01302ec48eba69e8a",
-      "size": 16897869,
+      "sha256": "d3680587e5622843a8a4df88e94bc5d9532880e29169514bc0e55dafb914fb66",
+      "size": 16898977,
       "tests": {
         "failures": 0,
         "focused": [
           "testmapsQ1.cliphull2ThinFragmentSplit"
         ],
-        "run": 399,
+        "run": 408,
         "skipped_by_the_suite": 16
       }
     },
     {
       "acceptance": {
-        "commands_run": 28,
-        "steps_passed": 10,
+        "commands_run": 32,
+        "steps_passed": 11,
         "verdict": "pass"
       },
       "kind": "toolchain",
-      "name": "auto-pigeon-ericw-tools-1.4513-windows-amd64.zip",
+      "name": "auto-pigeon-ericw-tools-1.4518-windows-amd64.zip",
       "platform": "windows-amd64",
-      "sha256": "c556cbaee49eaf0b651c20fe906442a6f09e4c65607b4e2b493f122380a40393",
-      "size": 15494837,
+      "sha256": "aee3c3e9ec7dbba2b37aa53de26de6d0ca1e03818e4ed49b6edf609f8865c083",
+      "size": 15496574,
       "tests": {
         "failures": 0,
         "focused": [
           "testmapsQ1.cliphull2ThinFragmentSplit"
         ],
-        "run": 399,
+        "run": 408,
         "skipped_by_the_suite": 16
       }
     },
     {
       "acceptance": {
-        "commands_run": 28,
-        "steps_passed": 10,
+        "commands_run": 32,
+        "steps_passed": 11,
         "verdict": "pass"
       },
       "kind": "toolchain",
-      "name": "auto-pigeon-ericw-tools-1.4513-macos-amd64.zip",
+      "name": "auto-pigeon-ericw-tools-1.4518-macos-amd64.zip",
       "platform": "macos-amd64",
-      "sha256": "f259db79ff4b3c1a33f1c55c5013dcaa8f60ebca8f8bd48345cc26906fa80f7f",
-      "size": 15737961,
+      "sha256": "ec652b5da50d6537a94682b4c87b71153638deabb61cfd0afde984bed1a387fa",
+      "size": 15739166,
       "tests": {
         "failures": 0,
         "focused": [
           "testmapsQ1.cliphull2ThinFragmentSplit"
         ],
-        "run": 399,
+        "run": 408,
         "skipped_by_the_suite": 16
       }
     },
     {
       "acceptance": {
-        "commands_run": 28,
-        "steps_passed": 10,
+        "commands_run": 32,
+        "steps_passed": 11,
         "verdict": "pass"
       },
       "kind": "toolchain",
-      "name": "auto-pigeon-ericw-tools-1.4513-macos-arm64.zip",
+      "name": "auto-pigeon-ericw-tools-1.4518-macos-arm64.zip",
       "platform": "macos-arm64",
-      "sha256": "31bb3c2cf47ea4e7032443ecca154d847e19075c7b3ae784b68ae64b4805e634",
-      "size": 7401211,
+      "sha256": "5b858a701c1a7994d539a1e6da9e250a716f956c12cfd672648512c8e6bb7e55",
+      "size": 7402306,
       "tests": {
         "failures": 0,
         "focused": [
           "testmapsQ1.cliphull2ThinFragmentSplit"
         ],
-        "run": 399,
+        "run": 408,
         "skipped_by_the_suite": 16
       }
     },
     {
-      "files": 1521,
+      "files": 1524,
       "kind": "source",
-      "name": "auto-pigeon-ericw-tools-1.4513-source.tar.gz",
+      "name": "auto-pigeon-ericw-tools-1.4518-source.tar.gz",
       "rebuilt_and_tested_from_the_archive": true,
-      "sha256": "4ad1fe15869a3d48a5943b5d2c4da510e984b891c9d9b455e498f8c9dfda57a5",
-      "size": 20967809
+      "sha256": "a305c9575ee4e272839d9d742e420dbc479e60de2214f9a45171ea92888b382b",
+      "size": 20980146
     }
   ],
-  "built_by": "https://github.com/auto-pigeon/ericw-tools/actions/runs/38237206051",
-  "commit": "69db3ffa9cddf15d8cda082ba6feda0a6317424f",
+  "built_by": "https://github.com/auto-pigeon/ericw-tools/actions/runs/38269698627",
+  "commit": "0c787d7a8c640a9f547a05b406bc1bfa422bd620",
   "fork": "https://github.com/auto-pigeon/ericw-tools",
   "prerelease": true,
   "schema": "auto-pigeon-ericw-release-manifest/1",
   "signed": false,
-  "tag": "auto-pigeon-ericw-v1.4513",
+  "tag": "auto-pigeon-ericw-v1.4518",
   "targets": {
     "linux-amd64": {
-      "asset": "auto-pigeon-ericw-tools-1.4513-linux-amd64.zip",
+      "asset": "auto-pigeon-ericw-tools-1.4518-linux-amd64.zip",
       "status": "published"
     },
     "macos-amd64": {
-      "asset": "auto-pigeon-ericw-tools-1.4513-macos-amd64.zip",
+      "asset": "auto-pigeon-ericw-tools-1.4518-macos-amd64.zip",
       "status": "published"
     },
     "macos-arm64": {
-      "asset": "auto-pigeon-ericw-tools-1.4513-macos-arm64.zip",
+      "asset": "auto-pigeon-ericw-tools-1.4518-macos-arm64.zip",
       "status": "published"
     },
     "windows-amd64": {
-      "asset": "auto-pigeon-ericw-tools-1.4513-windows-amd64.zip",
+      "asset": "auto-pigeon-ericw-tools-1.4518-windows-amd64.zip",
       "status": "published"
     }
   },
   "upstream": {
-    "describe": "2.0.0-alpha11-27-g69db3ffa",
+    "describe": "2.0.0-alpha11-32-g0c787d7a",
     "repository": "https://github.com/ericwa/ericw-tools"
   },
-  "version": "1.4513",
-  "version_banner": "2.0.0-alpha11-27-g69db3ffa+auto-pigeon.1.4513"
+  "version": "1.4518",
+  "version_banner": "2.0.0-alpha11-32-g0c787d7a+auto-pigeon.1.4518"
 }
