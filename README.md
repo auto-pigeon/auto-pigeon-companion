@@ -552,6 +552,64 @@ curl -sS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
 #  "readiness":{"ready":false,"problems":[{"fault":"…","summary":"Compile the map: …","fix":"…"}]}}
 ```
 
+**A program is asked what it is.** A profile can say which programs it was written
+for, and the two built-in Quake 1 ericw-tools profiles do: `ericw-tools 2.0.0-alpha11
+(Quake 1)` needs qbsp, vis and light that call themselves `2.…`, with a vis and a light
+whose own usage lists `-logfile` (it passes that option), and the Auto-Pigeon build's
+profile needs the ones that print `+auto-pigeon.` in their version. EricW 0.18.1 is
+neither — its vis stops with `Unknown option "-logfile"` — so a modern profile pointed
+at a 0.18.1 folder **needs setup**, in Profiles and in every pipeline list alike, and
+is refused before any compiler is started. Nothing else is chosen for you: the folder
+you picked stays recorded and shown, and the way out is to choose a folder this profile
+was written for, or to use a profile written for the version you have. A profile that
+declares no such requirement — your own, or one for 0.18.1 — runs what it is given, as
+before.
+
+Each program is asked once, as a supervised job you can open in **Jobs** (`Check what
+vis is`): when you record its path, when you approve its profile, when the Companion
+starts and finds a program changed since it was last asked, and when you press **Check
+these programs** on the profile's page. Profiles shows what each one said — its
+version, and `matches this profile` or why not. Replacing a program where it stands is
+noticed: the page reads `not checked since it changed` until it is asked again, and a
+build never runs a program on the strength of an answer about different bytes. Being
+compatible is not an approval and is not a statement about what the compiler does to
+your map.
+
+```bash
+$ companion toolchain check auto-pigeon.ericw-tools.q1
+light    incompatible       v0.18.1  /opt/ericw-tools-v0.18.1/bin/light
+         The light recorded for ericw-tools 2.0.0-alpha11 (Quake 1) is not the program this profile was written for (it calls itself v0.18.1; this profile accepts 2.…): /opt/ericw-tools-v0.18.1/bin/light. Choose the folder of a version this profile was written for …
+qbsp     incompatible       v0.18.1  /opt/ericw-tools-v0.18.1/bin/qbsp
+vis      incompatible       v0.18.1  /opt/ericw-tools-v0.18.1/bin/vis
+$ echo $?
+1
+$ companion toolchain check auto-pigeon.ericw-tools.q1 --json   # the same answers, with each file's SHA-256
+```
+
+```bash
+# ask again from a script, and read the profile as Profiles shows it
+curl -sS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" -X POST \
+  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/profiles/auto-pigeon.ericw-tools.q1/check"
+# {"readiness":{"ready":false,"problems":[{"fault":"tool_incompatible","summary":"The vis recorded for … (it calls itself v0.18.1; this profile accepts 2.…): …","fix":"…"}]},
+#  "compatibility":[{"executable":"vis","state":"incompatible","identity":"v0.18.1","path":"…","sha256":"sha256:…","checked_at":"…","job_id":"…"}, …],
+#  "action_problems":{"compile":[…],"vis":[…],"light":[…],"inspect":[],"check":[]}, …}
+
+# a single stage submitted directly is refused the same way, HTTP 409, before vis is started
+curl -sS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
+  -H 'Content-Type: application/json' -X POST \
+  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/jobs" \
+  -d '{"profile":"auto-pigeon.ericw-tools.q1","action":"vis","inputs":{"bsp":"/path/to/level.bsp","prt":"/path/to/level.prt"}}'
+# {"class":"tool_incompatible","error":"The vis recorded for ericw-tools 2.0.0-alpha11 (Quake 1) is not the program this profile was written for (it calls itself v0.18.1; …"}
+```
+
+`fault` is `tool_incompatible` when the program said what it is and it is the wrong
+one; `tool_unverified` when nothing was learned (it has not been asked since it
+changed, it did not answer in time, or it printed nothing that names it); and
+`tool_unusable` when the file cannot be run here (not executable, or built for
+another kind of computer). `companion build run` asks about every required stage
+before it starts the first, so a pipeline with a right qbsp and a wrong vis does not
+compile and then fail.
+
 **Reading a build back.** A build is read by its id, and the list reads every
 build this machine has. Each answer carries the build's manifest and `live` —
 whether this Companion is running that build right now — and the two always
@@ -669,7 +727,7 @@ commands:
   autobuild list | show | on | off | pipeline | build-now | retry   rebuild a hosted map automatically when a new revision is saved (inside a running Companion)
   build run | preview | list | show | pipelines   build a map through a pipeline: several supervised jobs, wired, with a manifest
   package targets | preview | create | inspect | verify | extract | map …   build a PAK or PK3 from what a build produced, read one somebody else made, and package, install and run a Quake III map
-  toolchain validate | show | canonicalize | digest | diff | list | schema | review | grant | withdraw | homepage | args  read, check and compare tool, engine and pipeline toolchains, and approve one to run
+  toolchain validate | show | canonicalize | digest | diff | list | schema | review | grant | withdraw | homepage | args | check  read, check and compare tool, engine and pipeline toolchains, and approve one to run
   acquire resolve   find a toolchain's programs on this machine (a folder, PATH, or a game's own copy); nothing is downloaded
   engine list | show | detect | bind | check | preview | run | stage | unstage   set up a Quake engine you already have, and start it as a supervised job
   game list | show | link | join | preview | host | stop   find a game somebody is hosting and join it, or advertise one of your own
@@ -976,6 +1034,8 @@ carries `class` in the HTTP error:
 | class | what it means |
 | --- | --- |
 | `tool_unavailable` | the compiler is not installed, was moved, or cannot be started |
+| `tool_incompatible` | the compiler is there and is not the one its profile was written for — it said so itself; nothing was started |
+| `tool_unverified` | the compiler would not say what it is (no answer in time, or nothing that names it); nothing was started |
 | `platform_unsupported` | the tool's profile says it does not run on this platform |
 | `game_data_missing` | no folder is set, the folder holds no `baseq3`, or a bound package is not held |
 | `archive_damaged` | a PK3 in an approved folder, or a bound package, is not a readable archive |

@@ -45,3 +45,4 @@ ways.
 | [0006](0006-provenance-decides-what-is-packaged-not-filenames.md) | Provenance decides what is packaged, and filenames decide nothing | Accepted | 2026-09-07 |
 | [0007](0007-the-threat-model-is-code-and-one-writer-owns-mutable-state.md) | The threat model is code, and one writer owns every mutable local file | Accepted | 2026-09-08 |
 | [0008](0008-the-companion-downloads-no-program.md) | The Companion downloads no program, and the extractor ships beside it | Accepted | 2026-09-23 |
+| [0009](0009-a-program-is-asked-what-it-is-and-the-answer-is-evidence-about-one-file.md) | A program is asked what it is, by the executor, and the answer is evidence about one file | Accepted (operator review pending) | 2026-10-12 |
