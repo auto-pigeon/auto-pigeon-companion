@@ -126,6 +126,19 @@ compiler.** Rejected by the prompt, and by what the log is for.
   `internal/job/compat_installed_test.go`, `internal/engine/compat_test.go`,
   `internal/web/compat_test.go`, `internal/cli/toolchain_check_cmd_test.go`.
 
+## Addendum, 2026-10-12 (`NEW_323E`): a document may name identities it refuses
+
+The decision above let a document say which identities it ACCEPTS. The built-in Auto-Pigeon
+build profile accepted every `2.… +auto-pigeon.` identity, and two of those releases (1.4502,
+1.4505) were then measured as putting solid in a map's air with exit status 0. Narrowing
+`accept` to the good releases by name would refuse every FUTURE release until the Companion was
+rebuilt. So the probe gained `refuse`: literal entries (`prefix` / `contains` / `suffix`) with a
+reason, applied only by the document that states them, never ordered, and part of the
+requirement digest only when present. The upstream profile names nothing and judges the same
+files as before. Rejected: comparing release numbers ("older than 1.4510") — an identity is not
+ordered here; and refusing those bytes for every profile — a local profile may name an old
+release on purpose.
+
 ## Follow-up work
 
 - Quake II ericw-tools profiles and Q3Map2 declare no probe; add one with the

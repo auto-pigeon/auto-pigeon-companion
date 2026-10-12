@@ -188,20 +188,43 @@ A profile only runs after you approve what it does (**Profiles**, or
 fork of ericw-tools, published at
 <https://github.com/auto-pigeon/ericw-tools/releases> — the profile's
 **Homepage** button opens that page. It is not an upstream release: it is
-upstream's 2.0.0-alpha11 line plus one change to qbsp that closes a clip-hull
-leak through thin brushes, and upstream has not reviewed it. The Companion
-downloads nothing: fetch the archive for your platform from the releases page,
-check it against the `SHA256SUMS` published beside it, unpack it, and choose the
-unpacked folder — the one that **contains** `bin/`:
+upstream's 2.0.0-alpha11 line plus four changes to qbsp, and upstream has not
+reviewed them. The profiles are written for **release 1.4513**
+(`auto-pigeon-ericw-v1.4513`), which the fork's own workflow built, tested and
+accepted from the extracted archive on Linux x86-64, Windows x86-64, macOS Intel
+and macOS Apple silicon; the profile's setup route gives each archive's name and
+SHA-256. The Companion downloads nothing: fetch the archive for your platform,
+check it against the `SHA256SUMS` published beside it, unpack it into a folder of
+its own, and choose the unpacked folder — the one that **contains** `bin/`:
 
 ```console
 $ companion acquire resolve internal/profile/builtin/ericw-tools-auto-pigeon-q1.tool.json \
-    --mode user_path --user-path ~/tools/auto-pigeon-ericw-tools-1.4505-linux-amd64 --bind
+    --mode user_path --user-path ~/tools/auto-pigeon-ericw-tools-1.4513-linux-amd64 --bind
 $ companion toolchain grant auto-pigeon.ericw-tools.auto-pigeon-build.q1      # read it, then approve
+$ companion toolchain check auto-pigeon.ericw-tools.auto-pigeon-build.q1      # asks qbsp, vis and light what they are
 $ companion job run --profile auto-pigeon.ericw-tools.auto-pigeon-build.q1 --action compile \
     --input source_map="$PWD/level.map" --root content_root="$PWD" --wait
-# … ---- qbsp / ericw-tools 2.0.0-alpha11-19-g1faae828+auto-pigeon.1.4505 ----
+# … ---- qbsp / ericw-tools 2.0.0-alpha11-27-g69db3ffa+auto-pigeon.1.4513 ----
 ```
+
+**Releases 1.4502 and 1.4505 are not built with.** Measured, they put solid in a
+map's air beside geometry that is not in one plane and leave the faces behind it
+undrawn, with no leak and exit status 0. The Quake 1 profile names both
+(`compatibility_probe.refuse`): bound to one of them it **needs setup**, in
+Profiles and in every pipeline list, and says which release it found and to
+unpack a newer one. Your binding is kept as it is until you choose another
+folder; nothing is downloaded or chosen for you. This is that one profile's
+statement about its own program: a profile of your own that names an old
+release on purpose, and the upstream profile, are not affected. Release 1.4510
+has the same compiler as 1.4513 and is accepted.
+
+What 1.4513 does not do, measured: a **whole brush thinner than 0.02 units** is
+not compiled correctly (a plate that thin which alone closes a hole is reported
+as a leak; a free fin that thin can become a sheet that divides the room, with
+no leak) — 0.0201 units and thicker, and thinner slivers of thicker brushes, are
+right in the cases measured. And without `-forcegoodtree`, which every built-in
+Quake 1 pipeline passes, one face of a 712-brush hollow pipe is still partly
+missing.
 
 These two are **alternatives**, not replacements. Every built-in build profile
 keeps naming the upstream compiler, and a stage of your own that names no tool
@@ -589,6 +612,27 @@ auto-pigeon.q1.fast-preview      1.0.0    builtin   compile -> vis -> light  nee
     compile (tool_incompatible): The qbsp recorded for ericw-tools 2.0.0-alpha11 (Quake 1) is not the program this profile was written for (it calls itself v0.18.1; this profile accepts 2.…): …
     vis (tool_incompatible): The vis recorded for … is not the program this profile was written for …
 $ companion build pipelines --json    # per pipeline: "runnable" (every capability has a provider), "ready", and "problems" by step
+```
+
+**Build & Run keeps the pipeline you chose.** A pipeline you picked that stops
+being ready — its compiler was rebound to a program its profile was not written
+for — stays the selected one, greyed, with its reason and a link to set it up;
+Preview and Build are disabled until it is ready or you choose another. The page
+remembers your choice across a refresh and a reload. It no longer falls back to
+the first ready pipeline in the list, and nothing is started with a pipeline you
+did not choose.
+
+**The binding store is version 1.4, and an older Companion cannot read it.**
+`bindings.json` written by an earlier build (1.3) is read as it is, with every
+binding and approval kept; the first time this build writes it (a path recorded,
+a program checked, an approval) the whole file becomes 1.4, where each program's
+answer about itself is kept. A build older than v1.239 then refuses the file
+(`the binding store is "aucom.local-binding/1.4"; this build reads …`) rather than
+guess at approvals it cannot read. Nothing downgrades a store: to be able to go
+back, keep a copy from before the first run of the new build —
+
+```console
+$ cp ~/.config/auto-pigeon-companion/bindings.json ~/bindings-1.3-backup.json   # before starting v1.239 or later
 ```
 
 ```bash

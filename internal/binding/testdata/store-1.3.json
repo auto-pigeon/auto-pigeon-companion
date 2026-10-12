@@ -1,0 +1,65 @@
+{
+  "schema_version": "aucom.local-binding/1.3",
+  "bindings": [
+    {
+      "schema_version": "aucom.local-binding/1.3",
+      "profile_id": "auto-pigeon.ericw-tools.q1",
+      "profile_version": "1.0.0",
+      "profile_digest": "sha256:1818181818181818181818181818181818181818181818181818181818181818",
+      "trust": "builtin",
+      "acquisition": "user_path",
+      "executables": {
+        "qbsp": "/opt/tools/ericw-0.18.1/bin/qbsp",
+        "vis": "/opt/tools/ericw-0.18.1/bin/vis",
+        "light": "/opt/tools/ericw-0.18.1/bin/light"
+      },
+      "version_checked_at": "0001-01-01T00:00:00Z",
+      "updated_at": "2026-09-23T00:22:32.225233758Z"
+    },
+    {
+      "schema_version": "aucom.local-binding/1.3",
+      "profile_id": "local.pipeline.my-normal-build",
+      "profile_version": "1.0.1",
+      "profile_digest": "sha256:6969696969696969696969696969696969696969696969696969696969696969",
+      "trust": "local",
+      "acquisition": "user_path",
+      "version_checked_at": "0001-01-01T00:00:00Z",
+      "grant": {
+        "profile_id": "local.pipeline.my-normal-build",
+        "version": "1.0.1",
+        "digest": "sha256:6969696969696969696969696969696969696969696969696969696969696969",
+        "trust": "local",
+        "granted": [],
+        "granted_at": "2026-10-08T20:47:58.447852897Z"
+      },
+      "updated_at": "2026-10-08T20:47:58.447853525Z"
+    },
+    {
+      "schema_version": "aucom.local-binding/1.3",
+      "profile_id": "local.tool.my-fork-build",
+      "profile_version": "1.0.0",
+      "profile_digest": "sha256:1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e",
+      "trust": "local",
+      "acquisition": "user_path",
+      "executables": {
+        "qbsp": "/opt/tools/fork-1.4502/bin/qbsp",
+        "vis": "/opt/tools/fork-1.4502/bin/vis",
+        "light": "/opt/tools/fork-1.4502/bin/light"
+      },
+      "roots": {
+        "content_root": "/home/someone/my quake project"
+      },
+      "resolved_version": "2.0.0-alpha11-16-gd4e4a75f+auto-pigeon.1.4502",
+      "version_checked_at": "2026-10-08T20:40:00Z",
+      "grant": {
+        "profile_id": "local.tool.my-fork-build",
+        "version": "1.0.0",
+        "digest": "sha256:1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e",
+        "trust": "local",
+        "granted": [],
+        "granted_at": "2026-10-08T20:41:00Z"
+      },
+      "updated_at": "2026-10-08T20:41:00Z"
+    }
+  ]
+}

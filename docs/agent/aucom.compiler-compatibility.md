@@ -55,6 +55,16 @@ defect; this module is what must stay true so it does not come back.
 2. **An identity is matched, never ordered.** `2.0.0-alpha11-19-g1faae828+auto-pigeon.1.4505`,
    `2.0.0-alpha11` and release number `1.4505` are different identities. Nothing here parses a
    version or compares two; `profile.Version` is for a document's own version and is not used.
+   **A document may also NAME identities it must not be run with** (`refuse`: `prefix` /
+   `contains` / `suffix` and a one-sentence `reason`, `NEW_323E`). It is the same kind of literal
+   statement, by the same document, about a release that was MEASURED: the built-in Auto-Pigeon
+   Quake 1 profile names `+auto-pigeon.1.4502` and `+auto-pigeon.1.4505`, which put solid in a
+   map's air with exit 0. It is never "this and everything older", it applies only to the profile
+   that says it (the upstream profile accepts the same files), and the reason is what the page,
+   the CLI and the refused job print. `refuse` is part of the requirement digest only when it is
+   not empty, so a document that names nothing keeps every answer recorded for it — pinned by
+   digest in `internal/compat`. Do not add an entry without the measurement, and do not use it to
+   retire a version merely because a newer one exists.
 3. **Asking is a supervised job; the answer is evidence about one file.** A probe is a profile
    action (`compatibility-probe.<executable>`, synthesized by `ToolProfile.ActionByID`, absent from
    `ActionList`) run by the one executor — ADR-0003 names "a version probe" — so it has the argument
@@ -95,6 +105,10 @@ arguments a document chose.
 
 - No fallback: an incompatible binding is refused and stays selected and visible; no other
   compiler, profile or path is chosen, and `-logfile` is not dropped to make an old vis run.
+  The same holds one level up (`NEW_323E`): Build & Run keeps the PIPELINE the user chose
+  selected when it loses readiness (`executionChoices(..., retain)` in `core.js`, the remembered
+  choice in `build.js`). Emptying the list let the next refresh select the first ready pipeline —
+  a different pipeline behind the user's choice. `testdata/pipelinechoice.check.mjs` holds it.
 - No approval from a probe, and no probe result clearing one.
 - No requirement on an executable that was not measured. `bspinfo` and `bsputil` are deliberately
   not in the two built-in probes, and the Quake II profiles declare none: add one with the
@@ -102,12 +116,27 @@ arguments a document chose.
 - Compatibility is not correctness. A compatible fork says nothing about what its qbsp does to a
   non-planar pipe (`NEW_324A`); that is the compiler's own acceptance.
 
+## The pinned release, and where its facts come from
+
+The two Auto-Pigeon-build profiles name ONE release of the fork, and
+`internal/profile/builtin/testdata/auto-pigeon-ericw-release-manifest.json` is that release's own
+published `release-manifest.json`, byte for byte. `forkrelease_test.go` fails unless the profiles'
+name, tag, banner and every published archive's name and SHA-256 are the manifest's. To move the
+pin: replace the fixture with the new release's manifest and edit the two documents until the test
+passes — never the other way round, and never from a banner sorted by eye. A release is pinned
+only after the fork's workflow accepted its archives; a compatible program is still not a correct
+compiler, and what a release was measured NOT to do goes in the profile's description.
+
+The binding store is `aucom.local-binding/1.4`. A 1.3 store is read unchanged and stamped 1.4 on
+the first write (`internal/binding/upgrade_test.go`); a build that reads only up to 1.3 refuses a
+1.4 file whole. Never write a downgrade and never promise a rollback without the user's own copy.
+
 ## Tests that hold it
 
 `internal/compat` (classifier on the measured banners, requirement digests, one sentence per
 state); `internal/job/compat_test.go` (shell fixtures that record their own argv — "never
 invoked" is read from what the program wrote); `internal/job/compat_installed_test.go` (the real
-0.18.1, alpha11 and fork, named by `AUCOM_TEST_ERICW_LEGACY`, `_ALPHA11`, `_FORK`);
+0.18.1, alpha11 and fork, named by `AUCOM_TEST_ERICW_LEGACY`, `_ALPHA11`, `_FORK`, and `_FORK_DEFECTIVE` for 1.4502 / 1.4505);
 `internal/engine/compat_test.go`; `internal/web/compat_test.go` and
 `internal/cli/toolchain_check_cmd_test.go` (page, API and CLI give one answer — including the
 `build pipelines` LISTING, which asked only whether a profile provides each capability and printed
