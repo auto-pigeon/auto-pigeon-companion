@@ -361,7 +361,11 @@ type Manifest struct {
 	// about, which is recorded beside every one of them.
 	ReproducibleKey string `json:"reproducible_key,omitempty"`
 	// Directory is where this build's files are on this machine. Deliberately
-	// *not* part of the reproducible key.
+	// *not* part of the reproducible key. A manifest read from disk says where
+	// it was READ from, whatever was written here: a build directory copied
+	// with the rest of a Companion's state carries the original's absolute
+	// path, and a reconcile that saved to it rewrote the original's build
+	// while it was still running (NEW_326).
 	Directory string `json:"directory,omitempty"`
 }
 
@@ -566,6 +570,8 @@ func LoadManifest(path string) (*Manifest, error) {
 		return nil, fmt.Errorf("build: %s is %q; this build reads %s",
 			path, m.SchemaVersion, readableSchemaList())
 	}
+	// Where it is, never where it says it is; see [Manifest.Directory].
+	m.Directory = filepath.Dir(path)
 	return &m, nil
 }
 

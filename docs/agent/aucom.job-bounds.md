@@ -114,7 +114,11 @@ a pid read out of a record: a copied store has every pid the original has.
 - **The build says what the step knows.** `build.Reconcile` says "the Companion
   stopped" only when the step's recovery outcome is one of this store's own; a
   copied step's build carries the step's own sentence, and the Build page shows
-  the manifest's sentence rather than a fixed one.
+  the manifest's sentence rather than a fixed one. **A manifest read from disk
+  is where it was read from** (`build.LoadManifest` sets `Directory`): the live
+  copy run found a copy's reconcile saving to the ORIGINAL's absolute path and
+  rewriting a build that was still running. A recorded path never sends a
+  write back to the store that wrote it — `q3install` already did the same.
 - **Outside Linux nothing is signalled**: no dependency-free start time or boot
   id exists there, so recovery marks the job interrupted and leaves the process.
   Do not add a taskkill by pid to "fix" that.

@@ -2,6 +2,8 @@ package build
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -78,5 +80,58 @@ func TestACopiedBuildDoesNotClaimItsCompanionStopped(t *testing.T) {
 	Reconcile(own, func(string) (*job.Job, error) { return record, nil }, time.Now())
 	if own.Error != InterruptedNote {
 		t.Fatalf("the build of a genuinely stopped Companion says %q", own.Error)
+	}
+}
+
+// NEW_326, found live: a build directory COPIED with the rest of a Companion's
+// state carries a manifest whose `directory` is the ORIGINAL's absolute path.
+// The copy's reconcile saved to that path and rewrote the original build's
+// manifest as interrupted while the original was still building. A manifest
+// read from disk is where it was read from; a recorded path never sends a
+// write back to the store that wrote it.
+func TestACopiedManifestIsWrittenOnlyWhereItWasRead(t *testing.T) {
+	original, copied := t.TempDir(), t.TempDir()
+	id := "20261013T073949Z-4f6fcd01"
+	m := &Manifest{SchemaVersion: SchemaVersion, BuildID: id, State: job.Running,
+		Steps:     []Step{{ID: "light", JobID: "j1", State: job.Running}},
+		Directory: filepath.Join(original, id)}
+	for _, root := range []string{original, copied} {
+		if err := os.MkdirAll(filepath.Join(root, id), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := m.Save(filepath.Join(root, id)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	before, err := os.ReadFile(filepath.Join(original, id, ManifestFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	read, err := Find(copied, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if read.Directory != filepath.Join(copied, id) {
+		t.Fatalf("the copied manifest says it lives in %s", read.Directory)
+	}
+	listed, err := List(copied)
+	if err != nil || len(listed) != 1 || listed[0].Directory != filepath.Join(copied, id) {
+		t.Fatalf("listed %v (%v)", listed, err)
+	}
+	interrupted := &job.Job{State: job.Interrupted, Error: "copied", FinishedAt: time.Now(),
+		Recovery: &job.Recovery{Outcome: job.RecoveryForeignStore}}
+	if !Reconcile(read, func(string) (*job.Job, error) { return interrupted, nil }, time.Now()) {
+		t.Fatal("not reconciled")
+	}
+	if err := read.Save(read.Directory); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := os.ReadFile(filepath.Join(original, id, ManifestFileName))
+	if string(after) != string(before) {
+		t.Fatalf("reconciling the copy rewrote the original's manifest:\n%s", after)
+	}
+	if again, _ := Find(copied, id); again.State != job.Interrupted {
+		t.Errorf("the copy's own manifest is %s", again.State)
 	}
 }
