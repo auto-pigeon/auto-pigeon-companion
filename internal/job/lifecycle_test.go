@@ -106,8 +106,13 @@ func TestARestartMarksAnAbandonedJobInterruptedAndNeverRerunsIt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("recovering: %v", err)
 	}
-	if len(recovered) != 1 || recovered[0] != id {
-		t.Fatalf("recovered %v, want [%s]", recovered, id)
+	if len(recovered) != 1 || recovered[0].ID != id || !recovered[0].Interrupted || recovered[0].Signalled {
+		t.Fatalf("recovered %+v, want %s interrupted and nothing signalled", recovered, id)
+	}
+	// A record with no launch provenance — this one, and every record an older
+	// build wrote — proves no ownership, so it is interrupted and never signalled.
+	if recovered[0].Outcome != RecoveryUnverifiable || recovered[0].Reason != "no_launch_record" {
+		t.Errorf("outcome %s (%s), want unverifiable (no_launch_record)", recovered[0].Outcome, recovered[0].Reason)
 	}
 
 	after, err := store.Load(id)

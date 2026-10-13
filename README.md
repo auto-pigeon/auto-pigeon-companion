@@ -674,6 +674,33 @@ outputs that can be downloaded. Poll until `live` is `false`, then read
 `manifest.state`. A build left `running` by a Companion that stopped is answered
 `interrupted`, and nothing is run again.
 
+**Copying or restoring the Companion's state cannot stop another instance's
+build.** A Companion that starts and finds a job its previous run left
+unfinished marks it `interrupted` and runs nothing again. It stops that job's
+programs only when it can prove they are its own abandoned ones: this same job
+store (not a copy, not a moved or restored directory), the same boot of this
+machine, the Companion that started them gone, and the programs still the ones
+it started. A job store copied for a backup, a preview or a second instance
+keeps its history readable, and its unfinished jobs read *"this record was
+copied, moved or restored here from another job store …; no program was stopped,
+and nothing here knows how that run ended"* — the original build carries on. On
+Windows and macOS nothing is ever stopped this way. What recovery decided is on
+the job:
+
+```console
+$ companion job show <job id> --json | jq .recovery
+{
+  "outcome": "foreign_store",
+  "reason": "store_is_a_copy",
+  "at": "2026-10-13T08:12:03Z",
+  "micros": 74
+}
+```
+
+`outcome` is one of `owned_orphan_stopped`, `live_owner_retained`,
+`foreign_store`, `foreign_boot`, `unverifiable`, `already_exited` and
+`no_process`; `signalled` is present, and `true`, only when a program was stopped.
+
 ```bash
 api="$(cat ~/.config/auto-pigeon-companion/api-url)"; token="$(cat ~/.config/auto-pigeon-companion/api-token)"
 # every build, newest first: {"items":[{"manifest":{"build_id":"…","state":"succeeded",…},"live":false}]}

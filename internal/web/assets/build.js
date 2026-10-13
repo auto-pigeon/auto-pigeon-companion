@@ -832,7 +832,11 @@
           : state === "cancelled"
             ? "You cancelled this build. The stage that was running was stopped with everything it had started; what it had written is listed below."
             : state === "interrupted"
-              ? "This build was interrupted: the Companion stopped while it ran. Nothing was run again; build it again when you are ready."
+              // The manifest's own sentence: "the Companion stopped while this
+              // build was running", or — for a build whose record was copied,
+              // moved or could not be verified — that, and that nothing was
+              // stopped. A copy must not claim the original's Companion stopped.
+              ? `This build was interrupted: ${body.manifest.error || "nothing here knows how it ended"}. Build it again when you are ready.`
               : `The build ${state}: ${body.manifest.error || body.error || "see the stages below"}`,
         state === "succeeded" ? (warned ? "warning" : "ok") : state === "cancelled" || state === "interrupted" ? "" : "error"
       );

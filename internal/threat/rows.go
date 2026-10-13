@@ -653,6 +653,33 @@ var rows = []Row{
 		},
 	},
 
+	{
+		ID: "T53", Category: CatRecovery,
+		Title:      "A copied, moved or restored job store stops another Companion's running build",
+		Asset:      "a build somebody else is running — a 60-minute LIGHT — and the user's trust that copying state is harmless",
+		Vector:     "Somebody copies a Companion's state (a backup, a preview sandbox, a second instance) while a job runs, and starts a Companion on the copy. Its recovery reads the copied record, finds the kernel still has that pid with that start time, and SIGKILLs the ORIGINAL compiler's group (Q3_017E: q3map2 -light, 44 minutes in).",
+		Mitigation: "Identity and ownership are checked separately, immediately before any signal: a recorded process is stopped only when this store launched it — the same canonical store path, the same store and job-directory inodes, the same boot id and pid namespace, the program still in this store's own workspace — and the supervisor that launched it is verifiably gone. A copy, a move or a restore can carry the record and never makes those true; such a record is marked interrupted in the copy, says nothing was stopped, and nothing is signalled. A live supervisor keeps its job whatever its heartbeat says. Outside Linux nothing is ever signalled.",
+		Evidence: []Evidence{
+			{"internal/job", "TestR02RecoveringACopiedStoreLeavesTheOriginalBuildRunning"},
+			{"internal/job", "TestR03StartingAServiceOnACopiedStoreLeavesTheOriginalBuildRunning"},
+			{"internal/job", "TestR04PeriodicRecoveryOfACopyNeverSignalsTheOriginal"},
+			{"internal/job", "TestR01RestartingTheGenuineStoreStopsItsOwnAbandonedBuild"},
+			{"internal/job", "TestR06ALiveSupervisorKeepsItsBuildWhateverItsHeartbeatSays"},
+			{"internal/job", "TestR16ARelocatedOrRestoredStoreIsNotPermission"},
+		},
+		Residual: &Residual{
+			What: "Linux only, by design: Windows and macOS read no process identity, so an abandoned tree a crashed Companion left there " +
+				"is reported (interrupted, nothing stopped) and not cleaned up. An engine run from its game folder carries no " +
+				"working-directory proof, so for it a store restored to its own path whose filesystem reused BOTH inode numbers " +
+				"would still read as the original. A pid can in principle be reused in the microseconds between the check and the kill.",
+			Why: "A taskkill by pid alone is the guess this row exists to forbid, and the dependency-free platform identities do " +
+				"not exist; the restore race needs a deleted store, a dead supervisor and two reused inodes at once; pidfd " +
+				"cannot signal a whole group.",
+			Owner:  "andrea-dintino (maintainer)",
+			Review: "2027-04-30",
+		},
+	},
+
 	// --- the release -------------------------------------------------------
 	{
 		ID: "T45", Category: CatRelease,

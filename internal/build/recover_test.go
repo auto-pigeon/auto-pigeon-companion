@@ -56,3 +56,27 @@ func TestAReconciledStepKeepsItsDuration(t *testing.T) {
 		t.Fatalf("step = duration %d, started %v, exit %v", step.DurationMS, step.StartedAt, step.ExitCode)
 	}
 }
+
+// A step whose record was COPIED here (NEW_326) does not make its build say
+// that the Companion stopped: the copy does not know that, and the build says
+// what the step's own record says instead.
+func TestACopiedBuildDoesNotClaimItsCompanionStopped(t *testing.T) {
+	m := &Manifest{State: job.Running, Steps: []Step{{ID: "light", JobID: "j1", State: job.Running}}}
+	copied := "this record was copied, moved or restored here from another job store while it said running; " +
+		"no program was stopped, and nothing here knows how that run ended"
+	record := &job.Job{State: job.Interrupted, Error: copied, FinishedAt: time.Now(),
+		Recovery: &job.Recovery{Outcome: job.RecoveryForeignStore, Reason: "store_is_a_copy"}}
+	if !Reconcile(m, func(string) (*job.Job, error) { return record, nil }, time.Now()) {
+		t.Fatal("not reconciled")
+	}
+	if m.State != job.Interrupted || m.Error != copied {
+		t.Fatalf("the copied build says %q", m.Error)
+	}
+	own := &Manifest{State: job.Running, Steps: []Step{{ID: "light", JobID: "j1", State: job.Running}}}
+	record.Recovery = &job.Recovery{Outcome: job.RecoveryOwnedOrphanStopped}
+	record.Error = "its programs were still running with nobody supervising them, and were stopped"
+	Reconcile(own, func(string) (*job.Job, error) { return record, nil }, time.Now())
+	if own.Error != InterruptedNote {
+		t.Fatalf("the build of a genuinely stopped Companion says %q", own.Error)
+	}
+}

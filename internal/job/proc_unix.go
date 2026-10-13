@@ -65,10 +65,15 @@ func processGroupAlive(pid int) bool {
 }
 
 // killAbandonedTree takes down the process group a crashed Companion left
-// running. The caller has already proved the leader is the process the job
-// started.
-func killAbandonedTree(pid int) error {
-	if err := syscall.Kill(-pid, syscall.SIGKILL); err != nil && err != syscall.ESRCH {
+// running. It takes an [ownedOrphan], not a pid: the only way to have one is
+// for [Store.assess] to have proved, a moment ago, that this store launched the
+// job, its supervisor is gone and the leader is still the process it started.
+// A pid read out of a record — which a copied store has too — is not enough.
+func killAbandonedTree(orphan ownedOrphan) error {
+	if orphan.pid <= 0 {
+		return syscall.EINVAL
+	}
+	if err := syscall.Kill(-orphan.pid, syscall.SIGKILL); err != nil && err != syscall.ESRCH {
 		return err
 	}
 	return nil

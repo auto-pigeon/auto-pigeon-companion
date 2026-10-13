@@ -157,7 +157,7 @@ the router resolves those for you rather than making you read the table.
 | --- | --- | --- |
 | `aucom.extractor-acquisition` | The extractor ships beside the Companion — never embedded, never downloaded | extractor, aue, acquisition, bundle, bundled, release, manifest, download, licence |
 | `aucom.extractor-execution` | Running it — the handshake, bounded invocation, and what was retired with the downloads | extractor, handshake, protocol, offline, bounds, timeout, authorization, verification |
-| `aucom.job-bounds` | A bound is not a measurement, and the bound comes from here | job, bounds, retention, logbuf, memory, disk, stress, limits |
+| `aucom.job-bounds` | A bound is not a measurement, and the bound comes from here | job, bounds, retention, logbuf, memory, disk, stress, limits, recovery, ownership |
 | `aucom.compiler-compatibility` | A program is asked what it is, and a profile decides only for itself | compatibility, compiler, probe, version, ericw, vis, logfile, readiness, rebind |
 
 **Profiles, approvals and trust**

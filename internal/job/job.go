@@ -18,7 +18,7 @@ import (
 // this program, not by anybody else's. A record this build does not fully
 // understand is refused rather than half-read, because a job record is what
 // says whether something ran.
-const SchemaVersion = "aucom.job/1.4"
+const SchemaVersion = "aucom.job/1.5"
 
 // SupportedSchemaVersions is every job record format this build reads, oldest
 // first.
@@ -38,7 +38,13 @@ const SchemaVersion = "aucom.job/1.4"
 // 1.4 added `stage_args` on the request: the tokens the pipeline STAGE this
 // job runs for was given, which a retry must carry because the stage, not the
 // tool, owns them.
-var SupportedSchemaVersions = []string{"aucom.job/1.0", "aucom.job/1.1", "aucom.job/1.2", "aucom.job/1.3", "aucom.job/1.4"}
+// 1.5 added `launch` — which store, on which boot, under which supervisor the
+// job was admitted and its program started — and `recovery`, what a recovery
+// pass decided about it (NEW_326). A record without `launch` was written by a
+// build that did not record it, and recovery reads that as "ownership cannot
+// be proved": it is still listed, shown and retried, and nothing it names is
+// ever signalled.
+var SupportedSchemaVersions = []string{"aucom.job/1.0", "aucom.job/1.1", "aucom.job/1.2", "aucom.job/1.3", "aucom.job/1.4", "aucom.job/1.5"}
 
 // SchemaSupported reports whether this build reads a job record format.
 func SchemaSupported(version string) bool {
@@ -194,9 +200,9 @@ type StreamLog struct {
 
 // Owner identifies the process that is supervising a job.
 //
-// A run identifier, not just a pid: pids are reused, and a stored job claiming
-// to be owned by a pid that now belongs to something else is exactly the case
-// recovery has to get right.
+// Only the pid is ever written; `run` is read for old records and has never
+// been set. Recovery does not trust either: who launched a job, and whether
+// that supervisor is still alive, is [Launch].
 type Owner struct {
 	PID int    `json:"pid,omitempty"`
 	Run string `json:"run,omitempty"`
@@ -209,6 +215,103 @@ type Owner struct {
 type ProcessIdentity struct {
 	PID        int    `json:"pid,omitempty"`
 	StartTicks uint64 `json:"start_ticks,omitempty"`
+}
+
+// FileIdentity is a directory as its filesystem knows it: the device and the
+// inode. A copy — cp, rsync, a backup restored, a snapshot mounted elsewhere —
+// is a new inode or another device, whatever its path and contents; a rename
+// keeps the inode and changes the path. Zero means it could not be read here.
+type FileIdentity struct {
+	Device uint64 `json:"device,omitempty"`
+	Inode  uint64 `json:"inode,omitempty"`
+}
+
+// Launch is where, and under whom, a job was admitted and its program started.
+//
+// Process identity says WHICH process a record names; Launch says whether THIS
+// store started it. A copy of the store copies the record, pid, start time and
+// all — so recovery signals a recorded process only when the store reading the
+// record is the one that wrote it (the same canonical path, the same store and
+// job directory inodes), on the same boot and pid namespace, and the supervisor
+// that launched it is verifiably gone. Anything less leaves it alone (NEW_326;
+// the decision table is [assessRecovery]). Nothing here is a secret and none
+// of it is portable: it is the opposite of a credential, a fact a copy can
+// carry and can never make true again.
+type Launch struct {
+	// Store is the store root's canonical path when the job was launched, every
+	// symlink resolved; StoreFile and JobFile are the store root and this job's
+	// directory as the filesystem identified them.
+	Store     string       `json:"store,omitempty"`
+	StoreFile FileIdentity `json:"store_file"`
+	JobFile   FileIdentity `json:"job_file"`
+	// Boot is the kernel's boot id and PIDNamespace the pid namespace the
+	// supervisor ran in: a pid and a start time mean nothing outside both.
+	Boot         string `json:"boot,omitempty"`
+	PIDNamespace string `json:"pid_namespace,omitempty"`
+	// WorkDir is the program's working directory relative to the job
+	// directory, slash-separated, when it was inside it (every tool action by
+	// default; not an engine run from its game folder). Recovery then also
+	// requires the running process's own working directory to BE that
+	// directory in the store reading the record — a fact the kernel holds and
+	// a restored copy cannot have, because the original inode stays allocated
+	// while the process is in it.
+	WorkDir string `json:"work_dir,omitempty"`
+	// Supervisor is the Companion process that admitted, and then started, it.
+	Supervisor ProcessIdentity `json:"supervisor"`
+}
+
+// RecoveryOutcome is what a recovery pass decided about one job. One token per
+// row of the decision table, so a log, a record and a test read the same word.
+type RecoveryOutcome string
+
+const (
+	// RecoveryOwnedOrphanStopped: this store launched it, its supervisor is
+	// gone, and the program it started was still running — and was stopped.
+	RecoveryOwnedOrphanStopped RecoveryOutcome = "owned_orphan_stopped"
+	// RecoveryLiveOwnerRetained: the supervisor that launched it is still
+	// running, so it is that supervisor's job whatever its heartbeat says.
+	RecoveryLiveOwnerRetained RecoveryOutcome = "live_owner_retained"
+	// RecoveryForeignStore: the record was written by another store — copied,
+	// moved or restored here. Nothing is signalled.
+	RecoveryForeignStore RecoveryOutcome = "foreign_store"
+	// RecoveryForeignBoot: started on another machine, in another pid
+	// namespace, or before this machine restarted. Nothing is signalled.
+	RecoveryForeignBoot RecoveryOutcome = "foreign_boot"
+	// RecoveryUnverifiable: ownership or identity could not be proved. Nothing
+	// is signalled.
+	RecoveryUnverifiable RecoveryOutcome = "unverifiable"
+	// RecoveryAlreadyExited: this store's own job, and its program had already
+	// gone when its supervisor was found gone.
+	RecoveryAlreadyExited RecoveryOutcome = "already_exited"
+	// RecoveryNoProcess: the job never started a program.
+	RecoveryNoProcess RecoveryOutcome = "no_process"
+)
+
+// OwnSupervisorStopped reports whether the decision was about this store's
+// own job whose supervisor is known to have gone — the only outcomes after
+// which "the Companion stopped while it ran" is a true sentence. A copied,
+// moved, foreign-boot or unverifiable record knows no such thing.
+func (r *Recovery) OwnSupervisorStopped() bool {
+	if r == nil {
+		return false
+	}
+	switch r.Outcome {
+	case RecoveryOwnedOrphanStopped, RecoveryAlreadyExited, RecoveryNoProcess:
+		return true
+	}
+	return false
+}
+
+// Recovery is what a recovery pass decided, kept on the record it decided it
+// about. Reason is a short token, never a path, an environment or a command.
+type Recovery struct {
+	Outcome RecoveryOutcome `json:"outcome"`
+	Reason  string          `json:"reason,omitempty"`
+	At      time.Time       `json:"at"`
+	// Micros is how long the decision (and any signal) took.
+	Micros int64 `json:"micros"`
+	// Signalled is true only when a signal was sent.
+	Signalled bool `json:"signalled,omitempty"`
 }
 
 // Job is the whole record of one supervised process.
@@ -286,6 +389,11 @@ type Job struct {
 	// recovery can tell the tree a crashed Companion left behind from an
 	// unrelated process that has since been given the same pid.
 	Process ProcessIdentity `json:"process,omitempty"`
+	// Launch is the provenance recovery checks before it signals anything. Nil
+	// on a record from before 1.5, and on one nothing could launch.
+	Launch *Launch `json:"launch,omitempty"`
+	// Recovery is what the recovery pass that ended this job decided.
+	Recovery *Recovery `json:"recovery,omitempty"`
 	// History is every state this job has been in, with when and why.
 	History []Event `json:"history,omitempty"`
 }
@@ -351,6 +459,14 @@ func (j *Job) Clone() *Job {
 	if j.ExitCode != nil {
 		code := *j.ExitCode
 		out.ExitCode = &code
+	}
+	if j.Launch != nil {
+		launch := *j.Launch
+		out.Launch = &launch
+	}
+	if j.Recovery != nil {
+		recovery := *j.Recovery
+		out.Recovery = &recovery
 	}
 	return &out
 }

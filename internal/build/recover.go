@@ -21,7 +21,10 @@ import (
 // Companion supervising it right now — leaves the build alone, and so does a
 // manifest this function cannot read a job for.
 
-// InterruptedNote is what a reconciled build says.
+// InterruptedNote is what a reconciled build says when its step's own
+// Companion stopped. A step whose record was copied, moved or could not be
+// verified says its own sentence instead (NEW_326): a copy of a store does not
+// know that the Companion running the original stopped, and must not say so.
 const InterruptedNote = "the Companion stopped while this build was running; nothing was run again"
 
 // Reconcile updates an abandoned manifest in memory and reports whether it did.
@@ -31,6 +34,7 @@ func Reconcile(m *Manifest, lookup func(id string) (*job.Job, error), now time.T
 		return false
 	}
 	changed := false
+	note := InterruptedNote
 	for i := range m.Steps {
 		step := &m.Steps[i]
 		if step.JobID == "" || !step.State.Active() {
@@ -50,13 +54,16 @@ func Reconcile(m *Manifest, lookup func(id string) (*job.Job, error), now time.T
 			step.DurationMS = record.Duration().Milliseconds()
 		}
 		step.ExitCode = record.ExitCode
+		if record.Recovery != nil && !record.Recovery.OwnSupervisorStopped() && record.Error != "" {
+			note = record.Error
+		}
 		changed = true
 	}
 	if !changed {
 		return false
 	}
 	m.State = job.Interrupted
-	m.Error = InterruptedNote
+	m.Error = note
 	if m.FinishedAt.IsZero() {
 		m.FinishedAt = now.UTC()
 	}

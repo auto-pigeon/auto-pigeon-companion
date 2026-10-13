@@ -82,6 +82,8 @@ func processGroupAlive(pid int) bool {
 	return code == stillActive
 }
 
-// killAbandonedTree is never reached on Windows: processStartTicks returns zero
-// there, so recovery cannot prove a pid is still the job's and signals nothing.
-func killAbandonedTree(pid int) error { return nil }
+// killAbandonedTree is never reached on Windows: no process identity can be
+// read there (procstart_other.go), so recovery never mints an [ownedOrphan]
+// and signals nothing. Were it reached, it refuses rather than running a
+// taskkill by pid alone.
+func killAbandonedTree(ownedOrphan) error { return errNoProcessIdentity }

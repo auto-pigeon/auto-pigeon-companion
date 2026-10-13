@@ -34,6 +34,10 @@ import (
 // a job whose heartbeat has stopped is one whose owner has. Pids are not used
 // for this. A pid is reused, and "process 4212 exists" is not evidence that it
 // is the Companion that started this job.
+//
+// A stale heartbeat only says nobody has been heard from. Whether anybody is
+// still there, and whether this store may stop what the job started, is
+// ownership.go's question, and a copied store never gets a yes (NEW_326).
 
 // heartbeatInterval is how often an owner refreshes its claim.
 const heartbeatInterval = 2 * time.Second
@@ -67,6 +71,12 @@ var ErrNotFound = errors.New("job: no such job")
 type Store struct {
 	root string
 	mu   sync.Mutex
+	// os is what recovery asks the operating system; nil is the real one. Set
+	// only by a test standing in for a kernel that will not answer.
+	os *osView
+	// failSave, when set, fails a Save it returns an error for. Set only by a
+	// test of what happens when a started job cannot be recorded.
+	failSave func(*Job) error
 }
 
 // OpenStore prepares a store rooted at dir, creating it if needed.
@@ -111,6 +121,11 @@ func (s *Store) Save(j *Job) error {
 		return err
 	}
 	j.SchemaVersion = SchemaVersion
+	if s.failSave != nil {
+		if err := s.failSave(j); err != nil {
+			return err
+		}
+	}
 	encoded, err := json.MarshalIndent(j, "", "  ")
 	if err != nil {
 		return fmt.Errorf("job: encoding %s: %w", j.ID, err)
@@ -256,18 +271,38 @@ func (s *Store) heartbeatAge(id string, now time.Time) (time.Duration, bool) {
 	return age, true
 }
 
-// Recover marks every abandoned job interrupted and returns their ids.
+// Recovered is what one recovery pass decided about one job, for a log line:
+// the outcome token, its bounded reason, and how long deciding took.
+type Recovered struct {
+	ID       string
+	Outcome  RecoveryOutcome
+	Reason   string
+	Duration time.Duration
+	// Interrupted is true when the record was changed to [Interrupted];
+	// Signalled when a process group was sent SIGKILL.
+	Interrupted bool
+	Signalled   bool
+}
+
+// Recover decides about every job that looks abandoned, and returns what it
+// decided.
 //
-// A job is abandoned when it is in a non-terminal state and its owner has
+// A job looks abandoned when it is in a non-terminal state and its owner has
 // stopped saying it is alive. Every non-terminal state counts, not only
 // [Running]: a job that was still [Queued] never started, but re-running it
 // without being asked is exactly the behaviour this refuses, and a user who
 // wants it has [Service.Retry].
 //
+// A stale heartbeat is a reason to look, not proof of anything: what happens
+// next is [Store.assess]'s decision table. A job whose supervisor is verifiably
+// alive is left alone; every other one is marked [Interrupted] with a sentence
+// that says what is known; and a recorded process is signalled only when this
+// store provably launched it and its supervisor is gone (NEW_326).
+//
 // supervised names jobs the caller is supervising itself, which are never taken
 // whatever their heartbeat says: a laptop that slept longer than heartbeatStale
 // wakes with its own claims stale, and its own running build is not abandoned.
-func (s *Store) Recover(now time.Time, supervised ...string) ([]string, error) {
+func (s *Store) Recover(now time.Time, supervised ...string) ([]Recovered, error) {
 	jobs, err := s.List()
 	if err != nil {
 		return nil, err
@@ -276,7 +311,7 @@ func (s *Store) Recover(now time.Time, supervised ...string) ([]string, error) {
 	for _, id := range supervised {
 		mine[id] = true
 	}
-	var recovered []string
+	var decided []Recovered
 	for _, j := range jobs {
 		if !j.State.Active() || mine[j.ID] {
 			continue
@@ -285,18 +320,30 @@ func (s *Store) Recover(now time.Time, supervised ...string) ([]string, error) {
 			// Somebody else is supervising this right now.
 			continue
 		}
-		note := fmt.Sprintf("the Companion stopped while this job was %s; nothing here knows how it ended", j.State)
-		// A Companion killed outright cannot take its job's process tree down,
-		// and the tree goes on running with nobody supervising it (NEW_244D:
-		// a kill -9 left the compiler and its child running after restart).
-		// Stopped here only when the kernel still has the very process this
-		// job started — same pid, same start time — so a reused pid is never
-		// signalled. Nothing is run again.
-		if j.Process.PID > 0 && j.Process.StartTicks != 0 && processStartTicks(j.Process.PID) == j.Process.StartTicks {
-			if err := killAbandonedTree(j.Process.PID); err == nil {
-				note += "; its programs were still running with nobody supervising them, and were stopped"
+		began := time.Now()
+		verdict := s.assess(j)
+		result := Recovered{ID: j.ID, Outcome: verdict.outcome, Reason: verdict.reason}
+		if verdict.outcome == RecoveryLiveOwnerRetained {
+			// Its own Companion is still running it. Nothing is written: the
+			// record, its heartbeat and its history stay exactly as they are.
+			result.Duration = time.Since(began)
+			decided = append(decided, result)
+			continue
+		}
+		stopped := false
+		if verdict.orphan != nil {
+			// A crashed Companion cannot take its job's process tree down, and
+			// the tree goes on running with nobody supervising it (NEW_244D).
+			// Reached only with the proof assess made a moment ago.
+			if err := killAbandonedTree(*verdict.orphan); err == nil {
+				stopped = true
+			} else {
+				verdict.reason = "signal_failed"
 			}
 		}
+		note := recoveryNote(j.State, verdict, stopped)
+		result.Duration = time.Since(began)
+		result.Reason, result.Signalled, result.Interrupted = verdict.reason, stopped, true
 		j.History = append(j.History, Event{State: Interrupted, At: now.UTC(), Note: note})
 		j.State = Interrupted
 		j.Error = note
@@ -304,15 +351,17 @@ func (s *Store) Recover(now time.Time, supervised ...string) ([]string, error) {
 			j.FinishedAt = now.UTC()
 		}
 		j.Owner = Owner{}
+		j.Recovery = &Recovery{Outcome: verdict.outcome, Reason: verdict.reason, At: now.UTC(),
+			Micros: result.Duration.Microseconds(), Signalled: stopped}
 		if err := s.Save(j); err != nil {
-			return recovered, err
+			return decided, err
 		}
 		// The workspace of an interrupted job is left alone. It may hold a
 		// half-written output somebody wants to look at, and removing it would
 		// be this package deciding that on their behalf.
-		recovered = append(recovered, j.ID)
+		decided = append(decided, result)
 	}
-	return recovered, nil
+	return decided, nil
 }
 
 // RequestCancel asks for a job to stop, from any process.

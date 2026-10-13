@@ -234,6 +234,29 @@ func helperMain(args []string) int {
 	case "cwd":
 		dir, _ := os.Getwd()
 		fmt.Println(dir)
+	case "barrier":
+		// A compiler held at a barrier: a leader and one child in the job's
+		// process group, both waiting for a `release` file in the working
+		// directory. The leader writes `ready` — "<leader pid> <child pid>" —
+		// once both exist, so a test synchronises on a file, not on a sleep.
+		child := exec.Command(os.Args[0], helperFlag, "barrier-child")
+		if err := child.Start(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		ready := fmt.Sprintf("%d %d\n", os.Getpid(), child.Process.Pid)
+		if err := os.WriteFile("ready.tmp", []byte(ready), 0o600); err != nil || os.Rename("ready.tmp", "ready") != nil {
+			return 1
+		}
+		fmt.Println("held at the barrier")
+		os.Stdout.Sync()
+		waitForFile("release")
+		_ = child.Wait()
+		fmt.Println("released")
+	case "barrier-child":
+		waitForFile("release")
+	case "supervise":
+		return superviseMain(rest)
 	default:
 		fmt.Fprintln(os.Stderr, "helper: unknown mode", mode)
 		return 2

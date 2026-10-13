@@ -128,6 +128,12 @@ type Service struct {
 	ctx     context.Context
 	cancel  context.CancelFunc
 	started bool
+
+	// beat and recoverEvery pace the heartbeat loop: heartbeatInterval and
+	// recoverEveryTicks, unless a test of the periodic recovery pass set them
+	// before Start.
+	beat         time.Duration
+	recoverEvery int
 }
 
 // NewService builds a service. It does not start workers; see [Service.Start].
@@ -208,8 +214,8 @@ func (s *Service) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	for _, id := range recovered {
-		s.logf("job %s was interrupted by a previous shutdown; retry it explicitly to run it again", id)
+	for _, r := range recovered {
+		s.logRecovery(r)
 	}
 
 	s.ctx, s.cancel = context.WithCancel(ctx)
@@ -248,7 +254,14 @@ func (s *Service) Close() error {
 // process's recovery pass leaves them alone. See [Store.Recover].
 func (s *Service) heartbeat() {
 	defer s.workers.Done()
-	ticker := time.NewTicker(heartbeatInterval)
+	beat, every := heartbeatInterval, recoverEveryTicks
+	if s.beat > 0 {
+		beat = s.beat
+	}
+	if s.recoverEvery > 0 {
+		every = s.recoverEvery
+	}
+	ticker := time.NewTicker(beat)
 	defer ticker.Stop()
 	tick := 0
 	for {
@@ -270,14 +283,30 @@ func (s *Service) heartbeat() {
 			// fresh and left the job `running` until the next restart, however
 			// long that was (NEW_244D). Jobs this process supervises heartbeat
 			// every tick above and are never stale here.
-			if tick++; tick%recoverEveryTicks == 0 {
+			if tick++; tick%every == 0 {
 				if recovered, err := s.store.Recover(s.now(), ids...); err == nil {
-					for _, id := range recovered {
-						s.logf("job %s: its Companion stopped while it ran; it is marked interrupted and is not run again", id)
+					for _, r := range recovered {
+						s.logRecovery(r)
 					}
 				}
 			}
 		}
+	}
+}
+
+// logRecovery is one line per decision, in the same words the record keeps:
+// the outcome token, its reason, whether anything was signalled, and how long
+// deciding took. Never a path, a command or an environment.
+func (s *Service) logRecovery(r Recovered) {
+	switch {
+	case !r.Interrupted:
+		s.logf("job %s: recovery %s (%s) in %s; left to the Companion running it", r.ID, r.Outcome, r.Reason, r.Duration)
+	case r.Signalled:
+		s.logf("job %s: recovery %s (%s) in %s; its abandoned programs were stopped, it is interrupted and is not run again",
+			r.ID, r.Outcome, r.Reason, r.Duration)
+	default:
+		s.logf("job %s: recovery %s (%s) in %s; nothing was signalled, it is interrupted and is not run again",
+			r.ID, r.Outcome, r.Reason, r.Duration)
 	}
 }
 
@@ -373,7 +402,10 @@ func (s *Service) admit(request Request) (*Job, error) {
 		TimeoutSeconds: action.TimeoutSeconds,
 		CreatedAt:      now,
 		Owner:          Owner{PID: os.Getpid()},
-		History:        []Event{{State: Queued, At: now}},
+		// Who admitted it, in which store, on which boot — so a recovery pass
+		// can tell this process's queued job from a copy of it (NEW_326).
+		Launch:  s.store.launch(id, ""),
+		History: []Event{{State: Queued, At: now}},
 	}
 	if err := s.store.Save(j); err != nil {
 		return nil, err
@@ -874,7 +906,12 @@ func (s *Service) execute(id string) {
 		onStarted: func(pid int, command *CommandPreview) error {
 			j.Command = command
 			j.Owner = Owner{PID: os.Getpid()}
+			// The child and the launch are recorded together, in one save: a
+			// record never names a running process without also naming the
+			// store and supervisor that started it. A retry is a new job, so
+			// it is launched — and owned — afresh, never inherited.
 			j.Process = ProcessIdentity{PID: pid, StartTicks: processStartTicks(pid)}
+			j.Launch = s.store.launch(id, invocation.Command.WorkingDir)
 			j.StartedAt = s.now()
 			j.TimeoutSeconds = invocation.TimeoutSeconds
 			return s.step(j, Running, fmt.Sprintf("pid %d", pid))

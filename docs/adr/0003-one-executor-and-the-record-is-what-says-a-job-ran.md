@@ -68,6 +68,22 @@ the Companion that started this job. This is what lets `companion job list` in a
 terminal share a store with a running GUI server without taking its jobs away,
 and what lets `companion job cancel` stop a build the server owns.
 
+**Amended by `NEW_326` (2026-10-13): a stale heartbeat is a reason to look, and
+signalling needs ownership.** `NEW_244D` taught recovery to SIGKILL the process
+group a crashed Companion left running, and it checked only identity — the
+kernel still had the recorded pid with the recorded start time. A copy of the
+store has that too: Q3_017E copied a live Companion's sandbox, started a second
+one on the copy, and its recovery killed the original q3map2 LIGHT. Every record
+now carries `launch` (`aucom.job/1.5`): the canonical store path, the store and
+job-directory inodes, the boot id and pid namespace, the supervisor's pid and
+start time, and the program's working directory inside the job directory.
+Recovery signals only when all of those are still true of the store reading the
+record and the kernel, and the supervisor is gone; a live supervisor keeps its
+job whatever its heartbeat says; a copied, moved, restored, legacy or
+unreadable record is marked `interrupted` in the store that holds it, says that
+nothing was stopped, and nothing is signalled. The decision table is
+`internal/job/ownership.go`; the rule's home is `docs/agent/aucom.job-bounds.md`.
+
 ## Consequences
 
 ### Positive
@@ -146,6 +162,11 @@ page reads from its own markup and a second process reads from a 0600 file.
 - `internal/job/store.go` — the heartbeat;
   `TestARestartMarksAnAbandonedJobInterruptedAndNeverRerunsIt` and
   `TestRecoveryLeavesAJobAnotherProcessIsStillSupervising`.
+- `internal/job/ownership.go` — who may signal after a crash (`NEW_326`);
+  `TestR01RestartingTheGenuineStoreStopsItsOwnAbandonedBuild` (the positive
+  control) and `TestR02RecoveringACopiedStoreLeavesTheOriginalBuildRunning`
+  through `TestR16ARelocatedOrRestoredStoreIsNotPermission`, which watch real
+  processes rather than a mocked kill.
 - `internal/job/logbuf.go` — always drain, bound what is kept;
   `TestAnOutputFloodIsBoundedInMemoryAndOnDisk`.
 - `internal/launch/profile.go` — the launch bridge;

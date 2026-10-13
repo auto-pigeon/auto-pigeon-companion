@@ -15,6 +15,8 @@ topics:
   - stress
   - measurement
   - limits
+  - recovery
+  - ownership
 paths:
   - internal/job/**
 ---
@@ -71,3 +73,54 @@ the native one. Where an operating system will not report comparable RSS the lan
 answers `manual_pending` with a command to type; **it never substitutes a file
 size, a heap statistic or a reading of the source**, and completion never claims
 a platform nobody measured.
+
+## RECOVERY SIGNALS ONLY WHAT THIS STORE PROVABLY LAUNCHED (`NEW_326`)
+
+Q3_017E copied the sandbox of a Companion 44 minutes into a q3map2 LIGHT and
+started a second Companion on the copy; its start-up recovery SIGKILLed the
+ORIGINAL compiler. The recorded pid and start time were true of the kernel —
+that is identity — and nothing asked whether this store had started it — that
+is ownership. **Both are checked, immediately before the signal, and only
+`Store.assess` in `internal/job/ownership.go` can mint the `ownedOrphan` value
+`killAbandonedTree` requires.** Do not add a second route to a signal that takes
+a pid read out of a record: a copied store has every pid the original has.
+
+- **What a record proves.** `launch` (`aucom.job/1.5`) is written at admission
+  and again, with the program's pid, in the same save that says `running`: the
+  store root's canonical path and inode, the job directory's inode, the boot id,
+  the pid namespace, the supervisor's pid and start ticks, and the working
+  directory relative to the job directory. A signal needs all of them equal to
+  what the store READING the record and the kernel say now, the supervisor gone
+  (no such process, a zombie, or another start time), the program still its own
+  group leader with its start ticks, and — for a program working inside its job
+  directory — the kernel's `/proc/<pid>/cwd` being that directory in this store.
+  A restored copy cannot have that inode: the orphan is holding it.
+- **What a move, a copy, a restore or an older record get.** `interrupted` in
+  the store that holds the record, a sentence saying no program was stopped and
+  nothing here knows how the run ended, and no signal. A symlink alias resolves
+  to the same canonical store and is the same store; a bind mount, a renamed
+  directory or another case spelling is not, and is refused — the safe way to be
+  wrong. A record without `launch` reads `unverifiable (no_launch_record)`; it is
+  not rejected, erased or upgraded.
+- **A stale heartbeat is a reason to look, not proof of death.** A supervisor
+  that is verifiably alive — asleep, SIGSTOPped, overloaded, its clock moved —
+  keeps its job and the record is not written (`live_owner_retained`). An
+  inspection error is `unverifiable`, never "dead".
+- **Outcomes are tokens**, the same in the record's `recovery`, the serve log
+  and the tests: `owned_orphan_stopped`, `live_owner_retained`, `foreign_store`,
+  `foreign_boot`, `unverifiable`, `already_exited`, `no_process`, each with a
+  bounded reason and the microseconds deciding took. Never a path, a command or
+  an environment.
+- **The build says what the step knows.** `build.Reconcile` says "the Companion
+  stopped" only when the step's recovery outcome is one of this store's own; a
+  copied step's build carries the step's own sentence, and the Build page shows
+  the manifest's sentence rather than a fixed one.
+- **Outside Linux nothing is signalled**: no dependency-free start time or boot
+  id exists there, so recovery marks the job interrupted and leaves the process.
+  Do not add a taskkill by pid to "fix" that.
+- **The acceptance is at the OS boundary.** `ownership_linux_test.go` and
+  `ownership_rows_linux_test.go` run a real supervisor process
+  (`helper_supervise_test.go`) and a compiler stand-in held at a barrier, and
+  assert on the processes. R01 is the positive control: a change that removes
+  every kill passes the copy rows and fails R01.
+
