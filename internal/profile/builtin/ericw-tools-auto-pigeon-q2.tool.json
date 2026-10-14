@@ -700,7 +700,7 @@
         },
         {
           "id": "no_clusters",
-          "match": "0 clusters",
+          "match": " 0 clusters",
           "severity": "warning",
           "message": "The BSP has no visibility clusters, so there is nothing to compute."
         },

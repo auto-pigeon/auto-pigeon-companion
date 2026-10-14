@@ -227,7 +227,7 @@
       ],
       "diagnostics": [
         { "id": "no_portals", "match": "unknown header/empty portal file", "severity": "error", "message": "vis could not read the portal file that belongs to this BSP.", "hint": "The compile stage produces it. A leaked map has none, because qbsp stops before writing one." },
-        { "id": "no_clusters", "match": "0 clusters", "severity": "warning", "message": "The BSP has no visibility clusters, so there is nothing to compute." },
+        { "id": "no_clusters", "match": " 0 clusters", "severity": "warning", "message": "The BSP has no visibility clusters, so there is nothing to compute." },
         { "id": "phs", "match": "clusters hearable", "severity": "info", "message": "The potentially hearable set was computed. Quake II uses it for sound; Quake 1 has no such pass." },
         { "id": "progress", "match": "visdatasize", "severity": "progress", "message": "Visibility data written." }
       ],
