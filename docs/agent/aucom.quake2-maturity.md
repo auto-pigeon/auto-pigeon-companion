@@ -7,6 +7,8 @@ authority:
   - aucom-quake2-maturity
 topics:
   - quake2
+  - yamagi
+  - pak
   - q2
   - maturity
   - work-in-progress
@@ -16,6 +18,12 @@ topics:
   - toolchain
 paths:
   - internal/maturity/**
+  - internal/q2deps/**
+  - internal/q2pack/**
+  - internal/q2install/**
+  - internal/q2run/**
+  - internal/cli/package_map_q2.go
+  - internal/web/q2package.go
 ---
 
 # Quake II is work in progress, and no document may say otherwise
@@ -90,3 +98,57 @@ the tool's line. A credential or a path is **refused and named**, using
 quietly redacting would hand a user a document they believe they wrote. Nothing
 in this repository sends a report anywhere, and adding a destination is a
 decision about somebody else's data, not a convenience.
+
+## A Quake II map is played from a PAK the engine says it opened (`Q2_009`)
+
+`companion package map` and the Build page's *Package and run this map* panel
+take a finished Quake II build through `internal/q2pack` (what goes in),
+`internal/q2install` (where it goes) and `internal/q2run` (whether the engine
+loaded THAT map). They decide nothing themselves. Each rule below was measured
+with Yamagi Quake II 8.70 built from tag `QUAKE2_8_70`, retail data, ericw-tools
+1.4518, on a real display, and each would be undone by a change that looked like
+a convenience.
+
+- **What the engine asks for is read from the BSP** (`internal/q2deps`): every
+  texinfo's `textures/<n>.wal`, the sky's six faces, `noise`, `model` and a
+  `.md2`'s own skins. A sky face is carried in every format the content holds:
+  Yamagi's paletted renderer asks for `.pcx`, its GL renderers for `.tga` only —
+  a package with only the first draws no sky in GL (found live).
+- **Nothing of the base game is packaged, nothing of the user's without a
+  grant**, and what nothing supplies is named before an archive is written. A
+  map name the base game or the content folder already has under `maps/` is
+  refused (the downloaded original of an edited corpus map). There is one PAK
+  writer, `internal/pack`; its sidecar is rewritten without local paths.
+- **The folders a build read come from the build**: request roots first, then
+  the compiling tool's `ToolRecord.roots` (the binding's). A build from the
+  Build page names none in its request (found live).
+- **A package goes into a mod folder of its own beside `baseq2`**, staged as a
+  hidden generation, re-hashed and read back, then renamed into place; the one
+  it replaces is put back on failure, cancel leaves it as it was, installs into
+  one game folder are serialised by a lock in the Companion's state. `baseq2`,
+  `xatrix` and `ctf` are reserved in `engine.CheckModName` for every staging
+  path (they were not before).
+- **A run is accepted only on the engine's own word for the file.** Yamagi's
+  `play_map` passes `+set fs_debug 1`; `q2run` accepts `Map: <name>` only after
+  `FS_FOpenFile: 'maps/<name>.bsp' (found in '<the installed .pak>')`. Measured:
+  a loose map in a folder the engine searches first (the mod's copy beside the
+  program, or in its settings folder) is loaded silently in place of the
+  package — that is `load_order_shadowed`. `fs_debug` is also what keeps a
+  quiet engine's output flowing: Yamagi writes its console with stdio, which is
+  block-buffered on a pipe.
+- **Every Yamagi action passes `-cfgdir YamagiQ2`.** A job's `HOME` is its own;
+  without it Yamagi wants `$HOME/.local/share/YamagiQ2/`, creates only the last
+  level and dies at start (every Companion launch, before `Q2_009`).
+- **Setup asks what the engine loads, without starting it** (`engine/native.go`):
+  the game library and a renderer, by the profile's `runtime`, and the program's
+  header for the computer it was built for. The game folder must hold
+  `baseq2/pak0.pak` or `baseq2/pics/colormap.pcx` (`holds_any`): a `baseq2`
+  holding no game stops the client at once.
+
+The engine-output watcher and wait (`internal/enginewatch`) are shared with
+Quake III's `q3run`; a family adds its own checks through `Inspect`/`Confirm`,
+not a second watcher.
+
+None of this changes the maturity statement. Corpus maps that leak under
+ericw-tools 2.x (F1) or are refused at parse (F2) are not packaged.
+

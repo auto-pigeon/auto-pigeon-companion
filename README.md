@@ -849,7 +849,7 @@ commands:
   job run | preview | list | show | logs | output | cancel | retry | artifacts | profiles   run a profile action as a supervised job, and inspect what ran
   autobuild list | show | on | off | pipeline | build-now | retry   rebuild a hosted map automatically when a new revision is saved (inside a running Companion)
   build run | preview | list | show | pipelines   build a map through a pipeline: several supervised jobs, wired, with a manifest
-  package targets | preview | create | inspect | verify | extract | map …   build a PAK or PK3 from what a build produced, read one somebody else made, and package, install and run a Quake III map
+  package targets | preview | create | inspect | verify | extract | map …   build a PAK or PK3 from what a build produced, read one somebody else made, and package, install and run a Quake III or Quake II map
   toolchain validate | show | canonicalize | digest | diff | list | schema | review | grant | withdraw | homepage | args | check  read, check and compare tool, engine and pipeline toolchains, and approve one to run
   acquire resolve   find a toolchain's programs on this machine (a folder, PATH, or a game's own copy); nothing is downloaded
   engine list | show | detect | bind | check | preview | run | stage | unstage   set up a Quake engine you already have, and start it as a supervised job
@@ -881,7 +881,7 @@ $ companion engine list                              # engines, and whether each
 $ companion engine bind auto-pigeon.engine.quakespasm --engine /opt/quakespasm/quakespasm
 $ companion engine bind auto-pigeon.engine.ioquake3 --executable engine=/opt/ioq3/ioquake3.x86_64 \
     --executable dedicated=/opt/ioq3/ioq3ded.x86_64 --game-root /opt/ioq3   # one flag per program
-$ companion package map preview --build <build id>   # what a Quake III map's PK3 would hold, and why
+$ companion package map preview --build <build id>   # what a Quake III map's PK3, or a Quake II map's PAK, would hold, and why
 $ companion game list                                # games being hosted now
 $ companion game join <link>                         # shows the exact command; --approve launches
 $ companion extractor convert map.apmap
@@ -1258,8 +1258,9 @@ nowhere else until its dependencies travel with it. `companion package map`
 turns ONE finished Quake III build into ONE archive,
 `<game>/auto-pigeon-<map id>-<revision>.pk3`, holding `maps/<name>.bsp` and only
 the files you say may be redistributed. The base game is never packaged, and
-nothing is inferred from a file's name or from where it was found. Quake and
-Quake II packaging is `package preview` / `package create`, unchanged.
+nothing is inferred from a file's name or from where it was found. A Quake II
+build is packaged by the same subcommands as a PAK (next section); Quake 1
+packaging is `package preview` / `package create`, unchanged.
 
 **Only an archive directly in a game directory is an archive.** Q3Map2 and the
 engines load `<game>/*.pk3` and nothing deeper, so a `.pk3` kept in a subfolder
@@ -1494,6 +1495,79 @@ been started there, and the managed install's links on Windows (a directory
 junction where a symbolic link is not permitted, a hard link for a file) have
 not been exercised on a Windows machine. No Quake III client session with real
 game data has been observed anywhere.
+
+### Packaging a Quake II map, installing it and running it
+
+Quake II support is work in progress, and so is this path. `companion package
+map` packages ONE finished Quake II build as ONE PAK, `<name>.pak`, holding
+`maps/<name>.bsp` and the files of your content folder that the compiled map
+names and that you say may travel with it: every texinfo's `textures/<n>.wal`,
+the worldspawn sky's six faces (`env/<sky><side>.pcx` and `.tga` — a paletted
+renderer asks for the first, every other renderer for the second, so both are
+carried when you have both), each `noise` as `sound/…`, and each `model` key's
+`.md2` with the skins its header names. What the base game (`baseq2` and its
+`pak*.pak`) supplies is never packaged; what nothing supplies is named before an
+archive is written (`--accept-missing --reason` records an exception); the map
+source, the compiler's `.texinfo.json`, portal and leak files and its logs are
+never members. The archive is written by the one PAK writer (uncompressed, names
+≤ 55 bytes, collisions refused, deterministic order) and read back before it is
+recorded; its sidecar manifest carries no local path. A name the base game or
+your content folder already has under `maps/` — the downloaded original of a
+map you edited — is refused: give the copy a name of its own.
+
+```console
+$ companion package map preview --build 20261014T190432Z-a596fcb7 --own-loose
+$ companion package map create  --build 20261014T190432Z-a596fcb7 --own-loose --name q2009room
+wrote …/q2-packages/q2-q2009room-38884148033c/q2009room.pak
+```
+
+**It is installed into a mod folder of its own beside `baseq2`, never into
+it.** `install` writes `<game folder>/aup-<name>/<name>.pak` (or `--mod`), as a
+hidden generation that is hashed and read back first and then renamed into
+place; the installation it replaces is put back if anything fails, and a
+cancelled install (Ctrl-C) leaves the previous one as it was. Installs into one
+game folder are serialised. `baseq2`, `xatrix`, `ctf` and any folder the
+Companion did not make are refused. `--into` and `--base-game` are Quake III's.
+
+```console
+$ companion package map install q2-q2009room-38884148033c --engine auto-pigeon.engine.yamagi-quake2
+installed …/Quake II/aup-q2009room/q2009room.pak
+  engine is told  -datadir …/Quake II +set game aup-q2009room +map q2009room
+```
+
+**A run is accepted only on the engine's word that it opened the map from that
+package.** The Yamagi profile asks for `fs_debug 1`, so Yamagi names the file it
+found for every map, texture and sound; `run` accepts `Map: <name>` only after
+`maps/<name>.bsp` was opened from the installed archive, re-hashed immediately
+before the start. A map of that name in a folder the engine searches first (its
+program folder's or its settings folder's copy of the mod) is a refusal,
+`load_order_shadowed`, and the engine is stopped. Missing data, game code or
+renderer are named at setup (*needs the game library — baseq2/game.so*, *needs
+a renderer*, *is not a program this computer can run*) and at runtime
+(`map_missing`, `gamecode_missing`, `renderer_missing`).
+
+```console
+$ companion package map run q2i-aup-q2009room-58887f3869 --engine auto-pigeon.engine.yamagi-quake2 --check
+map load   ACCEPTED
+opened from …/Quake II/aup-q2009room/q2009room.pak
+```
+
+**Setting up Yamagi.** Choose the folder holding its programs (a build from
+upstream source names the client `quake2`; the Windows release `yquake2.exe`)
+and, as the game folder, the folder that holds `baseq2` with `pak0.pak` in it.
+The game library (`baseq2/game.so`, `.dll`, `.dylib`) and a renderer (`ref_*`)
+are looked for beside the program. Every launch passes `-cfgdir YamagiQ2`: the
+Companion gives a job a home of its own, and without it Yamagi 8.70 stops at
+start because it cannot create `~/.local/share/YamagiQ2/`.
+
+**On the page** the same steps are the *Package and run this map* panel under a
+finished Quake II build in **Build**. Build & Run does not run a Quake II map and
+says where the panel is. FTEQW's Quake II profile only joins servers and is not
+offered here.
+
+**What has been run where.** Linux x86-64 only: ericw-tools 1.4518 and Yamagi
+Quake II 8.70 built from its source, with the retail game data, on a real
+display. No other engine, platform or packaged Yamagi release has been run.
 
 **Checks** — all three must pass before a change is merged:
 

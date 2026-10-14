@@ -25,6 +25,7 @@ paths:
   - internal/q3pack/**
   - internal/q3install/**
   - internal/q3run/**
+  - internal/enginewatch/**
   - internal/q3deps/**
   - internal/cli/package_map_cmd.go
   - internal/web/q3package.go
