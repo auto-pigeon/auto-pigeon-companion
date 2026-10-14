@@ -550,6 +550,11 @@
     const outputSources = [];
     doc.steps.forEach((step) => {
       for (const output of providerFor(step.capability, step.tool)?.outputs || []) outputSources.push([`${step.id}.${output.name}`, `${step.id} → ${output.name}`]);
+      // Every stage also has its own output text, the reserved `<stage>.stdout`
+      // (profile.StepLogOutput) — what a leak test publishes as the compiler's
+      // log. Not offering it marked the built-in leak tests' log as gone in
+      // any copy made from them (Q2_010, found live).
+      if (step.id) outputSources.push([`${step.id}.stdout`, `${step.id} → what it printed`]);
     });
     box.append(list("Results", "Which stage outputs the build publishes.",
       doc.outputs.map((output, i) => el("div", {

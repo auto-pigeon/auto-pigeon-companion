@@ -92,10 +92,38 @@
   // never compiles anything.
   function leakVerdict(manifest, leak) {
     const compile = (manifest.steps || []).find((step) => step.id === (leak?.compile_step || "compile"));
-    // A compiler whose run the Companion reads itself (Q3Map2) comes with its
+    // A compiler whose run the Companion reads itself (qbsp for Quake II, Q3Map2) comes with its
     // reading. Three facts stay apart in the sentence: how the process exited,
     // how the step ended, and what the run says about leaks — a leaked Quake
     // III map is exit 0, a failed step and a leak, all at once (Q3_018).
+    if (leak?.diagnostic && leak.compiler === "ericw-qbsp-q2") {
+      // Quake II (Q2_010): qbsp in its Quake II mode. A leak exits 1; a map
+      // with nothing to flood, or a texture it could not open, exits 0 with a
+      // BSP — measured, so neither the exit nor the BSP is the verdict.
+      const how = t("qbsp exited {code}; the compile step ended as {state}.", {
+        code: compile?.exit_code ?? "—", state: compile?.state || t("not run") });
+      const evidence = leak.diagnostic.evidence || [];
+      const said = {
+        leak: evidence.includes("route")
+          ? t("qbsp found a leak in this saved revision and wrote a point file (.pts) with {n} points, running from the entity it reached to outside the map.", { n: leak.diagnostic.route_points })
+          : t("qbsp found a leak in this saved revision, and left no usable point file: there is no route to draw."),
+        no_leak: t("qbsp found no leak in this saved revision. That is a statement about this run, not proof the map is sealed."),
+        no_interior: t("Not tested: no entity stands in open space — there is none, or every one is inside a solid brush — so qbsp flooded nothing. It still wrote a BSP and exited 0; that is not a seal."),
+        incomplete: t("No verdict: the run does not say whether the map leaks ({why}). Its output says more.", {
+          why: evidence.join(", ") || t("unknown") }),
+      }[leak.diagnostic.outcome] || t("No verdict.");
+      const notes = [];
+      if (evidence.includes("texture_missing")) {
+        notes.push(t("qbsp could not open a texture this map names (its .wal), so it never read that face's contents: a room it closes is not called sealed."));
+      }
+      if (evidence.includes("brush_invalid")) {
+        notes.push(t("qbsp dropped a brush it could not read; this run is about the map without it."));
+      }
+      if (evidence.includes("version_unqualified")) {
+        notes.push(t("This qbsp is not the build this reading was measured on (the Auto-Pigeon build of ericw-tools, release 1.4518)."));
+      }
+      return [said, how, ...notes].join(" ");
+    }
     if (leak?.diagnostic) {
       const how = t("Q3Map2 exited {code}; the compile step ended as {state}.", {
         code: compile?.exit_code ?? "—", state: compile?.state || t("not run") });
