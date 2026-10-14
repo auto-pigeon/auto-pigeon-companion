@@ -327,8 +327,9 @@ changed since the click is refused by name.
 | the saved map is | pipeline offered first | what **Build** runs | point file |
 | --- | --- | --- | --- |
 | Quake 1 | `auto-pigeon.q1.leak-test` | EricW `qbsp -leaktest` | `.pts`, from the entity to the outside |
+| Quake II (experimental) | `auto-pigeon.q2.leak-test` | EricW `qbsp -q2bsp -leaktest` only — no vis, no light, no package, no engine | `.pts`, from the entity to the outside (measured) |
 | Quake III | `auto-pigeon.q3.leak-test` | Q3Map2 `-bsp -leaktest` only — no vis, no light, no package, no engine | `.lin`, from the OUTSIDE to the entity |
-| anything else (Quake II included) | none | nothing: the notice says the game has no leak test here | — |
+| anything else | none | nothing: the notice says the game has no leak test here | — |
 
 The game is never taken from the link, from the page or from a toolbar: a link may
 carry a `profile=` hint, and one that disagrees with the saved revision is refused.
@@ -365,7 +366,36 @@ brush of a nonsolid shader: Q3Map2 tests structural brushes. A shader it could n
 find gets its default flags, and the result says so rather than guessing. Everything
 Q3Map2 printed is kept with the build as `compile_log` however the step ended, and
 the `.lin` is collected from the job's own fresh directory — never from beside your
-map. `companion build pipelines` lists both leak tests.
+map. `companion build pipelines` lists every leak test.
+
+**A Quake II leak test (experimental) is read the same way, by what qbsp said and
+left.** Measured with release 1.4518 of the Auto-Pigeon build of ericw-tools, in its
+Quake II mode, on small authored rooms: a leak exits 1 with `Reached occupant "…" at
+(x y z)` and `level.pts`; a sealed room exits 0 and writes a Quake II BSP (`IBSP:38`).
+But a map with **no** entity in open space — none at all, or every one inside a brush
+— also exits 0 and also writes a BSP, after `No entities in empty space`; so does a
+room one of whose walls names a texture qbsp could not open. Neither is a pass:
+
+| qbsp printed and left | reading |
+| --- | --- |
+| `Reached occupant … at (x y z)` / `Leak file written`, a `.pts` starting at that point | **leak**, with a route |
+| `No entities in empty space -- no filling performed` (a BSP, exit 0) | **not tested** |
+| `N outside leaves`, `Writing … as Quake II BSP IBSP:38`, the footer, exit 0, the BSP there, every texture found, release 1.4518 | **no leak in this run** — not proof the map is sealed |
+| a texture it could not open, a point file the run did not say it wrote, `-quiet` output, an error, a cancel, another qbsp version's clean run | **no verdict**, with the reason |
+
+A detail brush, a clip brush or a translucent window across a gap does not seal it.
+The built-in pipeline names the family's default Quake II tool; only release 1.4518
+of the Auto-Pigeon build has been measured, so to run that one make your own copy of
+the pipeline whose stage names it (**Profiles**), and pin it for Quake II. The result
+is `aucom.leak-result/1.1` with `"game_profile":"quake2"`, `"compiler":"ericw-qbsp-q2"`.
+
+```bash
+# What the Companion would run for a Quake II map, without running it.
+./companion build preview --pipeline auto-pigeon.q2.leak-test --input source_map=room.map \
+  --root game_root="$HOME/Quake II/baseq2" --root content_root="$HOME/Quake II/mymod"
+# … qbsp -nocolor -q2bsp -basedir …/baseq2 -gamedir …/mymod -leaktest <workspace>/input/source_map/room.map <workspace>/level.bsp
+./companion build leak-pipeline --game quake2 --pin auto-pigeon.q2.leak-test
+```
 
 A leaking map can make qbsp exit with failure and still produce a useful pointfile
 and log. The finished build says three things apart: what the compiler found (a
@@ -417,10 +447,10 @@ curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
 Set `BUILD_ID` to the finished leak-test build ID. The URL and token files are
 created by the Companion. The JSON records the pinned map identity and artifact
 hashes; it is a local result file, not a signed attestation. A Quake 1 result is
-`aucom.leak-result/1.0`, unchanged. A Quake III result is `aucom.leak-result/1.1`:
-it also names `game_profile`, `compiler`, `pointfile_format` and
-`pointfile_direction`, keeps `content_sha256` (the saved revision) apart from
-`compiler_source_sha256` (the converted `.map` Q3Map2 read), and carries
+`aucom.leak-result/1.0`, unchanged. A Quake II or Quake III result is
+`aucom.leak-result/1.1`: it also names `game_profile`, `compiler`, `pointfile_format`
+and `pointfile_direction`, keeps `content_sha256` (the saved revision) apart from
+`compiler_source_sha256` (the converted `.map` the compiler read), and carries
 `diagnostic` — the reading above, with its evidence. The BSP is never in it.
 
 **Watching a build.** In **Jobs**, a job's name is a link to its page. While a

@@ -17,6 +17,8 @@ topics:
   - pts
   - q3map2
   - qbsp
+  - quake2
+  - q2bsp
   - adapter
   - next-game
   - verdict
@@ -27,6 +29,7 @@ paths:
   - internal/web/leakrelay.go
   - internal/aub/leaklink.go
   - internal/profile/builtin/q1-leak-test.pipeline.json
+  - internal/profile/builtin/q2-leak-test.pipeline.json
   - internal/profile/builtin/q3-leak-test.pipeline.json
 prerequisites:
 ---
@@ -34,8 +37,8 @@ prerequisites:
 # A leak test is one adapter per game, measured before it is listed
 
 `Q3_018` turned the editor's Leaks → Test in Companion flow from a Quake 1 feature into a table
-with two rows. This module is the contract a third row has to meet, and the note a next-game
-template (`Q3_015`) links to rather than restates.
+with two rows; `Q2_010` added the third, Quake II, by meeting the contract below. This module is
+that contract, and the note a next-game template (`Q3_015`) links to rather than restates.
 
 ## The table, and what decides a row
 
@@ -47,13 +50,17 @@ is not one.
 | game | built-in pipeline | compiler | point file | direction | envelope |
 | --- | --- | --- | --- | --- | --- |
 | `quake1` | `auto-pigeon.q1.leak-test` | `ericw-qbsp` (EricW 2.0.0-alpha11; 0.18.1 also qualified) | `ericw-pts` | `occupant_to_outside` | `aucom.leak-result/1.0` |
+| `quake2` | `auto-pigeon.q2.leak-test` | `ericw-qbsp-q2` (qbsp `-q2bsp`, Auto-Pigeon build 1.4518) | `ericw-pts` | `occupant_to_outside` | `aucom.leak-result/1.1` |
 | `quake3` | `auto-pigeon.q3.leak-test` | `q3map2` (2.5.17n-git-68ecbed) | `q3map2-lin` | `outside_to_occupant` | `aucom.leak-result/1.1` |
 
 The pipeline column is the built-in one. It is not what runs unless the user chose it — see the
 next section.
 
-**A game with no row is unsupported, by name. It is never Quake 1.** Quake II has a `qbsp`; that
-is not a measurement, and it has no row.
+**A game with no row is unsupported, by name. It is never Quake 1.** Quake II's `qbsp` being Quake
+1's program was never the reason it has a row: the authored controls in
+`internal/leakadapter/testdata/q2` are. Its compiler is named `ericw-qbsp-q2`, apart from Quake 1's,
+because its log is read by other rules (`ClassifyEricwQ2`) and a compiler here has one game; its
+point file grammar and direction were measured to be Quake 1's, and are not assumed from it.
 
 **The game is the saved document's own word**: the `game` field of the pinned, digest-checked
 APMap. The review reads it from the asset cache's verified bytes (`savedMapGame`); the build start
@@ -96,20 +103,42 @@ record, never from today's pin or a fixed step id.
 - The compile action's BSP stays REQUIRED. A leaked test is therefore a failed step — the truthful
   state of a compile that wrote no BSP — and ordinary builds are not relaxed to make it succeed.
 
+## Quake II, as measured (`Q2_010`)
+
+Release 1.4518 of the Auto-Pigeon build, `qbsp -nocolor -q2bsp -basedir … -gamedir … -leaktest`:
+
+| control | exit | left | what decides it |
+| --- | --- | --- | --- |
+| sealed | 0 | BSP `IBSP:38`, PRT | `N outside leaves`, `Writing … as Quake II BSP IBSP:38`, footer |
+| slot in a wall; light outside; detail, clip or window across the slot | 1 | `level.pts`, `level.leak.prt`, no BSP | `Reached occupant "…" at (x y z)`, `Leak file written` |
+| no entity; every entity in a brush | **0** | **BSP** | `No entities in empty space -- no filling performed (hull 0)` — not tested |
+| a wall naming a texture with no WAL | 0 | BSP | `Couldn't locate texture for …` — not called sealed |
+| a file cut off | 1 | nothing | `************ ERROR ************` |
+| `-quiet` sealed | 0 | BSP | no fill report at all — no verdict |
+
+So for Quake II the BSP and exit 0 are not a pass (three controls have both), and the point file is
+a leak's only when the log says it wrote one: measured, a sealed run DELETES a stale `level.pts` but
+keeps a stale `level.leak.prt`, and a run that stops before the fill keeps both. The text is the
+step's own output: qbsp's `level.log` file leaves out every `---- Stage ----` heading, the fill
+report among them, so the Quake II row binds only `aucom.step.stdout`. The BSP's header is read
+(`BSPFormatOf`) and must be `IBSP:38`. qbsp prints `Couldn't locate texture for skip` on every run;
+that lookup is its own and is not a missing texture of the map.
+
 ## Three states that are never one
 
-| state | where | a leaked Quake III test |
-| --- | --- | --- |
-| process exit | `compile_exit_code` | `0` |
-| pipeline state | `build_state` | `failed` |
-| leak outcome | `diagnostic.outcome` | `leak` |
+| state | where | a leaked Quake III test | a Quake II map with no entity |
+| --- | --- | --- | --- |
+| process exit | `compile_exit_code` | `0` | `0` |
+| pipeline state | `build_state` | `failed` | `succeeded` |
+| leak outcome | `diagnostic.outcome` | `leak` | `no_interior` |
 
 Delivery to the editor is a fourth, kept beside the build in `leak-return.json`; a failed delivery
 is retried from there and compiles nothing.
 
 ## Reading a run: the evidence, in order
 
-`ClassifyQ3Map2` is the reference. Its precedence is the contract:
+`ClassifyQ3Map2` is the reference, and `ClassifyEricwQ2` follows it with Quake II's measured words.
+Their precedence is the contract:
 
 1. A text that is not this compiler's log is no verdict.
 2. The compiler SAYING it reached an entity from outside is a `leak`, whatever the exit status. A
