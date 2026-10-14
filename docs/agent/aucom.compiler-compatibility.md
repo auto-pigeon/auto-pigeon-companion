@@ -111,10 +111,33 @@ arguments a document chose.
   a different pipeline behind the user's choice. `testdata/pipelinechoice.check.mjs` holds it.
 - No approval from a probe, and no probe result clearing one.
 - No requirement on an executable that was not measured. `bspinfo` and `bsputil` are deliberately
-  not in the two built-in probes, and the Quake II profiles declare none: add one with the
-  measurement that justifies it.
+  not in the built-in probes. The two Quake II profiles declare one since `Q2_008`, measured on
+  0.18.1, 2.0.0-alpha7, alpha11 and fork 1.4505/1.4518 (`TestTheBuiltInQuake2ProfilesJudgeTheInstalledReleases`):
+  alpha7's qbsp stops its usage (`number is too big`) before `-basedir`, so the upstream document
+  holds qbsp only to `-q2bsp` and `-leaktest`. The fork's Quake II document does not refuse 1.4502
+  or 1.4505: that defect was measured on Quake 1 maps only.
 - Compatibility is not correctness. A compatible fork says nothing about what its qbsp does to a
   non-planar pipe (`NEW_324A`); that is the compiler's own acceptance.
+
+## A folder is asked what it holds, and a token never repeats a switch (`Q2_008`)
+
+- **`holds_any` on a root** (profile-common 1.1, additive) is a document's literal statement of
+  what a bound folder must hold — relative paths, at least one present. It exists for the folder a
+  program does not complain about: Quake II's qbsp handed the folder above `baseq2` exits 0 with
+  its built-in palette and no textures. `engine.Checker` (Profiles, Build & Run, `build
+  pipelines`) and `profile.resolveRoots` (the executor and every preview) ask it, and a folder that
+  holds none of them is `missing_game_data`, refused by name.
+- **A recorded folder that is the wrong folder makes the installation need setup**, like a
+  recorded program that is the wrong program (`installReadiness`): a tool whose `inspect` action
+  reads no folder is not "ready" while every action that compiles cannot start. An UNBOUND folder
+  stays per action.
+- **A build tool's folder is never fixed with `engine bind`**, which refuses a tool's id:
+  `rootFix`, beside `bindFix`, names Profiles and `acquire resolve … --root role=path --bind`.
+- **A person's own token never repeats a switch the action writes** (`profile.ManagedSwitchConflict`):
+  `-threads` on a stage whose action passes `-threads {option.threads}` is refused where it is saved
+  (stage-arguments API, `toolchain args`) and when a command is resolved, naming the parameter or
+  folder that sets it. A program handed a switch twice honours one of them, and which one is its
+  choice. A switch the action never passes is the person's own.
 
 ## The pinned release, and where its facts come from
 

@@ -665,6 +665,47 @@ another kind of computer). `companion build run` asks about every required stage
 before it starts the first, so a pipeline with a right qbsp and a wrong vis does not
 compile and then fail.
 
+**Quake II toolchains ask their programs too, and hold the game folder to the game.**
+Both built-in Quake II tool profiles (still work in progress) now ask qbsp, vis and
+light what they are: the upstream one accepts any `2.…` release whose qbsp lists
+`-q2bsp` and `-leaktest` and whose vis and light list `-threads`, `-basedir` and
+`-gamedir` (vis also `-fast` and `-level`); the Auto-Pigeon build's profile accepts
+only its own releases (`…+auto-pigeon.…`). ericw-tools 0.18.1 has no Quake II and is
+refused by name. The **installed game folder is the one that holds `pak0.pak`** —
+`baseq2` itself, not the folder above it, which qbsp accepts without a word and then
+builds with its own palette and no textures; a folder holding neither `pak0.pak`
+nor `pics/colormap.pcx` is "needs setup" in Profiles, in Build & Run and in
+`companion build pipelines`, and a build against it is refused before qbsp starts.
+**Lighting needs the `.texinfo.json` the compile wrote**: a build whose compile left
+none stops at the light stage and names it, instead of lighting the map with default
+surface flags.
+
+In Profiles that is the **Game directory** of the toolchain's setup. From a terminal,
+for a toolchain you wrote with New profile (its document is in the `profiles` folder
+next to `bindings.json`):
+
+```console
+$ T=~/.config/auto-pigeon-companion/profiles/<your-q2-tool>.json
+$ companion acquire resolve "$T" --mode user_path --user-path "$HOME/tools/auto-pigeon-ericw-tools" \
+    --root "game_root=$HOME/Games/Quake II/baseq2" --root "content_root=$HOME/Games/Quake II/baseq2" --bind
+$ companion toolchain check <your-q2-tool>      # qbsp, vis, light: compatible 2.0.0-alpha11-…+auto-pigeon.1.4518
+$ companion build pipelines                     # bound to "$HOME/Games/Quake II" instead, a pipeline using it reads:
+#   compile (missing_game_data): The installed game folder recorded for … holds no pak0.pak or pics/colormap.pcx, so it is not the folder "Compile the map" reads: …
+```
+
+**A stage's own arguments never repeat a switch the stage already passes.** A
+token such as `-threads` on a vis stage, which already passes `-threads` from its
+`threads` parameter, is refused where it is saved — on the pipeline's page, by the
+API and by the CLI — and again when a command is made, naming the parameter to set
+instead. A switch the stage does not pass is yours to add:
+
+```console
+$ companion toolchain args <your-q2-pipeline> vis --set=-threads --set=8
+error: the arguments for the stage vis: argument 1 (-threads) is already given to vis by this stage's parameter "Threads" (threads); set that parameter instead — …
+$ companion toolchain args <your-q2-pipeline> vis --set=-nopercent
+<your-q2-pipeline>: stage vis now gets 1 argument(s) of your own
+```
+
 **Reading a build back.** A build is read by its id, and the list reads every
 build this machine has. Each answer carries the build's manifest and `live` —
 whether this Companion is running that build right now — and the two always

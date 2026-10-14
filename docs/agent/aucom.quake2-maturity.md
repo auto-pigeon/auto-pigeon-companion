@@ -62,6 +62,17 @@ trade a refusal that names the binding for a map that looks built and is wrong.
 Three roots, bound separately: `tool_root`, `game_root` (`-basedir`),
 `content_root` (`-gamedir`).
 
+**Measured with release 1.4518 (`Q2_008`), and held by the documents:** `-basedir`
+is the folder that HOLDS `pak0.pak` — `baseq2` itself; the folder above it compiles
+exit 0 with `using built-in palette` and no textures, so `game_root` is held to
+`pak0.pak` or `pics/colormap.pcx` (`holds_any`). light without the compile's
+`<stem>.texinfo.json` also exits 0 — a `func_group` with `_minlight` lit 504
+bytes differently — so `texinfo` is a REQUIRED input of light and a compile that
+left none stops the build at light, as `output_missing`. qbsp 1.4518 accepts
+`-threads`; no Quake II action passes it. Compile and VIS are byte-deterministic;
+LIGHT with more than one thread is not, so two four-thread builds of one map are
+compared by stage, not by the final BSP's hash.
+
 **An engine profile declares the actions upstream documents and no others.**
 FTEQW's Quake II profile has `join_server` alone, because upstream's own
 QuickStart says every local Quake II server needs gamecode FTEQW does not ship
