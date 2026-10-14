@@ -38,8 +38,19 @@ func TestTheLeakPipelineCanBeChosenFromTheTerminal(t *testing.T) {
 		t.Fatalf("an uninstalled pipeline was pinned: %s", stderr.String())
 	}
 	stderr.Reset()
-	if code := Run(env, []string{"build", "leak-pipeline", "--game", "quake2"}); code == 0 {
+	if code := Run(env, []string{"build", "leak-pipeline", "--game", "hexen2"}); code == 0 {
 		t.Fatal("a game with no leak test was answered")
+	}
+	// Quake II has a measured leak test since Q2_010; Quake 1's is not it.
+	stdout.Reset()
+	if code := Run(env, []string{"build", "leak-pipeline", "--game", "quake2"}); code != 0 ||
+		!strings.Contains(stdout.String(), "auto-pigeon.q2.leak-test") {
+		t.Fatalf("the Quake II choices: %s %s", stdout.String(), stderr.String())
+	}
+	stderr.Reset()
+	if code := Run(env, []string{"build", "leak-pipeline", "--game", "quake2", "--pin", "auto-pigeon.q1.leak-test"}); code == 0 ||
+		!strings.Contains(stderr.String(), "cannot be the quake2 leak test") {
+		t.Fatalf("the Quake 1 leak test was pinned for Quake II: %s", stderr.String())
 	}
 
 	stdout.Reset()
