@@ -642,6 +642,12 @@ func (r *Runner) tools(steps []profile.ResolvedStep) []ToolRecord {
 		if bound {
 			record.ResolvedVersion = local.ResolvedVersion
 			record.Acquisition = local.Acquisition
+			for role, path := range local.Roots {
+				if record.Roots == nil {
+					record.Roots = map[string]string{}
+				}
+				record.Roots[role] = path
+			}
 			for _, declared := range resolved.Profile.Executables {
 				path, resolvedPath := local.Executables[declared.Name]
 				if !resolvedPath {

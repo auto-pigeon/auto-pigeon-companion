@@ -1,4 +1,10 @@
-// Package → Install → Run, for a finished Quake III build.
+// Package → Install → Run, for a finished Quake III or Quake II build.
+//
+// One panel for both families (Q2_009): a Quake III build is packaged as a PK3
+// by internal/q3pack and friends, a Quake II build as a PAK by internal/q2pack
+// and friends, each under its own API, and the answers and refusals have the
+// same shape. What differs is said where it differs — a Quake II package
+// always goes into a mod folder of its own, and is run by a client.
 //
 // Three steps on one panel under the build's result, in the order a person
 // does them: say what may be redistributed and read what the archive would
@@ -57,6 +63,12 @@
     return "";
   }
 
+  // The family's surface: where its API is, and what its engine is called.
+  const FAMILIES = {
+    quake3: { api: "/api/v1/q3", game: "Quake III", archive: "PK3" },
+    quake2: { api: "/api/v1/q2", game: "Quake II", archive: "PAK" },
+  };
+
   function short(digest) {
     return String(digest || "").replace(/^sha256:/, "").slice(0, 12);
   }
@@ -67,7 +79,8 @@
   function show(manifest, live) {
     const panel = $("q3pkg-panel");
     if (!panel) return;
-    const fits = manifest && !live && manifest.engine_family === "quake3" && manifest.state === "succeeded" &&
+    const family = FAMILIES[manifest?.engine_family];
+    const fits = manifest && !live && family && manifest.state === "succeeded" &&
       (manifest.outputs || []).some((output) => output.name === "bsp" && output.path && !output.missing);
     if (!fits) {
       panel.hidden = true;
@@ -77,10 +90,12 @@
     panel.hidden = false;
     if (state?.build === manifest.build_id) return;
     stopPolling();
-    state = { build: manifest.build_id, grants: {}, include: "", plan: null, held: "", acceptable: false,
-      pkg: null, engines: [], installation: null, run: null };
+    state = { build: manifest.build_id, family: manifest.engine_family, api: family.api, grants: {}, include: "", plan: null,
+      held: "", acceptable: false, pkg: null, engines: [], installation: null, run: null };
+    layout(family);
     for (const id of ["q3pkg-create-message", "q3pkg-install-message", "q3pkg-run-message"]) setMessage(id, "");
     $("q3pkg-include").value = "";
+    $("q3pkg-name").value = "";
     $("q3pkg-accept").checked = false;
     $("q3pkg-reason").value = "";
     $("q3pkg-created").replaceChildren();
@@ -104,7 +119,27 @@
     return grants;
   }
 
+  // layout shows the fields this family's packages read and hides the rest.
+  function layout(family) {
+    const quake2 = family === FAMILIES.quake2;
+    $("q3pkg-lede").textContent = quake2
+      ? t("One PAK holding the compiled map and only the files you say may be redistributed. The base game is never packaged. It goes into a mod folder of its own beside baseq2 — baseq2 is never written — and the engine has to say it opened the map from that package.")
+      : t("One PK3 holding the compiled map and only the files you say may be redistributed. The base game is never packaged. Then it is put beside a game and the engine is started — and the engine itself has to say the map loaded.");
+    $("q3pkg-include").closest(".field").hidden = quake2;
+    $("q3pkg-name-field").hidden = !quake2;
+    $("q3pkg-into").closest(".field").hidden = quake2;
+    $("q3pkg-basegame").closest(".field").hidden = quake2;
+    $("q3pkg-port").closest(".field").hidden = quake2;
+    $("q3pkg-mod").placeholder = quake2 ? t("aup-<map name>") : t("the package's own");
+  }
+
   function packageBody() {
+    if (state.family === "quake2") {
+      const body = { build: state.build, grants: grantsBody() };
+      const name = $("q3pkg-name").value.trim();
+      if (name) body.name = name;
+      return body;
+    }
     const include = $("q3pkg-include").value.split(/[\s,]+/).filter(Boolean);
     return { build: state.build, grants: grantsBody(), include };
   }
@@ -125,7 +160,7 @@
     // Answers can change faster than a plan comes back (an arrow key held in
     // the dropdown). Only the newest question's answer is shown.
     const asked = (state.planSeq = (state.planSeq || 0) + 1);
-    const { ok, body } = await api("/api/v1/q3/packages/preview", { method: "POST", body: packageBody() });
+    const { ok, body } = await api(state.api + "/packages/preview", { method: "POST", body: packageBody() });
     if (state?.build !== build || state.planSeq !== asked) return;
     if (!ok) {
       state.plan = null;
@@ -209,7 +244,9 @@
     const out = $("q3pkg-plan");
     out.replaceChildren();
 
-    out.append(el("p", { className: "muted", text: t("The archive: {game}/{name}", { game: plan.game_dir, name: plan.archive_name }) }));
+    out.append(el("p", { className: "muted", text: state.family === "quake2"
+      ? t("The archive: {name}, loaded as maps/{map}.bsp; installed into {game} unless you name another folder", { name: plan.archive_name, map: plan.map?.name, game: plan.game_dir })
+      : t("The archive: {game}/{name}", { game: plan.game_dir, name: plan.archive_name }) }));
 
     renderSources(plan);
 
@@ -306,7 +343,7 @@
       busy("q3pkg-create-message", t("Writing the archive…"));
       const body = packageBody();
       if ($("q3pkg-accept").checked) body.accept_reason = $("q3pkg-reason").value.trim();
-      const response = await api("/api/v1/q3/packages", { method: "POST", body });
+      const response = await api(state.api + "/packages", { method: "POST", body });
       if (!response.ok) {
         const kind = response.body.class ? ` (${response.body.class})` : "";
         setMessage("q3pkg-create-message", (response.body.error || t("The package was not written.")) + kind, "error");
@@ -363,14 +400,14 @@
   async function refreshEngines() {
     const sequence = ++engineRefresh;
     const owned = state;
-    const { ok, body } = await api("/api/v1/q3/engines");
+    const { ok, body } = await api(owned.api + "/engines");
     if (state !== owned || sequence !== engineRefresh) return;
     const select = $("q3pkg-engine");
     const kept = select.value;
     state.engines = ok ? body.engines || [] : [];
     window.AUCOM.executionChoices(select, state.engines, kept, engineReady,
       (engine) => engine.name + (engineReady(engine) ? "" : " — needs setup: " + (engine.problem || "readiness is not known")),
-      "Choose a ready Quake III engine…", true);
+      t("Choose a ready {game} engine…", { game: FAMILIES[owned.family].game }), true);
     engineChanged();
     if (!ok) setMessage("q3pkg-install-message", body.error || t("The engines could not be listed."), "error");
   }
@@ -386,7 +423,7 @@
     const previousAction = actions.value;
     actions.replaceChildren();
     if (!engine) {
-      note.replaceChildren(el("span", { text: "Choose a ready Quake III engine. " }), el("a", { text: "Profiles / setup", attrs: { href: "#profiles" } }));
+      note.replaceChildren(el("span", { text: t("Choose a ready {game} engine. ", { game: FAMILIES[state.family].game }) }), el("a", { text: "Profiles / setup", attrs: { href: "#profiles" } }));
       $("q3pkg-install-preview").disabled = true;
       $("q3pkg-run").disabled = true;
       $("q3pkg-install").disabled = true;
@@ -431,6 +468,9 @@
   }
 
   function installBody() {
+    if (state.family === "quake2") {
+      return { package: state.pkg.id, engine: $("q3pkg-engine").value, mod: $("q3pkg-mod").value.trim() };
+    }
     return {
       package: state.pkg.id,
       engine: $("q3pkg-engine").value,
@@ -444,7 +484,7 @@
     if (!state.pkg || !engineReady(currentEngine())) return;
     await withBusy(button, async () => {
       busy("q3pkg-install-message", previewOnly ? t("Checking where it would go…") : t("Installing…"));
-      const response = await api(previewOnly ? "/api/v1/q3/installs/preview" : "/api/v1/q3/installs",
+      const response = await api(previewOnly ? state.api + "/installs/preview" : state.api + "/installs",
         { method: "POST", body: installBody() });
       if (!response.ok) {
         const kind = response.body.class ? ` (${response.body.class})` : "";
@@ -475,10 +515,15 @@
       facts.append(el("dd", { children: [typeof value === "string" ? el("code", { text: value }) : value] }));
     };
     fact(previewOnly ? t("Would be written") : t("Written"), installation.archive.path);
-    fact(t("Your game folder"), installation.kind === "managed"
+    if (state.family === "quake2") {
+      fact(t("Your game folder"), t("{folder} — baseq2 is NOT written; the package is the only thing in {mod}", { folder: installation.game_root, mod: installation.fs_game }));
+      fact(t("The engine is given"), `-datadir ${installation.base_path} · +set game ${installation.fs_game} · +map ${installation.map_name}`);
+      fact(t("The map in it"), `${installation.map_member.path} · sha256 ${short(installation.map_member.sha256)}…`);
+      if (installation.replaced) fact(t("It replaced"), installation.replaced);
+    } else fact(t("Your game folder"), installation.kind === "managed"
       ? t("{folder} — NOT written; read through links", { folder: installation.game_root })
       : t("{folder} — one file added, nothing replaced", { folder: installation.game_root }));
-    fact(t("The engine is given"), `fs_basepath ${installation.base_path} · fs_game ${installation.fs_game}`);
+    if (state.family !== "quake2") fact(t("The engine is given"), `fs_basepath ${installation.base_path} · fs_game ${installation.fs_game}`);
     const order = installation.load_order || {};
     if ((order.searched_before || []).length) fact(t("Searched before it"), order.searched_before.join(", "));
     out.append(facts);
@@ -531,7 +576,7 @@
     // while the engine's run actions need setup.
     if (!state.installation) return;
     await withBusy(button, async () => {
-      const response = await api("/api/v1/q3/installs/" + encodeURIComponent(state.installation.id), { method: "DELETE" });
+      const response = await api(state.api + "/installs/" + encodeURIComponent(state.installation.id), { method: "DELETE" });
       if (!response.ok) {
         setMessage("q3pkg-install-message", response.body.error || t("It could not be removed."), "error");
         return;
@@ -559,7 +604,7 @@
       const action = (currentEngine()?.actions || []).find((candidate) => candidate.id === $("q3pkg-action").value);
       const port = $("q3pkg-port").value.trim();
       if (port && actionTakes(action, "port")) options.port = port;
-      const response = await api("/api/v1/q3/runs", { method: "POST", body: {
+      const response = await api(state.api + "/runs", { method: "POST", body: {
         installation: state.installation.id, engine: $("q3pkg-engine").value, action: $("q3pkg-action").value, options } });
       if (!response.ok) {
         const kind = response.body.class ? ` (${response.body.class})` : "";
@@ -583,7 +628,7 @@
     const build = state?.build;
     const tick = async () => {
       if (!state || state.build !== build || !state.run) return;
-      const { ok, body } = await api("/api/v1/q3/runs/" + encodeURIComponent(state.run.id));
+      const { ok, body } = await api(state.api + "/runs/" + encodeURIComponent(state.run.id));
       if (!state || state.build !== build) return;
       if (ok) {
         const before = state.run.state;
@@ -649,7 +694,15 @@
     if (run.job_id) {
       fact(t("Its job and whole output"), el("a", { text: run.job_id, attrs: { href: "#jobs/" + encodeURIComponent(run.job_id) } }));
     }
-    if (result) {
+    if (result && state.family === "quake2") {
+      fact(t("The installed package"), result.expected);
+      // The path as the engine printed it, as code: a badge would re-case it.
+      const opened = el("span");
+      opened.append(el("code", { text: result.loaded_from || t("the engine did not say") }), " ",
+        badge(result.source_verified ? t("the installed package") : t("NOT the installed package"), result.source_verified ? "ok" : "failed"));
+      fact(t("The engine opened the map from"), opened);
+      fact(t("The map's bytes"), "sha256 " + short(result.map_sha256) + "…");
+    } else if (result) {
       fact("fs_game", result.fs_game);
       fact("fs_basepath", result.base_path);
     }
@@ -665,7 +718,7 @@
   async function stopRun(button) {
     if (!state?.run) return;
     await withBusy(button, async () => {
-      const response = await api(`/api/v1/q3/runs/${encodeURIComponent(state.run.id)}/cancel`, { method: "POST" });
+      const response = await api(`${state.api}/runs/${encodeURIComponent(state.run.id)}/cancel`, { method: "POST" });
       if (!response.ok) {
         setMessage("q3pkg-run-message", response.body.error || t("The engine could not be stopped."), "error");
         return;
@@ -684,10 +737,10 @@
   // newest while an engine ran out of another showed no engine at all.
   async function restore() {
     const build = state.build;
-    const packages = await api("/api/v1/q3/packages?build=" + encodeURIComponent(build));
+    const packages = await api(state.api + "/packages?build=" + encodeURIComponent(build));
     if (state?.build !== build || !packages.ok || !(packages.body.packages || []).length || state.pkg) return;
     const mine = packages.body.packages;
-    const installs = await api("/api/v1/q3/installs");
+    const installs = await api(state.api + "/installs");
     if (state?.build !== build) return;
     const installed = installs.ok
       ? (installs.body.installations || []).find((candidate) => mine.some((pkg) => pkg.id === candidate.package_id))
@@ -708,11 +761,15 @@
     if (!installed) return;
     state.installation = installed;
     $("q3pkg-into").value = installed.kind;
-    if (installed.base_game !== "baseq3") $("q3pkg-basegame").value = installed.base_game;
+    if (state.family === "quake3" && installed.base_game !== "baseq3") $("q3pkg-basegame").value = installed.base_game;
+    if (state.family === "quake2") {
+      $("q3pkg-mod").value = installed.fs_game;
+      if (state.pkg.plan?.map?.name) $("q3pkg-name").value = state.pkg.plan.map.name;
+    }
     renderInstallation(installed, false);
     $("q3pkg-step-run").hidden = false;
     $("q3pkg-uninstall").hidden = false;
-    const latest = await api(`/api/v1/q3/installs/${encodeURIComponent(installed.id)}/runs`);
+    const latest = await api(`${state.api}/installs/${encodeURIComponent(installed.id)}/runs`);
     if (state?.build !== build || !latest.ok || !latest.body.run) return;
     state.run = latest.body.run;
     // The engine and the action the run used are the ones to show selected.
@@ -729,6 +786,7 @@
   function wire() {
     if (!$("q3pkg-panel")) return;
     $("q3pkg-include").addEventListener("change", refreshPlan);
+    $("q3pkg-name").addEventListener("change", refreshPlan);
     $("q3pkg-accept").addEventListener("change", updateCreate);
     $("q3pkg-reason").addEventListener("input", updateCreate);
     $("q3pkg-create").addEventListener("click", (event) => create(event.currentTarget));

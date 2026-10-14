@@ -1,8 +1,10 @@
 package enginefixture
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -38,10 +40,17 @@ const (
 	// which is what a client and a server both really do. It ends when it is
 	// stopped, which is the case the process-tree teardown is about.
 	BehaviourStay Behaviour = "stay"
+	// BehaviourQuake2Load is the measured shape of Yamagi Quake II 8.70 asked
+	// for a map with `fs_debug 1` (Q2_009): it looks for `maps/<map>.bsp` in
+	// the `.pak` files of `<-datadir>/<+set game>`, reading each archive's own
+	// directory, names the archive it found it in — or says it can't find it —
+	// then prints `Map: <map>` with the carriage return the engine prints, and
+	// stays up. It reads the installed bytes; it proves nothing about Yamagi.
+	BehaviourQuake2Load Behaviour = "quake2_load"
 )
 
 // Behaviours is every mode, for an error message that lists them.
-var Behaviours = []Behaviour{BehaviourReady, BehaviourCrash, BehaviourStay}
+var Behaviours = []Behaviour{BehaviourReady, BehaviourCrash, BehaviourStay, BehaviourQuake2Load}
 
 // ReadyLine is the readiness banner. It is a real QuakeSpasm-family line
 // because the curated profiles classify it with a diagnostic rule, and a rule
@@ -137,6 +146,12 @@ func Main(args []string) int {
 		if opts.exitCode == 0 {
 			return 1
 		}
+		return opts.exitCode
+	case BehaviourQuake2Load:
+		fmt.Println(ReadyLine)
+		quake2Load(engineArgs)
+		os.Stdout.Sync()
+		time.Sleep(opts.stayFor())
 		return opts.exitCode
 	case BehaviourStay:
 		fmt.Println(ReadyLine)
@@ -343,4 +358,65 @@ func (r Record) Lookup(name string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// quake2Load prints what Yamagi prints for a map it is told to load.
+func quake2Load(args []string) {
+	var datadir, game, mapName string
+	for i := 0; i+1 < len(args); i++ {
+		switch {
+		case args[i] == "-datadir":
+			datadir = args[i+1]
+		case args[i] == "+set" && i+2 < len(args) && args[i+1] == "game":
+			game = args[i+2]
+		case args[i] == "+map":
+			mapName = args[i+1]
+		}
+	}
+	member := "maps/" + mapName + ".bsp"
+	paks, _ := filepath.Glob(filepath.Join(datadir, game, "*.pak"))
+	sort.Strings(paks)
+	for _, pak := range paks {
+		if pakHolds(pak, member) {
+			opened := fmt.Sprintf("FS_FOpenFile: '%s' (found in '%s').", member, filepath.ToSlash(pak))
+			fmt.Println(opened)
+			fmt.Print("Map: " + mapName + "\r")
+			fmt.Println(opened)
+			return
+		}
+	}
+	fmt.Printf("FS_FOpenFile: couldn't find '%s'.\n", member)
+	fmt.Printf("Can't find %s\n", member)
+}
+
+// pakHolds reads a PACK directory, from the format's published layout.
+func pakHolds(path, member string) bool {
+	file, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+	header := make([]byte, 12)
+	if _, err := io.ReadFull(file, header); err != nil || string(header[:4]) != "PACK" {
+		return false
+	}
+	offset := int64(binary.LittleEndian.Uint32(header[4:]))
+	length := int64(binary.LittleEndian.Uint32(header[8:]))
+	if length%64 != 0 || length > 64<<16 {
+		return false
+	}
+	directory := make([]byte, length)
+	if _, err := file.ReadAt(directory, offset); err != nil {
+		return false
+	}
+	for at := int64(0); at < length; at += 64 {
+		name := string(directory[at : at+56])
+		if end := strings.IndexByte(name, 0); end >= 0 {
+			name = name[:end]
+		}
+		if strings.EqualFold(name, member) {
+			return true
+		}
+	}
+	return false
 }

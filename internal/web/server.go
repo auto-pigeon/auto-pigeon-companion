@@ -113,6 +113,8 @@ type Server struct {
 	// q3runs is the Quake III package runs this process is waiting on or has
 	// waited on. See q3package.go.
 	q3runs *q3Runs
+	// q2runs is the same for Quake II packages (Q2_009).
+	q2runs *q3Runs
 	// leaks tells the editor, through AUB, what is happening to its leak
 	// requests. One worker, stopped by Close. See leaksender.go.
 	leaks *leakSender
@@ -290,6 +292,7 @@ func NewServer(options Options) (*Server, error) {
 		scanner:      options.Scanner,
 		builds:       newBuildRuns(),
 		q3runs:       newQ3Runs(),
+		q2runs:       newQ3Runs(),
 		logf:         logf,
 		games:        newGameState(),
 		newAUB:       newAUB,
@@ -411,7 +414,7 @@ func (s *Server) api() map[string]http.HandlerFunc {
 		s.jobAPI(), s.profileAPI(), s.libraryAPI(),
 		s.engineAPI(), s.buildAPI(), s.playAPI(), s.settingsAPI(), s.siteLinksRoutes(), s.hostingRoutes(), s.bugReportRoutes(), s.pathAPI(),
 		s.feedbackAPI(), s.aboutAPI(), s.accountAPI(), s.gamesAPI(), s.noticesAPI(),
-		s.lifecycleAPI(), s.leakTestAPI(), s.leakPipelineAPI(), s.uriAPI(), s.autobuildAPI(), s.q3API(),
+		s.lifecycleAPI(), s.leakTestAPI(), s.leakPipelineAPI(), s.uriAPI(), s.autobuildAPI(), s.q3API(), s.q2API(),
 	} {
 		for pattern, handler := range table {
 			if _, clash := routes[pattern]; clash {

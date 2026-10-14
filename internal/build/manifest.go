@@ -232,6 +232,13 @@ type ToolRecord struct {
 	// Acquisition is how the executables got onto this machine.
 	Acquisition profile.AcquisitionMode `json:"acquisition,omitempty"`
 	Executables []ExecutableRecord      `json:"executables,omitempty"`
+	// Roots are the folders this machine's binding gave the tool, by role —
+	// the base game and content folders a build read when the request named
+	// none (Q2_009: a Quake II package is planned from what the compiler read,
+	// and a build from the Build page has its folders from the tool's setup).
+	// Diagnostic, like every absolute path here, and not part of the
+	// reproducible key.
+	Roots map[string]string `json:"roots,omitempty"`
 }
 
 // Step is one stage of the pipeline as it actually happened.

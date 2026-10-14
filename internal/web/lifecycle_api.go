@@ -180,6 +180,7 @@ func (s *Server) Close() {
 	// A Quake III run that is still waiting for its engine's word stops
 	// waiting, and stops the engine it started on its way out.
 	s.q3runs.cancelWaiting()
+	s.q2runs.cancelWaiting()
 	for _, run := range s.builds.active() {
 		run.cancel()
 	}

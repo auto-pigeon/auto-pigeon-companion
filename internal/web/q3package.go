@@ -493,10 +493,12 @@ type q3Run struct {
 	Action       string    `json:"action"`
 	StartedAt    time.Time `json:"started_at"`
 
-	mu     sync.Mutex
-	job    string
-	done   bool
-	result *q3run.Result
+	mu   sync.Mutex
+	job  string
+	done bool
+	// result is the family's own run result (q3run's or q2run's), held as
+	// what the page reads: it is only ever encoded.
+	result any
 	err    string
 	class  string
 	cancel context.CancelFunc
@@ -670,12 +672,15 @@ func (s *Server) handleQ3RunStart(w http.ResponseWriter, r *http.Request) {
 		defer cancel()
 		result, err := q3run.Launch(ctx, service, request)
 		run.mu.Lock()
-		run.done, run.result = true, result
+		run.done = true
+		if result != nil {
+			run.result = result
+		}
 		if err != nil {
 			run.err, run.class = err.Error(), failure.Of(err)
 		}
 		run.mu.Unlock()
-		s.saveQ3Run(run)
+		s.saveRun(run, "q3-runs")
 		if result != nil {
 			s.logf("q3 run %s: map load %s, engine job %s, pid %d", run.ID, result.MapLoad, result.JobID, result.PID)
 		} else {
@@ -685,15 +690,15 @@ func (s *Server) handleQ3RunStart(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, run.view())
 }
 
-// saveQ3Run writes a finished run where a reloaded page, or a restarted
-// Companion, can find it.
-func (s *Server) saveQ3Run(run *q3Run) {
-	dir, err := s.q3Dir("q3-runs")
+// saveRun writes a finished run where a reloaded page, or a restarted
+// Companion, can find it: `q3-runs` or `q2-runs` beside the builds.
+func (s *Server) saveRun(run *q3Run, dirName string) {
+	dir, err := s.q3Dir(dirName)
 	if err != nil {
 		return
 	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		s.logf("q3 run %s: recording it: %v", run.ID, err)
+		s.logf("run %s: recording it: %v", run.ID, err)
 		return
 	}
 	data, err := json.MarshalIndent(run.view(), "", "  ")
@@ -701,20 +706,25 @@ func (s *Server) saveQ3Run(run *q3Run) {
 		return
 	}
 	if err := os.WriteFile(filepath.Join(dir, run.ID+".json"), append(data, '\n'), 0o600); err != nil {
-		s.logf("q3 run %s: recording it: %v", run.ID, err)
+		s.logf("run %s: recording it: %v", run.ID, err)
 	}
 }
 
 // q3RunView is a run by id: the one this process holds, else the record a
 // previous one left.
 func (s *Server) q3RunView(id string) (map[string]any, error) {
+	return s.runView(s.q3runs, "q3-runs", id)
+}
+
+// runView is a run of one registry by id, else the record it left in dirName.
+func (s *Server) runView(registry *q3Runs, dirName, id string) (map[string]any, error) {
 	if !job.ValidID(id) && !validQ3RunID(id) {
 		return nil, fmt.Errorf("%q is not a run id", id)
 	}
-	if run := s.q3runs.get(id); run != nil {
+	if run := registry.get(id); run != nil {
 		return s.withEngineState(run.view()), nil
 	}
-	dir, err := s.q3Dir("q3-runs")
+	dir, err := s.q3Dir(dirName)
 	if err != nil {
 		return nil, err
 	}
@@ -774,12 +784,16 @@ func (s *Server) handleQ3RunGet(w http.ResponseWriter, r *http.Request) {
 // handleQ3RunLatest is the newest run of an installation: what a reloaded page
 // asks for, so it shows the engine that is running rather than a blank panel.
 func (s *Server) handleQ3RunLatest(w http.ResponseWriter, r *http.Request) {
+	s.latestRun(w, r, s.q3runs, "q3-runs")
+}
+
+func (s *Server) latestRun(w http.ResponseWriter, r *http.Request, registry *q3Runs, dirName string) {
 	id := r.PathValue("id")
-	if run := s.q3runs.forInstallation(id); run != nil {
+	if run := registry.forInstallation(id); run != nil {
 		writeJSON(w, http.StatusOK, map[string]any{"run": s.withEngineState(run.view())})
 		return
 	}
-	dir, err := s.q3Dir("q3-runs")
+	dir, err := s.q3Dir(dirName)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
@@ -811,8 +825,12 @@ func (s *Server) handleQ3RunLatest(w http.ResponseWriter, r *http.Request) {
 // handleQ3RunCancel stops a run: the wait when it is still waiting, and the
 // engine when it is running. The same cancel a job's own Stop button performs.
 func (s *Server) handleQ3RunCancel(w http.ResponseWriter, r *http.Request) {
+	s.cancelRun(w, r, s.q3runs, "q3-runs")
+}
+
+func (s *Server) cancelRun(w http.ResponseWriter, r *http.Request, registry *q3Runs, dirName string) {
 	id := r.PathValue("id")
-	run := s.q3runs.get(id)
+	run := registry.get(id)
 	jobID := ""
 	if run != nil {
 		run.mu.Lock()
@@ -826,7 +844,7 @@ func (s *Server) handleQ3RunCancel(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		view, err := s.q3RunView(id)
+		view, err := s.runView(registry, dirName, id)
 		if err != nil {
 			writeError(w, q3Status(err), err)
 			return

@@ -30,9 +30,9 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"sync"
 	"time"
 
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/enginewatch"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/failure"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
@@ -273,7 +273,7 @@ func Launch(ctx context.Context, jobs Jobs, request Request) (*Result, error) {
 		JobID:          submitted.ID,
 		State:          submitted.State,
 		MapLoad:        NotObserved,
-		SignalDeclared: watcher.declared,
+		SignalDeclared: watcher.Declared(),
 		MapName:        installation.MapName,
 		FSGame:         installation.FSGame,
 		BasePath:       installation.BasePath,
@@ -289,71 +289,48 @@ func Launch(ctx context.Context, jobs Jobs, request Request) (*Result, error) {
 		result.WorkingDir = previewed.Command.WorkingDir
 	}
 
-	started := time.Now()
-	deadline := started.Add(wait)
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
-	var current *job.Job
-	for {
-		if loaded, err := jobs.Get(submitted.ID); err == nil {
-			current = loaded
-			result.State = current.State
-			if current.Process.PID != 0 {
-				result.PID = current.Process.PID
-			}
-		}
-		verdict := watcher.verdict()
-		switch {
-		case verdict.loaded:
-			result.MapLoad = Accepted
-			result.Evidence, result.RuleID = verdict.line, verdict.rule.ID
-			result.Message = firstNonEmpty(verdict.rule.Message, "The engine loaded the map.")
-			result.WaitedMS = time.Since(started).Milliseconds()
-			return finish(result), nil
-		case verdict.failed:
-			result.MapLoad = Refused
-			result.Evidence, result.RuleID = verdict.line, verdict.rule.ID
-			result.Message = firstNonEmpty(verdict.rule.Message, "The engine reported an error before it loaded the map.")
-			result.Hint = verdict.rule.Hint
-			result.FailureClass = firstNonEmpty(verdict.rule.Class, failure.MapNotLoaded)
-			result.WaitedMS = time.Since(started).Milliseconds()
-			stop(jobs, result, current)
-			return finish(result), nil
-		case current != nil && current.State.Terminal():
-			// It ended, and never said the map loaded.
-			result.MapLoad = Refused
-			result.ExitCode = current.ExitCode
-			result.FailureClass = firstNonEmpty(current.FailureClass, failure.EngineStopped)
-			result.Message = stoppedMessage(current)
-			result.Evidence = watcher.last()
-			result.WaitedMS = time.Since(started).Milliseconds()
-			return finish(result), nil
-		case !watcher.declared && result.PID != 0:
-			// The document names no line to wait for. The process exists, and
-			// that is all this run can say.
-			result.Message = "The engine process started. This engine profile names no line that reports a map " +
-				"has loaded, so whether it did was not observed: look at the engine, or at the job's log."
-			result.WaitedMS = time.Since(started).Milliseconds()
-			return finish(result), nil
-		}
-		select {
-		case <-ctx.Done():
-			result.Message = "The run was cancelled before the engine reported loading the map."
-			result.FailureClass = failure.Cancelled
-			result.MapLoad = Refused
-			result.WaitedMS = time.Since(started).Milliseconds()
-			stop(jobs, result, current)
-			return finish(result), nil
-		case <-ticker.C:
-		}
-		if time.Now().After(deadline) {
-			result.Message = fmt.Sprintf("The engine is running and did not report loading the map within %s. "+
-				"It was left running: look at it, or at the job's log.", wait.Round(time.Second))
-			result.Evidence = watcher.last()
-			result.WaitedMS = time.Since(started).Milliseconds()
-			return finish(result), nil
-		}
+	outcome := enginewatch.Await(ctx, jobs, submitted.ID, watcher, wait)
+	if outcome.Job != nil {
+		result.State = outcome.Job.State
 	}
+	result.PID = outcome.PID
+	result.WaitedMS = outcome.Waited.Milliseconds()
+	verdict := outcome.Verdict
+	switch outcome.Ending {
+	case enginewatch.EndedLoaded:
+		result.MapLoad = Accepted
+		result.Evidence, result.RuleID = verdict.Line, verdict.Rule.ID
+		result.Message = firstNonEmpty(verdict.Rule.Message, "The engine loaded the map.")
+	case enginewatch.EndedFailed:
+		result.MapLoad = Refused
+		result.Evidence, result.RuleID = verdict.Line, verdict.Rule.ID
+		result.Message = firstNonEmpty(verdict.Rule.Message, "The engine reported an error before it loaded the map.")
+		result.Hint = verdict.Rule.Hint
+		result.FailureClass = firstNonEmpty(verdict.Rule.Class, failure.MapNotLoaded)
+		stop(jobs, result, outcome.Job)
+	case enginewatch.EndedStopped:
+		// It ended, and never said the map loaded.
+		result.MapLoad = Refused
+		result.ExitCode = outcome.Job.ExitCode
+		result.FailureClass = firstNonEmpty(outcome.Job.FailureClass, failure.EngineStopped)
+		result.Message = enginewatch.StoppedMessage(outcome.Job)
+		result.Evidence = watcher.Last()
+	case enginewatch.EndedUndeclared:
+		// The document names no line to wait for. The process exists, and
+		// that is all this run can say.
+		result.Message = "The engine process started. This engine profile names no line that reports a map " +
+			"has loaded, so whether it did was not observed: look at the engine, or at the job's log."
+	case enginewatch.EndedCancelled:
+		result.Message = "The run was cancelled before the engine reported loading the map."
+		result.FailureClass = failure.Cancelled
+		result.MapLoad = Refused
+		stop(jobs, result, outcome.Job)
+	case enginewatch.EndedTimedOut:
+		result.Message = fmt.Sprintf("The engine is running and did not report loading the map within %s. "+
+			"It was left running: look at it, or at the job's log.", wait.Round(time.Second))
+		result.Evidence = watcher.Last()
+	}
+	return finish(result), nil
 }
 
 // finish adds what is true of every result.
@@ -381,61 +358,26 @@ func finish(result *Result) *Result {
 }
 
 // stop ends an engine that did not load the map, when it is still running.
+// Until the process tree is gone, briefly: "stopped" is said of a process that
+// has stopped, and a caller that exits on this result must not take a
+// half-stopped engine's supervisor away with it.
 func stop(jobs Jobs, result *Result, current *job.Job) {
-	if current != nil && current.State.Terminal() {
-		return
-	}
-	cancelled, err := jobs.Cancel(result.JobID)
-	if err != nil || cancelled == nil {
+	stopped, state, code := enginewatch.Stop(jobs, result.JobID, current)
+	if !stopped {
 		return
 	}
 	result.EngineStopped = true
-	result.State = cancelled.State
-	// Until the process tree is gone, briefly: "stopped" is said of a process
-	// that has stopped, and a caller that exits on this result must not take a
-	// half-stopped engine's supervisor away with it.
-	result.State, result.ExitCode = Settle(jobs, result.JobID, cancelled)
+	result.State, result.ExitCode = state, code
 }
 
 // Settle waits, briefly, for a job that was told to stop to reach its final
 // state, and returns that state and its exit status.
 func Settle(jobs Jobs, id string, last *job.Job) (job.State, *int) {
-	deadline := time.Now().Add(stopWait)
-	for last != nil && !last.State.Terminal() && time.Now().Before(deadline) {
-		time.Sleep(50 * time.Millisecond)
-		if loaded, err := jobs.Get(id); err == nil {
-			last = loaded
-		}
-	}
-	if last == nil {
-		return "", nil
-	}
-	return last.State, last.ExitCode
-}
-
-// stopWait bounds the wait for a stopped engine to be gone.
-const stopWait = 10 * time.Second
-
-// stoppedMessage is the sentence for an engine that ended without loading.
-func stoppedMessage(finished *job.Job) string {
-	if finished.Error != "" {
-		return "The engine stopped before it loaded the map: " + finished.Error
-	}
-	if finished.ExitCode != nil {
-		return fmt.Sprintf("The engine exited with status %d before it reported loading the map.", *finished.ExitCode)
-	}
-	return "The engine stopped before it reported loading the map."
+	return enginewatch.Settle(jobs, id, last)
 }
 
 // runsAMap reports an action that is told a map to load.
-func runsAMap(action profile.Action) bool {
-	for _, arg := range action.Args {
-		if strings.Contains(arg.Value, "{runtime."+profile.RuntimeMapName+"}") {
-			return true
-		}
-	}
-	return false
-}
+func runsAMap(action profile.Action) bool { return enginewatch.RunsAMap(action) }
 
 func firstNonEmpty(values ...string) string {
 	for _, value := range values {
@@ -455,119 +397,24 @@ func abbreviate(values []string, limit int) string {
 
 // --- the watcher -----------------------------------------------------------
 
-// maxLineBytes bounds one line of engine output held while it is being read. A
-// program that never prints a newline must not grow a buffer without limit.
-const maxLineBytes = 64 << 10
-
-// watcher reads an engine's output as it arrives and remembers the first line
-// that settles the question.
-type watcher struct {
-	rules    []profile.DiagnosticRule
-	mapName  string
-	declared bool
-
-	mu      sync.Mutex
-	pending []byte
-	result  verdict
-	recent  string
-}
-
-type verdict struct {
-	loaded bool
-	failed bool
-	line   string
-	rule   profile.DiagnosticRule
-}
-
-func newWatcher(rules []profile.DiagnosticRule, mapName string) *watcher {
-	w := &watcher{mapName: mapName}
-	for _, rule := range rules {
-		// The mirror carries both streams as one, so a rule's own stream is
-		// not something this reader can hold it to.
-		rule.Stream = ""
-		w.rules = append(w.rules, rule)
-		if rule.Signal == profile.SignalMapLoaded {
-			w.declared = true
-		}
-	}
-	return w
-}
-
-// Write is the job service's mirror: the engine's output, both streams, as it
-// is produced.
-func (w *watcher) Write(chunk []byte) (int, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.pending = append(w.pending, chunk...)
-	for {
-		end := -1
-		for i, b := range w.pending {
-			if b == '\n' {
-				end = i
-				break
-			}
-		}
-		if end < 0 {
-			if len(w.pending) > maxLineBytes {
-				w.line(string(w.pending[:maxLineBytes]))
-				w.pending = w.pending[:0]
-			}
-			return len(chunk), nil
-		}
-		w.line(strings.TrimRight(string(w.pending[:end]), "\r"))
-		w.pending = w.pending[end+1:]
-	}
-}
-
-// line applies the rules to one line. The first settling line wins and later
-// ones are not consulted: an engine that loaded the map and then printed an
-// error has loaded the map, and one that errored and then loaded something has
-// not loaded what it was asked for first.
-func (w *watcher) line(text string) {
-	text = clean(text)
-	if strings.TrimSpace(text) != "" {
-		w.recent = text
-	}
-	if w.result.loaded || w.result.failed {
-		return
-	}
-	for _, rule := range w.rules {
-		if !rule.Matches("", text) {
-			continue
-		}
-		switch {
-		case rule.Signal == profile.SignalMapLoaded:
-			// An id Tech 3 server names the map on this line, as
-			// `\mapname\<name>\`. When the line says which map, it has to be
-			// the one that was asked for: an engine that fell back to another
-			// map has not loaded this one.
-			if named, says := namedMap(text); says && !strings.EqualFold(named, w.mapName) {
-				w.result = verdict{failed: true, line: text, rule: profile.DiagnosticRule{
+// newWatcher is `internal/enginewatch`'s watcher with Quake III's own check: an
+// id Tech 3 server names the map on its `map_loaded` line, as
+// `\mapname\<name>\`, and when the line says which map it has to be the one
+// that was asked for — an engine that fell back to another map has not loaded
+// this one.
+func newWatcher(rules []profile.DiagnosticRule, mapName string) *enginewatch.Watcher {
+	return enginewatch.New(rules, enginewatch.Options{
+		Confirm: func(line string, rule profile.DiagnosticRule) *enginewatch.Verdict {
+			if named, says := namedMap(line); says && !strings.EqualFold(named, mapName) {
+				return &enginewatch.Verdict{Failed: true, Line: line, Rule: profile.DiagnosticRule{
 					ID:      rule.ID,
-					Message: fmt.Sprintf("The engine loaded %q, not %q.", named, w.mapName),
+					Message: fmt.Sprintf("The engine loaded %q, not %q.", named, mapName),
 					Class:   failure.MapNotLoaded,
 				}}
-				return
 			}
-			w.result = verdict{loaded: true, line: text, rule: rule}
-			return
-		case rule.Severity == profile.SeverityError:
-			w.result = verdict{failed: true, line: text, rule: rule}
-			return
-		}
-	}
-}
-
-func (w *watcher) verdict() verdict {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.result
-}
-
-func (w *watcher) last() string {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.recent
+			return nil
+		},
+	})
 }
 
 // namedMap reads `\mapname\<name>\` out of a server info line.
@@ -582,25 +429,4 @@ func namedMap(line string) (string, bool) {
 		rest = rest[:end]
 	}
 	return rest, rest != ""
-}
-
-// clean makes a line of engine output safe to show: control characters out,
-// length bounded. The raw bytes are in the job's log.
-func clean(line string) string {
-	var b strings.Builder
-	for _, r := range line {
-		if r == '\t' {
-			b.WriteRune(' ')
-			continue
-		}
-		if r < 0x20 || r == 0x7f {
-			continue
-		}
-		b.WriteRune(r)
-		if b.Len() >= 600 {
-			b.WriteString("…")
-			break
-		}
-	}
-	return b.String()
 }

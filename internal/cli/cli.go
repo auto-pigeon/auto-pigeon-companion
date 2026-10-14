@@ -173,7 +173,7 @@ var commands = []Command{
 	},
 	{
 		Name: "package", Usage: "targets | preview | create | inspect | verify | extract | map …",
-		Summary: "build a PAK or PK3 from what a build produced, read one somebody else made, and package, install and run a Quake III map",
+		Summary: "build a PAK or PK3 from what a build produced, read one somebody else made, and package, install and run a Quake III or Quake II map",
 		Run:     runPackage,
 	},
 	{

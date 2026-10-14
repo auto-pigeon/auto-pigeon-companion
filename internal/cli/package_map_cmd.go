@@ -15,21 +15,23 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/maturity"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/pack"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/q2install"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/q2pack"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/q3install"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/q3pack"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/q3run"
 )
 
-// `companion package map` — one finished Quake III build as one PK3 that
-// carries the map and only what somebody said may be redistributed, installed
-// beside a game and loaded in an engine.
+// `companion package map` — one finished Quake III build as one PK3, or one
+// finished Quake II build as one PAK (Q2_009, package_map_q2.go), that carries
+// the map and only what somebody said may be redistributed, installed beside a
+// game and loaded in an engine.
 //
 // It is a sibling of `package preview` / `package create` and not a mode of
 // them, because it answers a different question. Those package what you SELECT
 // and review what it lacks; this works out what the compiled map needs, twice —
 // what the compiler read and what an engine will read — and packages the second
-// set under the grants you give. Quake 1 and Quake II packaging is the other
-// pair, unchanged.
+// set under the grants you give. Quake 1 packaging is the other pair, unchanged.
 
 const packageMapUsage = `usage:
   companion package map preview --build <id> [grants] [--include <path>]... [--name <map>] [--json]
@@ -47,6 +49,12 @@ const packageMapUsage = `usage:
   companion package map uninstall <installation>
 
 <package> is an id from ` + "`package map list`" + `, or a directory ` + "`--out`" + ` wrote.
+
+A Quake II build (Q2_009) is packaged as a PAK with the same subcommands. Its
+package ids begin q2- and its installations q2i-; it is installed into a mod
+folder of its own beside baseq2 (--mod names another; --into and --base-game are
+Quake III's), its grants are the loose and path ones, and a run is accepted only
+when the engine says it opened the map from the installed package.
 
 grants — who may redistribute a file the map needs (nothing is packaged without one):
   --own-archive <sha256>             an archive whose contents are your own work (repeatable)
@@ -232,11 +240,6 @@ func packageMapPlan(env *Env, args []string, previewOnly bool) int {
 		fmt.Fprint(env.Stderr, "error: --reason is what --accept-missing records; without it there is nothing to give a reason for\n")
 		return 2
 	}
-	given, err := grants.grants()
-	if err != nil {
-		fmt.Fprintf(env.Stderr, "error: %v\n", err)
-		return 2
-	}
 	settings, err := loadSettings(env)
 	if err != nil {
 		return fail(env, err)
@@ -244,6 +247,18 @@ func packageMapPlan(env *Env, args []string, previewOnly bool) int {
 	manifest, err := loadBuildManifest(env, settings, *buildID)
 	if err != nil {
 		return fail(env, err)
+	}
+	if manifest.EngineFamily == q2pack.FamilyQuake2 {
+		if len(include) > 0 || *knownAssets != "" {
+			fmt.Fprintln(env.Stderr, "error: --include and --known-assets are Quake III's; a Quake II package carries what the compiled map names")
+			return 2
+		}
+		return packageMapQ2Plan(env, settings, manifest, previewOnly, *mapName, *output, *reason, *acceptMissing, grants, *asJSON)
+	}
+	given, err := grants.grants()
+	if err != nil {
+		fmt.Fprintf(env.Stderr, "error: %v\n", err)
+		return 2
 	}
 	request := q3pack.Request{Manifest: manifest, MapName: *mapName, Grants: given, Include: include}
 	if *knownAssets != "" {
@@ -476,16 +491,29 @@ func packageMapList(env *Env, args []string) int {
 	if err != nil {
 		return fail(env, err)
 	}
-	if *asJSON {
-		if records == nil {
-			records = []*q3pack.Record{}
-		}
-		return printJSON(env, records)
+	q2Packages, err := q2Store(env, settings)
+	if err != nil {
+		return fail(env, err)
 	}
-	if len(records) == 0 {
-		fmt.Fprintln(env.Stdout, "no Quake III map packages on this machine; make one with `companion package map create --build <id>`")
+	q2Records, err := q2Packages.List()
+	if err != nil {
+		return fail(env, err)
+	}
+	if *asJSON {
+		all := []any{}
+		for _, record := range records {
+			all = append(all, record)
+		}
+		for _, record := range q2Records {
+			all = append(all, record)
+		}
+		return printJSON(env, all)
+	}
+	if len(records) == 0 && len(q2Records) == 0 {
+		fmt.Fprintln(env.Stdout, "no map packages on this machine; make one with `companion package map create --build <id>`")
 		return 0
 	}
+	printQ2PackageList(env, q2Records)
 	for _, record := range records {
 		state := "complete"
 		if !record.Complete {
@@ -512,6 +540,9 @@ func packageMapShow(env *Env, args []string) int {
 	settings, err := loadSettings(env)
 	if err != nil {
 		return fail(env, err)
+	}
+	if isQ2Package(rest[0]) {
+		return packageMapQ2Show(env, settings, rest[0], *asJSON)
 	}
 	record, err := loadPackage(env, settings, rest[0])
 	if err != nil {
@@ -574,6 +605,13 @@ func packageMapInstall(env *Env, args []string) int {
 	settings, err := loadSettings(env)
 	if err != nil {
 		return fail(env, err)
+	}
+	if isQ2Package(rest[0]) {
+		if kind != q3install.Managed || *baseGame != "" {
+			fmt.Fprintln(env.Stderr, "error: --into and --base-game are Quake III's; a Quake II package always goes into a mod folder of its own beside baseq2")
+			return 2
+		}
+		return packageMapQ2Install(env, settings, rest[0], *engineID, *mod, *gameRoot, *dryRun, *asJSON)
 	}
 	record, err := loadPackage(env, settings, rest[0])
 	if err != nil {
@@ -712,15 +750,31 @@ func packageMapInstalled(env *Env, args []string) int {
 	if err != nil {
 		return fail(env, err)
 	}
-	if *asJSON {
-		if installations == nil {
-			installations = []*q3install.Installation{}
-		}
-		return printJSON(env, installations)
+	q2Dir, err := q2InstallsDir(env, settings)
+	if err != nil {
+		return fail(env, err)
 	}
-	if len(installations) == 0 {
-		fmt.Fprintln(env.Stdout, "no Quake III map package is installed by this program")
+	q2Installations, err := q2install.List(q2Dir)
+	if err != nil {
+		return fail(env, err)
+	}
+	if *asJSON {
+		all := []any{}
+		for _, installation := range installations {
+			all = append(all, installation)
+		}
+		for _, installation := range q2Installations {
+			all = append(all, installation)
+		}
+		return printJSON(env, all)
+	}
+	if len(installations) == 0 && len(q2Installations) == 0 {
+		fmt.Fprintln(env.Stdout, "no map package is installed by this program")
 		return 0
+	}
+	for _, installation := range q2Installations {
+		fmt.Fprintf(env.Stdout, "%s\n  Quake II map %s, mod folder %s\n  %s\n", installation.ID, installation.MapName,
+			installation.FSGame, installation.Archive.Path)
 	}
 	for _, installation := range installations {
 		fmt.Fprintf(env.Stdout, "%s\n  map %s, %s\n  %s\n", installation.ID, installation.MapName,
@@ -745,6 +799,9 @@ func packageMapUninstall(env *Env, args []string) int {
 	settings, err := loadSettings(env)
 	if err != nil {
 		return fail(env, err)
+	}
+	if isQ2Installation(rest[0]) {
+		return packageMapQ2Uninstall(env, settings, rest[0])
 	}
 	dir, err := q3InstallsDir(env, settings)
 	if err != nil {
@@ -781,6 +838,9 @@ func packageMapRun(env *Env, args []string) int {
 	if *engineID == "" {
 		fmt.Fprintln(env.Stderr, "error: package map run requires --engine; `companion engine list` shows the ones set up here")
 		return 2
+	}
+	if isQ2Installation(rest[0]) {
+		return packageMapQ2Run(env, rest[0], *engineID, *action, *wait, *check, *asJSON, options.orNil())
 	}
 	// Why this engine could not run it here, said before anything starts.
 	entry, bindingsPath, err := findEngine(env, *engineID)

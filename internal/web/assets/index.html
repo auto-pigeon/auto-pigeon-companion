@@ -737,7 +737,7 @@
                  folder: an archive is its digest, a game directory is its name. -->
             <div id="q3pkg-panel" class="q3pkg" hidden>
               <h3>Package and run this map</h3>
-              <p class="muted">
+              <p class="muted" id="q3pkg-lede">
                 One PK3 holding the compiled map and only the files you say may be
                 redistributed. The base game is never packaged. Then it is put
                 beside a game and the engine is started — and the engine itself
@@ -749,6 +749,10 @@
                 <div id="q3pkg-sources" class="q3pkg-sources"></div>
                 <p id="q3pkg-plan-message" class="message" role="status"></p>
                 <div id="q3pkg-plan"></div>
+                <div class="field" id="q3pkg-name-field" hidden>
+                  <label for="q3pkg-name">Name in the game <span class="hint">(what <code>+map</code> is given — a name no other map has; optional)</span></label>
+                  <input id="q3pkg-name" type="text" placeholder="the source's own name" />
+                </div>
                 <div class="field">
                   <label for="q3pkg-include">Also carry these files <span class="hint">(optional — a licence text, a level shot; separate with spaces)</span></label>
                   <input id="q3pkg-include" type="text" placeholder="LICENSE.txt levelshots/mymap.jpg" />

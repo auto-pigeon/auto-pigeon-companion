@@ -381,7 +381,7 @@ func TestEveryQuake3ActionThatLoadsAMapNamesTheLineThatSaysSo(t *testing.T) {
 			if !runsAMap(action) {
 				continue
 			}
-			if !newWatcher(action.Diagnostics, "x").declared {
+			if !newWatcher(action.Diagnostics, "x").Declared() {
 				t.Errorf("%s %s loads a map and names no map_loaded line", id, action.ID)
 			}
 		}

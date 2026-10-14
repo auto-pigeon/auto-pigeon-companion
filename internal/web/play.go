@@ -18,6 +18,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/playrun"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/q2pack"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/q3pack"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/q3packages"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/texturebundle"
@@ -631,6 +632,16 @@ var errPlayIsNotForQuake3 = errors.New(
 		"textures, shaders and models packaged with it, and you have to say which of them may be " +
 		"redistributed: build it under Build, then use “Package and run this map” under the build's result")
 
+// errPlayIsNotForQuake2 is why Build & Run refuses a Quake II pipeline
+// (Q2_009). A Quake II map is played from a PAK in a mod folder of its own,
+// which an engine has to say it opened; the loose level this sequence stages
+// carries none of the map's own textures, sky, sounds or models, and its
+// texture bundle is a Quake 1 WAD bundle.
+var errPlayIsNotForQuake2 = errors.New(
+	"Build & Run plays a Quake map by putting its level in a mod folder. A Quake II map is played from a " +
+		"PAK holding the map and the files you say may travel with it: build it under Build, then use " +
+		"“Package and run this map” under the build's result")
+
 // playRefuses reports a pipeline Build & Run does not run.
 func (s *Server) playRefuses(pipelineID string) error {
 	catalog, err := s.catalog()
@@ -641,8 +652,11 @@ func (s *Server) playRefuses(pipelineID string) error {
 	if err != nil {
 		return nil
 	}
-	if documentFamily(entry.Profile) == q3pack.FamilyQuake3 {
+	switch documentFamily(entry.Profile) {
+	case q3pack.FamilyQuake3:
 		return errPlayIsNotForQuake3
+	case q2pack.FamilyQuake2:
+		return errPlayIsNotForQuake2
 	}
 	return nil
 }

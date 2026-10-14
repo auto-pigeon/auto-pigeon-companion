@@ -986,8 +986,10 @@
     // textures, shaders and models have to travel with it. That build gets the
     // Package → Install → Run panel instead (q3package.js), which is told about
     // every render and ignores the ones for a build it is already showing.
-    const quake3 = manifest.engine_family === "quake3";
-    $("build-play").hidden = quake3 || !(manifest.state === "succeeded" &&
+    // A Quake II map is packaged too (Q2_009): a PAK in a mod folder of its
+    // own, run by an engine that has to say it opened that package.
+    const packaged = manifest.engine_family === "quake3" || manifest.engine_family === "quake2";
+    $("build-play").hidden = packaged || !(manifest.state === "succeeded" &&
       (manifest.outputs || []).some((output) => output.name === "bsp" && output.path && !output.missing));
     window.AUCOM.q3package?.show(manifest, Boolean(body.live));
     if (body.live) {
