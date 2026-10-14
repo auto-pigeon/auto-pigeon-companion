@@ -339,6 +339,18 @@ func bindFix(document profile.Profile, engineFix string) string {
 	return engineFix
 }
 
+// rootFix is bindFix for a folder (Q2_008): a build tool's folders are set
+// where its programs are, and `engine bind` refuses a tool's id — found while
+// running the README's Quake II example, where every folder problem of a
+// toolchain named that command.
+func rootFix(document profile.Profile, role, engineFix string) string {
+	if document.Metadata().Kind == profile.KindTool {
+		return "Set it under \"Where these programs are on this machine\" in Profiles, or run `companion acquire resolve <its profile file> --mode user_path --user-path <folder> --root " +
+			role + "=<path> --bind`."
+	}
+	return engineFix
+}
+
 func executableFile(document profile.Profile, name string) string {
 	engine, ok := document.(*profile.EngineProfile)
 	if !ok {
@@ -368,7 +380,7 @@ func (c Checker) rootProblems(document profile.Profile, action profile.Action, l
 			problems = append(problems, Problem{
 				Fault:   FaultUnboundRoot,
 				Summary: fmt.Sprintf("%q needs the %s, and nothing on this machine says where that is.", action.Title, phrase(ref.Role)),
-				Fix:     "Set it: `companion engine bind " + document.Metadata().ID + " " + flagFor(ref.Role) + "`.",
+				Fix:     rootFix(document, ref.Role, "Set it: `companion engine bind "+document.Metadata().ID+" "+flagFor(ref.Role)+"`."),
 			})
 			continue
 		}
@@ -376,7 +388,7 @@ func (c Checker) rootProblems(document profile.Profile, action profile.Action, l
 			problems = append(problems, Problem{
 				Fault:   FaultMissingRoot,
 				Summary: fmt.Sprintf("The %s recorded for %s is not a directory: %s.", phrase(ref.Role), document.Metadata().Name, path),
-				Fix:     "It was moved or removed. Set it again with `companion engine bind`.",
+				Fix:     rootFix(document, ref.Role, "It was moved or removed. Set it again with `companion engine bind`."),
 			})
 			continue
 		}
@@ -388,8 +400,8 @@ func (c Checker) rootProblems(document profile.Profile, action profile.Action, l
 				Fault: FaultMissingGameData,
 				Summary: fmt.Sprintf("The %s recorded for %s holds no %s, so it is not the folder %q reads: %s.",
 					phrase(ref.Role), document.Metadata().Name, ref.HoldsText(), action.Title, path),
-				Fix: "Choose the folder that holds " + ref.HoldsText() + " itself — not the folder above it — in Profiles, or with `companion engine bind " +
-					document.Metadata().ID + " " + flagFor(ref.Role) + "`.",
+				Fix: "Choose the folder that holds " + ref.HoldsText() + " itself — not the folder above it. " +
+					rootFix(document, ref.Role, "Set it with `companion engine bind "+document.Metadata().ID+" "+flagFor(ref.Role)+"`."),
 			})
 			continue
 		}

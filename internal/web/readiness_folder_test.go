@@ -3,6 +3,7 @@ package web
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
@@ -61,6 +62,13 @@ func TestAToolWhoseRecordedGameFolderIsWrongNeedsSetupEverywhere(t *testing.T) {
 	r := installReadiness(entry, local)
 	if r.Ready || !r.Problems.Has(engine.FaultMissingGameData) {
 		t.Fatalf("bound to the folder above baseq2 the tool reads ready=%v %+v", r.Ready, r.Problems)
+	}
+	// A build tool's folder is not set with `engine bind`, which refuses a
+	// tool's id; the fix names the route that sets it.
+	for _, problem := range r.Problems {
+		if strings.Contains(problem.Fix, "engine bind") || !strings.Contains(problem.Fix, "--root game_root=") {
+			t.Errorf("a build tool's folder fix: %q", problem.Fix)
+		}
 	}
 	if len(r.PerAction["inspect"]) != 0 {
 		t.Errorf("the action that reads no game folder is still startable on its own: %+v", r.PerAction["inspect"])
