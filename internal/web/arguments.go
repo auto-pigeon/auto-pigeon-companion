@@ -173,6 +173,17 @@ func (s *Server) handleProfileStageArguments(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusBadRequest, fmt.Errorf("the arguments for the stage %s: %w", stage, err))
 		return
 	}
+	if catalog, catalogErr := s.catalog(); catalogErr == nil {
+		for _, step := range pipeline.Steps {
+			if step.ID != stage {
+				continue
+			}
+			if err := job.StageTokenConflict(catalog, step, tokens); err != nil {
+				writeError(w, http.StatusBadRequest, fmt.Errorf("the arguments for the stage %s: %w", stage, err))
+				return
+			}
+		}
+	}
 	path, err := s.bindingsPath()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)

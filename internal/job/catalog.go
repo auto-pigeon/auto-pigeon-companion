@@ -218,3 +218,32 @@ func (c Chain) List() ([]CatalogEntry, error) {
 	}
 	return out, nil
 }
+
+// StageTokenConflict checks a pipeline stage's own tokens against the action
+// that runs the stage here (Q2_008): a token that repeats a switch the action
+// manages is refused where it is saved, by the page and the CLI alike, with
+// the same sentence the build would refuse it with. A stage nothing installed
+// provides yet is not checked here — the build resolves it again, and refuses
+// there.
+func StageTokenConflict(catalog Catalog, step profile.PipelineStep, tokens []string) error {
+	if len(tokens) == 0 || catalog == nil {
+		return nil
+	}
+	entries, err := catalog.List()
+	if err != nil {
+		return nil
+	}
+	for _, entry := range entries {
+		tool, isTool := entry.Profile.(*profile.ToolProfile)
+		if !isTool || (step.Tool != "" && tool.Meta.ID != step.Tool) {
+			continue
+		}
+		for _, action := range tool.Actions {
+			if action.Capability != step.Capability {
+				continue
+			}
+			return profile.ManagedSwitchConflict(action, tokens)
+		}
+	}
+	return nil
+}

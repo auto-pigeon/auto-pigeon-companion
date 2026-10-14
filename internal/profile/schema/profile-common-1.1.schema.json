@@ -912,6 +912,16 @@
         "optional": {
           "type": "boolean",
           "description": "The action runs whether or not this root is set; arguments using it are conditioned with when.root."
+        },
+        "holds_any": {
+          "type": "array",
+          "description": "Relative paths, with forward slashes, at least one of which the folder bound to this role must hold. Readiness and the executor refuse a folder that holds none of them. Not allowed on the workspace.",
+          "maxItems": 8,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
         }
       }
     },

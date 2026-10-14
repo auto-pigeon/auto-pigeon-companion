@@ -54,14 +54,15 @@ func toolchainArgs(env *Env, args []string) int {
 	if err != nil {
 		return fail(env, err)
 	}
-	entry, err := job.NewCatalog(profilesDir).Lookup(rest[0])
+	catalog := job.NewCatalog(profilesDir)
+	entry, err := catalog.Lookup(rest[0])
 	if err != nil {
 		return fail(env, err)
 	}
 	meta := entry.Profile.Metadata()
 
 	if pipeline, isPipeline := entry.Profile.(*profile.PipelineProfile); isPipeline {
-		return pipelineStageArgs(env, entry, pipeline, bindingsPath, rest, tokens)
+		return pipelineStageArgs(env, catalog, entry, pipeline, bindingsPath, rest, tokens)
 	}
 	if _, isTool := entry.Profile.(*profile.ToolProfile); isTool && len(tokens) > 0 {
 		fmt.Fprintf(env.Stderr, "error: arguments are set on a pipeline stage, not on the build tool.\n"+
@@ -109,7 +110,7 @@ func toolchainArgs(env *Env, args []string) int {
 }
 
 // pipelineStageArgs is `args` for a pipeline: the tokens of its stages.
-func pipelineStageArgs(env *Env, entry job.CatalogEntry, pipeline *profile.PipelineProfile, bindingsPath string, rest []string, tokens []string) int {
+func pipelineStageArgs(env *Env, catalog job.Catalog, entry job.CatalogEntry, pipeline *profile.PipelineProfile, bindingsPath string, rest []string, tokens []string) int {
 	meta := entry.Profile.Metadata()
 	var local binding.LocalBinding
 	if len(rest) == 2 {
@@ -120,6 +121,15 @@ func pipelineStageArgs(env *Env, entry job.CatalogEntry, pipeline *profile.Pipel
 		if !known {
 			fmt.Fprintf(env.Stderr, "error: %s has no stage called %q\n", meta.ID, stage)
 			return 1
+		}
+		for _, step := range pipeline.Steps {
+			if step.ID != stage {
+				continue
+			}
+			if err := job.StageTokenConflict(catalog, step, tokens); err != nil {
+				fmt.Fprintf(env.Stderr, "error: the arguments for the stage %s: %v\n", stage, err)
+				return 1
+			}
 		}
 		var err error
 		local, err = binding.SetStepArguments(bindingsPath, meta.ID, meta.Version, entry.Digest, entry.Trust, stage, tokens)

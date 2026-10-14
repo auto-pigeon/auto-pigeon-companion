@@ -66,6 +66,9 @@ func isQ2ToolName(name string) bool {
 // q2ToolMain is the fixture's entry point, dispatched from TestMain on the name
 // the binary was invoked under.
 func q2ToolMain(name string, args []string) int {
+	if len(args) == 0 {
+		return fixtureUsage(name)
+	}
 	switch name {
 	case "qbsp":
 		return fixtureQBSP(args)
@@ -76,6 +79,28 @@ func q2ToolMain(name string, args []string) int {
 	}
 	fmt.Fprintf(os.Stderr, "fixture: %q is not one of %s\n", name, strings.Join(q2ToolNames, ", "))
 	return 2
+}
+
+// fixtureUsage is what each program prints when it is given nothing, which is
+// how the Companion asks it what it is (Q2_008): the banner and the options its
+// action passes, as 2.0.0-alpha7 spells them. qbsp exits 1 there — alpha7's
+// qbsp stops its usage with `number is too big` before it reaches `-basedir`,
+// measured — and vis and light exit 0. The answer is the text, not the exit.
+func fixtureUsage(name string) int {
+	usage := map[string][]string{
+		"qbsp":  {"-q2bsp                        target Quake II's BSP format", "-leaktest                     make compilation fail if the map leaks"},
+		"vis":   {"-threads n", "-fast                         run very simple & fast vis procedure", "-gamedir \"relative/path\"", "-basedir \"relative/path\"", "-noambient", "-level n"},
+		"light": {"-threads n", "-extra", "-gamedir \"relative/path\"", "-basedir \"relative/path\"", "-nolights", "-soft [n]"},
+	}[name]
+	fmt.Printf("---- %s / ericw-tools 2.0.0-alpha7 ----\nusage: %s [-help/-h/-?] [-options] ...\n", name, name)
+	for _, line := range usage {
+		fmt.Println("  " + line)
+	}
+	if name == "qbsp" {
+		fmt.Println("************ ERROR ************\nnumber is too big")
+		return 1
+	}
+	return 0
 }
 
 // q2Args is what the three programs have in common, parsed the way they parse
@@ -94,7 +119,7 @@ func parseQ2Args(args []string) q2Args {
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "-nocolor", "-verbose", "-quiet", "-notex", "-fast", "-soft", "-extra", "-extra4",
-			"-noambient", "-nolights":
+			"-noambient", "-nolights", "-nopercent":
 			// Accepted and ignored: the fixture measures wiring, not lighting.
 		case "-q2bsp":
 			parsed.format = "q2bsp"
@@ -214,8 +239,13 @@ func fixtureQBSP(args []string) int {
 	}
 	// The extended texinfo document, which `light` reads back. Its absence is
 	// silent in the real tool, which is exactly why the pipeline wires it.
-	if err := os.WriteFile(stem+".texinfo.json", []byte("{}\n"), 0o600); err != nil {
-		return 1
+	// A map carrying `aucom-no-texinfo` stands for the file being gone by the
+	// time light runs (Q2_008, C6): the real light then succeeds with default
+	// flags, which is what the required input exists to stop.
+	if !strings.Contains(string(body), "aucom-no-texinfo") {
+		if err := os.WriteFile(stem+".texinfo.json", []byte("{}\n"), 0o600); err != nil {
+			return 1
+		}
 	}
 	if err := os.WriteFile(stem+".log", []byte("qbsp fixture log\n"), 0o600); err != nil {
 		return 1

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"os"
 	"path"
 	"path/filepath"
 	"sort"
@@ -228,6 +229,10 @@ func resolveInvocation(p Profile, actionID string, request Request) (Invocation,
 	var custom []string
 	if len(request.ExtraArgs) > 0 {
 		if err := ValidateCustomArgs(request.ExtraArgs); err != nil {
+			return Invocation{}, fmt.Errorf("profile: resolving %s/%s: your own arguments for %q: %w",
+				meta.ID, actionID, action.Executable, err)
+		}
+		if err := ManagedSwitchConflict(action, request.ExtraArgs); err != nil {
 			return Invocation{}, fmt.Errorf("profile: resolving %s/%s: your own arguments for %q: %w",
 				meta.ID, actionID, action.Executable, err)
 		}
@@ -661,6 +666,15 @@ func resolveRoots(action Action, roots map[string]string) (read, write []string,
 			return nil, nil, err
 		}
 		resolved = filepath.Clean(resolved)
+		// The folder is the one the document says it must be (Q2_008): the
+		// same question readiness asks, asked again where the command is made,
+		// so a folder emptied or rebound since the page was drawn is refused
+		// here rather than compiled against.
+		if _, holds := r.Holds(resolved, func(p string) error { _, err := os.Stat(p); return err }); !holds {
+			return nil, nil, failure.As(failure.GameDataMissing, fmt.Errorf(
+				"the %q root on this machine is %s, which holds no %s; choose the folder that does",
+				r.Role, resolved, r.HoldsText()))
+		}
 		read = append(read, resolved)
 		if r.Access == AccessReadWrite {
 			write = append(write, resolved)

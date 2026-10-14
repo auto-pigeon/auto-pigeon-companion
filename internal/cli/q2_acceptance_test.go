@@ -82,7 +82,31 @@ func gameDataRoot(t *testing.T) string {
 			t.Fatal(err)
 		}
 	}
+	// The palette, which is what the Quake II profiles hold a base game folder
+	// to (Q2_008): a folder with neither it nor pak0.pak is the folder ABOVE
+	// baseq2, and qbsp compiled against that exits 0 with no textures.
+	if err := os.MkdirAll(filepath.Join(root, "pics"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "pics", "colormap.pcx"), synthesizedColormap(), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	return root
+}
+
+// synthesizedColormap is a one-pixel 8-bit PCX with a grey-ramp palette,
+// written here: the 128-byte header, one run-length byte pair, the 0x0C marker
+// and 768 bytes of palette. Nothing of the game's.
+func synthesizedColormap() []byte {
+	header := make([]byte, 128)
+	header[0], header[1], header[2], header[3] = 0x0A, 5, 1, 8 // PCX, version 5, RLE, 8 bits
+	header[65] = 1                                             // one plane
+	header[66] = 2                                             // two bytes per line
+	out := append(header, 0xC2, 0x00, 0x0C)
+	for i := 0; i < 256; i++ {
+		out = append(out, byte(i), byte(i), byte(i))
+	}
+	return out
 }
 
 // synthesizedWAL is a Quake II texture written here, from nothing.

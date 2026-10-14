@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "name": "EricW tools, Auto-Pigeon build 1.4518 (Quake II, experimental)",
   "summary": "Auto-Pigeon's own build of the ericw-tools compilers for Quake II, experimental, downloaded from its GitHub releases.",
-  "description": "This profile describes the Auto-Pigeon fork of ericw-tools — the qbsp, vis and light map compilers by Eric Wasylishen and contributors — as published on the fork's GitHub releases page. It is not an upstream release, and upstream has not reviewed or accepted the fork's change.\n\nRelease 1.4518 is upstream `main` at 2.0.0-alpha11 plus 32 commits, with five changes to qbsp: `SplitBrush` splits thin brush fragments with `PLANESIDE_EPSILON` instead of `0.1`, which closes a clip-hull leak through valid thin geometry; `CheckSplitBrush` tests the node volume with the same tolerance; `LeafNode` gives a leaf a brush's contents only when the middle of the leaf is inside that brush; `AddBrushBevels` recognises a bevel that is one of the brush's own faces; and both split functions refuse a cut only when it has no interior, where they used to refuse one with short edges, so a whole brush thinner than 0.02 units is cut out of the slab it lies in. Every program prints `ericw-tools 2.0.0-alpha11-32-g0c787d7a+auto-pigeon.1.4518`, and the check on this profile shows that line, so you can see which release you pointed it at. A newer release from the same page works with this profile; the check says which one it is.\n\nReleases 1.4502 and 1.4505 carried only the first of those changes and are not to be built with: measured, they put solid in a map's air beside geometry that is not in one plane — a pipe that leaves its plane, a bent duct — and leave the faces behind it undrawn, with no leak and exit status 0. The Quake 1 profile for this build refuses both by name; this one asks its programs nothing, so look at the version line yourself. Releases 1.4510 and 1.4513 have every change but the last and are not refused, but measured: with them a free fin thinner than 0.02 units can fill half of its room with solid, with no leak and exit status 0, and a plate that thin which alone closes a hole is reported as a leak. Use 1.4518 or newer.\n\nKnown limits of 1.4518, measured in its Quake 1 mode (the code that splits brushes is shared by both modes; in Quake II mode this release was run by the fork's own tests and not through this profile): a whole brush thinner than 0.001 units is dropped — no material, and no solid in the map's air; a room only such a brush seals is reported as a leak. From 0.00101 units up the measured cases are exact, with and without `-forcegoodtree`. Where two slabs thinner than 0.2 units cross, the hairline column they share is solid where the map has air, with nothing drawn. A brush of zero thickness crashes qbsp, as upstream's does.\n\nThe archive unpacks to one folder holding `bin/`, `licenses/`, `README.md`, `build-info.json` and `MANIFEST.json`. The programs are in `bin/`, beside the Embree and oneTBB libraries they load, so choose the unpacked folder itself — the one that contains `bin/` — not `bin/`. Each release also publishes `SHA256SUMS` and a `release-manifest.json`; check the archive against them before unpacking. The Companion downloads nothing: you fetch the archive, and this profile runs what you unpacked.\n\nThis is a second profile beside the built-in ericw-tools one for Quake II, experimental, not a replacement for it. The built-in build profiles keep naming the upstream compiler, so nothing you already build changes. To build with this one, duplicate a build profile in Profiles and choose this tool for its stages.\n\nQuake II is work in progress here. The actions, options and file names are the built-in Quake II profile's own, which were measured on upstream 2.0.0-alpha7. This build is based on 2.0.0-alpha11, and its Quake II mode has not been measured here: a step that behaves differently from what this document says is a difference between those two versions, and worth reporting.",
+  "description": "This profile describes the Auto-Pigeon fork of ericw-tools — the qbsp, vis and light map compilers by Eric Wasylishen and contributors — as published on the fork's GitHub releases page. It is not an upstream release, and upstream has not reviewed or accepted the fork's change.\n\nRelease 1.4518 is upstream `main` at 2.0.0-alpha11 plus 32 commits, with five changes to qbsp: `SplitBrush` splits thin brush fragments with `PLANESIDE_EPSILON` instead of `0.1`, which closes a clip-hull leak through valid thin geometry; `CheckSplitBrush` tests the node volume with the same tolerance; `LeafNode` gives a leaf a brush's contents only when the middle of the leaf is inside that brush; `AddBrushBevels` recognises a bevel that is one of the brush's own faces; and both split functions refuse a cut only when it has no interior, where they used to refuse one with short edges, so a whole brush thinner than 0.02 units is cut out of the slab it lies in. Every program prints `ericw-tools 2.0.0-alpha11-32-g0c787d7a+auto-pigeon.1.4518`, and the check on this profile shows that line, so you can see which release you pointed it at. A newer release from the same page works with this profile; the check says which one it is.\n\nReleases 1.4502 and 1.4505 carried only the first of those changes and are not to be built with: measured, they put solid in a map's air beside geometry that is not in one plane — a pipe that leaves its plane, a bent duct — and leave the faces behind it undrawn, with no leak and exit status 0. The Quake 1 profile for this build refuses both by name. This one asks its programs what they are — a release of this build, listing the options its actions pass — but it does not refuse 1.4502 or 1.4505 by name, because that defect was measured on Quake 1 maps and nobody has measured it on a Quake II one; look at the version line yourself. Releases 1.4510 and 1.4513 have every change but the last and are not refused, but measured: with them a free fin thinner than 0.02 units can fill half of its room with solid, with no leak and exit status 0, and a plate that thin which alone closes a hole is reported as a leak. Use 1.4518 or newer.\n\nKnown limits of 1.4518, measured in its Quake 1 mode (the code that splits brushes is shared by both modes; in Quake II mode this release was run by the fork's own tests and not through this profile): a whole brush thinner than 0.001 units is dropped — no material, and no solid in the map's air; a room only such a brush seals is reported as a leak. From 0.00101 units up the measured cases are exact, with and without `-forcegoodtree`. Where two slabs thinner than 0.2 units cross, the hairline column they share is solid where the map has air, with nothing drawn. A brush of zero thickness crashes qbsp, as upstream's does.\n\nThe archive unpacks to one folder holding `bin/`, `licenses/`, `README.md`, `build-info.json` and `MANIFEST.json`. The programs are in `bin/`, beside the Embree and oneTBB libraries they load, so choose the unpacked folder itself — the one that contains `bin/` — not `bin/`. Each release also publishes `SHA256SUMS` and a `release-manifest.json`; check the archive against them before unpacking. The Companion downloads nothing: you fetch the archive, and this profile runs what you unpacked.\n\nThis is a second profile beside the built-in ericw-tools one for Quake II, experimental, not a replacement for it. The built-in build profiles keep naming the upstream compiler, so nothing you already build changes. To build with this one, duplicate a build profile in Profiles and choose this tool for its stages.\n\nQuake II is work in progress here. The actions, options and file names are the built-in Quake II profile's own, which were measured on upstream 2.0.0-alpha7. This build is based on 2.0.0-alpha11, and its Quake II mode has not been measured here: a step that behaves differently from what this document says is a difference between those two versions, and worth reporting.",
   "publisher": {
     "name": "Auto-Pigeon",
     "url": "https://github.com/auto-pigeon/auto-pigeon-companion"
@@ -112,6 +112,50 @@
     },
     "timeout_seconds": 10
   },
+  "compatibility_probe": {
+    "args": [],
+    "parse": {
+      "kind": "after_marker",
+      "marker": "ericw-tools ",
+      "stream": "stdout"
+    },
+    "timeout_seconds": 10,
+    "accept": [
+      {
+        "prefix": "2.",
+        "contains": "+auto-pigeon."
+      }
+    ],
+    "executables": [
+      {
+        "name": "qbsp",
+        "mentions": [
+          "-q2bsp",
+          "-basedir",
+          "-gamedir",
+          "-leaktest"
+        ]
+      },
+      {
+        "name": "vis",
+        "mentions": [
+          "-threads",
+          "-basedir",
+          "-gamedir",
+          "-fast",
+          "-level"
+        ]
+      },
+      {
+        "name": "light",
+        "mentions": [
+          "-threads",
+          "-basedir",
+          "-gamedir"
+        ]
+      }
+    ]
+  },
   "capabilities": [
     {
       "id": "q2.bsp.compile",
@@ -203,7 +247,7 @@
     {
       "id": "compile",
       "title": "Compile the map",
-      "description": "qbsp reads the .map and writes the Quake II .bsp. `-basedir` is the directory holding `textures/`, because qbsp has to open the .wal a face names to read the content and surface flags it bakes into the BSP; `-gamedir` is the mod that overlays it.",
+      "description": "qbsp reads the .map and writes the Quake II .bsp. `-basedir` is the directory holding `textures/`, because qbsp has to open the .wal a face names to read the content and surface flags it bakes into the BSP; `-gamedir` is the mod that overlays it.\n\nThe base game data folder is the one that holds `pak0.pak` — `baseq2` itself, not the folder above it. Measured with release 1.4518 (Q2_008): handed the folder above, qbsp exits 0 with `using built-in palette` and `Couldn't locate texture` for every retail texture, a map that looks built and is wrong. So the folder is held to `pak0.pak` or `pics/colormap.pcx`, and Profiles, Build & Run and the build itself refuse it by name when it holds neither.",
       "capability": "q2.bsp.compile",
       "executable": "qbsp",
       "working_dir": {
@@ -522,7 +566,11 @@
         {
           "role": "game_root",
           "access": "read",
-          "purpose": "read the Quake II textures whose flags are baked into the BSP"
+          "purpose": "read the Quake II textures whose flags are baked into the BSP",
+          "holds_any": [
+            "pak0.pak",
+            "pics/colormap.pcx"
+          ]
         },
         {
           "role": "content_root",
@@ -678,7 +726,11 @@
         {
           "role": "game_root",
           "access": "read",
-          "purpose": "read the Quake II palette the compilers load at startup"
+          "purpose": "read the Quake II palette the compilers load at startup",
+          "holds_any": [
+            "pak0.pak",
+            "pics/colormap.pcx"
+          ]
         },
         {
           "role": "content_root",
@@ -691,7 +743,7 @@
     {
       "id": "light",
       "title": "Compute lighting",
-      "description": "light rewrites the BSP it is given. Its log is not declared here for the same reason vis's is not: 2.x writes `<stem>-light.log` beside the BSP it was handed, which is inside the staged input's own directory. It also reads the `.texinfo.json` qbsp wrote beside that BSP — `Loading extended texinfo flags from …` — so that file is an input here and is staged with the BSP. Without it the run still succeeds, with the wrong surface flags, which is why it is wired rather than left to chance.",
+      "description": "light rewrites the BSP it is given. Its log is not declared here for the same reason vis's is not: 2.x writes `<stem>-light.log` beside the BSP it was handed, which is inside the staged input's own directory. It also reads the `.texinfo.json` qbsp wrote beside that BSP — `Loading extended texinfo flags from …` — so that file is an input here and is staged with the BSP. Without it the run still succeeds, exit 0, with the wrong surface flags — measured with release 1.4518: a `func_group` carrying `_minlight` lit 504 bytes differently with the file removed — so it is a REQUIRED input: a compile that did not leave one stops the build at this step, by name, instead of lighting the map with defaults.",
       "capability": "q2.bsp.light",
       "executable": "light",
       "working_dir": {
@@ -759,6 +811,7 @@
           "name": "texinfo",
           "title": "Extended texinfo flags",
           "role": "q2.texinfo",
+          "required": true,
           "extensions": [
             ".json"
           ],
@@ -877,7 +930,11 @@
         {
           "role": "game_root",
           "access": "read",
-          "purpose": "read the Quake II palette and the textures whose colours bounce light"
+          "purpose": "read the Quake II palette and the textures whose colours bounce light",
+          "holds_any": [
+            "pak0.pak",
+            "pics/colormap.pcx"
+          ]
         },
         {
           "role": "content_root",

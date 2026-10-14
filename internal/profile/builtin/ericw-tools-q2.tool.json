@@ -58,6 +58,17 @@
     "parse": { "kind": "after_marker", "marker": "ericw-tools ", "stream": "stdout" },
     "timeout_seconds": 10
   },
+  "compatibility_probe": {
+    "args": [],
+    "parse": { "kind": "after_marker", "marker": "ericw-tools ", "stream": "stdout" },
+    "timeout_seconds": 10,
+    "accept": [{ "prefix": "2." }],
+    "executables": [
+      { "name": "qbsp", "mentions": ["-q2bsp", "-leaktest"] },
+      { "name": "vis", "mentions": ["-threads", "-basedir", "-gamedir", "-fast", "-level"] },
+      { "name": "light", "mentions": ["-threads", "-basedir", "-gamedir"] }
+    ]
+  },
   "capabilities": [
     {
       "id": "q2.bsp.compile",
@@ -105,7 +116,7 @@
     {
       "id": "compile",
       "title": "Compile the map",
-      "description": "qbsp reads the .map and writes the Quake II .bsp. `-basedir` is the directory holding `textures/`, because qbsp has to open the .wal a face names to read the content and surface flags it bakes into the BSP; `-gamedir` is the mod that overlays it.",
+      "description": "qbsp reads the .map and writes the Quake II .bsp. `-basedir` is the directory holding `textures/`, because qbsp has to open the .wal a face names to read the content and surface flags it bakes into the BSP; `-gamedir` is the mod that overlays it.\n\n**What this document asks of the programs you point it at (Q2_008).** Each of qbsp, vis and light is started once with no arguments when you bind, approve or check it, and must name itself `ericw-tools 2.…` and list the options its action passes: qbsp `-q2bsp` and `-leaktest`; vis `-threads`, `-basedir`, `-gamedir`, `-fast` and `-level`; light `-threads`, `-basedir` and `-gamedir`. qbsp is not held to `-basedir`: 2.0.0-alpha7's qbsp stops printing its usage (`number is too big`, exit 1) before it reaches that line, and it was measured to accept the option all the same. ericw-tools v0.18.1 names itself `v0.18.1`, has no `-q2bsp`, and is refused by name. **The base game data folder is the one that holds `pak0.pak`** — `baseq2` itself, not the folder above it. Measured with release 1.4518: handed the folder above, qbsp exits 0 with `using built-in palette` and `Couldn't locate texture` for every retail texture, so the folder is held to `pak0.pak` or `pics/colormap.pcx` and refused by name when it holds neither.",
       "capability": "q2.bsp.compile",
       "executable": "qbsp",
       "working_dir": { "root": "workspace" },
@@ -175,7 +186,7 @@
       ],
       "roots": [
         { "role": "workspace", "access": "read_write", "purpose": "read the staged map source and write the compiled BSP beside it" },
-        { "role": "game_root", "access": "read", "purpose": "read the Quake II textures whose flags are baked into the BSP" },
+        { "role": "game_root", "access": "read", "purpose": "read the Quake II textures whose flags are baked into the BSP", "holds_any": ["pak0.pak", "pics/colormap.pcx"] },
         { "role": "content_root", "access": "read", "purpose": "read the mod's own textures, which override the base game's" }
       ],
       "timeout_seconds": 3600
@@ -222,7 +233,7 @@
       ],
       "roots": [
         { "role": "workspace", "access": "read_write", "purpose": "rewrite the staged BSP with its visibility and hearability data" },
-        { "role": "game_root", "access": "read", "purpose": "read the Quake II palette the compilers load at startup" },
+        { "role": "game_root", "access": "read", "purpose": "read the Quake II palette the compilers load at startup", "holds_any": ["pak0.pak", "pics/colormap.pcx"] },
         { "role": "content_root", "access": "read", "purpose": "read the mod that overlays the base game data" }
       ],
       "timeout_seconds": 21600
@@ -230,7 +241,7 @@
     {
       "id": "light",
       "title": "Compute lighting",
-      "description": "light rewrites the BSP it is given. Its log is not declared here for the same reason vis's is not: 2.x writes `<stem>-light.log` beside the BSP it was handed, which is inside the staged input's own directory. It also reads the `.texinfo.json` qbsp wrote beside that BSP — `Loading extended texinfo flags from …` — so that file is an input here and is staged with the BSP. Without it the run still succeeds, with the wrong surface flags, which is why it is wired rather than left to chance.",
+      "description": "light rewrites the BSP it is given. Its log is not declared here for the same reason vis's is not: 2.x writes `<stem>-light.log` beside the BSP it was handed, which is inside the staged input's own directory. It also reads the `.texinfo.json` qbsp wrote beside that BSP — `Loading extended texinfo flags from …` — so that file is an input here and is staged with the BSP. Without it the run still succeeds, exit 0, with the wrong surface flags — measured with release 1.4518: a `func_group` carrying `_minlight` lit 504 bytes differently with the file removed — so it is a REQUIRED input: a compile that did not leave one stops the build at this step, by name, instead of lighting the map with defaults.",
       "capability": "q2.bsp.light",
       "executable": "light",
       "working_dir": { "root": "workspace" },
@@ -252,7 +263,7 @@
       ],
       "inputs": [
         { "name": "bsp", "title": "BSP with visibility", "role": "q2.bsp.vised", "required": true, "extensions": [".bsp"] },
-        { "name": "texinfo", "title": "Extended texinfo flags", "role": "q2.texinfo", "extensions": [".json"], "stage_with": "bsp" }
+        { "name": "texinfo", "title": "Extended texinfo flags", "role": "q2.texinfo", "required": true, "extensions": [".json"], "stage_with": "bsp" }
       ],
       "outputs": [
         { "name": "bsp", "title": "Lit BSP", "role": "q2.bsp.lit", "in_place": "bsp" }
@@ -278,7 +289,7 @@
       ],
       "roots": [
         { "role": "workspace", "access": "read_write", "purpose": "rewrite the staged BSP with its lighting data" },
-        { "role": "game_root", "access": "read", "purpose": "read the Quake II palette and the textures whose colours bounce light" },
+        { "role": "game_root", "access": "read", "purpose": "read the Quake II palette and the textures whose colours bounce light", "holds_any": ["pak0.pak", "pics/colormap.pcx"] },
         { "role": "content_root", "access": "read", "purpose": "read the mod that overlays the base game data" }
       ],
       "timeout_seconds": 21600

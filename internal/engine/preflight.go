@@ -380,6 +380,19 @@ func (c Checker) rootProblems(document profile.Profile, action profile.Action, l
 			})
 			continue
 		}
+		if _, holds := ref.Holds(path, func(p string) error { _, err := c.stat(p); return err }); !holds {
+			// The document names what the folder must hold (Q2_008), because
+			// the program itself does not refuse the wrong one: Quake II's
+			// qbsp handed the folder above baseq2 exits 0 with no textures.
+			problems = append(problems, Problem{
+				Fault: FaultMissingGameData,
+				Summary: fmt.Sprintf("The %s recorded for %s holds no %s, so it is not the folder %q reads: %s.",
+					phrase(ref.Role), document.Metadata().Name, ref.HoldsText(), action.Title, path),
+				Fix: "Choose the folder that holds " + ref.HoldsText() + " itself — not the folder above it — in Profiles, or with `companion engine bind " +
+					document.Metadata().ID + " " + flagFor(ref.Role) + "`.",
+			})
+			continue
+		}
 		if ref.Role == profile.RootGame {
 			problems = append(problems, c.gameDataProblems(document, path)...)
 		}

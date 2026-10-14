@@ -203,6 +203,14 @@ func TestStageArgumentsAreValidatedPerStageResettableAndSurviveARestart(t *testi
 			t.Errorf("%v was answered %d: %v", bad, status, body["error"])
 		}
 	}
+	// A token repeating a switch the stage's action manages is refused where it
+	// is saved, naming what sets it (Q2_008): here `--fail`, which the
+	// action passes when its "Fail on purpose" parameter is on.
+	if status, body := m.call(http.MethodPost, pipeline+"/stage-arguments",
+		map[string]any{"stage": "compile", "arguments": []string{"--fail"}}); status != http.StatusBadRequest ||
+		!strings.Contains(fmt.Sprint(body["error"]), `"Fail on purpose" (fail)`) {
+		t.Errorf("a token repeating a managed switch was answered %d: %v", status, body["error"])
+	}
 	// Stage arguments belong to pipelines; a tool is not one.
 	if status, _ := m.call(http.MethodPost, "/api/v1/profiles/aucom.fixture.toolchain/stage-arguments",
 		map[string]any{"stage": "compile", "arguments": []string{"-x"}}); status != http.StatusBadRequest {

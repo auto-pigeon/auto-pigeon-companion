@@ -2,6 +2,8 @@ package profile
 
 import (
 	"fmt"
+	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -42,7 +44,37 @@ type RootRef struct {
 	// `-wadpath`, which finds `gfx/metal.wad` when a texture folder is set and
 	// is simply left out when none is). A required root stays the default.
 	Optional bool `json:"optional,omitempty"`
+	// HoldsAny is what a folder bound to this role must hold for the action
+	// to be worth starting: relative paths, at least one of which exists in
+	// it (Q2_008). It is for the folder a program will NOT complain about —
+	// ericw-tools' Quake II qbsp handed the folder above `baseq2` exits 0
+	// with its built-in palette and no textures, a map that looks built and
+	// is wrong, so the Quake II profiles name `pak0.pak` and
+	// `pics/colormap.pcx`. Asked by readiness and again when a command is
+	// resolved; a folder that holds none of them is refused by name.
+	HoldsAny []string `json:"holds_any,omitempty"`
 }
+
+// MaxHoldsAny bounds [RootRef.HoldsAny]: a few names somebody can read in one
+// sentence, never a manifest.
+const MaxHoldsAny = 8
+
+// Holds reports whether a bound folder holds one of [RootRef.HoldsAny], and
+// which. A root that names nothing holds what it needs.
+func (r RootRef) Holds(dir string, stat func(string) error) (string, bool) {
+	if len(r.HoldsAny) == 0 {
+		return "", true
+	}
+	for _, want := range r.HoldsAny {
+		if stat(filepath.Join(dir, filepath.FromSlash(want))) == nil {
+			return want, true
+		}
+	}
+	return "", false
+}
+
+// HoldsText is [RootRef.HoldsAny] for a sentence: "pak0.pak or pics/colormap.pcx".
+func (r RootRef) HoldsText() string { return strings.Join(r.HoldsAny, " or ") }
 
 func (r RootRef) validate(c *collector) {
 	c.child(field("role"), func(c *collector) {
@@ -64,6 +96,29 @@ func (r RootRef) validate(c *collector) {
 	c.child(field("optional"), func(c *collector) {
 		if r.Optional && r.Role == RootWorkspace {
 			c.fixf("drop `optional`", "is set on the workspace, which every job has")
+		}
+	})
+	c.child(field("holds_any"), func(c *collector) {
+		if len(r.HoldsAny) == 0 {
+			return
+		}
+		if r.Role == RootWorkspace {
+			c.fixf("drop `holds_any`", "is set on the workspace, which is created empty for every job")
+			return
+		}
+		if len(r.HoldsAny) > MaxHoldsAny {
+			c.fixf(fmt.Sprintf("name at most %d", MaxHoldsAny), "names %d paths", len(r.HoldsAny))
+		}
+		for i, want := range r.HoldsAny {
+			c.child(index(i), func(c *collector) {
+				clean := path.Clean(want)
+				switch {
+				case strings.TrimSpace(want) == "" || len(want) > 200:
+					c.fixf("name a file or folder relative to the root", "is empty or longer than 200 bytes")
+				case strings.Contains(want, "\\") || strings.Contains(want, "{") || path.IsAbs(want) || filepath.IsAbs(want) || clean != want || clean == "." || strings.HasPrefix(clean, ".."):
+					c.fixf("write a relative path with forward slashes, inside the root, such as pics/colormap.pcx", "is %q", want)
+				}
+			})
 		}
 	})
 }
