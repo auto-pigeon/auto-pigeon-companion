@@ -472,6 +472,11 @@
     const { ok, body } = await api("/api/v1/profiles/" + encodeURIComponent(id));
     if (!ok || !body.readiness || document.getElementById("profile-readiness") !== current) return;
     current.replaceWith(readinessBox(body));
+    // The commands below are answered from the same binding, so they are
+    // asked again too (Q2_008, found live): after Save these paths the page
+    // said "ready" above and, below, still refused the folder just replaced.
+    const previews = document.querySelector("#profile-arguments .profile-arguments__previews");
+    if (previews) await refreshPreviews(id, previews);
   }
 
   // --- your own arguments -----------------------------------------------------
