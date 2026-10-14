@@ -43,9 +43,12 @@ func TestALeakRequestIsReviewedForTheGameTheSavedRevisionDeclares(t *testing.T) 
 		{game: "quake1", pipeline: "auto-pigeon.q1.leak-test", compiler: "ericw-qbsp"},
 		{game: "quake3", pipeline: "auto-pigeon.q3.leak-test", compiler: "q3map2"},
 		{game: "quake3", hint: "quake3", pipeline: "auto-pigeon.q3.leak-test", compiler: "q3map2"},
-		{game: "quake2", unsupported: true},
-		{game: "quake2", hint: "quake2", unsupported: true},
+		// Measured and given a row in Q2_010 — its own compiler name and
+		// pipeline, never Quake 1's.
+		{game: "quake2", pipeline: "auto-pigeon.q2.leak-test", compiler: "ericw-qbsp-q2"},
+		{game: "quake2", hint: "quake2", pipeline: "auto-pigeon.q2.leak-test", compiler: "ericw-qbsp-q2"},
 		{game: "hexen2", unsupported: true},
+		{game: "quake4", hint: "quake4", unsupported: true},
 	} {
 		m := newMachine(t)
 		m.backend.savedAPMap(c.game)
@@ -73,7 +76,8 @@ func TestALeakRequestIsReviewedForTheGameTheSavedRevisionDeclares(t *testing.T) 
 
 // A hint is checked against the saved revision and never used instead of it.
 func TestALeakLinkWhoseProfileHintDisagreesWithTheSavedRevisionIsRefused(t *testing.T) {
-	for _, c := range []struct{ game, hint string }{{"quake3", "quake1"}, {"quake1", "quake3"}, {"quake2", "quake1"}} {
+	for _, c := range []struct{ game, hint string }{{"quake3", "quake1"}, {"quake1", "quake3"}, {"quake2", "quake1"},
+		{"quake1", "quake2"}, {"quake2", "quake3"}} {
 		m := newMachine(t)
 		m.backend.savedAPMap(c.game)
 		m.signIn()
@@ -105,9 +109,12 @@ func TestALeakBuildMayOnlyRunThePipelineOfTheMapsOwnGame(t *testing.T) {
 		"a Quake III map through the Quake 1 test":  {"auto-pigeon.q1.leak-test", "quake3", true},
 		"a Quake 1 map through the Quake III test":  {"auto-pigeon.q3.leak-test", "quake1", true},
 		"a Quake III map through an ordinary build": {"auto-pigeon.q3.normal", "quake3", true},
-		"a Quake II map":                 {"auto-pigeon.q1.leak-test", "quake2", true},
-		"a map naming no game":           {"auto-pigeon.q1.leak-test", "", true},
-		"a source that was not an APMap": {"auto-pigeon.q1.leak-test", "quake1", false},
+		"a Quake II map through the Quake 1 test":   {"auto-pigeon.q1.leak-test", "quake2", true},
+		"a Quake 1 map through the Quake II test":   {"auto-pigeon.q2.leak-test", "quake1", true},
+		"a Quake II map through an ordinary build":  {"auto-pigeon.q2.normal", "quake2", true},
+		"a Quake II map naming no game":             {"auto-pigeon.q2.leak-test", "", true},
+		"a map naming no game":                      {"auto-pigeon.q1.leak-test", "", true},
+		"a source that was not an APMap":            {"auto-pigeon.q1.leak-test", "quake1", false},
 	} {
 		if binding, err := pinned.server.leakBindingForBuild(c.pipeline, build.Conversion{Game: c.game}, c.converted); err == nil {
 			t.Errorf("%s: accepted as %+v", name, binding)

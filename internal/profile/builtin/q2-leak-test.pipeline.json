@@ -1,0 +1,94 @@
+{
+  "schema_version": "aucom.profile/1.1",
+  "kind": "pipeline",
+  "id": "auto-pigeon.q2.leak-test",
+  "version": "1.0.0",
+  "name": "Quake II — leak test (experimental)",
+  "summary": "Experimental: only the Quake II compile step, with the leak test on: does the map leak, and where.",
+  "description": "For the question “is this map sealed”, asked of one exact saved revision of a Quake II map. It runs qbsp in its Quake II mode with `-leaktest` and stops there: no visibility, no lighting, no package and no engine, because none of them says anything about a leak.\n\nMeasured on the Auto-Pigeon build of ericw-tools, release 1.4518 (`Q2_010`), with authored controls: a leaked map exits 1, prints `Reached occupant … at (x y z)` and `Leak file written`, writes `level.pts` and `level.leak.prt` and no BSP. The compile step is therefore recorded as failed — its BSP is not there, which is the truthful state of a compile that refused to write one — while the leak is a separate fact, read from what qbsp printed and the point file it left. Both are published: the point file as `pts`, and everything qbsp printed as `compile_log`, whichever way the step ended. qbsp's own `.log` file is not that text: it leaves out the stage headings, the fill report among them.\n\nThe point file runs from the entity qbsp reached — its origin is the one the log names — to outside the map, like Quake 1's and unlike Quake III's.\n\nWhat a pass means is narrow on purpose: this compiler, at this version, found no leak in this revision, every texture the map names was found, and the BSP it wrote is a Quake II one (`IBSP:38`). A map with no entity standing in open space — none at all, or every one inside a brush — is not tested: qbsp says `No entities in empty space`, floods nothing and still writes a BSP and exits 0, and that is reported as not tested. A detail brush, a clip brush or a translucent window across a gap does not seal it. A wall naming a texture qbsp could not open is a face whose contents nobody read, so a room it closes is not called sealed.\n\nThis pipeline names the family's default Quake II tool. Only release 1.4518 of the Auto-Pigeon build has been measured: with any other qbsp a leak it reports is still a leak, and nothing else is a verdict. To run it with the Auto-Pigeon build, make your own copy of this pipeline whose stage names that tool, and choose it as the Quake II leak test.\n\nThe Auto-Pigeon editor asks for this pipeline through an `autopigeon://leaktest/` link, and a person approves it here before anything runs.\n\nQuake II support in Auto-Pigeon is work in progress. Some textures, entities, compilation and engine workflows may be incomplete.",
+  "publisher": {
+    "name": "Auto-Pigeon",
+    "url": "https://github.com/auto-pigeon/auto-pigeon-companion"
+  },
+  "license": {
+    "spdx": "MIT",
+    "name": "MIT"
+  },
+  "compatibility": {
+    "companion": {
+      "at_least": "0.1.0"
+    }
+  },
+  "game_profile": {
+    "slug": "quake2",
+    "engine_family": "quake2"
+  },
+  "inputs": [
+    {
+      "name": "source_map",
+      "title": "Map source",
+      "role": "q2.map.source",
+      "required": true,
+      "extensions": [
+        ".map"
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "id": "compile",
+      "title": "Compile the map",
+      "capability": "q2.bsp.compile",
+      "tool": "auto-pigeon.ericw-tools.q2",
+      "inputs": [
+        {
+          "name": "source_map",
+          "from": "pipeline.source_map"
+        }
+      ],
+      "options": {
+        "basename": "level",
+        "format": "q2bsp",
+        "leaktest": "true",
+        "verbosity": "normal"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "name": "pts",
+      "title": "Leak point file",
+      "role": "q2.pts",
+      "from": "compile.pts",
+      "optional": true
+    },
+    {
+      "name": "compile_log",
+      "title": "qbsp output",
+      "role": "aucom.step.stdout",
+      "from": "compile.stdout",
+      "optional": true
+    },
+    {
+      "name": "bsp",
+      "title": "Compiled BSP (evidence only)",
+      "role": "q2.bsp",
+      "from": "compile.bsp",
+      "optional": true
+    },
+    {
+      "name": "leak_portals",
+      "title": "Leak portal file",
+      "role": "q2.leak.prt",
+      "from": "compile.leak_portals",
+      "optional": true
+    },
+    {
+      "name": "prt",
+      "title": "Portal file",
+      "role": "q2.prt",
+      "from": "compile.prt",
+      "optional": true
+    }
+  ]
+}

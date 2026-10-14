@@ -30,7 +30,19 @@ func TestOnlyMeasuredGamesHaveALeakAdapterAndNothingFallsBackToQuake1(t *testing
 		q3.Direction != DirectionOutsideFirst || q3.Classify == nil || !q3.PointfileBesideSource {
 		t.Fatalf("quake3: %+v %v", q3, err)
 	}
-	for _, game := range []string{"quake2", "", "unknown", "Quake1", "quake1 ", "hexen2"} {
+	q2, err := ForProfile("quake2")
+	if err != nil || q2.PipelineID != "auto-pigeon.q2.leak-test" || q2.ResultSchema != Schema11 ||
+		q2.Compiler != CompilerEricwQbspQ2 || q2.PointfileFormat != FormatEricwPts ||
+		q2.Direction != DirectionOccupantFirst || q2.Classify == nil || q2.PointfileBesideSource ||
+		q2.PointfileRole != "q2.pts" || q2.BSPRole != "q2.bsp" || len(q2.LogRoles) != 1 || q2.LogRoles[0] != StepLogRole {
+		t.Fatalf("quake2: %+v %v", q2, err)
+	}
+	// Not one of them answers for another game, and the Quake 1 pipeline is
+	// nobody else's.
+	if adapter, ok := ForPipeline("auto-pigeon.q1.leak-test"); !ok || adapter.Profile != "quake1" {
+		t.Fatalf("the Quake 1 pipeline: %+v", adapter)
+	}
+	for _, game := range []string{"", "unknown", "Quake1", "quake1 ", "Quake2", "quake2 ", "hexen2", "quake4"} {
 		if adapter, err := ForProfile(game); !errors.Is(err, ErrUnsupported) || adapter.PipelineID != "" {
 			t.Errorf("%q: got %+v %v, want unsupported and no pipeline", game, adapter, err)
 		}
@@ -43,7 +55,7 @@ func TestOnlyMeasuredGamesHaveALeakAdapterAndNothingFallsBackToQuake1(t *testing
 			t.Errorf("%q is not a leak-test pipeline", id)
 		}
 	}
-	if strings.Join(Profiles(), ",") != "quake1,quake3" {
+	if strings.Join(Profiles(), ",") != "quake1,quake2,quake3" {
 		t.Fatalf("profiles: %v", Profiles())
 	}
 }

@@ -118,6 +118,11 @@ const (
 	// different name for one.
 	Q2FastPreview = "auto-pigeon.q2.fast-preview"
 	Q2Normal      = "auto-pigeon.q2.normal"
+	// Q2LeakTest is the Quake II counterpart of Q1LeakTest (`Q2_010`): qbsp's
+	// Quake II compile step alone with the leak test on. It publishes the
+	// `.pts` point file and what qbsp printed. Like every built-in pipeline it
+	// names the family's default tool, not the Auto-Pigeon build.
+	Q2LeakTest = "auto-pigeon.q2.leak-test"
 
 	// Q3Map2 is the experimental Quake III toolchain: Q3Map2 2.5.17n, from
 	// NetRadiant-custom's `20260114` release.
@@ -180,7 +185,7 @@ var Q1Pipelines = []string{Q1FastPreview, Q1Normal, Q1Final}
 // DiagnosticPipelines answer a question about a map rather than build it: one
 // step, no playable output. Listed apart so "every build pipeline is compile,
 // vis, light" stays a statement about builds.
-var DiagnosticPipelines = []string{Q1LeakTest, Q3LeakTest}
+var DiagnosticPipelines = []string{Q1LeakTest, Q2LeakTest, Q3LeakTest}
 
 // Q2Engines is every curated Quake II engine profile this build ships, in the
 // order they are listed. Yamagi first because it is the one the Quake II path

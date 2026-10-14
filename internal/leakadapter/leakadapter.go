@@ -26,7 +26,8 @@
 // A row is a claim that somebody ran that compiler on authored controls — a
 // sealed room, a room with a wall missing, a room nothing stands in — and wrote
 // down what it printed, what it exited with and what it left on disk. Quake II
-// has a `qbsp` too; that is not a measurement, and it has no row.
+// got its row that way (`Q2_010`): its `qbsp` being the Quake 1 program was
+// not a measurement, the authored controls in `testdata/q2` are.
 package leakadapter
 
 import (
@@ -40,6 +41,7 @@ import (
 // The games with a row.
 const (
 	ProfileQuake1 = "quake1"
+	ProfileQuake2 = "quake2"
 	ProfileQuake3 = "quake3"
 )
 
@@ -47,7 +49,11 @@ const (
 // envelope naming anything else is refused rather than parsed hopefully.
 const (
 	CompilerEricwQbsp = "ericw-qbsp"
-	CompilerQ3Map2    = "q3map2"
+	// CompilerEricwQbspQ2 is the same program in its `-q2bsp` mode. A name of
+	// its own because its log is read by other rules (ClassifyEricwQ2) and a
+	// compiler here has one game.
+	CompilerEricwQbspQ2 = "ericw-qbsp-q2"
+	CompilerQ3Map2      = "q3map2"
 )
 
 // The point file formats, as the result envelope names them.
@@ -58,9 +64,12 @@ const (
 
 // Which end of a point file is the entity the compiler reached.
 //
-// Measured, both: EricW 0.18.1's `.pts` begins at the occupant and ends
+// Measured, all: EricW 0.18.1's `.pts` begins at the occupant and ends
 // outside, and so does 2.0.0-alpha11's (2026-10-07: AUT's leaking room, first
-// point the info_player_start's origin, log lines unchanged); Q3Map2 2.5.17n's `.lin` begins OUTSIDE and its last point is the
+// point the info_player_start's origin, log lines unchanged), and so does
+// release 1.4518's in its Quake II mode (`Q2_010`: the first point is the
+// origin the log's `Reached occupant` line names, the last is outside the
+// shell); Q3Map2 2.5.17n's `.lin` begins OUTSIDE and its last point is the
 // entity's origin. A reader that assumed the first is the occupant would look
 // for the entity in the void.
 const (
@@ -146,6 +155,18 @@ var adapters = map[string]Adapter{
 		PointfileRole: "q3.lin", LogRoles: []string{StepLogRole}, BSPRole: "q3.bsp",
 		ResultSchema: Schema11, QualifiedVersions: []string{Q3Map2MeasuredVersion},
 		Classify: ClassifyQ3Map2,
+	},
+	// Quake II: qbsp's text is the step's own output, never its `.log` file —
+	// measured, the log file leaves out every `---- Stage ----` heading, the
+	// fill report among them. Its BSP is evidence (`IBSP:38`); its point file
+	// is named after the output, like Quake 1's.
+	ProfileQuake2: {
+		Profile: ProfileQuake2, PipelineID: "auto-pigeon.q2.leak-test",
+		Compiler: CompilerEricwQbspQ2, PointfileFormat: FormatEricwPts, Direction: DirectionOccupantFirst,
+		PointfileOutput: "pts", LogOutput: "compile_log", BSPOutput: "bsp",
+		PointfileRole: "q2.pts", LogRoles: []string{StepLogRole}, BSPRole: "q2.bsp",
+		ResultSchema: Schema11, QualifiedVersions: []string{EricwQ2MeasuredVersion},
+		Classify: ClassifyEricwQ2,
 	},
 }
 
@@ -312,6 +333,9 @@ type Evidence struct {
 	Pointfile string
 	// BSP is whether this run left a BSP: nil when not known.
 	BSP *bool
+	// BSPFormat is that BSP's header as qbsp names it (`IBSP:38`), when it was
+	// read. Empty when not.
+	BSPFormat string
 }
 
 // Verdict is the reading of one run.

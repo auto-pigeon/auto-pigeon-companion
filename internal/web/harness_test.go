@@ -710,7 +710,7 @@ func newMachine(t *testing.T) *machine {
 	// flow's tests are about the flow. Nothing pinned is its own test
 	// (leakpipeline_test.go).
 	settings.LeakTestPipelines = map[string]string{
-		"quake1": "auto-pigeon.q1.leak-test", "quake3": "auto-pigeon.q3.leak-test"}
+		"quake1": "auto-pigeon.q1.leak-test", "quake2": "auto-pigeon.q2.leak-test", "quake3": "auto-pigeon.q3.leak-test"}
 	m.settings = settings
 
 	store, err := job.OpenStore(settings.JobsDir)

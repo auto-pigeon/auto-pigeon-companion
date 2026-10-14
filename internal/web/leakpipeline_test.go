@@ -63,8 +63,13 @@ func TestALeakRequestForAGameWithNoPinnedPipelineAsksForOne(t *testing.T) {
 		t.Errorf("a Quake III pipeline pinned for Quake 1: %d", status)
 	}
 	if status, _ := m.call(http.MethodPost, "/api/v1/leak-test/pipelines",
-		map[string]string{"game": "quake2", "pipeline": "auto-pigeon.q2.normal"}); status != http.StatusNotFound {
+		map[string]string{"game": "hexen2", "pipeline": "auto-pigeon.q2.normal"}); status != http.StatusNotFound {
 		t.Errorf("a pin for a game with no leak test: %d", status)
+	}
+	// Quake II has a leak test since Q2_010, and the Quake 1 one is not it.
+	if status, _ := m.call(http.MethodPost, "/api/v1/leak-test/pipelines",
+		map[string]string{"game": "quake2", "pipeline": "auto-pigeon.q1.leak-test"}); status != http.StatusConflict {
+		t.Errorf("the Quake 1 leak test pinned for Quake II: %d", status)
 	}
 	if status, body := m.call(http.MethodPost, "/api/v1/leak-test/pipelines",
 		map[string]string{"game": "quake1", "pipeline": "auto-pigeon.q1.leak-test"}); status != http.StatusOK {

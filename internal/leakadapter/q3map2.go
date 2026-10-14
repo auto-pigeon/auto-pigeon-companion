@@ -83,7 +83,10 @@ func EvidenceTokens() []string {
 	return []string{EvNotQ3Map2, EvVersionUnqualified, EvLeakBanner, EvEntityLeaked, EvRoute, EvRouteMissing,
 		EvRouteInvalid, EvEmptyFlood, EvEntityInSolid, EvNoEntityInOpen, EvFillCompleted, EvBSPWritten,
 		EvBSPMissing, EvFinished, EvTruncated, EvFatalError, EvStepNotSucceeded, EvCancelled, EvExitNonzero,
-		EvShaderImageMissing}
+		EvShaderImageMissing,
+		// Quake II (`Q2_010`).
+		EvNotEricwQ2Log, EvRouteUnexpected, EvRouteDisagrees, EvTextureMissing, EvBrushInvalid, EvFillUnreported,
+		EvBSPFormatWrong, EvOccupantReached, EvLeakFileReported, EvQuake2BSPConfirmed}
 }
 
 // Q3Map2LogVersion is the version a log names itself as, or empty.

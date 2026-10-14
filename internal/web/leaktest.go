@@ -416,6 +416,7 @@ func (s *Server) buildLeakResult(id string) (leakResult, error) {
 		}
 	}
 	var bsp *bool
+	bspFormat := ""
 	for _, output := range manifest.Outputs {
 		var limit int64
 		switch output.Name {
@@ -424,10 +425,17 @@ func (s *Server) buildLeakResult(id string) (leakResult, error) {
 		case binding.Log:
 			limit = 16 << 20
 		case binding.BSP:
-			// Only whether this run left one. Its bytes never leave this
-			// machine in a leak result.
+			// Whether this run left one, and what its header says it is. Its
+			// bytes never leave this machine in a leak result.
 			present := !output.Missing && output.Path != ""
 			bsp = &present
+			if present {
+				header, err := readLeakOutputHeader(dir, manifest.BuildID, output, 8)
+				if err != nil {
+					return leakResult{}, err
+				}
+				bspFormat = leakadapter.BSPFormatOf(header)
+			}
 			continue
 		default:
 			continue
@@ -467,7 +475,8 @@ func (s *Server) buildLeakResult(id string) (leakResult, error) {
 	}
 	if adapter.Classify != nil {
 		verdict := adapter.Classify(leakadapter.Evidence{Log: result.Log, CompilerVersion: result.CompilerVersion,
-			ExitCode: result.CompileExitCode, StepState: stepState, Pointfile: result.Pointfile, BSP: bsp})
+			ExitCode: result.CompileExitCode, StepState: stepState, Pointfile: result.Pointfile, BSP: bsp,
+			BSPFormat: bspFormat})
 		result.Diagnostic = &verdict
 	}
 	return result, nil
@@ -485,6 +494,39 @@ func sameStem(output, source string) bool {
 		return strings.TrimSuffix(base, filepath.Ext(base))
 	}
 	return stem(output) == stem(source)
+}
+
+// readLeakOutputHeader reads the first n bytes of one of this build's own
+// outputs — a BSP's header — from inside the build, as readLeakOutput finds it.
+// A file shorter than n gives what it has.
+func readLeakOutputHeader(buildDir, id string, output build.FileRecord, n int) ([]byte, error) {
+	file, err := openLeakOutput(buildDir, id, output)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	header := make([]byte, n)
+	read, err := io.ReadFull(file, header)
+	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.EOF) {
+		return nil, err
+	}
+	return header[:read], nil
+}
+
+// openLeakOutput opens one recorded output, refusing a path outside the
+// build's own output directory.
+func openLeakOutput(buildDir, id string, output build.FileRecord) (*os.File, error) {
+	rootPath := filepath.Join(buildDir, id, "output")
+	relative, err := filepath.Rel(rootPath, output.Path)
+	if err != nil || relative == ".." || filepath.IsAbs(relative) || strings.HasPrefix(relative, ".."+string(os.PathSeparator)) {
+		return nil, errors.New("the recorded compiler output is outside this build")
+	}
+	root, err := os.OpenRoot(rootPath)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	return root.Open(relative)
 }
 
 func readLeakOutput(buildDir, id string, output build.FileRecord, limit int64) (string, error) {
