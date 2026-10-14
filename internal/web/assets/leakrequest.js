@@ -51,7 +51,7 @@
     return { quake1: t("Quake 1"), quake2: t("Quake II"), quake3: t("Quake III") }[id] || id || t("unknown game");
   }
   function compilerName(id) {
-    return { "ericw-qbsp": "qbsp (EricW)", q3map2: "Q3Map2" }[id] || id || t("the compiler");
+    return { "ericw-qbsp": "qbsp (EricW)", "ericw-qbsp-q2": "qbsp (EricW, Quake II mode)", q3map2: "Q3Map2" }[id] || id || t("the compiler");
   }
 
   function button(text, kind, onClick) {
