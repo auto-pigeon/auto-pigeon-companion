@@ -49,7 +49,8 @@ func installReadiness(entry job.CatalogEntry, local binding.LocalBinding) readin
 	if !out.Ready && primary != "" {
 		out.Problems = out.PerAction[primary]
 	}
-	// A program that is not what the profile was written for makes the whole
+	// A program that is not what the profile was written for, or a folder that
+	// is not the one it needs, makes the whole
 	// installation one that needs setting up, whichever of its other programs
 	// can start (NEW_323D). Without this a tool whose qbsp is right and whose
 	// vis is 0.18.1 read "ready" here — one action can start — while every
@@ -60,7 +61,13 @@ func installReadiness(entry job.CatalogEntry, local binding.LocalBinding) readin
 	for _, action := range actions {
 		for _, problem := range out.PerAction[action.ID] {
 			switch problem.Fault {
-			case engine.FaultToolIncompatible, engine.FaultToolUnusable, engine.FaultToolUnverified:
+			// A recorded FOLDER that is the wrong folder is the same kind of
+			// fact (Q2_008, found live): a Quake II tool bound to the folder
+			// above baseq2 read "ready" here because bspinfo reads no game
+			// folder, while every pipeline that compiles with it needed setup.
+			// An unbound folder stays per action, as before.
+			case engine.FaultToolIncompatible, engine.FaultToolUnusable, engine.FaultToolUnverified,
+				engine.FaultMissingGameData, engine.FaultMissingRoot:
 				if !seen[problem.Summary] {
 					seen[problem.Summary] = true
 					wrong = append(wrong, problem)
