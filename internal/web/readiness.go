@@ -67,7 +67,7 @@ func installReadiness(entry job.CatalogEntry, local binding.LocalBinding) readin
 			// folder, while every pipeline that compiles with it needed setup.
 			// An unbound folder stays per action, as before.
 			case engine.FaultToolIncompatible, engine.FaultToolUnusable, engine.FaultToolUnverified,
-				engine.FaultMissingGameData, engine.FaultMissingRoot:
+				engine.FaultMissingGameData, engine.FaultMissingRoot, engine.FaultMissingLibrary:
 				if !seen[problem.Summary] {
 					seen[problem.Summary] = true
 					wrong = append(wrong, problem)

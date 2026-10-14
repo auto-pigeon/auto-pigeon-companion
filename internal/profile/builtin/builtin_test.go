@@ -735,6 +735,7 @@ func TestCuratedEnginesSayWhyAPlatformIsNotSupported(t *testing.T) {
 // pressed the button.
 func TestEveryCuratedEngineActionResolvesOnEveryDeclaredPlatform(t *testing.T) {
 	base := t.TempDir()
+	holdQuake2Palette(t, filepath.Join(base, "games", "quake"))
 	runtime := map[string]string{
 		"map_name":     "e1m1",
 		"mod_name":     "mymod",
@@ -778,6 +779,7 @@ func TestEveryCuratedEngineActionResolvesOnEveryDeclaredPlatform(t *testing.T) {
 // of the difference: `.exe` on Windows and nothing anywhere else.
 func TestAnEnginesArgvIsTheSameOnEveryPlatformAndOnlyTheFileNameDiffers(t *testing.T) {
 	base := t.TempDir()
+	holdQuake2Palette(t, filepath.Join(base, "quake"))
 	tools := filepath.Join(base, "engines")
 	runtimeValues := map[string]string{
 		"map_name": "e1m1", "mod_name": "mymod", "package_name": "ad_sepulcher",
@@ -878,6 +880,20 @@ func TestTheGenericQuake2ProfileSendsOnlyTheVanillaVocabulary(t *testing.T) {
 }
 
 // loadEngines returns every built-in engine profile by id.
+// holdQuake2Palette gives a fake game folder what a Quake II engine's game
+// folder must hold (Q2_009): `baseq2/pics/colormap.pcx`. One byte of nothing —
+// what is checked is that the file is there, and no game data is needed for it.
+func holdQuake2Palette(t *testing.T, gameRoot string) {
+	t.Helper()
+	pics := filepath.Join(gameRoot, "baseq2", "pics")
+	if err := os.MkdirAll(pics, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pics, "colormap.pcx"), []byte{0}, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func loadEngines(t *testing.T) map[string]*profile.EngineProfile {
 	t.Helper()
 	entries, err := Load()

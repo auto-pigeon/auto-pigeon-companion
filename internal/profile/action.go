@@ -53,6 +53,17 @@ var upstreamSpellings = map[string]map[string][]string{
 		"linux/386":   {"darkplaces-linux-686-sdl", "darkplaces-glx", "darkplaces-linux-686-glx"},
 		"linux/arm64": {"darkplaces-glx"},
 	},
+	// Yamagi Quake II names its client `yquake2.exe` on Windows only: its
+	// Makefile and CMakeLists build `quake2` everywhere else (measured on tag
+	// QUAKE2_8_70, `Q2_009`), and that is what a folder built from upstream
+	// source holds.
+	"yquake2": {
+		"linux/amd64":  {"quake2"},
+		"linux/arm64":  {"quake2"},
+		"linux/386":    {"quake2"},
+		"darwin/amd64": {"quake2"},
+		"darwin/arm64": {"quake2"},
+	},
 }
 
 // FileCandidates is where a declared executable may be found under an install

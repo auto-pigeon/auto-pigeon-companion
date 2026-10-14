@@ -332,8 +332,8 @@ func TestASyntheticQuake2MapTravelsTheWholeExperimentalPath(t *testing.T) {
 	// and the Companion's preflight refuses a root that is not one — an empty
 	// `baseq2` is reported as "there is no game here" rather than accepted.
 	//
-	// So the test stands one up out of a file of its own. It is deliberately
-	// not called `pak0.pak` and deliberately contains nothing of id Software's:
+	// So the test stands one up out of a palette of its own. It is deliberately
+	// not `pak0.pak` and deliberately contains nothing of id Software's:
 	// what is being tested is that the launch reaches the engine with the right
 	// command line, and the Companion must never carry, copy or fabricate
 	// commercial game data to test that.
@@ -341,8 +341,13 @@ func TestASyntheticQuake2MapTravelsTheWholeExperimentalPath(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(game, "baseq2"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(game, "baseq2", "aucom-test-placeholder.txt"),
-		[]byte("stands in for the tester's own copy of Quake II\n"), 0o600); err != nil {
+	// What the Yamagi profile holds a game folder to (Q2_009): `baseq2/pak0.pak`
+	// or a loose palette. The palette is the one this test writes itself; a
+	// `baseq2` holding only a note is no game, and is refused.
+	if err := os.MkdirAll(filepath.Join(game, "baseq2", "pics"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(game, "baseq2", "pics", "colormap.pcx"), synthesizedColormap(), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	content := t.TempDir()
@@ -392,7 +397,7 @@ func TestASyntheticQuake2MapTravelsTheWholeExperimentalPath(t *testing.T) {
 	// And that command line is Yamagi's, not a Quake 1 profile's: `-datadir`,
 	// which its own source calls the current spelling, and `+set game`, which
 	// is how a Quake II mod is chosen.
-	for _, fragment := range []string{"-datadir " + game, "+set game aucom", "+map level"} {
+	for _, fragment := range []string{"-datadir " + game + " -cfgdir YamagiQ2", "+set game aucom", "+set fs_debug 1", "+map level"} {
 		if !strings.Contains(want, fragment) {
 			t.Errorf("Yamagi's play_map does not contain %q: %s", fragment, want)
 		}

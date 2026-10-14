@@ -43,8 +43,10 @@ const StampSchemaVersion = "aucom.staging/1.0"
 // Refused as staging targets, and this is the single most important rule in the
 // file: staging over `id1` would overwrite the base game a user paid for with
 // whatever their project happens to contain, and the cleanup that followed
-// would then remove it.
-var reservedGameDirs = []string{"id1", "qw", "hipnotic", "rogue", "dopa", "rerelease"}
+// would then remove it. Quake II's own folders are here too (Q2_009): until
+// then `baseq2` passed this check, so a Quake II level could be staged into the
+// base game itself.
+var reservedGameDirs = []string{"id1", "qw", "hipnotic", "rogue", "dopa", "rerelease", "baseq2", "xatrix", "ctf"}
 
 // StagedFile is one file the Companion wrote, and what it wrote.
 type StagedFile struct {

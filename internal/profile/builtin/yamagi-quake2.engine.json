@@ -2,10 +2,10 @@
   "schema_version": "aucom.profile/1.1",
   "kind": "engine",
   "id": "auto-pigeon.engine.yamagi-quake2",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "name": "Yamagi Quake II",
   "summary": "The maintained Quake II port most single-player releases are tested against.",
-  "description": "Yamagi Quake II is the conservative, maintained continuation of id Software's Quake II. It is the reference the Companion's Quake II path is written against.\n\n**It locates game data with `-datadir`, not `-basedir`, and that is not a stylistic preference.** Every Quake 1 engine profile in this build passes `-basedir <game root>`; Yamagi's own filesystem code prints `+set basedir is deprecated, use -datadir instead` and then treats it as a data directory anyway. Writing `-basedir` here would work and would be the deprecated spelling of it, which is the sort of thing that is correct until the release that removes it. The mod is chosen with the `game` cvar, so `+set game`, not `-game`.\n\n`q2ded` is a second executable rather than a switch: Yamagi ships the dedicated server as its own program, and an action that started the client with a flag would be starting something else.\n\nThis profile was written from Yamagi's own published documentation and source, not from a build running on this machine. That is what every `unverified` platform below means, and it is why there is no version probe: asking a Quake II engine what version it is means starting it, and starting it means opening a window and a game.\n\nQuake II support in Auto-Pigeon is work in progress. Core editing is available, but some textures, entities, compilation and engine workflows may be incomplete, and this profile is part of that path.",
+  "description": "Yamagi Quake II is the conservative, maintained continuation of id Software's Quake II. It is the reference the Companion's Quake II path is written against.\n\n**It locates game data with `-datadir`, not `-basedir`, and that is not a stylistic preference.** Every Quake 1 engine profile in this build passes `-basedir <game root>`; Yamagi's own filesystem code prints `+set basedir is deprecated, use -datadir instead` and then treats it as a data directory anyway. Writing `-basedir` here would work and would be the deprecated spelling of it, which is the sort of thing that is correct until the release that removes it. The mod is chosen with the `game` cvar, so `+set game`, not `-game`.\n\n`q2ded` is a second executable rather than a switch: Yamagi ships the dedicated server as its own program, and an action that started the client with a flag would be starting something else.\n\nThis profile was written from Yamagi's own published documentation and source, and `play_map` was then measured against a build of tag `QUAKE2_8_70` made from that source on Linux (`Q2_009`). No packaged release has been run here, which is what every `unverified` platform below means, and there is no version probe: asking a Quake II engine what version it is means starting it, and starting it means opening a window and a game.\n\n**`play_map` sets `fs_debug 1`, and that is measured, not decoration.** Yamagi names every file it opens and the folder or archive it found it in only when asked, and a loose map in its own write folder for the mod (`~/.local/share/YamagiQ2/<mod>/`) is loaded in place of the same name in an installed package without a word. With `fs_debug` the engine says which file it opened, which is how a run proves it is playing the package it was given. It also keeps the console stream moving: Yamagi writes it with stdio, block-buffered on a pipe, and a quiet engine's `Map:` line otherwise waits unread.\n\n**Every action passes `-cfgdir YamagiQ2`, and that is measured.** The Companion starts a program with a `HOME` of the job's own. Yamagi on Linux then wants `$HOME/.local/share/YamagiQ2/`, creates only its last level, and stops before it opens anything: `Couldn't create dir …/.local/share/YamagiQ2/` (`Q2_009`, every launch). `-cfgdir` is Yamagi's documented name for that folder, created as one folder under `HOME`; on Windows `YamagiQ2` is the default name anyway. The engine's settings, saves and screenshots for a run are therefore kept with the job.\n\n**The game folder is the one that holds `baseq2`, and `baseq2` must hold the game.** Measured: a `baseq2` with no data stops the client at once (`R_InitImages: Couldn't load pics/16to8.dat` with the software renderer). So every action's game folder must hold `baseq2/pak0.pak` — retail or the demo — or a loose `baseq2/pics/colormap.pcx`. The game library (`game.so`, `game.dll`, `game.dylib`) and the renderer libraries (`ref_gl1`, `ref_gl3`, `ref_soft`, …) are separate things the engine loads from beside its program or the game folder, and setup checks for them separately.\n\nQuake II support in Auto-Pigeon is work in progress. Core editing is available, but some textures, entities, compilation and engine workflows may be incomplete, and this profile is part of that path.",
   "publisher": {
     "name": "Auto-Pigeon",
     "url": "https://github.com/auto-pigeon/auto-pigeon-companion"
@@ -30,7 +30,7 @@
   },
   "runtime": "yamagi-quake2",
   "engine_version": "8.70",
-  "last_qualified": "2026-09-07",
+  "last_qualified": "2026-10-14",
   "platforms": [
     {
       "platform": {
@@ -46,7 +46,7 @@
         "arch": "amd64"
       },
       "status": "unverified",
-      "note": "Most distributions package it and upstream publishes source; nobody here has run one."
+      "note": "Built here from upstream tag QUAKE2_8_70 (SDL2) and run (`Q2_009`): off Windows the client is `quake2`, not `yquake2`. No distribution or release package has been run."
     },
     {
       "platform": {
@@ -147,18 +147,24 @@
       "args": [
         "-datadir",
         "{root.game_root}",
+        "-cfgdir",
+        "YamagiQ2",
         "+set",
         "game",
         "{runtime.mod_name}",
+        "+set",
+        "fs_debug",
+        "1",
         "+map",
         "{runtime.map_name}"
       ],
-      "description": "`+set game` chooses the directory the map is loaded from. Launching a map into a directory nobody named is how you end up watching the wrong map.",
+      "description": "`+set game` chooses the directory the map is loaded from. Launching a map into a directory nobody named is how you end up watching the wrong map. `fs_debug 1` makes the engine name the file it opened for every map, texture and sound, which is how a run checks the map came out of the package it installed.",
       "roots": [
         {
           "role": "game_root",
           "access": "read",
-          "purpose": "load the base game and the mod being played"
+          "purpose": "load the base game and the mod being played",
+          "holds_any": ["baseq2/pak0.pak", "baseq2/pics/colormap.pcx"]
         },
         {
           "role": "content_root",
@@ -167,6 +173,41 @@
         }
       ],
       "diagnostics": [
+        {
+          "id": "map_loaded",
+          "match": "Map: ",
+          "severity": "info",
+          "signal": "map_loaded",
+          "message": "The engine is loading the map."
+        },
+        {
+          "id": "map_missing",
+          "match": "Can't find maps/",
+          "severity": "error",
+          "message": "The engine could not find the map it was told to load.",
+          "hint": "The map is loaded from the mod folder the engine was given with +set game. Install the package again, or check the map's name."
+        },
+        {
+          "id": "gamecode_missing",
+          "match": "failed to load game DLL",
+          "severity": "error",
+          "message": "The engine could not load the game library.",
+          "hint": "Yamagi needs the game library built for this computer — game.so on Linux, game.dll on Windows, game.dylib on macOS — in a baseq2 folder beside its program or in the game folder. The retail game's gamex86.dll is for Windows on 32-bit x86 only."
+        },
+        {
+          "id": "renderer_missing",
+          "match": "No usable renderer found",
+          "severity": "error",
+          "message": "The engine found no renderer it could load.",
+          "hint": "Yamagi loads its renderers (ref_gl1, ref_gl3, ref_soft…) from the folder its program is in. Use the folder of a complete build."
+        },
+        {
+          "id": "settings_folder",
+          "match": "Couldn't create dir",
+          "severity": "error",
+          "message": "The engine could not create its settings folder.",
+          "hint": "Yamagi keeps its settings in a folder under the home directory it is given. Read the job's log for the folder it named."
+        },
         {
           "id": "ready",
           "match": "Console initialized",
@@ -186,6 +227,13 @@
           "severity": "error",
           "message": "The engine stopped with a fatal error.",
           "hint": "The engine's own last line is usually the whole diagnosis; read the job's log."
+        },
+        {
+          "id": "fatal",
+          "match": "Error: ",
+          "severity": "error",
+          "message": "The engine stopped with a fatal error.",
+          "hint": "Yamagi's own line after `Error:` is the diagnosis; read the job's log."
         }
       ]
     },
@@ -203,6 +251,8 @@
       "args": [
         "-datadir",
         "{root.game_root}",
+        "-cfgdir",
+        "YamagiQ2",
         "+set",
         "game",
         "{runtime.package_name}"
@@ -211,7 +261,8 @@
         {
           "role": "game_root",
           "access": "read",
-          "purpose": "load the base game and the mod being played"
+          "purpose": "load the base game and the mod being played",
+          "holds_any": ["baseq2/pak0.pak", "baseq2/pics/colormap.pcx"]
         },
         {
           "role": "content_root",
@@ -220,6 +271,27 @@
         }
       ],
       "diagnostics": [
+        {
+          "id": "gamecode_missing",
+          "match": "failed to load game DLL",
+          "severity": "error",
+          "message": "The engine could not load the game library.",
+          "hint": "Yamagi needs the game library built for this computer — game.so on Linux, game.dll on Windows, game.dylib on macOS — in a baseq2 folder beside its program or in the game folder. The retail game's gamex86.dll is for Windows on 32-bit x86 only."
+        },
+        {
+          "id": "renderer_missing",
+          "match": "No usable renderer found",
+          "severity": "error",
+          "message": "The engine found no renderer it could load.",
+          "hint": "Yamagi loads its renderers (ref_gl1, ref_gl3, ref_soft…) from the folder its program is in. Use the folder of a complete build."
+        },
+        {
+          "id": "settings_folder",
+          "match": "Couldn't create dir",
+          "severity": "error",
+          "message": "The engine could not create its settings folder.",
+          "hint": "Yamagi keeps its settings in a folder under the home directory it is given. Read the job's log for the folder it named."
+        },
         {
           "id": "ready",
           "match": "Console initialized",
@@ -239,6 +311,13 @@
           "severity": "error",
           "message": "The engine stopped with a fatal error.",
           "hint": "The engine's own last line is usually the whole diagnosis; read the job's log."
+        },
+        {
+          "id": "fatal",
+          "match": "Error: ",
+          "severity": "error",
+          "message": "The engine stopped with a fatal error.",
+          "hint": "Yamagi's own line after `Error:` is the diagnosis; read the job's log."
         }
       ]
     },
@@ -256,6 +335,8 @@
       "args": [
         "-datadir",
         "{root.game_root}",
+        "-cfgdir",
+        "YamagiQ2",
         "+connect",
         "{runtime.server_host}:{runtime.server_port}"
       ],
@@ -263,7 +344,8 @@
         {
           "role": "game_root",
           "access": "read",
-          "purpose": "load the base game and the mod being played"
+          "purpose": "load the base game and the mod being played",
+          "holds_any": ["baseq2/pak0.pak", "baseq2/pics/colormap.pcx"]
         }
       ],
       "network": {
@@ -271,6 +353,27 @@
         "purpose": "connect to the server the user names"
       },
       "diagnostics": [
+        {
+          "id": "gamecode_missing",
+          "match": "failed to load game DLL",
+          "severity": "error",
+          "message": "The engine could not load the game library.",
+          "hint": "Yamagi needs the game library built for this computer — game.so on Linux, game.dll on Windows, game.dylib on macOS — in a baseq2 folder beside its program or in the game folder. The retail game's gamex86.dll is for Windows on 32-bit x86 only."
+        },
+        {
+          "id": "renderer_missing",
+          "match": "No usable renderer found",
+          "severity": "error",
+          "message": "The engine found no renderer it could load.",
+          "hint": "Yamagi loads its renderers (ref_gl1, ref_gl3, ref_soft…) from the folder its program is in. Use the folder of a complete build."
+        },
+        {
+          "id": "settings_folder",
+          "match": "Couldn't create dir",
+          "severity": "error",
+          "message": "The engine could not create its settings folder.",
+          "hint": "Yamagi keeps its settings in a folder under the home directory it is given. Read the job's log for the folder it named."
+        },
         {
           "id": "ready",
           "match": "Console initialized",
@@ -290,6 +393,13 @@
           "severity": "error",
           "message": "The engine stopped with a fatal error.",
           "hint": "The engine's own last line is usually the whole diagnosis; read the job's log."
+        },
+        {
+          "id": "fatal",
+          "match": "Error: ",
+          "severity": "error",
+          "message": "The engine stopped with a fatal error.",
+          "hint": "Yamagi's own line after `Error:` is the diagnosis; read the job's log."
         }
       ]
     },
@@ -307,6 +417,8 @@
       "args": [
         "-datadir",
         "{root.game_root}",
+        "-cfgdir",
+        "YamagiQ2",
         "+set",
         "game",
         "{runtime.mod_name}",
@@ -332,7 +444,8 @@
         {
           "role": "game_root",
           "access": "read",
-          "purpose": "load the base game and the mod being played"
+          "purpose": "load the base game and the mod being played",
+          "holds_any": ["baseq2/pak0.pak", "baseq2/pics/colormap.pcx"]
         },
         {
           "role": "content_root",
@@ -345,6 +458,27 @@
         "purpose": "accept connections from other players"
       },
       "diagnostics": [
+        {
+          "id": "gamecode_missing",
+          "match": "failed to load game DLL",
+          "severity": "error",
+          "message": "The engine could not load the game library.",
+          "hint": "Yamagi needs the game library built for this computer — game.so on Linux, game.dll on Windows, game.dylib on macOS — in a baseq2 folder beside its program or in the game folder. The retail game's gamex86.dll is for Windows on 32-bit x86 only."
+        },
+        {
+          "id": "renderer_missing",
+          "match": "No usable renderer found",
+          "severity": "error",
+          "message": "The engine found no renderer it could load.",
+          "hint": "Yamagi loads its renderers (ref_gl1, ref_gl3, ref_soft…) from the folder its program is in. Use the folder of a complete build."
+        },
+        {
+          "id": "settings_folder",
+          "match": "Couldn't create dir",
+          "severity": "error",
+          "message": "The engine could not create its settings folder.",
+          "hint": "Yamagi keeps its settings in a folder under the home directory it is given. Read the job's log for the folder it named."
+        },
         {
           "id": "ready",
           "match": "Console initialized",
@@ -364,6 +498,13 @@
           "severity": "error",
           "message": "The engine stopped with a fatal error.",
           "hint": "The engine's own last line is usually the whole diagnosis; read the job's log."
+        },
+        {
+          "id": "fatal",
+          "match": "Error: ",
+          "severity": "error",
+          "message": "The engine stopped with a fatal error.",
+          "hint": "Yamagi's own line after `Error:` is the diagnosis; read the job's log."
         }
       ]
     },
@@ -378,6 +519,8 @@
       "args": [
         "-datadir",
         "{root.game_root}",
+        "-cfgdir",
+        "YamagiQ2",
         "+set",
         "game",
         "{runtime.mod_name}",
@@ -403,7 +546,8 @@
         {
           "role": "game_root",
           "access": "read",
-          "purpose": "load the base game and the mod being played"
+          "purpose": "load the base game and the mod being played",
+          "holds_any": ["baseq2/pak0.pak", "baseq2/pics/colormap.pcx"]
         },
         {
           "role": "content_root",
@@ -416,6 +560,20 @@
         "purpose": "accept connections from other players"
       },
       "diagnostics": [
+        {
+          "id": "gamecode_missing",
+          "match": "failed to load game DLL",
+          "severity": "error",
+          "message": "The engine could not load the game library.",
+          "hint": "Yamagi needs the game library built for this computer — game.so on Linux, game.dll on Windows, game.dylib on macOS — in a baseq2 folder beside its program or in the game folder. The retail game's gamex86.dll is for Windows on 32-bit x86 only."
+        },
+        {
+          "id": "settings_folder",
+          "match": "Couldn't create dir",
+          "severity": "error",
+          "message": "The engine could not create its settings folder.",
+          "hint": "Yamagi keeps its settings in a folder under the home directory it is given. Read the job's log for the folder it named."
+        },
         {
           "id": "ready",
           "match": "Console initialized",
@@ -435,6 +593,13 @@
           "severity": "error",
           "message": "The engine stopped with a fatal error.",
           "hint": "The engine's own last line is usually the whole diagnosis; read the job's log."
+        },
+        {
+          "id": "fatal",
+          "match": "Error: ",
+          "severity": "error",
+          "message": "The engine stopped with a fatal error.",
+          "hint": "Yamagi's own line after `Error:` is the diagnosis; read the job's log."
         }
       ]
     }

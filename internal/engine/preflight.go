@@ -195,6 +195,17 @@ func (c Checker) Check(document profile.Profile, trust profile.Trust, digest str
 	if len(missing) == 0 {
 		problems = append(problems, c.compatibilityProblems(document, action, local, len(problems) == 0)...)
 	}
+	// An engine has no probe — asking one what it is opens a window — so its
+	// program is read for the computer it was built for, and what it loads
+	// besides itself is looked for (Q2_009).
+	if program := c.programPath(document, action, local); len(missing) == 0 && program != "" &&
+		document.Metadata().Kind == profile.KindEngine {
+		unusable := c.formatProblems(document, action, program)
+		problems = append(problems, unusable...)
+		if len(unusable) == 0 {
+			problems = append(problems, c.nativeProblems(document, action, local, program)...)
+		}
+	}
 	problems = append(problems, c.rootProblems(document, action, local)...)
 	return problems
 }

@@ -125,9 +125,14 @@
         "--",
         "-datadir",
         "{root.game_root}",
+        "-cfgdir",
+        "YamagiQ2",
         "+set",
         "game",
         "{runtime.mod_name}",
+        "+set",
+        "fs_debug",
+        "1",
         "+map",
         "{runtime.map_name}"
       ],
@@ -146,6 +151,9 @@
             },
             {
               "value": "stay"
+            },
+            {
+              "value": "quake2_load"
             }
           ]
         },
@@ -178,18 +186,66 @@
       ],
       "diagnostics": [
         {
+          "id": "map_loaded",
+          "match": "Map: ",
+          "severity": "info",
+          "signal": "map_loaded",
+          "message": "The engine is loading the map."
+        },
+        {
+          "id": "map_missing",
+          "match": "Can't find maps/",
+          "severity": "error",
+          "message": "The engine could not find the map it was told to load.",
+          "hint": "The map is loaded from the mod folder the engine was given with +set game. Install the package again, or check the map's name."
+        },
+        {
+          "id": "gamecode_missing",
+          "match": "failed to load game DLL",
+          "severity": "error",
+          "message": "The engine could not load the game library.",
+          "hint": "Yamagi needs the game library built for this computer — game.so on Linux, game.dll on Windows, game.dylib on macOS — in a baseq2 folder beside its program or in the game folder. The retail game's gamex86.dll is for Windows on 32-bit x86 only."
+        },
+        {
+          "id": "renderer_missing",
+          "match": "No usable renderer found",
+          "severity": "error",
+          "message": "The engine found no renderer it could load.",
+          "hint": "Yamagi loads its renderers (ref_gl1, ref_gl3, ref_soft…) from the folder its program is in. Use the folder of a complete build."
+        },
+        {
+          "id": "settings_folder",
+          "match": "Couldn't create dir",
+          "severity": "error",
+          "message": "The engine could not create its settings folder.",
+          "hint": "Yamagi keeps its settings in a folder under the home directory it is given. Read the job's log for the folder it named."
+        },
+        {
           "id": "ready",
-          "match": "Console initialized.",
+          "match": "Console initialized",
           "severity": "info",
           "message": "The engine is up."
         },
         {
-          "id": "host_error",
-          "stream": "stderr",
-          "match": "Host_Error:",
+          "id": "couldnt_load",
+          "match": "Couldn't load",
+          "severity": "error",
+          "message": "The engine could not load something it needs.",
+          "hint": "Quake II needs its own game data. Check that the base game data root holds `baseq2` with the game's PAK files in it."
+        },
+        {
+          "id": "error",
+          "match": "ERROR:",
           "severity": "error",
           "message": "The engine stopped with a fatal error.",
-          "hint": "Read the log: an engine's own last line is usually the whole diagnosis."
+          "hint": "The engine's own last line is usually the whole diagnosis; read the job's log."
+        },
+        {
+          "id": "fatal",
+          "match": "Error: ",
+          "severity": "error",
+          "message": "The engine stopped with a fatal error.",
+          "hint": "Yamagi's own line after `Error:` is the diagnosis; read the job's log."
         }
       ]
     },
@@ -210,6 +266,8 @@
         "--",
         "-datadir",
         "{root.game_root}",
+        "-cfgdir",
+        "YamagiQ2",
         "+set",
         "game",
         "{runtime.package_name}"
@@ -263,6 +321,8 @@
         "--",
         "-datadir",
         "{root.game_root}",
+        "-cfgdir",
+        "YamagiQ2",
         "+connect",
         "{runtime.server_host}:{runtime.server_port}"
       ],
@@ -319,6 +379,8 @@
         "--",
         "-datadir",
         "{root.game_root}",
+        "-cfgdir",
+        "YamagiQ2",
         "+set",
         "game",
         "{runtime.mod_name}",
@@ -391,6 +453,8 @@
         "--",
         "-datadir",
         "{root.game_root}",
+        "-cfgdir",
+        "YamagiQ2",
         "+set",
         "game",
         "{runtime.mod_name}",
