@@ -63,6 +63,11 @@ def world(walls, extra=(), message="Q2_010 control"):
     body = [box(*SHELL[name]) for name in walls] + list(extra)
     return '{\n  "classname" "worldspawn"\n  "message" "%s"\n' % message + "\n".join(body) + "\n}"
 
+# `Q2_019`: 28 x 28 pillars 120 units apart in the void around the room (those near it left out), heights varied.
+PILLARS = [box((x, y, 0), (x + 8, y + 8, 8 + (i * 7 + j * 3) % 40))
+           for i in range(28) for j in range(28)
+           for x, y in [(-1680 + i * 120, -1680 + j * 120)] if not (-300 < x < 300 and -300 < y < 300)]
+
 MAPS = {
     # A. sealed: six structural brushes, one occupant and one light inside.
     "a_sealed": [world(ALL), LIGHT, PLAYER],
@@ -86,6 +91,9 @@ MAPS = {
     "f_window_cover": [world(OPEN, EAST_SLOTTED + [box(*SLOT, tex="q2010/glass", contents=CONTENTS_WINDOW,
                                                       flags=SURF_TRANS33)]),
                        LIGHT, PLAYER],
+    # J (`Q2_019`). sealed, with 764 small pillars standing in the void outside the shell: qbsp's fill report
+    # counts more than 999 outside leaves and prints the count with a thousands separator ("1,718 outside leaves").
+    "j_outside_pillars": [world(ALL, PILLARS, message="Q2_019 control"), LIGHT, PLAYER],
     # H. sealed, but the east wall names a texture no WAL exists for.
     "h_missing_wal": [world(OPEN, [box(*SHELL["east"], tex="q2010/nothere")]), LIGHT, PLAYER],
 }

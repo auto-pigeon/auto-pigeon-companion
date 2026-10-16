@@ -56,9 +56,10 @@ const (
 )
 
 var (
-	q2VersionLine    = regexp.MustCompile(`(?m)^---- qbsp / ericw-tools (\S+) ----\s*$`)
-	q2Reached        = regexp.MustCompile(`(?m)Reached occupant (?:"[^"\n]*" )?at \(\s*(\S+)\s+(\S+)\s+(\S+)\s*\)`)
-	q2OutsideLeaves  = regexp.MustCompile(`(?m)^\s*\d+ outside leaves\s*$`)
+	q2VersionLine = regexp.MustCompile(`(?m)^---- qbsp / ericw-tools (\S+) ----\s*$`)
+	q2Reached     = regexp.MustCompile(`(?m)Reached occupant (?:"[^"\n]*" )?at \(\s*(\S+)\s+(\S+)\s+(\S+)\s*\)`)
+	// `Q2_019`: a real-size map prints "[.   ]    1,723 outside leaves" — a progress prefix and grouped digits.
+	q2OutsideLeaves  = regexp.MustCompile(`(?m)^(?:\[[^\]\n]*\])?\s*\d[\d,]* outside leaves\s*$`)
 	q2WritingIBSP38  = regexp.MustCompile(`(?m)^Writing \S.* as Quake II BSP IBSP:38\s*$`)
 	q2Wrote          = regexp.MustCompile(`(?m)^Wrote \S.*\.bsp\s*$`)
 	q2Elapsed        = regexp.MustCompile(`(?m)^\s*[\d.]+s? seconds elapsed\s*$`)

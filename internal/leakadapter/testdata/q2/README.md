@@ -20,3 +20,4 @@ measurements. qbsp's own `level.log` FILE is not used: it leaves out every `----
 | `g_degenerate_plane` | a face whose three points are on one line: the brush is dropped | 1 | `.pts` (6 points) |
 | `h_missing_wal` | sealed, one wall naming a texture with no WAL | 0 | BSP — not called sealed |
 | `i_stale_pts` | `a_sealed` with a stale `level.pts` planted beforehand | 0 | BSP; qbsp deleted the stale `.pts` (`pts/i_stale_pts.pts` is the planted file) |
+| `j_outside_pillars` (`Q2_019`) | `a_sealed` with 764 small pillars in the void around it | 0 | BSP; the fill report reads `[.   ]    1,723 outside leaves` — a progress prefix and a thousands separator, as every real-size map prints it |

@@ -66,6 +66,10 @@ func TestEricwQ2RunsAreReadByWhatTheCompilerSaidAndLeft(t *testing.T) {
 			bsp: &yes, want: OutcomeIncomplete, tokens: []string{EvRouteUnexpected}},
 		{name: "I sealed run, as collected (qbsp removed the .pts)", log: "i_stale_pts", state: "succeeded", exit: &zero, bsp: &yes,
 			want: OutcomeNoLeak},
+		// `Q2_019`: a real-size map's fill report is "[.   ]    1,723 outside leaves" — a progress prefix and a
+		// thousands separator. A sealed large map was read as incomplete before.
+		{name: "J sealed, more than 999 outside leaves, spinner prefix", log: "j_outside_pillars", state: "succeeded", exit: &zero,
+			bsp: &yes, want: OutcomeNoLeak, tokens: []string{EvFillCompleted, EvFinished, EvBSPWritten, EvQuake2BSPConfirmed}},
 	}
 	for _, c := range cases {
 		e := Evidence{Log: readQ2(t, "logs", c.log+".log"), StepState: c.state, ExitCode: c.exit, BSP: c.bsp}
