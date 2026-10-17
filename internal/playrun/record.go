@@ -35,6 +35,7 @@ import (
 	"time"
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/q2pack"
 )
 
 // SchemaVersion versions the record.
@@ -160,6 +161,25 @@ type Request struct {
 	// Label is a short human name for the Jobs list. Optional.
 	Label string `json:"label,omitempty"`
 
+	// Family is the build profile's engine family, as its document says
+	// (AUB's `engine_family`), recorded so a retry runs the same sequence.
+	// Empty is every family that plays a loose level.
+	//
+	// Quake II is played from a package (Q2_020; [Request.Packaged]): its
+	// compiler reads the game folders bound to it in Profiles rather than a
+	// WAD bundle, the Installing stage packages the map through
+	// internal/q2pack and installs it through internal/q2install, and the
+	// Launching stage waits through internal/q2run for the engine's own word
+	// that it opened the map from that package. One review and one record,
+	// and no second packager.
+	Family string `json:"family,omitempty"`
+	// Grants say which files of the content folder may travel in the
+	// package — the answers the package panel asks for. Quake II only.
+	Grants []q2pack.Grant `json:"grants,omitempty"`
+	// AcceptReason accepts, in writing, what the package will not carry.
+	// Quake II only; recorded in the package.
+	AcceptReason string `json:"accept_reason,omitempty"`
+
 	// OwnWADsDir is a folder on this machine the person named in the review,
 	// holding their own copy of WADs the deployment did not send. Used
 	// only for the WADs AUB did not carry, each by its exact file name, and
@@ -196,6 +216,9 @@ type Listing struct {
 	EndpointPort int    `json:"endpoint_port"`
 }
 
+// Packaged reports a run played from a package rather than a loose level.
+func (r Request) Packaged() bool { return r.Family == q2pack.FamilyQuake2 }
+
 // DefaultMod is the game directory a Build & Run installs into.
 //
 // A sibling of `id1`, never `id1` itself: see internal/engine, which refuses
@@ -220,8 +243,26 @@ func (r *Request) Normalize() error {
 	r.GameRoot = strings.TrimSpace(r.GameRoot)
 	r.MapName = strings.TrimSpace(r.MapName)
 	r.OwnWADsDir = strings.TrimSpace(r.OwnWADsDir)
+	r.Family = strings.TrimSpace(r.Family)
+	r.AcceptReason = strings.TrimSpace(r.AcceptReason)
 	if r.ModName = strings.TrimSpace(r.ModName); r.ModName == "" {
 		r.ModName = DefaultMod
+		if r.Packaged() && r.MapName != "" {
+			// One mod folder per map, the package panel's default.
+			r.ModName = q2pack.DefaultGameDir(r.MapName)
+		}
+	}
+	if r.Packaged() {
+		switch {
+		case r.OwnWADsDir != "":
+			return fmt.Errorf("playrun: a Quake II build reads its .wal textures from the game folders bound " +
+				"to its compiler; there are no WADs to supply")
+		case r.Listing != nil:
+			return fmt.Errorf("playrun: Build & Run plays a Quake II map on this computer; hosting one " +
+				"for others is not offered here")
+		}
+	} else if len(r.Grants) > 0 || r.AcceptReason != "" {
+		return fmt.Errorf("playrun: only a Quake II map is packaged, so only its run takes grants")
 	}
 
 	if r.BuildOnly {
@@ -399,6 +440,12 @@ type Record struct {
 	Installed    []StagedFile `json:"installed,omitempty"`
 	InstalledDir string       `json:"installed_dir,omitempty"`
 
+	// Package and Installation are what a packaged run played from: the
+	// archive internal/q2pack wrote and the mod folder internal/q2install put
+	// it in, by identity. Nil for a loose level.
+	Package      *PackageRef      `json:"package,omitempty"`
+	Installation *InstallationRef `json:"installation,omitempty"`
+
 	// Launch is the engine's identity and the exact argv, element by element.
 	Launch *LaunchRecord `json:"launch,omitempty"`
 
@@ -439,6 +486,40 @@ type LaunchRecord struct {
 	Executable string   `json:"executable"`
 	Args       []string `json:"args,omitempty"`
 	WorkingDir string   `json:"working_dir,omitempty"`
+
+	// MapLoad is the engine's own word on the map, for a packaged run:
+	// internal/q2run's `accepted`, `refused` or `not_observed`. LoadedFrom is
+	// the file the engine said it opened the map from, and SourceVerified is
+	// true only when that is the installed package. Message is the verdict
+	// in a sentence. Empty for a loose level, whose launch is the process.
+	MapLoad        string `json:"map_load,omitempty"`
+	LoadedFrom     string `json:"loaded_from,omitempty"`
+	SourceVerified bool   `json:"source_verified,omitempty"`
+	Message        string `json:"message,omitempty"`
+}
+
+// PackageRef is the package a packaged run wrote or reused (internal/q2pack).
+type PackageRef struct {
+	ID      string `json:"id"`
+	Archive string `json:"archive"`
+	SHA256  string `json:"sha256"`
+	Members int    `json:"members"`
+	// Complete is false when the package does not carry something the map
+	// needs and somebody accepted that in writing; NotCarried names it.
+	Complete   bool     `json:"complete"`
+	NotCarried []string `json:"not_carried,omitempty"`
+	// Reused says an identical package was already in the store.
+	Reused bool `json:"reused,omitempty"`
+}
+
+// InstallationRef is the mod folder a packaged run installed into.
+type InstallationRef struct {
+	ID      string `json:"id"`
+	ModDir  string `json:"mod_dir"`
+	FSGame  string `json:"fs_game"`
+	MapName string `json:"map_name"`
+	// Replaced names the installation this one replaced, if any.
+	Replaced string `json:"replaced,omitempty"`
 }
 
 // Elapsed is how long a run has been going, or took.

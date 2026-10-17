@@ -22,6 +22,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/config"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/enginefixture"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/q2fixture"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/pathpick"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/texturebundle"
@@ -92,7 +93,7 @@ func buildHelperMain(args []string) int {
 	// `--sidecar` to write its transcript to `<destination stem>.log` and
 	// nothing to stdout (EricW on Windows), `--lines=<n>` — and echoes every
 	// flag it was given, so a test sees the exact argv the program received.
-	slow, sidecar, lines := 0, false, 0
+	slow, sidecar, lines, quake2 := 0, false, 0, false
 	var flags []string
 	for len(args) > 2 && strings.HasPrefix(args[0], "-") {
 		flag := args[0]
@@ -104,6 +105,10 @@ func buildHelperMain(args []string) int {
 			fmt.Sscanf(strings.TrimPrefix(flag, "--lines="), "%d", &lines)
 		case flag == "--sidecar":
 			sidecar = true
+		case flag == "--q2bsp":
+			// Q2_020: write a Quake II BSP — IBSP 38 naming one texture — so
+			// a build of a Quake II fixture pipeline can be packaged.
+			quake2 = true
 		}
 	}
 	if len(args) != 2 {
@@ -148,7 +153,11 @@ func buildHelperMain(args []string) int {
 		return 1
 	}
 	fmt.Println("reading", filepath.Base(source))
-	if err := os.WriteFile(destination, append([]byte("BSP:"), contents...), 0o600); err != nil {
+	output := append([]byte("BSP:"), contents...)
+	if quake2 {
+		output = q2fixture.BSP(`{ "classname" "worldspawn" }`, q2FixtureTexture)
+	}
+	if err := os.WriteFile(destination, output, 0o600); err != nil {
 		fmt.Fprintln(os.Stderr, "helper:", err)
 		return 1
 	}

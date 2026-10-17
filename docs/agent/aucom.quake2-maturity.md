@@ -24,6 +24,7 @@ paths:
   - internal/q2run/**
   - internal/cli/package_map_q2.go
   - internal/web/q2package.go
+  - internal/web/playq2.go
 ---
 
 # Quake II is work in progress, and no document may say otherwise
@@ -144,6 +145,17 @@ a convenience.
   header for the computer it was built for. The game folder must hold
   `baseq2/pak0.pak` or `baseq2/pics/colormap.pcx` (`holds_any`): a `baseq2`
   holding no game stops the client at once.
+
+**Build & Run is a third entry to the same three owners (`Q2_020`).** Q2_009
+refused a Quake II build profile there; now `playrun.Request.Family == quake2`
+makes the sequence a *packaged* one (`internal/web/playq2.go`): no texture-bundle
+stage (the compiler reads its bound game folders, so the build is handed no
+`content_root` of its own), Installing = `q2pack.Prepare` → `Store.Create` →
+`q2install.Install` with the review's grants, Launching = `q2run.Launch`
+registered in the panel's run registry, so the panel's guards and Stop see it. A
+held plan fails at Installing with the plan's words before anything is written;
+an engine refusal fails at Launching and keeps the complete installation. Only a
+Quake II engine and a client map action fit a Quake II build profile there.
 
 The engine-output watcher and wait (`internal/enginewatch`) are shared with
 Quake III's `q3run`; a family adds its own checks through `Inspect`/`Confirm`,

@@ -221,16 +221,20 @@ func TestTheQuake2PackageJourneyThroughThePagesRoutes(t *testing.T) {
 	}
 }
 
-// Build & Run stages a loose level; a Quake II map is played from its package.
-func TestBuildAndRunSendsAQuake2MapToThePackagePath(t *testing.T) {
+// Build & Run no longer refuses a Quake II map (Q2_009 did; Q2_020 routes it
+// through the package path — TestBuildAndRunPlaysAQuake2MapFromItsPackage).
+// With the built-in pipeline and Yamagi, the review now asks for what is
+// actually missing on this machine: the engine's game folder.
+func TestBuildAndRunTakesAQuake2MapToThePackagePath(t *testing.T) {
 	m := newMachine(t)
 	status, body := m.call(http.MethodPost, "/api/v1/play/plan", map[string]any{
 		"asset_id": "abc", "revision_id": "def", "revision_number": 1,
 		"pipeline": "auto-pigeon.q2.normal", "engine": "auto-pigeon.engine.yamagi-quake2",
-		"action": "play_map", "map": "room", "mod": "apmod",
+		"action": "play_map", "map": "room",
 	})
 	message, _ := body["error"].(string)
-	if status != http.StatusConflict || !strings.Contains(message, "Package and run this map") {
+	if status != http.StatusBadRequest || strings.Contains(message, "Package and run this map") ||
+		!strings.Contains(message, "game folder") {
 		t.Errorf("Build & Run for a Quake II pipeline = %d: %v", status, message)
 	}
 }

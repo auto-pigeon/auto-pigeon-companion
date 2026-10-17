@@ -1596,9 +1596,39 @@ Companion gives a job a home of its own, and without it Yamagi 8.70 stops at
 start because it cannot create `~/.local/share/YamagiQ2/`.
 
 **On the page** the same steps are the *Package and run this map* panel under a
-finished Quake II build in **Build**. Build & Run does not run a Quake II map and
-says where the panel is. FTEQW's Quake II profile only joins servers and is not
-offered here.
+finished Quake II build in **Build**. FTEQW's Quake II profile only joins servers
+and is not offered here.
+
+**Build & Run plays a saved Quake II map the same way** (still work in progress).
+Choose a Quake II build profile and only Quake II engines are offered, with
+*Play it* (hosting a Quake II map is not offered there). There is no texture
+bundle: the compiler reads the `.wal` files of the game folders bound to it in
+Profiles. The review shows where the package goes (`<game folder>/aup-<map>/`,
+never `baseq2`) and asks one question, *Your own files in the package* — the
+panel's answer for the content folder's loose files: your own work, licensed (name
+the licence), or not to be redistributed — and offers to accept in writing what
+the package will not carry. One press then downloads the revision, converts an
+APMap with the bundled extractor, compiles, plans the PAK from the BSP, writes
+it, installs it, and starts the engine; the run succeeds only when the engine
+says it opened the map from that package. A file nothing holds, or one nobody
+said may travel, stops the run at *Installing* before anything is written,
+names the file and says what to do; *Try again* repeats the same request (after
+you put a missing file back), and a new answer is a new Build & Run. The package
+and the installation are the panel's own: they are listed under the build and
+under Run, and an engine Build & Run started is stopped there or in Jobs.
+
+```bash
+token="$(cat ~/.config/auto-pigeon-companion/api-token)"
+api="$(cat ~/.config/auto-pigeon-companion/api-url)"
+body='{"asset_id":"<map id>","revision_id":"<revision id>","revision_number":3,
+       "pipeline":"auto-pigeon.q2.normal","engine":"auto-pigeon.engine.yamagi-quake2",
+       "action":"play_map","map":"myroom",
+       "grants":[{"loose":true,"basis":"own_work"}]}'
+curl -fsS -H "X-AUCOM-Token: $token" -H 'Content-Type: application/json' -d "$body" "$api/api/v1/play/plan"
+# {"packaged":true,"writes":{"directory":".../Quake II/aup-myroom","files":["aup-myroom/myroom.pak",…]},…}
+curl -fsS -H "X-AUCOM-Token: $token" -H 'Content-Type: application/json' -d "$body" "$api/api/v1/play/runs"
+curl -fsS -H "X-AUCOM-Token: $token" "$api/api/v1/play/runs/<run id>" | jq '{state, failed_at, remedy, package, installation, launch: {map_load: .launch.map_load, loaded_from: .launch.loaded_from}}'
+```
 
 **What has been run where.** Linux x86-64 only: ericw-tools 1.4518 and Yamagi
 Quake II 8.70 built from its source, with the retail game data, on a real

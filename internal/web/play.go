@@ -406,6 +406,9 @@ func (s *Server) playBuild(ctx context.Context, request build.Request,
 // playPlanInstall reads the finished build and the verified bundle and says
 // what goes into the mod directory.
 func (s *Server) playPlanInstall(_ context.Context, record *playrun.Record) (playrun.InstallPlan, error) {
+	if record.Request.Packaged() {
+		return s.playPlanPackage(record)
+	}
 	dir, err := s.buildsDir()
 	if err != nil {
 		return playrun.InstallPlan{}, err
@@ -439,8 +442,11 @@ func (s *Server) playPlanInstall(_ context.Context, record *playrun.Record) (pla
 // playInstall stages through engine.LevelStaging, which owns the stamp, the
 // refusal to write into a directory the Companion did not create, the rollback
 // and `engine unstage`.
-func (s *Server) playInstall(_ context.Context, request playrun.Request,
+func (s *Server) playInstall(ctx context.Context, request playrun.Request,
 	plan playrun.InstallPlan) (playrun.InstallResult, error) {
+	if request.Packaged() {
+		return s.playInstallPackage(ctx, request, plan)
+	}
 	wads := make([]engine.StagedSource, 0, len(plan.WADs))
 	for _, file := range plan.WADs {
 		wads = append(wads, engine.StagedSource{Path: file.Path, Source: file.Source})
@@ -467,6 +473,12 @@ func (s *Server) playInstall(_ context.Context, request playrun.Request,
 // playVerifyInstalled re-hashes every staged file immediately before launch.
 func (s *Server) playVerifyInstalled(_ context.Context, request playrun.Request,
 	files []playrun.StagedFile) error {
+	if request.Packaged() {
+		// internal/q2run re-hashes the installed archive and its map
+		// immediately before it starts the engine (q2install.Verify): one
+		// check, in the owner that starts the process.
+		return nil
+	}
 	dir := filepath.Join(request.GameRoot, request.ModName)
 	for _, file := range files {
 		path := filepath.Join(dir, filepath.FromSlash(file.Path))
@@ -487,7 +499,10 @@ func (s *Server) playVerifyInstalled(_ context.Context, request playrun.Request,
 // playLaunch starts the engine through the job service, with the structured
 // argv the engine profile resolves — the executable and each argument as its
 // own element, never a command string.
-func (s *Server) playLaunch(_ context.Context, request playrun.Request) (playrun.LaunchRecord, error) {
+func (s *Server) playLaunch(ctx context.Context, request playrun.Request) (playrun.LaunchRecord, error) {
+	if request.Packaged() {
+		return s.playLaunchPackage(ctx, request)
+	}
 	service, err := s.requireJobsService()
 	if err != nil {
 		return playrun.LaunchRecord{}, err
@@ -535,6 +550,11 @@ func (s *Server) playLaunch(_ context.Context, request playrun.Request) (playrun
 // same ownership-respecting removal `companion engine unstage` performs: a file
 // the user changed since it was staged is left alone.
 func (s *Server) playUnstage(request playrun.Request) error {
+	if request.Packaged() {
+		// A package installation is put in place whole or not at all, and
+		// stays listed under Run; nothing half-installed is left to remove.
+		return nil
+	}
 	if _, err := engine.ReadStamp(filepath.Join(request.GameRoot, request.ModName)); err != nil {
 		// Nothing there the Companion staged. A run that failed before it
 		// installed has nothing to clean up, and removing a directory this
@@ -569,6 +589,10 @@ type playRequestBody struct {
 	// OwnWADsDir is the folder the person named in the review for WADs the
 	// deployment did not send. See playrun/ownwads.go.
 	OwnWADsDir string `json:"own_wads_dir,omitempty"`
+	// Grants and AcceptReason are a Quake II review's answers about the
+	// files of the content folder the package may carry (playq2.go).
+	Grants       []q2pack.Grant `json:"grants,omitempty"`
+	AcceptReason string         `json:"accept_reason,omitempty"`
 	// Listing lists a hosted game in Live Games. See hosting.go.
 	Listing *playListingBody `json:"listing,omitempty"`
 }
@@ -594,7 +618,7 @@ func (b playRequestBody) request(gameRoot string) playrun.Request {
 		PipelineID: b.Pipeline, Options: b.Options, Strict: b.Strict,
 		EngineProfileID: b.Engine, EngineActionID: b.Action,
 		GameRoot: gameRoot, ModName: b.Mod, MapName: b.Map, Label: b.Label,
-		OwnWADsDir: b.OwnWADsDir,
+		OwnWADsDir: b.OwnWADsDir, Grants: b.Grants, AcceptReason: b.AcceptReason,
 	}
 }
 
@@ -632,15 +656,12 @@ var errPlayIsNotForQuake3 = errors.New(
 		"textures, shaders and models packaged with it, and you have to say which of them may be " +
 		"redistributed: build it under Build, then use “Package and run this map” under the build's result")
 
-// errPlayIsNotForQuake2 is why Build & Run refuses a Quake II pipeline
-// (Q2_009). A Quake II map is played from a PAK in a mod folder of its own,
-// which an engine has to say it opened; the loose level this sequence stages
-// carries none of the map's own textures, sky, sounds or models, and its
-// texture bundle is a Quake 1 WAD bundle.
-var errPlayIsNotForQuake2 = errors.New(
-	"Build & Run plays a Quake map by putting its level in a mod folder. A Quake II map is played from a " +
-		"PAK holding the map and the files you say may travel with it: build it under Build, then use " +
-		"“Package and run this map” under the build's result")
+// A Quake II map is played from a PAK in a mod folder of its own, which the
+// engine has to say it opened. Q2_009 refused it here and pointed at the
+// package panel; since Q2_020 the sequence runs that panel's own owners —
+// internal/q2pack, q2install and q2run — so Build & Run for a Quake II build
+// profile packages, installs and waits for the engine's word in one record
+// (see [playrun.Request.Packaged]). Nothing here packages anything itself.
 
 // playRefuses reports a pipeline Build & Run does not run.
 func (s *Server) playRefuses(pipelineID string) error {
@@ -655,10 +676,70 @@ func (s *Server) playRefuses(pipelineID string) error {
 	switch documentFamily(entry.Profile) {
 	case q3pack.FamilyQuake3:
 		return errPlayIsNotForQuake3
-	case q2pack.FamilyQuake2:
-		return errPlayIsNotForQuake2
 	}
 	return nil
+}
+
+// playFamily is the engine family of a build profile, as its document says.
+// Empty when the catalog cannot say: the sequence's own stages report that.
+func (s *Server) playFamily(pipelineID string) string {
+	catalog, err := s.catalog()
+	if err != nil {
+		return ""
+	}
+	entry, err := catalog.Lookup(pipelineID)
+	if err != nil {
+		return ""
+	}
+	return documentFamily(entry.Profile)
+}
+
+// playFits refuses, before anything runs, an engine that cannot play what the
+// build profile makes: for Quake II, an engine of another family, or an action
+// that does not load a map on this computer — the same test the package panel's
+// engine list applies.
+func (s *Server) playFits(family, engineID, actionID string) error {
+	if family != q2pack.FamilyQuake2 {
+		return nil
+	}
+	catalog, err := s.catalog()
+	if err != nil {
+		return err
+	}
+	entry, err := catalog.Lookup(engineID)
+	if err != nil {
+		return err
+	}
+	document, isEngine := entry.Profile.(*profile.EngineProfile)
+	if !isEngine || documentFamily(document) != q2pack.FamilyQuake2 {
+		return fmt.Errorf("this is a Quake II build profile, and %s is not a Quake II engine: choose one "+
+			"that is, or set one up under Profiles", entry.Profile.Metadata().Name)
+	}
+	action, found := document.ActionByID(actionID)
+	if !found || !loadsAMap(action) || action.SessionRole != profile.SessionClient {
+		return fmt.Errorf("Build & Run plays a Quake II map on this computer: choose %s's action "+
+			"that starts the game on a map", document.Meta.Name)
+	}
+	return nil
+}
+
+// playRequest is the request a body describes, with what this machine says
+// about it: the engine's game folder, and the build profile's family.
+func (s *Server) playRequest(body playRequestBody) (playrun.Request, int, error) {
+	if err := s.playRefuses(body.Pipeline); err != nil {
+		return playrun.Request{}, http.StatusConflict, err
+	}
+	family := s.playFamily(body.Pipeline)
+	if err := s.playFits(family, body.Engine, body.Action); err != nil {
+		return playrun.Request{}, http.StatusBadRequest, err
+	}
+	gameRoot, err := s.gameRootFor(body.Engine)
+	if err != nil {
+		return playrun.Request{}, http.StatusBadRequest, err
+	}
+	request := body.request(gameRoot)
+	request.Family = family
+	return request, http.StatusOK, nil
 }
 
 func (s *Server) handlePlayStart(w http.ResponseWriter, r *http.Request) {
@@ -666,13 +747,9 @@ func (s *Server) handlePlayStart(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &body) {
 		return
 	}
-	if err := s.playRefuses(body.Pipeline); err != nil {
-		writeError(w, http.StatusConflict, err)
-		return
-	}
-	gameRoot, err := s.gameRootFor(body.Engine)
+	request, status, err := s.playRequest(body)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err)
+		writeError(w, status, err)
 		return
 	}
 	service, err := s.playService()
@@ -680,7 +757,7 @@ func (s *Server) handlePlayStart(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, err)
 		return
 	}
-	record, err := service.Start(body.request(gameRoot))
+	record, err := service.Start(request)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -841,6 +918,12 @@ func playView(record *playrun.Record, now time.Time) map[string]any {
 	if record.Request.BuildOnly {
 		out["build_only"] = true
 	}
+	if record.Request.Family != "" {
+		out["family"] = record.Request.Family
+	}
+	if record.Request.Packaged() {
+		out["packaged"] = true
+	}
 	if record.Request.Trigger != "" {
 		out["trigger"] = record.Request.Trigger
 	}
@@ -954,13 +1037,33 @@ func playView(record *playrun.Record, now time.Time) map[string]any {
 		out["installed"] = installed
 		out["installed_dir"] = record.InstalledDir
 	}
+	if record.Package != nil {
+		out["package"] = map[string]any{
+			"id": record.Package.ID, "archive": record.Package.Archive, "sha256": record.Package.SHA256,
+			"members": record.Package.Members, "complete": record.Package.Complete,
+			"not_carried": record.Package.NotCarried, "reused": record.Package.Reused,
+		}
+	}
+	if record.Installation != nil {
+		out["installation"] = map[string]any{
+			"id": record.Installation.ID, "mod_dir": record.Installation.ModDir,
+			"fs_game": record.Installation.FSGame, "map_name": record.Installation.MapName,
+			"replaced": record.Installation.Replaced,
+		}
+	}
 	if record.Launch != nil {
-		out["launch"] = map[string]any{
+		launch := map[string]any{
 			"profile_id": record.Launch.ProfileID, "action_id": record.Launch.ActionID,
 			"job_id": record.Launch.JobID,
 			// The argv element by element, which is how a person checks it.
 			"executable": record.Launch.Executable, "args": record.Launch.Args,
 		}
+		// A packaged run's engine said whether it opened the map, and from where.
+		if record.Launch.MapLoad != "" {
+			launch["map_load"], launch["loaded_from"] = record.Launch.MapLoad, record.Launch.LoadedFrom
+			launch["source_verified"], launch["message"] = record.Launch.SourceVerified, record.Launch.Message
+		}
+		out["launch"] = launch
 	}
 
 	return out
@@ -1129,16 +1232,11 @@ func (s *Server) handlePlayPlan(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &body) {
 		return
 	}
-	if err := s.playRefuses(body.Pipeline); err != nil {
-		writeError(w, http.StatusConflict, err)
-		return
-	}
-	gameRoot, err := s.gameRootFor(body.Engine)
+	request, status, err := s.playRequest(body)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err)
+		writeError(w, status, err)
 		return
 	}
-	request := body.request(gameRoot)
 	if err = request.Normalize(); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -1149,6 +1247,11 @@ func (s *Server) handlePlayPlan(w http.ResponseWriter, r *http.Request) {
 	}
 	if err = engine.CheckModName(request.ModName); err != nil {
 		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	if request.Packaged() {
+		s.playPlanPackaged(w, request)
 		return
 	}
 

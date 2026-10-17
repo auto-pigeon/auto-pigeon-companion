@@ -36,6 +36,11 @@ func (s *Service) execute(ctx context.Context, record *Record) {
 		// Download, textures, convert, compile — and stop: see Request.BuildOnly.
 		stages = stages[:4]
 	}
+	if record.Request.Packaged() {
+		// A Quake II compiler reads the .wal files of the game folders bound
+		// to it; there is no WAD bundle to download (see compile).
+		stages = append(stages[:1:1], stages[2:]...)
+	}
 
 	for _, stage := range stages {
 		if err := ctx.Err(); err != nil {
@@ -227,18 +232,22 @@ func (s *Service) compile(ctx context.Context, record *Record) error {
 	if source == "" {
 		source = record.MapFile
 	}
-	// Each WAD at the path the map declares it at (declaredwads.go).
-	placed, err := s.placeDeclaredWADs(record, source)
-	if err != nil {
-		return fmt.Errorf("playrun: placing the map's WADs where it declares them: %w", err)
-	}
-	if len(placed) > 0 {
-		s.detail(record, "texture WADs also placed where the map declares them: "+strings.Join(placed, ", "))
-	}
+	packaged := record.Request.Packaged()
 	readsTextures := true
-	if s.deps.DeclaresRoot != nil {
-		if readsTextures, err = s.deps.DeclaresRoot(record.Request.PipelineID, profile.RootContent); err != nil {
-			return err
+	if !packaged {
+		// Each WAD at the path the map declares it at (declaredwads.go).
+		placed, err := s.placeDeclaredWADs(record, source)
+		if err != nil {
+			return fmt.Errorf("playrun: placing the map's WADs where it declares them: %w", err)
+		}
+		if len(placed) > 0 {
+			s.detail(record, "texture WADs also placed where the map declares them: "+strings.Join(placed, ", "))
+		}
+		if s.deps.DeclaresRoot != nil {
+			var err error
+			if readsTextures, err = s.deps.DeclaresRoot(record.Request.PipelineID, profile.RootContent); err != nil {
+				return err
+			}
 		}
 	}
 	request := build.Request{
@@ -252,7 +261,14 @@ func (s *Service) compile(ctx context.Context, record *Record) error {
 		Strict:  record.Request.Strict,
 		Label:   record.Request.Label,
 	}
-	if !readsTextures {
+	if packaged {
+		// The game folders this machine bound to the compiler in Profiles —
+		// the base game and the user's content — exactly as a build from the
+		// Build page reads them. A texture bundle is a Quake 1 WAD set, and
+		// supplying one here would hide the content folder from the compiler.
+		request.Roots, request.RootSources = nil, nil
+		s.detail(record, "the compiler reads the map's .wal textures from the game folders bound to it in Profiles")
+	} else if !readsTextures {
 		request.Roots, request.RootSources = nil, nil
 		s.detail(record, "no step of this build profile reads a texture folder, so none is given: "+
 			"the compiler cannot open the map's WADs, and the BSP will carry no textures")
@@ -365,6 +381,17 @@ func (s *Service) install(ctx context.Context, record *Record) error {
 		return err
 	}
 	record.InstalledDir, record.Installed = result.Dir, result.Files
+	record.Package, record.Installation = result.Package, result.Installation
+	if result.Package != nil && result.Installation != nil {
+		reused := ""
+		if result.Package.Reused {
+			reused = ", identical to one already made"
+		}
+		s.detail(record, fmt.Sprintf("package %s (%d member(s)%s) installed into %s", result.Package.Archive,
+			result.Package.Members, reused, result.Installation.ModDir))
+
+		return nil
+	}
 	s.detail(record, fmt.Sprintf("%d file(s) under %s", len(result.Files), result.Dir))
 
 	return nil
@@ -379,6 +406,11 @@ func (s *Service) launch(ctx context.Context, record *Record) error {
 		return err
 	}
 	launched, err := s.deps.Launch(ctx, record.Request)
+	if launched.JobID != "" || launched.Executable != "" {
+		// What started, kept even when the engine then refused the map: the
+		// job and its argv are what a person opens to see why.
+		record.Launch = &launched
+	}
 	if err != nil {
 		return err
 	}
@@ -393,6 +425,9 @@ func (s *Service) launch(ctx context.Context, record *Record) error {
 
 func describeLaunch(launch LaunchRecord) string {
 	parts := append([]string{filepath.Base(launch.Executable)}, launch.Args...)
+	if launch.MapLoad != "" && launch.Message != "" {
+		return strings.Join(parts, " ") + " — " + launch.Message
+	}
 
 	return strings.Join(parts, " ")
 }
@@ -433,6 +468,10 @@ func (s *Service) failed(record *Record, state State, cause error) {
 	record.State = Failed
 	record.FailedAt = state
 	record.Error = cause.Error()
+	var remedied *RemedyError
+	if record.Remedy == "" && errors.As(cause, &remedied) && remedied.Remedy != "" {
+		record.Remedy = remedied.Remedy
+	}
 	if record.Remedy == "" {
 		record.Remedy = remedyFor(state, cause)
 	}
@@ -441,7 +480,10 @@ func (s *Service) failed(record *Record, state State, cause error) {
 	// Nothing half-installed. A failure after the install is the one case where
 	// files are already in somebody's game folder, and leaving them there would
 	// mean a mod directory holding a level the engine was never started on.
-	if state == Launching || state == Installing {
+	// A package is different: internal/q2install puts it in place whole or not
+	// at all, so what a failed launch leaves is a complete installation, listed
+	// under Run where it can be started or removed.
+	if (state == Launching || state == Installing) && !record.Request.Packaged() {
 		if err := s.deps.Unstage(record.Request); err != nil {
 			s.deps.Logf("run %s: cleaning up the install: %v", record.ID, err)
 		} else {

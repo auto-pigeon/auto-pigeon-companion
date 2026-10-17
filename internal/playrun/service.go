@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/q2pack"
 )
 
 // Deps are the services a run drives. Every one of them already exists
@@ -142,6 +143,11 @@ type InstallPlan struct {
 	WADs []InstallFile
 	// BuildManifest is the build's own manifest.json.
 	BuildManifest string
+
+	// Package is a packaged run's plan, prepared from the finished build;
+	// Manifest is that build. Nil for a loose level.
+	Package  *q2pack.Plan
+	Manifest *build.Manifest
 }
 
 // InstallFile is one file to stage.
@@ -156,7 +162,24 @@ type InstallFile struct {
 type InstallResult struct {
 	Dir   string
 	Files []StagedFile
+	// Package and Installation are a packaged run's. Nil for a loose level.
+	Package      *PackageRef
+	Installation *InstallationRef
 }
+
+// ErrPackageHeld stops a packaged run before anything is written: the package
+// plan names something that may not, or cannot, travel with the map.
+var ErrPackageHeld = errors.New("playrun: the package is held")
+
+// RemedyError is a stage's error with the sentence a person acts on, from the
+// package that knows it — the package plan's own words, the engine's hint.
+type RemedyError struct {
+	Err    error
+	Remedy string
+}
+
+func (e *RemedyError) Error() string { return e.Err.Error() }
+func (e *RemedyError) Unwrap() error { return e.Err }
 
 // ErrNotCompilerReady stops a run before the extractor or a compiler starts.
 //

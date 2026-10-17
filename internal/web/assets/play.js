@@ -78,6 +78,10 @@
     // only because its host picked Everyone for this launch. Never remembered
     // in the URL, so a reload — a fresh session — is Private again too.
     listing: { enabled: true, title: "", visibility: FRESH_VISIBILITY, host: "", port: "" },
+    // A Quake II build is played from a package (Q2_020): what the review was
+    // told about the content folder's own files. The package panel's answers,
+    // asked once for all of them; never remembered in the URL.
+    grant: { basis: "", licence: "", accept: false, reason: "" },
     // planKey is what the plan was computed for. Any change to an identity
     // invalidates it, and the page says so rather than reviewing a stale one.
     planKey: "",
@@ -248,6 +252,24 @@
 
   function nameOfEngine(id) {
     return state.engines.find((e) => e.id === id)?.name || id || "";
+  }
+
+  // The engine family of the chosen build profile, as its document says.
+  function family() {
+    return state.pipelines.find((p) => p.id === state.pipeline)?.engine_family || "";
+  }
+
+  // A Quake II map is played from a package (Q2_020): built, packaged with the
+  // files the person says may travel, installed in a mod folder of its own and
+  // accepted on the engine's word — the package panel's path, from here.
+  function packaged() {
+    return family() === "quake2";
+  }
+
+  // Which engines can play what the build profile makes: for Quake II, a
+  // Quake II engine. Every engine for every other family, as before.
+  function engineFits(engine) {
+    return !packaged() || engine?.engine_family === "quake2";
   }
 
   // Any change to an identity throws the plan away and SAYS SO. A review that
@@ -476,6 +498,8 @@
       (pipeline) => pipeline.name + (window.AUCOM.pipelineReady(pipeline) ? "" : " — needs setup: " + (pipeline.readiness?.problems || []).map((p) => p.summary).join(" ")),
       "Choose a ready build profile…");
     renderStages();
+    // The engines may have arrived first; which of them fit is the family's.
+    if (state.engines.length) renderEngines();
   }
 
   function renderStages() {
@@ -498,10 +522,15 @@
     if (sequence !== engineRefresh) return;
     if (!ok) { state.engines = []; state.engine = ""; $("play-engine").replaceChildren(); renderActions(); renderSteps(); return; }
     state.engines = body.items || [];
+    renderEngines();
+  }
+
+  function renderEngines() {
     const select = $("play-engine");
+    const ready = (engine) => Object.keys(ACTIONS).some((id) => window.AUCOM.actionReady(engine, id));
     state.engine = window.AUCOM.executionChoices(select, state.engines, state.engine,
-      (engine) => Object.keys(ACTIONS).some((id) => window.AUCOM.actionReady(engine, id)),
-      (engine) => `${engine.name} — ${Object.keys(ACTIONS).some((id) => window.AUCOM.actionReady(engine, id)) ? t("Ready to start") : t("Needs setup") + ": " + (engine.readiness?.problems || []).map(p => p.summary).join(" ")}`,
+      (engine) => engineFits(engine) && ready(engine),
+      (engine) => `${engine.name} — ${!engineFits(engine) ? t("not a Quake II engine") : ready(engine) ? t("Ready to start") : t("Needs setup") + ": " + (engine.readiness?.problems || []).map(p => p.summary).join(" ")}`,
       "Choose a ready engine…");
     renderActions();
   }
@@ -516,7 +545,10 @@
     // would pick them. "Join a server" and "Play a mod or package" belong to
     // Live Games and Run: offered here, as they were, they were four tabs whose
     // meaning nobody could guess (operator, 2026-09-22).
+    // A Quake II map is played on this computer; hosting one is not offered
+    // here (Q2_020), so only "Play it" is.
     const offered = Object.keys(ACTIONS)
+      .filter((id) => !packaged() || id === "play_map")
       .map((id) => (engine?.actions || []).find((action) => action.id === id))
       .filter(Boolean);
     for (const action of offered) {
@@ -554,8 +586,22 @@
     }
     const root = engine?.binding?.roots?.game_root || "";
     state.gameRoot = root;
+    // The mod folder field: a Quake II package's own folder (aup-<map>) is
+    // what an untouched field means, and it says so rather than showing the
+    // Quake 1 default it would not use.
+    const modField = $("play-mod");
+    if (packaged() && state.mod === "auto-pigeon") {
+      modField.value = "";
+      modField.placeholder = modFolder();
+    } else {
+      modField.placeholder = "";
+      if (modField.value !== state.mod && document.activeElement !== modField) modField.value = state.mod;
+    }
     $("play-game-root").textContent = root
-      ? `The game is at ${root}. The Companion will create ${state.mod} beside it and never write into id1.`
+      ? (packaged()
+        ? t("The game is at {root}. The Companion will create {mod} beside baseq2 and never write into baseq2.",
+          { root, mod: modFolder() })
+        : `The game is at ${root}. The Companion will create ${state.mod} beside it and never write into id1.`)
       : "This engine has no game folder set on this machine yet — set one under Profiles first.";
     // Only once an engine is chosen: before that there is nothing to be wrong
     // about, and an error on an untouched form reads as a fault.
@@ -792,6 +838,23 @@
     }
   }
 
+  // The mod folder: for a Quake II package, one per map (aup-<name>) unless
+  // somebody named another.
+  function modFolder() {
+    if (packaged() && state.mod === "auto-pigeon") return "aup-" + ($("play-map-name").value.trim() || "<map>");
+    return state.mod;
+  }
+
+  // The review's answer about the content folder's files, as the package
+  // planner's grants. Nothing when nobody answered: the plan then names each
+  // file and the run stops before installing.
+  function grantsBody() {
+    if (!packaged() || !state.grant.basis) return undefined;
+    const grant = { loose: true, basis: state.grant.basis };
+    if (state.grant.basis === "licensed") grant.licence = state.grant.licence.trim();
+    return [grant];
+  }
+
   function requestBody() {
     return {
       asset_type: "map",
@@ -803,10 +866,12 @@
       strict: state.strict,
       engine: state.engine,
       action: state.action,
-      mod: state.mod,
+      mod: packaged() && state.mod === "auto-pigeon" ? "" : state.mod,
       map: $("play-map-name").value.trim(),
       own_wads_dir: state.ownWadsDir || undefined,
       listing: listingBody(),
+      grants: grantsBody(),
+      accept_reason: packaged() && state.grant.accept ? state.grant.reason.trim() || undefined : undefined,
     };
   }
 
@@ -827,6 +892,7 @@
     ]));
 
     review.append(texturesSection(plan.textures));
+    if (plan.packaged) review.append(packageSection(plan));
     if (plan.textures_warning) {
       review.append(el("p", { className: "message error", attrs: { role: "alert" }, text: t(plan.textures_warning) }));
     }
@@ -869,6 +935,58 @@
     if (plan.build_preview_note) {
       review.append(el("p", { className: "muted small review-note", text: plan.build_preview_note }));
     }
+  }
+
+  // The package a Quake II run will make (Q2_020): what goes in, and the one
+  // question only the person can answer — whether the files of their content
+  // folder that the map names may travel with it. The same answers the
+  // package panel asks for, given once for all of them.
+  const GRANT_BASES = [
+    ["", "Not answered — stop and name each file"],
+    ["own_work", "It is my own work"],
+    ["licensed", "Licensed — I will name the licence"],
+    ["not_redistributable", "It may not be redistributed"],
+  ];
+
+  function packageSection(plan) {
+    const basis = el("select", { attrs: { id: "play-grant-basis", "aria-describedby": "play-grant-note" } });
+    for (const [value, label] of GRANT_BASES) basis.append(el("option", { text: t(label), attrs: { value } }));
+    basis.value = state.grant.basis;
+    const licence = el("input", { attrs: { id: "play-grant-licence", type: "text", placeholder: t("e.g. CC-BY-4.0"), value: state.grant.licence } });
+    const licenceField = el("p", { className: "field", children: [
+      el("label", { text: t("Licence"), attrs: { for: "play-grant-licence" } }), licence] });
+    licenceField.hidden = state.grant.basis !== "licensed";
+    const accept = el("input", { attrs: { id: "play-grant-accept", type: "checkbox" } });
+    accept.checked = state.grant.accept;
+    const reason = el("textarea", { attrs: { id: "play-grant-reason", rows: "2", placeholder: t("Why the package may leave these files out") } });
+    reason.value = state.grant.reason;
+    reason.hidden = !state.grant.accept;
+    basis.addEventListener("change", () => {
+      state.grant.basis = basis.value;
+      licenceField.hidden = basis.value !== "licensed";
+      renderFinalSummary();
+    });
+    licence.addEventListener("input", () => { state.grant.licence = licence.value; });
+    accept.addEventListener("change", () => {
+      state.grant.accept = accept.checked;
+      reason.hidden = !accept.checked;
+      renderFinalSummary();
+    });
+    reason.addEventListener("input", () => { state.grant.reason = reason.value; });
+    return el("section", {
+      className: "panel review-card",
+      children: [
+        el("h4", { text: t("The package") }),
+        el("p", { className: "muted small", text: plan.maturity_message || "" }),
+        el("p", { className: "muted", attrs: { id: "play-grant-note" }, text: plan.package?.message || "" }),
+        el("p", { className: "field", children: [
+          el("label", { text: t("Your own files in the package"), attrs: { for: "play-grant-basis" } }), basis] }),
+        licenceField,
+        el("p", { className: "field", children: [
+          el("label", { attrs: { for: "play-grant-accept" }, children: [accept,
+            el("span", { text: " " + t("Accept in writing what the package will not carry") })] }), reason] }),
+      ],
+    });
   }
 
   function texturesSection(textures) {
@@ -1137,8 +1255,11 @@
     summary.replaceChildren(
       ...line(t("Map"), `${state.map?.display_name || ""} · ${t("revision {n}", { n: state.revision?.revision ?? "" })}`),
       ...line(t("Build"), nameOfPipeline(state.pipeline)),
-      ...line(t("Run"), `${nameOfEngine(state.engine)} · ${actionTitle(state.action)} → ${state.gameRoot}/${state.mod}`),
+      ...line(t("Run"), `${nameOfEngine(state.engine)} · ${actionTitle(state.action)} → ${state.gameRoot}/${modFolder()}`),
       ...line(t("Name in the game"), $("play-map-name").value.trim()),
+      ...(packaged() ? line(t("Your own files in the package"),
+        t((GRANT_BASES.find(([value]) => value === state.grant.basis) || GRANT_BASES[0])[1]) +
+        (state.grant.accept ? " · " + t("what it will not carry is accepted in writing") : "")) : []),
       ...(own ? line(t("Your own WADs"), `${(textures.own_wads_needed || []).join(", ")} ← ${state.ownWadsDir}`) : []),
       ...(listingBody() ? line(t("Live Games"), `${listingBody().title} · ${$("play-listing-visibility").selectedOptions[0]?.textContent || ""}` +
         ` · ${listingBody().endpoint_host}:${listingBody().endpoint_port}`) : []),
@@ -1571,8 +1692,19 @@
     if (run.current_job) rows.push(...line("Running job", `${run.current_step} · ${run.current_job}`));
     if (run.installed_dir) rows.push(...line("Installed into", run.installed_dir));
     for (const file of run.installed || []) rows.push(...line(file.path, file.sha256));
+    // A Quake II run's package, where it was installed, and the engine's word.
+    if (run.package) {
+      rows.push(...line(t("Package"), `${run.package.archive} · ${t("{n} member(s)", { n: run.package.members })} · sha256 ${run.package.sha256}` +
+        (run.package.reused ? " · " + t("identical to one already made") : "") +
+        (run.package.complete ? "" : " · " + t("does not carry: {files}", { files: (run.package.not_carried || []).join(", ") }))));
+    }
+    if (run.installation) rows.push(...line(t("Installed into"), `${run.installation.mod_dir} (fs_game ${run.installation.fs_game})`));
     if (run.launch) {
       rows.push(...line("Command", [run.launch.executable, ...(run.launch.args || [])].join(" ")));
+      if (run.launch.map_load) {
+        rows.push(...line(t("The engine's word"), `${run.launch.map_load}${run.launch.loaded_from ? " — " + run.launch.loaded_from : ""}` +
+          (run.launch.message ? ". " + run.launch.message : "")));
+      }
     }
     if (run.error && run.state !== "cancelled") {
       rows.push(el("dt", { text: "What it reported, in full" }),
@@ -1654,11 +1786,16 @@
   $("play-map-name").addEventListener("input", (event) => {
     state.mapName = event.target.value.trim();
     invalidate("You changed the map's name in the game.");
+    // A Quake II package's folder is named after the map.
+    if (packaged()) renderActions();
   });
   $("play-pipeline").addEventListener("change", (event) => {
     state.pipeline = event.target.value;
     invalidate("You changed the build profile, so what it would run has to be worked out again.");
     renderStages();
+    // Which engines fit depends on the family (a Quake II build needs a
+    // Quake II engine), so the engine list is drawn again.
+    renderEngines();
     summarize();
   });
   $("play-strict").addEventListener("change", (event) => {
