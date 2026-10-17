@@ -21,3 +21,14 @@ measurements. qbsp's own `level.log` FILE is not used: it leaves out every `----
 | `h_missing_wal` | sealed, one wall naming a texture with no WAL | 0 | BSP — not called sealed |
 | `i_stale_pts` | `a_sealed` with a stale `level.pts` planted beforehand | 0 | BSP; qbsp deleted the stale `.pts` (`pts/i_stale_pts.pts` is the planted file) |
 | `j_outside_pillars` (`Q2_019`) | `a_sealed` with 764 small pillars in the void around it | 0 | BSP; the fill report reads `[.   ]    1,723 outside leaves` — a progress prefix and a thousands separator, as every real-size map prints it |
+
+## The candidate 1.4522 (`Q2_005B`)
+
+`logs-1.4522/` and `pts-1.4522/` are the same controls run by the fork's candidate 1.4522
+(`2.0.0-alpha11-36-g0d64c054+auto-pigeon.1.4522`, commit 0d64c054, built by the fork's CI scripts and NOT
+published) with the same command, the same game view (a `baseq2` holding pak0-pak2) and the same job layout;
+kept as qbsp printed them (carriage returns included) with only the directory renamed. Every exit, every file
+left and every point file is 1.4518's; `TestTheCandidateQbspIsReadAsTheMeasuredRelease` reads each row as the
+1.4518 row is read. `pts-1.4522/i_stale_pts.pts` is the planted file, as in `pts/`. The runner is
+`LLM/runs/auto-pigeon/Q2_005B/scripts/run_aucom_controls.sh`.
+

@@ -380,13 +380,16 @@ room one of whose walls names a texture qbsp could not open. Neither is a pass:
 | --- | --- |
 | `Reached occupant … at (x y z)` / `Leak file written`, a `.pts` starting at that point | **leak**, with a route |
 | `No entities in empty space -- no filling performed` (a BSP, exit 0) | **not tested** |
-| `N outside leaves`, `Writing … as Quake II BSP IBSP:38`, the footer, exit 0, the BSP there, every texture found, release 1.4518 | **no leak in this run** — not proof the map is sealed |
+| `N outside leaves`, `Writing … as Quake II BSP IBSP:38`, the footer, exit 0, the BSP there, every texture found, release 1.4518 or the candidate 1.4522 | **no leak in this run** — not proof the map is sealed |
 | a texture it could not open, a point file the run did not say it wrote, `-quiet` output, an error, a cancel, another qbsp version's clean run | **no verdict**, with the reason |
 
 A detail brush, a clip brush or a translucent window across a gap does not seal it.
 The built-in pipeline names the family's default Quake II tool; only release 1.4518
 of the Auto-Pigeon build has been measured, so to run that one make your own copy of
-the pipeline whose stage names it (**Profiles**), and pin it for Quake II. The result
+the pipeline whose stage names it (**Profiles**), and pin it for Quake II. The fork's
+candidate 1.4522 (`2.0.0-alpha11-36-g0d64c054+auto-pigeon.1.4522`, built locally from
+commit 0d64c054 and not published as a download) was measured on the same controls and
+is read the same way; nothing else is (`Q2_005B`, `internal/leakadapter/testdata/q2/logs-1.4522`). The result
 is `aucom.leak-result/1.1` with `"game_profile":"quake2"`, `"compiler":"ericw-qbsp-q2"`.
 
 ```bash

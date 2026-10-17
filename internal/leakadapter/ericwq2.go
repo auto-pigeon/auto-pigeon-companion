@@ -3,6 +3,7 @@ package leakadapter
 import (
 	"math"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -12,6 +13,17 @@ import (
 // (`Q2_010`). Upstream 2.0.0-alpha7 — what the family's default tool profile
 // describes — was not available to measure, so it is not qualified.
 const EricwQ2MeasuredVersion = "2.0.0-alpha11-32-g0c787d7a+auto-pigeon.1.4518"
+
+// EricwQ2CandidateVersion is the fork's candidate 1.4522 (`Q2_005B`: entity
+// lines kept in order, `light -lmextents float32`), built from commit 0d64c054
+// by the fork's own CI scripts and NOT published. Every control below was run
+// again with its qbsp (`testdata/q2/logs-1.4522`, `pts-1.4522`): the same exits,
+// the same files left, the same point files byte for byte, and every row read
+// as 1.4518's is. Only this exact banner is added; nothing else 1.x is.
+const EricwQ2CandidateVersion = "2.0.0-alpha11-36-g0d64c054+auto-pigeon.1.4522"
+
+// EricwQ2MeasuredVersions are the qbsp builds the reading below was measured on.
+var EricwQ2MeasuredVersions = []string{EricwQ2MeasuredVersion, EricwQ2CandidateVersion}
 
 // What qbsp 1.4518 prints with `-q2bsp -leaktest`, measured on the authored
 // controls in `testdata/q2/controls` (the logs beside them are those runs,
@@ -118,7 +130,7 @@ func ClassifyEricwQ2(e Evidence) Verdict {
 	if logged := EricwQ2LogVersion(log); logged != "" {
 		version = logged
 	}
-	qualified := version == EricwQ2MeasuredVersion
+	qualified := slices.Contains(EricwQ2MeasuredVersions, version)
 	missingTexture := false
 	for _, match := range q2MissingTexture.FindAllStringSubmatch(log, -1) {
 		// qbsp looks up a `skip` of its own on every run, measured on every

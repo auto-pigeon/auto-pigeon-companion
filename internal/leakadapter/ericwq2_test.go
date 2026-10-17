@@ -24,6 +24,26 @@ func readQ2(t *testing.T, parts ...string) string {
 // step's exit, how the step ended, the fresh point file when the run left
 // one and whether a BSP was collected.
 func TestEricwQ2RunsAreReadByWhatTheCompilerSaidAndLeft(t *testing.T) {
+	checkEricwQ2Controls(t, "logs", "pts", EricwQ2MeasuredVersion)
+}
+
+// `Q2_005B`: the candidate 1.4522's own runs of the same controls are read as
+// 1.4518's are, row for row — the evidence for qualifying its exact banner.
+func TestTheCandidateQbspIsReadAsTheMeasuredRelease(t *testing.T) {
+	checkEricwQ2Controls(t, "logs-1.4522", "pts-1.4522", EricwQ2CandidateVersion)
+	q2, _ := ForProfile(ProfileQuake2)
+	if !q2.Qualified(EricwQ2CandidateVersion) || !q2.Qualified(EricwQ2MeasuredVersion) || q2.Qualified("2.0.0-alpha11-36-g0d64c054") {
+		t.Fatalf("qualified versions: %v", q2.QualifiedVersions)
+	}
+	for _, name := range []string{"b_gap", "c_outside_light", "f_clip_cover", "f_detail_cover", "f_window_cover", "g_degenerate_plane"} {
+		if readQ2(t, "pts-1.4522", name+".pts") != readQ2(t, "pts", name+".pts") {
+			t.Errorf("%s: the candidate's point file is not 1.4518's", name)
+		}
+	}
+}
+
+func checkEricwQ2Controls(t *testing.T, logs, ptsDir, version string) {
+	t.Helper()
 	yes, no, zero, one := true, false, 0, 1
 	cases := []struct {
 		name, log, pts string
@@ -72,9 +92,12 @@ func TestEricwQ2RunsAreReadByWhatTheCompilerSaidAndLeft(t *testing.T) {
 			bsp: &yes, want: OutcomeNoLeak, tokens: []string{EvFillCompleted, EvFinished, EvBSPWritten, EvQuake2BSPConfirmed}},
 	}
 	for _, c := range cases {
-		e := Evidence{Log: readQ2(t, "logs", c.log+".log"), StepState: c.state, ExitCode: c.exit, BSP: c.bsp}
+		e := Evidence{Log: readQ2(t, logs, c.log+".log"), StepState: c.state, ExitCode: c.exit, BSP: c.bsp}
+		if EricwQ2LogVersion(e.Log) != version {
+			t.Errorf("%s: the log is qbsp %q, not %q", c.name, EricwQ2LogVersion(e.Log), version)
+		}
 		if c.pts != "" {
-			e.Pointfile = readQ2(t, "pts", c.pts+".pts")
+			e.Pointfile = readQ2(t, ptsDir, c.pts+".pts")
 		}
 		got := ClassifyEricwQ2(e)
 		if got.Outcome != c.want || got.RoutePoints != c.points {

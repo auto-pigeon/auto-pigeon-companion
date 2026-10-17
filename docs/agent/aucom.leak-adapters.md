@@ -50,7 +50,7 @@ is not one.
 | game | built-in pipeline | compiler | point file | direction | envelope |
 | --- | --- | --- | --- | --- | --- |
 | `quake1` | `auto-pigeon.q1.leak-test` | `ericw-qbsp` (EricW 2.0.0-alpha11; 0.18.1 also qualified) | `ericw-pts` | `occupant_to_outside` | `aucom.leak-result/1.0` |
-| `quake2` | `auto-pigeon.q2.leak-test` | `ericw-qbsp-q2` (qbsp `-q2bsp`, Auto-Pigeon build 1.4518) | `ericw-pts` | `occupant_to_outside` | `aucom.leak-result/1.1` |
+| `quake2` | `auto-pigeon.q2.leak-test` | `ericw-qbsp-q2` (qbsp `-q2bsp`, Auto-Pigeon build 1.4518; candidate 1.4522) | `ericw-pts` | `occupant_to_outside` | `aucom.leak-result/1.1` |
 | `quake3` | `auto-pigeon.q3.leak-test` | `q3map2` (2.5.17n-git-68ecbed) | `q3map2-lin` | `outside_to_occupant` | `aucom.leak-result/1.1` |
 
 The pipeline column is the built-in one. It is not what runs unless the user chose it — see the
@@ -105,7 +105,9 @@ record, never from today's pin or a fixed step id.
 
 ## Quake II, as measured (`Q2_010`)
 
-Release 1.4518 of the Auto-Pigeon build, `qbsp -nocolor -q2bsp -basedir … -gamedir … -leaktest`:
+Release 1.4518 of the Auto-Pigeon build, `qbsp -nocolor -q2bsp -basedir … -gamedir … -leaktest` — and, with the
+same rows, the fork's candidate 1.4522 (`Q2_005B`: commit 0d64c054, not published; `testdata/q2/logs-1.4522`). A
+build is qualified by its EXACT banner and its own measured controls, never by a prefix or a version range:
 
 | control | exit | left | what decides it |
 | --- | --- | --- | --- |

@@ -165,7 +165,7 @@ var adapters = map[string]Adapter{
 		Compiler: CompilerEricwQbspQ2, PointfileFormat: FormatEricwPts, Direction: DirectionOccupantFirst,
 		PointfileOutput: "pts", LogOutput: "compile_log", BSPOutput: "bsp",
 		PointfileRole: "q2.pts", LogRoles: []string{StepLogRole}, BSPRole: "q2.bsp",
-		ResultSchema: Schema11, QualifiedVersions: []string{EricwQ2MeasuredVersion},
+		ResultSchema: Schema11, QualifiedVersions: EricwQ2MeasuredVersions,
 		Classify: ClassifyEricwQ2,
 	},
 }

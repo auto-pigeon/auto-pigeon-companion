@@ -1,0 +1,69 @@
+---- qbsp / ericw-tools 2.0.0-alpha11-36-g0d64c054+auto-pigeon.1.4522 ----
+low priority not compiled into this version
+logging to /q2010/jobs/b_gap/work/level.log (truncate)
+
+--- Options Summary ---
+    "nocolor" was set to "1" (from command line)
+    "gamedir" was set to "/q2010/content" (from command line)
+    "basedir" was set to "/q2010/game/baseq2" (from command line)
+    "q2bsp" was set to "1" (from command line)
+    "chop" was set to "1" (from game target)
+    "leaktest" was set to "1" (from command line)
+    "maxedges" was set to "0" (from game target)
+
+Input file: /q2010/jobs/b_gap/input/b_gap.map
+Output file: /q2010/jobs/b_gap/work/level.bsp
+
+using gamedir: '/q2010/content'
+using basedir: '/q2010/game/baseq2'
+WARNING: Couldn't locate texture for skip
+---- LoadMapFile ----
+     3 entities
+     2 unique textures
+     4 texinfos
+    28 unique planes
+
+---- ProcessMapBrushes ----
+INFO: world extents calculated to 568 units
+[  0%]  ...[ 33%]  est: 00:00:00[ 66%]  est: 00:00:00[100%] time elapsed: 00:00:00.000088
+     7 brushes
+    42 sides
+
+Processing map...
+---- Brush_LoadEntity ----
+[  0%]  ...[ 14%]  est: 00:00:00[ 28%]  est: 00:00:00[ 42%]  est: 00:00:00[ 57%]  est: 00:00:00[ 71%]  est: 00:00:00[ 85%]  est: 00:00:00[100%] time elapsed: 00:00:00.000106
+---- CountBrushes ----
+    7 SOLID brushes
+    7 brushes total
+    42 visible sides
+INFO: calculating BSP for 7 brushes with 42 sides
+---- ChopBrushes ----
+[  0%]  ...[ 14%]  est: 00:00:00[ 28%]  est: 00:00:00[ 42%]  est: 00:00:00[ 57%]  est: 00:00:00[ 71%]  est: 00:00:00[ 85%]  est: 00:00:00[100%] time elapsed: 00:00:00.000037
+chopped 7 brushes into 7
+---- BrushBSP ----
+     7 brushes
+    42 visible faces
+[.   ][done] time elapsed: 00:00:00.000690
+    26 nodes
+    26 expensive split nodes
+    27 leaves
+---- CountLeafs ----
+     7 SOLID leafs
+    20 EMPTY leafs
+    27 leafs total
+    8 max tree height
+    6 avg tree height
+---- MakeTreePortals ----
+[  0%]  ...[  1%]  est: 00:00:00[  3%]  est: 00:00:00[ 13%]  est: 00:00:00[ 16%]  est: 00:00:00[ 20%]  est: 00:00:00[ 26%]  est: 00:00:00[ 35%]  est: 00:00:00[ 64%]  est: 00:00:00[ 77%]  est: 00:00:00[ 81%]  est: 00:00:00[ 84%]  est: 00:00:00[ 88%]  est: 00:00:00[ 92%]  est: 00:00:00[100%] time elapsed: 00:00:00.000360
+---- CalcTreeBounds ----
+[.   ][done] time elapsed: 00:00:00.000023
+    124 tree portals
+---- FillOutside ----
+[.   ]WARNING: Reached occupant "light" at (0 0 192), no filling performed.
+Leak file written to /q2010/jobs/b_gap/work/level.pts
+---- WriteDebugPortals ----
+            5 portals written to /q2010/jobs/b_gap/work/level.leak.prt
+[done] time elapsed: 00:00:00.000393
+************ ERROR ************
+FillOutside: Aborting because -leaktest was used.
+
