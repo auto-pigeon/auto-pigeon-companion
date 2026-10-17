@@ -82,3 +82,12 @@ validates the link's shape before anything else, records it through
 redeemed, deduplicated by digest), and starts or raises the page. The server
 redeems it once when the page asks. Never make the handler resolve, download or
 launch.
+
+**The handler is registered once, at first interactive use (moved from README.md, 2026-10-17).**
+The first no-subcommand start (a double-click) registers `autopigeon://` and records that it did
+in `config.json` as `uri_handler`, so it happens once: a later start leaves alone a handler the
+user removed or pointed at another program. A newer Companion unpacked into another folder takes
+over the handler an older one registered. On macOS the `.app` declares the scheme and nothing is
+written. `companion serve` (server mode) never registers. Without a handler the editor's
+**Leaks → Test in Companion** click reaches nothing and the editor waits for a result that cannot
+come — which is why the first-use registration exists.

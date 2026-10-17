@@ -167,3 +167,19 @@ token beside the sentence, set by the function that knows the cause and read
 with `failure.Of`. Never derive a class from an error's text, and never add a
 class called "unknown": an unclassified failure is a fact about that failure.
 
+
+**What a Quake III build records (moved from README.md, 2026-10-17).** What was staged is the build
+manifest's `game_data` (`aucom.build-manifest/1.3`): the base game and mod names, each archive with
+its SHA-256 and member count, the loose file count, what was left out and why. An APMap input also
+records `inputs[].conversion` (the APMap's digest, its own `document_id` and revision), keeps the
+extractor's `<name>.q3map-manifest.json` beside the `.map`, and records the converted `.map` as the
+`source_map` input (its SHA-256 is the extractor's output). A map from the account records
+`inputs[].source` (`asset_id`, `revision`, `revision_id`): the APMap's own revision is not the
+account's — a map saved three times still calls itself revision 0 — so the Build page's *What this
+build read* names all three facts. A bound package the account does not hold, a download that is not
+the bound bytes, and a *different* archive of the same name in the content folder each stop the
+build by name; the map's own `mod_root` is the build's mod directory, and a stage asking for another
+is refused. A refusal is shown as its first line (an extractor refusal such as
+`apmap-to-q3map refused [q3map_shader_unsafe]: …` leads with the extractor's reason), recorded once
+in Activity with its class; a page reload while a build runs reopens that build and starts no
+second compiler.

@@ -46,8 +46,11 @@ publishes and installs portable profiles, and joins a hosted game with verified 
 
 It is one of the repositories under `mapper-code/` and follows the same mapper-wide prompt/handoff
 workflow as every sibling. `README.md` is the user-facing manual for what the program does — it is
-large, it is maintained separately, and it is **not** an instruction payload; nothing here may be
-moved into it and no session is asked to read it whole.
+maintained separately, and it is **not** an instruction payload; nothing here may be moved into it
+and no session is asked to read it whole.
+
+**`README.md` is user-facing only (HITL, 2026-10-17).** Developer material once in it now lives in the module owning
+its subject (new: `docs/agent/aucom.profile-authoring.md`); put incident history, measurements and internals there, never in the README.
 
 This file was created to carry the shared workflow rules, which this repo previously had nowhere to
 record. It deliberately does **not** invent engineering rules for this codebase; add those in a
@@ -164,6 +167,7 @@ the router resolves those for you rather than making you read the table.
 
 | module | the authority on | topics |
 | --- | --- | --- |
+| `aucom.profile-authoring` | Writing a profile — the New profile form, stage tools and stage arguments | profile-authoring, new-profile, scratch, compose, stage, stage-tool, stage-arguments, pipeline, readiness |
 | `aucom.export-gate` | The export gate is the only way out, and trust does not travel in | publish, export, profile, portable, trust, community, install, deployment |
 | `aucom.approvals` | There is one writer of an approval, and it refuses | approval, grant, binding, digest, review, cli-parity |
 | `aucom.threat-model` | The threat model is code, and there is one writer of a mutable local file | threat, security, risk, matrix, review-date, lockfile, mitigation, adr |

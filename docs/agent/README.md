@@ -117,8 +117,10 @@ Two rules follow. The README remains the user-facing statement of the rules the 
 it in the same task, including the CLI/page parity claim `aucom.approvals` had to repair once. And
 it must not be turned into an instruction source: no auto-loaded file may `@import` it, and a
 module that needs a README section states the rule itself rather than telling an agent to go and
-read it whole. It was **not split**, because churning a stable public document that nothing loads
-would cost review time and save no context at all.
+read it whole. It was **not split** by `246G`. On 2026-10-17 HITL made it **user-facing only**: the
+developer material it had grown (measurements, incident history, internal contracts, contributor
+commands) moved into the modules that own those subjects, and `aucom.profile-authoring` was added
+for the profile-form rules no module owned.
 
 `docs/adr/` is the decision record and is routed by the module whose subject it belongs to —
 `0007` by `aucom.threat-model`. An ADR is evidence for a rule, not a second copy of it.

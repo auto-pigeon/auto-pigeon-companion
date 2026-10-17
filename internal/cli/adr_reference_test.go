@@ -64,10 +64,12 @@ func TestEveryADRCitationNamesOneExistingFile(t *testing.T) {
 	}
 }
 
-// The desktop-shell module and the README cite the same decision record.
+// The desktop-shell module cites the decision record. README.md is user-facing
+// only (HITL, 2026-10-17) and no longer carries a $MAPPER_ROOT path; if it ever
+// cites an ADR again, TestEveryADRCitationNamesOneExistingFile still checks it.
 func TestTheDesktopShellCitesADR0026(t *testing.T) {
 	documents := adrCitingDocuments(t)
-	for _, name := range []string{"README.md", "docs/agent/aucom.desktop-shell.md"} {
+	for _, name := range []string{"docs/agent/aucom.desktop-shell.md"} {
 		if !strings.Contains(documents[name], "$MAPPER_ROOT/LLM/docs/adr/"+desktopShellADR) {
 			t.Errorf("%s does not cite $MAPPER_ROOT/LLM/docs/adr/%s", name, desktopShellADR)
 		}

@@ -196,3 +196,9 @@ No Quake III client session with real game data has been observed: this
 machine has none. `CL_InitCGame:` as the client's `map_loaded` line is the
 published source's wording, not a measurement, and the profile says so. Windows
 and macOS are compiled and unit-tested only.
+
+**The page's Port field (moved from README.md, 2026-10-17).** On the Build page, *Package and run
+this map* step 3's **Port** belongs only to actions that declare a port (the two servers): a client
+action disables it, and a port typed for a server is not sent with a client run.
+`GET /api/v1/q3/engines` names each action's declared options (`"options": ["base_game", "port", …]`),
+which is what the page reads.

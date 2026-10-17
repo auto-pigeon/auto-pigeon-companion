@@ -148,3 +148,13 @@ What binds a task here:
   stop a double-clicked 1.161 on Windows, with no trace yet; the diagnostic and
   the next step are in the NEW_254 handoff.
 
+
+## One Companion per settings folder (moved from README.md, 2026-10-17)
+
+A second start while one is open raises a new tab of the running one and starts nothing else, so
+only one Companion ever uses a settings folder, log and job store. The answer names the build that
+answered; when it is not the build just started (an older copy still open) it says so —
+`This launch (1.214) started nothing; quit the running one first to use this build.` — and nothing
+of the new build runs. Two starts a moment apart (a double double-click, or a link clicked while
+the program is still starting) end with one Companion: the second waits for the first to finish
+starting and then shows it.

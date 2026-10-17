@@ -97,3 +97,15 @@ from the build) and the commit it came from. **CI still reads no secrets**, and 
 release workflow does not build AUE yet: the AUE repository is private, and
 reading it would need a token — deferred until the repositories move to the
 `auto-pigeon` organisation.
+
+### How a build converts an APMap (moved from README.md, 2026-10-17)
+
+A map in the account is an APMap and a compiler reads a `.map`, so a build converts through the
+extractor first, choosing its direction by the APMap's `game`: `quake1` → `--apmap-to-q1map`,
+`quake2` → `--apmap-to-q2map`, `quake3` → `--apmap-to-q3map` (an extractor with that direction,
+`Q3_004`). The Quake III direction also writes `<name>.q3map-manifest.json` beside the `.map` in the
+same `converted-<name>/` directory — the source document's identity, every shader, model and sound
+the map names, and every conversion warning. An extractor refusal (an older extractor, a patch or
+shader it will not write) is reported in its own words and nothing is built. A local `.apmap` given
+to `build run` is copied into the build's temporary stage first, so nothing is written beside the
+user's file; `companion extractor convert` runs the same path by hand.

@@ -178,3 +178,29 @@ A row is a claim that somebody did all of this, on the machine, with the install
    desktop.
 
 Until then the game is unsupported, and says so.
+
+## Delivery to the editor, and the result file (moved from README.md, 2026-10-17)
+
+These were user-manual paragraphs until HITL made `README.md` user-facing only; the behaviour is
+unchanged and `internal/web/leakrelay.go` owns it.
+
+- **A status is delivered, not merely sent.** When the account server does not accept a status
+  (away, restarting) the Companion keeps the NEWEST thing to say about that request and resends it
+  after 1, 2, 4, 8, 16 and then every 30 seconds, for as long as the request is worth telling anyone
+  about (30 minutes). It sends where the work IS: a Build pressed while the server was away is
+  reported as "building", never walked back through "received". While a request is being worked on
+  its line is repeated every 30 seconds, so a server that restarted and forgot it has it again.
+  Signed out, or signed in as another account, nothing is sent and nothing is lost: the request is
+  acknowledged when the owning account signs in. None of this delays a build.
+- `GET /api/v1/leak-test/request` carries `relay`: `state` is `delivered`, `pending`, `retrying`,
+  `sign_in_required`, `other_account` or `stopped` (the server rejected the request itself; it is not
+  sent again), with `desired`, `failures` and `error`. `GET /api/v1/leak-test/pending?request_id=<id>`
+  answers `"replaced": true` when a newer click took that request's place, instead of handing over
+  the newer request's details.
+- **The result file** (`GET /api/v1/leak-test/runs/<build>/result`) records the pinned map identity
+  and artifact hashes; it is a local file, not a signed attestation, and never carries the BSP. A
+  Quake 1 result is `aucom.leak-result/1.0`, unchanged. Quake II and Quake III results are
+  `aucom.leak-result/1.1`: they add `game_profile`, `compiler`, `pointfile_format` and
+  `pointfile_direction`, keep `content_sha256` (the saved revision) apart from
+  `compiler_source_sha256` (the converted `.map` the compiler read), and carry `diagnostic` — the
+  reading, with its evidence.
