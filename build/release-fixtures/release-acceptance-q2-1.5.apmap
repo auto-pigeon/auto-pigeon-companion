@@ -1,0 +1,2431 @@
+{
+  "$schema": "https://auto-pigeon.org/schemas/apmap/1.5/apmap.schema.json",
+  "apmap_version": "1.5",
+  "document_id": "aucom-release-acceptance-q2-1.5",
+  "revision": 0,
+  "role": "full_map",
+  "game": "quake2",
+  "map_dialect": "quake_standard",
+  "id_policy": "derived",
+  "frame": {
+    "space": "source_world",
+    "units": "quake_unit",
+    "coordinate_system": {
+      "handedness": "right",
+      "up_axis": "z"
+    },
+    "to_source": {
+      "type": "identity"
+    }
+  },
+  "provenance": {
+    "producer": "aucom-release-acceptance",
+    "producer_version": "1.0"
+  },
+  "authorship": {
+    "author": "Auto-Pigeon release acceptance",
+    "copyright_notice": "Fixture, no rights reserved.",
+    "license": "CC0-1.0"
+  },
+  "entities": [
+    {
+      "entity_id": "ent_eb871584b578398d",
+      "derived_from": {
+        "kind": "source_map",
+        "source_map": "release-acceptance-q2-1.5.map",
+        "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+        "source_path": "e0"
+      },
+      "content": [
+        {
+          "kind": "property",
+          "key": "classname",
+          "value": "worldspawn"
+        },
+        {
+          "kind": "property",
+          "key": "message",
+          "value": "Q2_020 release fixture"
+        },
+        {
+          "kind": "brush",
+          "brush_id": "brs_2b710f190f50e24d",
+          "derived_from": {
+            "kind": "source_map",
+            "source_map": "release-acceptance-q2-1.5.map",
+            "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+            "source_path": "e0.b0"
+          },
+          "faces": [
+            {
+              "face_id": "fac_134bf15c407695e7",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b0.f0"
+              },
+              "plane": {
+                "points": [
+                  [
+                    272,
+                    272,
+                    0
+                  ],
+                  [
+                    272,
+                    -16,
+                    0
+                  ],
+                  [
+                    -16,
+                    272,
+                    0
+                  ]
+                ]
+              },
+              "texture": "aucom/floor",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_45d6ef328ebb4713",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b0.f1"
+              },
+              "plane": {
+                "points": [
+                  [
+                    272,
+                    272,
+                    0
+                  ],
+                  [
+                    -16,
+                    272,
+                    0
+                  ],
+                  [
+                    272,
+                    272,
+                    -16
+                  ]
+                ]
+              },
+              "texture": "aucom/floor",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_17e4aada9efcc453",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b0.f2"
+              },
+              "plane": {
+                "points": [
+                  [
+                    272,
+                    272,
+                    0
+                  ],
+                  [
+                    272,
+                    272,
+                    -16
+                  ],
+                  [
+                    272,
+                    -16,
+                    0
+                  ]
+                ]
+              },
+              "texture": "aucom/floor",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_41b9476574cc0348",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b0.f3"
+              },
+              "plane": {
+                "points": [
+                  [
+                    -16,
+                    -16,
+                    -16
+                  ],
+                  [
+                    272,
+                    -16,
+                    -16
+                  ],
+                  [
+                    -16,
+                    272,
+                    -16
+                  ]
+                ]
+              },
+              "texture": "aucom/floor",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_0f43ef76c6dfa972",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b0.f4"
+              },
+              "plane": {
+                "points": [
+                  [
+                    -16,
+                    -16,
+                    -16
+                  ],
+                  [
+                    -16,
+                    -16,
+                    0
+                  ],
+                  [
+                    272,
+                    -16,
+                    -16
+                  ]
+                ]
+              },
+              "texture": "aucom/floor",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_70acbb78f8e90dda",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b0.f5"
+              },
+              "plane": {
+                "points": [
+                  [
+                    -16,
+                    -16,
+                    -16
+                  ],
+                  [
+                    -16,
+                    272,
+                    -16
+                  ],
+                  [
+                    -16,
+                    -16,
+                    0
+                  ]
+                ]
+              },
+              "texture": "aucom/floor",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "brush",
+          "brush_id": "brs_69e56208e1874806",
+          "derived_from": {
+            "kind": "source_map",
+            "source_map": "release-acceptance-q2-1.5.map",
+            "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+            "source_path": "e0.b1"
+          },
+          "faces": [
+            {
+              "face_id": "fac_69a9b51d9b8b0805",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b1.f0"
+              },
+              "plane": {
+                "points": [
+                  [
+                    272,
+                    272,
+                    144
+                  ],
+                  [
+                    272,
+                    -16,
+                    144
+                  ],
+                  [
+                    -16,
+                    272,
+                    144
+                  ]
+                ]
+              },
+              "texture": "aucom/lightpanel",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_a0b2268b633714c3",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b1.f1"
+              },
+              "plane": {
+                "points": [
+                  [
+                    272,
+                    272,
+                    144
+                  ],
+                  [
+                    -16,
+                    272,
+                    144
+                  ],
+                  [
+                    272,
+                    272,
+                    128
+                  ]
+                ]
+              },
+              "texture": "aucom/lightpanel",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_18bf2af63adbebbb",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b1.f2"
+              },
+              "plane": {
+                "points": [
+                  [
+                    272,
+                    272,
+                    144
+                  ],
+                  [
+                    272,
+                    272,
+                    128
+                  ],
+                  [
+                    272,
+                    -16,
+                    144
+                  ]
+                ]
+              },
+              "texture": "aucom/lightpanel",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_78c3b34ac8a05bb3",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b1.f3"
+              },
+              "plane": {
+                "points": [
+                  [
+                    -16,
+                    -16,
+                    128
+                  ],
+                  [
+                    272,
+                    -16,
+                    128
+                  ],
+                  [
+                    -16,
+                    272,
+                    128
+                  ]
+                ]
+              },
+              "texture": "aucom/lightpanel",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                1,
+                300
+              ]
+            },
+            {
+              "face_id": "fac_4590d2a804012653",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b1.f4"
+              },
+              "plane": {
+                "points": [
+                  [
+                    -16,
+                    -16,
+                    128
+                  ],
+                  [
+                    -16,
+                    -16,
+                    144
+                  ],
+                  [
+                    272,
+                    -16,
+                    128
+                  ]
+                ]
+              },
+              "texture": "aucom/lightpanel",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_143cc010345b027b",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b1.f5"
+              },
+              "plane": {
+                "points": [
+                  [
+                    -16,
+                    -16,
+                    128
+                  ],
+                  [
+                    -16,
+                    272,
+                    128
+                  ],
+                  [
+                    -16,
+                    -16,
+                    144
+                  ]
+                ]
+              },
+              "texture": "aucom/lightpanel",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "brush",
+          "brush_id": "brs_10280d30a56c3cbb",
+          "derived_from": {
+            "kind": "source_map",
+            "source_map": "release-acceptance-q2-1.5.map",
+            "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+            "source_path": "e0.b2"
+          },
+          "faces": [
+            {
+              "face_id": "fac_9233079ab6315504",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b2.f0"
+              },
+              "plane": {
+                "points": [
+                  [
+                    0,
+                    272,
+                    128
+                  ],
+                  [
+                    0,
+                    -16,
+                    128
+                  ],
+                  [
+                    -16,
+                    272,
+                    128
+                  ]
+                ]
+              },
+              "texture": "aucom/wall",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_ac259afa0a1b7e7a",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b2.f1"
+              },
+              "plane": {
+                "points": [
+                  [
+                    0,
+                    272,
+                    128
+                  ],
+                  [
+                    -16,
+                    272,
+                    128
+                  ],
+                  [
+                    0,
+                    272,
+                    0
+                  ]
+                ]
+              },
+              "texture": "aucom/wall",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_f7177fe054f67071",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b2.f2"
+              },
+              "plane": {
+                "points": [
+                  [
+                    0,
+                    272,
+                    128
+                  ],
+                  [
+                    0,
+                    272,
+                    0
+                  ],
+                  [
+                    0,
+                    -16,
+                    128
+                  ]
+                ]
+              },
+              "texture": "aucom/wall",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_4bf03f49cc68a36e",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b2.f3"
+              },
+              "plane": {
+                "points": [
+                  [
+                    -16,
+                    -16,
+                    0
+                  ],
+                  [
+                    0,
+                    -16,
+                    0
+                  ],
+                  [
+                    -16,
+                    272,
+                    0
+                  ]
+                ]
+              },
+              "texture": "aucom/wall",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_56b6dfe71f3d2ca3",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b2.f4"
+              },
+              "plane": {
+                "points": [
+                  [
+                    -16,
+                    -16,
+                    0
+                  ],
+                  [
+                    -16,
+                    -16,
+                    128
+                  ],
+                  [
+                    0,
+                    -16,
+                    0
+                  ]
+                ]
+              },
+              "texture": "aucom/wall",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_a3a4aecb69ccd1c4",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b2.f5"
+              },
+              "plane": {
+                "points": [
+                  [
+                    -16,
+                    -16,
+                    0
+                  ],
+                  [
+                    -16,
+                    272,
+                    0
+                  ],
+                  [
+                    -16,
+                    -16,
+                    128
+                  ]
+                ]
+              },
+              "texture": "aucom/wall",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "brush",
+          "brush_id": "brs_5882baa923d71636",
+          "derived_from": {
+            "kind": "source_map",
+            "source_map": "release-acceptance-q2-1.5.map",
+            "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+            "source_path": "e0.b3"
+          },
+          "faces": [
+            {
+              "face_id": "fac_f7d1adb672f0fd18",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b3.f0"
+              },
+              "plane": {
+                "points": [
+                  [
+                    272,
+                    272,
+                    128
+                  ],
+                  [
+                    272,
+                    -16,
+                    128
+                  ],
+                  [
+                    256,
+                    272,
+                    128
+                  ]
+                ]
+              },
+              "texture": "aucom/wall",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_b9eadd732df45b21",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b3.f1"
+              },
+              "plane": {
+                "points": [
+                  [
+                    272,
+                    272,
+                    128
+                  ],
+                  [
+                    256,
+                    272,
+                    128
+                  ],
+                  [
+                    272,
+                    272,
+                    0
+                  ]
+                ]
+              },
+              "texture": "aucom/wall",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_7f4833322164043c",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b3.f2"
+              },
+              "plane": {
+                "points": [
+                  [
+                    272,
+                    272,
+                    128
+                  ],
+                  [
+                    272,
+                    272,
+                    0
+                  ],
+                  [
+                    272,
+                    -16,
+                    128
+                  ]
+                ]
+              },
+              "texture": "aucom/wall",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_f8a08404ac4151d5",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b3.f3"
+              },
+              "plane": {
+                "points": [
+                  [
+                    256,
+                    -16,
+                    0
+                  ],
+                  [
+                    272,
+                    -16,
+                    0
+                  ],
+                  [
+                    256,
+                    272,
+                    0
+                  ]
+                ]
+              },
+              "texture": "aucom/wall",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_fb067264528dd061",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b3.f4"
+              },
+              "plane": {
+                "points": [
+                  [
+                    256,
+                    -16,
+                    0
+                  ],
+                  [
+                    256,
+                    -16,
+                    128
+                  ],
+                  [
+                    272,
+                    -16,
+                    0
+                  ]
+                ]
+              },
+              "texture": "aucom/wall",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_daaa83e8500afb99",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b3.f5"
+              },
+              "plane": {
+                "points": [
+                  [
+                    256,
+                    -16,
+                    0
+                  ],
+                  [
+                    256,
+                    272,
+                    0
+                  ],
+                  [
+                    256,
+                    -16,
+                    128
+                  ]
+                ]
+              },
+              "texture": "aucom/wall",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "brush",
+          "brush_id": "brs_0092019e762b5bd3",
+          "derived_from": {
+            "kind": "source_map",
+            "source_map": "release-acceptance-q2-1.5.map",
+            "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+            "source_path": "e0.b4"
+          },
+          "faces": [
+            {
+              "face_id": "fac_46d2daa13bf1de22",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b4.f0"
+              },
+              "plane": {
+                "points": [
+                  [
+                    256,
+                    0,
+                    128
+                  ],
+                  [
+                    256,
+                    -16,
+                    128
+                  ],
+                  [
+                    0,
+                    0,
+                    128
+                  ]
+                ]
+              },
+              "texture": "aucom/wall",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_13f953b2dd6062dc",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b4.f1"
+              },
+              "plane": {
+                "points": [
+                  [
+                    256,
+                    0,
+                    128
+                  ],
+                  [
+                    0,
+                    0,
+                    128
+                  ],
+                  [
+                    256,
+                    0,
+                    0
+                  ]
+                ]
+              },
+              "texture": "aucom/wall",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_19a9bdc2dd04d162",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b4.f2"
+              },
+              "plane": {
+                "points": [
+                  [
+                    256,
+                    0,
+                    128
+                  ],
+                  [
+                    256,
+                    0,
+                    0
+                  ],
+                  [
+                    256,
+                    -16,
+                    128
+                  ]
+                ]
+              },
+              "texture": "aucom/wall",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_a6985c35c4801b68",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b4.f3"
+              },
+              "plane": {
+                "points": [
+                  [
+                    0,
+                    -16,
+                    0
+                  ],
+                  [
+                    256,
+                    -16,
+                    0
+                  ],
+                  [
+                    0,
+                    0,
+                    0
+                  ]
+                ]
+              },
+              "texture": "aucom/wall",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_586dfb5c3e3fe301",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b4.f4"
+              },
+              "plane": {
+                "points": [
+                  [
+                    0,
+                    -16,
+                    0
+                  ],
+                  [
+                    0,
+                    -16,
+                    128
+                  ],
+                  [
+                    256,
+                    -16,
+                    0
+                  ]
+                ]
+              },
+              "texture": "aucom/wall",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_175d0ab148a6dadc",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b4.f5"
+              },
+              "plane": {
+                "points": [
+                  [
+                    0,
+                    -16,
+                    0
+                  ],
+                  [
+                    0,
+                    0,
+                    0
+                  ],
+                  [
+                    0,
+                    -16,
+                    128
+                  ]
+                ]
+              },
+              "texture": "aucom/wall",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "brush",
+          "brush_id": "brs_f294e41b9a05acf2",
+          "derived_from": {
+            "kind": "source_map",
+            "source_map": "release-acceptance-q2-1.5.map",
+            "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+            "source_path": "e0.b5"
+          },
+          "faces": [
+            {
+              "face_id": "fac_4e5006e5ef770352",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b5.f0"
+              },
+              "plane": {
+                "points": [
+                  [
+                    256,
+                    272,
+                    128
+                  ],
+                  [
+                    256,
+                    256,
+                    128
+                  ],
+                  [
+                    0,
+                    272,
+                    128
+                  ]
+                ]
+              },
+              "texture": "aucom/wall",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_802a331f7bb418b5",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b5.f1"
+              },
+              "plane": {
+                "points": [
+                  [
+                    256,
+                    272,
+                    128
+                  ],
+                  [
+                    0,
+                    272,
+                    128
+                  ],
+                  [
+                    256,
+                    272,
+                    0
+                  ]
+                ]
+              },
+              "texture": "aucom/wall",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_ef143dfcbee5f0e9",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b5.f2"
+              },
+              "plane": {
+                "points": [
+                  [
+                    256,
+                    272,
+                    128
+                  ],
+                  [
+                    256,
+                    272,
+                    0
+                  ],
+                  [
+                    256,
+                    256,
+                    128
+                  ]
+                ]
+              },
+              "texture": "aucom/wall",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_1a5e759088ee8736",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b5.f3"
+              },
+              "plane": {
+                "points": [
+                  [
+                    0,
+                    256,
+                    0
+                  ],
+                  [
+                    256,
+                    256,
+                    0
+                  ],
+                  [
+                    0,
+                    272,
+                    0
+                  ]
+                ]
+              },
+              "texture": "aucom/wall",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_bc25ea1cf73cce34",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b5.f4"
+              },
+              "plane": {
+                "points": [
+                  [
+                    0,
+                    256,
+                    0
+                  ],
+                  [
+                    0,
+                    256,
+                    128
+                  ],
+                  [
+                    256,
+                    256,
+                    0
+                  ]
+                ]
+              },
+              "texture": "aucom/wall",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_ad897d72b0137d35",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b5.f5"
+              },
+              "plane": {
+                "points": [
+                  [
+                    0,
+                    256,
+                    0
+                  ],
+                  [
+                    0,
+                    272,
+                    0
+                  ],
+                  [
+                    0,
+                    256,
+                    128
+                  ]
+                ]
+              },
+              "texture": "aucom/wall",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                0,
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "brush",
+          "brush_id": "brs_6e82557db4d537d1",
+          "derived_from": {
+            "kind": "source_map",
+            "source_map": "release-acceptance-q2-1.5.map",
+            "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+            "source_path": "e0.b6"
+          },
+          "faces": [
+            {
+              "face_id": "fac_c3ccc640bd5e3c4d",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b6.f0"
+              },
+              "plane": {
+                "points": [
+                  [
+                    144,
+                    144,
+                    64
+                  ],
+                  [
+                    144,
+                    112,
+                    64
+                  ],
+                  [
+                    112,
+                    144,
+                    64
+                  ]
+                ]
+              },
+              "texture": "aucom/crate",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                134217728,
+                0,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_36169280c4f42430",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b6.f1"
+              },
+              "plane": {
+                "points": [
+                  [
+                    144,
+                    144,
+                    64
+                  ],
+                  [
+                    112,
+                    144,
+                    64
+                  ],
+                  [
+                    144,
+                    144,
+                    0
+                  ]
+                ]
+              },
+              "texture": "aucom/crate",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                134217728,
+                0,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_44c022e877c332a5",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b6.f2"
+              },
+              "plane": {
+                "points": [
+                  [
+                    144,
+                    144,
+                    64
+                  ],
+                  [
+                    144,
+                    144,
+                    0
+                  ],
+                  [
+                    144,
+                    112,
+                    64
+                  ]
+                ]
+              },
+              "texture": "aucom/crate",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                134217728,
+                0,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_353d411fd51f0b80",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b6.f3"
+              },
+              "plane": {
+                "points": [
+                  [
+                    112,
+                    112,
+                    0
+                  ],
+                  [
+                    144,
+                    112,
+                    0
+                  ],
+                  [
+                    112,
+                    144,
+                    0
+                  ]
+                ]
+              },
+              "texture": "aucom/crate",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                134217728,
+                0,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_9bbb2426b017586b",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b6.f4"
+              },
+              "plane": {
+                "points": [
+                  [
+                    112,
+                    112,
+                    0
+                  ],
+                  [
+                    112,
+                    112,
+                    64
+                  ],
+                  [
+                    144,
+                    112,
+                    0
+                  ]
+                ]
+              },
+              "texture": "aucom/crate",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                134217728,
+                0,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_9e47f4df7aac0ae0",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e0.b6.f5"
+              },
+              "plane": {
+                "points": [
+                  [
+                    112,
+                    112,
+                    0
+                  ],
+                  [
+                    112,
+                    144,
+                    0
+                  ],
+                  [
+                    112,
+                    112,
+                    64
+                  ]
+                ]
+              },
+              "texture": "aucom/crate",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                134217728,
+                0,
+                0
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "entity_id": "ent_8ca5d95c2f4f7f0b",
+      "derived_from": {
+        "kind": "source_map",
+        "source_map": "release-acceptance-q2-1.5.map",
+        "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+        "source_path": "e1"
+      },
+      "content": [
+        {
+          "kind": "property",
+          "key": "classname",
+          "value": "func_group"
+        },
+        {
+          "kind": "brush",
+          "brush_id": "brs_d045212cac2b6937",
+          "derived_from": {
+            "kind": "source_map",
+            "source_map": "release-acceptance-q2-1.5.map",
+            "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+            "source_path": "e1.b0"
+          },
+          "faces": [
+            {
+              "face_id": "fac_c19308797d054b82",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e1.b0.f0"
+              },
+              "plane": {
+                "points": [
+                  [
+                    64,
+                    208,
+                    96
+                  ],
+                  [
+                    64,
+                    200,
+                    96
+                  ],
+                  [
+                    32,
+                    208,
+                    96
+                  ]
+                ]
+              },
+              "texture": "aucom/glass",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                2,
+                16,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_48d4bce7db8d3c1e",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e1.b0.f1"
+              },
+              "plane": {
+                "points": [
+                  [
+                    64,
+                    208,
+                    96
+                  ],
+                  [
+                    32,
+                    208,
+                    96
+                  ],
+                  [
+                    64,
+                    208,
+                    0
+                  ]
+                ]
+              },
+              "texture": "aucom/glass",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                2,
+                16,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_c778ba025dacdcd9",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e1.b0.f2"
+              },
+              "plane": {
+                "points": [
+                  [
+                    64,
+                    208,
+                    96
+                  ],
+                  [
+                    64,
+                    208,
+                    0
+                  ],
+                  [
+                    64,
+                    200,
+                    96
+                  ]
+                ]
+              },
+              "texture": "aucom/glass",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                2,
+                16,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_31e01f1326802d6b",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e1.b0.f3"
+              },
+              "plane": {
+                "points": [
+                  [
+                    32,
+                    200,
+                    0
+                  ],
+                  [
+                    64,
+                    200,
+                    0
+                  ],
+                  [
+                    32,
+                    208,
+                    0
+                  ]
+                ]
+              },
+              "texture": "aucom/glass",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                2,
+                16,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_59c4833f63b54227",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e1.b0.f4"
+              },
+              "plane": {
+                "points": [
+                  [
+                    32,
+                    200,
+                    0
+                  ],
+                  [
+                    32,
+                    200,
+                    96
+                  ],
+                  [
+                    64,
+                    200,
+                    0
+                  ]
+                ]
+              },
+              "texture": "aucom/glass",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                2,
+                16,
+                0
+              ]
+            },
+            {
+              "face_id": "fac_c5b1d51d6ab2a815",
+              "derived_from": {
+                "kind": "source_map",
+                "source_map": "release-acceptance-q2-1.5.map",
+                "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+                "source_path": "e1.b0.f5"
+              },
+              "plane": {
+                "points": [
+                  [
+                    32,
+                    200,
+                    0
+                  ],
+                  [
+                    32,
+                    208,
+                    0
+                  ],
+                  [
+                    32,
+                    200,
+                    96
+                  ]
+                ]
+              },
+              "texture": "aucom/glass",
+              "projection": {
+                "mode": "classic",
+                "shift": [
+                  0,
+                  0
+                ],
+                "rotation": 0,
+                "scale": [
+                  1,
+                  1
+                ]
+              },
+              "tail": [
+                2,
+                16,
+                0
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "entity_id": "ent_8bb9ec2927704887",
+      "derived_from": {
+        "kind": "source_map",
+        "source_map": "release-acceptance-q2-1.5.map",
+        "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+        "source_path": "e2"
+      },
+      "content": [
+        {
+          "kind": "property",
+          "key": "classname",
+          "value": "info_player_start"
+        },
+        {
+          "kind": "property",
+          "key": "origin",
+          "value": "128 64 24"
+        },
+        {
+          "kind": "property",
+          "key": "angle",
+          "value": "90"
+        }
+      ]
+    },
+    {
+      "entity_id": "ent_52979ac5c3d34e45",
+      "derived_from": {
+        "kind": "source_map",
+        "source_map": "release-acceptance-q2-1.5.map",
+        "source_sha256": "3b8941943c4e42ec33c12d449357104c9f5ad99620b65dda4bb08d0ceec9e21f",
+        "source_path": "e3"
+      },
+      "content": [
+        {
+          "kind": "property",
+          "key": "classname",
+          "value": "light"
+        },
+        {
+          "kind": "property",
+          "key": "origin",
+          "value": "128 128 96"
+        },
+        {
+          "kind": "property",
+          "key": "light",
+          "value": "200"
+        },
+        {
+          "kind": "property",
+          "key": "_color",
+          "value": "1 0.9 0.8"
+        }
+      ]
+    }
+  ],
+  "groups": []
+}

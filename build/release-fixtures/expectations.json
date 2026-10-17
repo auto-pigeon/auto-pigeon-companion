@@ -1,8 +1,37 @@
 {
   "schema": "aucom.release-fixtures/1.0",
-  "comment": "What the packaged extractor must make of each fixture in this directory. release-acceptance.py converts every *.apmap here with the archive's own extractor and compares the .map it wrote with these counts; a fixture with no entry fails the run. release-acceptance.apmap is the APMap 1.3 slab kept as backward-compatibility evidence. release-acceptance-1.5.apmap is a Quake 1 APMap 1.5 document carrying what 1.4 added (authorship, three nested groups) so that a changed version header is not the whole of the coverage.",
+  "comment": "What the packaged extractor must make of each fixture in this directory. release-acceptance.py converts every *.apmap here with the archive's own extractor and compares the .map it wrote with these counts; a fixture with no entry fails the run. release-acceptance.apmap is the APMap 1.3 slab kept as backward-compatibility evidence. release-acceptance-1.5.apmap is a Quake 1 APMap 1.5 document carrying what 1.4 added (authorship, three nested groups) so that a changed version header is not the whole of the coverage. release-acceptance-q2-1.5.apmap (Q2_020) is an independently authored Quake II APMap 1.5 room, converted from source/release-acceptance-q2-1.5.map with --q2map-to-apmap by the extractor a release bundles: its `face_suffixes` are Quake II face tails (contents, flags, value) the bundled extractor must write back \u2014 a light panel (SURF_LIGHT, value 300), a detail pillar (CONTENTS_DETAIL) and a translucent window in a func_group (CONTENTS_WINDOW, SURF_TRANS33). No game data, no external corpus.",
   "fixtures": {
-    "release-acceptance.apmap": { "apmap_version": "1.3", "classnames": ["worldspawn", "info_player_start"], "brushes": 1 },
-    "release-acceptance-1.5.apmap": { "apmap_version": "1.5", "classnames": ["worldspawn", "light"], "brushes": 4 }
+    "release-acceptance.apmap": {
+      "apmap_version": "1.3",
+      "classnames": [
+        "worldspawn",
+        "info_player_start"
+      ],
+      "brushes": 1
+    },
+    "release-acceptance-1.5.apmap": {
+      "apmap_version": "1.5",
+      "classnames": [
+        "worldspawn",
+        "light"
+      ],
+      "brushes": 4
+    },
+    "release-acceptance-q2-1.5.apmap": {
+      "apmap_version": "1.5",
+      "classnames": [
+        "worldspawn",
+        "func_group",
+        "info_player_start",
+        "light"
+      ],
+      "brushes": 8,
+      "face_suffixes": [
+        "aucom/lightpanel 0 0 0 1 1 0 1 300",
+        "aucom/crate 0 0 0 1 1 134217728 0 0",
+        "aucom/glass 0 0 0 1 1 2 16 0"
+      ]
+    }
   }
 }

@@ -21,8 +21,9 @@ release as a user receives it.
   4. the extractor's bytes are the digest the bundle manifest lists
   5. `extractor convert` turns EVERY fixture APMap beside the one named into a
      .map through the real subprocess path, each holding the entities and
-     brushes `expectations.json` lists — the APMap 1.3 slab and a Quake 1
-     APMap 1.5 document with authorship and nested groups — and a version
+     brushes `expectations.json` lists — the APMap 1.3 slab, a Quake 1
+     APMap 1.5 document with authorship and nested groups, and a Quake II
+     APMap 1.5 room whose face tails must come back exactly — and a version
      nobody defined is refused
   6. a TAMPERED extractor is refused before it runs
   7. a MISSING extractor is named by its path, and nothing fetches one
@@ -530,10 +531,15 @@ def main():
         lines = [line.strip() for line in written.splitlines()]
         classnames = [line.split('"')[3] for line in lines if line.startswith('"classname" "')]
         brushes = sum(1 for line in lines if line == "{") - len(classnames)
+        # A face's own tail — Quake II's contents, flags and value — must come
+        # back as the document holds it (Q2_020): a game's face data, not only
+        # its entity and brush counts.
+        faces = [line for line in lines if line.startswith("(")]
+        tails = [suffix for suffix in want.get("face_suffixes", []) if not any(face.endswith(suffix) for face in faces)]
         run.check(label, code == 0 and "verified" in out and declared == want.get("apmap_version")
-                  and classnames == want.get("classnames") and brushes == want.get("brushes"),
+                  and classnames == want.get("classnames") and brushes == want.get("brushes") and not tails,
                   f"exit {code}, APMap {declared}, {len(written)} bytes of .map, classnames {classnames}, "
-                  f"{brushes} brushes (want {want}), {out.strip()!r} {err.strip()!r}")
+                  f"{brushes} brushes, face tails missing {tails} (want {want}), {out.strip()!r} {err.strip()!r}")
 
     # 5b. A version nobody defined is still refused, by the extractor, by name.
     newest = json.load(open(os.path.join(fixtures, names[-1]), encoding="utf-8"))
