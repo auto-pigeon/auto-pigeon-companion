@@ -53,8 +53,16 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
       - name: go vet
         run: go vet ./...
+      # An explicit bound, measured rather than inherited (Q2_020). Go's default
+      # is 10 minutes per test binary, and internal/web alone takes 321-351 s
+      # on a healthy ubuntu-latest runner (runs 38636536564, 38655515044,
+      # 38959646351). Run 38615467410 hit the default on a runner ~1.5x slower
+      # than that (internal/cli 436 s, internal/build 309 s in the same job)
+      # with its active test 3 s old and 30 goroutines in the dump — slow, not
+      # hung, and nothing left running. 20 minutes is 3.4x the healthy maximum
+      # and 2.7x the slowest package ever observed; a real hang still fails.
       - name: go test
-        run: go test ./...
+        run: go test -timeout 20m ./...
 
   gofmt:
     name: gofmt

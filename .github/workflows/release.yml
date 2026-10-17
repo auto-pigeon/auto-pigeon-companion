@@ -142,7 +142,8 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
       - run: go vet ./...
-      - run: go test ./...
+      # The same measured bound as build.yml's, for the same reason: see there.
+      - run: go test -timeout 20m ./...
 
   # The extractor, from the head of its branch resolved to one commit, with its own gates and its own
   # release procedure. The only job that can read its repository.

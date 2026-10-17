@@ -128,7 +128,12 @@ func TestCIBuildsEverySupportedTarget(t *testing.T) {
 	mustContain(t, "the build workflow", workflow,
 		"./cmd/"+executableName,
 		`CGO_ENABLED: "0"`,
-		"go test ./...",
+		// The whole tree, with the measured bound written down (Q2_020): Go's
+		// 10-minute default per test binary is what ubuntu-latest hit once.
+		"go test -timeout 20m ./...",
+	)
+	mustContain(t, "the release workflow", repoFile(t, ".github", "workflows", "release.yml"),
+		"go test -timeout 20m ./...",
 	)
 }
 
