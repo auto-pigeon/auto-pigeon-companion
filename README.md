@@ -1146,7 +1146,7 @@ already fetched builds offline:
 
 ```console
 $ companion build run --pipeline auto-pigeon.q3.fast-preview \
-    --input source_map=aub:map/<map id>@<revision> --root game_root=/opt/quake3
+    --input source_map=aub:map/<map id>@<revision id> --root game_root=/opt/quake3
   …
             bound package baseq3/zz_q3010.pk3 sha256:634e3c08fff6cb9e… (1432 bytes, 4 member(s), from the account) — staged
 ```
@@ -1423,7 +1423,7 @@ build → package → install → run needs no PK3 linked or copied by hand:
 
 ```console
 $ companion build run --pipeline auto-pigeon.q3.fast-preview \
-    --input source_map=aub:map/46pjkt2s773n550@7 --root game_root=/opt/quake3
+    --input source_map=aub:map/46pjkt2s773n550@k5rlmolcyf33u88 --root game_root=/opt/quake3
 $ companion package map create --build 20261010T142021Z-62584000 \
     --accept-missing --reason "the bound texture package is not mine to redistribute"
 $ companion package map install auto-pigeon-46pjkt2s773n550-7-66293b87db87 \

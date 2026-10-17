@@ -457,10 +457,18 @@
     suggestMapName();
   }
 
+  // The name this page last suggested. A field still holding it holds the
+  // page's name, not the person's, so choosing another map replaces it
+  // (Q2_020: choosing one map and then another kept the first map's name, and
+  // the second map was compiled, installed and started under it). A name the
+  // person typed, or one a link or a reload restored, is theirs and stays.
+  let suggestedMapName = "";
+
   // A suggestion, not a rule: the engine's own sanitizing rules are the
   // authority, and the field is editable because a person may want another name.
   function suggestMapName() {
-    if ($("play-map-name").value.trim()) return;
+    const current = $("play-map-name").value.trim();
+    if (current && current !== suggestedMapName) return;
     const stem = (state.sourceFile || state.map?.display_name || "")
       .replace(/\.[^.]*$/, "")
       .toLowerCase()
@@ -469,6 +477,7 @@
     if (!stem) return;
     $("play-map-name").value = stem.slice(0, 64);
     state.mapName = $("play-map-name").value;
+    suggestedMapName = state.mapName;
   }
 
   // Auto-build on the chosen map (autobuild.js): shown under the map while a
