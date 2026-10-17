@@ -121,10 +121,21 @@ func TestAReferenceResolvesTheWayTheEngineSearches(t *testing.T) {
 		}
 	}
 	// A loose file is found under its own spelling or lower-cased, as Yamagi
-	// tries them; `textures/mine/lower.wal` is the second.
+	// tries them; `textures/mine/lower.wal` is the second. On a
+	// case-insensitive filesystem `Mine/` and `mine/` are ONE folder, spelled
+	// whichever way it was created first, and the operating system opens the
+	// file under either: the file is the one holding byte 8 either way.
+	insensitive := caseInsensitive(t, root)
 	for _, file := range report.Files {
-		if file.Name == "MINE/LOWER" && file.Location.Path != "textures/mine/lower.wal" {
+		if file.Name != "MINE/LOWER" {
+			continue
+		}
+		switch {
+		case !insensitive && file.Location.Path != "textures/mine/lower.wal":
 			t.Errorf("MINE/LOWER is %s", file.Location.Path)
+		case insensitive && (!strings.EqualFold(file.Location.Path, "textures/mine/lower.wal") ||
+			bytesOf(t, file.Location) != "\x08"):
+			t.Errorf("MINE/LOWER is %s on a case-insensitive filesystem", file.Location.Path)
 		}
 	}
 }

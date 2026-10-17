@@ -41,10 +41,13 @@ type Index struct {
 	// Limits is what was not read.
 	Limits []string
 
-	loose    map[string]Location // by exact virtual path
-	lower    map[string]Location // by lower-cased virtual path, only for a path spelled all lower-case on disk
-	archived map[string]Location // by lower-cased member path; the first archive in engine order wins
+	loose    map[string]Location   // by exact virtual path
+	folded   map[string][]Location // every spelling on disk, by lower-cased virtual path
+	archived map[string]Location   // by lower-cased member path; the first archive in engine order wins
 	files    int
+	// stat is how this machine answers an open of a path: os.Stat. A test
+	// replaces it to ask what a case-insensitive filesystem would answer.
+	stat func(string) (os.FileInfo, error)
 }
 
 // maxIndexFiles bounds one folder's walk.
@@ -54,13 +57,16 @@ const maxIndexFiles = 250000
 // directly in it.
 //
 // Measured in Yamagi Quake II 8.70's filesystem: a loose file is found under
-// the name asked for or, failing that, the name lower-cased; an archive member
+// the name asked for or, failing that, the name lower-cased — each an `fopen`,
+// so whether another spelling of a name opens a file is the filesystem's
+// answer and not the engine's (see [Index.FindLoose]); an archive member
 // is found whatever its case; and within one folder the archives are searched
 // before the loose files, numbered `pak<N>` from the highest down after any
 // other `.pak`. Links are followed, as the engine follows them. An archive
 // below the top of the folder is a file like any other, and is not opened.
 func IndexDir(root string) (*Index, error) {
-	index := &Index{Root: root, loose: map[string]Location{}, lower: map[string]Location{}, archived: map[string]Location{}}
+	index := &Index{Root: root, loose: map[string]Location{}, folded: map[string][]Location{},
+		archived: map[string]Location{}, stat: os.Stat}
 	info, err := os.Stat(root)
 	if err != nil {
 		return nil, fmt.Errorf("q2deps: reading %s: %w", root, err)
@@ -76,9 +82,7 @@ func IndexDir(root string) (*Index, error) {
 		}
 		location := Location{Path: rel, Origin: Loose, File: abs, Size: size}
 		index.loose[rel] = location
-		if rel == strings.ToLower(rel) {
-			index.lower[rel] = location
-		}
+		index.folded[strings.ToLower(rel)] = append(index.folded[strings.ToLower(rel)], location)
 		if !strings.Contains(rel, "/") {
 			switch strings.ToLower(filepath.Ext(rel)) {
 			case ".pak":
@@ -143,16 +147,50 @@ func (i *Index) Find(virtual string) (Location, bool) {
 	return i.FindLoose(virtual)
 }
 
-// FindLoose is the loose file only.
+// FindLoose is the loose file only, under the two spellings Yamagi opens: the
+// name as asked for, then lower-cased.
+//
+// Each is an `fopen`, so what a spelling opens is the FILESYSTEM's answer. On
+// a case-sensitive one (Linux, as a rule) that is the file spelled exactly so,
+// and nothing else. On a case-insensitive one (Windows, macOS by default) it is
+// the file whatever the case of each folder and name — and two folders a
+// sensitive filesystem keeps apart, `Mine/` and `mine/`, are one there, under
+// whichever spelling was created first (Q2_020: CI at 7b7524d). So a spelling
+// the index does not hold exactly is asked of this machine, and the answer is
+// matched to an indexed file by identity rather than by name. Nothing is
+// case-folded on a filesystem that does not fold.
 func (i *Index) FindLoose(virtual string) (Location, bool) {
 	if i == nil {
 		return Location{}, false
 	}
-	if location, ok := i.loose[virtual]; ok {
+	if location, ok := i.opens(virtual); ok {
 		return location, true
 	}
-	location, ok := i.lower[strings.ToLower(virtual)]
-	return location, ok
+	return i.opens(strings.ToLower(virtual))
+}
+
+// opens is the loose file one spelling opens on this machine.
+func (i *Index) opens(spelling string) (Location, bool) {
+	if location, ok := i.loose[spelling]; ok {
+		return location, true
+	}
+	// Only the files the walk read can answer, so a spelling that is not some
+	// case of an indexed path — or one that climbs out of the folder — never
+	// reaches the filesystem at all.
+	candidates := i.folded[strings.ToLower(spelling)]
+	if len(candidates) == 0 || i.stat == nil {
+		return Location{}, false
+	}
+	opened, err := i.stat(filepath.Join(i.Root, filepath.FromSlash(spelling)))
+	if err != nil || !opened.Mode().IsRegular() {
+		return Location{}, false
+	}
+	for _, candidate := range candidates {
+		if info, err := os.Stat(candidate.File); err == nil && os.SameFile(opened, info) {
+			return candidate, true
+		}
+	}
+	return Location{}, false
 }
 
 // LooseFiles is the number of loose files read.
