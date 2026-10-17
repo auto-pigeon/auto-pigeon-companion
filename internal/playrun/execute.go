@@ -327,7 +327,7 @@ func (s *Service) compile(ctx context.Context, record *Record) error {
 
 	// The compiler exits 0 with no textures at all (textures.go), so its own
 	// words are read here rather than trusting the status.
-	warning, err := checkTextures(manifest).verdict()
+	warning, err := checkTextures(manifest).verdict(packaged)
 	if err != nil {
 		record.Remedy = "The map names its WADs in worldspawn's `wad` key. Open the build in Jobs to see " +
 			"which archive the compiler could not find, and make sure the map's texture bundle, or " +

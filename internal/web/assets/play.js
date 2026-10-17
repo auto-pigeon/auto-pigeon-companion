@@ -186,7 +186,7 @@
         ($("play-map-name").value.trim() ? ` · +map ${$("play-map-name").value.trim()}` : "") : "");
     put(2, nameOfPipeline(state.pipeline), state.strict ? t("strict") : "");
     put(3, state.engine ? nameOfEngine(state.engine) : "",
-      state.engine ? [actionTitle(state.action), state.mod].filter(Boolean).join(" · ") : "");
+      state.engine ? [actionTitle(state.action), modFolder()].filter(Boolean).join(" · ") : "");
     put(4, state.plan ? t("checked") : "", "", t("not checked yet"));
     const node5 = $("play-step-summary-5");
     node5.replaceChildren();
@@ -1752,8 +1752,14 @@
   async function cancelRun(run) {
     const confirmed = await window.AUCOM.confirmModal?.({
       title: "Stop this build and run?",
-      body: "The compiler is stopped and anything already installed is removed, so the game folder " +
-        "is left as it was. Everything already downloaded stays in the cache.",
+      // A Quake II run installs a package whole or not at all (Q2_020): a
+      // stop removes nothing, and says so rather than promising a removal.
+      body: run.packaged
+        ? t("The compiler or the engine is stopped. A Quake II package is installed whole or not at all, so " +
+          "nothing half-installed is left; one already installed stays under Run, where it can be removed. " +
+          "Everything already downloaded stays in the cache.")
+        : "The compiler is stopped and anything already installed is removed, so the game folder " +
+          "is left as it was. Everything already downloaded stays in the cache.",
       confirm: "Stop it",
     });
     if (confirmed === false) return;

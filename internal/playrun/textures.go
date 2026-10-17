@@ -89,10 +89,17 @@ func textureName(raw string) string {
 }
 
 // verdict turns the check into a failure or a warning. A failure is returned as
-// an error; a warning is the sentence the run carries.
-func (c textureCheck) verdict() (warning string, err error) {
+// an error; a warning is the sentence the run carries. A packaged (Quake II)
+// run's compiler reads `.wal` files from its bound game folders, not WADs, and
+// the sentence names those (Q2_020, seen live).
+func (c textureCheck) verdict(packaged bool) (warning string, err error) {
 	if len(c.Missing) == 0 {
 		return "", nil
+	}
+	if packaged {
+		return fmt.Sprintf("%d texture(s) were not found as a .wal in the game folders bound to the compiler, so their "+
+			"surfaces took default contents and flags and will show as a placeholder: %s",
+			len(c.Missing), listSome(c.Missing)), nil
 	}
 	if c.NoWAD {
 		return "", fmt.Errorf("%w: no WAD the map names could be opened, so %d texture(s) would be placeholders (%s)",

@@ -92,3 +92,25 @@ func TestOnlyAToolTextureMissingIsNotAWarning(t *testing.T) {
 		t.Fatalf("state = %s, warnings = %q; want succeeded with none", record.State, record.Warnings)
 	}
 }
+
+// A Quake II compiler reads `.wal` files from its bound game folders, so a
+// packaged run's warning names those and not WADs (Q2_020, seen live on the
+// candidate: "not in any WAD the compiler opened" for q2009/marker).
+func TestAQuake2RunsMissingTextureIsAWalNotAWAD(t *testing.T) {
+	h := packagedHarness(t)
+	h.buildRun = compiled(
+		line("texture_skip_lookup", "WARNING: Couldn't locate texture for skip"),
+		line("texture_missing", "WARNING: Couldn't locate texture for q2009/marker"),
+	)
+	service, err := playrun.NewService(h.store, h.deps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.service = service
+	started, _ := h.service.Start(quake2Request())
+	record := h.await(started.ID)
+	if len(record.Warnings) != 1 || !strings.Contains(record.Warnings[0], ".wal") ||
+		strings.Contains(record.Warnings[0], "WAD") || !strings.Contains(record.Warnings[0], "q2009/marker") {
+		t.Fatalf("warnings = %q", record.Warnings)
+	}
+}
