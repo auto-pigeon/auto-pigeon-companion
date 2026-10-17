@@ -161,6 +161,14 @@ func copyMember(dst io.Writer, member Member) (int64, string, error) {
 // nothing is allocated on the strength of a number that has not been checked
 // against the actual length of the archive.
 func ReadPAK(r io.ReaderAt, size int64, budget Budget) ([]Entry, []string, error) {
+	return readPAK(r, size, budget, nil)
+}
+
+// readPAK is ReadPAK. With a non-nil `skipped`, a member whose NAME is not a
+// plain relative path is left out and named there instead of refusing the
+// archive; every structural check still applies to every record. Only
+// [InspectForLookup] passes one.
+func readPAK(r io.ReaderAt, size int64, budget Budget, skipped *[]string) ([]Entry, []string, error) {
 	if size < pakHeaderSize {
 		return nil, nil, fmt.Errorf("%w: it is %d bytes, and a PAK header is %d", ErrMalformed, size, pakHeaderSize)
 	}
@@ -211,8 +219,9 @@ func ReadPAK(r io.ReaderAt, size int64, budget Budget) ([]Entry, []string, error
 			return nil, nil, fmt.Errorf("%w: directory record %d fills the whole %d-byte name field with no terminator",
 				ErrMalformed, i, pakNameFieldSize)
 		}
-		if err := CheckEntryPath(name, PAKNameLength); err != nil {
-			return nil, nil, fmt.Errorf("%w: directory record %d names a member that %w", ErrUnsafePath, i, err)
+		unsafe := CheckEntryPath(name, PAKNameLength)
+		if unsafe != nil && skipped == nil {
+			return nil, nil, fmt.Errorf("%w: directory record %d names a member that %w", ErrUnsafePath, i, unsafe)
 		}
 		position := int64(int32(binary.LittleEndian.Uint32(record[pakNameFieldSize:])))
 		length := int64(int32(binary.LittleEndian.Uint32(record[pakNameFieldSize+4:])))
@@ -232,10 +241,14 @@ func ReadPAK(r io.ReaderAt, size int64, budget Budget) ([]Entry, []string, error
 			return nil, nil, fmt.Errorf("%w: %q runs from %d for %d bytes, over the directory at %d",
 				ErrMalformed, name, position, length, dirOffset)
 		}
+		sizes = append(sizes, length)
+		if unsafe != nil {
+			*skipped = append(*skipped, fmt.Sprintf("%s (directory record %d: %v)", name, i, unsafe))
+			continue
+		}
 		entries = append(entries, Entry{
 			Path: name, Size: length, Compression: Store, StoredSize: length, Offset: position,
 		})
-		sizes = append(sizes, length)
 	}
 	budget.ArchiveSize = size
 	if err := budget.CheckDeclared(sizes); err != nil {

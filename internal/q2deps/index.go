@@ -97,12 +97,19 @@ func IndexDir(root string) (*Index, error) {
 		return nil, err
 	}
 	for _, name := range engineArchiveOrder(archives) {
-		inspection, err := pack.Inspect(filepath.Join(root, name), pack.FormatPAK, pack.Budget{})
+		// Read for lookup: a member named `a/../b` is skipped, not a reason to
+		// lose the archive (Quake II's own pak0.pak has two, Q2_020).
+		inspection, err := pack.InspectForLookup(filepath.Join(root, name), pack.FormatPAK, pack.Budget{})
 		if err != nil {
 			index.Limits = append(index.Limits, fmt.Sprintf("%s could not be read as a PAK: %v", name, err))
 			continue
 		}
 		index.Archives = append(index.Archives, name)
+		if len(inspection.Skipped) > 0 {
+			index.Limits = append(index.Limits, fmt.Sprintf(
+				"%s: %d member(s) whose names are not plain paths were not indexed, so a reference spelled that way is reported missing rather than resolved: %s",
+				name, len(inspection.Skipped), strings.Join(inspection.Skipped, "; ")))
+		}
 		for _, entry := range inspection.Entries {
 			key := strings.ToLower(entry.Path)
 			if _, taken := index.archived[key]; taken {

@@ -155,3 +155,34 @@ func TestTheNativeFilesystemDecidesWhatAnotherSpellingOpens(t *testing.T) {
 		t.Errorf("case-sensitive filesystem: BASE/WALL_a is %s %q, want missing", got.Where, got.Location.Path)
 	}
 }
+
+// Q2_020, found with the retail game on the 1.270 candidate: id Software's own
+// baseq2/pak0.pak holds `models/monsters/tank/../ctank/skin.pcx`. The archive
+// reader refuses a member like that — right for extracting one — and the base
+// index then held NOTHING of pak0.pak, so every base texture of a real map was
+// "in neither your content folder nor the base game". An engine matches member
+// names literally, so a plain-path request never reaches that member: the
+// index skips it, says so, and keeps the rest.
+func TestABaseArchiveWithAnUnsafeMemberNameIsStillIndexed(t *testing.T) {
+	base, _ := q2fixture.Write(filepath.Join(t.TempDir(), "baseq2"), map[string][]byte{
+		"pak0.pak": q2fixture.PAK(
+			[]string{"textures/e1u1/box3_1.wal", "models/monsters/tank/../ctank/skin.pcx", "env/unit1_rt.pcx"},
+			map[string][]byte{"textures/e1u1/box3_1.wal": {1}, "models/monsters/tank/../ctank/skin.pcx": {2}, "env/unit1_rt.pcx": {3}}),
+	})
+	index, err := IndexDir(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"textures/e1u1/box3_1.wal", "env/unit1_rt.pcx"} {
+		if location, ok := index.Find(path); !ok || location.Archive != "pak0.pak" {
+			t.Errorf("%s: %+v %v, want it from pak0.pak", path, location, ok)
+		}
+	}
+	if len(index.Archives) != 1 {
+		t.Errorf("archives read: %v", index.Archives)
+	}
+	limits := strings.Join(index.Limits, "\n")
+	if !strings.Contains(limits, "models/monsters/tank/../ctank/skin.pcx") || strings.Contains(limits, "could not be read") {
+		t.Errorf("limits: %s", limits)
+	}
+}

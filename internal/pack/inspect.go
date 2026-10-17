@@ -39,6 +39,10 @@ type Inspection struct {
 	Collisions []Collision `json:"collisions,omitempty"`
 	// Notes are structural observations that are not faults.
 	Notes []string `json:"notes,omitempty"`
+	// Skipped are members [InspectForLookup] left out because their names are
+	// not plain relative paths, each with the reason. Always empty from
+	// [Inspect], which refuses such an archive instead.
+	Skipped []string `json:"skipped,omitempty"`
 }
 
 // Ratio is how much larger the declared contents are than the container.
@@ -56,6 +60,22 @@ func (i Inspection) Ratio() float64 {
 // refusal — "it starts with \"PK\\x03\\x04\", not \"PACK\"" — which is a better
 // message than anything this function could construct, so it does not try.
 func Inspect(path string, format Format, budget Budget) (*Inspection, error) {
+	return inspect(path, format, budget, false)
+}
+
+// InspectForLookup reads a PAK's directory to answer "which member would an
+// engine open for this name", and nothing else: a member whose name is not a
+// plain relative path is skipped and listed in [Inspection.Skipped] instead of
+// refusing the archive. An engine compares member names literally, so a request
+// for a plain path never reaches such a member — and a base game can ship one:
+// Quake II's retail baseq2/pak0.pak names `models/monsters/tank/../ctank/skin.pcx`
+// (measured, Q2_020). Every structural check still applies. Nothing read this
+// way may be extracted: [Extract] and [Verify] go through [Inspect].
+func InspectForLookup(path string, format Format, budget Budget) (*Inspection, error) {
+	return inspect(path, format, budget, true)
+}
+
+func inspect(path string, format Format, budget Budget, lookup bool) (*Inspection, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("pack: opening %s: %w", path, err)
@@ -80,10 +100,16 @@ func Inspect(path string, format Format, budget Budget) (*Inspection, error) {
 	var (
 		entries []Entry
 		notes   []string
+		skipped []string
 	)
 	switch format {
 	case FormatPAK:
-		entries, notes, err = ReadPAK(file, info.Size(), budget)
+		if lookup {
+			skipped = []string{}
+			entries, notes, err = readPAK(file, info.Size(), budget, &skipped)
+		} else {
+			entries, notes, err = ReadPAK(file, info.Size(), budget)
+		}
 	case FormatPK3:
 		entries, notes, err = ReadPK3(file, info.Size(), budget)
 	default:
@@ -100,6 +126,9 @@ func Inspect(path string, format Format, budget Budget) (*Inspection, error) {
 	inspection := &Inspection{
 		Path: path, Format: format, Size: info.Size(), SHA256: digest,
 		Entries: entries, Notes: notes,
+	}
+	if len(skipped) > 0 {
+		inspection.Skipped = skipped
 	}
 	paths := make([]string, 0, len(entries))
 	for _, entry := range entries {
