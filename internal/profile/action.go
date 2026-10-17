@@ -615,8 +615,17 @@ type DiagnosticRule struct {
 	Stream string `json:"stream,omitempty"` // stdout, stderr, both (default)
 	Match  string `json:"match" aucom:"required"`
 	// Kind defaults to `contains`.
-	Kind     MatchKind `json:"kind,omitempty"`
-	Severity Severity  `json:"severity" aucom:"required"`
+	Kind MatchKind `json:"kind,omitempty"`
+	// Except are lines that match too and are NOT this finding — each one
+	// exact, measured and named, never a pattern. It exists for a program
+	// that prints its own routine lookup in the same words as a real fault:
+	// ericw-tools qbsp in Quake II mode prints `WARNING: Couldn't locate
+	// texture for skip` on every run, of a texture it looks up itself and no
+	// game ships, and an error on every successful build is an error nobody
+	// reads (Q2_020). The line is still recorded raw, and another rule may
+	// classify it.
+	Except   []LineMatch `json:"except,omitempty"`
+	Severity Severity    `json:"severity" aucom:"required"`
 	// Message is what the user is shown instead of the raw line. The raw line
 	// is still recorded.
 	Message string `json:"message,omitempty"`
@@ -657,6 +666,28 @@ type DiagnosticRule struct {
 	Signal string `json:"signal,omitempty"`
 }
 
+// LineMatch is one line a [DiagnosticRule] excepts, matched the way rules are.
+type LineMatch struct {
+	Match string `json:"match" aucom:"required"`
+	// Kind defaults to `contains`.
+	Kind MatchKind `json:"kind,omitempty"`
+}
+
+// maxExcept bounds a rule's exceptions: a rule that needs more than a few is a
+// rule that matches the wrong thing.
+const maxExcept = 8
+
+func (m LineMatch) matches(line string) bool {
+	switch m.Kind {
+	case MatchPrefix:
+		return strings.HasPrefix(line, m.Match)
+	case MatchSuffix:
+		return strings.HasSuffix(line, m.Match)
+	default:
+		return strings.Contains(line, m.Match)
+	}
+}
+
 // SignalMapLoaded is the one signal a diagnostic rule may carry.
 const SignalMapLoaded = "map_loaded"
 
@@ -675,6 +706,21 @@ func (d DiagnosticRule) validate(c *collector) {
 	c.child(field("kind"), func(c *collector) {
 		if d.Kind != "" && !contains(matchKinds, string(d.Kind)) {
 			c.fixf("use one of: "+strings.Join(matchKinds, ", ")+" (there is no regular-expression match, by design)", "is %q", d.Kind)
+		}
+	})
+	c.child(field("except"), func(c *collector) {
+		if len(d.Except) > maxExcept {
+			c.fixf(fmt.Sprintf("keep at most %d, or match a narrower line", maxExcept), "has %d exceptions", len(d.Except))
+		}
+		for i, except := range d.Except {
+			c.child(index(i), func(c *collector) {
+				c.child(field("match"), func(c *collector) { checkText(c, except.Match, 256, true) })
+				c.child(field("kind"), func(c *collector) {
+					if except.Kind != "" && !contains(matchKinds, string(except.Kind)) {
+						c.fixf("use one of: "+strings.Join(matchKinds, ", "), "is %q", except.Kind)
+					}
+				})
+			})
 		}
 	})
 	c.child(field("severity"), func(c *collector) {
@@ -720,19 +766,21 @@ func (d DiagnosticRule) validate(c *collector) {
 	})
 }
 
-// Matches reports whether a line of output matches the rule.
+// Matches reports whether a line of output matches the rule and none of its
+// exceptions.
 func (d DiagnosticRule) Matches(stream, line string) bool {
 	if d.Stream != "" && d.Stream != "both" && d.Stream != stream {
 		return false
 	}
-	switch d.Kind {
-	case MatchPrefix:
-		return strings.HasPrefix(line, d.Match)
-	case MatchSuffix:
-		return strings.HasSuffix(line, d.Match)
-	default:
-		return strings.Contains(line, d.Match)
+	if !(LineMatch{Match: d.Match, Kind: d.Kind}).matches(line) {
+		return false
 	}
+	for _, except := range d.Except {
+		if except.matches(line) {
+			return false
+		}
+	}
+	return true
 }
 
 // WorkingDir is where a process starts, as a role plus a relative path.

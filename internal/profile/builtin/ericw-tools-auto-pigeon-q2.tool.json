@@ -517,11 +517,19 @@
           "hint": "Turn the leak test off if you want the BSP anyway; it will have no visibility data."
         },
         {
+          "id": "texture_skip_lookup",
+          "match": "Couldn't locate texture for skip",
+          "kind": "suffix",
+          "severity": "info",
+          "message": "qbsp looked up `skip`, a texture of its own that no game ships; it prints this on every Quake II compile, and it is not a missing texture of the map."
+        },
+        {
           "id": "texture_missing",
           "match": "Couldn't locate texture for",
+          "except": [{ "match": "Couldn't locate texture for skip", "kind": "suffix" }],
           "severity": "error",
           "message": "A texture the map uses was not found under the base game data or the mod, so its contents and surface flags fall back to defaults.",
-          "hint": "In Quake II the flags are read from the .wal itself, so a missing texture is a wrong BSP and not just a missing picture. Check what the base game data root is bound to. `skip` has no .wal and always reports this; that one line is expected."
+          "hint": "In Quake II the flags are read from the .wal itself, so a missing texture is a wrong BSP and not just a missing picture. Check what the base game data root is bound to."
         },
         {
           "id": "builtin_palette",

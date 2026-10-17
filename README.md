@@ -1227,7 +1227,12 @@ $ companion build run --pipeline auto-pigeon.q3.fast-preview --input source_map=
 A tool profile declares the two things only its author can know with two
 optional members of a diagnostic rule: `"fatal": true` (the line proves the
 stage's result is unusable although the program exited 0; requires severity
-`error`) and `"class": "<token>"`. On the Build page a build reads top to
+`error`) and `"class": "<token>"`. A third, `"except": [{"match": "…", "kind": "suffix"}]`, names
+lines that match the rule and are NOT its finding — exact and measured, never a pattern: both Quake II
+EricW profiles except qbsp's own `WARNING: Couldn't locate texture for skip`, printed on every Quake II
+compile, from `texture_missing` and report it as the info finding `texture_skip_lookup`, so a sealed
+control has no error and a genuinely missing `.wal` (`Couldn't locate texture for e1u1/floor1_3`) is
+still one. On the Build page a build reads top to
 bottom: its name, state and a one-line status (which stage, for how long); then
 *Warnings and errors*, the findings of every stage as one list — the same
 finding counted once, errors first, the compiler's own line and the remedy one

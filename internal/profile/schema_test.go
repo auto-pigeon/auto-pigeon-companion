@@ -63,6 +63,7 @@ func schemaCases() []schemaCase {
 		def("enumValue", EnumValue{}),
 		def("optionSpec", OptionSpec{}),
 		def("diagnosticRule", DiagnosticRule{}),
+		def("lineMatch", LineMatch{}),
 		def("workingDir", WorkingDir{}),
 		def("rootRef", RootRef{}),
 		def("networkNeed", NetworkNeed{}),

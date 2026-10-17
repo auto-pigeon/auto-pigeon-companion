@@ -837,6 +837,14 @@
             "suffix"
           ]
         },
+        "except": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/lineMatch"
+          },
+          "description": "Lines that match too and are not this finding, each exact and measured: a program's own routine lookup printed in the words of a real fault."
+        },
         "severity": {
           "enum": [
             "error",
@@ -870,6 +878,27 @@
             "map_loaded"
           ],
           "description": "The line is the program's own report of something a caller waits for. `map_loaded`: the engine has loaded the map it was told to load. Never on an error."
+        }
+      }
+    },
+    "lineMatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "match"
+      ],
+      "properties": {
+        "match": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "kind": {
+          "enum": [
+            "contains",
+            "prefix",
+            "suffix"
+          ]
         }
       }
     },
