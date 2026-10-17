@@ -25,33 +25,40 @@ func caseInsensitive(t *testing.T, dir string) bool {
 }
 
 // foldingStat answers an open the way a case-insensitive filesystem does: each
-// component of the path matches a directory entry whatever its case. It lets a
-// case-sensitive test machine ask the question a Windows or macOS one answers.
-func foldingStat(path string) (os.FileInfo, error) {
-	volume := filepath.VolumeName(path)
-	rest := strings.TrimPrefix(path[len(volume):], string(filepath.Separator))
-	current := volume + string(filepath.Separator)
-	for _, part := range strings.Split(rest, string(filepath.Separator)) {
-		if part == "" {
-			continue
-		}
-		entries, err := os.ReadDir(current)
-		if err != nil {
-			return nil, err
-		}
-		found := ""
-		for _, entry := range entries {
-			if strings.EqualFold(entry.Name(), part) {
-				found = entry.Name()
-				break
-			}
-		}
-		if found == "" {
+// component of the path below root matches a directory entry whatever its
+// case. It lets a case-sensitive test machine ask the question a Windows or
+// macOS one answers. Only the components below root are folded: above it a
+// Windows temporary folder can be named by its 8.3 short name (`RUNNER~1`),
+// which no directory listing shows (Q2_020, windows-latest).
+func foldingStat(root string) func(string) (os.FileInfo, error) {
+	return func(path string) (os.FileInfo, error) {
+		rel, err := filepath.Rel(root, path)
+		if err != nil || strings.HasPrefix(rel, "..") {
 			return nil, os.ErrNotExist
 		}
-		current = filepath.Join(current, found)
+		current := root
+		for _, part := range strings.Split(rel, string(filepath.Separator)) {
+			if part == "" || part == "." {
+				continue
+			}
+			entries, err := os.ReadDir(current)
+			if err != nil {
+				return nil, err
+			}
+			found := ""
+			for _, entry := range entries {
+				if strings.EqualFold(entry.Name(), part) {
+					found = entry.Name()
+					break
+				}
+			}
+			if found == "" {
+				return nil, os.ErrNotExist
+			}
+			current = filepath.Join(current, found)
+		}
+		return os.Stat(current)
 	}
-	return os.Stat(current)
 }
 
 func resolveNamed(t *testing.T, index *Index, name string) Resolved {
@@ -83,7 +90,7 @@ func TestAMergedFolderIsFoundWhereTheOperatingSystemOpensIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	index.stat = foldingStat
+	index.stat = foldingStat(content)
 	for name, want := range map[string]string{
 		"MINE/LOWER": "textures/Mine/lower.wal",
 		"mine/lower": "textures/Mine/lower.wal",
