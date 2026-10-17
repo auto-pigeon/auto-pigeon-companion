@@ -525,12 +525,24 @@
     renderEngines();
   }
 
+  // What stops an engine, in the words Profiles uses. The engine's own
+  // problems first; an engine that is ready in itself and only an ACTION of
+  // it is not (Q2_020, seen live: Yamagi's "Play a map" needed a folder) is
+  // named by that action's problems, rather than by "Needs setup:" and
+  // nothing after it.
+  function setupProblems(engine) {
+    const own = engine.readiness?.problems || [];
+    const offered = Object.keys(ACTIONS).filter((id) => !packaged() || id === "play_map");
+    const problems = own.length ? own : offered.flatMap((id) => engine.action_problems?.[id] || []);
+    return [...new Set(problems.map((problem) => problem.summary))].join(" ");
+  }
+
   function renderEngines() {
     const select = $("play-engine");
     const ready = (engine) => Object.keys(ACTIONS).some((id) => window.AUCOM.actionReady(engine, id));
     state.engine = window.AUCOM.executionChoices(select, state.engines, state.engine,
       (engine) => engineFits(engine) && ready(engine),
-      (engine) => `${engine.name} — ${!engineFits(engine) ? t("not a Quake II engine") : ready(engine) ? t("Ready to start") : t("Needs setup") + ": " + (engine.readiness?.problems || []).map(p => p.summary).join(" ")}`,
+      (engine) => `${engine.name} — ${!engineFits(engine) ? t("not a Quake II engine") : ready(engine) ? t("Ready to start") : t("Needs setup") + ": " + setupProblems(engine)}`,
       "Choose a ready engine…");
     renderActions();
   }
@@ -816,7 +828,9 @@
     // bundle the build will read, cached by its own digest, so pressing Build &
     // Run afterwards costs nothing extra. What is never done is INVENTING the
     // list: until this returns, the review says the textures will be fetched.
-    if (body.textures && body.textures.known === false && window.AUCOM.status?.authenticated) {
+    // A Quake II run has no texture bundle (Q2_020): its compiler reads the
+    // game folders bound to it, and the review says so instead.
+    if (!body.packaged && body.textures && body.textures.known === false && window.AUCOM.status?.authenticated) {
       const asked = ++texturesAsked;
       const { ok: gotTextures, body: textures } = await api(
         `/api/v1/play/textures?asset_id=${encodeURIComponent(state.map.asset_id)}` +
@@ -1265,7 +1279,7 @@
         ` · ${listingBody().endpoint_host}:${listingBody().endpoint_port}`) : []),
     );
     const reviewed = Boolean(state.plan);
-    const ready = reviewed && (textures?.compiler_ready !== false ||
+    const ready = reviewed && (state.plan?.packaged || textures?.compiler_ready !== false ||
       Boolean(textures?.ready_with_own_wads && textures.own_wads_dir === state.ownWadsDir));
     $("play-start").disabled = !ready;
     setMessage("play-start-message", ready ? "" : !reviewed ? t("The review is not ready yet — see step 4.") :

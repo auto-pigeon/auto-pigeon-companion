@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/enginefixture"
 )
 
 // The Build & Run journey, in a real browser, against the real page.
@@ -95,6 +97,23 @@ func TestBuildAndRunJourneyInABrowser(t *testing.T) {
 	}
 }
 
+// Q2_020: the Quake II journey in a browser — the review of a packaged run,
+// and the run accepted on the engine's word. The machine is prepared as the
+// API journey's (playq2_test.go).
+func TestBuildAndRunQuake2JourneyInABrowser(t *testing.T) {
+	browser := findBrowser(t)
+	if browser == "" {
+		t.Skip("no Chrome-family browser on this machine; set AUCOM_TEST_BROWSER to name one")
+	}
+	m := newMachine(t)
+	m.preparePlay(t)
+	m.prepareQ2Play(t)
+	drivePlayPage(t, m, browser, "1280,900", "quake2", "testdata/playq2journey.js", map[string]any{
+		"pipeline_id": "aucom.fixture.q2-pipeline", "engine_id": enginefixture.ProfileQ2ID,
+		"other_engine_id": "aucom.fixture.q1-engine",
+	})
+}
+
 func runPlayJourney(t *testing.T, browser, window, label string) {
 	m := newMachine(t)
 	// The toolchain and the engine are approved and bound before the journey:
@@ -106,12 +125,12 @@ func runPlayJourney(t *testing.T, browser, window, label string) {
 
 // drivePlayPage runs one driver script against the real page of a prepared
 // machine, in a real browser, and reports each step it recorded.
-func drivePlayPage(t *testing.T, m *machine, browser, window, label, driver string) {
+func drivePlayPage(t *testing.T, m *machine, browser, window, label, driver string, overrides ...map[string]any) {
 	script, err := os.ReadFile(driver)
 	if err != nil {
 		t.Fatal(err)
 	}
-	settings, err := json.Marshal(map[string]any{
+	values := map[string]any{
 		"email":       m.backend.email,
 		"password":    "hunter2",
 		"asset_id":    m.backend.asset.assetID,
@@ -123,7 +142,13 @@ func drivePlayPage(t *testing.T, m *machine, browser, window, label, driver stri
 		"cache_dir":   m.assets,
 		"api_token":   m.server.Token().Value(),
 		"gallery":     m.backend.gallery,
-	})
+	}
+	for _, override := range overrides {
+		for key, value := range override {
+			values[key] = value
+		}
+	}
+	settings, err := json.Marshal(values)
 	if err != nil {
 		t.Fatal(err)
 	}
