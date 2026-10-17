@@ -47,8 +47,8 @@ func fixtureQ2ToolJSON(self string) []byte {
 		"actions": []map[string]any{
 			{
 				"id": "compile", "title": "Compile", "capability": "fixture.q2compile",
-				"executable": "tool",
-				"args":       []any{buildHelperFlag, "--q2bsp", "{input.source_map}", "{output.bsp}"},
+				"executable":  "tool",
+				"args":        []any{buildHelperFlag, "--q2bsp", "{input.source_map}", "{output.bsp}"},
 				"working_dir": map[string]any{"root": "workspace"},
 				"inputs": []map[string]any{
 					{"name": "source_map", "title": "Source", "role": "q2.map.source",

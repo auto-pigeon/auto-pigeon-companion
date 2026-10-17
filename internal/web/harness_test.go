@@ -22,9 +22,9 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/config"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/enginefixture"
-	"github.com/auto-pigeon/auto-pigeon-companion/internal/q2fixture"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/pathpick"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/q2fixture"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/texturebundle"
 )
 
