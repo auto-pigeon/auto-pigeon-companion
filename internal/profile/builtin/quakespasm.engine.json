@@ -125,12 +125,12 @@
         "root": "game_root"
       },
       "args": [
+        "+map",
+        "{runtime.map_name}",
         "-basedir",
         "{root.game_root}",
         "-game",
-        "{runtime.mod_name}",
-        "+map",
-        "{runtime.map_name}"
+        "{runtime.mod_name}"
       ],
       "roots": [
         {
@@ -271,14 +271,14 @@
         "root": "game_root"
       },
       "args": [
-        "-basedir",
-        "{root.game_root}",
-        "-game",
-        "{runtime.mod_name}",
         "+maxplayers",
         "{option.max_players}",
         "+map",
-        "{runtime.map_name}"
+        "{runtime.map_name}",
+        "-basedir",
+        "{root.game_root}",
+        "-game",
+        "{runtime.mod_name}"
       ],
       "options": [
         {
