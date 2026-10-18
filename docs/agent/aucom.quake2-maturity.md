@@ -115,6 +115,18 @@ a convenience.
   `.md2`'s own skins. A sky face is carried in every format the content holds:
   Yamagi's paletted renderer asks for `.pcx`, its GL renderers for `.tga` only —
   a package with only the first draws no sky in GL (found live).
+- **A reference is found where the engine's own `FS_FOpenFile` finds it**
+  (read in Yamagi 8.70's `src/common/filesystem.c`, `shared.c`): within one
+  folder the archives first — not-numbered `.pak`s, then `pak<N>` from the
+  highest — matched ignoring ASCII case; then the loose file under the name as
+  asked, then the name with only `A`-`Z` lower-cased (`Q_strlwr`, "C" locale).
+  Each loose try is an open, so whether another spelling opens a file is the
+  host filesystem's answer, measured per lookup and matched to the indexed file
+  by identity; on a case-insensitive one `Mine/` and `mine/` are one folder
+  (reproduced on a real exFAT volume, Q2_015A). `Location.Path` is always the
+  spelling on disk. Tests measure the fixture folder's case behaviour with a
+  sentinel, never `GOOS`, and also run the resolver through `foldingStat`, the
+  case-insensitive simulation, so a Linux runner checks the macOS/Windows path.
 - **Nothing of the base game is packaged, nothing of the user's without a
   grant**, and what nothing supplies is named before an archive is written. A
   map name the base game or the content folder already has under `maps/` is

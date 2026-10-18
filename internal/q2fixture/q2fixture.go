@@ -11,6 +11,7 @@ import (
 	"encoding/binary"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -132,9 +133,18 @@ func PAK(names []string, members map[string][]byte) []byte {
 	return append(append(header, data...), directory...)
 }
 
-// Write puts files under root, creating folders, and returns root.
+// Write puts files under root, creating folders, and returns root. The files
+// are written in name order, never map order: on a case-insensitive filesystem
+// two spellings of one folder are one folder named by whichever was created
+// first, and that must not change from run to run.
 func Write(root string, files map[string][]byte) (string, error) {
-	for name, data := range files {
+	names := make([]string, 0, len(files))
+	for name := range files {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		data := files[name]
 		path := filepath.Join(root, filepath.FromSlash(name))
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return "", err

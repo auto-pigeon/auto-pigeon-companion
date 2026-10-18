@@ -42,8 +42,8 @@ type Index struct {
 	Limits []string
 
 	loose    map[string]Location   // by exact virtual path
-	folded   map[string][]Location // every spelling on disk, by lower-cased virtual path
-	archived map[string]Location   // by lower-cased member path; the first archive in engine order wins
+	folded   map[string][]Location // every spelling on disk, by Unicode lower-cased virtual path
+	archived map[string]Location   // by ASCII lower-cased member path; the first archive in engine order wins
 	files    int
 	// stat is how this machine answers an open of a path: os.Stat. A test
 	// replaces it to ask what a case-insensitive filesystem would answer.
@@ -111,7 +111,7 @@ func IndexDir(root string) (*Index, error) {
 				name, len(inspection.Skipped), strings.Join(inspection.Skipped, "; ")))
 		}
 		for _, entry := range inspection.Entries {
-			key := strings.ToLower(entry.Path)
+			key := engineLower(entry.Path)
 			if _, taken := index.archived[key]; taken {
 				continue
 			}
@@ -148,7 +148,7 @@ func (i *Index) Find(virtual string) (Location, bool) {
 	if i == nil {
 		return Location{}, false
 	}
-	if location, ok := i.archived[strings.ToLower(virtual)]; ok {
+	if location, ok := i.archived[engineLower(virtual)]; ok {
 		return location, true
 	}
 	return i.FindLoose(virtual)
@@ -173,7 +173,31 @@ func (i *Index) FindLoose(virtual string) (Location, bool) {
 	if location, ok := i.opens(virtual); ok {
 		return location, true
 	}
-	return i.opens(strings.ToLower(virtual))
+	return i.opens(engineLower(virtual))
+}
+
+// engineLower is a name lower-cased the way Yamagi 8.70 lower-cases one
+// (src/common/shared/shared.c): `Q_strlwr` is C's `tolower` byte by byte, and
+// the engine never calls `setlocale`, so only `A`-`Z` change. Its archive
+// search compares with `strcasecmp` / `_stricmp` in the same "C" locale.
+// `strings.ToLower` folds every Unicode letter, and on a case-sensitive
+// filesystem would find `textures/x/ä.wal` for `textures/X/Ä.wal` where the
+// engine finds nothing. (An archive member whose name is not printable ASCII
+// is not indexed at all — `internal/pack` — so for archives this only keeps
+// the two lookups one rule.)
+func engineLower(name string) string {
+	for i := 0; i < len(name); i++ {
+		if c := name[i]; 'A' <= c && c <= 'Z' {
+			lower := []byte(name)
+			for j := i; j < len(lower); j++ {
+				if 'A' <= lower[j] && lower[j] <= 'Z' {
+					lower[j] += 'a' - 'A'
+				}
+			}
+			return string(lower)
+		}
+	}
+	return name
 }
 
 // opens is the loose file one spelling opens on this machine.
@@ -183,7 +207,9 @@ func (i *Index) opens(spelling string) (Location, bool) {
 	}
 	// Only the files the walk read can answer, so a spelling that is not some
 	// case of an indexed path — or one that climbs out of the folder — never
-	// reaches the filesystem at all.
+	// reaches the filesystem at all. The candidates are matched by Unicode
+	// case, a superset of what any filesystem folds; which of them the
+	// spelling opens, if any, is still the filesystem's answer below.
 	candidates := i.folded[strings.ToLower(spelling)]
 	if len(candidates) == 0 || i.stat == nil {
 		return Location{}, false

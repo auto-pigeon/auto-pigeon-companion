@@ -67,21 +67,44 @@ func TestAFileThatIsNotAQuake2MapIsRefused(t *testing.T) {
 	}
 }
 
+// Every case here holds on any host, whatever its filesystem folds: the two
+// fixture roots never hold two spellings of one folder or file, so a host that
+// merges `Mine/` and `mine/` cannot change what the test is about (Q2_020, CI
+// at 7b7524d: the old fixture held both, and a macOS or Windows runner merged
+// them into one folder). What depends on the filesystem's case behaviour is in
+// case_test.go, where it is measured first. Each case is run twice: against
+// this machine's filesystem, and against the case-insensitive simulation, so a
+// case-sensitive Linux runner also exercises the identity match that a
+// Windows or macOS one relies on.
 func TestAReferenceResolvesTheWayTheEngineSearches(t *testing.T) {
+	for _, host := range []struct {
+		name     string
+		simulate bool
+	}{{"this filesystem", false}, {"simulated case-insensitive filesystem", true}} {
+		t.Run(host.name, func(t *testing.T) { resolveTheWayTheEngineSearches(t, host.simulate) })
+	}
+}
+
+func resolveTheWayTheEngineSearches(t *testing.T, simulate bool) {
 	root := t.TempDir()
-	base, _ := q2fixture.Write(filepath.Join(root, "base"), map[string][]byte{
-		"pak0.pak": q2fixture.PAK([]string{"env/skyrt.tga", "textures/e1/Wall.wal"},
-			map[string][]byte{"env/skyrt.tga": {1}, "textures/e1/Wall.wal": {2}}),
-		"pak1.pak":          q2fixture.PAK([]string{"textures/e1/wall.wal"}, map[string][]byte{"textures/e1/wall.wal": {3}}),
-		"textures/e1/x.wal": {4},
+	base := mustWrite(t, filepath.Join(root, "base"), map[string][]byte{
+		"pak0.pak": q2fixture.PAK(
+			[]string{"env/skyrt.tga", "textures/e1/Wall.wal", "textures/e1/shared.wal", "models/m/base.pcx", "textures/E1/Upper.wal"},
+			map[string][]byte{"env/skyrt.tga": {1}, "textures/e1/Wall.wal": {2, 2}, "textures/e1/shared.wal": {11},
+				"models/m/base.pcx": {13}, "textures/E1/Upper.wal": {14}}),
+		"pak1.pak": q2fixture.PAK([]string{"textures/e1/wall.wal"}, map[string][]byte{"textures/e1/wall.wal": {3, 3, 3}}),
+		// The same path loose in the folder: the archives are searched first.
+		"textures/e1/wall.wal": {4, 4, 4, 4},
+		"textures/e1/x.wal":    {12},
 	})
-	content, _ := q2fixture.Write(filepath.Join(root, "content"), map[string][]byte{
+	content := mustWrite(t, filepath.Join(root, "content"), map[string][]byte{
 		"env/skyrt.tga":                {5},
-		"models/m/tris.md2":            q2fixture.MD2("models/m/skin.pcx", "models/m/gone.pcx"),
+		"models/m/tris.md2":            q2fixture.MD2("models/m/skin.pcx", "models/m/gone.pcx", "models/m/base.pcx"),
 		"models/m/skin.pcx":            {6},
 		"textures/Mine/Upper.wal":      {7},
-		"textures/mine/lower.wal":      {8},
-		"textures/archived/in-pak.pak": {9},
+		"textures/other/lower.wal":     {8},
+		"textures/e1/shared.wal":       {9},
+		"textures/archived/in-pak.pak": {10},
 	})
 	baseIndex, err := IndexDir(base)
 	if err != nil {
@@ -91,51 +114,84 @@ func TestAReferenceResolvesTheWayTheEngineSearches(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if simulate {
+		baseIndex.stat, contentIndex.stat = foldingStat(base), foldingStat(content)
+	}
+	if len(contentIndex.Archives) != 0 {
+		t.Errorf("an archive below the top of the content folder was opened: %v", contentIndex.Archives)
+	}
+	texture := func(name string) Reference {
+		return Reference{Kind: KindTexture, Name: name, Paths: []string{"textures/" + name + ".wal"}}
+	}
 	refs := []Reference{
 		{Kind: KindSky, Name: "skyrt", Paths: []string{"env/skyrt.pcx", "env/skyrt.tga"}},
-		{Kind: KindTexture, Name: "e1/wall", Paths: []string{"textures/e1/wall.wal"}},
-		{Kind: KindTexture, Name: "Mine/Upper", Paths: []string{"textures/Mine/Upper.wal"}},
-		{Kind: KindTexture, Name: "MINE/LOWER", Paths: []string{"textures/MINE/LOWER.wal"}},
+		texture("e1/wall"), texture("e1/UPPER"), texture("e1/x"), texture("e1/shared"),
+		texture("Mine/Upper"), texture("OTHER/LOWER"), texture("Gone/Absent"),
 		{Kind: KindModel, Name: "models/m/tris.md2", Paths: []string{"models/m/tris.md2"}},
 	}
-	report := Resolve(&Map{References: refs}, contentIndex, baseIndex)
-	got := map[string]string{}
-	for _, file := range report.Files {
-		got[file.Name] = string(file.Where) + " " + file.Location.Archive + file.Path
+	type want struct {
+		where    Where
+		path     string // the virtual path that resolved
+		location string // the spelling the folder holds
+		archive  string
+		bytes    string
+		shadows  bool
 	}
-	want := map[string]string{
+	wants := map[string]want{
 		// The content's tga is found before the base's: the mod is searched
 		// first for each name, and pcx is asked for before tga everywhere.
-		"skyrt": "content env/skyrt.tga",
-		// pak1 is searched before pak0, whatever the case of its member.
-		"e1/wall":           "base pak1.paktextures/e1/wall.wal",
-		"Mine/Upper":        "content textures/Mine/Upper.wal",
-		"MINE/LOWER":        "content textures/MINE/LOWER.wal",
-		"models/m/tris.md2": "content models/m/tris.md2",
-		"models/m/skin.pcx": "content models/m/skin.pcx",
-		"models/m/gone.pcx": "missing ",
+		"skyrt": {FromContent, "env/skyrt.tga", "env/skyrt.tga", "", "\x05", true},
+		// pak1 is searched before pak0, whatever the case of its member, and
+		// both before the folder's loose copy of the same path.
+		"e1/wall":  {FromBase, "textures/e1/wall.wal", "textures/e1/wall.wal", "pak1.pak", "\x03\x03\x03", false},
+		"e1/UPPER": {FromBase, "textures/e1/UPPER.wal", "textures/E1/Upper.wal", "pak0.pak", "\x0e", false},
+		// No archive has it: the base folder's loose file.
+		"e1/x": {FromBase, "textures/e1/x.wal", "textures/e1/x.wal", "", "\x0c", false},
+		// The content's copy wins over the base game's, and says it shadows it.
+		"e1/shared": {FromContent, "textures/e1/shared.wal", "textures/e1/shared.wal", "", "\x09", true},
+		// The exact spelling, mixed case and all.
+		"Mine/Upper": {FromContent, "textures/Mine/Upper.wal", "textures/Mine/Upper.wal", "", "\x07", false},
+		// Not under the spelling asked for on a case-sensitive filesystem, so
+		// lower-cased; a case-insensitive one opens it at the first try. The
+		// file, and the spelling on disk, are the same either way.
+		"OTHER/LOWER": {FromContent, "textures/OTHER/LOWER.wal", "textures/other/lower.wal", "", "\x08", false},
+		"Gone/Absent": {Missing, "", "", "", "", false},
+		// A model the content holds is read for its skins, each resolved the
+		// same way: one in the content, one only in the base, one nowhere.
+		"models/m/tris.md2": {FromContent, "models/m/tris.md2", "models/m/tris.md2", "", "", false},
+		"models/m/skin.pcx": {FromContent, "models/m/skin.pcx", "models/m/skin.pcx", "", "\x06", false},
+		"models/m/base.pcx": {FromBase, "models/m/base.pcx", "models/m/base.pcx", "pak0.pak", "\x0d", false},
+		"models/m/gone.pcx": {Missing, "", "", "", "", false},
 	}
-	for name, where := range want {
-		if got[name] != where {
-			t.Errorf("%s resolved to %q, want %q", name, got[name], where)
-		}
-	}
-	// A loose file is found under its own spelling or lower-cased, as Yamagi
-	// tries them; `textures/mine/lower.wal` is the second. On a
-	// case-insensitive filesystem `Mine/` and `mine/` are ONE folder, spelled
-	// whichever way it was created first, and the operating system opens the
-	// file under either: the file is the one holding byte 8 either way.
-	insensitive := caseInsensitive(t, root)
+	report := Resolve(&Map{References: refs}, contentIndex, baseIndex)
+	got := map[string]Resolved{}
 	for _, file := range report.Files {
-		if file.Name != "MINE/LOWER" {
+		got[file.Name] = file
+	}
+	failed := false
+	for name, w := range wants {
+		file, ok := got[name]
+		switch {
+		case !ok:
+			t.Errorf("%s was not resolved at all", name)
+		case file.Where != w.where || file.Path != w.path || file.Location.Path != w.location ||
+			file.Location.Archive != w.archive || file.Shadows != w.shadows:
+			t.Errorf("%s: %s %q at %q in %q shadows=%v, want %s %q at %q in %q shadows=%v", name,
+				file.Where, file.Path, file.Location.Path, file.Location.Archive, file.Shadows,
+				w.where, w.path, w.location, w.archive, w.shadows)
+		case w.bytes != "" && contentOf(t, map[Where]*Index{FromContent: contentIndex, FromBase: baseIndex}[file.Where], file.Location) != w.bytes:
+			t.Errorf("%s: %s holds %q, want %q — another file won", name, file.Location.Path,
+				contentOf(t, map[Where]*Index{FromContent: contentIndex, FromBase: baseIndex}[file.Where], file.Location), w.bytes)
+		default:
 			continue
 		}
-		switch {
-		case !insensitive && file.Location.Path != "textures/mine/lower.wal":
-			t.Errorf("MINE/LOWER is %s", file.Location.Path)
-		case insensitive && (!strings.EqualFold(file.Location.Path, "textures/mine/lower.wal") ||
-			bytesOf(t, file.Location) != "\x08"):
-			t.Errorf("MINE/LOWER is %s on a case-insensitive filesystem", file.Location.Path)
-		}
+		failed = true
+	}
+	if len(report.Files) != len(wants) {
+		t.Errorf("%d files resolved, want %d", len(report.Files), len(wants))
+		failed = true
+	}
+	if failed {
+		t.Logf("the fixture as this host enumerates it:\n%s", listing(t, root))
 	}
 }

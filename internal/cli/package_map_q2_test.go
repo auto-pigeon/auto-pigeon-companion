@@ -33,11 +33,16 @@ func TestTheQuake2PackageMapJourneyOnTheCommandLine(t *testing.T) {
 		"pak0.pak": q2fixture.PAK([]string{"pics/colormap.pcx"}, map[string][]byte{"pics/colormap.pcx": q2fixture.PCX()})}); err != nil {
 		t.Fatal(err)
 	}
-	content, _ := q2fixture.Write(t.TempDir(), map[string][]byte{"textures/q2009/marker.wal": q2fixture.WAL("q2009/marker")})
+	content, err := q2fixture.Write(t.TempDir(), map[string][]byte{"textures/q2009/marker.wal": q2fixture.WAL("q2009/marker")})
+	if err != nil {
+		t.Fatal(err)
+	}
 	id, _ := build.NewID(time.Now())
 	dir := filepath.Join(builds, id)
 	bsp := filepath.Join(dir, "output", "q2009cli.bsp")
-	q2fixture.Write(filepath.Dir(bsp), map[string][]byte{"q2009cli.bsp": q2fixture.BSP(`{ "classname" "worldspawn" }`, "q2009/marker")})
+	if _, err := q2fixture.Write(filepath.Dir(bsp), map[string][]byte{"q2009cli.bsp": q2fixture.BSP(`{ "classname" "worldspawn" }`, "q2009/marker")}); err != nil {
+		t.Fatal(err)
+	}
 	manifest := &build.Manifest{SchemaVersion: build.SchemaVersion, BuildID: id, EngineFamily: "quake2", State: job.Succeeded,
 		StartedAt: time.Now().UTC(), Directory: dir, Steps: []build.Step{},
 		Inputs:  []build.FileRecord{{Name: "source_map", Path: filepath.Join(dir, "input", "q2009cli.map")}},
