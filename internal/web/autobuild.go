@@ -132,10 +132,15 @@ func (s *Server) autobuildStart(entry autobuild.Entry, revision autobuild.Revisi
 		AssetType: "map", AssetID: entry.AssetID,
 		RevisionID: revision.ID, RevisionNumber: revision.Number,
 		PipelineID: entry.PipelineID,
-		MapName:    name,
-		BuildOnly:  true,
-		Trigger:    "auto_build",
-		Label:      fmt.Sprintf("Auto-build: %s, revision %d", title, revision.Number),
+		// The build profile's family, as Build & Run's own request carries it
+		// (playRequest): without it a Quake II auto-build ran the Quake 1
+		// sequence, refused its texture export as not compiler-ready and never
+		// laid its account textures where the compiler reads them (Q2_015A).
+		Family:    s.playFamily(entry.PipelineID),
+		MapName:   name,
+		BuildOnly: true,
+		Trigger:   "auto_build",
+		Label:     fmt.Sprintf("Auto-build: %s, revision %d", title, revision.Number),
 	})
 	if err != nil {
 		return "", err

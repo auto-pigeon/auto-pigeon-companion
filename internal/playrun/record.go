@@ -255,8 +255,8 @@ func (r *Request) Normalize() error {
 	if r.Packaged() {
 		switch {
 		case r.OwnWADsDir != "":
-			return fmt.Errorf("playrun: a Quake II build reads its .wal textures from the game folders bound " +
-				"to its compiler; there are no WADs to supply")
+			return fmt.Errorf("playrun: a Quake II build reads its account textures from the map's texture " +
+				"export and every other .wal from the game folders bound to its compiler; there are no WADs to supply")
 		case r.Listing != nil:
 			return fmt.Errorf("playrun: Build & Run plays a Quake II map on this computer; hosting one " +
 				"for others is not offered here")
@@ -367,6 +367,9 @@ type WADSource struct {
 	// `undeclared`, `digest_mismatch`, … — kept when a person's own copy then
 	// completed it, so the record says both what happened and why.
 	NotSentReason string `json:"not_sent_reason,omitempty"`
+	// Binding is how the map binds this source to one exact revision of an
+	// account texture source (a Quake II namespace), as the export states it.
+	Binding *build.BoundTextureSource `json:"binding,omitempty"`
 }
 
 // Record is the whole durable record of one Build & Run.
@@ -419,6 +422,9 @@ type Record struct {
 	// source, and NoticesDir where they are stored on this machine.
 	Notices    []StagedFile `json:"notices,omitempty"`
 	NoticesDir string       `json:"notices_dir,omitempty"`
+	// BundleLicenses is the verified export's LICENSES.md on this machine. A
+	// Quake II package carries it beside the account textures it describes.
+	BundleLicenses string `json:"bundle_licenses,omitempty"`
 
 	// Extractor identifies the AUE that ran, and whether it was verified.
 	Extractor *ExtractorRef `json:"extractor,omitempty"`

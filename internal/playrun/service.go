@@ -120,6 +120,8 @@ type BundleResult struct {
 	// stored under, at those paths.
 	Notices    []StagedFile
 	NoticesDir string
+	// Licenses is the export's LICENSES.md on this machine, when it had one.
+	Licenses string
 }
 
 // ConvertResult is what [Deps.Convert] produced.

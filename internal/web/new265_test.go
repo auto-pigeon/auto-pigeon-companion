@@ -475,6 +475,11 @@ func TestAutoBuildBuildsANewRevisionOnceThroughTheOrdinaryPipeline(t *testing.T)
 	if run["state"] != "succeeded" || run["build_only"] != true || run["launch"] != nil || run["installed"] != nil {
 		t.Fatalf("the auto-build run: %v", run)
 	}
+	// The build profile's family, as Build & Run's own request carries it: a
+	// Quake II auto-build is the Quake II sequence (Q2_015A).
+	if family := m.server.playFamily("aucom.fixture.pipeline"); run["family"] != family || family == "" {
+		t.Errorf("the auto-build run's family is %v, want the build profile's %q", run["family"], family)
+	}
 	for i := 0; i < 3; i++ {
 		due()
 	}

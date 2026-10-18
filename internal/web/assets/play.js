@@ -837,8 +837,10 @@
     // bundle the build will read, cached by its own digest, so pressing Build &
     // Run afterwards costs nothing extra. What is never done is INVENTING the
     // list: until this returns, the review says the textures will be fetched.
-    // A Quake II run has no texture bundle (Q2_020): its compiler reads the
-    // game folders bound to it, and the review says so instead.
+    // A Quake II run's review does not list WADs: its texture export (account
+    // texture sources at their bound revisions) is downloaded by the run itself,
+    // and its other .wal files come from the base game folder (Q2_015A). The
+    // plan's texture message says so.
     if (!body.packaged && body.textures && body.textures.known === false && window.AUCOM.status?.authenticated) {
       const asked = ++texturesAsked;
       const { ok: gotTextures, body: textures } = await api(

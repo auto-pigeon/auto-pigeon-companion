@@ -132,6 +132,27 @@ a convenience.
   map name the base game or the content folder already has under `maps/` is
   refused (the downloaded original of an edited corpus map). There is one PAK
   writer, `internal/pack`; its sidecar is rewritten without local paths.
+- **Account textures come from the map's texture export, at the revision the map
+  binds** (Q2_015A, seen live against AUB 1.2 exports). A Quake II Build & Run
+  (and an auto-build: `Family` is set there too) downloads the export, and
+  AUB's `compiler_ready` is not its gate: that is false for every map that uses
+  a retail namespace, because `wad_bytes_not_carried: e1u1` is always there.
+  The gate (`internal/playrun/q2textures.go`) refuses only a requirement with a
+  `binding` whose status is not `bound`, or a bound/user source whose files did
+  not arrive verified. Installed namespaces are left to the base game. The
+  verified `<ns>/<file>.wal` members are staged by `internal/build/q2textures.go`
+  as `q2textures/overlay/textures/…` in the build directory, re-hashed there, and
+  `q2textures/gamedir` (symlinks laid over the bound content folder, the overlay
+  winning) replaces `content_root` for every step. qbsp takes one `-gamedir`,
+  and adding `-path` would change the built-in tool documents' digests. Measured
+  with alpha7 and 1.4518 qbsp: a loose `-gamedir` file beats a `-basedir`
+  archive's copy. The manifest records the root as `aub_q2_texture_overlay` with
+  `overlay`/`underlay`. `q2deps.ResolveLayers` searches the account layer first
+  (`FromAccount`, recording `ShadowedContent`), and `q2pack` carries those files
+  as `account_source` with AUB provenance, no grant asked, re-checked against
+  the export digests, plus the export's `LICENSES.md` as
+  `docs/<map>/aub-licenses.md`. A compile that misses a carried texture fails.
+  The Build page builds a local file and is unchanged.
 - **The folders a build read come from the build**: request roots first, then
   the compiling tool's `ToolRecord.roots` (the binding's). A build from the
   Build page names none in its request (found live).

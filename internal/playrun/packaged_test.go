@@ -49,12 +49,41 @@ func packagedHarness(t *testing.T) *harness {
 	return h
 }
 
+// q2Bundle is a Quake II export as AUB writes one (seen live, Q2_015A): one
+// account texture source the map binds, carried; one namespace installed with
+// the game, named and not sent — so AUB calls it not compiler-ready.
+func q2Bundle(status string, staged bool) playrun.BundleResult {
+	ref := &build.BundleRef{
+		Schema: "aub-map-texture-export/1.2", MapID: "map0000000001", Revision: 7,
+		Digest: strings.Repeat("b", 64),
+		Files: []build.BundleFile{
+			{Path: "aup687697486/red_7a099681.wal", Source: "aup687697486", SHA256: strings.Repeat("1", 64), Bytes: 10980},
+			{Path: "aup687697486/blue_119bf034.wal", Source: "aup687697486", SHA256: strings.Repeat("2", 64), Bytes: 10980},
+		},
+		CompilerReady:    false,
+		CompilerRefusals: []string{"wad_inventory_incomplete", "wad_bytes_not_carried: e1u1"},
+		Bound: []build.BoundTextureSource{{Name: "aup687697486", Status: status, SourceID: "ldksgssnnrdjvb3",
+			RevisionID: "sufmmp7nard130t", Revision: 2}},
+	}
+	if !staged {
+		ref.Files = nil
+	}
+	binding := ref.Bound[0]
+	return playrun.BundleResult{Ref: ref, ContentRoot: "/cache/q2bundle/content", Licenses: "/cache/q2bundle/LICENSES.md",
+		Sources: []playrun.WADSource{
+			{Name: "aup687697486", Origin: "user", Staged: staged, Revision: 2, Binding: &binding},
+			{Name: "e1u1", Origin: "installed", Staged: false, NotSentReason: "undeclared"},
+		}}
+}
+
 func TestAQuake2RunPackagesInstallsAndWaitsForTheEngine(t *testing.T) {
 	h := packagedHarness(t)
-	var roots map[string]string
-	var rootsGiven bool
+	h.fetchBundle = func(context.Context, playrun.Request) (playrun.BundleResult, error) {
+		return q2Bundle("bound", true), nil
+	}
+	var given build.Request
 	h.buildRun = func(_ context.Context, request build.Request, announce func(*build.Manifest)) (*build.Manifest, error) {
-		roots, rootsGiven = request.Roots, request.RootSources != nil
+		given = request
 		manifest := &build.Manifest{BuildID: "20261017T000000Z-q2q2q2", State: job.Succeeded}
 		announce(manifest)
 		return manifest, nil
@@ -74,20 +103,37 @@ func TestAQuake2RunPackagesInstallsAndWaitsForTheEngine(t *testing.T) {
 	}
 	record := h.await(started.ID)
 	if record.State != playrun.Succeeded {
-		t.Fatalf("state = %s at %s: %s", record.State, record.FailedAt, record.Error)
+		t.Fatalf("state = %s at %s: %s (%s)", record.State, record.FailedAt, record.Error, record.Remedy)
 	}
-	// No texture bundle: a Quake II compiler reads its bound game folders.
-	want := []string{"fetch-map", "convert", "build", "install", "verify", "launch"}
+	// The texture export IS downloaded (Q2_015A), and AUB's compiler_ready —
+	// false, for the base game's e1u1 it never sends — does not stop the run.
+	want := []string{"fetch-map", "fetch-bundle", "convert", "build", "install", "verify", "launch"}
 	if got := h.calls(); !equal(got, want) {
 		t.Errorf("stages ran %v, want %v", got, want)
 	}
-	for _, stage := range record.Stages {
-		if stage.State == playrun.DownloadingTextures {
-			t.Error("the record has a texture-download stage")
-		}
+	// The build reads the bound game folders, and is given the export to lay
+	// over the content folder: every carried file, the export's identity and
+	// its licence summary.
+	if len(given.Roots) != 0 || given.RootSources != nil {
+		t.Errorf("the build was handed roots %v; it must read the bound game folders", given.Roots)
 	}
-	if len(roots) != 0 || rootsGiven {
-		t.Errorf("the build was handed roots %v; it must read the bound game folders", roots)
+	textures := given.Q2Textures
+	switch {
+	case textures == nil:
+		t.Fatal("the build was not given the map's account textures")
+	case textures.Dir != "/cache/q2bundle/content" || len(textures.Files) != 2 ||
+		textures.Bundle == nil || textures.Bundle.Digest != strings.Repeat("b", 64) ||
+		textures.Licenses != "/cache/q2bundle/LICENSES.md":
+		t.Errorf("account textures = %+v", textures)
+	}
+	if record.Bundle == nil || len(record.Bundle.Bound) != 1 || record.Bundle.Bound[0].Revision != 2 {
+		t.Errorf("the record does not say which revision the map binds: %+v", record.Bundle)
+	}
+	for _, stage := range record.Stages {
+		if stage.State == playrun.DownloadingTextures &&
+			(!strings.Contains(stage.Detail, "aup687697486 revision 2") || !strings.Contains(stage.Detail, "e1u1")) {
+			t.Errorf("the texture stage says %q", stage.Detail)
+		}
 	}
 	// The package panel's default mod folder, one per map.
 	if record.Request.ModName != "aup-q2room" {
@@ -103,6 +149,107 @@ func TestAQuake2RunPackagesInstallsAndWaitsForTheEngine(t *testing.T) {
 	}
 	if len(record.Request.Grants) != 1 || record.Request.Grants[0].Basis != q2pack.BasisOwnWork {
 		t.Errorf("grants were not recorded for a retry: %+v", record.Request.Grants)
+	}
+}
+
+// What stops a Quake II run at its textures, before anything compiles: a bound
+// revision that is not available, and a bound source whose files did not
+// arrive verified. Each names the source and says what to do.
+func TestAQuake2RunStopsWhenABoundTextureSourceIsNotUsable(t *testing.T) {
+	for name, tc := range map[string]struct {
+		bundle        playrun.BundleResult
+		error, remedy string
+	}{
+		"binding unavailable": {q2Bundle("bound_revision_unavailable", true),
+			"revision 2, which is not available (bound_revision_unavailable)", "LOAD › Textures"},
+		"files not verified": {q2Bundle("bound", false),
+			"the files of the texture source aup687697486 are not verified", "signed in"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := packagedHarness(t)
+			h.fetchBundle = func(context.Context, playrun.Request) (playrun.BundleResult, error) { return tc.bundle, nil }
+			service, err := playrun.NewService(h.store, h.deps)
+			if err != nil {
+				t.Fatal(err)
+			}
+			h.service = service
+			started, _ := h.service.Start(quake2Request())
+			record := h.await(started.ID)
+			if record.State != playrun.Failed || record.FailedAt != playrun.DownloadingTextures {
+				t.Fatalf("state = %s at %s", record.State, record.FailedAt)
+			}
+			if !strings.Contains(record.Error, tc.error) || !strings.Contains(record.Remedy, tc.remedy) ||
+				!strings.Contains(record.Remedy, "aup687697486") {
+				t.Errorf("error %q, remedy %q", record.Error, record.Remedy)
+			}
+			for _, call := range h.calls() {
+				if call == "convert" || call == "build" {
+					t.Errorf("%s ran after the texture gate refused", call)
+				}
+			}
+		})
+	}
+}
+
+// A compiler that did not find a texture the export carried is a failed
+// build, not a placeholder: the files were laid where it reads them.
+func TestAQuake2BuildThatMissesAnAccountTextureFails(t *testing.T) {
+	h := packagedHarness(t)
+	h.fetchBundle = func(context.Context, playrun.Request) (playrun.BundleResult, error) {
+		return q2Bundle("bound", true), nil
+	}
+	h.buildRun = func(_ context.Context, _ build.Request, announce func(*build.Manifest)) (*build.Manifest, error) {
+		manifest := &build.Manifest{BuildID: "20261017T000000Z-q2miss", State: job.Succeeded, Steps: []build.Step{{
+			ID: "compile", State: job.Succeeded, Diagnostics: []job.Diagnostic{
+				{RuleID: "texture_missing", Raw: "WARNING: Couldn't locate texture for e1u1/metal1_1"},
+				{RuleID: "texture_missing", Raw: "WARNING: Couldn't locate texture for aup687697486/red_7a099681"},
+			}}}}
+		announce(manifest)
+		return manifest, nil
+	}
+	service, err := playrun.NewService(h.store, h.deps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.service = service
+	started, _ := h.service.Start(quake2Request())
+	record := h.await(started.ID)
+	if record.State != playrun.Failed || record.FailedAt != playrun.Compiling ||
+		!strings.Contains(record.Error, "aup687697486/red_7a099681") || strings.Contains(record.Error, "e1u1") {
+		t.Fatalf("state = %s at %s: %s", record.State, record.FailedAt, record.Error)
+	}
+}
+
+// Cancelled while the export downloads: the run is cancelled there, nothing
+// compiles, and the record holds no texture root — a half-downloaded export is
+// never something a build reads (internal/texturebundle publishes an entry
+// whole or not at all).
+func TestCancellingAQuake2RunWhileItsTexturesDownload(t *testing.T) {
+	h := packagedHarness(t)
+	downloading := make(chan struct{})
+	h.fetchBundle = func(ctx context.Context, _ playrun.Request) (playrun.BundleResult, error) {
+		close(downloading)
+		<-ctx.Done()
+		return playrun.BundleResult{}, ctx.Err()
+	}
+	service, err := playrun.NewService(h.store, h.deps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.service = service
+	started, _ := h.service.Start(quake2Request())
+	<-downloading
+	if err := h.service.Cancel(started.ID); err != nil {
+		t.Fatal(err)
+	}
+	record := h.await(started.ID)
+	if record.State != playrun.Cancelled || record.BundleRoot != "" || record.Bundle != nil {
+		t.Fatalf("state = %s, bundle root %q, bundle %+v", record.State, record.BundleRoot, record.Bundle)
+	}
+	for _, call := range h.calls() {
+		if call == "convert" || call == "build" {
+			t.Errorf("%s ran after a cancel", call)
+		}
 	}
 }
 

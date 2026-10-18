@@ -155,7 +155,15 @@ func buildHelperMain(args []string) int {
 	fmt.Println("reading", filepath.Base(source))
 	output := append([]byte("BSP:"), contents...)
 	if quake2 {
-		output = q2fixture.BSP(`{ "classname" "worldspawn" }`, q2FixtureTexture)
+		// The source names any further texture on a `// q2texture <name>`
+		// line, so a test can compile a map that uses an account texture.
+		textures := []string{q2FixtureTexture}
+		for _, line := range strings.Split(string(contents), "\n") {
+			if name, ok := strings.CutPrefix(strings.TrimSpace(line), "// q2texture "); ok {
+				textures = append(textures, strings.TrimSpace(name))
+			}
+		}
+		output = q2fixture.BSP(`{ "classname" "worldspawn" }`, textures...)
 	}
 	if err := os.WriteFile(destination, output, 0o600); err != nil {
 		fmt.Fprintln(os.Stderr, "helper:", err)
@@ -575,6 +583,64 @@ func (b *fixtureBackend) serveTextureExport(w http.ResponseWriter, r *http.Reque
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", `attachment; filename="fixture-textures.zip"`)
 	_, _ = w.Write(bundle)
+}
+
+// q2AccountNamespace and q2AccountTexture are the account texture source the
+// Quake II fixture map binds, and the one texture of it that it uses.
+const (
+	q2AccountNamespace = "aupq2test"
+	q2AccountTexture   = q2AccountNamespace + "/red_0123"
+)
+
+// q2AccountWAL is that texture's bytes, as the export carries them.
+var q2AccountWAL = q2fixture.WAL(q2AccountTexture)
+
+// fixtureQ2TextureBundle builds a Quake II export the way AUB 1.2 builds one
+// (seen live, Q2_015A): the account texture source the map binds, carried, with
+// its binding; a namespace installed with the game, named and not sent; and so
+// `compiler_ready: false`.
+func fixtureQ2TextureBundle(mapID string, revision int, binding string) []byte {
+	sum := sha256.Sum256(q2AccountWAL)
+	file := map[string]any{"path": q2AccountTexture + ".wal", "source": q2AccountNamespace,
+		"sha256": hex.EncodeToString(sum[:]), "bytes": len(q2AccountWAL)}
+	manifest := map[string]any{
+		"schema_version": texturebundle.Schema,
+		"map_id":         mapID, "map_name": "q2room", "revision": revision, "game": "quake2",
+		"requirements": []map[string]any{
+			{"order": 0, "name": q2AccountNamespace, "game": "quake2", "kind": "folder", "origin": "user",
+				"status": "resolved", "revision": 2, "included": true, "files": []any{file},
+				"binding": map[string]any{"status": binding, "source_id": "src0000000001",
+					"revision_id": "rev0000000002", "revision": 2}},
+			{"order": 1, "name": "e1u1", "game": "quake2", "kind": "folder", "origin": "installed",
+				"status": "resolved", "included": false, "files": []any{},
+				"redistribution": map[string]any{"decision": "withheld", "reason": "undeclared"}},
+		},
+		"files":             []any{file},
+		"compiler_ready":    false,
+		"compiler_refusals": []string{"wad_inventory_incomplete", "wad_bytes_not_carried: e1u1"},
+	}
+	buffer := &bytes.Buffer{}
+	writer := zip.NewWriter(buffer)
+	add := func(name string, body []byte) {
+		out, err := writer.Create(name)
+		if err != nil {
+			panic(err)
+		}
+		if _, err = out.Write(body); err != nil {
+			panic(err)
+		}
+	}
+	add(q2AccountTexture+".wal", q2AccountWAL)
+	add(texturebundle.LicensesName, []byte("# Attribution\n"))
+	encoded, err := json.Marshal(manifest)
+	if err != nil {
+		panic(err)
+	}
+	add(texturebundle.ManifestName, encoded)
+	if err = writer.Close(); err != nil {
+		panic(err)
+	}
+	return buffer.Bytes()
 }
 
 // fixtureTextureBundle builds a bundle the way AUB builds one: two declared

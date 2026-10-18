@@ -36,11 +36,6 @@ func (s *Service) execute(ctx context.Context, record *Record) {
 		// Download, textures, convert, compile — and stop: see Request.BuildOnly.
 		stages = stages[:4]
 	}
-	if record.Request.Packaged() {
-		// A Quake II compiler reads the .wal files of the game folders bound
-		// to it; there is no WAD bundle to download (see compile).
-		stages = append(stages[:1:1], stages[2:]...)
-	}
 
 	for _, stage := range stages {
 		if err := ctx.Err(); err != nil {
@@ -111,6 +106,7 @@ func (s *Service) downloadTextures(ctx context.Context, record *Record) error {
 	record.Bundle, record.BundleRoot = result.Ref, result.ContentRoot
 	record.WADSources = result.Sources
 	record.Notices, record.NoticesDir = result.Notices, result.NoticesDir
+	record.BundleLicenses = result.Licenses
 
 	// The pairing, checked here as well as at the two places that fetched the
 	// halves. A current export must never be paired with a historical map
@@ -122,6 +118,18 @@ func (s *Service) downloadTextures(ctx context.Context, record *Record) error {
 	if result.Ref.Revision != record.Request.RevisionNumber {
 		return fmt.Errorf("playrun: the texture bundle is revision %d and this run is revision %d",
 			result.Ref.Revision, record.Request.RevisionNumber)
+	}
+
+	if record.Request.Packaged() {
+		// Quake II has its own gate (q2textures.go): AUB's compiler_ready
+		// weighs the base game's textures, which a Quake II compiler reads
+		// from the base game folder and AUB never sends.
+		if err := checkQ2Textures(record); err != nil {
+			return err
+		}
+		s.detail(record, describeQ2Textures(record))
+
+		return nil
 	}
 
 	// The gate. Nothing starts the extractor or a compiler on a bundle AUB has
@@ -267,7 +275,14 @@ func (s *Service) compile(ctx context.Context, record *Record) error {
 		// Build page reads them. A texture bundle is a Quake 1 WAD set, and
 		// supplying one here would hide the content folder from the compiler.
 		request.Roots, request.RootSources = nil, nil
-		s.detail(record, "the compiler reads the map's .wal textures from the game folders bound to it in Profiles")
+		if textures := q2TexturesFor(record); textures != nil {
+			request.Q2Textures = textures
+			s.detail(record, fmt.Sprintf("the compiler reads the map's %d account texture(s) from the verified export, "+
+				"laid over the content folder bound to it, and every other .wal from the game folders bound to it in Profiles",
+				len(textures.Files)))
+		} else {
+			s.detail(record, "the compiler reads the map's .wal textures from the game folders bound to it in Profiles")
+		}
 	} else if !readsTextures {
 		request.Roots, request.RootSources = nil, nil
 		s.detail(record, "no step of this build profile reads a texture folder, so none is given: "+
@@ -327,7 +342,16 @@ func (s *Service) compile(ctx context.Context, record *Record) error {
 
 	// The compiler exits 0 with no textures at all (textures.go), so its own
 	// words are read here rather than trusting the status.
-	warning, err := checkTextures(manifest).verdict(packaged)
+	check := checkTextures(manifest)
+	if packaged {
+		if err := check.accountTexturesFound(record.WADSources); err != nil {
+			record.Remedy = "Open the build in Jobs: the compiler was given the map's account textures and did not find them. " +
+				"Report this with the build."
+
+			return err
+		}
+	}
+	warning, err := check.verdict(packaged)
 	if err != nil {
 		record.Remedy = "The map names its WADs in worldspawn's `wad` key. Open the build in Jobs to see " +
 			"which archive the compiler could not find, and make sure the map's texture bundle, or " +

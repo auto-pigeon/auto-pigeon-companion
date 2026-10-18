@@ -4,9 +4,10 @@
 // accepts the engine's word. This proves somebody can get there: a Quake II
 // build profile offers only Quake II engines and "Play it", the review shows
 // the package and asks about the content folder's own files — and does NOT
-// fetch a Quake 1 texture bundle, whose refusals would otherwise sit in the
-// review and disable Start (seen live on the 1.268 candidate) — and the run's
-// details say what the engine said.
+// list a Quake 1 WAD set, whose refusals would otherwise sit in the review and
+// disable Start (seen live on the 1.268 candidate): the run downloads the
+// map's texture export itself (Q2_015A) — and the run's details say what the
+// engine said.
 
 "use strict";
 
@@ -85,7 +86,7 @@
     // Long enough for the second request a Quake 1 review makes for its WADs.
     await sleep(3000);
     const review = textOf($("play-review"));
-    record("the review of a Quake II run fetches no texture bundle",
+    record("the review of a Quake II run lists no Quake 1 WADs and says where its .wal files come from",
       !document.querySelector("#play-review .wad-list") && !/Not sent with this map's textures/.test(review) &&
         review.includes(".wal") && !textOf($("play-review-message")),
       review.replace(/\s+/g, " ").slice(0, 200));

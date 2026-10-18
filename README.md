@@ -691,6 +691,28 @@ curl -fsS -H "X-AUCOM-Token: $token" -H 'Content-Type: application/json' -d "$bo
 curl -fsS -H "X-AUCOM-Token: $token" "$api/api/v1/play/runs/<run id>" | jq '{state, failed_at, remedy}'
 ```
 
+**Your account's textures.** A Quake II map saved in Auto-Pigeon can use
+textures from a texture source in your account (`aup…/name`), tied to the exact
+revision of that source the map was saved with. Build & Run downloads the map's
+texture export for the revision you chose and checks every file against its
+SHA-256. The compiler is given those `.wal` files at `textures/<source>/<name>.wal`,
+in a folder of the build's own made over your content folder. Nothing is written
+into your content folder or `baseq2`. The files then go into the package with
+where they came from, without asking about your own files. If the map's revision
+of a texture source is no longer available, the run stops before compiling and
+says which source to update in the editor. Textures that come with the game
+(`e1u1/…`) are never sent: the compiler and the engine read them from `baseq2`,
+and the package review names any that are not there. A second run of the same
+revision uses the export already checked on this computer. Auto-build does the
+same for a Quake II map.
+
+```bash
+# what the run will download and package for a Quake II map (the "textures" part of the review)
+curl -fsS -H "X-AUCOM-Token: $token" -H 'Content-Type: application/json' -d "$body" "$api/api/v1/play/plan" | jq .textures
+# after a run: where each texture of the package came from
+curl -fsS -H "X-AUCOM-Token: $token" "$api/api/v1/play/runs/<run id>" | jq '.stages[] | select(.state=="downloading_textures") | .detail'
+```
+
 Tested only on Linux x86-64 with ericw-tools 1.4518 and Yamagi Quake II 8.70
 built from source, with the retail game data.
 

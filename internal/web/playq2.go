@@ -73,14 +73,18 @@ func (s *Server) playPlanPackaged(w http.ResponseWriter, request playrun.Request
 			"never_writes": q2pack.BaseGameDir + ", and every other folder a Quake II installation owns",
 		},
 		"textures": map[string]any{
-			"known": false, "packaged": true,
-			"message": "A Quake II compiler reads the map's .wal textures from the game folders bound to it " +
-				"in Profiles: the base game, and your content folder. No texture bundle is downloaded.",
+			"known": false, "packaged": true, "downloads": true,
+			"message": "The map's texture export for this revision is downloaded and verified. The .wal files " +
+				"of the account texture sources the map binds, at the revisions it binds, are laid over your " +
+				"content folder where the compiler reads them, and travel in the package. Textures installed " +
+				"with the game are not sent: the compiler reads them from the base game folder bound to it in " +
+				"Profiles, and the package plan names any it does not have.",
 		},
 		"package": map[string]any{
 			"grants": grants, "accept_reason": request.AcceptReason,
-			"message": "After the compile, a PAK is made of the compiled map and of the files of your content " +
-				"folder that the compiled map names — textures, sky, sounds, models — when you say they may " +
+			"message": "After the compile, a PAK is made of the compiled map, of the map's account textures, and " +
+				"of the files of your content folder that the compiled map names — textures, sky, sounds, " +
+				"models — when you say they may " +
 				"travel with it. What the base game supplies is never copied. If the map names a file nothing " +
 				"holds, or one nobody said may travel, the run stops before anything is installed and names it.",
 		},

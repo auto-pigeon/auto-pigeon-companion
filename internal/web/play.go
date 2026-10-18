@@ -217,8 +217,16 @@ func bundleResult(entry texturebundle.Entry, backend string) playrun.BundleResul
 			Path: file.Path, Source: file.Source, SHA256: file.SHA256, Bytes: file.Bytes,
 		})
 	}
+	for _, requirement := range entry.Manifest.OrderedWADs() {
+		if bound := boundSource(requirement); bound != nil {
+			ref.Bound = append(ref.Bound, *bound)
+		}
+	}
 
 	result := playrun.BundleResult{Ref: ref, ContentRoot: entry.ContentRoot, Sources: wadSources(entry)}
+	if entry.Receipt.Licenses {
+		result.Licenses = filepath.Join(entry.Dir, texturebundle.LicensesName)
+	}
 	for _, notice := range entry.Receipt.Notices {
 		result.Notices = append(result.Notices, playrun.StagedFile{
 			Path: notice.Path, SHA256: notice.SHA256, Bytes: notice.Bytes,
@@ -247,7 +255,7 @@ func wadSources(entry texturebundle.Entry) []playrun.WADSource {
 	wads := entry.Manifest.OrderedWADs()
 	out := make([]playrun.WADSource, 0, len(wads))
 	for _, wad := range wads {
-		source := playrun.WADSource{Name: wad.Name, Origin: wad.Origin, Revision: wad.Revision}
+		source := playrun.WADSource{Name: wad.Name, Origin: wad.Origin, Revision: wad.Revision, Binding: boundSource(wad)}
 		staged := len(wad.Files) > 0
 		for _, file := range wad.Files {
 			member, ok := verified[file.Path]
@@ -279,6 +287,20 @@ func wadSources(entry texturebundle.Entry) []playrun.WADSource {
 	}
 
 	return out
+}
+
+// boundSource is a requirement's binding to one revision of an account
+// texture source, in the build manifest's terms; nil when it has none.
+func boundSource(requirement texturebundle.OrderedWAD) *build.BoundTextureSource {
+	binding := requirement.Binding
+	if binding == nil {
+		return nil
+	}
+	return &build.BoundTextureSource{
+		Name: requirement.Name, Status: binding.Status, SourceID: binding.SourceID,
+		RevisionID: binding.RevisionID, Revision: binding.Revision,
+		SourceSHA256: binding.SourceSHA256, PaletteSHA256: binding.PaletteSHA256,
+	}
 }
 
 func (s *Server) backendAddress() string {

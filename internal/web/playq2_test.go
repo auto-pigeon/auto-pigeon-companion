@@ -2,6 +2,10 @@ package web
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -150,7 +154,10 @@ func (m *machine) prepareQ2Play(t *testing.T) (gameRoot, content string) {
 	}
 
 	m.backend.asset.fileName = "q2room.map"
-	m.backend.asset.body = []byte("{ \"classname\" \"worldspawn\" }\n")
+	// The map uses a texture of an account texture source it binds, which
+	// its texture export carries (Q2_015A).
+	m.backend.asset.body = []byte("// q2texture " + q2AccountTexture + "\n{ \"classname\" \"worldspawn\" }\n")
+	m.backend.textures = fixtureQ2TextureBundle(m.backend.asset.assetID, m.backend.asset.revision, "bound")
 	return gameRoot, content
 }
 
@@ -171,6 +178,13 @@ func q2PlayBody(m *machine) map[string]any {
 func TestBuildAndRunPlaysAQuake2MapFromItsPackage(t *testing.T) {
 	m := newMachine(t)
 	gameRoot, _ := m.prepareQ2Play(t)
+	// An installed archive with a file of the account texture's name and other
+	// bytes: not the revision the map was saved against, so not what is used.
+	installed := q2fixture.PAK([]string{"textures/" + q2AccountTexture + ".wal"},
+		map[string][]byte{"textures/" + q2AccountTexture + ".wal": []byte("an installed copy")})
+	if _, err := q2fixture.Write(filepath.Join(gameRoot, "baseq2"), map[string][]byte{"pak9.pak": installed}); err != nil {
+		t.Fatal(err)
+	}
 	baseDigest := fileDigest(t, filepath.Join(gameRoot, "baseq2", "pak0.pak"))
 	modDir := filepath.Join(gameRoot, "aup-q2room")
 
@@ -221,10 +235,17 @@ func TestBuildAndRunPlaysAQuake2MapFromItsPackage(t *testing.T) {
 	if run["state"] != "succeeded" {
 		t.Fatalf("the Quake II run %v at %v: %v (%v)", run["state"], run["failed_at"], run["error"], run["remedy"])
 	}
+	// The map's texture export was downloaded and verified (Q2_015A), and
+	// AUB's compiler_ready — false, for the e1u1 it never sends — did not
+	// stop the run.
+	downloaded := false
 	for _, raw := range run["stages"].([]any) {
 		if stage := raw.(map[string]any); stage["state"] == "downloading_textures" {
-			t.Error("a Quake II run downloaded a texture bundle")
+			downloaded = strings.Contains(fmt.Sprint(stage["detail"]), q2AccountNamespace+" revision 2")
 		}
+	}
+	if !downloaded {
+		t.Errorf("the run did not download the map's account textures: %v", run["stages"])
 	}
 	pkg, _ := run["package"].(map[string]any)
 	installation, _ := run["installation"].(map[string]any)
@@ -242,6 +263,15 @@ func TestBuildAndRunPlaysAQuake2MapFromItsPackage(t *testing.T) {
 	if fileDigest(t, filepath.Join(gameRoot, "baseq2", "pak0.pak")) != baseDigest {
 		t.Error("baseq2 changed")
 	}
+	// The package carries the account texture: the export's bytes, not the
+	// installed archive's copy of the same name, with no grant asked for it.
+	members := pakMembers(t, archive)
+	if got, want := members["textures/"+q2AccountTexture+".wal"], digestOf(q2AccountWAL); got != want {
+		t.Errorf("the package's %s.wal is %q, want the export's %q; members %v", q2AccountTexture, got, want, members)
+	}
+	if _, ok := members["docs/q2room/aub-licenses.md"]; !ok {
+		t.Errorf("the export's licence summary is not in the package: %v", members)
+	}
 
 	// The package panel sees the same package, installation and running engine.
 	status, body := m.call(http.MethodGet, "/api/v1/q2/installs/"+installation["id"].(string)+"/runs", nil)
@@ -250,6 +280,9 @@ func TestBuildAndRunPlaysAQuake2MapFromItsPackage(t *testing.T) {
 		t.Fatalf("the panel's newest run of the installation = %d: %v", status, body)
 	}
 	// While that engine runs, a second Build & Run will not replace its folder.
+	// It gets that far with a backend that no longer sends a usable export:
+	// the verified export of this revision is reused from the cache.
+	m.backend.textures = []byte("this is not a bundle")
 	status, started = m.call(http.MethodPost, "/api/v1/play/runs", granted)
 	if status != http.StatusAccepted {
 		t.Fatalf("starting again = %d: %v", status, started["error"])
@@ -263,5 +296,53 @@ func TestBuildAndRunPlaysAQuake2MapFromItsPackage(t *testing.T) {
 	}
 	if finished := m.waitForJob(launch["job_id"].(string)); finished["state"] != "cancelled" {
 		t.Errorf("the stopped engine's job is %v", finished["state"])
+	}
+}
+
+// pakMembers is every member of a PAK, by path, with the digest of its bytes
+// read from the archive's own directory.
+func pakMembers(t *testing.T, archive string) map[string]string {
+	t.Helper()
+	data, err := os.ReadFile(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(data) < 12 || string(data[:4]) != "PACK" {
+		t.Fatalf("%s is not a PAK", archive)
+	}
+	members := map[string]string{}
+	offset, length := binary.LittleEndian.Uint32(data[4:]), binary.LittleEndian.Uint32(data[8:])
+	for at := offset; at+64 <= offset+length && int(at+64) <= len(data); at += 64 {
+		record := data[at : at+64]
+		name := string(bytes.TrimRight(record[:56], "\x00"))
+		start, size := binary.LittleEndian.Uint32(record[56:]), binary.LittleEndian.Uint32(record[60:])
+		members[name] = digestOf(data[start : start+size])
+	}
+	return members
+}
+
+func digestOf(body []byte) string {
+	sum := sha256.Sum256(body)
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+// Q2_015A: a revision the map binds that is no longer available stops the run
+// at its textures, naming the source and what to do, before anything compiles.
+func TestAQuake2RunsTexturesAreItsBoundRevisionOrNothing(t *testing.T) {
+	m := newMachine(t)
+	m.prepareQ2Play(t)
+	granted := q2PlayBody(m)
+	granted["grants"] = []map[string]any{{"loose": true, "basis": "own_work"}}
+
+	m.backend.textures = fixtureQ2TextureBundle(m.backend.asset.assetID, m.backend.asset.revision, "bound_revision_unavailable")
+	status, started := m.call(http.MethodPost, "/api/v1/play/runs", granted)
+	if status != http.StatusAccepted {
+		t.Fatalf("starting = %d: %v", status, started["error"])
+	}
+	refused := m.awaitPlay(t, started["id"].(string))
+	if refused["state"] != "failed" || refused["failed_at"] != "downloading_textures" ||
+		!strings.Contains(fmt.Sprint(refused["error"]), "bound_revision_unavailable") ||
+		!strings.Contains(fmt.Sprint(refused["remedy"]), q2AccountNamespace) {
+		t.Fatalf("an unavailable binding: %v at %v: %v (%v)", refused["state"], refused["failed_at"], refused["error"], refused["remedy"])
 	}
 }
