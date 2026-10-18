@@ -66,6 +66,10 @@ const (
 	RootFromTextureBundle RootSourceKind = "aub_texture_bundle"
 	// RootFromLocalDirectory: a directory the user chose on this machine.
 	RootFromLocalDirectory RootSourceKind = "local_directory"
+	// RootFromQ2TextureOverlay: a Quake II game directory this build made of
+	// the account textures of a verified AUB map texture export, laid over
+	// the content folder bound to the compiler (q2textures.go).
+	RootFromQ2TextureOverlay RootSourceKind = "aub_q2_texture_overlay"
 )
 
 // RootSource is where a supplied root came from, for the manifest.
@@ -116,6 +120,24 @@ type BundleRef struct {
 	CompilerReady bool `json:"compiler_ready"`
 	// CompilerRefusals is why not. Empty exactly when CompilerReady is true.
 	CompilerRefusals []string `json:"compiler_refusals,omitempty"`
+
+	// Bound are the account texture sources the map binds to one exact
+	// revision, as the export states them. Quake II; empty for a WAD bundle.
+	Bound []BoundTextureSource `json:"bound,omitempty"`
+}
+
+// BoundTextureSource is one account texture source a map binds, at the
+// revision it binds — the provenance of the files of that source a Quake II
+// package carries.
+type BoundTextureSource struct {
+	// Name is the namespace the map's textures are named under.
+	Name          string `json:"name"`
+	Status        string `json:"status"`
+	SourceID      string `json:"source_id,omitempty"`
+	RevisionID    string `json:"revision_id,omitempty"`
+	Revision      int    `json:"revision,omitempty"`
+	SourceSHA256  string `json:"source_sha256,omitempty"`
+	PaletteSHA256 string `json:"palette_sha256,omitempty"`
 }
 
 // BundleFile is one carried file of a texture bundle.
@@ -137,6 +159,15 @@ type RootRecord struct {
 	Access profile.Access `json:"access,omitempty"`
 
 	Source *RootSource `json:"source,omitempty"`
+
+	// Overlay and Underlay are, for a root this build made by laying one
+	// directory over another ([RootFromQ2TextureOverlay]), the two it was made
+	// of: the build's own copy of the verified account textures, and the
+	// folder bound to the tool (empty when none was). Diagnostic, as Path is;
+	// they are what a Quake II package is planned from, so it can tell the
+	// account's files from the user's own.
+	Overlay  string `json:"overlay,omitempty"`
+	Underlay string `json:"underlay,omitempty"`
 }
 
 // checkRoots validates the request's roots against the pipeline's resolved

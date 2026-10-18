@@ -114,6 +114,10 @@ type Request struct {
 	// verified by the caller. Nil for a map that binds nothing and for every
 	// other game. See gamedata.go.
 	Packages *BoundPackages
+	// Q2Textures is the verified AUB texture export of a Quake II map, whose
+	// account textures the build lays over the content folder for every step
+	// (q2textures.go). Nil for every other build.
+	Q2Textures *Q2Textures
 
 	// Inputs maps a declared pipeline input to a file on this machine.
 	//
@@ -242,6 +246,17 @@ func (r *Runner) Run(ctx context.Context, request Request) (*Manifest, error) {
 	// nothing yet.
 	if stagesGameData(manifest.EngineFamily) {
 		if request, err = r.stageGameData(request, steps, layout, manifest); err != nil {
+			return r.fail(manifest, job.Failed, err)
+		}
+		if err := manifest.Save(dir); err != nil {
+			return r.unrecorded(manifest, err)
+		}
+	}
+
+	// A Quake II map's account textures, where every step's compiler reads
+	// them, before anything compiles.
+	if request.Q2Textures != nil {
+		if request, err = r.stageQ2Textures(request, steps, layout, manifest); err != nil {
 			return r.fail(manifest, job.Failed, err)
 		}
 		if err := manifest.Save(dir); err != nil {

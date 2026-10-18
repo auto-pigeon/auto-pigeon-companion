@@ -124,6 +124,29 @@ type Redistribution struct {
 	NoticePaths   []string `json:"notice_paths,omitempty"`
 }
 
+// The binding statuses AUB writes (internal/maptexture). Anything but
+// [BindingBound] means the revision the map was saved against cannot be used,
+// and why.
+const (
+	BindingBound               = "bound"
+	BindingSourceUnavailable   = "bound_source_unavailable"
+	BindingRevisionUnavailable = "bound_revision_unavailable"
+	BindingDigestMismatch      = "bound_digest_mismatch"
+)
+
+// Binding is a map's binding of one texture source to one exact revision.
+type Binding struct {
+	Status        string `json:"status"`
+	SourceID      string `json:"source_id,omitempty"`
+	RevisionID    string `json:"revision_id,omitempty"`
+	Revision      int    `json:"revision,omitempty"`
+	SourceSHA256  string `json:"source_sha256,omitempty"`
+	PaletteSHA256 string `json:"palette_sha256,omitempty"`
+	// CurrentRevision is the source's newest revision when it is not the
+	// bound one: the map keeps its revision until somebody moves it.
+	CurrentRevision int `json:"current_revision,omitempty"`
+}
+
 // Notice is one third-party notice file the bundle carries because a source in
 // it requires one.
 type Notice struct {
@@ -173,6 +196,13 @@ type Requirement struct {
 
 	// Redistribution is present for an installed source in a 1.2 manifest.
 	Redistribution *Redistribution `json:"redistribution,omitempty"`
+
+	// Binding is present when the map binds this source to one exact revision
+	// of an account texture source — a Quake II namespace (`aup…/`), seen live
+	// in AUB's 1.2 exports. It says which revision the map was saved against
+	// and whether that revision is still available; [BindingBound] is the
+	// only status whose files a build may use.
+	Binding *Binding `json:"binding,omitempty"`
 
 	ReferencedTextures []string `json:"referenced_textures,omitempty"`
 	MissingTextures    []string `json:"missing_textures,omitempty"`
@@ -485,6 +515,7 @@ type OrderedWAD struct {
 	Revision       int             `json:"revision,omitempty"`
 	SourceSHA256   string          `json:"source_sha256,omitempty"`
 	Redistribution *Redistribution `json:"redistribution,omitempty"`
+	Binding        *Binding        `json:"binding,omitempty"`
 }
 
 // OrderedWADs reads the requirements in declaration order.
@@ -502,7 +533,7 @@ func (m Manifest) OrderedWADs() []OrderedWAD {
 			Origin: requirement.Origin, Included: requirement.Included,
 			Note: requirement.Note, Files: requirement.Files,
 			Revision: requirement.Revision, SourceSHA256: requirement.SourceSHA256,
-			Redistribution: requirement.Redistribution,
+			Redistribution: requirement.Redistribution, Binding: requirement.Binding,
 		})
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Order < out[j].Order })
