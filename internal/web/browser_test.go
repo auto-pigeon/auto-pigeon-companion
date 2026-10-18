@@ -74,6 +74,46 @@ func findBrowser(t *testing.T) string {
 	return ""
 }
 
+// headlessArguments are the flags every journey starts its browser with.
+//
+// `--password-store=basic`: on a Linux desktop session Chrome otherwise asks
+// the session's keyring over D-Bus for a password store before it loads the
+// first page, and where that call is never answered it waits out D-Bus's
+// 25-second default. Measured on a workstation (Q2_015A): the first request
+// reached the test server 25.5 s after launch, 0.58 s with this flag, 0.59 s
+// with no session bus at all — 25 s per browser, ten browsers per run of this
+// package. A test profile holds no password, and a journey must not depend on,
+// or wait for, the machine's own keyring.
+func headlessArguments(window, profileDir string) []string {
+	return []string{
+		"--headless=new", "--disable-gpu", "--no-sandbox", "--disable-dev-shm-usage",
+		"--no-first-run", "--no-default-browser-check", "--disable-extensions",
+		"--disable-background-networking", "--disable-component-update",
+		"--password-store=basic",
+		"--window-size=" + window, "--user-data-dir=" + profileDir,
+	}
+}
+
+// browserWaitDelay bounds how long stopping a journey's browser waits for the
+// helper processes that share its output to let go of it.
+const browserWaitDelay = 15 * time.Second
+
+// stopBrowser ends a journey's browser and removes its profile.
+//
+// Kill, then the command's own Wait rather than Process.Wait. Process.Wait
+// reaps the browser and nothing else: os/exec's context watcher was then left
+// blocked for the life of the test binary, one per browser (CI run
+// 38615467410's timeout dump lists them, "chan send, 8 minutes"), and the
+// profile was removed while the browser's helpers could still be writing it,
+// which left `aucom-browser-*` folders behind in the temporary directory. Wait
+// returns once every process sharing the output pipe has exited, and
+// browserWaitDelay bounds that if one does not.
+func stopBrowser(command *exec.Cmd, profileDir string) {
+	_ = command.Process.Kill()
+	_ = command.Wait()
+	_ = os.RemoveAll(profileDir)
+}
+
 // journeyStep is one thing the driver script did, as it reported it.
 type journeyStep struct {
 	Step   string `json:"step"`
@@ -227,31 +267,15 @@ func runBrowserJourney(t *testing.T, browser, window string, width int) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 	defer cancel()
-	command := exec.CommandContext(ctx, browser,
-		"--headless=new",
-		"--disable-gpu",
-		"--no-sandbox",
-		"--disable-dev-shm-usage",
-		"--no-first-run",
-		"--no-default-browser-check",
-		"--disable-extensions",
-		"--disable-background-networking",
-		"--disable-component-update",
-		"--window-size="+window,
-		"--user-data-dir="+profileDir,
-		front.URL+"/",
-	)
+	command := exec.CommandContext(ctx, browser, append(headlessArguments(window, profileDir), front.URL+"/")...)
+	command.WaitDelay = browserWaitDelay
 	var browserOutput strings.Builder
 	command.Stdout = &browserOutput
 	command.Stderr = &browserOutput
 	if err := command.Start(); err != nil {
 		t.Skipf("could not start %s: %v", browser, err)
 	}
-	defer func() {
-		_ = command.Process.Kill()
-		_, _ = command.Process.Wait()
-		_ = os.RemoveAll(profileDir)
-	}()
+	defer stopBrowser(command, profileDir)
 
 	var report journeyReport
 	var lines []string

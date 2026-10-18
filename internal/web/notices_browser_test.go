@@ -55,22 +55,14 @@ func TestNoticeBannerInABrowser(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	command := exec.CommandContext(ctx, browser,
-		"--headless=new", "--disable-gpu", "--no-sandbox", "--disable-dev-shm-usage",
-		"--no-first-run", "--no-default-browser-check", "--disable-extensions",
-		"--disable-background-networking", "--disable-component-update",
-		"--window-size=1280,900", "--user-data-dir="+profileDir, front.URL+"/",
-	)
+	command := exec.CommandContext(ctx, browser, append(headlessArguments("1280,900", profileDir), front.URL+"/")...)
+	command.WaitDelay = browserWaitDelay
 	var output strings.Builder
 	command.Stdout, command.Stderr = &output, &output
 	if err := command.Start(); err != nil {
 		t.Skipf("could not start %s: %v", browser, err)
 	}
-	defer func() {
-		_ = command.Process.Kill()
-		_, _ = command.Process.Wait()
-		_ = os.RemoveAll(profileDir)
-	}()
+	defer stopBrowser(command, profileDir)
 
 	var report journeyReport
 	deadline := time.After(90 * time.Second)

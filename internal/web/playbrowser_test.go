@@ -172,12 +172,7 @@ func drivePlayPage(t *testing.T, m *machine, browser, window, label, driver stri
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	arguments := []string{
-		"--headless=new", "--disable-gpu", "--no-sandbox", "--disable-dev-shm-usage",
-		"--no-first-run", "--no-default-browser-check", "--disable-extensions",
-		"--disable-background-networking", "--disable-component-update",
-		"--window-size=" + window, "--user-data-dir=" + profileDir,
-	}
+	arguments := headlessArguments(window, profileDir)
 	shotDir := os.Getenv(screenshotEnv)
 	var toChromeR, toChromeW, fromChromeR, fromChromeW *os.File
 	if shotDir != "" {
@@ -200,6 +195,7 @@ func drivePlayPage(t *testing.T, m *machine, browser, window, label, driver stri
 		}
 	}
 	command := exec.CommandContext(ctx, browser, append(arguments, front.URL+"/")...)
+	command.WaitDelay = browserWaitDelay
 	if shotDir != "" {
 		// fd 3 is what the browser reads, fd 4 what it writes.
 		command.ExtraFiles = []*os.File{toChromeR, fromChromeW}
@@ -214,11 +210,7 @@ func drivePlayPage(t *testing.T, m *machine, browser, window, label, driver stri
 		toChromeR.Close()
 		fromChromeW.Close()
 	}
-	defer func() {
-		_ = command.Process.Kill()
-		_, _ = command.Process.Wait()
-		_ = os.RemoveAll(profileDir)
-	}()
+	defer stopBrowser(command, profileDir)
 
 	var report journeyReport
 	var lines []string
