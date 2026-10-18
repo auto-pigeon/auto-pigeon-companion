@@ -67,10 +67,14 @@
 package builtin
 
 import (
+	"bytes"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"io/fs"
+	"reflect"
 	"sort"
+	"sync"
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
@@ -224,14 +228,78 @@ func (e Entry) Trust() profile.Trust { return profile.TrustBuiltin }
 // It returns an error rather than panicking at init, and callers report it,
 // because a build whose own profiles do not parse should say so where a user
 // can see it — not fail to start with a stack trace.
+//
+// Every document goes through [profile.Decode] and [profile.Digest], the same
+// decoder, rules and encoder as a downloaded file, once per process: the
+// documents are compiled into the binary, so what that found cannot change
+// while it runs. Before Q2_015A every call did all of it again — 27 documents,
+// 0.23 s and 43 MB of allocation per call (now 12 ms and 1.9 MB) — and one
+// Profiles page or one build resolver called it several times over: it was 66%
+// of every CPU sample of `internal/web`'s whole test run on a workstation,
+// before garbage collection, and the frame CI's 10-minute timeout caught that
+// package in (run 38615467410). Each call still
+// returns profiles of its own, decoded afresh from the same bytes into the
+// type the full decode chose, so a caller that edits one (a template filled
+// into the New profile form) changes nothing any other caller sees.
+// `TestEveryLoadIsTheFullDecodeAndOwnsWhatItReturns` holds both halves.
 func Load() ([]Entry, error) {
+	verified.once.Do(func() { verified.documents, verified.err = verify() })
+	if verified.err != nil {
+		return nil, verified.err
+	}
+	entries := make([]Entry, 0, len(verified.documents))
+	for _, document := range verified.documents {
+		p, err := document.materialize()
+		if err != nil {
+			return nil, fmt.Errorf("builtin: %s could not be read again: %w", document.file, err)
+		}
+		entries = append(entries, Entry{File: document.file, Profile: p, Digest: document.digest})
+	}
+	return entries, nil
+}
+
+// verified is what the full decode of the embedded documents found.
+var verified struct {
+	once      sync.Once
+	documents []verifiedDocument
+	err       error
+}
+
+// verifiedDocument is one embedded document the full decoder accepted.
+type verifiedDocument struct {
+	file   string
+	data   []byte
+	kind   reflect.Type // the struct type [profile.Decode] returned a pointer to
+	digest string
+}
+
+// materialize is the document as a new value of the type the full decode
+// chose, read the way that decode's own typed step reads it (unknown members
+// refused). The boundary checks and the validation it skips are the ones the
+// same bytes already passed.
+func (d verifiedDocument) materialize() (profile.Profile, error) {
+	target := reflect.New(d.kind).Interface()
+	decoder := json.NewDecoder(bytes.NewReader(d.data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		return nil, err
+	}
+	p, ok := target.(profile.Profile)
+	if !ok {
+		return nil, fmt.Errorf("%s is not a profile type", d.kind)
+	}
+	return p, nil
+}
+
+// verify is the full decode of every embedded document, in file-name order.
+func verify() ([]verifiedDocument, error) {
 	names, err := fs.Glob(files, "*.json")
 	if err != nil {
 		return nil, fmt.Errorf("builtin: listing the embedded profiles: %w", err)
 	}
 	sort.Strings(names)
 
-	entries := make([]Entry, 0, len(names))
+	documents := make([]verifiedDocument, 0, len(names))
 	seen := map[string]string{}
 	for _, name := range names {
 		data, err := files.ReadFile(name)
@@ -251,9 +319,13 @@ func Load() ([]Entry, error) {
 			return nil, fmt.Errorf("builtin: %s and %s both declare the id %q", first, name, id)
 		}
 		seen[id] = name
-		entries = append(entries, Entry{File: name, Profile: p, Digest: digest})
+		kind := reflect.TypeOf(p)
+		if kind.Kind() != reflect.Pointer {
+			return nil, fmt.Errorf("builtin: %s decoded to %s, not a pointer to a profile", name, kind)
+		}
+		documents = append(documents, verifiedDocument{file: name, data: data, kind: kind.Elem(), digest: digest})
 	}
-	return entries, nil
+	return documents, nil
 }
 
 // Find returns the built-in profile with an id.

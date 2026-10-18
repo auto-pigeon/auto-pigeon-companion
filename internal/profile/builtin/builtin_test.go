@@ -3,6 +3,7 @@ package builtin
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -1071,5 +1072,61 @@ func TestTheDarkPlacesExecutableHasItsUpstreamLinuxSpellings(t *testing.T) {
 	windows := executable.FileCandidates(profile.Platform{OS: "windows", Arch: "amd64"})
 	if len(windows) != 1 || windows[0] != "darkplaces-sdl.exe" {
 		t.Errorf("windows/amd64 candidates %q: a Linux spelling must not reach another platform", windows)
+	}
+}
+
+// Load reads the embedded documents through the full decoder once per process
+// and re-reads their bytes for every call (Q2_015A). Both halves are held
+// here: what every call returns is exactly what [profile.Decode] and
+// [profile.Digest] make of the same file — so a validation that one day
+// rewrote a document while checking it would show up as a difference rather
+// than be skipped — and no call shares a value with another, so a caller that
+// edits what it got cannot change what the next one gets.
+func TestEveryLoadIsTheFullDecodeAndOwnsWhatItReturns(t *testing.T) {
+	first, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range first {
+		data, err := files.ReadFile(entry.File)
+		if err != nil {
+			t.Fatal(err)
+		}
+		full, err := profile.Decode(data)
+		if err != nil {
+			t.Fatalf("%s: %v", entry.File, err)
+		}
+		if !reflect.DeepEqual(full, entry.Profile) {
+			t.Errorf("%s: Load's profile differs from profile.Decode's", entry.File)
+		}
+		digest, err := profile.Digest(full)
+		if err != nil || digest != entry.Digest {
+			t.Errorf("%s: digest %s, profile.Digest says %s (%v)", entry.File, entry.Digest, digest, err)
+		}
+	}
+	// Edit every profile the first call returned, the way a template filled
+	// into a form is edited.
+	ids := make([]string, len(first))
+	for i, entry := range first {
+		ids[i] = entry.Profile.Metadata().ID
+		reflect.ValueOf(entry.Profile).Elem().FieldByName("Meta").FieldByName("ID").SetString("edited.by.a.caller")
+	}
+	second, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(second) != len(first) {
+		t.Fatalf("second Load: %d entries, first %d", len(second), len(first))
+	}
+	for i, entry := range second {
+		if entry.Profile == first[i].Profile {
+			t.Errorf("%s: two calls returned the same profile value", entry.File)
+		}
+		if got := entry.Profile.Metadata().ID; got != ids[i] {
+			t.Errorf("%s: a caller's edit reached the next Load: id %q, want %q", entry.File, got, ids[i])
+		}
+	}
+	if _, err := Find(ids[0]); err != nil {
+		t.Errorf("Find(%q) after a caller edited its copy: %v", ids[0], err)
 	}
 }
