@@ -87,8 +87,12 @@ type Grant struct {
 type Disposition string
 
 const (
-	BuildOutput          Disposition = "build_output"
-	UserAuthored         Disposition = "user_authored"
+	BuildOutput  Disposition = "build_output"
+	UserAuthored Disposition = "user_authored"
+	// AccountSource is a texture of an account texture source the map binds,
+	// at the revision it binds, as AUB's texture export carried it: packaged
+	// on that provenance, which the member's From names, without a grant.
+	AccountSource        Disposition = "account_source"
 	Licensed             Disposition = "licensed"
 	Notice               Disposition = "notice"
 	BaseGame             Disposition = "base_game"
@@ -98,7 +102,7 @@ const (
 )
 
 func (d Disposition) carried() bool {
-	return d == BuildOutput || d == UserAuthored || d == Licensed || d == Notice
+	return d == BuildOutput || d == UserAuthored || d == Licensed || d == Notice || d == AccountSource
 }
 
 // Member is one file of the archive.
@@ -270,6 +274,13 @@ func Prepare(request Request) (*Plan, error) {
 	}
 
 	roots := buildRoots(manifest)
+	textures := accountTextures(manifest)
+	if textures != nil {
+		// The compiler read a directory this build made; the package is
+		// planned from its two halves, so the account's files are told apart
+		// from the user's own (internal/build, q2textures.go).
+		roots[profile.RootContent] = textures.underlay
+	}
 	baseRoot := roots[profile.RootGame]
 	if baseRoot == "" {
 		return nil, failure.As(failure.GameDataMissing, fmt.Errorf(
@@ -286,7 +297,13 @@ func Prepare(request Request) (*Plan, error) {
 			return nil, failure.As(failure.InputInvalid, fmt.Errorf("q2pack: the content folder this build read: %w", err))
 		}
 	}
-	report := q2deps.Resolve(compiled, content, base)
+	var account *q2deps.Index
+	if textures != nil {
+		if account, err = q2deps.IndexDir(textures.overlay); err != nil {
+			return nil, failure.As(failure.InputInvalid, fmt.Errorf("q2pack: the account textures this build read: %w", err))
+		}
+	}
+	report := q2deps.ResolveLayers(compiled, q2deps.Layers{Account: account, Content: content, Base: base})
 
 	bspDigest, bspSize, err := hashFile(level.BSP)
 	if err != nil {
@@ -329,12 +346,41 @@ func Prepare(request Request) (*Plan, error) {
 		Disposition: BuildOutput, From: "build " + manifest.BuildID, source: level.BSP})
 	loose := Source{ID: "loose", Kind: "loose"}
 	carriedContent := false
+	carriedAccount := 0
 	members := map[string]bool{mapMember: true}
 	for _, resolved := range report.Files {
 		dependency := Dependency{Name: resolved.Name, Kind: string(resolved.Kind), From: resolved.From,
 			RequiredAtRuntime: true}
 		file := File{Path: firstNonEmpty(resolved.Path, resolved.Paths[0]), Role: string(resolved.Kind), RequiredAtRuntime: true}
 		switch resolved.Where {
+		case q2deps.FromAccount:
+			file.Disposition = AccountSource
+			file.Reason = textures.describe(resolved.Location.Path)
+			if hidden := resolved.ShadowedContent; hidden != nil {
+				file.Reason += fmt.Sprintf("; your content folder's own %s has the same path and is not packaged", hidden.Path)
+			}
+			for _, location := range append([]q2deps.Location{resolved.Location}, resolved.Also...) {
+				if members[location.Path] {
+					continue
+				}
+				members[location.Path] = true
+				digest, size, err := hashFile(location.File)
+				if err != nil {
+					return nil, err
+				}
+				if want, known := textures.digest(location.Path); !known || want.Bytes != size ||
+					!strings.EqualFold(strings.TrimPrefix(want.SHA256, "sha256:"), strings.TrimPrefix(digest, "sha256:")) {
+					plan.Problems = append(plan.Problems, Problem{Code: "account_texture_changed", Path: location.Path,
+						Message: fmt.Sprintf("%s is not the file AUB's texture export carried and this build verified", location.Path)})
+					continue
+				}
+				plan.Members = append(plan.Members, Member{Path: location.Path, Size: size, SHA256: digest,
+					Disposition: AccountSource, From: textures.describe(location.Path), source: location.File})
+				carriedAccount++
+				if _, inBase := base.Find(location.Path); inBase {
+					plan.Overrides = append(plan.Overrides, location.Path)
+				}
+			}
 		case q2deps.FromBase:
 			file.Disposition = BaseGame
 			file.Reason = "the base game has it (" + describe(resolved.Location) + ")"
@@ -408,6 +454,24 @@ func Prepare(request Request) (*Plan, error) {
 				From: "the notice " + notice.Path + " in your content folder", source: notice.File})
 		}
 	}
+	if carriedAccount > 0 {
+		plan.Sources = append(plan.Sources, Source{ID: "account", Kind: "account", RuntimeFiles: carriedAccount,
+			Hints: []string{textures.summary()}})
+		// The export's licence summary travels with the files it describes,
+		// where the content folder's notices go.
+		if licences := textures.licenses(); licences != "" {
+			path := "docs/" + name + "/aub-licenses.md"
+			if !members[path] && len(path) <= pack.PAKNameLength {
+				members[path] = true
+				digest, size, err := hashFile(licences)
+				if err != nil {
+					return nil, err
+				}
+				plan.Members = append(plan.Members, Member{Path: path, Size: size, SHA256: digest, Disposition: Notice,
+					From: "the licence summary of AUB's texture export " + textures.bundleDigest(), source: licences})
+			}
+		}
+	}
 	if loose.RuntimeFiles > 0 {
 		if content != nil {
 			loose.Hints = append(loose.Hints, fmt.Sprintf("%d loose file(s) in it; only what the map names is considered", content.LooseFiles()))
@@ -452,6 +516,76 @@ func Prepare(request Request) (*Plan, error) {
 		plan.TotalBytes += member.Size
 	}
 	return plan, nil
+}
+
+// builtTextures is what a build recorded of the account textures it laid over
+// its content folder.
+type builtTextures struct {
+	overlay, underlay string
+	bundle            *build.BundleRef
+}
+
+// accountTextures is the build's account-texture root, or nil when it had none.
+func accountTextures(manifest *build.Manifest) *builtTextures {
+	for _, root := range manifest.Roots {
+		if root.Role == profile.RootContent && root.Source != nil &&
+			root.Source.Kind == build.RootFromQ2TextureOverlay && root.Overlay != "" {
+			return &builtTextures{overlay: root.Overlay, underlay: root.Underlay, bundle: root.Source.Bundle}
+		}
+	}
+	return nil
+}
+
+// digest is the export's declaration of a virtual path's file.
+func (t *builtTextures) digest(virtual string) (build.BundleFile, bool) {
+	if t == nil || t.bundle == nil {
+		return build.BundleFile{}, false
+	}
+	for _, file := range t.bundle.Files {
+		if "textures/"+file.Path == virtual {
+			return file, true
+		}
+	}
+	return build.BundleFile{}, false
+}
+
+// describe is where an account texture came from, in the words a member's
+// From and a review's reason use: the source and the revision the map binds,
+// and the export that carried it.
+func (t *builtTextures) describe(virtual string) string {
+	file, _ := t.digest(virtual)
+	for _, bound := range t.bundle.Bound {
+		if bound.Name != file.Source {
+			continue
+		}
+		return fmt.Sprintf("the account texture source %s at revision %d (source %s, revision %s), carried by AUB's texture export %s of map %s revision %d",
+			bound.Name, bound.Revision, bound.SourceID, bound.RevisionID, t.bundleDigest(), t.bundle.MapID, t.bundle.Revision)
+	}
+	return fmt.Sprintf("the texture source %s, carried by AUB's texture export %s of map %s revision %d",
+		firstNonEmpty(file.Source, "named in the export"), t.bundleDigest(), t.bundle.MapID, t.bundle.Revision)
+}
+
+func (t *builtTextures) summary() string {
+	return fmt.Sprintf("textures of the account texture sources the map binds, as AUB's texture export %s carried them", t.bundleDigest())
+}
+
+func (t *builtTextures) bundleDigest() string {
+	if t.bundle == nil {
+		return "(unrecorded)"
+	}
+	if len(t.bundle.Digest) > 12 {
+		return t.bundle.Digest[:12]
+	}
+	return t.bundle.Digest
+}
+
+// licenses is the export's licence summary the build kept, or "".
+func (t *builtTextures) licenses() string {
+	path := filepath.Join(filepath.Dir(t.overlay), build.Q2LicensesName)
+	if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() {
+		return path
+	}
+	return ""
 }
 
 // buildRoots are the folders the build's compile read, by role: the ones the

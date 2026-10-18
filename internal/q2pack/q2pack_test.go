@@ -2,6 +2,8 @@ package q2pack
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
@@ -370,4 +372,151 @@ func TestTheFoldersOfABuildFromTheBuildPageAreTheCompilingTools(t *testing.T) {
 	if len(plan.Problems) != 0 || len(plan.Members) != 13 {
 		t.Fatalf("problems %v, %d members", plan.Problems, len(plan.Members))
 	}
+}
+
+// accountWorld is the room built with a map texture export laid over its
+// content folder (internal/build, q2textures.go): two account textures — one
+// in a mixed-case namespace AUB admits — of which the first is also, under the
+// same name, in the base game's archive and in the user's content folder.
+func accountWorld(t *testing.T) (world, map[string][]byte) {
+	t.Helper()
+	w := newWorld(t, "e1u1/floor1_1", "q2009/marker", "aup687697486/red_7a099681", "AupMixed/Blue_Case", "e1u1/absent")
+	account := map[string][]byte{
+		"aup687697486/red_7a099681.wal": q2fixture.WAL("aup687697486/red_7a099681"),
+		"AupMixed/Blue_Case.wal":        append(q2fixture.WAL("AupMixed/Blue_Case"), 1),
+	}
+	textures := filepath.Join(w.buildDir, "q2textures")
+	overlay := filepath.Join(textures, "overlay")
+	staged := map[string][]byte{}
+	var files []build.BundleFile
+	for name, body := range account {
+		staged["textures/"+name] = body
+		digest, size := digestBytes(body)
+		files = append(files, build.BundleFile{Path: name, Source: strings.Split(name, "/")[0], SHA256: digest, Bytes: size})
+	}
+	if _, err := q2fixture.Write(overlay, staged); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := q2fixture.Write(textures, map[string][]byte{build.Q2LicensesName: []byte("# Licences\n")}); err != nil {
+		t.Fatal(err)
+	}
+	// The same names elsewhere, with other bytes: neither is the revision the
+	// map was saved against.
+	pak := q2fixture.PAK([]string{"textures/aup687697486/red_7a099681.wal"},
+		map[string][]byte{"textures/aup687697486/red_7a099681.wal": []byte("an installed copy")})
+	if _, err := q2fixture.Write(w.base, map[string][]byte{"pak9.pak": pak}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := q2fixture.Write(w.content, map[string][]byte{"textures/aup687697486/red_7a099681.wal": []byte("my older copy")}); err != nil {
+		t.Fatal(err)
+	}
+	bundle := &build.BundleRef{Schema: "aub-map-texture-export/1.2", MapID: "0vxa8mdzrwajj9j", Revision: 5,
+		Digest: strings.Repeat("b", 64), Files: files,
+		Bound: []build.BoundTextureSource{{Name: "aup687697486", Status: "bound", SourceID: "ldksgssnnrdjvb3",
+			RevisionID: "sufmmp7nard130t", Revision: 2}}}
+	w.manifest.Roots = []build.RootRecord{
+		{Role: profile.RootGame, Path: w.base},
+		{Role: profile.RootContent, Path: filepath.Join(textures, "gamedir"), Overlay: overlay, Underlay: w.content,
+			Source: &build.RootSource{Kind: build.RootFromQ2TextureOverlay, Bundle: bundle}},
+	}
+	return w, account
+}
+
+func digestBytes(body []byte) (string, int64) {
+	sum := sha256.Sum256(body)
+	return hex.EncodeToString(sum[:]), int64(len(body))
+}
+
+// Q2_015A: the account textures a map binds are packaged on AUB's provenance,
+// with no grant, winning the base game's and the content folder's files of the
+// same name; the base game's own textures stay the base game's, and one nothing
+// holds is named.
+func TestAPackageCarriesTheAccountTexturesTheMapBinds(t *testing.T) {
+	w, account := accountWorld(t)
+	plan, err := Prepare(Request{Manifest: w.manifest})
+	if err != nil {
+		t.Fatal(err)
+	}
+	members := map[string]Member{}
+	for _, member := range plan.Members {
+		members[member.Path] = member
+	}
+	for name, body := range account {
+		member, ok := members["textures/"+name]
+		digest, _ := digestBytes(body)
+		switch {
+		case !ok:
+			t.Errorf("textures/%s is not packaged; members %v", name, memberPaths(plan))
+		case member.Disposition != AccountSource || member.SHA256 != "sha256:"+digest:
+			t.Errorf("textures/%s: %s %s, want account_source %s", name, member.Disposition, member.SHA256, digest)
+		}
+	}
+	if from := members["textures/aup687697486/red_7a099681.wal"].From; !strings.Contains(from, "aup687697486 at revision 2") ||
+		!strings.Contains(from, "0vxa8mdzrwajj9j revision 5") {
+		t.Errorf("provenance = %q", from)
+	}
+	if licences := members["docs/q2009room/aub-licenses.md"]; licences.Disposition != Notice {
+		t.Errorf("the export's licence summary: %+v", licences)
+	}
+	if !slicesContains(plan.Overrides, "textures/aup687697486/red_7a099681.wal") {
+		t.Errorf("overrides %v: the base game's copy of the same name is what the package's replaces", plan.Overrides)
+	}
+	// No grant was given: the user's own marker is held, the account's files are not.
+	var problems []string
+	for _, problem := range plan.Problems {
+		problems = append(problems, problem.Code+" "+problem.Path)
+	}
+	want := []string{"missing textures/e1u1/absent.wal", "no_grant textures/q2009/marker.wal"}
+	for _, expected := range want {
+		if !slicesContains(problems, expected) {
+			t.Errorf("problems %v, want %q among them", problems, expected)
+		}
+	}
+	for _, problem := range problems {
+		if strings.Contains(problem, "aup687697486") || strings.Contains(problem, "AupMixed") {
+			t.Errorf("an account texture is a problem: %s", problem)
+		}
+	}
+	for _, dependency := range plan.Dependencies {
+		switch dependency.Name {
+		case "aup687697486/red_7a099681":
+			if dependency.Disposition != AccountSource ||
+				!strings.Contains(dependency.Files[0].Reason, "your content folder's own textures/aup687697486/red_7a099681.wal") {
+				t.Errorf("%s: %s, %q", dependency.Name, dependency.Disposition, dependency.Files[0].Reason)
+			}
+		case "e1u1/floor1_1":
+			if dependency.Disposition != BaseGame {
+				t.Errorf("the base game's texture became %s", dependency.Disposition)
+			}
+		}
+	}
+}
+
+// A file that changed after the build verified it is not packaged.
+func TestAnAccountTextureThatChangedSinceTheBuildIsNotPackaged(t *testing.T) {
+	w, _ := accountWorld(t)
+	tampered := filepath.Join(w.buildDir, "q2textures", "overlay", "textures", "aup687697486", "red_7a099681.wal")
+	if err := os.WriteFile(tampered, []byte("changed"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := Prepare(Request{Manifest: w.manifest, Grants: []Grant{{Basis: BasisOwnWork, Loose: true}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slicesContains(memberPaths(plan), "textures/aup687697486/red_7a099681.wal") {
+		t.Error("a changed account texture was packaged")
+	}
+	held := plan.Blocked(true)
+	if held == nil || !strings.Contains(held.Error(), "is not the file AUB's texture export carried") {
+		t.Errorf("held = %v", held)
+	}
+}
+
+func slicesContains(list []string, value string) bool {
+	for _, item := range list {
+		if item == value {
+			return true
+		}
+	}
+	return false
 }

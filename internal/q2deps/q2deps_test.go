@@ -195,3 +195,62 @@ func resolveTheWayTheEngineSearches(t *testing.T, simulate bool) {
 		t.Logf("the fixture as this host enumerates it:\n%s", listing(t, root))
 	}
 }
+
+// Q2_015A: the account textures a map binds — the build's verified copy of the
+// export — are searched first. They win the content folder's and the base
+// game's files of the same path, which are recorded rather than dropped; an
+// exact mixed-case spelling AUB admits is found as spelled; and a path the
+// account does not hold is resolved as before.
+func TestTheAccountTexturesAMapBindsAreFoundFirst(t *testing.T) {
+	root := t.TempDir()
+	account := mustWrite(t, filepath.Join(root, "overlay"), map[string][]byte{
+		"textures/aup687697486/red_7a099681.wal": {1},
+		"textures/AupMixed/Blue_Case.wal":        {2},
+	})
+	content := mustWrite(t, filepath.Join(root, "content"), map[string][]byte{
+		"textures/aup687697486/red_7a099681.wal": {3},
+		"textures/mine/own.wal":                  {4},
+	})
+	base := mustWrite(t, filepath.Join(root, "base"), map[string][]byte{
+		"pak0.pak": q2fixture.PAK([]string{"textures/aup687697486/red_7a099681.wal", "textures/e1u1/metal1_1.wal"},
+			map[string][]byte{"textures/aup687697486/red_7a099681.wal": {5}, "textures/e1u1/metal1_1.wal": {6}}),
+	})
+	layers := Layers{}
+	for _, side := range []struct {
+		dir   string
+		index **Index
+	}{{account, &layers.Account}, {content, &layers.Content}, {base, &layers.Base}} {
+		index, err := IndexDir(side.dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		*side.index = index
+	}
+	texture := func(name string) Reference {
+		return Reference{Kind: KindTexture, Name: name, Paths: []string{"textures/" + name + ".wal"}}
+	}
+	report := ResolveLayers(&Map{References: []Reference{texture("aup687697486/red_7a099681"),
+		texture("AupMixed/Blue_Case"), texture("mine/own"), texture("e1u1/metal1_1"), texture("e1u1/absent")}}, layers)
+	got := map[string]Resolved{}
+	for _, file := range report.Files {
+		got[file.Name] = file
+	}
+	red := got["aup687697486/red_7a099681"]
+	if red.Where != FromAccount || contentOf(t, layers.Account, red.Location) != "\x01" || !red.Shadows ||
+		red.ShadowedContent == nil || contentOf(t, layers.Content, *red.ShadowedContent) != "\x03" {
+		t.Errorf("red: %+v", red)
+	}
+	if blue := got["AupMixed/Blue_Case"]; blue.Where != FromAccount || blue.Location.Path != "textures/AupMixed/Blue_Case.wal" {
+		t.Errorf("blue: %+v", blue)
+	}
+	for name, where := range map[string]Where{"mine/own": FromContent, "e1u1/metal1_1": FromBase, "e1u1/absent": Missing} {
+		if got[name].Where != where {
+			t.Errorf("%s: %s, want %s", name, got[name].Where, where)
+		}
+	}
+	// Without the account layer, the same map resolves as it always did.
+	plain := Resolve(&Map{References: []Reference{texture("aup687697486/red_7a099681")}}, layers.Content, layers.Base)
+	if plain.Files[0].Where != FromContent {
+		t.Errorf("no account layer: %+v", plain.Files[0])
+	}
+}

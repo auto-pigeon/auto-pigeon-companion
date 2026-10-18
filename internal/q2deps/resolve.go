@@ -18,7 +18,23 @@ const (
 	FromBase Where = "base"
 	// Missing: neither has it.
 	Missing Where = "missing"
+	// FromAccount: an account texture source the map binds, at the revision
+	// it binds — a file AUB's texture export carried and this machine
+	// verified (Q2_015A). Packaged on AUB's provenance, with no grant asked.
+	FromAccount Where = "account"
 )
+
+// Layers are the folders a reference is looked up in, in the order an engine
+// finds it once the package is installed: the package's own files — the
+// account's textures, then the content the package carries — and then the
+// base game.
+type Layers struct {
+	// Account is the build's verified copy of the account textures, laid out
+	// as `textures/<namespace>/<file>.wal`. Nil when the map binds none.
+	Account *Index
+	Content *Index
+	Base    *Index
+}
 
 // Resolved is a reference and where it was found.
 type Resolved struct {
@@ -30,6 +46,10 @@ type Resolved struct {
 	// Shadows is set when a content file has the same path as a base-game
 	// file: the package's copy is the one the engine loads.
 	Shadows bool `json:"shadows,omitempty"`
+	// ShadowedContent is the content folder's own file at the same path as an
+	// account texture that won: the account's revision is what the map was
+	// saved against, so it is the one packaged, and this one is named.
+	ShadowedContent *Location `json:"shadowed_content,omitempty"`
 	// Also are the content folder's other spellings of a reference whose
 	// file depends on the renderer: a sky face is asked for as `.pcx` by a
 	// paletted renderer and as `.tga` by every other (Yamagi's
@@ -53,7 +73,18 @@ type Report struct {
 // game. A `.md2` the content holds is read for the skins it names, which are
 // resolved the same way.
 func Resolve(m *Map, content, base *Index) *Report {
+	return ResolveLayers(m, Layers{Content: content, Base: base})
+}
+
+// ResolveLayers is [Resolve] with the account's textures searched first: a
+// path an account texture source the map binds supplies is that source's file,
+// whatever the content folder or the base game also holds under it.
+func ResolveLayers(m *Map, layers Layers) *Report {
+	content, base := layers.Content, layers.Base
 	report := &Report{Map: m, Limits: append([]string(nil), m.Limits...)}
+	if layers.Account != nil {
+		report.Limits = append(report.Limits, layers.Account.Limits...)
+	}
 	if content != nil {
 		report.Limits = append(report.Limits, content.Limits...)
 	}
@@ -70,7 +101,7 @@ func Resolve(m *Map, content, base *Index) *Report {
 			continue
 		}
 		seen[key] = true
-		resolved := resolveOne(reference, content, base)
+		resolved := resolveOne(reference, layers)
 		if resolved.Where == FromContent && strings.EqualFold(pathExt(resolved.Path), ".md2") {
 			skins, err := MD2Skins(resolved.Location.File)
 			if err != nil {
@@ -86,8 +117,22 @@ func Resolve(m *Map, content, base *Index) *Report {
 	return report
 }
 
-func resolveOne(reference Reference, content, base *Index) Resolved {
+func resolveOne(reference Reference, layers Layers) Resolved {
+	account, content, base := layers.Account, layers.Content, layers.Base
 	for i, path := range reference.Paths {
+		if location, ok := account.FindLoose(path); ok {
+			_, inBase := base.Find(path)
+			resolved := Resolved{Reference: reference, Where: FromAccount, Path: path, Location: location, Shadows: inBase}
+			if hidden, found := content.FindLoose(path); found {
+				resolved.ShadowedContent = &hidden
+			}
+			for _, other := range reference.Paths[i+1:] {
+				if also, found := account.FindLoose(other); found {
+					resolved.Also = append(resolved.Also, also)
+				}
+			}
+			return resolved
+		}
 		if location, ok := content.FindLoose(path); ok {
 			_, inBase := base.Find(path)
 			resolved := Resolved{Reference: reference, Where: FromContent, Path: path, Location: location, Shadows: inBase}

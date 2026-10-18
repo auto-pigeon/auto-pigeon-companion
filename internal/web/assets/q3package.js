@@ -42,6 +42,7 @@
   const DISPOSITION = {
     build_output: "this build's map",
     user_authored: "packaged — your own work",
+    account_source: "packaged — your account's texture source, at the revision the map binds",
     licensed: "packaged — licensed",
     base_game: "the base game supplies it; never packaged",
     third_party_unresolved: "NOT packaged — no grant",
@@ -52,7 +53,7 @@
 
   function dispositionBadge(disposition) {
     const kind = { missing: "failed", blocked: "failed", third_party_unresolved: "warning",
-      user_authored: "ok", licensed: "ok", build_output: "ok" }[disposition] || "skipped";
+      user_authored: "ok", licensed: "ok", build_output: "ok", account_source: "ok" }[disposition] || "skipped";
     return badge(t(DISPOSITION[disposition] || disposition), kind);
   }
 
