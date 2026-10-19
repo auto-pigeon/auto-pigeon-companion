@@ -1,0 +1,78 @@
+---- qbsp / ericw-tools 2.0.0-alpha11-38-gd4717d68+auto-pigeon.1.4524 ----
+low priority not compiled into this version
+logging to /q2010/jobs/b_gap-verbose/level.log (truncate)
+
+--- Options Summary ---
+    "verbose" was set to "1" (from command line)
+    "nocolor" was set to "1" (from command line)
+    "gamedir" was set to "/q2010/content" (from command line)
+    "basedir" was set to "/q2010/game/baseq2" (from command line)
+    "q2bsp" was set to "1" (from command line)
+    "chop" was set to "1" (from game target)
+    "leaktest" was set to "1" (from command line)
+    "maxedges" was set to "0" (from game target)
+
+Input file: /q2010/jobs/b_gap-verbose/b_gap.map
+Output file: /q2010/jobs/b_gap-verbose/level.bsp
+
+using gamedir: '/q2010/content'
+Added directory '/q2010/game/baseq2'
+Added pak '/q2010/game/baseq2/pak0.pak' with 3307 files
+Added pak '/q2010/game/baseq2/pak1.pak' with 279 files
+Added pak '/q2010/game/baseq2/pak2.pak' with 2 files
+using basedir: '/q2010/game/baseq2'
+Added directory '/q2010/content'
+Loaded 'pics/colormap.pcx' from archive '/q2010/game/baseq2/pak0.pak'
+WARNING: Couldn't locate texture for skip
+---- LoadMapFile ----
+Loaded 'b_gap.map' from archive ''
+Loaded 'textures/q2010/wall.wal' from archive '/q2010/content'
+     3 entities
+     2 unique textures
+     4 texinfos
+    28 unique planes
+
+---- ProcessMapBrushes ----
+INFO: world extents calculated to 568 units
+[  0%]  ...[ 33%]  est: 00:00:00[ 66%]  est: 00:00:00[100%] time elapsed: 00:00:00.000087
+     7 brushes
+    42 sides
+
+Processing map...
+---- Brush_LoadEntity ----
+[  0%]  ...[ 14%]  est: 00:00:00[ 28%]  est: 00:00:00[ 42%]  est: 00:00:00[ 57%]  est: 00:00:00[ 71%]  est: 00:00:00[ 85%]  est: 00:00:00[100%] time elapsed: 00:00:00.000078
+---- CountBrushes ----
+    7 SOLID brushes
+    7 brushes total
+    42 visible sides
+INFO: calculating BSP for 7 brushes with 42 sides
+---- ChopBrushes ----
+[  0%]  ...[ 14%]  est: 00:00:00[ 28%]  est: 00:00:00[ 42%]  est: 00:00:00[ 57%]  est: 00:00:00[ 71%]  est: 00:00:00[ 85%]  est: 00:00:00[100%] time elapsed: 00:00:00.000034
+chopped 7 brushes into 7
+---- BrushBSP ----
+     7 brushes
+    42 visible faces
+[.   ][done] time elapsed: 00:00:00.000755
+    26 nodes
+    26 expensive split nodes
+    27 leaves
+---- CountLeafs ----
+     7 SOLID leafs
+    20 EMPTY leafs
+    27 leafs total
+    8 max tree height
+    6 avg tree height
+---- MakeTreePortals ----
+[  0%]  ...[  1%]  est: 00:00:00[  3%]  est: 00:00:00[  7%]  est: 00:00:00[  9%]  est: 00:00:00[ 13%]  est: 00:00:00[ 18%]  est: 00:00:00[ 22%]  est: 00:00:00[ 35%]  est: 00:00:00[ 47%]  est: 00:00:00[ 52%]  est: 00:00:00[ 67%]  est: 00:00:00[ 75%]  est: 00:00:00[ 92%]  est: 00:00:00[ 96%]  est: 00:00:00[100%] time elapsed: 00:00:00.000504
+---- CalcTreeBounds ----
+[.   ][done] time elapsed: 00:00:00.000055
+    124 tree portals
+---- FillOutside ----
+[.   ]WARNING: Reached occupant "light" at (0 0 192), no filling performed.
+Leak file written to level.pts
+---- WriteDebugPortals ----
+            5 portals written to level.leak.prt
+[done] time elapsed: 00:00:00.000371
+************ ERROR ************
+FillOutside: Aborting because -leaktest was used.
+

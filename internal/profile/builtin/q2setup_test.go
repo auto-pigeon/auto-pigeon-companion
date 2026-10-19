@@ -183,3 +183,51 @@ func TestQuake2PathsWithSpacesStayOneArgumentOnAWindowsShapedBinding(t *testing.
 		t.Errorf("argv = %q, want the map then the BSP last", args)
 	}
 }
+
+// `Q2_021`: the fork's light passes `-lmextents <value>` only when a stage sets
+// it, right before the BSP, so a pipeline written for 1.4518 renders the same
+// argv as before and a Yamagi pipeline gets the engine's float32 arithmetic. A
+// value the option does not list is refused rather than handed to light.
+func TestTheForkLightPassesLmextentsOnlyWhenAStageSetsIt(t *testing.T) {
+	_, baseq2 := q2BaseFolder(t)
+	entry, err := Find(EricwAutoPigeonQ2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	linux := profile.Platform{OS: "linux", Arch: "amd64"}
+	unset, err := profile.Resolve(entry.Profile, "light", q2Request(t, baseq2, linux, "light"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slices.Contains(unset.Command.Args, "-lmextents") {
+		t.Errorf("light without the option: argv = %q, want no -lmextents", unset.Command.Args)
+	}
+	request := q2Request(t, baseq2, linux, "light")
+	request.Options = map[string]string{"lmextents": "float32"}
+	set, err := profile.Resolve(entry.Profile, "light", request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := set.Command.Args
+	at := slices.Index(args, "-lmextents")
+	if at < 0 || args[at+1] != "float32" || at+2 != slices.Index(args, request.Inputs["bsp"]) {
+		t.Errorf("light with lmextents=float32: argv = %q, want -lmextents float32 just before the BSP", args)
+	}
+	if len(args) != len(unset.Command.Args)+2 {
+		t.Errorf("light with lmextents=float32 changed more than the option: %q against %q", args, unset.Command.Args)
+	}
+	request = q2Request(t, baseq2, linux, "light")
+	request.Options = map[string]string{"lmextents": "double"}
+	if _, err := profile.Resolve(entry.Profile, "light", request); err == nil {
+		t.Error("light with lmextents=double was accepted")
+	}
+	upstream, err := Find(EricwQ2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request = q2Request(t, baseq2, linux, "light")
+	request.Options = map[string]string{"lmextents": "float32"}
+	if _, err := profile.Resolve(upstream.Profile, "light", request); err == nil {
+		t.Error("the upstream alpha7 profile accepted lmextents, which its light does not know")
+	}
+}

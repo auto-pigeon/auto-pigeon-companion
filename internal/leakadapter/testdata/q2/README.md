@@ -32,3 +32,12 @@ left and every point file is 1.4518's; `TestTheCandidateQbspIsReadAsTheMeasuredR
 1.4518 row is read. `pts-1.4522/i_stale_pts.pts` is the planted file, as in `pts/`. The runner is
 `LLM/runs/auto-pigeon/Q2_005B/scripts/run_aucom_controls.sh`.
 
+## The release 1.4524 (`Q2_021`)
+
+`logs-1.4524/` and `pts-1.4524/` are the same controls run by release 1.4524
+(`2.0.0-alpha11-38-gd4717d68+auto-pigeon.1.4524`, tag `auto-pigeon-ericw-v1.4524`, the published
+`auto-pigeon-ericw-tools-1.4524-linux-amd64.zip`, SHA-256 `eb87b62f…` checked against the release's `SHA256SUMS`) with
+the same command, game view and job layout. Every exit, file left and point file is 1.4522's; the logs differ from
+1.4522's only in the banner and in timings. `TestTheReleasedQbspIsReadAsTheMeasuredRelease` reads each row as the 1.4518
+row is read. `pts-1.4524/i_stale_pts.pts` is the planted file. The runner is
+`LLM/runs/auto-pigeon/Q2_021/aucom-controls/scripts/run_aucom_controls_1.4524.sh`.

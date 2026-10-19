@@ -1,0 +1,48 @@
+---- qbsp / ericw-tools 2.0.0-alpha11-38-gd4717d68+auto-pigeon.1.4524 ----
+low priority not compiled into this version
+
+--- Options Summary ---
+    "nopercent" was set to "1" (from command line)
+    "nostat" was set to "1" (from command line)
+    "noprogress" was set to "1" (from command line)
+    "nocolor" was set to "1" (from command line)
+    "gamedir" was set to "/q2010/content" (from command line)
+    "basedir" was set to "/q2010/game/baseq2" (from command line)
+    "q2bsp" was set to "1" (from command line)
+    "chop" was set to "1" (from game target)
+    "leaktest" was set to "1" (from command line)
+    "maxedges" was set to "0" (from game target)
+
+Input file: /q2010/jobs/d_no_occupant-quiet/d_no_occupant.map
+Output file: /q2010/jobs/d_no_occupant-quiet/level.bsp
+
+using gamedir: '/q2010/content'
+using basedir: '/q2010/game/baseq2'
+WARNING: Couldn't locate texture for skip
+INFO: world extents calculated to 568 units
+Processing map...
+WARNING: No entities in empty space -- no filling performed (hull 0)
+Writing level.bsp as Quake II BSP IBSP:38
+Wrote level.bsp
+
+count   lump name    byte size 
+      1 models               48
+     20 planes              400
+    148 vertexes           1776
+     24 nodes               672
+      3 texinfos            228
+    120 faces              2400
+     26 leafs               728
+    120 leaffaces           240
+      6 leafbrushes          12
+    265 edges              1060
+    528 surfedges          2112
+      6 brushes              72
+     36 brushsides          144
+      1 areas                 8
+      1 areaportals           8
+        lightdata             0
+        visdata               0
+        entdata              57
+
+0.006s seconds elapsed

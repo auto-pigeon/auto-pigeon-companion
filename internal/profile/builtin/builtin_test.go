@@ -196,6 +196,10 @@ func TestNoTwoBuiltinToolsProvideTheSameCapability(t *testing.T) {
 // actions and options, the same game. What differs is where it comes from and
 // where its programs sit in the folder — and those are stated, not left to be
 // the default's by inheritance.
+//
+// One exception, listed by name in forkOnlyOptions: an option of the fork's own
+// that its default's release does not have. It is advanced and has no default,
+// so a stage that does not set it renders exactly the default's argv.
 func TestTheAutoPigeonBuildsAreAlternativesThatPointAtTheirGitHubReleases(t *testing.T) {
 	const releases = "https://github.com/auto-pigeon/ericw-tools/releases"
 	for _, id := range []string{EricwAutoPigeonQ1, EricwAutoPigeonQ2} {
@@ -218,8 +222,22 @@ func TestTheAutoPigeonBuildsAreAlternativesThatPointAtTheirGitHubReleases(t *tes
 		}
 		for index, action := range fork.Actions {
 			want := upstream.Actions[index]
+			own := forkOnlyOptions[id+"/"+action.ID]
+			options, args := 0, 0
+			for _, option := range action.Options {
+				if !slices.Contains(own, option.Name) {
+					options++
+				} else if option.Default != "" || !option.Advanced {
+					t.Errorf("%s action %s option %s is the fork's own: it must be advanced and have no default", id, action.ID, option.Name)
+				}
+			}
+			for _, arg := range action.Args {
+				if arg.When == nil || !slices.Contains(own, arg.When.Option) {
+					args++
+				}
+			}
 			if action.ID != want.ID || action.Capability != want.Capability || action.Executable != want.Executable ||
-				len(action.Options) != len(want.Options) || len(action.Args) != len(want.Args) {
+				options != len(want.Options) || args != len(want.Args) {
 				t.Errorf("%s action %s differs from its default's %s", id, action.ID, want.ID)
 			}
 		}
@@ -1129,4 +1147,11 @@ func TestEveryLoadIsTheFullDecodeAndOwnsWhatItReturns(t *testing.T) {
 	if _, err := Find(ids[0]); err != nil {
 		t.Errorf("Find(%q) after a caller edited its copy: %v", ids[0], err)
 	}
+}
+
+// forkOnlyOptions are the options an Auto-Pigeon build has and its family
+// default's release does not, by "<tool id>/<action id>". `Q2_021`: release
+// 1.4522 added `light -lmextents`, which upstream 2.0.0-alpha7 does not know.
+var forkOnlyOptions = map[string][]string{
+	EricwAutoPigeonQ2 + "/light": {"lmextents"},
 }

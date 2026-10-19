@@ -1,0 +1,161 @@
+---- qbsp / ericw-tools 2.0.0-alpha11-38-gd4717d68+auto-pigeon.1.4524 ----
+low priority not compiled into this version
+logging to /q2010/jobs/a_sealed-verbose/level.log (truncate)
+
+--- Options Summary ---
+    "verbose" was set to "1" (from command line)
+    "nocolor" was set to "1" (from command line)
+    "gamedir" was set to "/q2010/content" (from command line)
+    "basedir" was set to "/q2010/game/baseq2" (from command line)
+    "q2bsp" was set to "1" (from command line)
+    "chop" was set to "1" (from game target)
+    "leaktest" was set to "1" (from command line)
+    "maxedges" was set to "0" (from game target)
+
+Input file: /q2010/jobs/a_sealed-verbose/a_sealed.map
+Output file: /q2010/jobs/a_sealed-verbose/level.bsp
+
+using gamedir: '/q2010/content'
+Added directory '/q2010/game/baseq2'
+Added pak '/q2010/game/baseq2/pak0.pak' with 3307 files
+Added pak '/q2010/game/baseq2/pak1.pak' with 279 files
+Added pak '/q2010/game/baseq2/pak2.pak' with 2 files
+using basedir: '/q2010/game/baseq2'
+Added directory '/q2010/content'
+Loaded 'pics/colormap.pcx' from archive '/q2010/game/baseq2/pak0.pak'
+WARNING: Couldn't locate texture for skip
+---- LoadMapFile ----
+Loaded 'a_sealed.map' from archive ''
+Loaded 'textures/q2010/wall.wal' from archive '/q2010/content'
+     3 entities
+     2 unique textures
+     4 texinfos
+    24 unique planes
+
+---- ProcessMapBrushes ----
+INFO: world extents calculated to 568 units
+[  0%]  ...[ 33%]  est: 00:00:00[ 66%]  est: 00:00:00[100%] time elapsed: 00:00:00.000080
+     6 brushes
+    36 sides
+
+Processing map...
+---- Brush_LoadEntity ----
+[  0%]  ...[ 16%]  est: 00:00:00[ 33%]  est: 00:00:00[ 50%]  est: 00:00:00[ 66%]  est: 00:00:00[ 83%]  est: 00:00:00[100%] time elapsed: 00:00:00.000069
+---- CountBrushes ----
+    6 SOLID brushes
+    6 brushes total
+    36 visible sides
+INFO: calculating BSP for 6 brushes with 36 sides
+---- ChopBrushes ----
+[  0%]  ...[ 16%]  est: 00:00:00[ 33%]  est: 00:00:00[ 50%]  est: 00:00:00[ 66%]  est: 00:00:00[ 83%]  est: 00:00:00[100%] time elapsed: 00:00:00.000017
+chopped 6 brushes into 6
+---- BrushBSP ----
+     6 brushes
+    36 visible faces
+[.   ][done] time elapsed: 00:00:00.000810
+    24 nodes
+    24 expensive split nodes
+    25 leaves
+---- CountLeafs ----
+     6 SOLID leafs
+    19 EMPTY leafs
+    25 leafs total
+    8 max tree height
+    6 avg tree height
+---- MakeTreePortals ----
+[  0%]  ...[  2%]  est: 00:00:00[  6%]  est: 00:00:00[ 10%]  est: 00:00:00[ 14%]  est: 00:00:00[ 18%]  est: 00:00:00[ 34%]  est: 00:00:00[ 46%]  est: 00:00:00[ 59%]  est: 00:00:00[ 65%]  est: 00:00:00[ 79%]  est: 00:00:00[ 87%]  est: 00:00:00[ 91%]  est: 00:00:00[ 95%]  est: 00:00:00[100%] time elapsed: 00:00:00.000483
+---- CalcTreeBounds ----
+[.   ][done] time elapsed: 00:00:00.000029
+    114 tree portals
+---- FillOutside ----
+[.   ]    18 outside leaves
+[done] time elapsed: 00:00:00.000025
+---- FillDetail ----
+    0 detail filled leafs
+---- BrushBSP ----
+     6 brushes
+     6 visible faces
+    30 non-visible faces
+[.   ][done] time elapsed: 00:00:00.000306
+    24 nodes
+    18 non-visible nodes
+    24 expensive split nodes
+    25 leaves
+---- CountLeafs ----
+     6 SOLID leafs
+    19 EMPTY leafs
+    25 leafs total
+    8 max tree height
+    6 avg tree height
+---- MakeTreePortals ----
+[  0%]  ...[  2%]  est: 00:00:00[  6%]  est: 00:00:00[ 18%]  est: 00:00:00[ 22%]  est: 00:00:00[ 32%]  est: 00:00:00[ 42%]  est: 00:00:00[ 61%]  est: 00:00:00[ 83%]  est: 00:00:00[ 91%]  est: 00:00:00[100%] time elapsed: 00:00:00.000363
+---- CalcTreeBounds ----
+[.   ][done] time elapsed: 00:00:00.000040
+    114 tree portals
+---- FillOutside ----
+[.   ]    18 outside leaves
+[done] time elapsed: 00:00:00.000021
+---- FillDetail ----
+    0 detail filled leafs
+---- EmitAreaPortals ----
+    1 areas
+    1 area portals
+---- MakeTreePortals ----
+[  0%]  ...[  2%]  est: 00:00:00[  6%]  est: 00:00:00[ 12%]  est: 00:00:00[ 14%]  est: 00:00:00[ 30%]  est: 00:00:00[ 44%]  est: 00:00:00[ 55%]  est: 00:00:00[ 69%]  est: 00:00:00[ 79%]  est: 00:00:00[ 91%]  est: 00:00:00[100%] time elapsed: 00:00:00.000378
+---- CalcTreeBounds ----
+[.   ][done] time elapsed: 00:00:00.000031
+    114 tree portals
+---- MarkVisibleSides ----
+    12 sides visible
+---- MakeFaces ----
+     6 makefaces
+    36 subdivided
+---- PruneNodes ----
+    18 nodes pruned
+---- WritePortalFile ----
+[.   ][done] time elapsed: 00:00:00.000082
+    1 player-occupiable leaves
+    1 clusters of leaves
+---- CountLeafs ----
+    1 EMPTY leafs
+    6 SOLID leafs
+    7 leafs total
+    7 max tree height
+    4 avg tree height
+---- TJunc ----
+[  0%]  ...[  2%]  est: 00:00:00[  4%]  est: 00:00:00[  7%]  est: 00:00:00[  9%]  est: 00:00:00[ 16%]  est: 00:00:00[ 19%]  est: 00:00:00[ 33%]  est: 00:00:00[ 40%]  est: 00:00:00[ 50%]  est: 00:00:00[ 59%]  est: 00:00:00[ 69%]  est: 00:00:00[ 71%]  est: 00:00:00[ 80%]  est: 00:00:00[ 88%]  est: 00:00:00[ 97%]  est: 00:00:00[100%] time elapsed: 00:00:00.000256
+     16 edges added by tjunctions
+     42 faces optimized through MWT
+    100 triangles computed from MWT
+---- EmitFaces ----
+    92 edges
+    42 faces
+---- ExportBrushList ----
+     6 total brushes
+    36 total brush sides
+     6 total leaf brushes
+---- FinishBSPFile ----
+Writing level.bsp as Quake II BSP IBSP:38
+Wrote level.bsp
+
+count   lump name    byte size 
+      1 models               48
+     17 planes              340
+     52 vertexes            624
+      6 nodes               168
+      3 texinfos            228
+     42 faces               840
+      8 leafs               224
+     42 leaffaces            84
+      6 leafbrushes          12
+     93 edges               372
+    184 surfedges           736
+      6 brushes              72
+     36 brushsides          144
+      2 areas                16
+      1 areaportals           8
+        lightdata             0
+        visdata               0
+        entdata             187
+
+0.007s seconds elapsed
