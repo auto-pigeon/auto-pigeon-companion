@@ -39,7 +39,7 @@
         "arch": "amd64"
       },
       "status": "unverified",
-      "note": "release 1.4533 passed the fork's native acceptance; its Quake II mode has not been run through this profile. Needs glibc 2.34 or newer"
+      "note": "release 1.4533 passed the fork's CI acceptance; on 2026-10-21 its check through this profile on Linux: compatible. No Quake II map built through it yet. Needs glibc 2.34+"
     },
     {
       "platform": {
@@ -502,6 +502,15 @@
           "match": "Leak file written",
           "severity": "info",
           "message": "A point file was written; it is the `pts` artifact of this build."
+        },
+        {
+          "id": "qbism_fallback",
+          "match": "limits exceeded for Quake II BSP - switching to Quake II Qbism BSP",
+          "severity": "error",
+          "fatal": true,
+          "class": "engine_limits",
+          "message": "The map is over Quake II's BSP limits: qbsp wrote Qbism's extended format instead, which Quake II engines such as Yamagi Quake II 8.70 cannot load. The build stops here.",
+          "hint": "Measured with release 1.4533 on a large PIPES pull (NEW_329B): `LIMITS EXCEEDED ON dleaf_t::firstleafbrush`, then this line, then `Writing case.bsp as Quake II Qbism BSP QBSP:38`, exit status 0. Make the map with fewer, larger pieces (a pipe: fewer Sides or arc segments; SCULPT or SURFACE DEFORM: a lower Tessellation or New pieces are detail), or split it into smaller maps. If your engine reads Qbism BSPs, set this stage's BSP format to Qbism extended."
         },
         {
           "id": "leak_portals",

@@ -448,6 +448,21 @@ length:
   --option light.lmextents=float32
 ```
 
+A Quake II build stops when its BSP is one a Quake II engine cannot run: more
+brushes, brush sides, planes, nodes, leaves or texture infos than Yamagi Quake II
+8.70 loads, a visibility lump over 1 MiB, a brush side whose plane index the
+engine reads as a negative number (so the player would walk through or into the
+wrong walls), or a map qbsp could only write in Qbism's extended format. The job
+fails at the stage that wrote the file and says which limit and what to change —
+usually fewer, larger pieces, or a split map. If your engine reads Qbism BSPs,
+choose that format for the compile stage:
+
+```bash
+./companion build run --pipeline local.pipeline.my-q2-normal --input source_map=big.map \
+  --root game_root="$HOME/Quake II/baseq2" --root content_root="$HOME/Quake II/mymod" \
+  --option compile.format=qbism
+```
+
 ```bash
 # What the Companion would run, without running it.
 ./companion build preview --pipeline auto-pigeon.q3.leak-test \

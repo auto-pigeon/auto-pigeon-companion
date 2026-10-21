@@ -73,6 +73,10 @@ var checks = map[string]check{
 	"q3.srf":        {"a Q3Map2 surface file", quake3Surfaces},
 	"q3.lin":        {"a leak line file", leakLine},
 	"q3.map.source": {"a Quake III map source", mapSource},
+	// NEW_329D: Quake II's BSP, read for the limits its engine loads it with
+	"q2.bsp":       {"a Quake II BSP Quake II can load", quake2BSP},
+	"q2.bsp.vised": {"a Quake II BSP Quake II can load", quake2BSP},
+	"q2.bsp.lit":   {"a Quake II BSP Quake II can load", quake2BSP},
 }
 
 // Known is every role this package reads, sorted.

@@ -120,6 +120,10 @@ These are unconditional. Everything else is routed.
   and the suite is not decoration: it parses the threat matrix, pins the two maturity sentences,
   derives the retention bounds and checks the native-support states, so a documentation change that
   contradicts the code fails here rather than in review.
+- **Pushing `main` here is pre-authorized (HITL, 2026-10-21), and only here.** Commit and push this repository
+  whenever your assigned work needs it, without asking; no force-push, no history rewrite, no tag replacement, one
+  batched push, then follow its build and release to the end. The rule and what every push owes:
+  `docs/agent/aucom.release-verification.md` ("Pushing to main is pre-authorized here").
 - **Never edit a sibling repository** unless the active prompt names it as a mutation target. That
   includes `auto-pigeon-launcher/`, which still exists and now carries only a deprecation notice.
   Agents may inspect siblings and run their public CLI/API when a prompt needs it.

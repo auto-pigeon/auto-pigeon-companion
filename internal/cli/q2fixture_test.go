@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/q2fixture"
 )
 
 // mustExecutable is this test binary, which is what every fixture in this
@@ -231,7 +233,11 @@ func fixtureQBSP(args []string) int {
 	if parsed.format == "qbism" {
 		ident = "QBSP"
 	}
-	if err := os.WriteFile(destination, []byte(ident+":38 compiled from "+filepath.Base(source)+"\n"), 0o600); err != nil {
+	// NEW_329D: a BSP the job reads (`artifactcheck` q2.bsp) — a valid
+	// container whose entity lump names the source, not a text placeholder
+	compiled := q2fixture.BSP("{\n\"classname\" \"worldspawn\"\n\"_compiled_from\" \"" + filepath.Base(source) + "\"\n}\n")
+	copy(compiled, ident)
+	if err := os.WriteFile(destination, compiled, 0o600); err != nil {
 		return 1
 	}
 	if err := os.WriteFile(stem+".prt", []byte("PRT1\n2\n0\n"), 0o600); err != nil {

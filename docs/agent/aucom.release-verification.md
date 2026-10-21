@@ -18,6 +18,8 @@ topics:
   - verification
   - bundle
   - acceptance
+  - push
+  - authorization
 paths:
   - internal/release/**
   - internal/nativeacceptance/**
@@ -178,6 +180,36 @@ gives one set of bytes. `reconcile` fails on any attached asset whose digest
 differs, is missing, or was not produced by the build.
 
 
+
+## Pushing to main is pre-authorized here (HITL, 2026-10-21)
+
+**This module is the one authoritative home of this rule;** `AGENTS.md` §2 and AUT's shared no-push policy
+(`auto-pigeon-tools/AGENTS.md` §2, `docs/agent/aut.branch-policy.md`, the branch rule `run-agent.sh` dispatches) only
+point here.
+
+Andrea (HITL) authorized, on 2026-10-21, as a **standing exception for this repository only**: an agent may commit
+to and push `main` of `auto-pigeon/auto-pigeon-companion` whenever its assigned work needs it — now and in later
+tasks — without asking again. That includes the prerelease the push publishes through `release.yml` (above) and
+the follow-up pushes needed to repair a CI or release failure the task caused. Every other repository keeps its own
+policy: there, no push happens unless the prompt asks for one.
+
+What the authorization does not cover, and what every push still owes:
+
+- **Never** force-push, rewrite published history, or move, delete or replace a tag or a release asset. Preserve
+  other people's commits: fetch first, and stop on anything that is not a fast-forward.
+- **Batch.** Every push to `main` is a release (`v1.<count>`), so push one coherent group of task commits, not
+  prose-only checkpoints one at a time.
+- **Check before** — `go build ./...`, `go vet ./...`, `go test ./...` and whatever the change's owner needs.
+- **Follow after** — the exact commit's `build` and `release` runs to terminal results, every job (macOS and
+  Windows included). Repair a failure the task caused on its owning code or test, then follow the next head. Do not
+  weaken the CI policy or drop a platform's tests to get green.
+- **Verify the publication** — the tag, `SHA256SUMS`, `release-manifest.json` (commit and bundled extractor) and the
+  extracted bytes of at least the archive for the host you are on.
+- **Record** the commit, both run ids and the tag in the task's handoff.
+- **CI is not acceptance.** A green release replaces none of the browser, released-binary or engine observations a
+  prompt asks for; a hosted runner's pass is evidence for that run only (above).
+
+The first push under it: `56684ce3` (`NEW_329D`), build run `39623990464`, release run `39623990547`, tag `v1.286`.
 
 ## Contributor commands (moved from README.md, 2026-10-17)
 

@@ -39,7 +39,7 @@
         "arch": "amd64"
       },
       "status": "supported",
-      "note": "release 1.4533 passed the fork's native acceptance; on 2026-10-12 it built two controls through this profile (a fin and a plate 0.012 units thick: qbsp, full VIS, LIGHT). Needs glibc 2.34 or newer"
+      "note": "release 1.4533 passed the fork's CI acceptance; on 2026-10-21 its check through this profile on Linux: compatible (the 2026-10-12 builds here were 1.4513 and 1.4518). Needs glibc 2.34+"
     },
     {
       "platform": {

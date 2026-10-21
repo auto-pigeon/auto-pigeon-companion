@@ -124,8 +124,76 @@ func TestAQuotedExcerptCarriesNoControlBytes(t *testing.T) {
 }
 
 func TestKnownListsTheRolesThatAreRead(t *testing.T) {
-	want := "q3.bsp q3.bsp.lit q3.bsp.vised q3.lin q3.map.source q3.prt q3.srf"
+	want := "q2.bsp q2.bsp.lit q2.bsp.vised q3.bsp q3.bsp.lit q3.bsp.vised q3.lin q3.map.source q3.prt q3.srf"
 	if got := strings.Join(Known(), " "); got != want {
 		t.Errorf("Known() = %q, want %q", got, want)
+	}
+}
+
+// q2bsp builds the smallest Quake II BSP the reader accepts — an entity lump
+// and the given brush sides (planenum, texinfo pairs) — with `lengths`
+// overriding a lump's length (its bytes are zeros).
+func q2bsp(magic string, planes []uint16, lengths map[int]int) []byte {
+	const header = 8 + 19*8
+	entities := []byte("{\n\"classname\" \"worldspawn\"\n}\n\x00")
+	sides := make([]byte, 4*len(planes))
+	for i, plane := range planes {
+		binary.LittleEndian.PutUint16(sides[i*4:], plane)
+	}
+	out := make([]byte, header)
+	copy(out, magic)
+	binary.LittleEndian.PutUint32(out[4:], 38)
+	body := append(append([]byte{}, entities...), sides...)
+	at := uint32(header + len(body))
+	for lump := 0; lump < 19; lump++ {
+		offset, length := at, uint32(0)
+		switch lump {
+		case 0:
+			offset, length = header, uint32(len(entities))
+		case 15:
+			offset, length = uint32(header+len(entities)), uint32(len(sides))
+		}
+		if n, ok := lengths[lump]; ok {
+			length = uint32(n)
+			offset = at
+			body = append(body, make([]byte, n)...)
+			at += uint32(n)
+		}
+		binary.LittleEndian.PutUint32(out[8+lump*8:], offset)
+		binary.LittleEndian.PutUint32(out[12+lump*8:], length)
+	}
+	return append(out, body...)
+}
+
+// NEW_329D: a Quake II BSP is read for what Yamagi Quake II 8.70 loads, not
+// only for its container — each case is one `Com_Error` (or the one silent
+// misreading) of that engine, measured on Auto-Pigeon's large PIPES pulls.
+func TestAQuakeIIBSPIsReadForWhatItsEngineLoads(t *testing.T) {
+	for _, c := range []struct {
+		name, role string
+		body       []byte
+		reason     string
+	}{
+		{"a compiled Quake II BSP", "q2.bsp", q2bsp("IBSP", []uint16{0, 1, 32767}, nil), ""},
+		{"a Qbism BSP the stage asked for", "q2.bsp.lit", q2bsp("QBSP", []uint16{40000}, nil), ""},
+		{"a brush side past plane 32767", "q2.bsp.vised", q2bsp("IBSP", []uint16{3, 32768, 65535}, nil), "2 brush side(s) naming a plane"},
+		{"8192 brushes, and the box hull needs one more", "q2.bsp", q2bsp("IBSP", nil, map[int]int{14: 8192 * 12}), "8192 brushes (and 1 more"},
+		{"a visibility lump past 1 MiB", "q2.bsp.lit", q2bsp("IBSP", nil, map[int]int{3: 0x100001}), "1048577-byte visibility lump"},
+		{"a Quake III BSP where Quake II's should be", "q2.bsp", q2bsp("IBSP", nil, nil)[:0], "the header alone"},
+		{"a BSP cut off before its last lump", "q2.bsp", func() []byte { b := q2bsp("IBSP", []uint16{1}, nil); return b[:len(b)-2] }(), "truncated"},
+	} {
+		path := filepath.Join(t.TempDir(), "x")
+		if err := os.WriteFile(path, c.body, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		err := Check(c.role, path)
+		switch {
+		case c.reason == "" && err != nil:
+			t.Errorf("%s: %v", c.name, err)
+		case c.reason != "" && (err == nil || !IsInvalid(err) || !strings.Contains(err.Error(), c.reason)):
+			t.Errorf("%s: want %q, got %v", c.name, c.reason, err)
+		case c.reason != "" && strings.Contains(c.reason, "plane") && !strings.Contains(err.Error(), "fewer, larger pieces"):
+			t.Errorf("%s: the failure does not say what to change: %v", c.name, err)
+		}
 	}
 }
