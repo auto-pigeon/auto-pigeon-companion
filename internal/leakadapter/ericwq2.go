@@ -23,7 +23,7 @@ const EricwQ2MeasuredVersion = "2.0.0-alpha11-32-g0c787d7a+auto-pigeon.1.4518"
 const EricwQ2CandidateVersion = "2.0.0-alpha11-36-g0d64c054+auto-pigeon.1.4522"
 
 // EricwQ2ReleaseVersion is the fork's release 1.4524 (`Q2_021`), the one the
-// Auto-Pigeon build profiles are written for: 1.4522's two changes plus two to
+// Auto-Pigeon build profiles were written for until `NEW_329D`: 1.4522's two changes plus two to
 // how qbsp splits a portal. Every control below was run again with the
 // published linux-amd64 archive's qbsp (`testdata/q2/logs-1.4524`,
 // `pts-1.4524`): the same exits, files left and point files as 1.4522 and
@@ -31,8 +31,18 @@ const EricwQ2CandidateVersion = "2.0.0-alpha11-36-g0d64c054+auto-pigeon.1.4522"
 // banner is added.
 const EricwQ2ReleaseVersion = "2.0.0-alpha11-38-gd4717d68+auto-pigeon.1.4524"
 
+// EricwQ2PinnedVersion is the fork's release 1.4533 (`NEW_329D`), the one the
+// Auto-Pigeon build profiles are written for now: 1.4524 plus a drawn face for
+// a dropped tiny portal, one leaf for a collision-hull node inside one solid
+// brush, and a sliver's face drawn by its own brush. Every control below was
+// run again with the published linux-amd64 archive's qbsp
+// (`testdata/q2/logs-1.4533`, `pts-1.4533`): the same exits, files left and
+// point files as 1.4524, the logs equal but for the banner and the timings.
+// Only this exact banner is added.
+const EricwQ2PinnedVersion = "2.0.0-alpha11-47-gcaad08e1+auto-pigeon.1.4533"
+
 // EricwQ2MeasuredVersions are the qbsp builds the reading below was measured on.
-var EricwQ2MeasuredVersions = []string{EricwQ2MeasuredVersion, EricwQ2CandidateVersion, EricwQ2ReleaseVersion}
+var EricwQ2MeasuredVersions = []string{EricwQ2MeasuredVersion, EricwQ2CandidateVersion, EricwQ2ReleaseVersion, EricwQ2PinnedVersion}
 
 // What qbsp 1.4518 prints with `-q2bsp -leaktest`, measured on the authored
 // controls in `testdata/q2/controls` (the logs beside them are those runs,

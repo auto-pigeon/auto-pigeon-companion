@@ -44,6 +44,23 @@ func TestTheReleasedQbspIsReadAsTheMeasuredRelease(t *testing.T) {
 	}
 }
 
+// `NEW_329D`: release 1.4533's own runs of the same controls are read as
+// 1.4518's are, row for row, with 1.4524's point files. A banner one commit
+// away, or the unadopted 1.4532, is still not qualified.
+func TestThePinnedQbspIsReadAsTheMeasuredRelease(t *testing.T) {
+	checkEricwQ2Controls(t, "logs-1.4533", "pts-1.4533", EricwQ2PinnedVersion)
+	q2, _ := ForProfile(ProfileQuake2)
+	if !q2.Qualified(EricwQ2PinnedVersion) || q2.Qualified("2.0.0-alpha11-47-gcaad08e1") ||
+		q2.Qualified("2.0.0-alpha11-46-gb3a4632c+auto-pigeon.1.4532") {
+		t.Fatalf("qualified versions: %v", q2.QualifiedVersions)
+	}
+	for _, name := range []string{"b_gap", "b_gap.quiet", "b_gap.verbose", "c_outside_light", "f_clip_cover", "f_detail_cover", "f_window_cover", "g_degenerate_plane", "i_stale_pts"} {
+		if readQ2(t, "pts-1.4533", name+".pts") != readQ2(t, "pts-1.4524", name+".pts") {
+			t.Errorf("%s: the pinned release's point file is not 1.4524's", name)
+		}
+	}
+}
+
 // `Q2_005B`: the candidate 1.4522's own runs of the same controls are read as
 // 1.4518's are, row for row — the evidence for qualifying its exact banner.
 func TestTheCandidateQbspIsReadAsTheMeasuredRelease(t *testing.T) {

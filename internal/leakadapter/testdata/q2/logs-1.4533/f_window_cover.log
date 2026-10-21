@@ -1,0 +1,71 @@
+---- qbsp / ericw-tools 2.0.0-alpha11-47-gcaad08e1+auto-pigeon.1.4533 ----
+low priority not compiled into this version
+logging to /q2010/jobs/f_window_cover/work/level.log (truncate)
+
+--- Options Summary ---
+    "nocolor" was set to "1" (from command line)
+    "gamedir" was set to "/q2010/content" (from command line)
+    "basedir" was set to "/q2010/game/baseq2" (from command line)
+    "q2bsp" was set to "1" (from command line)
+    "chop" was set to "1" (from game target)
+    "leaktest" was set to "1" (from command line)
+    "maxedges" was set to "0" (from game target)
+
+Input file: /q2010/jobs/f_window_cover/input/f_window_cover.map
+Output file: /q2010/jobs/f_window_cover/work/level.bsp
+
+using gamedir: '/q2010/content'
+using basedir: '/q2010/game/baseq2'
+WARNING: Couldn't locate texture for skip
+---- LoadMapFile ----
+     3 entities
+     3 unique textures
+     7 texinfos
+    28 unique planes
+
+---- ProcessMapBrushes ----
+INFO: world extents calculated to 568 units
+[  0%]  ...[ 33%]  est: 00:00:00[ 66%]  est: 00:00:00[100%] time elapsed: 00:00:00.000047
+     8 brushes
+    48 sides
+
+Processing map...
+---- Brush_LoadEntity ----
+[  0%]  ...[ 12%]  est: 00:00:00[ 25%]  est: 00:00:00[ 37%]  est: 00:00:00[ 50%]  est: 00:00:00[ 62%]  est: 00:00:00[ 75%]  est: 00:00:00[ 87%]  est: 00:00:00[100%] time elapsed: 00:00:00.000042
+---- CountBrushes ----
+    1 WINDOW | TRANSLUCENT | DETAIL brushes
+    7 SOLID brushes
+    8 brushes total
+    48 visible sides
+INFO: calculating BSP for 8 brushes with 48 sides
+---- ChopBrushes ----
+[  0%]  ...[ 12%]  est: 00:00:00[ 25%]  est: 00:00:00[ 37%]  est: 00:00:00[ 50%]  est: 00:00:00[ 62%]  est: 00:00:00[ 75%]  est: 00:00:00[ 87%]  est: 00:00:00[100%] time elapsed: 00:00:00.000011
+chopped 8 brushes into 8
+---- BrushBSP ----
+     8 brushes
+    48 visible faces
+[.   ][done] time elapsed: 00:00:00.000345
+    26 nodes
+    26 expensive split nodes
+    27 leaves
+---- CountLeafs ----
+     1 WINDOW | TRANSLUCENT | DETAIL leafs
+     7 SOLID leafs
+    19 EMPTY leafs
+    27 leafs total
+    8 max tree height
+    6 avg tree height
+---- MakeTreePortals ----
+[  0%]  ...[  1%]  est: 00:00:00[  5%]  est: 00:00:00[ 18%]  est: 00:00:00[ 20%]  est: 00:00:00[ 26%]  est: 00:00:00[ 35%]  est: 00:00:00[ 62%]  est: 00:00:00[ 71%]  est: 00:00:00[ 92%]  est: 00:00:00[100%] time elapsed: 00:00:00.000177
+---- CalcTreeBounds ----
+[.   ][done] time elapsed: 00:00:00.000015
+    124 tree portals
+---- FillOutside ----
+[.   ]WARNING: Reached occupant "light" at (0 0 192), no filling performed.
+Leak file written to /q2010/jobs/f_window_cover/work/level.pts
+---- WriteDebugPortals ----
+            5 portals written to /q2010/jobs/f_window_cover/work/level.leak.prt
+[done] time elapsed: 00:00:00.000193
+************ ERROR ************
+FillOutside: Aborting because -leaktest was used.
+

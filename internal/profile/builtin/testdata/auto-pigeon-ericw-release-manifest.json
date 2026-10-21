@@ -7,16 +7,16 @@
         "verdict": "pass"
       },
       "kind": "toolchain",
-      "name": "auto-pigeon-ericw-tools-1.4524-linux-amd64.zip",
+      "name": "auto-pigeon-ericw-tools-1.4533-linux-amd64.zip",
       "platform": "linux-amd64",
-      "sha256": "eb87b62f7ac32c3c07aec7c1124fd8f27ebf8ff7bca2c5f7b393ae604f37d343",
-      "size": 16906869,
+      "sha256": "32c37b2ff1947c548ffba72d5d59ace3bb06107fed8283d90538c47f602f4ea8",
+      "size": 16917101,
       "tests": {
         "failures": 0,
         "focused": [
           "testmapsQ1.cliphull2ThinFragmentSplit"
         ],
-        "run": 417,
+        "run": 425,
         "skipped_by_the_suite": 16
       }
     },
@@ -27,16 +27,16 @@
         "verdict": "pass"
       },
       "kind": "toolchain",
-      "name": "auto-pigeon-ericw-tools-1.4524-windows-amd64.zip",
+      "name": "auto-pigeon-ericw-tools-1.4533-windows-amd64.zip",
       "platform": "windows-amd64",
-      "sha256": "cca3f83c8983537d1d20a7939253ac0bf7c26fc24b325d0e1fda287b65c6eff3",
-      "size": 15500984,
+      "sha256": "f811a8d1eed29218949ee4eb0c8d08089bf1ea223b3527d081f705c3c31aa542",
+      "size": 15508779,
       "tests": {
         "failures": 0,
         "focused": [
           "testmapsQ1.cliphull2ThinFragmentSplit"
         ],
-        "run": 417,
+        "run": 425,
         "skipped_by_the_suite": 16
       }
     },
@@ -47,16 +47,16 @@
         "verdict": "pass"
       },
       "kind": "toolchain",
-      "name": "auto-pigeon-ericw-tools-1.4524-macos-amd64.zip",
+      "name": "auto-pigeon-ericw-tools-1.4533-macos-amd64.zip",
       "platform": "macos-amd64",
-      "sha256": "0cc13de68503a5eeef0c178c94eb30a596bb345649d0965ac99a4c2f8bdf6741",
-      "size": 15744904,
+      "sha256": "ca803b696306d0fde2a59bf913733a45caa91fb1015f8f07d5f12826555726f7",
+      "size": 15752702,
       "tests": {
         "failures": 0,
         "focused": [
           "testmapsQ1.cliphull2ThinFragmentSplit"
         ],
-        "run": 417,
+        "run": 425,
         "skipped_by_the_suite": 16
       }
     },
@@ -67,57 +67,57 @@
         "verdict": "pass"
       },
       "kind": "toolchain",
-      "name": "auto-pigeon-ericw-tools-1.4524-macos-arm64.zip",
+      "name": "auto-pigeon-ericw-tools-1.4533-macos-arm64.zip",
       "platform": "macos-arm64",
-      "sha256": "e8a149d47149c474d6469c8f2066e29dd53bcb803ec833ad64eecdf13a5074e8",
-      "size": 7408253,
+      "sha256": "c5c177e792efbead421efc03dc339ca196eff8245a1bff96a8414e9c761cb051",
+      "size": 7419970,
       "tests": {
         "failures": 0,
         "focused": [
           "testmapsQ1.cliphull2ThinFragmentSplit"
         ],
-        "run": 417,
+        "run": 425,
         "skipped_by_the_suite": 16
       }
     },
     {
-      "files": 1531,
+      "files": 1538,
       "kind": "source",
-      "name": "auto-pigeon-ericw-tools-1.4524-source.tar.gz",
+      "name": "auto-pigeon-ericw-tools-1.4533-source.tar.gz",
       "rebuilt_and_tested_from_the_archive": true,
-      "sha256": "fde76d637b1be870b56187f3601cd68ea8a5b9fbc859dc2cb0200d6350c29835",
-      "size": 21009600
+      "sha256": "781f338127bc0ebfcd9406ddb0822693496fb2d85ca072478768cffbcee110ff",
+      "size": 21137821
     }
   ],
-  "built_by": "https://github.com/auto-pigeon/ericw-tools/actions/runs/39137868586",
-  "commit": "d4717d68faf334c82a16b0cbd3b24ed4214054ca",
+  "built_by": "https://github.com/auto-pigeon/ericw-tools/actions/runs/39499069263",
+  "commit": "caad08e135aeb670f3c88ab9c6a2af79e95e540c",
   "fork": "https://github.com/auto-pigeon/ericw-tools",
   "prerelease": true,
   "schema": "auto-pigeon-ericw-release-manifest/1",
   "signed": false,
-  "tag": "auto-pigeon-ericw-v1.4524",
+  "tag": "auto-pigeon-ericw-v1.4533",
   "targets": {
     "linux-amd64": {
-      "asset": "auto-pigeon-ericw-tools-1.4524-linux-amd64.zip",
+      "asset": "auto-pigeon-ericw-tools-1.4533-linux-amd64.zip",
       "status": "published"
     },
     "macos-amd64": {
-      "asset": "auto-pigeon-ericw-tools-1.4524-macos-amd64.zip",
+      "asset": "auto-pigeon-ericw-tools-1.4533-macos-amd64.zip",
       "status": "published"
     },
     "macos-arm64": {
-      "asset": "auto-pigeon-ericw-tools-1.4524-macos-arm64.zip",
+      "asset": "auto-pigeon-ericw-tools-1.4533-macos-arm64.zip",
       "status": "published"
     },
     "windows-amd64": {
-      "asset": "auto-pigeon-ericw-tools-1.4524-windows-amd64.zip",
+      "asset": "auto-pigeon-ericw-tools-1.4533-windows-amd64.zip",
       "status": "published"
     }
   },
   "upstream": {
-    "describe": "2.0.0-alpha11-38-gd4717d68",
+    "describe": "2.0.0-alpha11-47-gcaad08e1",
     "repository": "https://github.com/ericwa/ericw-tools"
   },
-  "version": "1.4524",
-  "version_banner": "2.0.0-alpha11-38-gd4717d68+auto-pigeon.1.4524"
+  "version": "1.4533",
+  "version_banner": "2.0.0-alpha11-47-gcaad08e1+auto-pigeon.1.4533"
 }

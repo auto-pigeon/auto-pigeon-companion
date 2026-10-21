@@ -169,7 +169,7 @@ Auto-Pigeon build (Quake 1)** and **(Quake II, experimental)**: Auto-Pigeon's ow
 fork of ericw-tools, published at
 <https://github.com/auto-pigeon/ericw-tools/releases> (the profile's
 **Homepage** button). It is upstream's 2.0.0-alpha11 plus changes to qbsp that
-upstream has not reviewed. The profiles are written for **release 1.4524**; the
+upstream has not reviewed. The profiles are written for **release 1.4533**; the
 profile's description lists what it was measured not to do. Fetch the archive for
 your platform, check it against the `SHA256SUMS` beside it, unpack it into a
 folder of its own, and choose the unpacked folder — the one that **contains**
@@ -177,7 +177,7 @@ folder of its own, and choose the unpacked folder — the one that **contains**
 
 ```console
 $ companion acquire resolve internal/profile/builtin/ericw-tools-auto-pigeon-q1.tool.json \
-    --mode user_path --user-path ~/tools/auto-pigeon-ericw-tools-1.4524-linux-amd64 --bind
+    --mode user_path --user-path ~/tools/auto-pigeon-ericw-tools-1.4533-linux-amd64 --bind
 $ companion toolchain grant auto-pigeon.ericw-tools.auto-pigeon-build.q1      # read it, then approve
 $ companion toolchain check auto-pigeon.ericw-tools.auto-pigeon-build.q1      # asks qbsp, vis and light what they are
 $ companion job run --profile auto-pigeon.ericw-tools.auto-pigeon-build.q1 --action compile \
@@ -435,7 +435,7 @@ curl -s -H "X-AUCOM-Token: $(cat "$CONFIG_DIR/api-token")" -H 'Content-Type: app
 | Quake III | `auto-pigeon.q3.leak-test` | Q3Map2 `-bsp -leaktest` only | `.lin` |
 | anything else | none | nothing: the notice says the game has no leak test here | — |
 
-For Quake II, only releases 1.4518, 1.4522 and 1.4524 of the Auto-Pigeon build of
+For Quake II, only releases 1.4518, 1.4522, 1.4524 and 1.4533 of the Auto-Pigeon build of
 ericw-tools have been measured: make your own copy of the pipeline whose stage
 names it (**Profiles**) and pin it for Quake II. For Yamagi Quake II 8.70 on a
 64-bit computer, set the light stage's **Lightmap size arithmetic** to `float32`
