@@ -305,3 +305,33 @@ func (r fixedResolver) Provider(capability string) (*ToolProfile, Action, bool) 
 	}
 	return nil, Action{}, false
 }
+
+// NEW_329D: a user's own tokens never land between a flag and its path, however
+// many operands follow it. EricW's vis and light end `-logfile {output.log}
+// {input.bsp}`; a vis stage argument `-nostate` was put between `-logfile` and
+// its path, became the log file's name, and the build failed at vis.
+func TestOwnArgumentsNeverSplitAFlagFromItsPath(t *testing.T) {
+	index := func(args ...string) int {
+		positional := make([]string, len(args))
+		for i, arg := range args {
+			positional[i] = fileKind(arg)
+		}
+		return customArgsIndex(args, positional)
+	}
+	for _, c := range []struct {
+		name string
+		args []string
+		want int
+	}{
+		{"vis: -logfile, its path, then the BSP", []string{"-threads", "4", "-level", "4", "-logfile", "{output.log}", "{input.bsp}"}, 4},
+		{"one flag and its one path", []string{"-fast", "-o", "{output.bsp}"}, 1},
+		{"qbsp: a valued flag, then source and destination", []string{"-leaktest", "-wadpath", "{root.content_root}", "{input.source_map}", "{output.bsp}"}, 3},
+		{"a flag that takes no value, then the operands", []string{"-leaktest", "{input.source_map}", "{output.bsp}"}, 1},
+		{"an engine's +commands", []string{"-basedir", "{root.game_root}", "+map", "{input.map}"}, 2},
+		{"no operands at all", []string{"-a", "-b"}, 2},
+	} {
+		if got := index(c.args...); got != c.want {
+			t.Errorf("%s: tokens go at %d, want %d (%q)", c.name, got, c.want, c.args)
+		}
+	}
+}

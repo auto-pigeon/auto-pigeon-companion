@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -495,7 +496,7 @@ func executablesOf(p Profile) []Executable {
 
 func resolveArgs(action Action, env Env, options map[string]string, inputs map[string]string) ([]string, int, error) {
 	args := make([]string, 0, len(action.Args))
-	positional := make([]bool, 0, len(action.Args))
+	positional := make([]string, 0, len(action.Args))
 	for i, arg := range action.Args {
 		include, err := argIncluded(arg, options, inputs, env.Roots)
 		if err != nil {
@@ -516,7 +517,7 @@ func resolveArgs(action Action, env Env, options map[string]string, inputs map[s
 			return nil, 0, fmt.Errorf("argument %d resolves to a value containing a NUL byte", i)
 		}
 		args = append(args, rendered)
-		positional = append(positional, fileReference(arg.Value))
+		positional = append(positional, fileKind(arg.Value))
 	}
 	return args, customArgsIndex(args, positional), nil
 }
@@ -524,11 +525,23 @@ func resolveArgs(action Action, env Env, options map[string]string, inputs map[s
 // fileReference reports whether a declared argument is exactly one input or
 // output path — the positional operands a compiler reads last.
 func fileReference(value string) bool {
+	return fileKind(value) != ""
+}
+
+// fileKind is "input" or "output" for a declared argument that is exactly one
+// such path, and "" for anything else.
+func fileKind(value string) string {
 	value = strings.TrimSpace(value)
 	if !strings.HasPrefix(value, "{") || !strings.HasSuffix(value, "}") || strings.Count(value, "{") != 1 {
-		return false
+		return ""
 	}
-	return strings.HasPrefix(value, "{input.") || strings.HasPrefix(value, "{output.")
+	switch {
+	case strings.HasPrefix(value, "{input."):
+		return "input"
+	case strings.HasPrefix(value, "{output."):
+		return "output"
+	}
+	return ""
 }
 
 // customArgsIndex is where a user's own argument tokens go in a rendered argv.
@@ -545,15 +558,21 @@ func fileReference(value string) bool {
 // With neither, they go at the end. Computed from the document's own
 // declarations, so it is the same answer for every tool that follows the
 // convention, and a preview shows exactly where they landed.
-func customArgsIndex(args []string, positional []bool) int {
+func customArgsIndex(args []string, positional []string) int {
 	at := len(args)
-	for at > 0 && positional[at-1] {
+	for at > 0 && positional[at-1] != "" {
 		at--
 	}
-	if at < len(args) && at > 0 && strings.HasPrefix(args[at-1], "-") && !positional[at-1] {
+	if at < len(args) && at > 0 && strings.HasPrefix(args[at-1], "-") && positional[at-1] == "" {
 		// `-o <path>`: the path is the flag's value, not an operand of its
-		// own, and a token placed between them would become the value.
-		if at == len(args)-1 {
+		// own, and a token placed between them would become the value — when
+		// it is the only path left, or (NEW_329D) when it is an output the
+		// run's inputs follow. A compiler's own operands come input first
+		// (`level.map level.bsp`); an output ahead of an input is a flag's
+		// value. EricW's vis and light end `-logfile {output.log}
+		// {input.bsp}`: a vis stage argument `-nostate` put between
+		// `-logfile` and its path became the log file's name and vis failed.
+		if at == len(args)-1 || (positional[at] == "output" && slices.Contains(positional[at+1:], "input")) {
 			at--
 		}
 	}

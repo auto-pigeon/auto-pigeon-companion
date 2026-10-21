@@ -126,6 +126,10 @@ func TestAQuake2StageTokenNeverRepeatsASwitchTheActionManages(t *testing.T) {
 		if slices.Index(args, "-nopercent") < 0 || slices.Index(args, "-nopercent") > slices.Index(args, request.Inputs["bsp"]) {
 			t.Errorf("%s argv = %q, want -nopercent before the BSP", action, args)
 		}
+		// NEW_329D: and never between `-logfile` and the log file it names
+		if at := slices.Index(args, "-logfile"); at >= 0 && (at+1 >= len(args) || args[at+1] == "-nopercent") {
+			t.Errorf("%s argv = %q, want -logfile followed by its own path", action, args)
+		}
 	}
 
 	compile, err := profile.Resolve(entry.Profile, "compile", q2Request(t, baseq2, linux, "compile"))
