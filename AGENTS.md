@@ -116,10 +116,15 @@ These are unconditional. Everything else is routed.
   task context: the only `SessionStart` hook this repository has is graft's, which injects a
   repository map and nothing about the task. So the marker rule holds whichever way the session
   began, and so does resolving the task yourself when nothing resolved it for you.
-- **`go build ./...`, `go vet ./...` and `go test ./...` must all pass before a task is complete**,
-  and the suite is not decoration: it parses the threat matrix, pins the two maturity sentences,
-  derives the retention bounds and checks the native-support states, so a documentation change that
-  contradicts the code fails here rather than in review.
+- **Read `TEST-SKILL.md` before selecting, resuming or qualifying tests** (canonical: AUT
+  `skills/auto-pigeon-testing/SKILL.md`).
+- **`go build ./...`, `go vet ./...` and `go test ./...` must all pass before a task that changes
+  code, tests, `README.md` or a `docs/agent/` module is complete**, and on every release candidate.
+  The suite is not decoration: it parses the threat matrix, pins the two maturity sentences, derives
+  the retention bounds and checks the native-support states, so a documentation change that
+  contradicts the code fails here rather than in review. A change to `TEST-SKILL.md` or this file's
+  routing alone, which no test reads, runs the router gate and AUT's `test_skill_sync.py check`
+  instead, and says so.
 - **Pushing `main` here is pre-authorized (HITL, 2026-10-21), and only here.** Commit and push this repository
   whenever your assigned work needs it, without asking; no force-push, no history rewrite, no tag replacement, one
   batched push, then follow its build and release to the end. The rule and what every push owes:
