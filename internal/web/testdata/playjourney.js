@@ -136,6 +136,29 @@
     await waitFor("the build profiles", () => $("play-pipeline").options.length > 1);
     setValue($("play-pipeline"), settings.pipeline_id);
     await waitFor("the stages", () => $("play-stages").children.length > 0);
+    // NEW_330 A5: the program behind the chosen build profile goes missing and
+    // comes back. The choice stays, greyed out with the reason, and is ready
+    // again after the repair — without a reload.
+    const bindTool = (path) => window.AUCOM.api("/api/v1/profiles/aucom.fixture.toolchain/bind",
+      { method: "POST", body: { executables: { tool: path } } });
+    await bindTool("");
+    window.location.hash = "#profiles";
+    await waitFor("Profiles", () => visible($("area-profiles")));
+    window.location.hash = "#play";
+    await waitFor("the build profile needing setup", () =>
+      [...$("play-pipeline").options].some((o) => o.value === settings.pipeline_id && o.disabled), 15000);
+    record("a chosen build profile whose program went missing stays chosen and says why",
+      $("play-pipeline").value === settings.pipeline_id && /needs setup/.test($("play-pipeline").selectedOptions[0]?.textContent || ""),
+      `${$("play-pipeline").value} · ${($("play-pipeline").selectedOptions[0]?.textContent || "").slice(0, 120)}`);
+    await bindTool(settings.tool_path);
+    window.location.hash = "#profiles";
+    await waitFor("Profiles", () => visible($("area-profiles")));
+    window.location.hash = "#play";
+    await waitFor("the build profile ready again", () =>
+      [...$("play-pipeline").options].some((o) => o.value === settings.pipeline_id && !o.disabled), 15000);
+    record("repairing the path makes the same choice ready again without a reload",
+      $("play-pipeline").value === settings.pipeline_id, $("play-pipeline").value);
+    if ($("play-step-2").hidden) stepButton(2).click();
     record(
       "the build step names the program that will run",
       textOf($("play-stages")).includes("Fixture toolchain"),
@@ -146,6 +169,14 @@
     stepButton(3).click();
     await waitFor("the run step", () => visible($("play-step-3")));
     await waitFor("the engines", () => $("play-engine").options.length > 1);
+    // NEW_330: an engine for another game is greyed out, says why, and gets no
+    // "Set up" link — setting it up could not make it play this build.
+    const other = [...$("play-engine").options].find((option) => option.value === settings.other_engine_id);
+    const setupLinks = [...document.querySelectorAll("#play-engine ~ .choice-setup a")].map((a) => a.getAttribute("href"));
+    record("a Quake 1 build profile does not offer a Quake II engine",
+      other && other.disabled && /does not play this build profile's maps/.test(other.textContent) &&
+        !setupLinks.some((href) => href.includes(encodeURIComponent(settings.other_engine_id))),
+      `${other ? other.textContent : "not listed"} · setup links ${setupLinks.join(" ") || "none"}`);
     setValue($("play-engine"), settings.engine_id);
     await waitFor("the actions", () => $("play-action").options.length > 0);
     // A small fixed set is offered as explained choices, not as a dropdown.
@@ -160,6 +191,8 @@
       textOf($("play-game-root")).includes("auto-pigeon") && textOf($("play-game-root")).includes("id1"),
       textOf($("play-game-root")).slice(0, 110)
     );
+    record("the mod folder label names the base folder the chosen engine declares",
+      textOf($("play-mod-where")).includes("id1"), textOf($("play-mod-where")));
 
     // --- 4. the review ------------------------------------------------------
     stepButton(4).click();
@@ -279,6 +312,16 @@
       document.activeElement === $("activity-heading"),
       document.activeElement ? document.activeElement.id || document.activeElement.tagName : "nothing"
     );
+    // NEW_331 A5: leaving Build & Run closes the drawer instead of leaving it
+    // over the next area's controls; the header button still opens it there.
+    window.location.hash = "#profiles";
+    await waitFor("Profiles", () => visible($("area-profiles")));
+    record("moving to Profiles closes Activity rather than covering it", $("activity").hidden === true,
+      String($("activity").hidden));
+    $("activity-open").click();
+    await waitFor("Activity over Profiles on request", () => onScreen($("activity")));
+    window.location.hash = "#play";
+    await waitFor("Build & Run again", () => visible($("area-play")));
 
     // --- nothing leaks ------------------------------------------------------
     // What must NOT be in the page is a credential or a place only the

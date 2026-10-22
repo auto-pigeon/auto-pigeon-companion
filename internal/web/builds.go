@@ -356,6 +356,12 @@ func (s *Server) handleBuildPipelines(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	engines, err := s.engineEntries()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+
 	items := make([]map[string]any, 0)
 	for _, entry := range entries {
 		pipeline, isPipeline := entry.Profile.(*profile.PipelineProfile)
@@ -399,6 +405,9 @@ func (s *Server) handleBuildPipelines(w http.ResponseWriter, r *http.Request) {
 			"steps": steps, "missing_capabilities": missing, "runnable": runnable,
 			"engine_family": family, "maturity": describeMaturity(family),
 			"readiness": pipelineReadiness(pipeline, runner.Resolver(), set).view(),
+			// Which engines can play what this build makes, on the documents'
+			// own word (engineFits) — the page's only source for it.
+			"engine_fit": engineFitView(family, engines),
 		})
 		// A leak test is a question about a map, not a build of it. The page
 		// asks this flag rather than knowing a pipeline id (`Q3_018`).
@@ -1016,4 +1025,18 @@ func (s *Server) unreadyPipeline(id string) (readiness, bool) {
 		return state, !state.Ready
 	}
 	return readiness{}, false
+}
+
+// engineFitView is [engineFits] for every engine, keyed by profile id:
+// `{"fits": true}` or `{"fits": false, "reason": "…"}`.
+func engineFitView(family string, engines []job.CatalogEntry) map[string]any {
+	view := make(map[string]any, len(engines))
+	for _, entry := range engines {
+		verdict := map[string]any{"fits": true}
+		if err := engineFits(family, entry.Profile); err != nil {
+			verdict = map[string]any{"fits": false, "reason": err.Error()}
+		}
+		view[entry.Profile.Metadata().ID] = verdict
+	}
+	return view
 }

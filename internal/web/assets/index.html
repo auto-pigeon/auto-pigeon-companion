@@ -324,9 +324,10 @@
           <p class="lede">
             Five steps, and nothing starts until the last one. The Companion
             downloads the exact map revision you choose and that revision's
-            texture WADs, converts, compiles, installs them into a folder of its
-            own beside <code>id1</code>, and starts the game. It never writes
-            into <code>id1</code>.
+            textures, converts, compiles, installs them into a folder of its own
+            beside the game's own data — <code>id1</code> for Quake,
+            <code>baseq2</code> for Quake II, <code>baseq3</code> for Quake III —
+            and starts the game. It never writes into the game's own data.
           </p>
 
           <div id="play-signed-out" class="panel notice" hidden>
@@ -453,6 +454,7 @@
             <div class="field">
               <label for="play-engine">Engine</label>
               <select id="play-engine"></select>
+              <p id="play-engine-message" class="message" role="status"></p>
               <p class="hint"><a href="#profiles">Profiles / setup</a> — configure unavailable choices, then refresh.</p>
             </div>
             <!-- What the engine does with the map just built. Only the actions
@@ -506,7 +508,7 @@
               </div>
             </fieldset>
             <div class="field">
-              <label for="play-mod">Mod folder name <span class="muted">(created beside id1 in the game folder)</span></label>
+              <label for="play-mod">Mod folder name <span class="muted" id="play-mod-where">(created in the game folder)</span></label>
               <input id="play-mod" type="text" value="auto-pigeon" />
               <p class="hint" id="play-game-root"></p>
             </div>

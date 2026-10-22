@@ -52,6 +52,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/engine"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/joincontent"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/maturity"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
 
@@ -829,20 +830,8 @@ func runtimeName(runtime string) string {
 	return runtime
 }
 
-func familyName(family string) string {
-	switch strings.ToLower(family) {
-	case "quake1":
-		return "Quake"
-	case "quake2":
-		return "Quake II"
-	case "quake3":
-		return "Quake III"
-	case "":
-		return "the game"
-	}
-
-	return family
-}
+// familyName is the one spelling in internal/maturity.
+func familyName(family string) string { return maturity.GameName(family) }
 
 func freshness(staleForMS int64) string {
 	seconds := staleForMS / 1000

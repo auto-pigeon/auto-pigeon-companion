@@ -102,3 +102,32 @@ ones recorded on a tool before stage arguments existed still reach every pipelin
 shown on each such stage, and can be removed on the tool's page or with
 `companion toolchain args <tool> <program> --reset`. An engine is not a stage and keeps its own. A
 token repeating a switch the stage already passes is refused (`aucom.compiler-compatibility`).
+
+## An engine plays the game its document declares (`NEW_330`)
+
+- Whether an engine can play what a pipeline makes is `engineFits` (`internal/web/play.go`): the two documents'
+  `game_profile.engine_family`, never a name, and a pipeline that declares no game is not judged. It is decided once,
+  on the server: `GET /api/v1/build/pipelines` carries `engine_fit: {engine_id: {fits, reason}}` per row, and
+  `playFits` refuses a plan or a run on the same word (HTTP 400), before anything is fetched. The page compares
+  nothing itself — no family test and no name test in browser code (`Q2_020` finding 2: the page held only Quake II
+  to it, so a Quake 1 build offered Yamagi as "Ready to start").
+- An engine that does not fit is greyed out with its reason and gets **no** "Set up" link (`executionChoices`'
+  `offerable`): setting it up could not make it fit. Changing the pipeline clears an engine that no longer fits, at
+  once, and says why in `#play-engine-message`; the saved setup is untouched.
+- The game's own folder in Build & Run copy comes from the engine's declared `content_layouts`
+  (`EngineProfile.BaseFolder`: the first `loose_files` layout under `game_root`), never a literal `id1`.
+- A launch is not a submitted job (`awaitEngineStart`): an engine job that ends unsuccessfully within
+  `engineStartWindow` fails the run at `launching`, naming the job and its exit status (NEW_331 A1). One still
+  running after the window is a started game.
+- An engine's project folder (`content_root`), when a Q1/Q2 engine's paths are saved without one, is the Companion's
+  own asset folder, created for it (`engine.FillProjectFolder`, page bind route and `companion engine bind`; HITL
+  2026-10-22). A folder already recorded is never replaced; Quake III is excluded (its project folder is its package
+  folder, `q3vfs.PackagesRole`). The value is absolute, so a copied config keeps pointing at the original folder.
+- Profiles' readiness box says **Partly ready** and lists each blocked action whenever `action_problems` is non-empty,
+  even though `readiness.ready` (the any-action rule) is true — "Ready: everything its programs need" is only for an
+  installation every action of which can start.
+- Build & Run keeps a chosen pipeline that loses readiness (`executionChoices(..., retain)` in `play.js`, as `build.js`
+  does), and keeps the reason a family switch cleared an engine until an engine is chosen.
+- A map-list 502 (AUB unreachable) is said in words with the address and **Try again** (`mapsUnreachable`).
+- `tabsFor` redraws on `aucom:sync` and when the tab already holding the value is pressed: a deep link that sets a
+  select's value (the `#new-profile/<id>` kind) must not leave another tab looking chosen.

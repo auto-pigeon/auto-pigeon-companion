@@ -285,6 +285,44 @@ curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
   "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/play/textures?asset_id=<map-id>&revision=<n>&own_wads_dir=/path/to/your/wads"
 ```
 
+**Which engines Build & Run offers.** An engine is offered only for a build
+profile of its own game — each profile says which game it is for — so a Quake 1
+build never offers a Quake II or Quake III engine, whatever its name. Choosing a
+build profile for another game clears an engine that cannot play it and says why;
+your saved setup is not touched. The page names the game's own folder (`id1`,
+`baseq2`, `baseq3`) from the engine you chose, and never writes into it.
+
+```bash
+# which engines can play what each build profile makes
+curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
+  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/build/pipelines" | jq '.items[] | {id, engine_fit}'
+```
+
+**An engine that cannot start.** Build & Run watches the game for its first few
+seconds. An engine that stops at once — a library it cannot find, an argument it
+refuses — ends the run **Failed** at *Starting the game*, naming the engine's job
+in **Jobs**, where its own output says why.
+
+**An engine's project folder.** When you save a Quake or Quake II engine's
+program and game folder in **Profiles** and leave **Content folder** empty, the
+Companion fills it with its own folder — where it keeps the maps and textures it
+downloads — and creates it. The field shows the folder; type another and save to
+change it. A Quake III engine reads its packages from that folder, so you choose
+it yourself. Profiles says **Partly ready** and names each action that still needs
+something, rather than **Ready**, when only some of what an engine does can start.
+
+```console
+$ companion engine bind auto-pigeon.engine.vkquake --engine /opt/vkquake/vkquake --game-root ~/Games/Quake
+recorded for auto-pigeon.engine.vkquake:
+  engine         /opt/vkquake/vkquake
+  content_root   /home/you/.cache/auto-pigeon-companion/assets
+  game_root      /home/you/Games/Quake
+```
+
+**When the server does not answer.** Build & Run says which server address did not
+answer and offers **Try again**; a map file on this computer still builds under
+**Build** meanwhile.
+
 **Auto-build.** Under the map in **Build & Run**, **Auto-build this map** checks
 it about every 30 seconds while the Companion runs and builds each newly saved
 revision once, with the chosen build profile. It never starts the game. The

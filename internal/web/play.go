@@ -16,6 +16,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/engine"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/maturity"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/playrun"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/q2pack"
@@ -565,7 +566,40 @@ func (s *Server) playLaunch(ctx context.Context, request playrun.Request) (playr
 		record.WorkingDir = previewed.Command.WorkingDir
 	}
 
-	return record, nil
+	return record, awaitEngineStart(ctx, service, submitted.ID)
+}
+
+// engineStartWindow is how long a launch watches a just-submitted engine before
+// calling it started. An engine that cannot start at all — a shared library the
+// loader cannot find, an argument it refuses, a file that is not a program —
+// ends inside it; one still running after it is a launched game, and nothing
+// waits for a game somebody is playing to exit.
+var engineStartWindow = 4 * time.Second
+
+// awaitEngineStart is NEW_330's answer to a false success NEW_331 saw with a
+// released Companion: "Starting the game ✓ · Running ✓ · Finished" while the
+// engine job had failed with exit 127 in a millisecond. A submitted job is not
+// a started game. A job that ends unsuccessfully inside the window fails the
+// launch, naming the job a person opens to read why.
+func awaitEngineStart(ctx context.Context, service *job.Service, id string) error {
+	watch, stop := context.WithTimeout(ctx, engineStartWindow)
+	defer stop()
+	ended, err := service.Wait(watch, id)
+	if err != nil || ended == nil || ended.State == job.Succeeded {
+		// Still running when the window closed, or a game that started and was
+		// closed again: either way the engine started.
+		return nil
+	}
+	exit := "no exit status"
+	if ended.ExitCode != nil {
+		exit = fmt.Sprintf("exit status %d", *ended.ExitCode)
+	}
+	why := strings.TrimSpace(ended.Error)
+	if why == "" {
+		why = "it stopped before the game started"
+	}
+
+	return fmt.Errorf("the engine did not start: job %s %s with %s — %s", id, ended.State, exit, why)
 }
 
 // playUnstage removes what a cancelled or failed run installed, through the
@@ -716,14 +750,38 @@ func (s *Server) playFamily(pipelineID string) string {
 	return documentFamily(entry.Profile)
 }
 
-// playFits refuses, before anything runs, an engine that cannot play what the
-// build profile makes: for Quake II, an engine of another family, or an action
-// that does not load a map on this computer — the same test the package panel's
-// engine list applies.
-func (s *Server) playFits(family, engineID, actionID string) error {
-	if family != q2pack.FamilyQuake2 {
+// engineFits is the one answer to "can this engine play what this build
+// profile makes" (`NEW_330`). It is the two documents' own word — the
+// `game_profile.engine_family` each declares — and never a name: an engine
+// called "Quake" that declares Quake III plays Quake III maps. A build profile
+// that declares no game is not judged. The pipeline listing carries this answer
+// for every engine and a run is refused on it, so the page compares nothing.
+//
+// Until NEW_330 only a Quake II build was held to it, and only in the page: a
+// Quake 1 build offered Yamagi as "Ready to start" and a Quake III build
+// offered vkQuake and Yamagi (`Q2_020` finding 2).
+func engineFits(family string, document profile.Profile) error {
+	if family == "" {
 		return nil
 	}
+	name := document.Metadata().Name
+	engineDocument, isEngine := document.(*profile.EngineProfile)
+	if !isEngine {
+		return fmt.Errorf("%s is not an engine profile", name)
+	}
+	if plays := documentFamily(engineDocument); plays != family {
+		game := maturity.GameName(family)
+		return fmt.Errorf("%s plays %s maps, and this build profile makes %s maps: choose an engine for %s, "+
+			"or set one up under Profiles", name, maturity.GameName(plays), game, game)
+	}
+	return nil
+}
+
+// playFits refuses, before anything runs, an engine that cannot play what the
+// build profile makes ([engineFits]), and for Quake II an action that does not
+// load a map on this computer — the same test the package panel's engine list
+// applies.
+func (s *Server) playFits(family, engineID, actionID string) error {
 	catalog, err := s.catalog()
 	if err != nil {
 		return err
@@ -732,11 +790,13 @@ func (s *Server) playFits(family, engineID, actionID string) error {
 	if err != nil {
 		return err
 	}
-	document, isEngine := entry.Profile.(*profile.EngineProfile)
-	if !isEngine || documentFamily(document) != q2pack.FamilyQuake2 {
-		return fmt.Errorf("this is a Quake II build profile, and %s is not a Quake II engine: choose one "+
-			"that is, or set one up under Profiles", entry.Profile.Metadata().Name)
+	if err := engineFits(family, entry.Profile); err != nil {
+		return err
 	}
+	if family != q2pack.FamilyQuake2 {
+		return nil
+	}
+	document := entry.Profile.(*profile.EngineProfile)
 	action, found := document.ActionByID(actionID)
 	if !found || !loadsAMap(action) || action.SessionRole != profile.SessionClient {
 		return fmt.Errorf("Build & Run plays a Quake II map on this computer: choose %s's action "+

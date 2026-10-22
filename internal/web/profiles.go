@@ -17,6 +17,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/approval"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/compat"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/engine"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile/builtin"
@@ -1330,6 +1331,9 @@ func (s *Server) handleProfileBind(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	// An engine's project folder, when nobody named one: the Companion's own
+	// (engine.FillProjectFolder, NEW_330).
+	projects, _ := s.assetCacheDir()
 	// The read, the change and the write inside one cross-process lock. The GUI
 	// server is one process and a `companion` command in a terminal is another;
 	// without this, whichever renamed last would silently discard the other's
@@ -1377,6 +1381,11 @@ func (s *Server) handleProfileBind(w http.ResponseWriter, r *http.Request) {
 				local.Roots = map[string]string{}
 			}
 			local.Roots[role] = value
+		}
+		if engineDocument, isEngine := document.(*profile.EngineProfile); isEngine {
+			if _, err := engine.FillProjectFolder(engineDocument, &local, projects); err != nil {
+				return err
+			}
 		}
 		local.UpdatedAt = time.Now().UTC()
 		return set.Put(local)

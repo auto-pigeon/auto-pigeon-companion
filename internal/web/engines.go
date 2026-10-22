@@ -103,6 +103,7 @@ func (s *Server) describeEngine(entry job.CatalogEntry, local binding.LocalBindi
 	body["last_qualified"] = document.LastQualified
 	body["game_profile"] = document.GameProfile
 	body["content_layouts"] = document.ContentLayouts
+	body["base_folder"] = document.BaseFolder()
 	body["executables"] = document.Executables
 	body["platform_support"] = map[string]any{
 		"platform": currentPlatform(), "status": support, "note": note,

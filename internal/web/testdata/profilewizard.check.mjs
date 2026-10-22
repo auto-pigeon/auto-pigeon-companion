@@ -16,7 +16,7 @@ function harness() {
     removeAttribute(k){delete this.attrs[k];}
     querySelector(){return null;}
     querySelectorAll(){return [];}
-    after(){} focus(){this.focused=true;} remove(){} scrollIntoView(){}
+    after(){} dispatchEvent(event){(this.dispatched ||= []).push(event.type);} focus(){this.focused=true;} remove(){} scrollIntoView(){}
   }
   const $=id=>{if(!nodes.has(id))nodes.set(id,new Node(id));return nodes.get(id);};
   const el=(tag,o={})=>{const n=new Node();Object.assign(n,o.attrs||{});n.textContent=o.text||'';n.append(...o.children||[]);return n;};
@@ -31,7 +31,7 @@ function harness() {
   const document={createTextNode:x=>x,querySelectorAll:()=>[],body:{classList:{remove(){}}}};
   $('wizard-kind').value='tool';
   for(const [id,value] of Object.entries({name:'A tool',version:'1.0.0',summary:'A compiler',publisher:'Local',license:'NOASSERTION'}))$('wizard-'+id).value=value;
-  runInNewContext(readFileSync(new URL('../assets/profiles.js',import.meta.url),'utf8'),{window:{AUCOM},document,console,structuredClone,URLSearchParams,Event:class{},navigator:{}});
+  runInNewContext(readFileSync(new URL('../assets/profiles.js',import.meta.url),'utf8'),{window:{AUCOM},document,console,structuredClone,URLSearchParams,Event:class{constructor(type){this.type=type;}},navigator:{}});
   // The shipped file installs this navigation helper; no navigation is needed here.
   AUCOM.openInstalledProfile=async id=>installs.push(id);
   const valid={valid:true,id:'local.a',kind:'tool',name:'A tool',version:'1.0.0',trust:'local',document:{name:'A tool',publisher:{name:'Local'},license:{spdx:'NOASSERTION'},executables:[],actions:[]}};
@@ -86,5 +86,13 @@ await test('a delayed template cannot mix a changed draft',async()=>{
  const h=harness();const init=h.AUCOM.areas['new-profile'].refresh('');await h.tick();h.answer({items:[{id:'base',kind:'tool',name:'Base'}]});await init;
  h.$('wizard-template').value='base';const selection=h.$('wizard-template').fire('change');await h.tick();h.$('wizard-name').value='Edited';await h.invalidate();h.answer({scratch:{kind:'engine'},identity:{name:'Wrong'}});await selection;await h.tick();
  assert.equal(h.$('wizard-name').value,'Edited');assert.equal(h.scratch.kind,'tool');
+});
+await test('a copy link for an engine shows the engine kind, not the default one',async()=>{
+ // NEW_330, seen live: `#new-profile/auto-pigeon.engine.vkquake` set the
+ // kind to engine and left the tab bar showing "A build pipeline".
+ const h=harness();let done=false;h.AUCOM.areas['new-profile'].refresh('auto-pigeon.engine.vkquake').then(()=>done=true);
+ const items={items:[{id:'auto-pigeon.engine.vkquake',kind:'engine',name:'vkQuake'}],scratch:{kind:'engine'},identity:{}};
+ for(let i=0;i<50&&!done;i++){while(h.requests.length)h.answer(items);await h.tick();}
+ assert.equal(done,true);assert.equal(h.$('wizard-kind').value,'engine');assert.deepEqual(h.$('wizard-kind').dispatched,['aucom:sync']);
 });
 console.log(`${count} profile wizard checks passed`);

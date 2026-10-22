@@ -240,7 +240,11 @@ function tabsFor(selectId) {
         },
       });
       tab.addEventListener("click", () => {
-        if (select.value === option.value) return;
+        // A value set by code (a deep link) is the select's and not yet the
+        // bar's: pressing the tab that already holds it redraws, rather than
+        // leaving another tab looking chosen (NEW_330, `#new-profile/<engine>`
+        // showed "A build pipeline" for an engine copy).
+        if (select.value === option.value) { draw(); return; }
         select.value = option.value;
         select.dispatchEvent(new Event("change", { bubbles: true }));
         draw();
@@ -259,6 +263,9 @@ function tabsFor(selectId) {
     });
   };
   select.addEventListener("change", draw);
+  // `aucom:sync`: code that sets the value without a change (which would run
+  // the select's own handlers) still has the bar show it.
+  select.addEventListener("aucom:sync", draw);
   new MutationObserver(draw).observe(select, { childList: true });
   draw();
 }
@@ -651,7 +658,12 @@ function pipelineReady(pipeline) { return pipeline?.readiness?.ready === true; }
 // filled by `chooseReady` on the next refresh, and the first ready pipeline then
 // stood where the user's own choice had been. A caller that retains must not
 // start anything while the selected item is not ready.
-function executionChoices(select, items, previous, ready, label, placeholder, chooseReady = false, retain = false) {
+// `offerable` (NEW_330) says which unavailable items setup could make
+// available: an engine for another game is greyed out like one that needs
+// setup, and gets no "Set up" link, because setting it up cannot make it play
+// this build.
+function executionChoices(select, items, previous, ready, label, placeholder, chooseReady = false, retain = false,
+  offerable = () => true) {
   select.replaceChildren(el("option", { text: placeholder, attrs: { value: "" } }));
   for (const item of items) {
     const available = ready(item);
@@ -661,7 +673,7 @@ function executionChoices(select, items, previous, ready, label, placeholder, ch
   }
   select.value = items.some((item) => item.id === previous && (retain || ready(item))) ? previous
     : !previous && chooseReady ? items.find(ready)?.id || "" : "";
-  setupActions(select, items.filter((item) => !ready(item)));
+  setupActions(select, items.filter((item) => !ready(item) && offerable(item)));
   return select.value;
 }
 

@@ -266,10 +266,24 @@
     return family() === "quake2";
   }
 
-  // Which engines can play what the build profile makes: for Quake II, a
-  // Quake II engine. Every engine for every other family, as before.
+  // Which engines can play what the build profile makes is the server's word,
+  // one verdict per engine on the pipeline's own row (NEW_330, `engine_fit`):
+  // the documents' declared games, never a name. Until NEW_330 the page held
+  // only Quake II to it, so a Quake 1 build offered Yamagi as "Ready to start".
+  // No build profile chosen yet is no verdict yet.
+  function engineFit(engine) {
+    const pipeline = state.pipelines.find((p) => p.id === state.pipeline);
+    return pipeline?.engine_fit?.[engine?.id] || { fits: true };
+  }
+
   function engineFits(engine) {
-    return !packaged() || engine?.engine_family === "quake2";
+    return engineFit(engine).fits !== false;
+  }
+
+  // The game's own data folder — id1, baseq2, baseq3 — as the chosen engine
+  // declares it, for every sentence that says where files go (NEW_330).
+  function baseFolder(engine) {
+    return engine?.base_folder || state.engines.find((e) => e.id === state.engine)?.base_folder || "";
   }
 
   // Any change to an identity throws the plan away and SAYS SO. A review that
@@ -299,15 +313,37 @@
   // the list ever held, so an older map — dm2, on an account with a few
   // hundred — could not be chosen at all (operator, 2026-09-22).
   const MAP_PAGES = 25;
+  // The account could not be asked for its maps because the server did not
+  // answer (502 from the local API): said in words, with the address, the
+  // server's own error kept beside it, and a way to ask again once it is back
+  // (NEW_330 A11). A map file on this computer still builds under Build.
+  function mapsUnreachable(detail) {
+    const address = (window.AUCOM.status?.aub_base_url || "").replace(/\/+$/, "");
+    const box = $("play-map-message");
+    box.className = "message error";
+    box.replaceChildren(
+      document.createTextNode(t("The Auto-Pigeon server at {address} did not answer, so your maps cannot be listed. A map file on this computer still builds under Build.",
+        { address: address || t("its address") }) + " "),
+    );
+    const retry = el("button", { text: t("Try again"), attrs: { type: "button" } });
+    retry.addEventListener("click", () => window.AUCOM.withBusy(retry, async () => {
+      box.replaceChildren();
+      await loadMaps();
+    }));
+    box.append(retry, el("span", { className: "muted small", text: " " + (detail || "") }));
+    announce(box.firstChild.textContent);
+  }
+
   async function loadMaps() {
     let items = [];
     let cursor = "";
     for (let page = 0; page < MAP_PAGES; page += 1) {
       const query = new URLSearchParams({ type: "map", limit: "200" });
       if (cursor) query.set("cursor", cursor);
-      const { ok, body } = await api("/api/v1/library/catalog?" + query.toString());
+      const { ok, status, body } = await api("/api/v1/library/catalog?" + query.toString());
       if (!ok) {
-        setMessage("play-map-message", body.error, "error");
+        if (status === 502) mapsUnreachable(body.error);
+        else setMessage("play-map-message", body.error, "error");
         break;
       }
       items = items.concat(body.items || []);
@@ -505,7 +541,12 @@
     const select = $("play-pipeline");
     state.pipeline = window.AUCOM.executionChoices(select, state.pipelines, state.pipeline, window.AUCOM.pipelineReady,
       (pipeline) => pipeline.name + (window.AUCOM.pipelineReady(pipeline) ? "" : " — needs setup: " + (pipeline.readiness?.problems || []).map((p) => p.summary).join(" ")),
-      "Choose a ready build profile…");
+      // retain (NEW_323E's rule, here too since NEW_330): a chosen build
+      // profile that loses readiness — a program path removed in Profiles —
+      // stays chosen, greyed out and saying why, and is ready again when the
+      // path is repaired. Dropping it made the person choose it again, and the
+      // next refresh could have chosen another one behind them.
+      "Choose a ready build profile…", false, true);
     renderStages();
     // The engines may have arrived first; which of them fit is the family's.
     if (state.engines.length) renderEngines();
@@ -549,10 +590,25 @@
   function renderEngines() {
     const select = $("play-engine");
     const ready = (engine) => Object.keys(ACTIONS).some((id) => window.AUCOM.actionReady(engine, id));
+    const previous = state.engine;
     state.engine = window.AUCOM.executionChoices(select, state.engines, state.engine,
       (engine) => engineFits(engine) && ready(engine),
-      (engine) => `${engine.name} — ${!engineFits(engine) ? t("not a Quake II engine") : ready(engine) ? t("Ready to start") : t("Needs setup") + ": " + setupProblems(engine)}`,
-      "Choose a ready engine…");
+      (engine) => `${engine.name} — ${!engineFits(engine) ? t("does not play this build profile's maps") : ready(engine) ? t("Ready to start") : t("Needs setup") + ": " + setupProblems(engine)}`,
+      "Choose a ready engine…", false, false, engineFits);
+    // A build profile for another game clears an engine that cannot play it,
+    // at once, and says why — the person's saved setup is untouched. The why
+    // stays, said against the build profile chosen NOW, until an engine is
+    // chosen: arrowing through the list is several changes, and the first
+    // one's message must not be wiped by the next (seen live, NEW_330).
+    const lost = state.engines.find((e) => e.id === previous);
+    if (previous && !state.engine && lost && !engineFits(lost)) state.droppedEngine = previous;
+    if (state.engine) state.droppedEngine = "";
+    const dropped = state.engines.find((e) => e.id === state.droppedEngine);
+    const why = dropped && !engineFits(dropped) ? engineFit(dropped).reason || "" : "";
+    if (why !== $("play-engine-message").textContent) {
+      setMessage("play-engine-message", why);
+      if (why) announce(why);
+    }
     renderActions();
   }
 
@@ -618,17 +674,21 @@
       modField.placeholder = "";
       if (modField.value !== state.mod && document.activeElement !== modField) modField.value = state.mod;
     }
+    const base = baseFolder(engine);
+    $("play-mod-where").textContent = base
+      ? t("(created beside {base} in the game folder)", { base })
+      : t("(created in the game folder)");
     $("play-game-root").textContent = root
-      ? (packaged()
-        ? t("The game is at {root}. The Companion will create {mod} beside baseq2 and never write into baseq2.",
-          { root, mod: modFolder() })
-        : `The game is at ${root}. The Companion will create ${state.mod} beside it and never write into id1.`)
-      : "This engine has no game folder set on this machine yet — set one under Profiles first.";
+      ? (base
+        ? t("The game is at {root}. The Companion will create {mod} beside {base} and never write into {base}.",
+          { root, mod: packaged() ? modFolder() : state.mod, base })
+        : t("The game is at {root}. The Companion will create {mod} there.", { root, mod: packaged() ? modFolder() : state.mod }))
+      : t("This engine has no game folder set on this machine yet — set one under Profiles first.");
     // Only once an engine is chosen: before that there is nothing to be wrong
     // about, and an error on an untouched form reads as a fault.
     const missing = Boolean(state.engine) && !root;
     $("play-game-root").textContent = !state.engine
-      ? "Choose an engine to see where the game is."
+      ? t("Choose an engine to see where the game is.")
       : $("play-game-root").textContent;
     // What stops this engine starting this action, in the words the server
     // uses for Profiles too (NEW_265): one decision, so the dropdown's "Needs
@@ -1820,6 +1880,8 @@
     // A Quake II package's folder is named after the map.
     if (packaged()) renderActions();
   });
+  // Why an engine was just cleared is read with the list it was cleared from.
+  $("play-engine").setAttribute("aria-describedby", "play-engine-message");
   $("play-pipeline").addEventListener("change", (event) => {
     state.pipeline = event.target.value;
     invalidate("You changed the build profile, so what it would run has to be worked out again.");

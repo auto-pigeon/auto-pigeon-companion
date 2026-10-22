@@ -395,8 +395,22 @@
 
   function readinessBox(body) {
     const box = el("div", { className: "readiness", attrs: { id: "profile-readiness" } });
-    if (body.readiness.ready) {
+    // "Ready" is the any-action rule: SOMETHING here can start. An action that
+    // still needs setup is named, with what it needs, rather than hidden under
+    // "everything its programs need is on this machine" while Build & Run says
+    // that action needs setup (NEW_330, seen live on a fresh vkQuake).
+    const blocked = Object.entries(body.action_problems || {}).filter(([, problems]) => (problems || []).length);
+    if (body.readiness.ready && !blocked.length) {
       box.append(el("p", { className: "message ok", text: t("Ready: everything its programs need is on this machine.") }));
+    } else if (body.readiness.ready) {
+      const title = (id) => (body.actions || []).find((action) => action.id === id)?.title || id;
+      box.append(el("p", { className: "message warning", text: t("Partly ready: some of what it does can start here, and these cannot yet:") }));
+      box.append(el("ul", {
+        className: "plain",
+        children: blocked.map(([id, problems]) => el("li", {
+          text: `${t(title(id))}: ${[...new Set(problems.map((problem) => problem.summary))].join(" ")}`,
+        })),
+      }));
     } else {
       box.append(el("p", { className: "message error", text: t("Not ready to start yet:") }));
       box.append(el("ul", {
@@ -847,7 +861,15 @@
           setMessage(saveStatus, out.error || "could not record these paths", "error");
           return;
         }
-        setMessage(saveStatus, "Recorded. It survives a restart.", "ok");
+        // What was RECORDED, which is not always what was typed: an engine's
+        // project folder left empty is the Companion's own (NEW_330), and the
+        // field shows it so it can be changed.
+        const recorded = out.binding?.roots || {};
+        const filled = rootFields.has("content_root") && !rootPaths.content_root && recorded.content_root;
+        for (const [role, field] of rootFields) field.input.value = recorded[role] || "";
+        setMessage(saveStatus, filled
+          ? t("Recorded. The project folder is the Companion's own, where it keeps the maps and textures it downloads; change it above if you want another. It survives a restart.")
+          : t("Recorded. It survives a restart."), "ok");
         record(`Recorded where ${body.name} is`, Object.values(paths).filter(Boolean).join(", "), "ok");
         describeProvenance(out.binding);
         await refreshReadiness(body.id);
@@ -1358,7 +1380,10 @@
       if (pinnedTemplate) {
         const { ok, body } = await api("/api/v1/profiles/templates");
         const found = ok ? (body.items || []).find((item) => item.id === pinnedTemplate) : null;
-        if (found) $("wizard-kind").value = found.kind;
+        if (found) {
+          $("wizard-kind").value = found.kind;
+          $("wizard-kind").dispatchEvent(new Event("aucom:sync"));
+        }
       }
       await refreshTemplates();
       setStep(pinnedTemplate ? 1 : step);

@@ -471,6 +471,13 @@ func engineBind(env *Env, args []string) int {
 		newRoots[pair.role] = absolute
 	}
 
+	// An engine's project folder, when nobody named one: the Companion's own
+	// (engine.FillProjectFolder, NEW_330) — the same answer the page gives.
+	projects := ""
+	if settings, err := loadSettings(env); err == nil {
+		projects, _ = settings.AssetCache()
+	}
+
 	// One cross-process lock around the read and the write: the GUI server may
 	// be recording a grant for this same profile in another process, and an
 	// unlocked read-modify-write here would discard it. See [binding.Update].
@@ -502,6 +509,9 @@ func engineBind(env *Env, args []string) int {
 				local.Roots = map[string]string{}
 			}
 			local.Roots[role] = path
+		}
+		if _, err := engine.FillProjectFolder(document, &local, projects); err != nil {
+			return err
 		}
 		local.UpdatedAt = time.Now().UTC()
 		return set2.Put(local)

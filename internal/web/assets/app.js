@@ -69,6 +69,15 @@
     // can no longer see.
     const feedback = $("feedback-panel");
     if (feedback) feedback.hidden = true;
+    // The Activity drawer is Build & Run's, drawn over the right of the page:
+    // left open after a move to Profiles it covered "Save these paths" and
+    // "Add argument" (NEW_331 A5). It closes on the way out, without taking
+    // focus anywhere; the Activity button in the header opens it again from
+    // any area, and closing it never stops a run.
+    if (area !== "play" && $("activity") && !$("activity").hidden) {
+      $("activity").hidden = true;
+      $("activity-open").setAttribute("aria-expanded", "false");
+    }
     $("area-heading").textContent = t(titles[area]);
     $("profiles-new").hidden = area !== "profiles";
     if (focus) $("area-heading").focus();

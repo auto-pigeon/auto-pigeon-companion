@@ -110,7 +110,7 @@ func TestBuildAndRunQuake2JourneyInABrowser(t *testing.T) {
 	m.prepareQ2Play(t)
 	drivePlayPage(t, m, browser, "1280,900", "quake2", "testdata/playq2journey.js", map[string]any{
 		"pipeline_id": "aucom.fixture.q2-pipeline", "engine_id": enginefixture.ProfileQ2ID,
-		"other_engine_id": "aucom.fixture.q1-engine",
+		"other_engine_id": "aucom.fixture.q1-engine", "other_pipeline_id": "aucom.fixture.pipeline",
 	})
 }
 
@@ -120,7 +120,11 @@ func runPlayJourney(t *testing.T, browser, window, label string) {
 	// `TestFirstRunJourneyInABrowser` already drives that half through the
 	// page, and repeating it here would make this test about something else.
 	m.preparePlay(t)
-	drivePlayPage(t, m, browser, window, label, "testdata/playjourney.js")
+	// NEW_330: a Quake II engine is installed beside the Quake 1 one, and a
+	// Quake 1 build must not offer it.
+	m.writeProfile(enginefixture.ProfileQ2ID+".json", enginefixture.ProfileQ2JSON)
+	drivePlayPage(t, m, browser, window, label, "testdata/playjourney.js",
+		map[string]any{"other_engine_id": enginefixture.ProfileQ2ID, "tool_path": mustExecutable(t)})
 }
 
 // drivePlayPage runs one driver script against the real page of a prepared

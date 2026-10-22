@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/config"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/engine"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/enginefixture"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile/builtin"
@@ -447,5 +448,33 @@ func TestEngineBindNamesEachExecutableOfATwoProgramProfile(t *testing.T) {
 		if !strings.Contains(stdout.String(), want) {
 			t.Errorf("%s was not recorded:\n%s", want, stdout)
 		}
+	}
+}
+
+// NEW_330, HITL 2026-10-22: `engine bind` gives a Quake 1 engine the
+// Companion's own project folder when none is named, as the page does, and
+// never replaces one that was.
+func TestEngineBindFillsTheProjectFolderWhenNoneIsNamed(t *testing.T) {
+	game := gameDir(t)
+	enginePath := programFile(t, "quakespasm")
+	env, stdout, stderr := testEnv(t)
+	assets := filepath.Join(t.TempDir(), "assets with spaces")
+	t.Setenv(config.EnvAssetCacheDir, assets)
+	if code := Run(env, []string{"engine", "bind", builtin.QuakeSpasm, "--engine", enginePath, "--game-root", game}); code != 0 {
+		t.Fatalf("bind exit code = %d, stderr = %s", code, stderr)
+	}
+	if !strings.Contains(stdout.String(), "content_root") || !strings.Contains(stdout.String(), assets) {
+		t.Errorf("bind did not record the Companion's project folder %s:\n%s", assets, stdout)
+	}
+	if info, err := os.Stat(assets); err != nil || !info.IsDir() {
+		t.Errorf("the project folder was not created: %v", err)
+	}
+
+	env, stdout, stderr = testEnvAt(t, env.ConfigPath)
+	if code := Run(env, []string{"engine", "bind", builtin.QuakeSpasm, "--content-root", game}); code != 0 {
+		t.Fatalf("rebinding = %d, stderr = %s", code, stderr)
+	}
+	if strings.Contains(stdout.String(), assets) {
+		t.Errorf("a project folder the person named was replaced:\n%s", stdout)
 	}
 }

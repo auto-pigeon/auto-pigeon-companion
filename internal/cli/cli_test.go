@@ -67,6 +67,11 @@ func TestMain(m *testing.M) {
 // developer's own.
 func testEnv(t *testing.T) (*Env, *bytes.Buffer, *bytes.Buffer) {
 	t.Helper()
+	// The default cache is the test's own: an engine bound without a project
+	// folder records the asset folder (engine.FillProjectFolder, NEW_330), and
+	// no test may create or name this machine's. A folder a test's config sets
+	// still wins.
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(t.TempDir(), "cache"))
 	var stdout, stderr bytes.Buffer
 	env := &Env{
 		Stdout:     &stdout,

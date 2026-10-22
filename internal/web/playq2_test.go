@@ -204,7 +204,7 @@ func TestBuildAndRunPlaysAQuake2MapFromItsPackage(t *testing.T) {
 	wrong := q2PlayBody(m)
 	wrong["engine"] = "aucom.fixture.q1-engine"
 	if status, body := m.call(http.MethodPost, "/api/v1/play/plan", wrong); status != http.StatusBadRequest ||
-		!strings.Contains(body["error"].(string), "not a Quake II engine") {
+		!strings.Contains(body["error"].(string), "makes Quake II maps") {
 		t.Errorf("a Quake 1 engine for a Quake II build = %d: %v", status, body["error"])
 	}
 

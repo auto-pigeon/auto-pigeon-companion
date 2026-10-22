@@ -158,6 +158,25 @@ func Of(engineFamily string) Statement {
 	return Statement{Family: family, State: Undeclared}
 }
 
+// GameName is what a person calls a family's game: "Quake", "Quake II",
+// "Quake III", and "the game" for none. One spelling for every sentence that
+// names a game by its family — join readiness and which engine can play a
+// build (`NEW_330`) — so the two never disagree about what a family is called.
+func GameName(engineFamily string) string {
+	switch strings.ToLower(strings.TrimSpace(engineFamily)) {
+	case "quake1":
+		return "Quake"
+	case "quake2":
+		return "Quake II"
+	case "quake3":
+		return "Quake III"
+	case "":
+		return "the game"
+	}
+
+	return engineFamily
+}
+
 // IsWorkInProgress is the predicate form, for a caller that only branches.
 func IsWorkInProgress(engineFamily string) bool { return Of(engineFamily).IsWorkInProgress() }
 

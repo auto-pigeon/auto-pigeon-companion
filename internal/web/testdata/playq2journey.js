@@ -64,14 +64,25 @@
 
     stepButton(2).click();
     await waitFor("the build profiles", () => $("play-pipeline").options.length > 1);
+    // NEW_330: a Quake 1 build and its Quake 1 engine first; switching to the
+    // Quake II build clears that engine at once and says why.
+    setValue($("play-pipeline"), settings.other_pipeline_id);
+    stepButton(3).click();
+    await waitFor("the engines", () => $("play-engine").options.length > 1);
+    setValue($("play-engine"), settings.other_engine_id);
+    await waitFor("the Quake 1 engine chosen", () => $("play-engine").value === settings.other_engine_id);
+    stepButton(2).click();
     setValue($("play-pipeline"), settings.pipeline_id);
     await waitFor("the stages", () => $("play-stages").children.length > 0);
 
     stepButton(3).click();
     await waitFor("the engines", () => $("play-engine").options.length > 1);
+    record("switching to a Quake II build clears the Quake 1 engine and says why",
+      $("play-engine").value === "" && /plays Quake maps/.test(textOf($("play-engine-message"))),
+      `engine "${$("play-engine").value}" · ${textOf($("play-engine-message")).slice(0, 140)}`);
     const q1 = [...$("play-engine").options].find((option) => option.value === settings.other_engine_id);
     record("a Quake II build profile offers only Quake II engines",
-      q1 && q1.disabled && /not a Quake II engine/.test(q1.textContent), q1 ? q1.textContent : "the Quake 1 engine is not listed");
+      q1 && q1.disabled && /does not play this build profile's maps/.test(q1.textContent), q1 ? q1.textContent : "the Quake 1 engine is not listed");
     setValue($("play-engine"), settings.engine_id);
     await waitFor("the actions", () => $("play-action").options.length > 0);
     const cards = [...document.querySelectorAll("#play-action-choices input[type=radio]")].map((input) => input.value);

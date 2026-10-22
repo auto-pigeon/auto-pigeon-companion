@@ -89,6 +89,20 @@ func (e *EngineProfile) Metadata() Meta { return e.Meta }
 // ActionList implements [Profile].
 func (e *EngineProfile) ActionList() []Action { return e.Actions }
 
+// BaseFolder is the folder inside the game folder that holds the game's own
+// data — `id1`, `baseq2`, `baseq3` — as the document's content layouts declare
+// it: the first `loose_files` layout under `game_root`. "" when it declares
+// none. A page names the folder from here rather than writing `id1` for every
+// game (`NEW_330`, `Q2_020` finding 1).
+func (e *EngineProfile) BaseFolder() string {
+	for _, layout := range e.ContentLayouts {
+		if layout.Kind == "loose_files" && layout.Root == "game_root" && layout.Path != "" {
+			return layout.Path
+		}
+	}
+	return ""
+}
+
 // ActionByID implements [Profile].
 func (e *EngineProfile) ActionByID(id string) (Action, bool) { return findAction(e.Actions, id) }
 
