@@ -385,6 +385,10 @@ func runServe(env *Env, args []string) int {
 		// check — offered to Report a bug. Same reporter the job service and
 		// the readiness check capture through.
 		Incidents: env.incidents(settings).Recent,
+		// What a bug report's `environment` says: the same environment those
+		// incidents are filed under (NEW_333), never "unknown" from a status
+		// route that did not carry it.
+		IncidentEnvironment: env.incidents(settings).Config().Environment,
 		Paths: web.Paths{
 			Profiles:   profilesDir,
 			Bindings:   bindingsPath,

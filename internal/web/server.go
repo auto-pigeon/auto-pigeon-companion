@@ -129,6 +129,8 @@ type Server struct {
 	lifecycle *Lifecycle
 	// incidents is Options.Incidents; never nil.
 	incidents func() []incident.RecentIncident
+	// incidentEnvironment is Options.IncidentEnvironment.
+	incidentEnvironment string
 
 	// mu guards the two values a request can change under another request:
 	// the stored configuration, and the client built from the address in it.
@@ -205,6 +207,11 @@ type Options struct {
 	// Lifecycle decides when the process stops. Nil is server mode, which never
 	// stops on its own — what a test and `companion serve` want.
 	Lifecycle *Lifecycle
+	// IncidentEnvironment is the deployment this process files incidents
+	// under (incident.Config.Environment), published on /api/status so a bug
+	// report says the same thing its incidents do (NEW_333). Empty means the
+	// status route omits it and the page writes "unknown".
+	IncidentEnvironment string
 	// Incidents lists what this process raised, newest first, for the page's
 	// Report a bug (bugreport.go). Nil means none: the page files cold
 	// reports only.
@@ -280,27 +287,28 @@ func NewServer(options Options) (*Server, error) {
 	}
 
 	server := &Server{
-		incidents:    incidents,
-		lifecycle:    lifecycle,
-		playLive:     playrun.NewLive(),
-		version:      options.Version,
-		debug:        options.Debug,
-		jobs:         options.Jobs,
-		runner:       options.AUE,
-		paths:        options.Paths,
-		picker:       picker,
-		scanner:      options.Scanner,
-		builds:       newBuildRuns(),
-		q3runs:       newQ3Runs(),
-		q2runs:       newQ3Runs(),
-		logf:         logf,
-		games:        newGameState(),
-		newAUB:       newAUB,
-		token:        token,
-		settings:     settings,
-		client:       client,
-		updateConfig: update,
-		readConfig:   options.ReadConfig,
+		incidents:           incidents,
+		incidentEnvironment: options.IncidentEnvironment,
+		lifecycle:           lifecycle,
+		playLive:            playrun.NewLive(),
+		version:             options.Version,
+		debug:               options.Debug,
+		jobs:                options.Jobs,
+		runner:              options.AUE,
+		paths:               options.Paths,
+		picker:              picker,
+		scanner:             options.Scanner,
+		builds:              newBuildRuns(),
+		q3runs:              newQ3Runs(),
+		q2runs:              newQ3Runs(),
+		logf:                logf,
+		games:               newGameState(),
+		newAUB:              newAUB,
+		token:               token,
+		settings:            settings,
+		client:              client,
+		updateConfig:        update,
+		readConfig:          options.ReadConfig,
 	}
 	index, err := indexPage(token)
 	if err != nil {
@@ -604,6 +612,9 @@ type statusBody struct {
 	Version       string `json:"version"`
 	AUBBaseURL    string `json:"aub_base_url"`
 	Authenticated bool   `json:"authenticated"`
+	// IncidentEnvironment is what a bug report's `environment` says
+	// (bugreport.mjs) — the one this process's incidents are filed under.
+	IncidentEnvironment string `json:"incident_environment,omitempty"`
 	// SessionExpired says a session is stored and its token has expired, so
 	// the page asks for a sign-in instead of showing "signed in" on a session
 	// every AUB call would refuse.
@@ -656,21 +667,22 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		verified, provenance = record.Verified, record.Mode
 	}
 	writeJSON(w, http.StatusOK, statusBody{
-		Version:        s.version,
-		AUBBaseURL:     baseURL,
-		Authenticated:  authenticated,
-		SessionExpired: expired,
-		Email:          settings.Session.Email,
-		Platform:       runtime.GOOS + "/" + runtime.GOARCH,
-		JobsDir:        jobs,
-		AUEAvailable:   aue.Available(s.runner),
-		AUEVerified:    verified,
-		AUEProvenance:  provenance,
-		Debug:          s.debug,
-		Backends:       config.OfficialBackends,
-		BackendLabel:   backendLabel(baseURL),
-		AUBIgnored:     ignoredAddresses(),
-		AUBIgnoredWhy:  ignoredWhy(),
+		Version:             s.version,
+		IncidentEnvironment: s.incidentEnvironment,
+		AUBBaseURL:          baseURL,
+		Authenticated:       authenticated,
+		SessionExpired:      expired,
+		Email:               settings.Session.Email,
+		Platform:            runtime.GOOS + "/" + runtime.GOARCH,
+		JobsDir:             jobs,
+		AUEAvailable:        aue.Available(s.runner),
+		AUEVerified:         verified,
+		AUEProvenance:       provenance,
+		Debug:               s.debug,
+		Backends:            config.OfficialBackends,
+		BackendLabel:        backendLabel(baseURL),
+		AUBIgnored:          ignoredAddresses(),
+		AUBIgnoredWhy:       ignoredWhy(),
 	})
 }
 

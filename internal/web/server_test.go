@@ -486,3 +486,23 @@ func TestOpenCommandPerPlatform(t *testing.T) {
 		}
 	}
 }
+
+// TestStatusCarriesTheIncidentEnvironment — NEW_333. The bug-report page writes
+// `status.incident_environment` into every report it builds, and the status
+// route never carried it: every Companion report, released v1.290 included,
+// said "environment unknown" while the same process's incidents named theirs.
+func TestStatusCarriesTheIncidentEnvironment(t *testing.T) {
+	server, err := NewServer(Options{
+		Version:             "1.290",
+		Config:              config.Default(),
+		Jobs:                newTestJobs(t),
+		IncidentEnvironment: "production",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, body := do(t, server, http.MethodGet, "/api/status", "")
+	if body["incident_environment"] != "production" {
+		t.Fatalf("incident_environment = %v, want production", body["incident_environment"])
+	}
+}
