@@ -44,6 +44,9 @@ type problemOrigin struct {
 	Profile     string
 	ProfileName string
 	Executable  string
+	// Detail is the tool's own sentence, before the stage title was put in
+	// front of it for the pages that list a pipeline's problems flat.
+	Detail string
 }
 
 func installReadiness(entry job.CatalogEntry, local binding.LocalBinding) readiness {
@@ -109,6 +112,7 @@ func (r readiness) view() map[string]any {
 			problems[index]["profile"] = origin.Profile
 			problems[index]["profile_name"] = origin.ProfileName
 			problems[index]["executable"] = origin.Executable
+			problems[index]["detail"] = origin.Detail
 		}
 	}
 	return map[string]any{"ready": r.Ready, "problems": problems}
@@ -137,10 +141,11 @@ func pipelineReadiness(pipeline *profile.PipelineProfile, resolver *build.Resolv
 		}
 		meta := entry.Profile.Metadata()
 		for _, problem := range problems {
+			detail := problem.Summary
 			problem.Summary = step.Title + ": " + problem.Summary
 			out.Problems = append(out.Problems, problem)
 			out.Origins = append(out.Origins, problemOrigin{
-				Step: step.Title, Profile: meta.ID, ProfileName: meta.Name, Executable: action.Executable,
+				Step: step.Title, Profile: meta.ID, ProfileName: meta.Name, Executable: action.Executable, Detail: detail,
 			})
 		}
 	}

@@ -144,7 +144,9 @@ until you pick one.
 The qualified compiler is ericw-tools **2.0.0-alpha11** (v0.18.1 is retired).
 Download it from its homepage (the profile's **Homepage** button), unpack it,
 then in **Profiles › Configure › ericw-tools** choose that folder — the one with
-`qbsp` directly inside it. From a terminal, with the profile document from this
+`qbsp` directly inside it. An approved profile's page opens on what this machine
+still needs and where its programs are; the profile's long description is under
+**About this profile**. From a terminal, with the profile document from this
 repository:
 
 ```console
@@ -229,7 +231,11 @@ curl -sS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
 
 **Build & Run keeps the pipeline you chose.** One that stops being ready stays
 selected, greyed, with its reason and a link to set it up; nothing is started
-with a pipeline you did not choose.
+with a pipeline you did not choose. The others that need setup are listed as
+`— needs setup` and summed up once, in the closed **Other pipelines (n need
+setup)** list under the select: what each still needs, a **Set up** link to the
+profile to fix (the tool, not the pipeline), and the exact words under
+**Details**. Engine and action lists work the same way.
 
 ### Building and watching a build
 

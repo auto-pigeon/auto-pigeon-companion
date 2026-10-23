@@ -64,10 +64,12 @@ const full = (id, name) => pipeline(id, name, [missing("Compile the map", "qbsp"
   assert.equal(rest.length, 0, "one missing tool was said more than once");
   assert.equal(cause.profile, "auto-pigeon.ericw-tools.q1", "the setup link goes to the pipeline, not to the tool");
   assert.equal(cause.text, "ericw-tools 2.0.0-alpha11 (Quake 1): qbsp, vis, and light not set up yet.");
-  // the same fault of every stage is said once, without the stage title the server put in front of it
-  const folder = (step) => ({ fault: "unbound_root", step, summary: `${step}: "${step}" needs the installed game folder.`, profile: "q2.tool", profile_name: "Q2 tool", executable: "qbsp" });
+  // the same fault of every stage is said once, in the tool's own sentence
+  const folder = (step) => ({ fault: "unbound_root", step, summary: `${step}: "${step}" needs the installed game folder.`,
+    detail: `"${step}" needs the installed game folder.`, profile: "q2.tool", profile_name: "Q2 tool", executable: "qbsp" });
   const [q2] = context.setupCauses(pipeline("q2", "Q2", [folder("Compile the map"), folder("Compute lighting"), { ...missing("Compute visibility", "vis"), profile: "q2.tool", profile_name: "Q2 tool" }]));
-  assert.equal(q2.text, 'Q2 tool: vis not set up yet. "Compile the map" needs the installed game folder.');
+  // the tool's own sentence (detail), and the other distinct sentence counted rather than dropped
+  assert.equal(q2.text, 'Q2 tool: vis not set up yet. "Compile the map" needs the installed game folder. (and 1 more)');
 }
 // 2. Two tools stay two lines; another fault keeps the server's own words.
 {
@@ -85,6 +87,14 @@ const full = (id, name) => pipeline(id, name, [missing("Compile the map", "qbsp"
   const cause = context.setupCauses(action, { setupProfile: () => ({ id: "auto-pigeon.engine.vkquake", name: "vkQuake" }) })[0];
   assert.equal(cause.profile, "auto-pigeon.engine.vkquake", "an action's setup link named the action");
   assert.equal(cause.text, "It needs the game folder.");
+  // the Run page's actions carry nothing themselves: their problems are the engine's, per action
+  const engineWithActions = { id: "e", name: "Yamagi", action_problems: { host_server: [{ fault: "missing_engine", summary: "Nothing on this machine says where Yamagi's \"server\" executable is.", fix: "" }] } };
+  const [hostCause] = context.setupCauses({ id: "host_server", title: "Run a dedicated server" }, {
+    setupProfile: () => ({ id: "e", name: "Yamagi" }),
+    setupProblems: (action) => engineWithActions.action_problems[action.id] || [],
+  });
+  assert.equal(hostCause.profile, "e", "an action row has no setup link to its engine");
+  assert.match(hostCause.text, /"server" executable/);
 }
 // 4. Four waiting pipelines under a select: ONE closed disclosure, four rows,
 //    every link to the tool, the exact words kept one click on; a refresh keeps

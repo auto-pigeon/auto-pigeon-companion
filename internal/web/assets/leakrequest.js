@@ -25,7 +25,7 @@
 "use strict";
 
 (() => {
-  const { $, el, api, withBusy, record, t, pipelineReady, executionChoices, setupCauses, badge } = window.AUCOM;
+  const { $, el, api, withBusy, record, t, pipelineReady, executionChoices, setupCauses, setupLink, trapFocus, badge } = window.AUCOM;
 
   const WATCH_MS = 2000;
   const box = $("leak-request");
@@ -242,9 +242,12 @@
     $("leak-pin-confirm").disabled = !item || !pipelineReady(item);
     $("leak-pin-select").title = item?.name || "";
     if (!choices.some(pipelineReady) && !$("leak-pin-field").hidden) {
-      status.replaceChildren(el("p", { text: choices.length
-        ? t("No pipeline is ready yet. Set up the tool one of them needs, then come back.")
-        : t("No installed pipeline can test {game} maps.", { game: gameName(pinGame) }) }));
+      // Nothing installed can test this game at all: the one thing to do is
+      // in Profiles, where a pipeline is installed or written (New profile).
+      status.replaceChildren(choices.length
+        ? el("p", { text: t("No pipeline is ready yet. Set up the tool one of them needs, then come back.") })
+        : el("p", { children: [document.createTextNode(t("No installed pipeline can test {game} maps.", { game: gameName(pinGame) }) + " "),
+          el("a", { text: t("Open Profiles"), attrs: { href: "#profiles" } })] }));
       return;
     }
     if (!item) { status.replaceChildren(); return; }
@@ -257,9 +260,7 @@
     status.replaceChildren(
       el("p", { className: "leak-pin__selected", children: [badge(t("Needs setup"), "blocked"), document.createTextNode(" "), el("strong", { text: item.name })] }),
       ...setupCauses(item).map((cause) => el("p", { className: "leak-pin__summary", children: [
-        document.createTextNode(cause.text + " "),
-        el("a", { text: t("Set up"), attrs: { href: "#profiles/" + encodeURIComponent(cause.profile), "aria-label": t("Set up {name}", { name: cause.name }) } }),
-      ] })));
+        document.createTextNode(cause.text + " "), setupLink(cause)] })));
   }
 
   async function loadPin() {
@@ -359,6 +360,8 @@
     // live on Windows: the continuation reviewed a stale "nothing pinned").
     while (resolving) await new Promise((done) => setTimeout(done, 100));
     await resolve(true);
+    // Opened again meanwhile (Change pipeline): that opening owns the page now.
+    if (!pinModal.hidden) return;
     // Review only the request the dialog was opened for, still current, and
     // only with the pipeline just pinned (NEW_310A): a request that replaced
     // it meanwhile, or a pin changed elsewhere, is shown, never started.
@@ -370,21 +373,12 @@
   pinModal.querySelector("[data-dismiss=leak-pin]")?.addEventListener("click", () => closePin());
   pinModal.addEventListener("keydown", (event) => {
     if (event.key === "Escape") { event.preventDefault(); closePin(); return; }
-    // Focus stays inside the open dialog: Tab past the last control comes back
-    // to the first, Shift+Tab the other way (the sign-in dialog's rule).
-    if (event.key !== "Tab") return;
-    const focusable = [...$("leak-pin-dialog").querySelectorAll("button, select, a[href], summary")]
-      .filter((node) => !node.disabled && node.offsetParent !== null);
-    if (!focusable.length) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    trapFocus(event, $("leak-pin-dialog"));
   });
   // A "Set up" link goes to Profiles: the dialog closes, and the request's
   // notice is where to come back to — choosing again reads the list afresh.
   $("leak-pin-dialog").addEventListener("click", (event) => {
-    if (event.target.closest?.('a[href^="#profiles/"]')) closePin({ restoreFocus: false });
+    if (event.target.closest?.('a[href^="#profiles"]')) closePin({ restoreFocus: false });
   });
   // Back from another window with the dialog's game still unanswered: list again.
   document.addEventListener("visibilitychange", () => { if (!document.hidden && !pinModal.hidden) loadPin(); });

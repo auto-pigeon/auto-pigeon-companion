@@ -215,6 +215,7 @@
         // An action is set up on its engine (NEW_345): the link went to a
         // profile page named after the action, which does not exist.
         setupProfile: () => ({ id: engine.id, name: engine.name }),
+        setupProblems: (action) => engine.action_problems?.[action.id] || [],
       });
     for (const option of select.options) option.dataset.role = engine.actions?.find((a) => a.id === option.value)?.session_role || "";
     if (!select.value) select.value = (engine.actions || []).find((a) => window.AUCOM.actionReady(engine, a.id))?.id || "";

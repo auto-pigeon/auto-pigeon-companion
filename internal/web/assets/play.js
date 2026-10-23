@@ -581,7 +581,7 @@
   // it is not (Q2_020, seen live: Yamagi's "Play a map" needed a folder) is
   // named by that action's problems, rather than by "Needs setup:" and
   // nothing after it.
-  function setupProblems(engine) {
+  function offeredProblems(engine) {
     const own = engine.readiness?.problems || [];
     const offered = Object.keys(ACTIONS).filter((id) => !packaged() || id === "play_map");
     return own.length ? own : offered.flatMap((id) => engine.action_problems?.[id] || []);
@@ -594,7 +594,7 @@
     state.engine = window.AUCOM.executionChoices(select, state.engines, state.engine,
       (engine) => engineFits(engine) && ready(engine),
       (engine) => `${engine.name} — ${!engineFits(engine) ? t("does not play this build profile's maps") : ready(engine) ? t("Ready to start") : t("Needs setup")}`,
-      "Choose a ready engine…", false, false, engineFits, { setupLabel: "engines", setupProblems });
+      "Choose a ready engine…", false, false, engineFits, { setupLabel: "engines", setupProblems: offeredProblems });
     // A build profile for another game clears an engine that cannot play it,
     // at once, and says why — the person's saved setup is untouched. The why
     // stays, said against the build profile chosen NOW, until an engine is

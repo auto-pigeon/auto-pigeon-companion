@@ -439,6 +439,13 @@
         badge(t("needs setup"), "blocked"), document.createTextNode(" "),
         document.createTextNode(t("{programs}: no path yet. Choose where they are below.", { programs: window.AUCOM.listOf(programs) })),
       ] }));
+      // The checker's own words, with the command-line way to do the same,
+      // one click away rather than gone.
+      box.append(el("details", { className: "profile-about", children: [
+        el("summary", { text: t("Details") }),
+        el("ul", { className: "plain", children: (body.readiness.problems || []).map((problem) =>
+          el("li", { text: [problem.summary, problem.fix].filter(Boolean).join(" ") })) }),
+      ] }));
       return box;
     } else {
       box.append(el("p", { className: "message error", text: t("Not ready to start yet:") }));
@@ -451,12 +458,16 @@
     return box;
   }
 
-  // nothingChosenYet: every program the profile holds to a version has no path
-  // and nothing else is wrong — the state of every tool on a fresh install.
+  // nothingChosenYet: nothing on this machine names a program or a folder for
+  // it, and nothing else is wrong — every tool on a fresh install. A folder
+  // that was chosen and holds the wrong thing is NOT this (it is said in the
+  // checker's own words below), however unbound its programs look.
   function nothingChosenYet(body) {
     const rows = body.compatibility || [];
-    return rows.length > 0 && rows.every((row) => row.state === "not_bound") &&
-      (body.readiness.problems || []).every((problem) => problem.fault === "missing_engine");
+    const recorded = Object.values(body.binding?.executables || {}).some(Boolean) ||
+      Object.values(body.binding?.roots || {}).some(Boolean);
+    return !recorded && rows.length > 0 && rows.every((row) => row.state === "not_bound") &&
+      (body.readiness?.problems || []).every((problem) => problem.fault === "missing_engine");
   }
 
   // compatibilityBox is what each program said it is when the Companion asked
@@ -778,14 +789,15 @@
       const acquisition = binding?.acquisition || "";
       const named = Object.values(binding?.executables || {}).filter(Boolean).length;
       provenance.replaceChildren();
-      if (named === 0) {
-        // Nothing named yet: the readiness line above already says so, with
-        // the programs' names (NEW_345) — a second badge here said it again.
-        return;
-      } else {
+      if (named > 0) {
         provenance.append(badge("local binding", "local"),
           document.createTextNode(" " + t("Programs you named on this machine. The Companion runs what you pointed at and downloads nothing.") +
             (body.trust === "builtin" ? " " + t("The profile's builtin badge is about the document, not about these bytes.") : "")));
+      } else if (!nothingChosenYet(body)) {
+        // Said here only when the readiness line above does not already say
+        // it with the programs' names (NEW_345: it was said twice).
+        provenance.append(badge("not set up", "blocked"),
+          document.createTextNode(" Nothing is recorded yet, so a build that needs these programs cannot start."));
       }
     };
     describeProvenance(body.binding);

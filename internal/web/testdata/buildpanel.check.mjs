@@ -10,7 +10,7 @@ const source = readFileSync(new URL("../assets/build.js", import.meta.url), "utf
 const core = readFileSync(new URL("../assets/core.js", import.meta.url), "utf8");
 const coreDuration = core.slice(core.indexOf("function duration(ms)"), core.indexOf("function when(value)"));
 assert.ok(coreDuration.startsWith("function duration(ms)"), "core.js no longer defines duration where this check looks");
-const start = source.indexOf("const { duration } = window.AUCOM;");
+const start = source.indexOf("const since = (stamp) =>");
 const end = source.indexOf("function renderProblems(manifest)");
 const sticky = source.indexOf("// What somebody opened or closed stays that way.");
 const folds = source.indexOf("// foldRepeats shortens a run");
@@ -20,7 +20,8 @@ const t = (text, slots = {}) => text.replace(/\{([a-zA-Z_.]+)\}/g, (_, key) => S
 const body = source.slice(start, sticky) + source.slice(folds, end);
 const AUCOM = { t };
 AUCOM.duration = new Function("AUCOM", coreDuration + "\nreturn duration;")(AUCOM);
-const { duration, foldRepeats, problemGroups } = new Function("t", "window", body + "\nreturn { duration, foldRepeats, problemGroups };")(t, { AUCOM });
+const { foldRepeats, problemGroups } = new Function("t", "duration", body + "\nreturn { foldRepeats, problemGroups };")(t, AUCOM.duration);
+const { duration } = AUCOM;
 
 // A span is said the way it is read: the lighting pass that printed "708399 ms".
 assert.equal(duration(640), "640 ms");

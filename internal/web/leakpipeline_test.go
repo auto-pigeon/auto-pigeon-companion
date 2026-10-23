@@ -198,6 +198,11 @@ func TestAnUnreadyChoiceNamesTheToolToSetUp(t *testing.T) {
 			if profile == "" || profile == choice["id"] || problem["profile_name"] == "" || problem["executable"] == "" || problem["step"] == "" {
 				t.Errorf("%v: a problem that does not name the tool to set up: %v", choice["id"], problem)
 			}
+			// The tool's own sentence travels beside the flat one, so a page
+			// never cuts the stage title off an English string.
+			if summary, _ := problem["summary"].(string); problem["detail"] == "" || summary != problem["step"].(string)+": "+problem["detail"].(string) {
+				t.Errorf("%v: summary %q is not the stage title and the tool's own sentence %q", choice["id"], summary, problem["detail"])
+			}
 		}
 	}
 	if unready == 0 {

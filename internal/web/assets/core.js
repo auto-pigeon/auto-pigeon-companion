@@ -692,7 +692,10 @@ function executionChoices(select, items, previous, ready, label, placeholder, ch
   }
   select.value = items.some((item) => item.id === previous && (retain || ready(item))) ? previous
     : !previous && chooseReady ? items.find(ready)?.id || "" : "";
-  setupActions(select, items.filter((item) => !ready(item) && offerable(item)), setup);
+  // The selected item's own state is said beside the list by its caller; the
+  // closed list is the OTHER items (NEW_345: a retained choice was counted in
+  // "Other pipelines" too).
+  setupActions(select, items.filter((item) => !ready(item) && offerable(item) && item.id !== select.value), setup);
   return select.value;
 }
 
@@ -742,13 +745,7 @@ function setupRows(waiting, opened = new Set(), setup = {}) {
     const row = el("li", { attrs: { "data-item": item.id } });
     row.append(el("span", { className: "setup-rows__name", text: item.name || item.id }));
     for (const cause of setupCauses(item, setup)) {
-      const line = el("span", { className: "setup-rows__cause" });
-      line.append(document.createTextNode(cause.text + " "));
-      line.append(el("a", { text: AUCOM.t("Set up"), attrs: {
-        href: "#profiles/" + encodeURIComponent(cause.profile),
-        "aria-label": AUCOM.t("Set up {name}", { name: cause.name }),
-      } }));
-      row.append(line);
+      row.append(el("span", { className: "setup-rows__cause", children: [document.createTextNode(cause.text + " "), setupLink(cause)] }));
     }
     const exact = (setup.setupProblems || setupProblems)(item);
     if (exact.length) {
@@ -761,6 +758,28 @@ function setupRows(waiting, opened = new Set(), setup = {}) {
     }
     return row;
   }) });
+}
+
+// setupLink is the one way a page sends somebody to set a profile up: its page
+// in Profiles, named for a screen reader by the profile, not by "Set up" alone.
+function setupLink(cause) {
+  return el("a", { text: AUCOM.t("Set up"), attrs: {
+    href: "#profiles/" + encodeURIComponent(cause.profile),
+    "aria-label": AUCOM.t("Set up {name}", { name: cause.name }),
+  } });
+}
+
+// trapFocus keeps Tab inside an open dialog: past the last control it comes
+// back to the first, and Shift+Tab the other way. Call it from the dialog's
+// keydown handler (the sign-in dialog's rule, shared since NEW_345).
+function trapFocus(event, container, selector = "button, select, input, a[href], summary") {
+  if (event.key !== "Tab") return;
+  const focusable = [...container.querySelectorAll(selector)].filter((node) => !node.disabled && node.offsetParent !== null);
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
 }
 
 // setupProblems is what an item says stops it: its readiness problems, or —
@@ -776,9 +795,9 @@ function setupProblems(item) {
 // an engine or a tool is its own. Programs are named together by what is
 // wrong with them ("qbsp, vis and light not set up yet"), from the fault and
 // the program the server names; any other problem is said once per fault in
-// the server's own sentence, without the stage title the server put in front
-// of it (the row already belongs to that item). Nothing is read out of the
-// English of a summary; the exact words stay one click away, under Details.
+// the tool's own sentence (`detail`: the server's summary before it put the
+// stage title in front). Nothing is read out of, or cut from, the English of
+// a summary; the exact words stay one click away, under Details.
 const PROGRAM_FAULTS = {
   missing_engine: "{programs} not set up yet",
   tool_incompatible: "{programs} not the version this profile was written for",
@@ -796,22 +815,26 @@ function setupCauses(item, setup = {}) {
   const groups = new Map();
   for (const problem of problemsOf(item)) {
     const id = problem.profile || own.id;
-    if (!groups.has(id)) groups.set(id, { profile: id, name: problem.profile_name || (id === own.id ? own.name : id), programs: new Map(), other: new Map() });
+    if (!groups.has(id)) groups.set(id, { profile: id, name: problem.profile_name || (id === own.id ? own.name : id), programs: new Map(), other: new Map(), sentences: new Set() });
     const group = groups.get(id);
     if (PROGRAM_FAULTS[problem.fault] && problem.executable) {
       if (!group.programs.has(problem.fault)) group.programs.set(problem.fault, []);
       const names = group.programs.get(problem.fault);
       if (!names.includes(problem.executable)) names.push(problem.executable);
-    } else if (!group.other.has(problem.fault)) {
-      const prefix = problem.step ? problem.step + ": " : "";
-      group.other.set(problem.fault, prefix && problem.summary.startsWith(prefix) ? problem.summary.slice(prefix.length) : problem.summary);
+    } else {
+      // The tool's own sentence (`detail`, without the stage title the server
+      // puts in front of a pipeline's problem), once per fault; how many more
+      // distinct sentences there are is counted, not dropped.
+      const sentence = problem.detail || problem.summary;
+      if (!group.other.has(problem.fault)) group.other.set(problem.fault, sentence);
+      group.sentences.add(sentence);
     }
   }
   return [...groups.values()].map((group) => {
     const parts = [...group.programs].map(([fault, names]) => AUCOM.t(PROGRAM_FAULTS[fault], { programs: listOf(names) }));
     const said = parts.length ? [AUCOM.t("{name}: {what}.", { name: group.name, what: parts.join("; ") })] : [];
     const other = [...group.other.values()];
-    if (other.length) said.push(other[0] + (other.length > 1 ? " " + AUCOM.t("(and {n} more)", { n: other.length - 1 }) : ""));
+    if (other.length) said.push(other[0] + (group.sentences.size > 1 ? " " + AUCOM.t("(and {n} more)", { n: group.sentences.size - 1 }) : ""));
     return { profile: group.profile, name: group.name, text: said.join(" ") };
   });
 }
@@ -828,7 +851,7 @@ function listOf(names) {
 
 Object.assign(AUCOM, {
   $, el, api, announce, actionReady, pipelineReady, executionChoices, setMessage, busy, withBusy, confirmModal,
-  setupRows, setupCauses, setupProblems, listOf, duration,
+  setupRows, setupCauses, setupProblems, setupLink, trapFocus, listOf, duration,
   record, renderActivity, clearActivity, pathField, downloadButton, tabsFor,
   badge, maturityBadge, maturityNote, bytes, when, terminal, programFileName, folderTitle,
   openCompatibilityReport, wireCompatibilityReport,

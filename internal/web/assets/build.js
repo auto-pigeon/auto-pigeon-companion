@@ -11,7 +11,7 @@
 
 (() => {
   const { $, el, api, setMessage, busy, withBusy, record, badge, when, terminal,
-    maturityBadge, maturityNote, openCompatibilityReport, t } = window.AUCOM;
+    maturityBadge, maturityNote, openCompatibilityReport, duration, t } = window.AUCOM;
 
   let pipelines = [];
   let pipelineRefresh = 0;
@@ -882,8 +882,6 @@
     tick();
   }
 
-  // core.js's, which Jobs uses too (NEW_345).
-  const { duration } = window.AUCOM;
   const since = (stamp) => {
     const at = Date.parse(stamp || "");
     return Number.isFinite(at) && at > 0 ? Math.max(0, Date.now() - at) : NaN;

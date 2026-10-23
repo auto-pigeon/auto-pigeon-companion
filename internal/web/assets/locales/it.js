@@ -6,13 +6,13 @@
 "use strict";
 window.AUCOM_LOCALES = window.AUCOM_LOCALES || {};
 window.AUCOM_LOCALES.it = {
-  // NEW_345: the leak-test chooser, the closed "needs setup" lists and job durations.
+  "Open Profiles": "Apri Profili",
   "Leak test requested by the editor": "Test delle perdite richiesto dall’editor",
   "{name}, saved revision {n} — received {time}": "{name}, revisione salvata {n} — ricevuta alle {time}",
   "Its content still matches what the editor asked about. It is a {game} map, so the test is {compiler}'s. Review the compiler command first; nothing runs until you press Build.": "Il contenuto corrisponde ancora a ciò che l’editor ha chiesto. È una mappa di {game}, quindi il test è quello di {compiler}. Prima esamina il comando del compilatore; nulla viene eseguito finché non premi Compila.",
   "No pipeline is chosen yet for testing {game} maps for leaks on this computer.": "Su questo computer non è ancora scelta una pipeline per il test delle perdite delle mappe di {game}.",
   "Choose one; it is kept for every later request.": "Scegline una; resta valida per tutte le richieste successive.",
-  "Choose leak-test pipeline": "Scegli la pipeline del test",
+  "Choose leak-test pipeline": "Scegli la pipeline del test delle perdite",
   "Change pipeline": "Cambia pipeline",
   "Review leak test": "Esamina il test delle perdite",
   "In review. The Build area shows the exact command; nothing runs until you press Build.": "In esame. L’area Compila mostra il comando esatto; nulla viene eseguito finché non premi Compila.",
@@ -41,7 +41,7 @@ window.AUCOM_LOCALES.it = {
   "{n} s": "{n} s",
   "{m} min {s} s": "{m} min {s} s",
   "{h} h {m} min": "{h} h {m} min",
-  "Ready": "Pronto",
+  "Ready": "Pronta",
   "ready": "pronto",
   "needs setup": "da configurare",
   "built in": "incluso",

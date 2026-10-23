@@ -253,18 +253,7 @@
     }
     // Focus stays inside an open dialog: Tab past the last control comes back
     // to the first, and Shift+Tab the other way.
-    if (event.key !== "Tab") return;
-    const focusable = [...$("first-run").querySelectorAll("button:not([disabled]), input:not([disabled])")];
-    if (focusable.length === 0) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
+    window.AUCOM.trapFocus(event, $("first-run"), "button, input");
   });
 
   $("sign-in-form").addEventListener("submit", async (event) => {
