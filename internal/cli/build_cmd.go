@@ -767,9 +767,10 @@ func buildLeakPipeline(env *Env, args []string) int {
 		return fail(env, err)
 	}
 	type choice struct {
-		ID      string `json:"id"`
-		Name    string `json:"name"`
-		Builtin bool   `json:"builtin"`
+		ID      string   `json:"id"`
+		Name    string   `json:"name"`
+		Builtin bool     `json:"builtin"`
+		Steps   []string `json:"steps"`
 	}
 	var choices []choice
 	eligible := map[string]string{}
@@ -784,9 +785,24 @@ func buildLeakPipeline(env *Env, args []string) int {
 			continue
 		}
 		eligible[meta.ID] = ""
-		choices = append(choices, choice{ID: meta.ID, Name: meta.Name, Builtin: meta.ID == adapter.PipelineID})
+		steps := make([]string, 0, len(pipeline.Steps))
+		for _, step := range pipeline.Steps {
+			steps = append(steps, step.ID)
+		}
+		choices = append(choices, choice{ID: meta.ID, Name: meta.Name, Builtin: adapter.Ships(meta.ID), Steps: steps})
 	}
-	sort.SliceStable(choices, func(i, j int) bool { return choices[i].Builtin && !choices[j].Builtin })
+	// The game's first built-in pipeline, then its alternatives, then the rest:
+	// the page's order.
+	rank := func(c choice) int {
+		switch {
+		case c.ID == adapter.PipelineID:
+			return 0
+		case c.Builtin:
+			return 1
+		}
+		return 2
+	}
+	sort.SliceStable(choices, func(i, j int) bool { return rank(choices[i]) < rank(choices[j]) })
 
 	pinned := settings.LeakTestPipelines[adapter.Profile]
 	if *pin != "" || *unpin {
@@ -828,7 +844,7 @@ func buildLeakPipeline(env *Env, args []string) int {
 		if c.ID == pinned {
 			mark = "*"
 		}
-		fmt.Fprintf(env.Stdout, "  %s %s  %s\n", mark, c.ID, c.Name)
+		fmt.Fprintf(env.Stdout, "  %s %s  %s  (runs %s)\n", mark, c.ID, c.Name, strings.Join(c.Steps, ", "))
 	}
 	return 0
 }

@@ -10,16 +10,25 @@ import (
 // NetRadiant-custom `20260114`, `auto-pigeon-tools/q3map2-contract.json`.
 const Q3Map2MeasuredVersion = "2.5.17n-git-68ecbed"
 
-// Q3Map2ForkVersion is the Auto-Pigeon fork's release 2.5.17n-ap.3026 (tag
+// Q3Map2ForkVersion3026 is the Auto-Pigeon fork's release 2.5.17n-ap.3026 (tag
 // `auto-pigeon-q3map2-v2.5.17n-ap.3026`, NEW_340): the same controls run from
 // its published linux-amd64 archive (`testdata/q3/logs-ap.3026`,
 // `lin-ap.3026`) exit, leave and print exactly what 68ecbed's did — every line
 // file byte-identical, the logs equal but for the banner, the timings and the
 // BSP's byte count. Only this exact banner is added.
-const Q3Map2ForkVersion = "2.5.17n-ap.3026+g7e109335.upstream.82161339"
+const Q3Map2ForkVersion3026 = "2.5.17n-ap.3026+g7e109335.upstream.82161339"
+
+// Q3Map2ForkVersion is the fork's release 2.5.17n-ap.3030 (tag
+// `auto-pigeon-q3map2-v2.5.17n-ap.3030`, NEW_340A), the one the built-in fork
+// profile names: it keeps a narrow real opening's portals. Its published
+// linux-amd64 archive, run on the same controls in the same job layout
+// (`testdata/q3/logs-ap.3030`, `lin-ap.3030`), exits and leaves exactly what
+// 3026 did, every line file byte-identical, the logs equal but for the banner
+// and its build date. Only this exact banner is added.
+const Q3Map2ForkVersion = "2.5.17n-ap.3030+gca2e281d.upstream.82161339"
 
 // Q3Map2MeasuredVersions are the Q3Map2 builds the reading below was measured on.
-var Q3Map2MeasuredVersions = []string{Q3Map2MeasuredVersion, Q3Map2ForkVersion}
+var Q3Map2MeasuredVersions = []string{Q3Map2MeasuredVersion, Q3Map2ForkVersion3026, Q3Map2ForkVersion}
 
 // What Q3Map2 2.5.17n prints, measured on the authored controls in
 // `testdata/q3/controls` (the logs beside them are those runs).

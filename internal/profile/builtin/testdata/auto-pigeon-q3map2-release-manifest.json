@@ -5,11 +5,11 @@
         "steps_passed": 9,
         "verdict": "pass"
       },
-      "built_program_sha256": "83433d7d2548c83645e63efe79d3fe2117363f10f064e6a64451801b9851aab3",
+      "built_program_sha256": "b88d9d92d80e9d0933c1f684600b888e3f90ca829a261e4fe0bae39939bfd5d3",
       "kind": "toolchain",
-      "name": "auto-pigeon-q3map2-2.5.17n-ap.3026-linux-amd64.zip",
+      "name": "auto-pigeon-q3map2-2.5.17n-ap.3030-linux-amd64.zip",
       "platform": "linux-amd64",
-      "program_sha256": "2cd462a0a7cbdd3094b6a1755546a7e042c875e1a413096eb88efe9e430f2fb1",
+      "program_sha256": "cec818b6d9358c34995b473adab36b4bf6674019981120a944f5f164dfaa42a6",
       "regressions": {
         "cases": {
           "G01.m4.inset": "pass",
@@ -46,7 +46,7 @@
           "R07.open.1": "pass",
           "R08.nearparallel": "pass",
           "R08.overlap": "pass",
-          "R08.slit.0125": "known_failure",
+          "R08.slit.0125": "pass",
           "R08.touch": "pass",
           "R08.zeroarea": "pass",
           "R09.patch": "pass",
@@ -54,6 +54,27 @@
           "R10.classic": "pass",
           "R10.valve220": "pass",
           "R11.m3.p10_nearby": "pass",
+          "S02.off.125": "pass",
+          "S02.off.1875": "pass",
+          "S02.off.5": "pass",
+          "S03.split.1875": "pass",
+          "S03.split.25": "pass",
+          "S03.split.5": "pass",
+          "S04.turned.0": "pass",
+          "S04.turned.15": "pass",
+          "S04.turned.45": "pass",
+          "S05.moved.on_split": "pass",
+          "S05.moved.straddle": "pass",
+          "S05.moved.turned45": "pass",
+          "S06.touch.off": "pass",
+          "S06.touch.split": "pass",
+          "S07.blind": "pass",
+          "S07.overlap": "pass",
+          "S07.pocket": "pass",
+          "S08.band.00625": "known_failure",
+          "S11.detail_over": "pass",
+          "S11.patch_over": "pass",
+          "S12.passage": "pass",
           "U.base_winding": "pass",
           "U.coarse_snap_normal": "pass",
           "U.decal_misalignment": "pass",
@@ -74,22 +95,22 @@
           "U.tiny_structural_brush": "pass"
         },
         "known_failures_still_failing": 1,
-        "required_cases": 59,
-        "required_passed": 59
+        "required_cases": 80,
+        "required_passed": 80
       },
-      "sha256": "01905d1f16f9e8777aae3a31ffac5431adc66d6cc9744e37e93203a978052412",
-      "size": 19824885
+      "sha256": "068666b5a9e99ba1fa18c934ae6c91c65e83e24f246f0c6ad8d0f1725c5d420e",
+      "size": 19826236
     },
     {
       "acceptance": {
         "steps_passed": 9,
         "verdict": "pass"
       },
-      "built_program_sha256": "6a218ae7520ff7b2f75ea6da1e500d1e9a11e407c2a4d84bc70d9a7fc733e6bd",
+      "built_program_sha256": "8526c75628e33c64136e9a13f9242523b4253317b78beb745652aa9bdb5f94a1",
       "kind": "toolchain",
-      "name": "auto-pigeon-q3map2-2.5.17n-ap.3026-windows-amd64.zip",
+      "name": "auto-pigeon-q3map2-2.5.17n-ap.3030-windows-amd64.zip",
       "platform": "windows-amd64",
-      "program_sha256": "6a218ae7520ff7b2f75ea6da1e500d1e9a11e407c2a4d84bc70d9a7fc733e6bd",
+      "program_sha256": "8526c75628e33c64136e9a13f9242523b4253317b78beb745652aa9bdb5f94a1",
       "regressions": {
         "cases": {
           "G01.m4.inset": "pass",
@@ -126,7 +147,7 @@
           "R07.open.1": "pass",
           "R08.nearparallel": "pass",
           "R08.overlap": "pass",
-          "R08.slit.0125": "known_failure",
+          "R08.slit.0125": "pass",
           "R08.touch": "pass",
           "R08.zeroarea": "pass",
           "R09.patch": "pass",
@@ -134,6 +155,27 @@
           "R10.classic": "pass",
           "R10.valve220": "pass",
           "R11.m3.p10_nearby": "pass",
+          "S02.off.125": "pass",
+          "S02.off.1875": "pass",
+          "S02.off.5": "pass",
+          "S03.split.1875": "pass",
+          "S03.split.25": "pass",
+          "S03.split.5": "pass",
+          "S04.turned.0": "pass",
+          "S04.turned.15": "pass",
+          "S04.turned.45": "pass",
+          "S05.moved.on_split": "pass",
+          "S05.moved.straddle": "pass",
+          "S05.moved.turned45": "pass",
+          "S06.touch.off": "pass",
+          "S06.touch.split": "pass",
+          "S07.blind": "pass",
+          "S07.overlap": "pass",
+          "S07.pocket": "pass",
+          "S08.band.00625": "known_failure",
+          "S11.detail_over": "pass",
+          "S11.patch_over": "pass",
+          "S12.passage": "pass",
           "U.base_winding": "pass",
           "U.coarse_snap_normal": "pass",
           "U.decal_misalignment": "pass",
@@ -154,22 +196,22 @@
           "U.tiny_structural_brush": "pass"
         },
         "known_failures_still_failing": 1,
-        "required_cases": 59,
-        "required_passed": 59
+        "required_cases": 80,
+        "required_passed": 80
       },
-      "sha256": "44635d9b989c6f825c7ea3745342cdf07849315f674073b0f10d84ae27f4a19f",
-      "size": 8486511
+      "sha256": "331cec7b774db7fc5105b907d5e09c3a6c5850798fd8f7fc872447865b371042",
+      "size": 8487608
     },
     {
       "acceptance": {
         "steps_passed": 9,
         "verdict": "pass"
       },
-      "built_program_sha256": "3ec9bb59310f490ac2d07f09e64a1592c10bf401423b352cb4692b15bf31a36a",
+      "built_program_sha256": "8f7e69f401e9332ac2f3804e64064e7dc379a8da90990e0ea2788c129eb85238",
       "kind": "toolchain",
-      "name": "auto-pigeon-q3map2-2.5.17n-ap.3026-macos-amd64.zip",
+      "name": "auto-pigeon-q3map2-2.5.17n-ap.3030-macos-amd64.zip",
       "platform": "macos-amd64",
-      "program_sha256": "ca93a91bc388c53803094d622b0e9ec9330d7eb3747e0163504b7c5f6eee44c0",
+      "program_sha256": "a32cadeb78671d64fc7f48753fc5485244fec1a138d6169c29addbb882e19032",
       "regressions": {
         "cases": {
           "G01.m4.inset": "pass",
@@ -206,7 +248,7 @@
           "R07.open.1": "pass",
           "R08.nearparallel": "pass",
           "R08.overlap": "pass",
-          "R08.slit.0125": "known_failure",
+          "R08.slit.0125": "pass",
           "R08.touch": "pass",
           "R08.zeroarea": "pass",
           "R09.patch": "pass",
@@ -214,6 +256,27 @@
           "R10.classic": "pass",
           "R10.valve220": "pass",
           "R11.m3.p10_nearby": "pass",
+          "S02.off.125": "pass",
+          "S02.off.1875": "pass",
+          "S02.off.5": "pass",
+          "S03.split.1875": "pass",
+          "S03.split.25": "pass",
+          "S03.split.5": "pass",
+          "S04.turned.0": "pass",
+          "S04.turned.15": "pass",
+          "S04.turned.45": "pass",
+          "S05.moved.on_split": "pass",
+          "S05.moved.straddle": "pass",
+          "S05.moved.turned45": "pass",
+          "S06.touch.off": "pass",
+          "S06.touch.split": "pass",
+          "S07.blind": "pass",
+          "S07.overlap": "pass",
+          "S07.pocket": "pass",
+          "S08.band.00625": "known_failure",
+          "S11.detail_over": "pass",
+          "S11.patch_over": "pass",
+          "S12.passage": "pass",
           "U.base_winding": "pass",
           "U.coarse_snap_normal": "pass",
           "U.decal_misalignment": "pass",
@@ -234,22 +297,22 @@
           "U.tiny_structural_brush": "pass"
         },
         "known_failures_still_failing": 1,
-        "required_cases": 59,
-        "required_passed": 59
+        "required_cases": 80,
+        "required_passed": 80
       },
-      "sha256": "146eb4840577f61ec3f87841d961e85029080426596d3b35ec86aeff4081a7a0",
-      "size": 5247733
+      "sha256": "dd5545a560d01ebde4ed01c7d8059a041f8ee0a8c1a2d34afa9f988b749b0d22",
+      "size": 5248937
     },
     {
       "acceptance": {
         "steps_passed": 9,
         "verdict": "pass"
       },
-      "built_program_sha256": "fc04948a0f69e3e9d078830308c6a2d9ccf8ff8eb846e90a38baa45f0bcb87ad",
+      "built_program_sha256": "8caf163cd30586f0e78bea923fb947ac5c9f135c5d80a3a6995e77a1107d9a1e",
       "kind": "toolchain",
-      "name": "auto-pigeon-q3map2-2.5.17n-ap.3026-macos-arm64.zip",
+      "name": "auto-pigeon-q3map2-2.5.17n-ap.3030-macos-arm64.zip",
       "platform": "macos-arm64",
-      "program_sha256": "03e6c21163801a98d55d5838c3d62741d9483b150d8940069fdbdbe78d8d6e45",
+      "program_sha256": "f3b81e2cd44ca6853677e13dc712f635b7212369755e648f40690ee1b5f84603",
       "regressions": {
         "cases": {
           "G01.m4.inset": "pass",
@@ -286,7 +349,7 @@
           "R07.open.1": "pass",
           "R08.nearparallel": "pass",
           "R08.overlap": "pass",
-          "R08.slit.0125": "known_failure",
+          "R08.slit.0125": "pass",
           "R08.touch": "pass",
           "R08.zeroarea": "pass",
           "R09.patch": "pass",
@@ -294,6 +357,27 @@
           "R10.classic": "pass",
           "R10.valve220": "pass",
           "R11.m3.p10_nearby": "pass",
+          "S02.off.125": "pass",
+          "S02.off.1875": "pass",
+          "S02.off.5": "pass",
+          "S03.split.1875": "pass",
+          "S03.split.25": "pass",
+          "S03.split.5": "pass",
+          "S04.turned.0": "pass",
+          "S04.turned.15": "pass",
+          "S04.turned.45": "pass",
+          "S05.moved.on_split": "pass",
+          "S05.moved.straddle": "pass",
+          "S05.moved.turned45": "pass",
+          "S06.touch.off": "pass",
+          "S06.touch.split": "pass",
+          "S07.blind": "pass",
+          "S07.overlap": "pass",
+          "S07.pocket": "pass",
+          "S08.band.00625": "known_failure",
+          "S11.detail_over": "pass",
+          "S11.patch_over": "pass",
+          "S12.passage": "pass",
           "U.base_winding": "pass",
           "U.coarse_snap_normal": "pass",
           "U.decal_misalignment": "pass",
@@ -314,22 +398,22 @@
           "U.tiny_structural_brush": "pass"
         },
         "known_failures_still_failing": 1,
-        "required_cases": 59,
-        "required_passed": 59
+        "required_cases": 80,
+        "required_passed": 80
       },
-      "sha256": "f5a9a9741fdb6262304d92bc5495fe111a7dd0801475a45959630fc75da1a2b2",
-      "size": 4665287
+      "sha256": "005660b0dd3e5afcf22936ad317a1482d76da16e19253f20d2c1890a4a7a274c",
+      "size": 4666404
     },
     {
       "acceptance": {
         "steps_passed": 9,
         "verdict": "pass"
       },
-      "built_program_sha256": "7860c10d7421ea4e3221aac809c981b0095b8c23a9bb588b16cefd725b35279a",
+      "built_program_sha256": "f896128afa3418e6d7fbac41120963e9c0832cd0ff45c73d0865723ea2e74596",
       "kind": "toolchain",
-      "name": "auto-pigeon-q3map2-2.5.17n-ap.3026-linux-arm64.zip",
+      "name": "auto-pigeon-q3map2-2.5.17n-ap.3030-linux-arm64.zip",
       "platform": "linux-arm64",
-      "program_sha256": "bd420f40f652013ad7a8e44b8688dd757b1785b744dff8aba447dec03577df2a",
+      "program_sha256": "e20f3e53f0347b420f9c278efc82cea5de29b9a43056122ba8837e1634026420",
       "regressions": {
         "cases": {
           "G01.m4.inset": "pass",
@@ -366,7 +450,7 @@
           "R07.open.1": "pass",
           "R08.nearparallel": "pass",
           "R08.overlap": "pass",
-          "R08.slit.0125": "known_failure",
+          "R08.slit.0125": "pass",
           "R08.touch": "pass",
           "R08.zeroarea": "pass",
           "R09.patch": "pass",
@@ -374,6 +458,27 @@
           "R10.classic": "pass",
           "R10.valve220": "pass",
           "R11.m3.p10_nearby": "pass",
+          "S02.off.125": "pass",
+          "S02.off.1875": "pass",
+          "S02.off.5": "pass",
+          "S03.split.1875": "pass",
+          "S03.split.25": "pass",
+          "S03.split.5": "pass",
+          "S04.turned.0": "pass",
+          "S04.turned.15": "pass",
+          "S04.turned.45": "pass",
+          "S05.moved.on_split": "pass",
+          "S05.moved.straddle": "pass",
+          "S05.moved.turned45": "pass",
+          "S06.touch.off": "pass",
+          "S06.touch.split": "pass",
+          "S07.blind": "pass",
+          "S07.overlap": "pass",
+          "S07.pocket": "pass",
+          "S08.band.00625": "known_failure",
+          "S11.detail_over": "pass",
+          "S11.patch_over": "pass",
+          "S12.passage": "pass",
           "U.base_winding": "pass",
           "U.coarse_snap_normal": "pass",
           "U.decal_misalignment": "pass",
@@ -394,38 +499,38 @@
           "U.tiny_structural_brush": "pass"
         },
         "known_failures_still_failing": 1,
-        "required_cases": 59,
-        "required_passed": 59
+        "required_cases": 80,
+        "required_passed": 80
       },
-      "sha256": "8136069581c7e750978c224604b572ecac9f39fdd4054345f431358a77a7c28f",
-      "size": 19509098
+      "sha256": "de987e416efd6cdc3701a7300a2350610546a165ef5ee31d89e7b0a4ce4f3dd8",
+      "size": 19509798
     },
     {
-      "files": 3935,
+      "files": 3957,
       "kind": "source",
-      "name": "auto-pigeon-q3map2-2.5.17n-ap.3026-source.tar.gz",
+      "name": "auto-pigeon-q3map2-2.5.17n-ap.3030-source.tar.gz",
       "rebuilt_and_tested_from_the_archive": true,
       "rebuilt_program_equals_linux_amd64_release": true,
-      "rebuilt_program_sha256": "83433d7d2548c83645e63efe79d3fe2117363f10f064e6a64451801b9851aab3",
-      "sha256": "0d1f723d4dc504cdb60c54571e618dc4a7001613d7388294de0149837c8afe29",
-      "size": 11718541
+      "rebuilt_program_sha256": "b88d9d92d80e9d0933c1f684600b888e3f90ca829a261e4fe0bae39939bfd5d3",
+      "sha256": "aee1e002e2bbc3e942766c56228efef06223a6e5e3f178b9a1ce318616e9f219",
+      "size": 11731629
     }
   ],
-  "built_by": "https://github.com/auto-pigeon/q3map2/actions/runs/39909598039",
-  "commit": "7e109335f7e531841bbd791eefb13439e51a769f",
+  "built_by": "https://github.com/auto-pigeon/q3map2/actions/runs/40038159518",
+  "commit": "ca2e281dfdc0b5a5d7f857b540ce4058294d396b",
   "fork": "https://github.com/auto-pigeon/q3map2",
   "known_failures": {
-    "R08.slit.0125": {
+    "S08.band.00625": {
       "failing": "leak verdict: sealed, the source leaks",
-      "mechanism": "portal_edge_length",
+      "mechanism": "on_epsilon_band",
       "observed_on": {
         "argv": "-bsp -game quake3 -threads 2 -meta",
-        "build": "make BUILD=release install/q3map2.x86_64, GCC 14.2 on Ubuntu 24.04 (linux-amd64)",
-        "observed": "2026-10-23",
-        "reader": "ci/auto-pigeon/ibsp.py",
-        "source": "netradiant-custom master 8216133984031afaa9a857b56ea66dd9c3d54b26 (upstream-base/82161339), unmodified"
+        "build": "auto-pigeon/q3map2 release 2.5.17n-ap.3026 linux-amd64 bin/q3map2 (sha256 2cd462a0a7cbdd3094b6a1755546a7e042c875e1a413096eb88efe9e430f2fb1), GCC 14 on Ubuntu 24.04",
+        "observed": "2026-10-24",
+        "reader": "ci/auto-pigeon/regress.py + ci/auto-pigeon/ibsp.py",
+        "source": "auto-pigeon/q3map2 main 7e109335 (upstream-base/82161339 + P1 + P2 + M4 + M3)"
       },
-      "owner": "not repaired (NEW_340 decision): a representability limit of the portal stage \u2014 portals.cpp drops a portal with fewer than three edges longer than EDGE_LENGTH 0.2, so an opening narrower than that in any leaf is closed"
+      "owner": "not repaired (NEW_340A): inside the ON_EPSILON precision band every stage of the compiler shares; on_epsilon_band: the slot's faces lie 0.0625 apart, inside ON_EPSILON (0.1); BuildFaceTree_r consumes the second as ON the first's plane, so no leaf lies between them"
     }
   },
   "patch_series": [
@@ -518,47 +623,67 @@
       "commit": "7e109335f7e531841bbd791eefb13439e51a769f",
       "compiler": true,
       "subject": "q3map2: keep a brush on its inner side of a plane its side was consumed on (M3, sliver)"
+    },
+    {
+      "commit": "9fac00ed3f3a22e40b80245da449c7e4680a158e",
+      "compiler": false,
+      "subject": "regression cases: narrow openings to the void read sealed (S02-S12, NEW_340A)"
+    },
+    {
+      "commit": "aa96ece97142c448dfa1479d3c6cf7ccf8409287",
+      "compiler": true,
+      "subject": "q3map2: keep a portal unless its winding is degenerate (narrow openings)"
+    },
+    {
+      "commit": "6f297e47523a3c201f82844472d37eb4dee2a6d8",
+      "compiler": true,
+      "subject": "q3map2: a block split does not consume a face of another plane (narrow openings on a split)"
+    },
+    {
+      "commit": "ca2e281dfdc0b5a5d7f857b540ce4058294d396b",
+      "compiler": true,
+      "subject": "q3map2: no deluxel reference without a deluxemap"
     }
   ],
   "prerelease": true,
   "qualification": "the declared regression cases and native archive acceptance of each published target; NOT a claim that every map compiles: known failures are listed and still fail",
   "schema": "auto-pigeon-q3map2-release-manifest/1",
   "signed": false,
-  "tag": "auto-pigeon-q3map2-v2.5.17n-ap.3026",
+  "tag": "auto-pigeon-q3map2-v2.5.17n-ap.3030",
   "targets": {
     "linux-amd64": {
-      "asset": "auto-pigeon-q3map2-2.5.17n-ap.3026-linux-amd64.zip",
+      "asset": "auto-pigeon-q3map2-2.5.17n-ap.3030-linux-amd64.zip",
       "required": true,
-      "sha256": "01905d1f16f9e8777aae3a31ffac5431adc66d6cc9744e37e93203a978052412",
-      "size": 19824885,
+      "sha256": "068666b5a9e99ba1fa18c934ae6c91c65e83e24f246f0c6ad8d0f1725c5d420e",
+      "size": 19826236,
       "status": "published"
     },
     "linux-arm64": {
-      "asset": "auto-pigeon-q3map2-2.5.17n-ap.3026-linux-arm64.zip",
+      "asset": "auto-pigeon-q3map2-2.5.17n-ap.3030-linux-arm64.zip",
       "required": false,
-      "sha256": "8136069581c7e750978c224604b572ecac9f39fdd4054345f431358a77a7c28f",
-      "size": 19509098,
+      "sha256": "de987e416efd6cdc3701a7300a2350610546a165ef5ee31d89e7b0a4ce4f3dd8",
+      "size": 19509798,
       "status": "published"
     },
     "macos-amd64": {
-      "asset": "auto-pigeon-q3map2-2.5.17n-ap.3026-macos-amd64.zip",
+      "asset": "auto-pigeon-q3map2-2.5.17n-ap.3030-macos-amd64.zip",
       "required": true,
-      "sha256": "146eb4840577f61ec3f87841d961e85029080426596d3b35ec86aeff4081a7a0",
-      "size": 5247733,
+      "sha256": "dd5545a560d01ebde4ed01c7d8059a041f8ee0a8c1a2d34afa9f988b749b0d22",
+      "size": 5248937,
       "status": "published"
     },
     "macos-arm64": {
-      "asset": "auto-pigeon-q3map2-2.5.17n-ap.3026-macos-arm64.zip",
+      "asset": "auto-pigeon-q3map2-2.5.17n-ap.3030-macos-arm64.zip",
       "required": true,
-      "sha256": "f5a9a9741fdb6262304d92bc5495fe111a7dd0801475a45959630fc75da1a2b2",
-      "size": 4665287,
+      "sha256": "005660b0dd3e5afcf22936ad317a1482d76da16e19253f20d2c1890a4a7a274c",
+      "size": 4666404,
       "status": "published"
     },
     "windows-amd64": {
-      "asset": "auto-pigeon-q3map2-2.5.17n-ap.3026-windows-amd64.zip",
+      "asset": "auto-pigeon-q3map2-2.5.17n-ap.3030-windows-amd64.zip",
       "required": true,
-      "sha256": "44635d9b989c6f825c7ea3745342cdf07849315f674073b0f10d84ae27f4a19f",
-      "size": 8486511,
+      "sha256": "331cec7b774db7fc5105b907d5e09c3a6c5850798fd8f7fc872447865b371042",
+      "size": 8487608,
       "status": "published"
     }
   },
@@ -567,6 +692,6 @@
     "base_tag": "upstream-base/82161339",
     "repository": "https://github.com/Garux/netradiant-custom"
   },
-  "version": "2.5.17n-ap.3026",
-  "version_banner": "2.5.17n-ap.3026+g7e109335.upstream.82161339"
+  "version": "2.5.17n-ap.3030",
+  "version_banner": "2.5.17n-ap.3030+gca2e281d.upstream.82161339"
 }

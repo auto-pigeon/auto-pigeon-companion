@@ -94,17 +94,19 @@ func TestBuildPipelinesAsJSON(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &rows); err != nil {
 		t.Fatalf("the output is not JSON: %v\n%s", err, stdout.String())
 	}
-	if len(rows) != 10 {
-		t.Fatalf("expected the three Quake 1, two Quake II and two Quake III built-in pipelines and the Quake 1, Quake II and Quake III leak tests, got %d",
+	if len(rows) != 11 {
+		t.Fatalf("expected the three Quake 1, two Quake II and two Quake III built-in pipelines and the Quake 1, Quake II, Quake III and Quake III (Auto-Pigeon q3map2 build) leak tests, got %d",
 			len(rows))
 	}
 	unfinished := map[string]int{}
 	diagnostics := 0
 	for _, row := range rows {
-		if row.ID == "auto-pigeon.q1.leak-test" || row.ID == "auto-pigeon.q2.leak-test" || row.ID == "auto-pigeon.q3.leak-test" {
+		if row.ID == "auto-pigeon.q1.leak-test" || row.ID == "auto-pigeon.q2.leak-test" || row.ID == "auto-pigeon.q3.leak-test" ||
+			row.ID == "auto-pigeon.q3.leak-test.auto-pigeon-build" {
 			// A diagnostic: the compile step alone, for the three games with a
-			// measured leak test (Quake II's since Q2_010). Quake II and III
-			// stay work in progress whatever the pipeline.
+			// measured leak test (Quake II's since Q2_010), Quake III's also run
+			// by the Auto-Pigeon q3map2 build (NEW_340A). Quake II and III stay
+			// work in progress whatever the pipeline.
 			diagnostics++
 			if len(row.Steps) != 1 || row.Steps[0] != "compile" || !row.Runnable {
 				t.Errorf("%s: steps=%v runnable=%t", row.ID, row.Steps, row.Runnable)
@@ -131,8 +133,8 @@ func TestBuildPipelinesAsJSON(t *testing.T) {
 			t.Errorf("%s declares the family %q", row.ID, row.Family)
 		}
 	}
-	if diagnostics != 3 {
-		t.Errorf("%d leak-test pipelines were listed, want the Quake 1, Quake II and Quake III ones", diagnostics)
+	if diagnostics != 4 {
+		t.Errorf("%d leak-test pipelines were listed, want the Quake 1, Quake II and both Quake III ones", diagnostics)
 	}
 	if unfinished["quake2"] != 2 || unfinished["quake3"] != 2 {
 		t.Errorf("%d Quake II and %d Quake III pipelines were listed",

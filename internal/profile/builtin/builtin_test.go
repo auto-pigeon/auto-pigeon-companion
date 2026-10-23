@@ -321,6 +321,13 @@ func TestEveryBuiltinPipelineResolvesAgainstTheBuiltinToolchain(t *testing.T) {
 			t.Errorf("%s is for the family %q, which this build ships no toolchain for", e.File, family)
 			continue
 		}
+		if alternative, ok := AlternativePipelines[pipeline.ID]; ok {
+			entry, err := Find(alternative)
+			if err != nil {
+				t.Fatal(err)
+			}
+			tool = entry.Profile.(*profile.ToolProfile)
+		}
 		steps, err := pipeline.Resolve(installed{tool})
 		if err != nil {
 			t.Errorf("%s does not resolve against the %s toolchain:\n%v", e.File, family, err)
@@ -1017,9 +1024,17 @@ func TestEveryBuiltinPipelineStageNamesItsFamilysBuiltinTool(t *testing.T) {
 		if !ok {
 			continue
 		}
+		wantTool := want[pipeline.GameProfile.EngineFamily]
+		if alternative, ok := AlternativePipelines[pipeline.ID]; ok {
+			// Named on every stage, and a built-in alternative of THIS family.
+			if !IsAlternativeTool(alternative) || alternativeTools[alternative] != wantTool {
+				t.Errorf("%s names %q, which is not a %s alternative", e.File, alternative, pipeline.GameProfile.EngineFamily)
+			}
+			wantTool = alternative
+		}
 		for _, step := range pipeline.Steps {
-			if step.Tool != want[pipeline.GameProfile.EngineFamily] {
-				t.Errorf("%s step %s names tool %q, want %q", e.File, step.ID, step.Tool, want[pipeline.GameProfile.EngineFamily])
+			if step.Tool != wantTool {
+				t.Errorf("%s step %s names tool %q, want %q", e.File, step.ID, step.Tool, wantTool)
 			}
 		}
 	}

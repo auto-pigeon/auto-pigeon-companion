@@ -209,3 +209,69 @@ func TestAnUnreadyChoiceNamesTheToolToSetUp(t *testing.T) {
 		t.Fatal("nothing is bound on a new machine, yet every choice is ready")
 	}
 }
+
+// NEW_340A: the Auto-Pigeon q3map2 build has a leak-only pipeline of its own,
+// shipped: it is offered for Quake III beside the upstream one (that one first),
+// marked built in, pinnable without retargeting a stage, and read the same
+// way. Every choice says which stages it runs, and so does the request card of
+// a pinned pipeline, so a full pipeline is never presented as a leak test alone.
+func TestTheForkLeakTestIsOfferedBuiltInAndEveryChoiceSaysWhatItRuns(t *testing.T) {
+	m := unpinned(t)
+	status, body := m.call(http.MethodGet, "/api/v1/leak-test/pipelines?game=quake3", nil)
+	if status != http.StatusOK {
+		t.Fatalf("choices: %d %v", status, body)
+	}
+	choices, _ := body["choices"].([]any)
+	if len(choices) < 2 {
+		t.Fatalf("Quake III choices: %v", choices)
+	}
+	first, second := choices[0].(map[string]any), choices[1].(map[string]any)
+	if first["id"] != "auto-pigeon.q3.leak-test" || second["id"] != "auto-pigeon.q3.leak-test.auto-pigeon-build" ||
+		first["builtin"] != true || second["builtin"] != true {
+		t.Fatalf("the two built-in Quake III leak tests are not offered first, upstream's before the fork's: %v %v", first, second)
+	}
+	for _, choice := range choices {
+		row := choice.(map[string]any)
+		steps, _ := row["steps"].([]any)
+		if len(steps) == 0 {
+			t.Errorf("%v says nothing about what it runs", row["id"])
+		}
+		if row["builtin"] == true && (len(steps) != 1 || steps[0].(map[string]any)["id"] != "compile") {
+			t.Errorf("a built-in leak test runs %v", steps)
+		}
+	}
+	if status, body := m.call(http.MethodPost, "/api/v1/leak-test/pipelines",
+		map[string]string{"game": "quake3", "pipeline": "auto-pigeon.q3.leak-test.auto-pigeon-build"}); status != http.StatusOK {
+		t.Fatalf("pinning the fork's leak test: %d %v", status, body)
+	}
+	binding, err := m.server.leakBindingForBuild("auto-pigeon.q3.leak-test.auto-pigeon-build", build.Conversion{Game: "quake3"}, true)
+	if err != nil || binding.Pipeline != "auto-pigeon.q3.leak-test.auto-pigeon-build" || binding.CompileStep != "compile" ||
+		binding.Pointfile != "lin" || binding.Log != "compile_log" {
+		t.Fatalf("the fork's leak test binds as %+v (%v)", binding, err)
+	}
+	if adapter, ok := leakadapter.ForPipeline("auto-pigeon.q3.leak-test.auto-pigeon-build"); !ok || adapter.Profile != "quake3" ||
+		adapter.BuiltinFor("auto-pigeon.q3.leak-test.auto-pigeon-build").Pipeline != "auto-pigeon.q3.leak-test.auto-pigeon-build" {
+		t.Errorf("the fork's leak test is not a Quake III built-in leak pipeline")
+	}
+	if !m.server.isLeakPipeline("auto-pigeon.q3.leak-test.auto-pigeon-build") {
+		t.Error("the Build page does not flag the fork's leak test as one")
+	}
+}
+
+// A building status names the step running AND every step the build runs, in
+// AUB's 120 characters; a plan too long for that is dropped, never the step.
+func TestALeakBuildStatusNamesEveryStageItRuns(t *testing.T) {
+	if got := leakBuildStage("compile", []string{"compile"}); got != "compile of compile" {
+		t.Errorf("leak-only: %q", got)
+	}
+	if got := leakBuildStage("vis", []string{"compile", "vis", "light"}); got != "vis of compile,vis,light" {
+		t.Errorf("full pipeline: %q", got)
+	}
+	long := make([]string, 40)
+	for i := range long {
+		long[i] = "step-with-a-long-name"
+	}
+	if got := leakBuildStage("light", long); got != "light" {
+		t.Errorf("a plan over AUB's limit: %q", got)
+	}
+}

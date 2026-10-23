@@ -19,6 +19,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/leakadapter"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/leakintent"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
 
 // Which pipeline a leak request may run is leakadapter's, keyed by the game the
@@ -155,6 +156,15 @@ func (s *Server) handleLeakTestPending(w http.ResponseWriter, r *http.Request) {
 		base["needs_pipeline"], base["pinned_problem"] = true, err.Error()
 	} else {
 		base["pipeline"] = pinned
+		// What it will run, said before anything runs: a pinned pipeline may have
+		// more stages than the one compile stage a leak test needs (NEW_340A).
+		if catalog, err := s.catalog(); err == nil {
+			if entry, err := catalog.Lookup(pinned); err == nil {
+				if pipeline, ok := entry.Profile.(*profile.PipelineProfile); ok {
+					base["pipeline_name"], base["pipeline_steps"] = pipeline.Meta.Name, pipelineSteps(pipeline)
+				}
+			}
+		}
 	}
 	writeJSON(w, http.StatusOK, base)
 }

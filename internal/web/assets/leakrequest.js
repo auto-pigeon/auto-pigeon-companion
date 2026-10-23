@@ -109,7 +109,10 @@
       actions.append(button(t("Go to the review"), "secondary", async () => window.AUCOM.showArea("build")));
     } else {
       state.textContent = t("Its content still matches what the editor asked about. It is a {game} map, so the test is {compiler}'s. Review the compiler command first; nothing runs until you press Build.", {
-        game: gameName(details.body.game_profile), compiler: compilerName(details.body.compiler) });
+        game: gameName(details.body.game_profile), compiler: compilerName(details.body.compiler) })
+        + (details.body.pipeline_name && stagesLine(details.body.pipeline_steps)
+          ? " " + t("The pipeline chosen for these maps is {name}.", { name: details.body.pipeline_name }) + " " + stagesLine(details.body.pipeline_steps)
+          : "");
       actions.append(button(t("Change pipeline"), "secondary", async () => openPin(details.body.game_profile, false)));
       actions.append(button(t("Review leak test"), "primary", review));
     }
@@ -233,6 +236,17 @@
     return choices.find((item) => item.id === $("leak-pin-select").value) || null;
   }
 
+  // What a pipeline runs, said before it is chosen or built (NEW_340A): a
+  // pinned pipeline may run more stages than the one compile stage a leak test
+  // needs, and those run only when the map is sealed.
+  function stagesLine(steps) {
+    if (!steps || !steps.length) return "";
+    const titles = steps.map((step) => step.title || step.id).join(", ");
+    return steps.length === 1
+      ? t("It runs one stage: {stages}.", { stages: titles })
+      : t("It runs {n} stages: {stages}. A leak test needs only the first; the others run when the map is sealed.", { n: steps.length, stages: titles });
+  }
+
   // The selected pipeline's state, in one place: Ready with its full name and
   // its own summary, or what it waits for with a link to fix it. Nothing about
   // the others is said here.
@@ -254,7 +268,8 @@
     if (pipelineReady(item)) {
       status.replaceChildren(
         el("p", { className: "leak-pin__selected", children: [badge(t("Ready"), "ok"), document.createTextNode(" "), el("strong", { text: item.name })] }),
-        ...(item.summary ? [el("p", { className: "leak-pin__summary", text: item.summary })] : []));
+        ...(item.summary ? [el("p", { className: "leak-pin__summary", text: item.summary })] : []),
+        ...(stagesLine(item.steps) ? [el("p", { className: "leak-pin__summary", text: stagesLine(item.steps) })] : []));
       return;
     }
     status.replaceChildren(

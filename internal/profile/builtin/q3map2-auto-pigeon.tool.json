@@ -3,9 +3,9 @@
   "kind": "tool",
   "id": "auto-pigeon.q3map2.auto-pigeon-build",
   "version": "1.0.0",
-  "name": "Q3Map2, Auto-Pigeon build 2.5.17n-ap.3026 (Quake III, experimental)",
+  "name": "Q3Map2, Auto-Pigeon build 2.5.17n-ap.3030 (Quake III, experimental)",
   "summary": "Experimental: the Auto-Pigeon fork's build of the Quake III compiler q3map2, downloaded from its GitHub releases.",
-  "description": "This profile describes the Auto-Pigeon fork of q3map2 — NetRadiant-custom's Quake III map compiler — as published on the fork's GitHub releases page. It is not an upstream release, and upstream has not reviewed or accepted the fork's changes. Only the `q3map2` command-line program is built and released; the NetRadiant editor is not part of it.\n\nRelease 2.5.17n-ap.3026 is upstream `master` 8216133 (2026-09-01) plus five compiler changes, each with a regression case of its own in the fork that fails without it: a thin brush fragment of any positive volume is kept, so thin rods and walls keep their collision; a face crossing a split plane by between 0.1 and 0.2 units is clipped instead of sent whole to one side, which filled room air; a face nearly parallel to a neighbouring face, which the compiler treats as lying on that face's plane, is still drawn when the 1/8-unit vertex snap would have put its triangles into the solid behind; a brush whose section by a split plane is smaller than 0.2 units is split instead of sent whole to one side, so a thin rod crossing a split keeps both parts; and a brush whose face the compiler treated as lying on a split plane is kept on its own side of that plane, where a sliver split off by the vertex snap filled a whole pipe bore. Three more changes fix the macOS build and an out-of-bounds read; they change no output. The program prints `2.5.17n-ap.3026+g7e109335.upstream.82161339` on its first line and after `Q3Map (ydnar) - v`, and the check on this profile shows it, so you can see which release you pointed it at.\n\nRelease 2.5.17n-ap.3017 is refused: it reads outside a plane table for a degenerate brush side (found by AddressSanitizer after it was published). Release 2.5.17n-ap.3020 is not refused, but it lacks the last three changes above; use 2.5.17n-ap.3026 or newer from the same page.\n\nKnown limits, held by the fork's own tests: an opening narrower than 0.2 units is closed (the compiler drops a portal with fewer than three edges longer than 0.2), and one that a split plane crosses is halved first, so a slot centred on a 1024-unit block boundary closes up to 0.375 units; such a map is reported sealed although its source leaks. Material within 0.1 units of a split plane may read as air at a single point, as upstream's does; the player's collision still uses the whole brush.\n\nThe archive unpacks to one folder holding `bin/`, `licenses/`, `README.md`, `build-info.json` and `MANIFEST.json`. `q3map2` is in `bin/`, beside every library it loads, so choose the unpacked folder itself — the one that contains `bin/` — not `bin/`. Each release also publishes `SHA256SUMS` and a `release-manifest.json`; check the archive against them before unpacking. The Companion downloads nothing: you fetch the archive, and this profile runs what you unpacked.\n\nThis is a second profile beside the built-in Q3Map2 one, not a replacement for it. The built-in Quake III build profiles keep naming the upstream compiler, so nothing you already build changes. To build with this one, duplicate a build profile in Profiles and choose this tool for its stages.\n\nThe actions, options and file names are the built-in Q3Map2 profile's own: the fork changes no command-line switch. Quake III remains work in progress.",
+  "description": "This profile describes the Auto-Pigeon fork of q3map2 — NetRadiant-custom's Quake III map compiler — as published on the fork's GitHub releases page. It is not an upstream release, and upstream has not reviewed or accepted the fork's changes. Only the `q3map2` command-line program is built and released; the NetRadiant editor is not part of it.\n\nRelease 2.5.17n-ap.3030 is upstream `master` 8216133 (2026-09-01) plus seven compiler changes, each with a regression case of its own in the fork that fails without it: a thin brush fragment of any positive volume is kept, so thin rods and walls keep their collision; a face crossing a split plane by between 0.1 and 0.2 units is clipped instead of sent whole to one side, which filled room air; a face nearly parallel to a neighbouring face, which the compiler treats as lying on that face's plane, is still drawn when the 1/8-unit vertex snap would have put its triangles into the solid behind; a brush whose section by a split plane is smaller than 0.2 units is split instead of sent whole to one side, so a thin rod crossing a split keeps both parts; a brush whose face the compiler treated as lying on a split plane is kept on its own side of that plane, where a sliver split off by the vertex snap filled a whole pipe bore; a narrow real opening keeps its portals (upstream dropped every portal with fewer than three edges longer than 0.2 units, so a slot 0.125 wide through a wall was reported sealed, a slot reached from a room was filled and a room behind a narrow passage was not drawn); and the 1024-unit block split no longer swallows the two faces of a slot centred on it. Four more changes fix the macOS build, an out-of-bounds read and a null reference in lighting; they change no output. The program prints `2.5.17n-ap.3030+gca2e281d.upstream.82161339` on its first line and after `Q3Map (ydnar) - v`, and the check on this profile shows it, so you can see which release you pointed it at.\n\nRelease 2.5.17n-ap.3017 is refused: it reads outside a plane table for a degenerate brush side (found by AddressSanitizer after it was published). Releases 2.5.17n-ap.3020 and 2.5.17n-ap.3026 are not refused, but they close the narrow openings above (3020 also lacks the three changes before them); use 2.5.17n-ap.3030 or newer from the same page.\n\nKnown limits, held by the fork's own tests: an opening whose two faces lie within 0.1 units of each other (inside the precision every stage of the compiler treats as one plane) is still closed, so a slot 0.0625 wide is reported sealed although its source leaks; an opening wider than that stays open wherever it lies. Material within 0.1 units of a split plane may read as air at a single point, as upstream's does; the player's collision still uses the whole brush.\n\nThe archive unpacks to one folder holding `bin/`, `licenses/`, `README.md`, `build-info.json` and `MANIFEST.json`. `q3map2` is in `bin/`, beside every library it loads, so choose the unpacked folder itself — the one that contains `bin/` — not `bin/`. Each release also publishes `SHA256SUMS` and a `release-manifest.json`; check the archive against them before unpacking. The Companion downloads nothing: you fetch the archive, and this profile runs what you unpacked.\n\nThis is a second profile beside the built-in Q3Map2 one, not a replacement for it. The built-in Quake III build profiles keep naming the upstream compiler, so nothing you already build changes. To build with this one, duplicate a build profile in Profiles and choose this tool for its stages. To test maps for leaks with it, choose the built-in pipeline “Quake III — leak test, Auto-Pigeon q3map2 build” when the Companion asks which pipeline tests Quake III maps (or under Change pipeline): it runs this tool's BSP stage only, with nothing to retarget.\n\nThe actions, options and file names are the built-in Q3Map2 profile's own: the fork changes no command-line switch. Quake III remains work in progress.",
   "publisher": {
     "name": "Auto-Pigeon",
     "url": "https://github.com/auto-pigeon/auto-pigeon-companion"
@@ -13,13 +13,13 @@
   "source": {
     "homepage": "https://github.com/auto-pigeon/q3map2/releases",
     "repository": "https://github.com/auto-pigeon/q3map2",
-    "release_notes": "https://github.com/auto-pigeon/q3map2/releases/tag/auto-pigeon-q3map2-v2.5.17n-ap.3026"
+    "release_notes": "https://github.com/auto-pigeon/q3map2/releases/tag/auto-pigeon-q3map2-v2.5.17n-ap.3030"
   },
   "license": {
     "spdx": "GPL-2.0-or-later",
     "name": "GNU General Public License v2.0 or later",
     "url": "https://www.gnu.org/licenses/old-licenses/gpl-2.0.html",
-    "corresponding_source": "https://github.com/auto-pigeon/q3map2/tree/auto-pigeon-q3map2-v2.5.17n-ap.3026",
+    "corresponding_source": "https://github.com/auto-pigeon/q3map2/tree/auto-pigeon-q3map2-v2.5.17n-ap.3030",
     "notice": "The Auto-Pigeon build of q3map2 is a fork of somebody else's program, under that program's own licence, and describing it here changes nothing about that. q3map2's source files carry the GtkRadiant header — 'either version 2 of the License, or (at your option) any later version' — so GPL-2.0-or-later is what it is conveyed under. The archive's `licenses/` folder carries the licence texts and the notice of every library in `bin/`; the corresponding source for exactly this release is the fork's tag named above, and each release also publishes a source archive. Auto-Pigeon Companion is MIT and separate: it runs this program as a separate process and does not contain, link or relicense it."
   },
   "compatibility": {
@@ -31,7 +31,7 @@
     "slug": "quake3",
     "engine_family": "quake3"
   },
-  "tool_version": "2.5.17n-ap.3026+g7e109335.upstream.82161339",
+  "tool_version": "2.5.17n-ap.3030+gca2e281d.upstream.82161339",
   "platforms": [
     {
       "platform": {
@@ -39,7 +39,7 @@
         "arch": "amd64"
       },
       "status": "supported",
-      "note": "release 2.5.17n-ap.3026 passed the fork's CI acceptance; on 2026-10-23 it built the Quake III controls through this profile on Linux (compile, full visibility, lighting). Needs glibc 2.38+"
+      "note": "release 2.5.17n-ap.3030 passed the fork's CI acceptance; on 2026-10-24 it built and leak-tested the Quake III controls through this profile on Linux. Needs glibc 2.38+"
     },
     {
       "platform": {
@@ -47,7 +47,7 @@
         "arch": "amd64"
       },
       "status": "unverified",
-      "note": "release 2.5.17n-ap.3026 passed the fork's native acceptance on Windows; nobody here has run it through this profile"
+      "note": "release 2.5.17n-ap.3030 passed the fork's native acceptance on Windows; nobody here has run it through this profile"
     },
     {
       "platform": {
@@ -55,7 +55,7 @@
         "arch": "amd64"
       },
       "status": "unverified",
-      "note": "release 2.5.17n-ap.3026 passed the fork's native acceptance on an Intel Mac; nobody here has run it through this profile; unsigned, so recent macOS refuses it until you allow it; needs macOS 15+"
+      "note": "release 2.5.17n-ap.3030 passed the fork's native acceptance on an Intel Mac; nobody here has run it through this profile; unsigned, so recent macOS refuses it until you allow it; needs macOS 15+"
     },
     {
       "platform": {
@@ -63,7 +63,7 @@
         "arch": "arm64"
       },
       "status": "unverified",
-      "note": "release 2.5.17n-ap.3026 passed the fork's native acceptance on Apple silicon; nobody here has run it through this profile; unsigned, so recent macOS refuses it until you allow it; needs macOS 15+"
+      "note": "release 2.5.17n-ap.3030 passed the fork's native acceptance on Apple silicon; nobody here has run it through this profile; unsigned, so recent macOS refuses it until you allow it; needs macOS 15+"
     },
     {
       "platform": {
@@ -87,7 +87,7 @@
       "mode": "user_path",
       "title": "Use the release you downloaded",
       "hint": "choose the unpacked auto-pigeon-q3map2 folder — the one that contains bin/, not bin/ itself",
-      "note": "Download the archive for your platform from https://github.com/auto-pigeon/q3map2/releases/tag/auto-pigeon-q3map2-v2.5.17n-ap.3026, check it against the SHA256SUMS published beside it, and unpack it into a folder of its own. Release 2.5.17n-ap.3026, SHA-256 of each archive: auto-pigeon-q3map2-2.5.17n-ap.3026-linux-amd64.zip 01905d1f16f9e8777aae3a31ffac5431adc66d6cc9744e37e93203a978052412; auto-pigeon-q3map2-2.5.17n-ap.3026-windows-amd64.zip 44635d9b989c6f825c7ea3745342cdf07849315f674073b0f10d84ae27f4a19f; auto-pigeon-q3map2-2.5.17n-ap.3026-macos-amd64.zip 146eb4840577f61ec3f87841d961e85029080426596d3b35ec86aeff4081a7a0; auto-pigeon-q3map2-2.5.17n-ap.3026-macos-arm64.zip f5a9a9741fdb6262304d92bc5495fe111a7dd0801475a45959630fc75da1a2b2; auto-pigeon-q3map2-2.5.17n-ap.3026-linux-arm64.zip 8136069581c7e750978c224604b572ecac9f39fdd4054345f431358a77a7c28f. A SHA-256 shows the download is intact; these builds are not signed. You are the authority for what you pointed at: the check says which release it is."
+      "note": "Download the archive for your platform from https://github.com/auto-pigeon/q3map2/releases/tag/auto-pigeon-q3map2-v2.5.17n-ap.3030, check it against the SHA256SUMS published beside it, and unpack it into a folder of its own. Release 2.5.17n-ap.3030, SHA-256 of each archive: auto-pigeon-q3map2-2.5.17n-ap.3030-linux-amd64.zip 068666b5a9e99ba1fa18c934ae6c91c65e83e24f246f0c6ad8d0f1725c5d420e; auto-pigeon-q3map2-2.5.17n-ap.3030-windows-amd64.zip 331cec7b774db7fc5105b907d5e09c3a6c5850798fd8f7fc872447865b371042; auto-pigeon-q3map2-2.5.17n-ap.3030-macos-amd64.zip dd5545a560d01ebde4ed01c7d8059a041f8ee0a8c1a2d34afa9f988b749b0d22; auto-pigeon-q3map2-2.5.17n-ap.3030-macos-arm64.zip 005660b0dd3e5afcf22936ad317a1482d76da16e19253f20d2c1890a4a7a274c; auto-pigeon-q3map2-2.5.17n-ap.3030-linux-arm64.zip de987e416efd6cdc3701a7300a2350610546a165ef5ee31d89e7b0a4ce4f3dd8. A SHA-256 shows the download is intact; these builds are not signed. You are the authority for what you pointed at: the check says which release it is."
     },
     {
       "mode": "system_path",
@@ -125,7 +125,7 @@
     "refuse": [
       {
         "suffix": "+g84d76af1.upstream.82161339",
-        "reason": "release 2.5.17n-ap.3017 reads outside a plane table for a degenerate brush side; unpack 2.5.17n-ap.3026 or newer from the same page and choose its folder"
+        "reason": "release 2.5.17n-ap.3017 reads outside a plane table for a degenerate brush side; unpack 2.5.17n-ap.3030 or newer from the same page and choose its folder"
       }
     ],
     "executables": [

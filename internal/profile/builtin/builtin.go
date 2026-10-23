@@ -139,8 +139,9 @@ const (
 	Q3Map2 = "auto-pigeon.q3map2"
 	// Q3Map2AutoPigeon is the Auto-Pigeon fork's build of q3map2, as published on
 	// its GitHub releases page (NEW_340). Like the EricW fork's two documents it
-	// is an ALTERNATIVE to Q3Map2, not a replacement: no built-in pipeline names
-	// it, and a stage reaches it only by naming it. See [IsAlternativeTool].
+	// is an ALTERNATIVE to Q3Map2, not a replacement: a stage reaches it only by
+	// naming it. See [IsAlternativeTool]. One built-in pipeline names it,
+	// [Q3LeakTestAutoPigeon]; see [AlternativePipelines].
 	Q3Map2AutoPigeon = "auto-pigeon.q3map2.auto-pigeon-build"
 	// The two Q3 pipelines, for the same reason there are two Q2 ones.
 	Q3FastPreview = "auto-pigeon.q3.fast-preview"
@@ -149,6 +150,10 @@ const (
 	// BSP stage alone with the leak test on. It publishes the `.lin` line file
 	// and what Q3Map2 printed (`Q3_018`).
 	Q3LeakTest = "auto-pigeon.q3.leak-test"
+	// Q3LeakTestAutoPigeon is the same leak test run by Q3Map2AutoPigeon
+	// (NEW_340A): the fork-compatible leak-only setup chosen through Profiles and
+	// the leak chooser, with no stage retargeted and no binding edited by hand.
+	Q3LeakTestAutoPigeon = "auto-pigeon.q3.leak-test.auto-pigeon-build"
 
 	// The curated Quake 1 engines. Each is one upstream project, and the id is
 	// the name that project calls itself.
@@ -194,7 +199,14 @@ var Q1Pipelines = []string{Q1FastPreview, Q1Normal, Q1Final}
 // DiagnosticPipelines answer a question about a map rather than build it: one
 // step, no playable output. Listed apart so "every build pipeline is compile,
 // vis, light" stays a statement about builds.
-var DiagnosticPipelines = []string{Q1LeakTest, Q2LeakTest, Q3LeakTest}
+var DiagnosticPipelines = []string{Q1LeakTest, Q2LeakTest, Q3LeakTest, Q3LeakTestAutoPigeon}
+
+// AlternativePipelines are the built-in pipelines whose every stage names a
+// built-in ALTERNATIVE tool instead of its family's default, keyed to that tool.
+// Every other built-in pipeline names the default on every stage (NEW_310,
+// HITL). An alternative is still never used unasked: these pipelines are chosen
+// by name, like any other, and each names its tool on every stage.
+var AlternativePipelines = map[string]string{Q3LeakTestAutoPigeon: Q3Map2AutoPigeon}
 
 // Q2Engines is every curated Quake II engine profile this build ships, in the
 // order they are listed. Yamagi first because it is the one the Quake II path

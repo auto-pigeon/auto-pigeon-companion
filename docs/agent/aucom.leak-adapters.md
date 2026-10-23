@@ -31,6 +31,7 @@ paths:
   - internal/profile/builtin/q1-leak-test.pipeline.json
   - internal/profile/builtin/q2-leak-test.pipeline.json
   - internal/profile/builtin/q3-leak-test.pipeline.json
+  - internal/profile/builtin/q3-leak-test-auto-pigeon.pipeline.json
 prerequisites:
 ---
 
@@ -51,10 +52,14 @@ is not one.
 | --- | --- | --- | --- | --- | --- |
 | `quake1` | `auto-pigeon.q1.leak-test` | `ericw-qbsp` (EricW 2.0.0-alpha11; 0.18.1 also qualified) | `ericw-pts` | `occupant_to_outside` | `aucom.leak-result/1.0` |
 | `quake2` | `auto-pigeon.q2.leak-test` | `ericw-qbsp-q2` (qbsp `-q2bsp`, Auto-Pigeon build 1.4518; 1.4522; releases 1.4524 and 1.4533) | `ericw-pts` | `occupant_to_outside` | `aucom.leak-result/1.1` |
-| `quake3` | `auto-pigeon.q3.leak-test` | `q3map2` (2.5.17n-git-68ecbed; the Auto-Pigeon fork's release 2.5.17n-ap.3026) | `q3map2-lin` | `outside_to_occupant` | `aucom.leak-result/1.1` |
+| `quake3` | `auto-pigeon.q3.leak-test` (alternative: `auto-pigeon.q3.leak-test.auto-pigeon-build`) | `q3map2` (2.5.17n-git-68ecbed; the Auto-Pigeon fork's releases 2.5.17n-ap.3026 and 2.5.17n-ap.3030) | `q3map2-lin` | `outside_to_occupant` | `aucom.leak-result/1.1` |
 
 The pipeline column is the built-in one. It is not what runs unless the user chose it — see the
-next section.
+next section. An ALTERNATIVE (`Adapter.Alternatives`, NEW_340A) is another shipped pipeline with the
+same single compile stage and outputs, every stage naming a built-in alternative tool
+(`builtin.AlternativePipelines`): it is offered right after the row's own, marked built in, pinned like
+any other, and read by `BuiltinFor` when a manifest predates the leak-test record. It is never chosen
+for the user.
 
 **A game with no row is unsupported, by name. It is never Quake 1.** Quake II's `qbsp` being Quake
 1's program was never the reason it has a row: the authored controls in
@@ -91,7 +96,11 @@ record, never from today's pin or a fixed step id.
 
 - The built-in leak test is one step, the compiler's structural/BSP stage with its leak test on.
   A user's pinned pipeline may have more stages; its leak stops at the bound compile stage, and the
-  later stages are skipped, never run on a BSP that was not written.
+  later stages are skipped, never run on a BSP that was not written. On a sealed map they DO run, so
+  nothing may promise one stage (NEW_340A): the chooser lists each pipeline's `steps`, the pending
+  request carries the pinned pipeline's `pipeline_name` and `pipeline_steps`, and a `building`
+  status's stage is `<running step> of <every step>` (inside AUB's 120 characters; a longer plan is
+  dropped, never the running step). The editor reads a bare step id from an older Companion as before.
 - The compiler's own text is the reserved step output `<step>.stdout` (role `aucom.step.stdout`):
   the job's stored log, written once when the process ends — success, failure, timeout or cancel —
   and never the live buffer a page polls. A compiler that writes a log file of its own (qbsp)
@@ -137,6 +146,11 @@ BSP's byte count (`testdata/q3/logs-ap.3026`, `lin-ap.3026`, read row for row by
 `TestTheForkReleaseIsReadAsTheMeasuredBuild`). An added control plants a stale `i_stale_lin.lin` beside the sealed
 room: the compiler deletes it, and read anyway it is not a leak. Only that exact banner,
 `2.5.17n-ap.3026+g7e109335.upstream.82161339`, joins `Q3Map2MeasuredVersions` — not 3020, not the bare version.
+
+Release 2.5.17n-ap.3030 (`NEW_340A`: narrow openings keep their portals) was run the same way from its published
+linux-amd64 archive: every exit and every file left is 3026's, every `.lin` byte-identical, the logs differ only in
+the banner and its build date (`testdata/q3/logs-ap.3030`, `lin-ap.3030`); the stale `.lin` is deleted. Its exact
+banner `2.5.17n-ap.3030+gca2e281d.upstream.82161339` joins the list; the built-in fork profile names it.
 
 ## Three states that are never one
 

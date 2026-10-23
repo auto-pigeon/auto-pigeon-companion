@@ -84,19 +84,34 @@ func (s *Server) leakSession() leakSession {
 		}}
 }
 
-// reportLeakBuild says which step of a leak build is running.
+// reportLeakBuild says which step of a leak build is running, and every step
+// the build will run: `<step> of <step>,<step>,…` (NEW_340A). A pinned pipeline
+// may run more than the compile stage a leak test needs, and the editor says
+// so instead of promising one stage. The editor reads the bare step of an older
+// Companion as before.
 func (s *Server) reportLeakBuild(link aub.LeakTestLink, manifest *build.Manifest) {
 	if manifest == nil || manifest.State.Terminal() {
 		return
 	}
 	stage := "starting"
+	ids := make([]string, 0, len(manifest.Steps))
 	for _, step := range manifest.Steps {
-		if step.State == job.Running {
+		if step.State == job.Running && stage == "starting" {
 			stage = step.ID
-			break
 		}
+		ids = append(ids, step.ID)
 	}
-	s.reportLeakStatus(link, leakBuilding, stage, manifest.BuildID)
+	s.reportLeakStatus(link, leakBuilding, leakBuildStage(stage, ids), manifest.BuildID)
+}
+
+// leakBuildStage is `<current> of <all>`, inside AUB's 120 characters: a list
+// too long for it is cut, never the current step.
+func leakBuildStage(current string, ids []string) string {
+	stage := current + " of " + strings.Join(ids, ",")
+	if utf8.RuneCountInString(stage) > leakStageLimit {
+		return current
+	}
+	return stage
 }
 
 // handleLeakTestRequest is the pending request as this machine holds it, and

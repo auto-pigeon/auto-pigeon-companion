@@ -69,31 +69,40 @@ func TestQ3Map2RunsAreReadByWhatTheCompilerSaidAndLeft(t *testing.T) {
 // NEW_340: the fork's release 2.5.17n-ap.3026, run from its published archive on
 // the same controls in the Companion's job layout, is read as 68ecbed is, row
 // for row, with byte-identical line files; a stale line file planted beside the
-// sealed map is deleted by the compiler and, read anyway, is not a leak. Only the
-// exact banner is qualified: 3020 (one release earlier) and the same commit
+// sealed map is deleted by the compiler and, read anyway, is not a leak. NEW_340A:
+// release 2.5.17n-ap.3030 likewise, its line files byte-identical to 3026's. Only
+// the exact banners are qualified: 3020 (an earlier release) and the same commit
 // without its suffix are not.
 func TestTheForkReleaseIsReadAsTheMeasuredBuild(t *testing.T) {
-	checkQ3Map2Controls(t, "logs-ap.3026", "lin-ap.3026")
-	for _, name := range []string{"b_gap", "c_outside_entity", "e_detail_cover", "e_patch_cover", "x_nonsolid_wall"} {
-		if read(t, "lin-ap.3026", name+".lin") != read(t, "lin", name+".lin") {
-			t.Errorf("%s: the release's line file is not 68ecbed's", name)
+	for _, release := range []struct{ logs, lin, banner string }{
+		{"logs-ap.3026", "lin-ap.3026", Q3Map2ForkVersion3026},
+		{"logs-ap.3030", "lin-ap.3030", Q3Map2ForkVersion},
+	} {
+		checkQ3Map2Controls(t, release.logs, release.lin)
+		for _, name := range []string{"b_gap", "c_outside_entity", "e_detail_cover", "e_patch_cover", "x_nonsolid_wall"} {
+			if read(t, release.lin, name+".lin") != read(t, "lin", name+".lin") {
+				t.Errorf("%s %s: the release's line file is not 68ecbed's", release.lin, name)
+			}
+		}
+		if !strings.Contains(read(t, release.logs, "a_sealed.log"), release.banner) {
+			t.Errorf("%s was not printed by %s", release.logs, release.banner)
+		}
+		yes, zero := true, 0
+		stale := ClassifyQ3Map2(Evidence{Log: read(t, release.logs, "i_stale_lin.log"), Pointfile: read(t, release.lin, "i_stale_lin.lin"),
+			StepState: "succeeded", ExitCode: &zero, BSP: &yes})
+		if stale.Outcome != OutcomeNoLeak || stale.Has(EvRoute) || stale.Has(EvVersionUnqualified) {
+			t.Fatalf("a stale line file beside %s's sealed run: %+v", release.banner, stale)
+		}
+		other := ClassifyQ3Map2(Evidence{Log: strings.ReplaceAll(read(t, release.logs, "a_sealed.log"), release.banner, "2.5.17n-ap.3020+gcf682e5b.upstream.82161339"),
+			StepState: "succeeded", ExitCode: &zero, BSP: &yes})
+		if other.Outcome != OutcomeIncomplete || !other.Has(EvVersionUnqualified) {
+			t.Fatalf("3020's clean run must stay unqualified: %+v", other)
 		}
 	}
 	q3, _ := ForProfile("quake3")
-	if !q3.Qualified(Q3Map2ForkVersion) || !q3.Qualified(Q3Map2MeasuredVersion) ||
-		q3.Qualified("2.5.17n-ap.3020+gcf682e5b.upstream.82161339") || q3.Qualified("2.5.17n-ap.3026") {
+	if !q3.Qualified(Q3Map2ForkVersion) || !q3.Qualified(Q3Map2ForkVersion3026) || !q3.Qualified(Q3Map2MeasuredVersion) ||
+		q3.Qualified("2.5.17n-ap.3020+gcf682e5b.upstream.82161339") || q3.Qualified("2.5.17n-ap.3026") || q3.Qualified("2.5.17n-ap.3030") {
 		t.Fatalf("qualified versions: %v", q3.QualifiedVersions)
-	}
-	yes, zero := true, 0
-	stale := ClassifyQ3Map2(Evidence{Log: read(t, "logs-ap.3026", "i_stale_lin.log"), Pointfile: read(t, "lin-ap.3026", "i_stale_lin.lin"),
-		StepState: "succeeded", ExitCode: &zero, BSP: &yes})
-	if stale.Outcome != OutcomeNoLeak || stale.Has(EvRoute) || stale.Has(EvVersionUnqualified) {
-		t.Fatalf("a stale line file beside the release's sealed run: %+v", stale)
-	}
-	other := ClassifyQ3Map2(Evidence{Log: strings.ReplaceAll(read(t, "logs-ap.3026", "a_sealed.log"), Q3Map2ForkVersion, "2.5.17n-ap.3020+gcf682e5b.upstream.82161339"),
-		StepState: "succeeded", ExitCode: &zero, BSP: &yes})
-	if other.Outcome != OutcomeIncomplete || !other.Has(EvVersionUnqualified) {
-		t.Fatalf("3020's clean run must stay unqualified: %+v", other)
 	}
 }
 

@@ -98,13 +98,32 @@ func (s *Server) leakChoices(game string) ([]map[string]any, error) {
 		readiness := pipelineReadiness(pipeline, runner.Resolver(), set)
 		choices = append(choices, map[string]any{
 			"id": meta.ID, "name": meta.Name, "summary": meta.Summary, "trust": entry.Trust,
-			"builtin": meta.ID == adapter.PipelineID, "readiness": readiness.view(),
+			"builtin": adapter.Ships(meta.ID), "readiness": readiness.view(), "steps": pipelineSteps(pipeline),
 		})
 	}
-	sort.SliceStable(choices, func(i, j int) bool {
-		return choices[i]["builtin"].(bool) && !choices[j]["builtin"].(bool)
-	})
+	// The game's first built-in pipeline, then its alternatives, then the rest.
+	rank := func(choice map[string]any) int {
+		switch {
+		case choice["id"] == adapter.PipelineID:
+			return 0
+		case choice["builtin"].(bool):
+			return 1
+		}
+		return 2
+	}
+	sort.SliceStable(choices, func(i, j int) bool { return rank(choices[i]) < rank(choices[j]) })
 	return choices, nil
+}
+
+// pipelineSteps is what a pipeline runs, in order: the leak chooser and the
+// request card say it, because a pinned pipeline may run more than the one
+// compile stage a leak test needs (its later stages run when the map is sealed).
+func pipelineSteps(pipeline *profile.PipelineProfile) []map[string]string {
+	steps := make([]map[string]string, 0, len(pipeline.Steps))
+	for _, step := range pipeline.Steps {
+		steps = append(steps, map[string]string{"id": step.ID, "title": step.Title})
+	}
+	return steps
 }
 
 func (s *Server) leakPipelineAPI() map[string]http.HandlerFunc {
@@ -189,7 +208,7 @@ func leakBindingFor(manifest *build.Manifest) (leakadapter.Adapter, leakadapter.
 	if !ok {
 		return leakadapter.Adapter{}, leakadapter.Binding{}, false
 	}
-	return adapter, adapter.Builtin(), true
+	return adapter, adapter.BuiltinFor(manifest.Pipeline.ID), true
 }
 
 // isLeakPipeline says whether a pipeline is a game's built-in leak test or one

@@ -464,7 +464,7 @@ the exact reasons under **Details**. The choice is kept in `config.json` as
 ```console
 $ ./companion build leak-pipeline --game quake1
 quake1 leak tests: nothing pinned; the next request asks which pipeline to use
-    auto-pigeon.q1.leak-test  Quake 1 — leak test
+    auto-pigeon.q1.leak-test  Quake 1 — leak test  (runs compile)
 $ ./companion build leak-pipeline --game quake1 --pin auto-pigeon.q1.leak-test
 $ ./companion build leak-pipeline --game quake1 --unpin
 ```
@@ -489,8 +489,31 @@ curl -s -H "X-AUCOM-Token: $(cat "$CONFIG_DIR/api-token")" -H 'Content-Type: app
 | --- | --- | --- | --- |
 | Quake 1 | `auto-pigeon.q1.leak-test` | EricW `qbsp -leaktest` | `.pts` |
 | Quake II (experimental) | `auto-pigeon.q2.leak-test` | EricW `qbsp -q2bsp -leaktest` only | `.pts` |
-| Quake III | `auto-pigeon.q3.leak-test` | Q3Map2 `-bsp -leaktest` only | `.lin` |
+| Quake III | `auto-pigeon.q3.leak-test`, then `auto-pigeon.q3.leak-test.auto-pigeon-build` | Q3Map2 `-bsp -leaktest` only (upstream's, or the Auto-Pigeon build's) | `.lin` |
 | anything else | none | nothing: the notice says the game has no leak test here | — |
+
+**Every choice says what it runs.** The dialog shows each pipeline's stages, and
+the notice of a request names the pinned pipeline and its stages before you
+review it: a pipeline you made may run visibility and lighting too, after the
+leak test's compile stage (they run only when the map is sealed). While it
+builds, the editor is told which stage is running and every stage the build
+runs (`vis of compile,vis,light`), so it never promises a leak test alone for a
+build that does more.
+
+```bash
+# The stages of every Quake III choice, built-in ones first.
+curl -s -H "X-AUCOM-Token: $(cat "$CONFIG_DIR/api-token")" \
+  "http://127.0.0.1:8789/api/v1/leak-test/pipelines?game=quake3" |
+  jq -r '.choices[] | "\(.id) builtin=\(.builtin): \([.steps[].id] | join(", "))"'
+```
+
+For Quake III with the Auto-Pigeon build of Q3Map2 set up in **Profiles**, pin
+the built-in `auto-pigeon.q3.leak-test.auto-pigeon-build` — the same one-stage
+leak test, run by that tool; no stage to retarget and no binding to edit:
+
+```console
+$ ./companion build leak-pipeline --game quake3 --pin auto-pigeon.q3.leak-test.auto-pigeon-build
+```
 
 For Quake II, only releases 1.4518, 1.4522, 1.4524 and 1.4533 of the Auto-Pigeon build of
 ericw-tools have been measured: make your own copy of the pipeline whose stage
@@ -581,8 +604,9 @@ $ companion acquire resolve internal/profile/builtin/q3map2.tool.json \
 published at <https://github.com/auto-pigeon/q3map2/releases> (the profile's
 **Homepage** button): upstream's compiler plus fixes for thin walls and rods
 that lost their collision, faces beside a near-parallel face that were not
-drawn, and a thin sliver that could fill a pipe's bore. It is written for
-**release 2.5.17n-ap.3026**, and its description lists what that release was
+drawn, a thin sliver that could fill a pipe's bore, and narrow real openings a
+slot 0.125 wide through a wall that upstream reports sealed. It is written for
+**release 2.5.17n-ap.3030**, and its description lists what that release was
 measured to do and not to do. Fetch the archive for your platform, check it
 against the `SHA256SUMS` beside it, unpack it into a folder of its own, and
 choose the unpacked folder — the one that **contains** `bin/`, where `q3map2`
@@ -590,7 +614,7 @@ sits beside every library it loads:
 
 ```console
 $ companion acquire resolve internal/profile/builtin/q3map2-auto-pigeon.tool.json \
-    --mode user_path --user-path ~/tools/auto-pigeon-q3map2-2.5.17n-ap.3026-linux-amd64 --bind
+    --mode user_path --user-path ~/tools/auto-pigeon-q3map2-2.5.17n-ap.3030-linux-amd64 --bind
 $ companion toolchain grant auto-pigeon.q3map2.auto-pigeon-build      # read it, then approve
 $ companion toolchain check auto-pigeon.q3map2.auto-pigeon-build      # asks q3map2 what it is
 $ companion job run --profile auto-pigeon.q3map2.auto-pigeon-build --action compile \
@@ -601,7 +625,8 @@ Release 2.5.17n-ap.3017 is refused (it reads past a table on a degenerate brush
 side); unpack a newer one. Like the EricW build, this profile is an
 **alternative**: every built-in Quake III build profile keeps naming the upstream
 compiler. To build with the Auto-Pigeon one, duplicate a build profile in
-**Profiles** and choose it as the tool of each stage. A build records, for each
+**Profiles** and choose it as the tool of each stage. Its leak test is built in:
+`auto-pigeon.q3.leak-test.auto-pigeon-build` (above). A build records, for each
 program it started, the SHA-256 of the file and what that same file said it was
 when it was last checked — beside the version the profile expects:
 
