@@ -210,6 +210,16 @@ type ExecutableRecord struct {
 	// Unreadable says why there is no digest, when there is none. A missing
 	// digest with no reason beside it reads as "nobody bothered".
 	Unreadable string `json:"unreadable,omitempty"`
+	// Identity is what THIS file called itself when its tool profile's
+	// compatibility probe last asked it, with the probe's verdict and when
+	// (NEW_340). It is copied from the binding only when the fact is about these
+	// exact bytes — its SHA-256 is SHA256 above — so it is the observed version
+	// of the program that ran, beside the version the document expects
+	// (ToolRecord.ToolVersion). Empty means the program was never asked or has
+	// changed since: unknown, and never the document's number.
+	Identity          string    `json:"identity,omitempty"`
+	IdentityState     string    `json:"identity_state,omitempty"`
+	IdentityCheckedAt time.Time `json:"identity_checked_at,omitempty"`
 }
 
 // ToolRecord is one tool profile a build used, and what version of the program
@@ -224,7 +234,9 @@ type ExecutableRecord struct {
 // stronger answer than a banner string, and it is one nobody can print.
 type ToolRecord struct {
 	Profile DocumentRef `json:"profile"`
-	// ToolVersion is the upstream version the *document* describes.
+	// ToolVersion is the upstream version the *document* describes: what is
+	// EXPECTED. What ran is each executable's digest and, when its probe asked
+	// those bytes, its Identity (ExecutableRecord).
 	ToolVersion string `json:"tool_version,omitempty"`
 	// ResolvedVersion is what a version probe reported when the tool was bound,
 	// if one ever was. Empty is normal and honest.

@@ -397,7 +397,7 @@ func newHarness(t *testing.T, documents map[string][]byte) *harness {
 
 // newHarnessKeeping is newHarness with the job workspaces left behind, so a test
 // can inspect where the executor actually staged a file.
-func newHarnessKeeping(t *testing.T, documents map[string][]byte, keep bool) *harness {
+func newHarnessKeeping(t *testing.T, documents map[string][]byte, keep bool, adjust ...func(map[string]binding.LocalBinding)) *harness {
 	t.Helper()
 	dir := t.TempDir()
 	profiles := filepath.Join(dir, "profiles")
@@ -445,6 +445,9 @@ func newHarnessKeeping(t *testing.T, documents map[string][]byte, keep bool) *ha
 				GrantedAt: time.Now().UTC(),
 			},
 		}
+	}
+	for _, change := range adjust {
+		change(bindings)
 	}
 	lookup := func(id string) (binding.LocalBinding, bool) {
 		local, found := bindings[id]

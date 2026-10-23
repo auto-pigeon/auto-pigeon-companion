@@ -51,7 +51,7 @@ is not one.
 | --- | --- | --- | --- | --- | --- |
 | `quake1` | `auto-pigeon.q1.leak-test` | `ericw-qbsp` (EricW 2.0.0-alpha11; 0.18.1 also qualified) | `ericw-pts` | `occupant_to_outside` | `aucom.leak-result/1.0` |
 | `quake2` | `auto-pigeon.q2.leak-test` | `ericw-qbsp-q2` (qbsp `-q2bsp`, Auto-Pigeon build 1.4518; 1.4522; releases 1.4524 and 1.4533) | `ericw-pts` | `occupant_to_outside` | `aucom.leak-result/1.1` |
-| `quake3` | `auto-pigeon.q3.leak-test` | `q3map2` (2.5.17n-git-68ecbed) | `q3map2-lin` | `outside_to_occupant` | `aucom.leak-result/1.1` |
+| `quake3` | `auto-pigeon.q3.leak-test` | `q3map2` (2.5.17n-git-68ecbed; the Auto-Pigeon fork's release 2.5.17n-ap.3026) | `q3map2-lin` | `outside_to_occupant` | `aucom.leak-result/1.1` |
 
 The pipeline column is the built-in one. It is not what runs unless the user chose it — see the
 next section.
@@ -127,6 +127,16 @@ step's own output: qbsp's `level.log` file leaves out every `---- Stage ----` he
 report among them, so the Quake II row binds only `aucom.step.stdout`. The BSP's header is read
 (`BSPFormatOf`) and must be `IBSP:38`. qbsp prints `Couldn't locate texture for skip` on every run;
 that lookup is its own and is not a missing texture of the map.
+
+## Quake III, the fork's release (`NEW_340`)
+
+The ten `Q3_018` controls, run from the published linux-amd64 archive of release 2.5.17n-ap.3026 in the job
+layout (`/tools/bin/q3map2`, the map staged under `/work/input/source_map/`, quiet and `-v`): every exit and every
+file left is 68ecbed's, every `.lin` is byte-identical, and the logs differ only in the banner, the timings and the
+BSP's byte count (`testdata/q3/logs-ap.3026`, `lin-ap.3026`, read row for row by
+`TestTheForkReleaseIsReadAsTheMeasuredBuild`). An added control plants a stale `i_stale_lin.lin` beside the sealed
+room: the compiler deletes it, and read anyway it is not a leak. Only that exact banner,
+`2.5.17n-ap.3026+g7e109335.upstream.82161339`, joins `Q3Map2MeasuredVersions` — not 3020, not the bare version.
 
 ## Three states that are never one
 

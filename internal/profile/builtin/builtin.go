@@ -137,6 +137,11 @@ const (
 	// does not install one to get at it. See the document's own acquisition
 	// note.
 	Q3Map2 = "auto-pigeon.q3map2"
+	// Q3Map2AutoPigeon is the Auto-Pigeon fork's build of q3map2, as published on
+	// its GitHub releases page (NEW_340). Like the EricW fork's two documents it
+	// is an ALTERNATIVE to Q3Map2, not a replacement: no built-in pipeline names
+	// it, and a stage reaches it only by naming it. See [IsAlternativeTool].
+	Q3Map2AutoPigeon = "auto-pigeon.q3map2.auto-pigeon-build"
 	// The two Q3 pipelines, for the same reason there are two Q2 ones.
 	Q3FastPreview = "auto-pigeon.q3.fast-preview"
 	Q3Normal      = "auto-pigeon.q3.normal"
@@ -347,6 +352,7 @@ func Find(id string) (Entry, error) {
 var alternativeTools = map[string]string{
 	EricwAutoPigeonQ1: EricwQ1,
 	EricwAutoPigeonQ2: EricwQ2,
+	Q3Map2AutoPigeon:  Q3Map2,
 }
 
 // IsAlternativeTool reports whether a built-in tool profile is a second build of

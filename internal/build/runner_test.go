@@ -680,6 +680,51 @@ func TestTheManifestRecordsTheDigestOfEveryExecutableThatRan(t *testing.T) {
 	}
 }
 
+// NEW_340: the version a build records as having run is the program's own
+// answer about the bytes that ran, never the document's number. A tool profile
+// declares what it EXPECTS (tool_version); the executable record carries what
+// the compatibility probe last heard from THAT file — and only when the probe
+// asked these exact bytes. A Q3 release profile once ran any q3map2 and the
+// manifest named only the profile's version.
+func TestTheManifestRecordsWhatTheProgramThatRanSaidItWas(t *testing.T) {
+	digest, size, err := digestFile(helperPath(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	asked := time.Date(2026, 10, 23, 8, 0, 0, 0, time.UTC)
+	fact := func(sha string) func(map[string]binding.LocalBinding) {
+		return func(bindings map[string]binding.LocalBinding) {
+			local := bindings["test.build.toolchain"]
+			local.Compatibility = map[string]binding.ExecutableFact{"tool": {Path: helperPath(t), Size: size, SHA256: sha,
+				Requirement: "sha256:" + strings.Repeat("0", 64), State: binding.FactCompatible, Identity: "9.9.9-observed", CheckedAt: asked}}
+			bindings["test.build.toolchain"] = local
+		}
+	}
+	for _, c := range []struct {
+		name, sha, identity string
+	}{
+		{"the probe asked these bytes", digest, "9.9.9-observed"},
+		{"the probe asked another file", "sha256:" + strings.Repeat("a", 64), ""},
+	} {
+		h := newHarnessKeeping(t, standardFixtures(t), false, fact(c.sha))
+		manifest := h.mustRun(Request{
+			PipelineID: "test.build.pipeline",
+			Inputs:     map[string]string{"source_map": h.sourceMap("level.map", "brushes\n")},
+		})
+		tool := manifest.Tools[0]
+		executable := tool.Executables[0]
+		if executable.SHA256 != digest || executable.Identity != c.identity {
+			t.Errorf("%s: executable %+v, want identity %q", c.name, executable, c.identity)
+		}
+		if c.identity != "" && (executable.IdentityState != "compatible" || !executable.IdentityCheckedAt.Equal(asked)) {
+			t.Errorf("%s: state %q checked %v", c.name, executable.IdentityState, executable.IdentityCheckedAt)
+		}
+		if tool.ToolVersion == "" || tool.ToolVersion == executable.Identity {
+			t.Errorf("%s: expected (%q) and observed (%q) must stay distinct", c.name, tool.ToolVersion, executable.Identity)
+		}
+	}
+}
+
 // A pipeline is not a way around a grant.
 func TestAProfileWithNoGrantCannotBeRunThroughAPipeline(t *testing.T) {
 	h := newHarness(t, standardFixtures(t))

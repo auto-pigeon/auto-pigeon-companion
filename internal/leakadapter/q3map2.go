@@ -2,12 +2,24 @@ package leakadapter
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 )
 
 // Q3Map2MeasuredVersion is the build every sentence below was measured on:
 // NetRadiant-custom `20260114`, `auto-pigeon-tools/q3map2-contract.json`.
 const Q3Map2MeasuredVersion = "2.5.17n-git-68ecbed"
+
+// Q3Map2ForkVersion is the Auto-Pigeon fork's release 2.5.17n-ap.3026 (tag
+// `auto-pigeon-q3map2-v2.5.17n-ap.3026`, NEW_340): the same controls run from
+// its published linux-amd64 archive (`testdata/q3/logs-ap.3026`,
+// `lin-ap.3026`) exit, leave and print exactly what 68ecbed's did — every line
+// file byte-identical, the logs equal but for the banner, the timings and the
+// BSP's byte count. Only this exact banner is added.
+const Q3Map2ForkVersion = "2.5.17n-ap.3026+g7e109335.upstream.82161339"
+
+// Q3Map2MeasuredVersions are the Q3Map2 builds the reading below was measured on.
+var Q3Map2MeasuredVersions = []string{Q3Map2MeasuredVersion, Q3Map2ForkVersion}
 
 // What Q3Map2 2.5.17n prints, measured on the authored controls in
 // `testdata/q3/controls` (the logs beside them are those runs).
@@ -126,7 +138,7 @@ func ClassifyQ3Map2(e Evidence) Verdict {
 		// The log's own banner is this run's; a probe is an earlier run.
 		version = logged
 	}
-	qualified := version == Q3Map2MeasuredVersion
+	qualified := slices.Contains(Q3Map2MeasuredVersions, version)
 	warnings := func() {
 		if strings.Contains(log, q3MissingImage) {
 			add(EvShaderImageMissing)

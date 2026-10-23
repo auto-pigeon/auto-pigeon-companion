@@ -677,6 +677,9 @@ func (r *Runner) tools(steps []profile.ResolvedStep) []ToolRecord {
 				executable := ExecutableRecord{Name: declared.Name, Path: path}
 				if digest, size, err := digestFile(path); err == nil {
 					executable.SHA256, executable.Size = digest, size
+					if fact, asked := local.Compatibility[declared.Name]; asked && fact.SHA256 == digest {
+						executable.Identity, executable.IdentityState, executable.IdentityCheckedAt = fact.Identity, string(fact.State), fact.CheckedAt
+					}
 				} else {
 					executable.Unreadable = err.Error()
 				}

@@ -557,6 +557,39 @@ $ companion acquire resolve internal/profile/builtin/q3map2.tool.json \
     --mode user_path --user-path /opt/netradiant-custom/usr/aucom-bin --bind
 ```
 
+**The Auto-Pigeon build of Q3Map2.** A second profile,
+`auto-pigeon.q3map2.auto-pigeon-build`, describes the Auto-Pigeon fork of q3map2
+published at <https://github.com/auto-pigeon/q3map2/releases> (the profile's
+**Homepage** button): upstream's compiler plus fixes for thin walls and rods
+that lost their collision, faces beside a near-parallel face that were not
+drawn, and a thin sliver that could fill a pipe's bore. It is written for
+**release 2.5.17n-ap.3026**, and its description lists what that release was
+measured to do and not to do. Fetch the archive for your platform, check it
+against the `SHA256SUMS` beside it, unpack it into a folder of its own, and
+choose the unpacked folder — the one that **contains** `bin/`, where `q3map2`
+sits beside every library it loads:
+
+```console
+$ companion acquire resolve internal/profile/builtin/q3map2-auto-pigeon.tool.json \
+    --mode user_path --user-path ~/tools/auto-pigeon-q3map2-2.5.17n-ap.3026-linux-amd64 --bind
+$ companion toolchain grant auto-pigeon.q3map2.auto-pigeon-build      # read it, then approve
+$ companion toolchain check auto-pigeon.q3map2.auto-pigeon-build      # asks q3map2 what it is
+$ companion job run --profile auto-pigeon.q3map2.auto-pigeon-build --action compile \
+    --input source_map="$PWD/room.map" --root game_root=/opt/quake3 --root content_root="$PWD" --wait
+```
+
+Release 2.5.17n-ap.3017 is refused (it reads past a table on a degenerate brush
+side); unpack a newer one. Like the EricW build, this profile is an
+**alternative**: every built-in Quake III build profile keeps naming the upstream
+compiler. To build with the Auto-Pigeon one, duplicate a build profile in
+**Profiles** and choose it as the tool of each stage. A build records, for each
+program it started, the SHA-256 of the file and what that same file said it was
+when it was last checked — beside the version the profile expects:
+
+```sh
+companion build show <build-id> --json | jq '.tools[] | {expected: .tool_version, ran: [.executables[] | {sha256, identity, identity_state}]}'
+```
+
 **Building.** `game_root` is the base game's folder and `content_root` your own
 content; choose the folder that *contains* `baseq3`. The compiler only sees
 `baseq3` and the mod you name, staged for the build — not sibling mods, hidden

@@ -153,7 +153,7 @@ var adapters = map[string]Adapter{
 		Compiler: CompilerQ3Map2, PointfileFormat: FormatQ3Map2Lin, Direction: DirectionOutsideFirst,
 		PointfileOutput: "lin", LogOutput: "compile_log", BSPOutput: "bsp", PointfileBesideSource: true,
 		PointfileRole: "q3.lin", LogRoles: []string{StepLogRole}, BSPRole: "q3.bsp",
-		ResultSchema: Schema11, QualifiedVersions: []string{Q3Map2MeasuredVersion},
+		ResultSchema: Schema11, QualifiedVersions: Q3Map2MeasuredVersions,
 		Classify: ClassifyQ3Map2,
 	},
 	// Quake II: qbsp's text is the step's own output, never its `.log` file —
