@@ -167,3 +167,40 @@ func TestALeakResultIsReadFromItsOwnBuildsBindingNotTodaysPin(t *testing.T) {
 		t.Errorf("the compiler version is %v, not the bound compile stage's tool's", body["compiler_version"])
 	}
 }
+
+// TestAnUnreadyChoiceNamesTheToolToSetUp (NEW_345): every unready leak-test
+// choice said the same English sentence four times, and its setup link went to
+// the PIPELINE's page, where nothing can be set up. Each problem now carries the
+// tool profile, the stage and the program it is about, so the page can group
+// one missing tool across pipelines and link to where it is fixed.
+func TestAnUnreadyChoiceNamesTheToolToSetUp(t *testing.T) {
+	m := newMachine(t)
+	status, body := m.call(http.MethodGet, "/api/v1/leak-test/pipelines?game=quake1", nil)
+	if status != http.StatusOK {
+		t.Fatalf("choices: %d %v", status, body)
+	}
+	choices, _ := body["choices"].([]any)
+	unready := 0
+	for _, raw := range choices {
+		choice := raw.(map[string]any)
+		readiness := choice["readiness"].(map[string]any)
+		if readiness["ready"] == true {
+			continue
+		}
+		unready++
+		problems, _ := readiness["problems"].([]any)
+		if len(problems) == 0 {
+			t.Fatalf("%v is not ready and says nothing", choice["id"])
+		}
+		for _, raw := range problems {
+			problem := raw.(map[string]any)
+			profile, _ := problem["profile"].(string)
+			if profile == "" || profile == choice["id"] || problem["profile_name"] == "" || problem["executable"] == "" || problem["step"] == "" {
+				t.Errorf("%v: a problem that does not name the tool to set up: %v", choice["id"], problem)
+			}
+		}
+	}
+	if unready == 0 {
+		t.Fatal("nothing is bound on a new machine, yet every choice is ready")
+	}
+}

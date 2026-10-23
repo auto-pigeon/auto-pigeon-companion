@@ -896,7 +896,7 @@ func profileFileName(meta profile.Meta) (string, error) {
 		}
 	}
 	name := strings.Trim(builder.String(), "-._")
-	if name == "" || len(name) > 120 {
+	if name == "" || len(name) > maxProfileFileStem {
 		return "", fmt.Errorf("%q cannot be a file name on this machine", meta.ID)
 	}
 	return name + ".json", nil
@@ -1193,11 +1193,18 @@ func derivedProfileID(tree map[string]any, template string) (string, bool) {
 		kind = "profile"
 	}
 	id := derivedIDPrefix + profileSlug(kind) + "." + slug
-	if len(id) > 128 {
-		id = strings.TrimRight(id[:128], "-.")
+	// Cut to what profileFileName accepts, which is shorter than an id may be:
+	// cutting at the id's own 128 made a long name compose and then refuse to
+	// install, at the last step (NEW_345, found live).
+	if len(id) > maxProfileFileStem {
+		id = strings.TrimRight(id[:maxProfileFileStem], "-.")
 	}
 	return id, true
 }
+
+// maxProfileFileStem is the longest id an installed profile's file is named
+// after.
+const maxProfileFileStem = 120
 
 // derivedIDPrefix is the namespace of every id the page made up for somebody.
 const derivedIDPrefix = "local."

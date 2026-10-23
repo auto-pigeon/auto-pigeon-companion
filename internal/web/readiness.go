@@ -29,6 +29,21 @@ type readiness struct {
 	// Problems is what stops the profile's first action, the one a person
 	// checks: an engine's play_map, a tool's first action. Empty when Ready.
 	Problems engine.Problems
+	// Origins says, for a pipeline, which tool profile each of Problems is
+	// about, index for index (NEW_345). A page that sets a pipeline up has to
+	// send the person to the TOOL — the pipeline's own page has nothing to fix
+	// — and it groups the same missing tool across pipelines by these ids,
+	// never by reading the English of a summary.
+	Origins []problemOrigin
+}
+
+// problemOrigin is where a pipeline's problem comes from: the stage, the tool
+// profile that runs it and the program that stage starts.
+type problemOrigin struct {
+	Step        string
+	Profile     string
+	ProfileName string
+	Executable  string
 }
 
 func installReadiness(entry job.CatalogEntry, local binding.LocalBinding) readiness {
@@ -84,7 +99,19 @@ func installReadiness(entry job.CatalogEntry, local binding.LocalBinding) readin
 
 // view is the readiness as a response carries it.
 func (r readiness) view() map[string]any {
-	return map[string]any{"ready": r.Ready, "problems": describeProblems(r.Problems)}
+	problems := describeProblems(r.Problems)
+	if len(r.Origins) == len(problems) {
+		for index, origin := range r.Origins {
+			if origin.Profile == "" {
+				continue
+			}
+			problems[index]["step"] = origin.Step
+			problems[index]["profile"] = origin.Profile
+			problems[index]["profile_name"] = origin.ProfileName
+			problems[index]["executable"] = origin.Executable
+		}
+	}
+	return map[string]any{"ready": r.Ready, "problems": problems}
 }
 
 // Pipeline setup uses the runner's resolver and each resolved action's same
@@ -108,9 +135,13 @@ func pipelineReadiness(pipeline *profile.PipelineProfile, resolver *build.Resolv
 		if step.Optional {
 			continue
 		}
+		meta := entry.Profile.Metadata()
 		for _, problem := range problems {
 			problem.Summary = step.Title + ": " + problem.Summary
 			out.Problems = append(out.Problems, problem)
+			out.Origins = append(out.Origins, problemOrigin{
+				Step: step.Title, Profile: meta.ID, ProfileName: meta.Name, Executable: action.Executable,
+			})
 		}
 	}
 	out.Ready = len(out.Problems) == 0

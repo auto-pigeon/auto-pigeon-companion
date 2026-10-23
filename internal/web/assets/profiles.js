@@ -282,7 +282,15 @@
     );
     if (note) detail.append(note);
     detail.append(el("p", { text: body.summary || "" }));
-    if (body.description) detail.append(el("p", { className: "muted", text: body.description }));
+    // The document's own long account — a fork's release history runs to
+    // hundreds of words — is a click away, not between the person and the
+    // setup they came here for (NEW_345). Its words are unchanged.
+    if (body.description) {
+      detail.append(el("details", { className: "profile-about", children: [
+        el("summary", { text: t("About this profile") }),
+        el("p", { className: "muted", text: body.description }),
+      ] }));
+    }
     detail.append(
       el("p", {
         className: "muted",
@@ -292,6 +300,17 @@
           (body.license?.spdx ? ` · ${body.license.spdx}` : ""),
       })
     );
+
+    // What this machine still needs comes first when it is the person's task:
+    // an approved profile — every built-in one — is opened to be SET UP, and
+    // its readiness and paths used to sit under its action list, homepage and
+    // approval line, two screens down (NEW_345). A profile still awaiting
+    // approval keeps the review first: approving is its next step.
+    const setupPart = el("div", { className: "profile-setup-part" });
+    renderReadiness(setupPart, body);
+    renderSetup(setupPart, body);
+    const setupFirst = body.authorized === true;
+    if (setupFirst) detail.append(setupPart);
 
     detail.append(el("h4", { text: "Actions" }));
     const actions = el("ul");
@@ -380,8 +399,7 @@
     detail.append(buttons);
     detail.append(status);
 
-    renderReadiness(detail, body);
-    renderSetup(detail, body);
+    if (!setupFirst) detail.append(setupPart);
     renderArguments(detail, body);
   }
 
@@ -411,6 +429,17 @@
           text: `${t(title(id))}: ${[...new Set(problems.map((problem) => problem.summary))].join(" ")}`,
         })),
       }));
+    } else if (nothingChosenYet(body)) {
+      // A program nobody has pointed at yet is not an error, and one sentence
+      // names them all (NEW_345). It used to be said three times: an "Error:"
+      // about the first program, a "no path yet" row per program, and the
+      // setup section's own badge below.
+      const programs = body.compatibility.map((row) => row.executable);
+      box.append(el("p", { className: "readiness__state", children: [
+        badge(t("needs setup"), "blocked"), document.createTextNode(" "),
+        document.createTextNode(t("{programs}: no path yet. Choose where they are below.", { programs: window.AUCOM.listOf(programs) })),
+      ] }));
+      return box;
     } else {
       box.append(el("p", { className: "message error", text: t("Not ready to start yet:") }));
       box.append(el("ul", {
@@ -420,6 +449,14 @@
     }
     if ((body.compatibility || []).length) box.append(compatibilityBox(body, box));
     return box;
+  }
+
+  // nothingChosenYet: every program the profile holds to a version has no path
+  // and nothing else is wrong — the state of every tool on a fresh install.
+  function nothingChosenYet(body) {
+    const rows = body.compatibility || [];
+    return rows.length > 0 && rows.every((row) => row.state === "not_bound") &&
+      (body.readiness.problems || []).every((problem) => problem.fault === "missing_engine");
   }
 
   // compatibilityBox is what each program said it is when the Companion asked
@@ -742,8 +779,9 @@
       const named = Object.values(binding?.executables || {}).filter(Boolean).length;
       provenance.replaceChildren();
       if (named === 0) {
-        provenance.append(badge("not set up", "blocked"),
-          document.createTextNode(" Nothing is recorded yet, so a build that needs these programs cannot start."));
+        // Nothing named yet: the readiness line above already says so, with
+        // the programs' names (NEW_345) — a second badge here said it again.
+        return;
       } else {
         provenance.append(badge("local binding", "local"),
           document.createTextNode(" " + t("Programs you named on this machine. The Companion runs what you pointed at and downloads nothing.") +

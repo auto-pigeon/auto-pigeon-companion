@@ -3,6 +3,7 @@ package engine_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -152,5 +153,25 @@ func TestCompatibilityNeitherHidesNorReplacesAnApproval(t *testing.T) {
 	// Approved (built in) and never asked: that is a problem, and it is named.
 	if got := linux().Check(document, profile.TrustBuiltin, digest, local, "vis"); !sameFaults(got, engine.FaultToolUnverified) {
 		t.Errorf("unasked programs, approved: %v", faultsOf(got))
+	}
+}
+
+// TestAToolNobodyPointedAtIsNotChosenAgain (NEW_345): a program whose path was
+// never recorded was fixed with "Choose it again" — wrong on every fresh
+// install, where nobody chose anything. A path that was recorded and is gone
+// is still chosen again.
+func TestAToolNobodyPointedAtIsNotChosenAgain(t *testing.T) {
+	document, digest := builtinEngine(t, ericwQ1)
+	never := binding.LocalBinding{SchemaVersion: binding.SchemaVersion, ProfileID: ericwQ1, ProfileDigest: digest,
+		Trust: profile.TrustBuiltin, Executables: map[string]string{}}
+	got := linux().Check(document, profile.TrustBuiltin, digest, never, "vis")
+	if !sameFaults(got, engine.FaultMissingEngine) || !strings.HasPrefix(got[0].Fix, "Choose where it is under") {
+		t.Errorf("never chosen: %v", got)
+	}
+	local, dir := compatBinding(t, document, digest, binding.FactCompatible)
+	local.Executables["vis"] = filepath.Join(dir, "gone")
+	got = linux().Check(document, profile.TrustBuiltin, digest, local, "vis")
+	if !sameFaults(got, engine.FaultMissingEngine) || !strings.HasPrefix(got[0].Fix, "Choose it again under") {
+		t.Errorf("chosen and gone: %v", got)
 	}
 }

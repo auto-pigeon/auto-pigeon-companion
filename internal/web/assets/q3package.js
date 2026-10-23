@@ -407,8 +407,9 @@
     const kept = select.value;
     state.engines = ok ? body.engines || [] : [];
     window.AUCOM.executionChoices(select, state.engines, kept, engineReady,
-      (engine) => engine.name + (engineReady(engine) ? "" : " — needs setup: " + (engine.problem || "readiness is not known")),
-      t("Choose a ready {game} engine…", { game: FAMILIES[owned.family].game }), true);
+      (engine) => engine.name + (engineReady(engine) ? "" : " — " + t("needs setup")),
+      t("Choose a ready {game} engine…", { game: FAMILIES[owned.family].game }), true, false, undefined,
+      { setupLabel: "engines" });
     engineChanged();
     if (!ok) setMessage("q3pkg-install-message", body.error || t("The engines could not be listed."), "error");
   }
@@ -440,8 +441,9 @@
     $("q3pkg-install").disabled = !engineReady(engine);
     $("q3pkg-install-preview").disabled = !engineReady(engine);
     window.AUCOM.executionChoices(actions, engine.actions || [], previousAction, actionReady,
-      (action) => action.title + (actionReady(action) ? "" : " — needs setup: " + (action.problem || "readiness is not known")),
-      "Choose a ready action…", true);
+      (action) => action.title + (actionReady(action) ? "" : " — " + t("needs setup")),
+      "Choose a ready action…", true, false, undefined,
+      { setupLabel: "actions", setupProfile: () => ({ id: engine.id, name: engine.name }) });
     actionChanged();
   }
 

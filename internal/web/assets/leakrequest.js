@@ -25,7 +25,7 @@
 "use strict";
 
 (() => {
-  const { $, el, api, withBusy, record, t, pipelineReady, executionChoices } = window.AUCOM;
+  const { $, el, api, withBusy, record, t, pipelineReady, executionChoices, setupCauses, badge } = window.AUCOM;
 
   const WATCH_MS = 2000;
   const box = $("leak-request");
@@ -207,10 +207,13 @@
   // --- choosing the pipeline -------------------------------------------------
   //
   // The dialog lists every installed pipeline that can answer this game's leak
-  // test (the server decides which can), with the readiness Build & Run shows:
-  // one that needs setup is listed, greyed, with its reasons, and cannot be
-  // chosen; "Profiles / setup" is beside it. Pinning sends the choice to the
-  // server, which refuses a pipeline that cannot be this game's leak test.
+  // test (the server decides which can), with the readiness Build & Run shows.
+  // One that needs setup is listed disabled and cannot be chosen; what it waits
+  // for is ONE closed "Other pipelines (n need setup)" disclosure under the
+  // select (core.js setupActions), each row linking to the tool to set up
+  // (NEW_345). Only the SELECTED pipeline's state is said in the open. Pinning
+  // sends the choice to the server, which refuses a pipeline that cannot be
+  // this game's leak test. Choosing runs nothing: a pin is a setting.
   let askedFor = null; // the request whose dialog opened by itself, once
   let pinGame = "";
   let pinThenReview = false;
@@ -218,74 +221,172 @@
   // a pin confirmed after that request was replaced reviews nothing.
   let pinFor = null;
   let pinGeneration = 0;
+  // Each opening of the dialog is a session. A pin answered after the dialog
+  // was closed and opened again — for a newer request — belongs to the old
+  // opening, and neither closes the new one nor reviews anything (NEW_345).
+  let pinSession = 0;
+  let pinOpener = null;
+  let choices = [];
   const pinModal = $("leak-pin-modal");
+
+  function chosen() {
+    return choices.find((item) => item.id === $("leak-pin-select").value) || null;
+  }
+
+  // The selected pipeline's state, in one place: Ready with its full name and
+  // its own summary, or what it waits for with a link to fix it. Nothing about
+  // the others is said here.
+  function renderPinStatus() {
+    const status = $("leak-pin-status");
+    const item = chosen();
+    $("leak-pin-confirm").disabled = !item || !pipelineReady(item);
+    $("leak-pin-select").title = item?.name || "";
+    if (!choices.some(pipelineReady) && !$("leak-pin-field").hidden) {
+      status.replaceChildren(el("p", { text: choices.length
+        ? t("No pipeline is ready yet. Set up the tool one of them needs, then come back.")
+        : t("No installed pipeline can test {game} maps.", { game: gameName(pinGame) }) }));
+      return;
+    }
+    if (!item) { status.replaceChildren(); return; }
+    if (pipelineReady(item)) {
+      status.replaceChildren(
+        el("p", { className: "leak-pin__selected", children: [badge(t("Ready"), "ok"), document.createTextNode(" "), el("strong", { text: item.name })] }),
+        ...(item.summary ? [el("p", { className: "leak-pin__summary", text: item.summary })] : []));
+      return;
+    }
+    status.replaceChildren(
+      el("p", { className: "leak-pin__selected", children: [badge(t("Needs setup"), "blocked"), document.createTextNode(" "), el("strong", { text: item.name })] }),
+      ...setupCauses(item).map((cause) => el("p", { className: "leak-pin__summary", children: [
+        document.createTextNode(cause.text + " "),
+        el("a", { text: t("Set up"), attrs: { href: "#profiles/" + encodeURIComponent(cause.profile), "aria-label": t("Set up {name}", { name: cause.name }) } }),
+      ] })));
+  }
 
   async function loadPin() {
     const own = ++pinGeneration;
     const select = $("leak-pin-select");
-    const problems = $("leak-pin-problems");
     const message = $("leak-pin-message");
-    message.textContent = "";
     const { ok, body } = await api("/api/v1/leak-test/pipelines?game=" + encodeURIComponent(pinGame));
     if (own !== pinGeneration) return; // A newer refresh owns the dialog.
+    message.textContent = "";
+    message.className = "message";
+    $("leak-pin-retry-row").hidden = ok;
+    $("leak-pin-field").hidden = !ok;
     if (!ok) {
+      // One failure, one remedy: the list is not shown half-empty, and what
+      // was chosen is kept for when it answers again.
+      choices = [];
       message.className = "message error";
-      message.textContent = body.error || t("The pipelines could not be listed.");
+      message.textContent = t("The pipelines could not be listed: {why}", { why: body.error || t("the Companion did not answer") });
+      renderPinStatus();
       return;
     }
-    const choices = body.choices || [];
+    const previous = select.value || body.pinned || "";
+    choices = body.choices || [];
     const label = (item) => item.name + (item.builtin ? " — " + t("built in") : "") +
       (pipelineReady(item) ? "" : " — " + t("needs setup"));
-    executionChoices(select, choices, select.value || body.pinned || "", pipelineReady, label,
-      choices.length ? t("Choose a pipeline…") : t("No installed pipeline can test these maps"));
-    problems.replaceChildren(...choices.filter((item) => !pipelineReady(item)).map((item) =>
-      el("li", { text: `${item.name}: ` + ((item.readiness?.problems || []).map((p) => p.summary).join(" ") || t("not ready")) })));
-    $("leak-pin-confirm").disabled = !select.value;
+    const anyReady = choices.some(pipelineReady);
+    executionChoices(select, choices, anyReady ? previous : "", pipelineReady, label,
+      !choices.length ? t("No installed pipeline can test these maps")
+        : choices.filter(pipelineReady).length === 1 ? t("Choose a pipeline (1 ready)…")
+          : t("Choose a pipeline ({n} ready)…", { n: choices.filter(pipelineReady).length }),
+      false, true, undefined, { setupLabel: anyReady ? "pipelines" : "all-pipelines" });
+    // Nothing ready: no dead list to pick from. What to do is said first, and
+    // the rows that say what each pipeline needs are the content, open.
+    const setup = $("leak-pin-field").querySelector(".choice-setup");
+    select.hidden = !anyReady;
+    $("leak-pin-label").hidden = !anyReady;
+    if (!anyReady && setup) setup.open = true;
+    renderPinStatus();
   }
 
   async function openPin(game, thenReview) {
     pinGame = game;
     pinThenReview = thenReview;
+    pinSession += 1;
     pinFor = seen ? { request: seen.request_id, generation } : null;
-    $("leak-pin-intro").textContent = t("Which pipeline should test {game} maps for leaks on this computer? The Companion ships profiles; the compilers are programs you install yourself, so the choice is yours. It is kept for every later request and can be changed here.", { game: gameName(game) });
-    $("leak-pin-confirm").textContent = thenReview ? t("Pin and review") : t("Pin");
+    if (pinModal.hidden) pinOpener = document.activeElement;
+    $("leak-pin-intro").textContent = t("Choose a pipeline for {game} leak tests. You can change it later.", { game: gameName(game) })
+      + (thenReview ? " " + t("Next, you review the test; nothing runs until you press Build.") : "");
     pinModal.hidden = false;
-    await loadPin();
     $("leak-pin-select").focus();
+    await loadPin();
+    if (!pinModal.hidden && !pinModal.contains(document.activeElement)) {
+      ($("leak-pin-select").hidden ? $("leak-pin-close") : $("leak-pin-select")).focus();
+    }
   }
 
-  function closePin() { pinModal.hidden = true; pinGeneration += 1; }
+  // Closing changes nothing: no pin, no request, no job (NEW_310: Cancel starts
+  // nothing and keeps the request). Focus goes back where it came from.
+  function closePin({ restoreFocus = true } = {}) {
+    if (pinModal.hidden) return;
+    pinModal.hidden = true;
+    pinGeneration += 1;
+    pinSession += 1;
+    if (restoreFocus && pinOpener && document.contains(pinOpener)) pinOpener.focus();
+    pinOpener = null;
+  }
 
-  $("leak-pin-select").addEventListener("change", () => { $("leak-pin-confirm").disabled = !$("leak-pin-select").value; });
+  $("leak-pin-select").addEventListener("change", renderPinStatus);
+  $("leak-pin-retry").addEventListener("click", () => withBusy($("leak-pin-retry"), loadPin));
   $("leak-pin-confirm").addEventListener("click", () => withBusy($("leak-pin-confirm"), async () => {
     const pipeline = $("leak-pin-select").value;
-    if (!pipeline) return;
-    const { ok, body } = await api("/api/v1/leak-test/pipelines", { method: "POST", body: { game: pinGame, pipeline } });
-    if (!ok) {
-      $("leak-pin-message").className = "message error";
-      $("leak-pin-message").textContent = body.error || t("The pipeline could not be pinned.");
+    if (!pipeline || !pipelineReady(chosen())) return;
+    // Whose pin this is, decided now — not after the answer, by which time the
+    // dialog may be showing a newer request (NEW_345).
+    const session = pinSession;
+    const asked = pinFor;
+    const game = pinGame;
+    const continueToReview = pinThenReview;
+    const { ok, body } = await api("/api/v1/leak-test/pipelines", { method: "POST", body: { game, pipeline } });
+    if (session !== pinSession) {
+      // Answered for an opening that is gone. The pin, if recorded, is the
+      // game's setting; a dialog open now shows it. Nothing is reviewed.
+      if (!pinModal.hidden) loadPin();
       return;
     }
-    record(t("Leak tests for {game} use {pipeline}", { game: gameName(pinGame), pipeline }), "", "ok");
-    closePin();
-    const continueToReview = pinThenReview;
+    if (!ok) {
+      $("leak-pin-message").className = "message error";
+      $("leak-pin-message").textContent = t("The pipeline could not be used: {why}", { why: body.error || t("the Companion did not answer") });
+      // The busy button let focus fall to the page; it goes back to the choice.
+      $("leak-pin-select").focus();
+      return;
+    }
+    record(t("Leak tests for {game} use {pipeline}", { game: gameName(game), pipeline }), "", "ok");
+    closePin({ restoreFocus: false });
     // A read that started before the pin answers for the time before it: wait
     // for it, then ask again, so the review is of the pinned pipeline (found
     // live on Windows: the continuation reviewed a stale "nothing pinned").
     while (resolving) await new Promise((done) => setTimeout(done, 100));
-    const asked = pinFor;
     await resolve(true);
     // Review only the request the dialog was opened for, still current, and
     // only with the pipeline just pinned (NEW_310A): a request that replaced
     // it meanwhile, or a pin changed elsewhere, is shown, never started.
     const still = asked && seen && seen.request_id === asked.request && generation === asked.generation;
     if (continueToReview && still && details?.ok && details.body.pipeline === pipeline && !details.body.needs_pipeline) await review();
+    else box.querySelector("button.primary, button")?.focus();
   }));
-  for (const close of [$("leak-pin-cancel"), $("leak-pin-close")]) close.addEventListener("click", closePin);
-  pinModal.querySelector("[data-dismiss=leak-pin]")?.addEventListener("click", closePin);
-  pinModal.addEventListener("keydown", (event) => { if (event.key === "Escape") closePin(); });
-  $("leak-pin-setup").addEventListener("click", () => { closePin(); window.AUCOM.showArea("profiles"); });
-  // Back from Profiles with the dialog's game still unanswered: list again.
+  for (const close of [$("leak-pin-cancel"), $("leak-pin-close")]) close.addEventListener("click", () => closePin());
+  pinModal.querySelector("[data-dismiss=leak-pin]")?.addEventListener("click", () => closePin());
+  pinModal.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") { event.preventDefault(); closePin(); return; }
+    // Focus stays inside the open dialog: Tab past the last control comes back
+    // to the first, Shift+Tab the other way (the sign-in dialog's rule).
+    if (event.key !== "Tab") return;
+    const focusable = [...$("leak-pin-dialog").querySelectorAll("button, select, a[href], summary")]
+      .filter((node) => !node.disabled && node.offsetParent !== null);
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  });
+  // A "Set up" link goes to Profiles: the dialog closes, and the request's
+  // notice is where to come back to — choosing again reads the list afresh.
+  $("leak-pin-dialog").addEventListener("click", (event) => {
+    if (event.target.closest?.('a[href^="#profiles/"]')) closePin({ restoreFocus: false });
+  });
+  // Back from another window with the dialog's game still unanswered: list again.
   document.addEventListener("visibilitychange", () => { if (!document.hidden && !pinModal.hidden) loadPin(); });
 
   // Dismiss names the request it is dismissing, so a newer one that arrived

@@ -13,7 +13,7 @@
 "use strict";
 
 (() => {
-  const { $, el, api, setMessage, withBusy, record, badge, when, terminal, t } = window.AUCOM;
+  const { $, el, api, setMessage, withBusy, record, badge, when, terminal, duration, t } = window.AUCOM;
 
   let watching = null;
   let poller = null;
@@ -57,6 +57,17 @@
     return "#jobs/" + encodeURIComponent(id);
   }
 
+  // How long a job took, or has been running as of this reading (NEW_345: a
+  // row said when a job started and never how long it ran). Read from the
+  // record's own times; nothing here ticks between refreshes.
+  function took(job) {
+    const start = Date.parse(job.started_at || "");
+    if (!Number.isFinite(start)) return "";
+    const end = terminal(job.state) ? Date.parse(job.finished_at || "") : Date.now();
+    if (!Number.isFinite(end) || end < start) return "";
+    return terminal(job.state) ? t("took {time}", { time: duration(end - start) }) : t("running for {time}", { time: duration(end - start) });
+  }
+
   function jobRow(job) {
     const head = el("div", { className: "row-head" });
     // Named by what ran, never by the job's id (operator, NEW_244D). The name
@@ -72,6 +83,7 @@
     const detail = el("p", { className: "muted" });
     detail.textContent = [
       job.exit_code !== undefined && job.exit_code !== null ? "exit " + job.exit_code : "",
+      took(job),
       job.started_at ? when(job.started_at) : "",
     ]
       .filter(Boolean)
@@ -221,6 +233,7 @@
         text: [
           body.exit_code !== undefined && body.exit_code !== null ? "exit status " + body.exit_code : "",
           body.timed_out ? "timed out" : "",
+          took(body),
           body.started_at ? "started " + when(body.started_at) : "",
           body.finished_at ? "finished " + when(body.finished_at) : "",
         ]

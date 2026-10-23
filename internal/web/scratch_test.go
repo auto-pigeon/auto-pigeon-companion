@@ -105,6 +105,33 @@ func TestAProfileWrittenWithoutAnIdIsNamedAfterItsName(t *testing.T) {
 	}
 }
 
+// TestALongNameStillInstalls (NEW_345, found live): the id derived from a long
+// name was cut at the 128 characters an id may have, and installing it was then
+// refused at the last step because the FILE it lands in allows 120 — "cannot be
+// a file name on this machine", with nothing the person could do about it but
+// guess at a shorter name. A derived id fits where it is going to be written.
+func TestALongNameStillInstalls(t *testing.T) {
+	m := newMachine(t)
+	request := ericwScratchTool()
+	delete(request, "id")
+	request["name"] = "NEW345 Quake 1 normal build with the Auto-Pigeon fork 1.4533 — a deliberately long custom pipeline name for wrapping"
+	status, composed := m.call(http.MethodPost, "/api/v1/profiles/compose", request)
+	if status != http.StatusOK || composed["valid"] != true {
+		t.Fatalf("compose = %d: %v", status, composed["error"])
+	}
+	id, _ := composed["id"].(string)
+	if !strings.HasPrefix(id, "local.tool.new345-quake-1-normal-build") {
+		t.Fatalf("derived id = %q", id)
+	}
+	status, imported := m.call(http.MethodPost, "/api/v1/profiles/import", map[string]any{"document": composed["document"]})
+	if status != http.StatusOK && status != http.StatusCreated {
+		t.Fatalf("import %s = %d: %v", id, status, imported["error"])
+	}
+	if status, _ := m.call(http.MethodGet, "/api/v1/profiles/"+id, nil); status != http.StatusOK {
+		t.Fatalf("the installed profile %s is not listed: %d", id, status)
+	}
+}
+
 // TestAScratchToolAndPipelineBuildAMap walks the whole route a person takes
 // through the page, over the API the page uses: compose a tool from scratch,
 // install it, approve it, bind its program by FOLDER, compose a pipeline from

@@ -19,6 +19,7 @@ function element(tag, options = {}) {
     prepend(...items) { node.children.unshift(...items); },
     replaceChildren(...items) { node.children = items; },
     addEventListener(type, listener) { node.listeners[type] = listener; },
+    contains() { return false; },
     querySelector(selector) {
       const name = selector.replace(/^\./, "");
       return all(node).find((child) => child.className.split(" ").includes(name)) || null;
@@ -47,6 +48,8 @@ function load() {
       $: byId, el: element, record() {}, showArea() {},
       pipelineReady: (item) => item?.readiness?.ready === true,
       executionChoices: (select, items, previous, ready) => items.find(ready)?.id || "",
+      badge: (text, kind) => element("span", { text, className: "badge " + kind }),
+      setupCauses: () => [],
       t: (message, slots = {}) => message.replace(/\{(\w+)\}/g, (_, key) => String(slots[key])),
       withBusy: (_control, work) => work(),
       areas: { build: { adoptLeakRequest: async (request) => { adopted.push(request); return ""; } } },
@@ -283,4 +286,66 @@ const PENDING = "/api/v1/leak-test/pending";
   assert.ok(!p.calls.some((c) => c.method === "POST"), "a pipeline was pinned for the user");
 }
 
-console.log("leakrequest: replacement, stale answers, dismiss, relay notice, unpinned game, cancel, pin ordering and recovery — ok");
+// 12. NEW_345: the pin for A is answered after the dialog was closed and
+//     opened again for B. A's answer neither closes B's dialog nor reviews
+//     anything: it belongs to an opening that is gone.
+{
+  const p = load();
+  await p.answer(REQUEST, 200, A);
+  const { pipeline: _none, ...unpinnedA } = resolved(A, "first");
+  await p.answer(PENDING, 200, { ...unpinnedA, game_profile: "quake1", needs_pipeline: true });
+  await p.answer("/api/v1/leak-test/pipelines?game=quake1", 200, { pinned: "", choices: [{ id: "auto-pigeon.q1.leak-test", readiness: { ready: true } }] });
+  p.byId("leak-pin-select").value = "auto-pigeon.q1.leak-test";
+  p.byId("leak-pin-confirm").listeners.click();
+  await p.settle();
+  p.byId("leak-pin-cancel").listeners.click(); // closed while the pin is in flight
+  await p.settle();
+  await p.tick();
+  await p.answer(REQUEST, 200, B);
+  const { pipeline: _noneB, ...unpinnedB } = resolved(B, "second");
+  await p.answer(PENDING, 200, { ...unpinnedB, game_profile: "quake1", needs_pipeline: true });
+  assert.equal(p.byId("leak-pin-modal").hidden, false, "B's dialog did not open");
+  await p.answer("/api/v1/leak-test/pipelines", 200, { game: "quake1", pinned: "auto-pigeon.q1.leak-test" });
+  assert.equal(p.byId("leak-pin-modal").hidden, false, "A's late pin closed B's dialog");
+  assert.equal(p.unanswered("/api/v1/leak-test/reviewing"), 0, "A's late pin started a review");
+  assert.equal(p.adopted.length, 0);
+}
+
+// 13. NEW_345: the list cannot be read. One message, one Retry, no half-empty
+//     select; Retry reads it again and the list comes back.
+{
+  const p = load();
+  await p.answer(REQUEST, 200, A);
+  const { pipeline: _none, ...unpinned } = resolved(A, "first");
+  await p.answer(PENDING, 200, { ...unpinned, game_profile: "quake1", needs_pipeline: true });
+  await p.answer("/api/v1/leak-test/pipelines?game=quake1", 500, { error: "the catalog could not be read" });
+  assert.match(p.byId("leak-pin-message").textContent, /could not be listed: the catalog could not be read/);
+  assert.equal(p.byId("leak-pin-retry-row").hidden, false, "no Retry after a failed list");
+  assert.equal(p.byId("leak-pin-field").hidden, true, "an empty select was shown after a failed list");
+  assert.equal(p.byId("leak-pin-confirm").disabled, true, "Use pipeline was offered with nothing listed");
+  p.byId("leak-pin-retry").listeners.click();
+  await p.settle();
+  await p.answer("/api/v1/leak-test/pipelines?game=quake1", 200, { pinned: "", choices: [{ id: "auto-pigeon.q1.leak-test", readiness: { ready: true } }] });
+  assert.equal(p.byId("leak-pin-retry-row").hidden, true);
+  assert.equal(p.byId("leak-pin-field").hidden, false);
+  assert.equal(p.byId("leak-pin-message").textContent, "");
+}
+
+// 14. NEW_345: nothing is ready. No dead list to choose from, a sentence that
+//     says what to do, and Use pipeline stays disabled.
+{
+  const p = load();
+  await p.answer(REQUEST, 200, A);
+  const { pipeline: _none, ...unpinned } = resolved(A, "first");
+  await p.answer(PENDING, 200, { ...unpinned, game_profile: "quake1", needs_pipeline: true });
+  await p.answer("/api/v1/leak-test/pipelines?game=quake1", 200, { pinned: "", choices: [
+    { id: "auto-pigeon.q1.leak-test", name: "Quake 1 — leak test", readiness: { ready: false, problems: [{ fault: "missing_engine", summary: "x", profile: "auto-pigeon.ericw-tools.q1", executable: "qbsp" }] } }] });
+  assert.equal(p.byId("leak-pin-select").hidden, true, "a list with nothing to choose was shown");
+  assert.match(text(p.byId("leak-pin-status")), /No pipeline is ready yet/);
+  p.byId("leak-pin-select").value = "auto-pigeon.q1.leak-test";
+  p.byId("leak-pin-confirm").listeners.click();
+  await p.settle();
+  assert.ok(!p.calls.some((c) => c.method === "POST"), "an unready pipeline was pinned");
+}
+
+console.log("leakrequest: replacement, stale answers, dismiss, relay notice, unpinned game, cancel, pin ordering and recovery, a late pin of a closed dialog, list failure and nothing ready — ok");

@@ -591,6 +591,19 @@ function folderTitle(role) {
   }[role] || role.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
 }
 
+// duration says a span the way a person reads one. A lighting pass printed
+// as "708399 ms" was a number nobody could place. (Moved from build.js by
+// NEW_345 so that Jobs says how long a job took in the same words.)
+function duration(ms) {
+  if (!(ms >= 0)) return "";
+  if (ms < 1000) return AUCOM.t("{n} ms", { n: Math.round(ms) });
+  const seconds = ms / 1000;
+  if (seconds < 60) return AUCOM.t("{n} s", { n: seconds < 10 ? seconds.toFixed(1) : Math.round(seconds) });
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return AUCOM.t("{m} min {s} s", { m: minutes, s: Math.round(seconds - minutes * 60) });
+  return AUCOM.t("{h} h {m} min", { h: Math.floor(minutes / 60), m: minutes % 60 });
+}
+
 function when(value) {
   if (!value) return "";
   const date = new Date(value);
@@ -662,8 +675,14 @@ function pipelineReady(pipeline) { return pipeline?.readiness?.ready === true; }
 // available: an engine for another game is greyed out like one that needs
 // setup, and gets no "Set up" link, because setting it up cannot make it play
 // this build.
+// `setupLabel` (NEW_345) names the collapsed list of what needs setup by what it
+// lists (SETUP_LABELS: "pipelines" reads "Other pipelines (4 need setup)"), and
+// `setupProblems(item)` replaces which of an item's problems are said, and
+// `setupProfile(item)` answers `{ id, name }` of the profile an item is set up
+// in when the items are not profiles themselves (an engine's actions are set
+// up on the engine).
 function executionChoices(select, items, previous, ready, label, placeholder, chooseReady = false, retain = false,
-  offerable = () => true) {
+  offerable = () => true, setup = {}) {
   select.replaceChildren(el("option", { text: placeholder, attrs: { value: "" } }));
   for (const item of items) {
     const available = ready(item);
@@ -673,32 +692,143 @@ function executionChoices(select, items, previous, ready, label, placeholder, ch
   }
   select.value = items.some((item) => item.id === previous && (retain || ready(item))) ? previous
     : !previous && chooseReady ? items.find(ready)?.id || "" : "";
-  setupActions(select, items.filter((item) => !ready(item) && offerable(item)));
+  setupActions(select, items.filter((item) => !ready(item) && offerable(item)), setup);
   return select.value;
 }
 
 // A choice that cannot be made yet is greyed out in the list, and a greyed-out
 // line is a dead end unless something beside it says where to go (NEW_323A).
-// Each profile that needs setup gets a link to its own page in Profiles, right
-// under the list it is disabled in.
-function setupActions(select, waiting) {
+//
+// NEW_345: it says so ONCE, collapsed, and sends the person where the fix is.
+// Four pipelines that wait for the same compiler used to print the same three
+// sentences four times, and their links went to the pipelines' own pages,
+// where there is nothing to set up. Now the list is one closed disclosure —
+// "Other pipelines (4 need setup)" — whose rows name the item, what it waits
+// for in a line, a "Set up" link to the profile that is actually missing, and
+// the exact words of every problem one click further, never removed.
+function setupActions(select, waiting, setup = {}) {
   const field = select.parentNode;
   if (!field?.querySelector) return;
   let aside = field.querySelector(".choice-setup");
   if (!waiting.length) { aside?.remove(); return; }
-  if (!aside) {
-    aside = el("p", { className: "hint choice-setup" });
-    select.after(aside);
+  const wasOpen = aside?.open === true;
+  const opened = new Set([...(aside?.querySelectorAll("details[data-item][open]") || [])].map((node) => node.dataset.item));
+  const fresh = el("details", { className: "choice-setup" });
+  fresh.open = wasOpen;
+  const [one, many] = SETUP_LABELS[setup.setupLabel] || SETUP_LABELS.default;
+  fresh.append(el("summary", { text: waiting.length === 1 ? AUCOM.t(one) : AUCOM.t(many, { n: waiting.length }) }));
+  fresh.append(setupRows(waiting, opened, setup));
+  // A field may say where the list goes (`data-setup-slot`): the leak-test
+  // chooser keeps the SELECTED pipeline's state between the select and it.
+  const slot = field.querySelector("[data-setup-slot]");
+  if (aside) aside.replaceWith(fresh); else if (slot) slot.append(fresh); else select.after(fresh);
+}
+
+// What the closed list is called, by what it lists: one sentence for one item
+// and one for several, as each language says them.
+const SETUP_LABELS = {
+  default: ["Not ready (1 needs setup)", "Not ready ({n} need setup)"],
+  pipelines: ["Other pipelines (1 needs setup)", "Other pipelines ({n} need setup)"],
+  "all-pipelines": ["Pipelines (1 needs setup)", "Pipelines ({n} need setup)"],
+  "build-profiles": ["Other build profiles (1 needs setup)", "Other build profiles ({n} need setup)"],
+  engines: ["Other engines (1 needs setup)", "Other engines ({n} need setup)"],
+  actions: ["Other actions (1 needs setup)", "Other actions ({n} need setup)"],
+};
+
+// setupRows is the rows of such a list, also used where the list is not under
+// a select (the leak-test chooser with nothing ready yet).
+function setupRows(waiting, opened = new Set(), setup = {}) {
+  return el("ul", { className: "setup-rows", children: waiting.map((item) => {
+    const row = el("li", { attrs: { "data-item": item.id } });
+    row.append(el("span", { className: "setup-rows__name", text: item.name || item.id }));
+    for (const cause of setupCauses(item, setup)) {
+      const line = el("span", { className: "setup-rows__cause" });
+      line.append(document.createTextNode(cause.text + " "));
+      line.append(el("a", { text: AUCOM.t("Set up"), attrs: {
+        href: "#profiles/" + encodeURIComponent(cause.profile),
+        "aria-label": AUCOM.t("Set up {name}", { name: cause.name }),
+      } }));
+      row.append(line);
+    }
+    const exact = (setup.setupProblems || setupProblems)(item);
+    if (exact.length) {
+      const details = el("details", { className: "setup-rows__exact", attrs: { "data-item": item.id } });
+      details.open = opened.has(item.id);
+      details.append(el("summary", { text: AUCOM.t("Details") }));
+      details.append(el("ul", { className: "plain", children: exact.map((problem) =>
+        el("li", { text: [problem.summary, problem.fix].filter(Boolean).join(" ") })) }));
+      row.append(details);
+    }
+    return row;
+  }) });
+}
+
+// setupProblems is what an item says stops it: its readiness problems, or —
+// for an engine ready in itself and blocked only in an action — those.
+function setupProblems(item) {
+  const own = item?.readiness?.problems || [];
+  if (own.length) return own;
+  return Object.values(item?.action_problems || {}).flat();
+}
+
+// setupCauses groups an item's problems by the profile that has to be set up,
+// from the profile id the server attaches to a pipeline's problem (NEW_345) —
+// an engine or a tool is its own. Programs are named together by what is
+// wrong with them ("qbsp, vis and light not set up yet"), from the fault and
+// the program the server names; any other problem is said once per fault in
+// the server's own sentence, without the stage title the server put in front
+// of it (the row already belongs to that item). Nothing is read out of the
+// English of a summary; the exact words stay one click away, under Details.
+const PROGRAM_FAULTS = {
+  missing_engine: "{programs} not set up yet",
+  tool_incompatible: "{programs} not the version this profile was written for",
+  tool_unverified: "{programs} did not say what they are",
+  tool_unusable: "{programs} cannot be run here",
+};
+function setupCauses(item, setup = {}) {
+  const own = setup.setupProfile?.(item) || { id: item.id, name: item.name || item.id };
+  const problemsOf = setup.setupProblems || setupProblems;
+  // A list whose items carry one sentence instead of problems (a package's
+  // engines) is said in that sentence.
+  if (!problemsOf(item).length) {
+    return item.problem ? [{ profile: own.id, name: own.name, text: item.problem }] : [];
   }
-  aside.replaceChildren(document.createTextNode(AUCOM.t("Not ready, so not offered above:") + " "));
-  waiting.forEach((item, index) => {
-    if (index) aside.append(document.createTextNode(" · "));
-    aside.append(el("a", { text: AUCOM.t("Set up {name}", { name: item.name || item.id }), attrs: { href: "#profiles/" + encodeURIComponent(item.id) } }));
+  const groups = new Map();
+  for (const problem of problemsOf(item)) {
+    const id = problem.profile || own.id;
+    if (!groups.has(id)) groups.set(id, { profile: id, name: problem.profile_name || (id === own.id ? own.name : id), programs: new Map(), other: new Map() });
+    const group = groups.get(id);
+    if (PROGRAM_FAULTS[problem.fault] && problem.executable) {
+      if (!group.programs.has(problem.fault)) group.programs.set(problem.fault, []);
+      const names = group.programs.get(problem.fault);
+      if (!names.includes(problem.executable)) names.push(problem.executable);
+    } else if (!group.other.has(problem.fault)) {
+      const prefix = problem.step ? problem.step + ": " : "";
+      group.other.set(problem.fault, prefix && problem.summary.startsWith(prefix) ? problem.summary.slice(prefix.length) : problem.summary);
+    }
+  }
+  return [...groups.values()].map((group) => {
+    const parts = [...group.programs].map(([fault, names]) => AUCOM.t(PROGRAM_FAULTS[fault], { programs: listOf(names) }));
+    const said = parts.length ? [AUCOM.t("{name}: {what}.", { name: group.name, what: parts.join("; ") })] : [];
+    const other = [...group.other.values()];
+    if (other.length) said.push(other[0] + (other.length > 1 ? " " + AUCOM.t("(and {n} more)", { n: other.length - 1 }) : ""));
+    return { profile: group.profile, name: group.name, text: said.join(" ") };
   });
+}
+
+// listOf joins names the way the reader's language does ("a, b and c").
+function listOf(names) {
+  const language = window.AUCOM_I18N?.current?.() || "en";
+  try {
+    return new Intl.ListFormat(language, { style: "long", type: "conjunction" }).format(names);
+  } catch {
+    return names.join(", ");
+  }
 }
 
 Object.assign(AUCOM, {
   $, el, api, announce, actionReady, pipelineReady, executionChoices, setMessage, busy, withBusy, confirmModal,
+  setupRows, setupCauses, setupProblems, listOf, duration,
   record, renderActivity, clearActivity, pathField, downloadButton, tabsFor,
   badge, maturityBadge, maturityNote, bytes, when, terminal, programFileName, folderTitle,
   openCompatibilityReport, wireCompatibilityReport,

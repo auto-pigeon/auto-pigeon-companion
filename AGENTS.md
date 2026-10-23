@@ -199,6 +199,7 @@ the router resolves those for you rather than making you read the table.
 | `aucom.launcher-merge` | It absorbed the Launcher (AUL), and there is one implementation of each thing | launcher, aul, merge, history, bootstrap, duplication |
 | `aucom.component-addresses` | Component addresses live in `.env`, never in code | addresses, env, ports, localhost, port-contract, endpoint |
 | `aucom.desktop-shell` | The desktop shell is deferred, and the browser is not a fallback for it | desktop, shell, wails, webview, window, native-ui, cgo, lifecycle, lease, quit, exit |
+| `aucom.ux` | One task per surface, the selected choice in the open, everything else one click away | ux, copy, wording, disclosure, dialog, readiness, needs-setup, setup-link, leak-chooser, i18n |
 
 ## 4. Using the router
 

@@ -131,7 +131,7 @@ The page has seven areas, in the order of a first run:
 | **Build** | Compiling a map: the pipeline, the map, the exact command per stage, then the output. |
 | **Run** | Starting a game: which engine, where it is, which map, and the exact command. |
 | **Profiles** | What a tool or engine asks to be allowed to do, approving it, and writing your own. |
-| **Jobs** | Everything that has run, with its command, exit status and output. |
+| **Jobs** | Everything that has run, with its command, exit status, how long it took and its output. |
 | **Settings** | Which Auto-Pigeon you use, and where the Companion keeps things. |
 
 **Signing in.** **Settings** and the **Sign in** dialog offer the two official
@@ -444,9 +444,16 @@ and only **Build** runs the compiler. **Dismiss** forgets that request. The game
 is read from the saved map itself, never from the link.
 
 **Which pipeline tests a game's maps is yours to choose, once per game.** The
-first request for a game opens **Choose the leak-test pipeline**, listing every
-installed pipeline that can test it, the built-in one first. The choice is kept
-in `config.json` as `leak_test_pipelines`; change it with **Change pipeline**.
+first request for a game opens **Choose a leak-test pipeline**, listing every
+installed pipeline that can test it, the built-in one first. Pick a ready one —
+the dialog shows it as **Ready** with its own summary — and press
+**Use pipeline**; the review in Build follows, and nothing runs until you press
+**Build** there. **Cancel**, `×` and Escape choose nothing and keep the request.
+Pipelines that need setup are listed disabled, and what each one still needs is
+in the closed **Other pipelines (n need setup)** list under it: one line per
+missing program set, a **Set up** link to the tool's own page in Profiles, and
+the exact reasons under **Details**. The choice is kept in `config.json` as
+`leak_test_pipelines`; change it with **Change pipeline**.
 
 ```console
 $ ./companion build leak-pipeline --game quake1
@@ -460,6 +467,12 @@ $ ./companion build leak-pipeline --game quake1 --unpin
 # What is pinned for Quake 1, and what could be.
 curl -s -H "X-AUCOM-Token: $(cat "$CONFIG_DIR/api-token")" \
   "http://127.0.0.1:8789/api/v1/leak-test/pipelines?game=quake1"
+# Why each one that is not ready is not: every problem names the tool profile,
+# the stage and the program it is about — the profile is where it is set up.
+curl -s -H "X-AUCOM-Token: $(cat "$CONFIG_DIR/api-token")" \
+  "http://127.0.0.1:8789/api/v1/leak-test/pipelines?game=quake1" |
+  jq -r '.choices[] | select(.readiness.ready | not) | .name as $n
+         | .readiness.problems[] | "\($n): set up \(.profile) (\(.step): \(.executable))"'
 # Pin one (an empty pipeline unpins).
 curl -s -H "X-AUCOM-Token: $(cat "$CONFIG_DIR/api-token")" -H 'Content-Type: application/json' \
   -d '{"game":"quake1","pipeline":"auto-pigeon.q1.leak-test"}' \

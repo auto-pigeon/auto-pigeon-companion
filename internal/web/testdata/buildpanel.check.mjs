@@ -6,7 +6,11 @@ import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 
 const source = readFileSync(new URL("../assets/build.js", import.meta.url), "utf8");
-const start = source.indexOf("function duration(ms)");
+// duration is core.js's since NEW_345 (Jobs says spans in the same words).
+const core = readFileSync(new URL("../assets/core.js", import.meta.url), "utf8");
+const coreDuration = core.slice(core.indexOf("function duration(ms)"), core.indexOf("function when(value)"));
+assert.ok(coreDuration.startsWith("function duration(ms)"), "core.js no longer defines duration where this check looks");
+const start = source.indexOf("const { duration } = window.AUCOM;");
 const end = source.indexOf("function renderProblems(manifest)");
 const sticky = source.indexOf("// What somebody opened or closed stays that way.");
 const folds = source.indexOf("// foldRepeats shortens a run");
@@ -14,7 +18,9 @@ assert.ok(start > 0 && sticky > start && folds > sticky && end > folds, "build.j
 const t = (text, slots = {}) => text.replace(/\{([a-zA-Z_.]+)\}/g, (_, key) => String(slots[key]));
 // The <details> memory between the two is the page's; everything else is arithmetic.
 const body = source.slice(start, sticky) + source.slice(folds, end);
-const { duration, foldRepeats, problemGroups } = new Function("t", body + "\nreturn { duration, foldRepeats, problemGroups };")(t);
+const AUCOM = { t };
+AUCOM.duration = new Function("AUCOM", coreDuration + "\nreturn duration;")(AUCOM);
+const { duration, foldRepeats, problemGroups } = new Function("t", "window", body + "\nreturn { duration, foldRepeats, problemGroups };")(t, { AUCOM });
 
 // A span is said the way it is read: the lighting pass that printed "708399 ms".
 assert.equal(duration(640), "640 ms");

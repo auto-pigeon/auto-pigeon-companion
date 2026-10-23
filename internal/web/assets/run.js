@@ -33,8 +33,8 @@
     }
     engines = body.items || [];
     window.AUCOM.executionChoices(select, engines, previous, (engine) => engine.ready === true,
-      (engine) => `${engine.name}${engine.maturity?.work_in_progress ? ` [${engine.maturity.badge}]` : ""} — ${engine.ready ? "ready" : "needs setup: " + (engine.readiness?.problems || []).map((p) => p.summary).join(" ")}`,
-      "Choose a ready engine…", true);
+      (engine) => `${engine.name}${engine.maturity?.work_in_progress ? ` [${engine.maturity.badge}]` : ""} — ${engine.ready ? t("ready") : t("needs setup")}`,
+      "Choose a ready engine…", true, false, undefined, { setupLabel: "engines" });
     renderEngine();
   }
 
@@ -210,7 +210,12 @@
     window.AUCOM.executionChoices(select, engine.actions || [], previous,
       (action) => window.AUCOM.actionReady(engine, action.id),
       (action) => `${action.title || action.id}${window.AUCOM.actionReady(engine, action.id) ? "" : " — needs setup"}`,
-      "Choose a ready action…");
+      "Choose a ready action…", false, false, undefined, {
+        setupLabel: "actions",
+        // An action is set up on its engine (NEW_345): the link went to a
+        // profile page named after the action, which does not exist.
+        setupProfile: () => ({ id: engine.id, name: engine.name }),
+      });
     for (const option of select.options) option.dataset.role = engine.actions?.find((a) => a.id === option.value)?.session_role || "";
     if (!select.value) select.value = (engine.actions || []).find((a) => window.AUCOM.actionReady(engine, a.id))?.id || "";
     $("run-preview").disabled = !window.AUCOM.actionReady(engine, select.value);

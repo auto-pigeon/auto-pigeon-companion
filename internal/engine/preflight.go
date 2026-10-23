@@ -261,7 +261,7 @@ func (c Checker) engineProblems(document profile.Profile, action profile.Action,
 			return Problems{{
 				Fault:   FaultMissingEngine,
 				Summary: fmt.Sprintf("Nothing on this machine says where %s's %q executable is.", document.Metadata().Name, action.Executable),
-				Fix:     bindFix(document, "Point the Companion at the engine you have: `companion engine bind "+document.Metadata().ID+" --engine <path to the executable>`."),
+				Fix:     bindFix(document, false, "Point the Companion at the engine you have: `companion engine bind "+document.Metadata().ID+" --engine <path to the executable>`."),
 			}}
 		}
 		file := executableFile(document, action.Executable)
@@ -277,7 +277,7 @@ func (c Checker) engineProblems(document profile.Profile, action profile.Action,
 		return Problems{{
 			Fault:   FaultMissingEngine,
 			Summary: fmt.Sprintf("The %s recorded for %s is not there: %s.", recordedNoun(document, action), document.Metadata().Name, path),
-			Fix:     bindFix(document, "It was moved, renamed or uninstalled. Bind it again with `companion engine bind "+document.Metadata().ID+" --engine <path>`."),
+			Fix:     bindFix(document, true, "It was moved, renamed or uninstalled. Bind it again with `companion engine bind "+document.Metadata().ID+" --engine <path>`."),
 		}}
 	case info.IsDir():
 		return Problems{{
@@ -335,7 +335,9 @@ func (c Checker) compatibilityProblems(document profile.Profile, action profile.
 
 // recordedNoun and bindFix keep the engine wording for engines. A build tool's
 // program is not an engine and is not bound by `engine bind` (NEW_310: a
-// missing qbsp read "The engine recorded for … is not there").
+// missing qbsp read "The engine recorded for … is not there"). `again` is
+// whether a path was ever recorded: a person who never chose one was told to
+// "choose it again" (NEW_345).
 func recordedNoun(document profile.Profile, action profile.Action) string {
 	if document.Metadata().Kind == profile.KindTool {
 		return fmt.Sprintf("program %q", action.Executable)
@@ -343,9 +345,13 @@ func recordedNoun(document profile.Profile, action profile.Action) string {
 	return "engine"
 }
 
-func bindFix(document profile.Profile, engineFix string) string {
+func bindFix(document profile.Profile, again bool, engineFix string) string {
 	if document.Metadata().Kind == profile.KindTool {
-		return "Choose it again under \"Where these programs are on this machine\" in Profiles, or run `companion acquire resolve <its profile file> --mode user_path --user-path <folder> --bind`."
+		choose := "Choose where it is"
+		if again {
+			choose = "Choose it again"
+		}
+		return choose + " under \"Where these programs are on this machine\" in Profiles, or run `companion acquire resolve <its profile file> --mode user_path --user-path <folder> --bind`."
 	}
 	return engineFix
 }

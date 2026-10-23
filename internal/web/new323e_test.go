@@ -35,7 +35,7 @@ func TestBuildRemembersTheChosenPipelineAndStartsNothingUnready(t *testing.T) {
 	}
 	page := string(source)
 	for _, want := range []string{
-		`"Choose a ready pipeline…", true, true);`,
+		`"Choose a ready pipeline…", true, true, undefined, { setupLabel: "pipelines" });`,
 		`const previous = select.value || chosenPipeline;`,
 		`rememberPipeline($("build-pipeline").value);`,
 		`$("build-preview").disabled = !window.AUCOM.pipelineReady(pipeline);`,

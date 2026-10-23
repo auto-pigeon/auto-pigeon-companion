@@ -12,7 +12,7 @@
   "original_words": 7372,
   "headings_total_including_title": 29,
   "headings_accounted": 28,
-  "title_heading_note": "`# AGENTS.md \u2014 Auto-Pigeon Companion` (original line 1) is the document title rather than a rule, so it is not a section with a destination; it stayed the title of the compacted root file. Line 2 is the blank line under it. Both are in `title_lines`.",
+  "title_heading_note": "`# AGENTS.md — Auto-Pigeon Companion` (original line 1) is the document title rather than a rule, so it is not a section with a destination; it stayed the title of the compacted root file. Line 2 is the blank line under it. Both are in `title_lines`.",
   "sections": [
     {
       "original_line": 3,
@@ -262,7 +262,7 @@
     {
       "id": "aucom.extractor-acquisition",
       "path": "docs/agent/aucom.extractor-acquisition.md",
-      "title": "The extractor is acquired, never embedded \u2014 catalogue, updates and the compatibility manifest",
+      "title": "The extractor is acquired, never embedded — catalogue, updates and the compatibility manifest",
       "authority": [
         "aucom-extractor-separation",
         "aucom-acquisition-machinery",
@@ -288,7 +288,7 @@
     {
       "id": "aucom.extractor-execution",
       "path": "docs/agent/aucom.extractor-execution.md",
-      "title": "Running the extractor \u2014 the handshake, offline authority, bounded invocation and what authorization is not",
+      "title": "Running the extractor — the handshake, offline authority, bounded invocation and what authorization is not",
       "authority": [
         "aucom-extractor-handshake",
         "aucom-offline-authority",
@@ -537,6 +537,28 @@
       ],
       "original_ranges": [],
       "note": "Added by NEW_246I1_AUCOM_AUE_AUT_One-Click-AUB-Map-WAD-Build-Run-Release-And-Desktop-Shell-Closure. It carries no range of the pre-split AGENTS.md because the rule did not exist then: the desktop shell was proposed by 246I1 and deferred by its own spike. The line accounting above is unchanged."
+    },
+    {
+      "id": "aucom.ux",
+      "path": "docs/agent/aucom.ux.md",
+      "title": "One task per surface, the selected choice in the open, everything else one click away",
+      "authority": [
+        "aucom-ux-copy-and-disclosure"
+      ],
+      "topics": [
+        "ux",
+        "copy",
+        "wording",
+        "disclosure",
+        "dialog",
+        "readiness",
+        "needs-setup",
+        "setup-link",
+        "leak-chooser",
+        "i18n"
+      ],
+      "original_ranges": [],
+      "note": "Added by NEW_345_AUCOM_Task-First-UX-Copy-And-Progressive-Disclosure. It carries no range of the pre-split AGENTS.md: the rules did not exist then. The line accounting above is unchanged."
     }
   ],
   "title_lines": [
@@ -615,6 +637,6 @@
       "destination": "docs/agent/aucom.component-addresses.md"
     }
   ],
-  "line_coverage_note": "Every line of the pre-split AGENTS.md is claimed by exactly one live file. The gate re-derives this on every run: a gap, an overlap, or a destination no longer on disk is a failure, which is what stops the accounting rotting into a receipt. One section is split across destinations by LINE rather than by heading \u2014 \u00a71, whose acquisition half is `aucom.extractor-acquisition` and whose execution half is `aucom.extractor-execution` \u2014 and the split falls on \u00a71's own subsection boundary at line 115, so both halves appear as ordinary heading rows.",
+  "line_coverage_note": "Every line of the pre-split AGENTS.md is claimed by exactly one live file. The gate re-derives this on every run: a gap, an overlap, or a destination no longer on disk is a failure, which is what stops the accounting rotting into a receipt. One section is split across destinations by LINE rather than by heading — §1, whose acquisition half is `aucom.extractor-acquisition` and whose execution half is `aucom.extractor-execution` — and the split falls on §1's own subsection boundary at line 115, so both halves appear as ordinary heading rows.",
   "rules_without_headings": []
 }

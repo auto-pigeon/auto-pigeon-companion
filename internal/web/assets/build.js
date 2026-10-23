@@ -220,8 +220,11 @@
     }
     pipelines = body.items || [];
     window.AUCOM.executionChoices(select, pipelines, previous, window.AUCOM.pipelineReady,
-      (pipeline) => `${pipeline.name}${pipeline.maturity?.work_in_progress ? ` [${pipeline.maturity.badge}]` : ""} — ${window.AUCOM.pipelineReady(pipeline) ? pipeline.summary : "needs setup: " + (pipeline.readiness?.problems || []).map((p) => p.summary).join(" ")}`,
-      "Choose a ready pipeline…", true, true);
+      // What an unready pipeline waits for is said once, under the list, in
+      // a closed "Other pipelines" disclosure (NEW_345) — not in its option,
+      // where every problem made one line of the select hundreds of words long.
+      (pipeline) => `${pipeline.name}${pipeline.maturity?.work_in_progress ? ` [${pipeline.maturity.badge}]` : ""} — ${window.AUCOM.pipelineReady(pipeline) ? pipeline.summary : t("needs setup")}`,
+      "Choose a ready pipeline…", true, true, undefined, { setupLabel: "pipelines" });
     renderPipeline();
     if (kept && select.value === previous) restoreInputs(kept);
   }
@@ -879,17 +882,8 @@
     tick();
   }
 
-  // duration says a span the way a person reads one. A lighting pass printed
-  // as "708399 ms" was a number nobody could place.
-  function duration(ms) {
-    if (!(ms >= 0)) return "";
-    if (ms < 1000) return t("{n} ms", { n: Math.round(ms) });
-    const seconds = ms / 1000;
-    if (seconds < 60) return t("{n} s", { n: seconds < 10 ? seconds.toFixed(1) : Math.round(seconds) });
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return t("{m} min {s} s", { m: minutes, s: Math.round(seconds - minutes * 60) });
-    return t("{h} h {m} min", { h: Math.floor(minutes / 60), m: minutes % 60 });
-  }
+  // core.js's, which Jobs uses too (NEW_345).
+  const { duration } = window.AUCOM;
   const since = (stamp) => {
     const at = Date.parse(stamp || "");
     return Number.isFinite(at) && at > 0 ? Math.max(0, Date.now() - at) : NaN;

@@ -540,13 +540,14 @@
     state.pipelines = body.items || [];
     const select = $("play-pipeline");
     state.pipeline = window.AUCOM.executionChoices(select, state.pipelines, state.pipeline, window.AUCOM.pipelineReady,
-      (pipeline) => pipeline.name + (window.AUCOM.pipelineReady(pipeline) ? "" : " — needs setup: " + (pipeline.readiness?.problems || []).map((p) => p.summary).join(" ")),
+      // What it waits for is in the closed list under the select (NEW_345).
+      (pipeline) => pipeline.name + (window.AUCOM.pipelineReady(pipeline) ? "" : " — " + t("needs setup")),
       // retain (NEW_323E's rule, here too since NEW_330): a chosen build
       // profile that loses readiness — a program path removed in Profiles —
       // stays chosen, greyed out and saying why, and is ready again when the
       // path is repaired. Dropping it made the person choose it again, and the
       // next refresh could have chosen another one behind them.
-      "Choose a ready build profile…", false, true);
+      "Choose a ready build profile…", false, true, undefined, { setupLabel: "build-profiles" });
     renderStages();
     // The engines may have arrived first; which of them fit is the family's.
     if (state.engines.length) renderEngines();
@@ -583,8 +584,7 @@
   function setupProblems(engine) {
     const own = engine.readiness?.problems || [];
     const offered = Object.keys(ACTIONS).filter((id) => !packaged() || id === "play_map");
-    const problems = own.length ? own : offered.flatMap((id) => engine.action_problems?.[id] || []);
-    return [...new Set(problems.map((problem) => problem.summary))].join(" ");
+    return own.length ? own : offered.flatMap((id) => engine.action_problems?.[id] || []);
   }
 
   function renderEngines() {
@@ -593,8 +593,8 @@
     const previous = state.engine;
     state.engine = window.AUCOM.executionChoices(select, state.engines, state.engine,
       (engine) => engineFits(engine) && ready(engine),
-      (engine) => `${engine.name} — ${!engineFits(engine) ? t("does not play this build profile's maps") : ready(engine) ? t("Ready to start") : t("Needs setup") + ": " + setupProblems(engine)}`,
-      "Choose a ready engine…", false, false, engineFits);
+      (engine) => `${engine.name} — ${!engineFits(engine) ? t("does not play this build profile's maps") : ready(engine) ? t("Ready to start") : t("Needs setup")}`,
+      "Choose a ready engine…", false, false, engineFits, { setupLabel: "engines", setupProblems });
     // A build profile for another game clears an engine that cannot play it,
     // at once, and says why — the person's saved setup is untouched. The why
     // stays, said against the build profile chosen NOW, until an engine is
@@ -1182,10 +1182,18 @@
     box.append(el("p", {
       children: [el("strong", { text: t("Not sent with this map's textures: {wads}.", { wads: names.join(", ") }) })],
     }));
-    box.append(el("ul", {
-      className: "plain",
-      children: names.map((name) => el("li", { text: notSentSentence(name, notSentReason(textures, name)) })),
-    }));
+    // Why each was not sent, once (NEW_345). A WAD whose row above already
+    // says why (the deployment has no texture source of that name at all) is
+    // not given the general redistribution sentence too: the two read as two
+    // different reasons for one fact. A specific reason AUB gave is always said.
+    const said = (name) => (textures.wads || []).find((wad) => !wad.included && wad.name === name && wad.note);
+    const why = names.filter((name) => notSentReason(textures, name) || !said(name));
+    if (why.length) {
+      box.append(el("ul", {
+        className: "plain",
+        children: why.map((name) => el("li", { text: notSentSentence(name, notSentReason(textures, name)) })),
+      }));
+    }
     box.append(el("p", {
       className: "muted small",
       text: t("You can supply your own copy: name the folder that has it. Only these files are taken from it, by their exact names, and the build records each one."),

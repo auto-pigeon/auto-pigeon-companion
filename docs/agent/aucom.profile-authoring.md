@@ -88,8 +88,9 @@ holding a value nothing provides any more shows that value, marked, rather than 
 - **Next** keeps the user at the current step when required fields or server validation fail.
   Installing opens the approval and setup page. If saving stage arguments fails, setup stays
   incomplete and **Retry saving stage arguments** saves them without reinstalling.
-- Execution lists keep unavailable profiles and actions visible with their reasons but disabled,
-  with a **Set up …** link per profile and **Profiles / setup** beside them.
+- Execution lists keep unavailable profiles and actions visible but disabled (`— needs setup`), with
+  what each needs in one closed list under the select and a **Set up** link to the profile that is
+  actually missing (`aucom.ux`).
 
 ## Stage arguments
 
