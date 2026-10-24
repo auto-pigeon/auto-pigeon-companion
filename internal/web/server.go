@@ -400,7 +400,9 @@ func (s *Server) routes() http.Handler {
 	for pattern, handler := range s.api() {
 		mux.Handle(pattern, s.guard(handler))
 	}
-	return mux
+	// Outermost: a connection another OS account opened is refused before any
+	// route, the token-carrying page included (peer.go, NEW_348).
+	return s.peerGuard(mux)
 }
 
 // api is the whole guarded HTTP surface, as one table.
@@ -807,6 +809,9 @@ func Serve(ctx context.Context, listener net.Listener, handler http.Handler) err
 		Handler:           handler,
 		ReadHeaderTimeout: 20 * time.Second,
 		IdleTimeout:       120 * time.Second,
+		// Who owns the other end of each connection, asked once when it is
+		// accepted; Server.peerGuard refuses another account's (peer.go).
+		ConnContext: peerContext,
 	}
 
 	errs := make(chan error, 1)

@@ -616,6 +616,18 @@ func (r *Runner) stageInputs(pipeline *profile.PipelineProfile, request Request,
 		if err := copyFile(source, destination); err != nil {
 			return nil, fmt.Errorf("the input %q: %w", input.Name, err)
 		}
+		// A map that came from Auto-Pigeon is confined to the build before any
+		// step reads it; the user's own file is not (mapconfine.go, NEW_348).
+		if _, fromAUB := request.Sources[input.Name]; fromAUB && strings.EqualFold(filepath.Ext(destination), ".map") {
+			rewritten, err := confineStagedMap(destination)
+			if err != nil {
+				return nil, fmt.Errorf("the input %q: %w", input.Name, err)
+			}
+			if len(rewritten) > 0 {
+				r.options.Logf("build: the input %q named WADs outside the build; kept only their file names: %s",
+					input.Name, strings.Join(rewritten, "; "))
+			}
+		}
 		digest, size, err := digestFile(destination)
 		if err != nil {
 			return nil, err

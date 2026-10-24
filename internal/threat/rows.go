@@ -383,6 +383,28 @@ var rows = []Row{
 
 	// --- credentials -------------------------------------------------------
 	{
+		ID: "T54", Category: CatLocalAPI,
+		Title:      "Another account on the same computer reads the API token from the local page",
+		Asset:      "the local API, which can start processes, and the AUB session it acts with",
+		Vector:     "`GET /` carries this run's token and loopback TCP is reachable by every OS account, so a second account on a shared machine fetches the page and scrapes the token (`NEW_342` lead, reproduced cross-uid in `NEW_348`).",
+		Mitigation: "Each connection's owner is asked of the operating system once, when it is accepted (Linux: /proc/net/tcp, the peer socket's uid; Windows: the TCP owner PID and its token SID). A connection a different account opened is refused on every route, the page included, before anything is served.",
+		Evidence: []Evidence{
+			{"internal/web", "TestAnotherAccountsConnectionIsRefusedEverywhere"},
+			{"internal/web", "TestThisAccountsOwnConnectionGetsThePage"},
+			{"internal/web", "TestSocketOwnerReadsThePeersRowNotOurs"},
+			{"internal/web", "TestOwnerPIDFromTableReadsTheWindowsLayout"},
+		},
+		Residual: &Residual{
+			What: "macOS cannot be asked who owns a loopback connection without cgo, so there the page is served as before; " +
+				"and on Windows the lookup is compile-checked here but has not run on a Windows host. Any lookup that fails " +
+				"serves the connection rather than refusing it.",
+			Why: "A refusal must be a fact the system stated, never the absence of an answer: a wrong refusal locks the user out of " +
+				"their own Companion. The Linux path is measured with a real second uid (NEW_348 n2-cross-uid.txt).",
+			Owner:  "andrea-dintino (maintainer)",
+			Review: "2027-03-31",
+		},
+	},
+	{
 		ID: "T27", Category: CatCredential,
 		Title:      "The AUB session token reaches a place a tool or a stranger can read it",
 		Asset:      "the user's Auto-Pigeon account",

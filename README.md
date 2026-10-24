@@ -925,6 +925,37 @@ $ companion uninstall                                # what it keeps on this com
 `toolchain` was called `profile` before; `companion profile list` and every
 other `profile` spelling still resolve to the same commands.
 
+**A map from Auto-Pigeon cannot make the compiler read your files.** A map's text
+can name files the compiler then opens: worldspawn's `wad`/`_wad` list, and a
+`misc_external_map`'s `_external_map`. For every input that came from
+Auto-Pigeon — Build & Run, hosting, a leak test — the Companion confines the copy
+it compiles before any step reads it (`NEW_348`): a WAD entry that is absolute,
+has a drive, or climbs out with `..` keeps only its file name (which is how the
+map's WADs are laid out for the build), and an `_external_map` stops the build
+by name. A map file you choose on your own disk is compiled exactly as it is.
+
+```text
+Error: Compiling: the input "source_map": the map names an external map file
+(`_external_map`), which a map from Auto-Pigeon may not do: the compiler would
+read that file from this computer. Remove the misc_external_map entity, or merge
+its brushes into the map
+```
+
+**The local page answers only your own account.** The page at
+`http://127.0.0.1:<port>/` carries this run's API token so it can work, and
+loopback is reachable by every account on the computer. The Companion asks the
+operating system which account opened each connection and refuses one opened by
+another account, on every route (`NEW_348`) — on Linux from `/proc/net/tcp`, on
+Windows from the connection table and the process token. A web page on another
+site could never read the token; this closes the other account on a shared
+computer. macOS does not answer this question yet, so there the page is served
+as before.
+
+```console
+$ sudo -u someone-else curl -s -o /dev/null -w '%{http_code}\n' "$(cat ~/.config/auto-pigeon-companion/api-url)"
+403
+```
+
 ## Configuration
 
 Settings are saved in a per-user `config.json`, written with mode 0600 because
