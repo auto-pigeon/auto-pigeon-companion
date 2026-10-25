@@ -12,6 +12,7 @@ var procGetExtendedTcpTable = syscall.NewLazyDLL("iphlpapi.dll").NewProc("GetExt
 
 const (
 	afINET                      = 2
+	afINET6                     = 23
 	tcpTableOwnerPIDConnections = 4
 	errorInsufficientBuffer     = 122
 	processQueryLimitedInfo     = 0x1000
@@ -20,25 +21,33 @@ const (
 // platformPeer finds the process that owns the peer's socket and compares the
 // account its token runs as with this process's own.
 //
-// Every failure — the table, opening the process, reading its token — answers
-// "unknown", and an unknown peer is served as before: a refusal here must be a
-// fact the system stated, never the absence of an answer.
+// The peer is looked for in the IPv4 table and then in the IPv6 one, where a
+// dual-stack client connected to ::ffff:127.0.0.1 is listed (`NEW_349`). Every
+// failure — no table, no row, a process or token that could not be opened —
+// is unidentified, and an unidentified peer is refused (peer.go): the peer
+// chooses its socket, so "no answer" must not be a way in. A process this
+// account started can always be opened for PROCESS_QUERY_LIMITED_INFORMATION
+// by this account, so a denied open is itself the sign of another account.
 func platformPeer(local, remote *net.TCPAddr) peerVerdict {
-	table, ok := tcpOwnerTable()
-	if !ok {
-		return peerUnknown
+	pid, found := uint32(0), false
+	if table, ok := tcpOwnerTable(afINET); ok {
+		pid, found = ownerPIDFromTable(table, remote, local)
 	}
-	pid, found := ownerPIDFromTable(table, remote, local)
 	if !found {
-		return peerUnknown
+		if table, ok := tcpOwnerTable(afINET6); ok {
+			pid, found = ownerPIDFromTable6(table, remote, local)
+		}
+	}
+	if !found {
+		return peerUnidentified
 	}
 	theirs, ok := processSID(pid)
 	if !ok {
-		return peerUnknown
+		return peerUnidentified
 	}
 	ours, ok := processSID(uint32(syscall.Getpid()))
 	if !ok {
-		return peerUnknown
+		return peerUnidentified
 	}
 	if theirs == ours {
 		return peerSameUser
@@ -46,14 +55,14 @@ func platformPeer(local, remote *net.TCPAddr) peerVerdict {
 	return peerOtherUser
 }
 
-// tcpOwnerTable reads the IPv4 connection table with owning PIDs.
-func tcpOwnerTable() ([]byte, bool) {
+// tcpOwnerTable reads one address family's connection table with owning PIDs.
+func tcpOwnerTable(family uintptr) ([]byte, bool) {
 	size := uint32(64 << 10)
 	for attempt := 0; attempt < 4; attempt++ {
 		buffer := make([]byte, size)
 		result, _, _ := procGetExtendedTcpTable.Call(
 			uintptr(unsafe.Pointer(&buffer[0])), uintptr(unsafe.Pointer(&size)),
-			0, afINET, tcpTableOwnerPIDConnections, 0)
+			0, family, tcpTableOwnerPIDConnections, 0)
 		switch result {
 		case 0:
 			return buffer[:size], true

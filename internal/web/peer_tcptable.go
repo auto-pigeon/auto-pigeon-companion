@@ -34,3 +34,31 @@ func ownerPIDFromTable(table []byte, self, peer *net.TCPAddr) (uint32, bool) {
 	}
 	return 0, false
 }
+
+// ownerPIDFromTable6 is ownerPIDFromTable for the AF_INET6 table Windows fills
+// for TCP_TABLE_OWNER_PID_CONNECTIONS (a MIB_TCP6TABLE_OWNER_PID), where a
+// dual-stack client connected to ::ffff:127.0.0.1 is listed (`NEW_349`). Both
+// ends are matched in the IPv4-mapped spelling. Rows are 56 bytes: local
+// address (16), scope id, local port, remote address (16), scope id, remote
+// port, state, owning PID — ports again the first two bytes, big-endian.
+func ownerPIDFromTable6(table []byte, self, peer *net.TCPAddr) (uint32, bool) {
+	selfIP, peerIP := self.IP.To4(), peer.IP.To4()
+	if len(table) < 4 || selfIP == nil || peerIP == nil {
+		return 0, false
+	}
+	selfMapped, peerMapped := selfIP.To16(), peerIP.To16()
+	const rowSize = 56
+	count := int(binary.LittleEndian.Uint32(table[:4]))
+	for i := 0; i < count; i++ {
+		start := 4 + i*rowSize
+		if start+rowSize > len(table) {
+			return 0, false
+		}
+		row := table[start : start+rowSize]
+		if net.IP(row[0:16]).Equal(selfMapped) && int(binary.BigEndian.Uint16(row[20:22])) == self.Port &&
+			net.IP(row[24:40]).Equal(peerMapped) && int(binary.BigEndian.Uint16(row[44:46])) == peer.Port {
+			return binary.LittleEndian.Uint32(row[52:56]), true
+		}
+	}
+	return 0, false
+}

@@ -4,7 +4,7 @@ package web
 
 import "net"
 
-// platformPeer cannot say on this platform yet (macOS has no /proc and no
+// platformPeer cannot ask on this platform yet (macOS has no /proc and no
 // stdlib route to a TCP socket's owner), so the connection is served as it
-// always was. See peer.go and README.md.
-func platformPeer(_, _ *net.TCPAddr) peerVerdict { return peerUnknown }
+// always was — the residual threat row T54 names. See peer.go and README.md.
+func platformPeer(_, _ *net.TCPAddr) peerVerdict { return peerUnsupported }

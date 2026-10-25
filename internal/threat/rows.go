@@ -387,19 +387,24 @@ var rows = []Row{
 		Title:      "Another account on the same computer reads the API token from the local page",
 		Asset:      "the local API, which can start processes, and the AUB session it acts with",
 		Vector:     "`GET /` carries this run's token and loopback TCP is reachable by every OS account, so a second account on a shared machine fetches the page and scrapes the token (`NEW_342` lead, reproduced cross-uid in `NEW_348`).",
-		Mitigation: "Each connection's owner is asked of the operating system once, when it is accepted (Linux: /proc/net/tcp, the peer socket's uid; Windows: the TCP owner PID and its token SID). A connection a different account opened is refused on every route, the page included, before anything is served.",
+		Mitigation: "Each connection's owner is asked of the operating system once, when it is accepted (Linux: /proc/net/tcp and /proc/net/tcp6, the peer socket's uid, an IPv4-mapped dual-stack client included; Windows: the IPv4 and IPv6 TCP owner tables, the owner PID and its token SID). A connection a different account opened, and one whose owner a platform that can answer did not name, is refused on every route, the page included, before anything is served (NEW_349: an AF_INET6 client to ::ffff:127.0.0.1 was listed only in tcp6 and was served).",
 		Evidence: []Evidence{
 			{"internal/web", "TestAnotherAccountsConnectionIsRefusedEverywhere"},
 			{"internal/web", "TestThisAccountsOwnConnectionGetsThePage"},
 			{"internal/web", "TestSocketOwnerReadsThePeersRowNotOurs"},
 			{"internal/web", "TestOwnerPIDFromTableReadsTheWindowsLayout"},
+			{"internal/web", "TestAnUnidentifiedPeerIsRefusedEverywhere"},
+			{"internal/web", "TestAMappedIPv6PeerIsIdentified"},
+			{"internal/web", "TestSocketOwnerReadsAMappedPeersRowInTCP6"},
+			{"internal/web", "TestOwnerPIDFromTable6ReadsAMappedPeer"},
 		},
 		Residual: &Residual{
 			What: "macOS cannot be asked who owns a loopback connection without cgo, so there the page is served as before; " +
-				"and on Windows the lookup is compile-checked here but has not run on a Windows host. Any lookup that fails " +
-				"serves the connection rather than refusing it.",
-			Why: "A refusal must be a fact the system stated, never the absence of an answer: a wrong refusal locks the user out of " +
-				"their own Companion. The Linux path is measured with a real second uid (NEW_348 n2-cross-uid.txt).",
+				"and on Windows the lookup is compile-checked here but has not run on a Windows host. Where a platform can answer, " +
+				"a lookup that fails refuses the connection.",
+			Why: "The peer chooses its own socket, so on a platform that can answer, \"no answer\" is something another account can " +
+				"ask for (NEW_349); on Linux a live loopback peer in this network namespace is always in /proc/net/tcp or tcp6. " +
+				"The Linux path is measured with a real second uid (NEW_348 n2-cross-uid.txt) and a real dual-stack client (NEW_349).",
 			Owner:  "andrea-dintino (maintainer)",
 			Review: "2027-03-31",
 		},

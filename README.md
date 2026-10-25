@@ -945,14 +945,19 @@ its brushes into the map
 `http://127.0.0.1:<port>/` carries this run's API token so it can work, and
 loopback is reachable by every account on the computer. The Companion asks the
 operating system which account opened each connection and refuses one opened by
-another account, on every route (`NEW_348`) — on Linux from `/proc/net/tcp`, on
-Windows from the connection table and the process token. A web page on another
-site could never read the token; this closes the other account on a shared
-computer. macOS does not answer this question yet, so there the page is served
-as before.
+another account, on every route (`NEW_348`) — on Linux from `/proc/net/tcp` and
+`/proc/net/tcp6`, on Windows from the IPv4 and IPv6 connection tables and the
+process token. A connection whose owner the system could not name is refused too
+(`NEW_349`): a client can connect from an IPv6 socket to `::ffff:127.0.0.1`, and
+that must not be a way past the check. A web page on another site could never
+read the token; this closes the other account on a shared computer. macOS does
+not answer this question yet, so there the page is served as before.
 
 ```console
 $ sudo -u someone-else curl -s -o /dev/null -w '%{http_code}\n' "$(cat ~/.config/auto-pigeon-companion/api-url)"
+403
+$ port=$(sed -E 's#.*:([0-9]+)/?$#\1#' ~/.config/auto-pigeon-companion/api-url)
+$ sudo -u someone-else curl -s -o /dev/null -w '%{http_code}\n' "http://[::ffff:127.0.0.1]:$port/"
 403
 ```
 
