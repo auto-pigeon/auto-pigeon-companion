@@ -26,7 +26,7 @@ import (
 // connection another account opened. Nothing about launching changes: the
 // browser this account started is this account.
 //
-// The answer is one of five, and two of them refuse:
+// The answer is one of five, and three of them refuse:
 //
 //   - the same account: served;
 //   - another account: refused;
@@ -40,8 +40,11 @@ import (
 //     the page. On Linux a live loopback peer in this network namespace always
 //     has a row in /proc/net/tcp or /proc/net/tcp6, so this is not a state the
 //     user's own browser reaches;
-//   - unsupported — this platform has no way to ask at all (macOS today):
-//     served as it always was, the residual threat row T54 names;
+//   - unsupported — this platform has no way to ask at all: REFUSED. Every
+//     released platform can ask — Linux reads /proc/net/tcp and tcp6, Windows
+//     its TCP owner tables, macOS the kernel's socket list (`NEW_353A`; until
+//     then macOS was served unasked, the residual T54 named) — so this is a
+//     build for a platform nobody releases, and not knowing is not an answer;
 //   - not checked — the zero value, a handler called in-process with no
 //     accepted connection behind it (tests): served. Serve's ConnContext sets a
 //     verdict on every connection it accepts, so no network request has it.
@@ -86,9 +89,14 @@ var errUnidentifiedPeer = errors.New(
 	"this Companion could not tell which account on this computer opened the connection, so it refused it; " +
 		"open the address the Companion printed when it started, from your own account")
 
+// errUnsupportedPeer is the refusal on a platform that cannot ask at all.
+var errUnsupportedPeer = errors.New(
+	"this Companion cannot tell which account on this computer opened the connection on this operating system, " +
+		"so it does not serve its page here; use a release for Linux, Windows or macOS")
+
 // peerGuard refuses every request on a connection another OS account opened,
-// or one whose owner the platform could not name, before any route — the page,
-// its assets and the API alike.
+// or one whose owner the platform could not name or cannot ask about, before
+// any route — the page, its assets and the API alike.
 func (s *Server) peerGuard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		verdict, _ := r.Context().Value(peerKey{}).(peerVerdict)
@@ -100,6 +108,10 @@ func (s *Server) peerGuard(next http.Handler) http.Handler {
 		case peerUnidentified:
 			s.logf("web: refused %s %s from a loopback connection whose owner the system could not name", r.Method, r.URL.Path)
 			writeError(w, http.StatusForbidden, errUnidentifiedPeer)
+			return
+		case peerUnsupported:
+			s.logf("web: refused %s %s: this platform cannot name a loopback connection's owner", r.Method, r.URL.Path)
+			writeError(w, http.StatusForbidden, errUnsupportedPeer)
 			return
 		}
 		next.ServeHTTP(w, r)

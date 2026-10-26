@@ -387,7 +387,7 @@ var rows = []Row{
 		Title:      "Another account on the same computer reads the API token from the local page",
 		Asset:      "the local API, which can start processes, and the AUB session it acts with",
 		Vector:     "`GET /` carries this run's token and loopback TCP is reachable by every OS account, so a second account on a shared machine fetches the page and scrapes the token (`NEW_342` lead, reproduced cross-uid in `NEW_348`).",
-		Mitigation: "Each connection's owner is asked of the operating system once, when it is accepted (Linux: /proc/net/tcp and /proc/net/tcp6, the peer socket's uid, an IPv4-mapped dual-stack client included; Windows: the IPv4 and IPv6 TCP owner tables, the owner PID and its token SID). A connection a different account opened, and one whose owner a platform that can answer did not name, is refused on every route, the page included, before anything is served (NEW_349: an AF_INET6 client to ::ffff:127.0.0.1 was listed only in tcp6 and was served).",
+		Mitigation: "Each connection's owner is asked of the operating system once, when it is accepted (Linux: /proc/net/tcp and /proc/net/tcp6, the peer socket's uid, an IPv4-mapped dual-stack client included; Windows: the IPv4 and IPv6 TCP owner tables, the owner PID and its token SID; macOS since NEW_353A: the kernel's socket list, sysctl net.inet.tcp.pcblist_n, each socket's so_uid, read without cgo). A connection a different account opened, one whose owner the platform did not name, and every connection on a platform that cannot ask at all (no released one) is refused on every route, the page included, before anything is served (NEW_349: an AF_INET6 client to ::ffff:127.0.0.1 was listed only in tcp6 and was served).",
 		Evidence: []Evidence{
 			{"internal/web", "TestAnotherAccountsConnectionIsRefusedEverywhere"},
 			{"internal/web", "TestThisAccountsOwnConnectionGetsThePage"},
@@ -397,11 +397,17 @@ var rows = []Row{
 			{"internal/web", "TestAMappedIPv6PeerIsIdentified"},
 			{"internal/web", "TestSocketOwnerReadsAMappedPeersRowInTCP6"},
 			{"internal/web", "TestOwnerPIDFromTable6ReadsAMappedPeer"},
+			{"internal/web", "TestUIDFromPCBListReadsTheMacLayout"},
+			{"internal/web", "TestAMacPeerIsIdentifiedByItsSocketOwner"},
+			{"internal/web", "TestAPlatformThatCannotAskIsRefusedEverywhere"},
+			{"internal/web", "TestASecondAccountsRealConnectionIsAnotherAccount"},
 		},
 		Residual: &Residual{
-			What: "macOS cannot be asked who owns a loopback connection without cgo, so there the page is served as before; " +
-				"and on Windows the lookup is compile-checked here but has not run on a Windows host. Where a platform can answer, " +
-				"a lookup that fails refuses the connection.",
+			What: "The macOS and Windows lookups are proved natively for this account's own connections (the CI test jobs on " +
+				"macos-latest and windows-latest), and a real second account's connection (nobody, through sudo) is judged another " +
+				"account's on Linux and macOS where a non-interactive sudo exists; on Windows no second account has connected. " +
+				"On every platform a lookup that fails refuses the connection, so a kernel that changed the macOS list layout " +
+				"refuses this account too until the reader is updated.",
 			Why: "The peer chooses its own socket, so on a platform that can answer, \"no answer\" is something another account can " +
 				"ask for (NEW_349); on Linux a live loopback peer in this network namespace is always in /proc/net/tcp or tcp6. " +
 				"The Linux path is measured with a real second uid (NEW_348 n2-cross-uid.txt) and a real dual-stack client (NEW_349).",

@@ -31,9 +31,9 @@ func TestAnotherAccountsConnectionIsRefusedEverywhere(t *testing.T) {
 		}
 	}
 
-	// This account, a platform that has no way to ask (macOS), and a handler
-	// called with no accepted connection behind it are served as before.
-	for _, verdict := range []peerVerdict{peerSameUser, peerUnsupported, peerNotChecked} {
+	// This account, and a handler called with no accepted connection behind it,
+	// are served as before.
+	for _, verdict := range []peerVerdict{peerSameUser, peerNotChecked} {
 		r := request(t, server, http.MethodGet, "/", "")
 		r = r.WithContext(context.WithValue(r.Context(), peerKey{}, verdict))
 		recorder := httptest.NewRecorder()
@@ -61,6 +61,102 @@ func TestAnUnidentifiedPeerIsRefusedEverywhere(t *testing.T) {
 		if strings.Contains(recorder.Body.String(), server.token.Value()) {
 			t.Fatalf("GET %s from an unidentified peer carried the token", path)
 		}
+	}
+}
+
+// `NEW_353A`: a platform that cannot ask at all is not served unasked any more.
+// Every released platform can ask (macOS since NEW_353A), so this verdict is
+// only an unreleased build's, and it refuses like an unidentified peer.
+func TestAPlatformThatCannotAskIsRefusedEverywhere(t *testing.T) {
+	server, _ := newTestServer(t, nil)
+	for _, path := range []string{"/", "/index.html", "/app.js", "/api/status"} {
+		r := request(t, server, http.MethodGet, path, server.token.Value())
+		r = r.WithContext(context.WithValue(r.Context(), peerKey{}, peerUnsupported))
+		recorder := httptest.NewRecorder()
+		server.ServeHTTP(recorder, r)
+		if recorder.Code != http.StatusForbidden {
+			t.Errorf("GET %s on a platform that cannot ask answered %d, want 403", path, recorder.Code)
+		}
+		if strings.Contains(recorder.Body.String(), server.token.Value()) {
+			t.Fatalf("GET %s on a platform that cannot ask carried the token", path)
+		}
+	}
+}
+
+// The macOS socket list (net.inet.tcp.pcblist_n), read on every platform: the
+// PEER's socket is found by its own local end, never this listener's mirror
+// socket, an IPv4-mapped client is found by its IPv4 address, a truncated or
+// re-laid-out list answers nothing, and two sockets that disagree are no answer.
+func TestUIDFromPCBListReadsTheMacLayout(t *testing.T) {
+	listener := &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8789}
+	peer := &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 54321}
+	order := binary.NativeEndian
+	record := func(kind uint32, size int) []byte {
+		out := make([]byte, size)
+		order.PutUint32(out[0:4], uint32(size))
+		order.PutUint32(out[4:8], kind)
+		return out
+	}
+	item := func(local, foreign *net.TCPAddr, uid uint32, vflag byte, mapped bool) []byte {
+		pcb := record(pcbKindInpcb, xinpcbNSize)
+		binary.BigEndian.PutUint16(pcb[xinpcbFport:], uint16(foreign.Port))
+		binary.BigEndian.PutUint16(pcb[xinpcbLport:], uint16(local.Port))
+		pcb[xinpcbVflag] = vflag
+		if mapped { // what an IPv6 socket's own spelling of a mapped address is
+			copy(pcb[xinpcbFaddr:], foreign.IP.To16())
+			copy(pcb[xinpcbLaddr:], local.IP.To16())
+		} else { // in_addr_4in6: the IPv4 address in the last four bytes
+			copy(pcb[xinpcbFaddr+12:], foreign.IP.To4())
+			copy(pcb[xinpcbLaddr+12:], local.IP.To4())
+		}
+		socket := record(pcbKindSocket, xsocketNSize)
+		order.PutUint32(socket[xsocketNUID:], uid)
+		out := append(pcb, socket...)
+		for _, kind := range []uint32{0x002, 0x004, 0x008} { // buffers and statistics
+			out = append(out, record(kind, 36)...)
+			out = append(out, make([]byte, 4)...) // to the next 8-byte boundary
+		}
+		return append(out, record(0x020, 208)...) // TCP state
+	}
+	header := func(count uint32) []byte {
+		out := make([]byte, 24)
+		order.PutUint32(out[0:4], 24)
+		order.PutUint32(out[4:8], count)
+		return out
+	}
+	list := header(3)
+	list = append(list, item(listener, &net.TCPAddr{IP: net.IPv4zero, Port: 0}, 501, inpFlagIPv4, false)...)
+	list = append(list, item(listener, peer, 501, inpFlagIPv4, false)...) // this process's accepted socket
+	list = append(list, item(peer, listener, 4242, inpFlagIPv4, false)...)
+	list = append(list, header(pcbKindInpcb)...) // a trailer whose count looks like a kind
+
+	if uid, found := uidFromPCBList(list, peer, listener); !found || uid != 4242 {
+		t.Fatalf("uidFromPCBList = %d, %v; want the peer's 4242", uid, found)
+	}
+	if _, found := uidFromPCBList(list, &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1}, listener); found {
+		t.Fatal("a peer with no socket was found")
+	}
+	if _, found := uidFromPCBList(list[:24+xinpcbNSize+50], peer, listener); found {
+		t.Fatal("a truncated list produced an answer")
+	}
+
+	// An AF_INET6 socket whose addresses are still the mapped spelling.
+	mapped := append(header(1), item(peer, listener, 4243, 0x2, true)...)
+	if uid, found := uidFromPCBList(mapped, peer, listener); !found || uid != 4243 {
+		t.Fatalf("uidFromPCBList(mapped) = %d, %v; want 4243", uid, found)
+	}
+
+	// Two sockets on one tuple with different owners: no answer.
+	twice := append(append(header(2), item(peer, listener, 4242, inpFlagIPv4, false)...), item(peer, listener, 501, inpFlagIPv4, false)...)
+	if _, found := uidFromPCBList(twice, peer, listener); found {
+		t.Fatal("two disagreeing owners produced an answer")
+	}
+
+	// A kernel whose structures changed size is not read with these offsets.
+	other := append(header(1), item(peer, listener, 4242, inpFlagIPv4, false)...)
+	order.PutUint32(other[24:28], xinpcbNSize+8)
+	if _, found := uidFromPCBList(other, peer, listener); found {
+		t.Fatal("a record of another length was read as an xinpcb_n")
 	}
 }
 
