@@ -94,7 +94,10 @@ func (g *gameFixture) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case g.listing != nil && path == aub.ProfileCatalogPrefix+"/"+g.listing.id:
 		write(http.StatusOK, map[string]any{"schema_version": aub.ProfileCatalogSchema, "profile": map[string]any{
 			"id": g.listing.id, "profile_id": "aucom.fixture.published-engine", "kind": "engine",
-			"name": "Published fixture engine", "trust": "verified", "latest_version": "1.0.0"}})
+			"name": "Published fixture engine", "trust": "verified", "latest_version": "1.0.0",
+			// AUB always names the publishing account (companionprofile view.go); an
+			// install records it as the document's origin (NEW_353A).
+			"publisher": map[string]any{"user_id": "host-publisher"}}})
 	case g.listing != nil && path == aub.ProfileCatalogPrefix+"/"+g.listing.id+"/versions/1.0.0":
 		g.versions++
 		write(http.StatusOK, map[string]any{"schema_version": aub.ProfileCatalogSchema,
