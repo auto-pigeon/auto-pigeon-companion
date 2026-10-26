@@ -315,10 +315,14 @@ func checkIdentity(id string, paths InstallPaths, existing binding.LocalBinding,
 		}
 		return nil
 	}
+	// The recorded origin decides, not the binding's trust: only an install
+	// records an origin, and approving the profile or saving its program paths
+	// here rewrites the trust from the catalog, which calls every document in
+	// the profile folder `local` (NEW_353A live acceptance).
 	switch {
-	case existing.Trust == profile.TrustCommunity && existing.Origin != nil && *existing.Origin == origin:
+	case existing.Origin != nil && *existing.Origin == origin:
 		return nil
-	case existing.Trust == profile.TrustCommunity && existing.Origin != nil:
+	case existing.Origin != nil:
 		return fmt.Errorf("%w: %s is installed from another listing or another account; this publication cannot replace it",
 			ErrIdentityConflict, id)
 	case existing.Trust == profile.TrustCommunity:

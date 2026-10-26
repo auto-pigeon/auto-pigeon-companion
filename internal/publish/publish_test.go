@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/approval"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
@@ -689,6 +690,52 @@ func TestTheSameListingsUpdateIsInstalledAndKeepsTheLocalConfiguration(t *testin
 	}
 	if local.ProfileVersion != "2.0.0" || local.Origin == nil || local.Origin.ListingID != "listing1" || local.Origin.PublisherID != "publisher-a" {
 		t.Fatalf("the update was not recorded with its origin: %+v", local)
+	}
+	if !reflect.DeepEqual(local.Executables, was.Executables) || !reflect.DeepEqual(local.Arguments, was.Arguments) {
+		t.Fatalf("the update lost the person's set-up: %v %v", local.Executables, local.Arguments)
+	}
+}
+
+// TestAnInstallSetUpHereIsStillUpdatedByItsOwnListing is what the live
+// acceptance found (NEW_353A): after an install, approving the profile or
+// saving its program paths in Profiles writes the binding's trust from the
+// catalog, which calls every document in the profile folder `local`. The
+// identity is the recorded origin, so the same listing's update still installs,
+// keeping what the person set up, and another listing is still refused.
+func TestAnInstallSetUpHereIsStillUpdatedByItsOwnListing(t *testing.T) {
+	canonical, document := canonicalBuiltin(t)
+	where := paths(t)
+	installWithConfiguration(t, where, canonical, "listing1", "publisher-a")
+	id := document.Metadata().ID
+	entry, err := job.NewCatalog(where.Profiles).Lookup(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (approval.Service{Catalog: job.NewCatalog(where.Profiles), BindingsPath: where.Bindings}).Grant(id, entry.Digest); err != nil {
+		t.Fatal(err)
+	}
+	set, _ := binding.LoadFile(where.Bindings)
+	was, _ := set.Find(id)
+	if was.Origin == nil || was.Origin.ListingID != "listing1" {
+		t.Fatalf("setting the install up here lost its origin: %+v", was.Origin)
+	}
+
+	other := planFrom(t, where, nextVersion(t, document, "2.0.0"), "listing9", "publisher-b")
+	before := snapshotInstall(t, where)
+	if _, err := publish.Apply(other, where, true); !errors.Is(err, publish.ErrIdentityConflict) {
+		t.Fatalf("another listing: err = %v, want ErrIdentityConflict", err)
+	}
+	if after := snapshotInstall(t, where); !reflect.DeepEqual(after, before) {
+		t.Fatal("a refused install changed something")
+	}
+
+	plan := planFrom(t, where, nextVersion(t, document, "2.0.0"), "listing1", "publisher-a")
+	local, err := publish.Apply(plan, where, true)
+	if err != nil {
+		t.Fatalf("the same listing's update was refused after the install was set up here: %v", err)
+	}
+	if local.ProfileVersion != "2.0.0" || local.Trust != profile.TrustCommunity {
+		t.Fatalf("the update was not recorded as the listing's: %+v", local)
 	}
 	if !reflect.DeepEqual(local.Executables, was.Executables) || !reflect.DeepEqual(local.Arguments, was.Arguments) {
 		t.Fatalf("the update lost the person's set-up: %v %v", local.Executables, local.Arguments)
