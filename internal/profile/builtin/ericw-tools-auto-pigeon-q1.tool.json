@@ -3,9 +3,9 @@
   "kind": "tool",
   "id": "auto-pigeon.ericw-tools.auto-pigeon-build.q1",
   "version": "1.0.0",
-  "name": "EricW tools, Auto-Pigeon build 1.4533 (Quake 1)",
+  "name": "EricW tools, Auto-Pigeon build 1.4535 (Quake 1)",
   "summary": "Auto-Pigeon's own build of the ericw-tools compilers for Quake 1, downloaded from its GitHub releases.",
-  "description": "This profile describes the Auto-Pigeon fork of ericw-tools — the qbsp, vis and light map compilers by Eric Wasylishen and contributors — as published on the fork's GitHub releases page. It is not an upstream release, and upstream has not reviewed or accepted the fork's change.\n\nRelease 1.4533 is upstream `main` at 2.0.0-alpha11 plus 47 commits. It keeps release 1.4518's changes to qbsp, which split thin brush fragments with `PLANESIDE_EPSILON` and cut a whole brush thinner than 0.02 units out of the slab it lies in, and release 1.4524's: entity key lines kept in order, `light -lmextents float32` and two portal-split repairs (see the release notes). It adds four more to qbsp: faces of tiny portals, of sliver leaves and of thin dead-end leaves are drawn where earlier releases left them out, and the clip hulls of a large hollow pipe build in minutes where they ran out of time or memory, with equal collision. Every program prints `ericw-tools 2.0.0-alpha11-47-gcaad08e1+auto-pigeon.1.4533`, and the check on this profile shows that line, so you can see which release you pointed it at. A newer release from the same page works with this profile; the check says which one it is.\n\nReleases 1.4502 and 1.4505 carried only the first of those changes and are not to be built with: measured, they put solid in a map's air beside geometry that is not in one plane — a pipe that leaves its plane, a bent duct — and leave the faces behind it undrawn, with no leak and exit status 0. This profile names both, and says so beside a program that is one of them instead of building with it. Releases 1.4510 and 1.4513 have every change but the last and are not refused, but measured: with them a free fin thinner than 0.02 units can fill half of its room with solid, with no leak and exit status 0, and a plate that thin which alone closes a hole is reported as a leak. Use 1.4518 or newer; this profile is written for 1.4533. Not 1.4532: its tests failed on Apple silicon.\n\nKnown limits, measured on 1.4518 and held by the fork's own tests on every release since, 1.4533 included: a whole brush thinner than 0.001 units is dropped — no material, and no solid in the map's air; a room only such a brush seals is reported as a leak. From 0.00101 units up the measured cases are exact, with and without `-forcegoodtree`. Where two slabs thinner than 0.2 units cross, the hairline column they share is solid where the map has air, with nothing drawn. A brush of zero thickness crashes qbsp, as upstream's does. A face strip narrower than 0.1 units under a tiny portal is not drawn.\n\nThe archive unpacks to one folder holding `bin/`, `licenses/`, `README.md`, `build-info.json` and `MANIFEST.json`. The programs are in `bin/`, beside the Embree and oneTBB libraries they load, so choose the unpacked folder itself — the one that contains `bin/` — not `bin/`. Each release also publishes `SHA256SUMS` and a `release-manifest.json`; check the archive against them before unpacking. The Companion downloads nothing: you fetch the archive, and this profile runs what you unpacked.\n\nThis is a second profile beside the built-in ericw-tools one for Quake 1, not a replacement for it. The built-in build profiles keep naming the upstream compiler, so nothing you already build changes. To build with this one, duplicate a build profile in Profiles and choose this tool for its stages.\n\nThe actions, options and file names are the built-in Quake 1 profile's own, measured on upstream 2.0.0-alpha11, which this build is based on. On 2026-10-12 releases 1.4513 and 1.4518 were each bound through this profile on Linux, and its compile, full VIS and LIGHT actions built controls with them.",
+  "description": "This profile describes the Auto-Pigeon fork of ericw-tools — the qbsp, vis and light map compilers by Eric Wasylishen and contributors — as published on the fork's GitHub releases page. It is not an upstream release, and upstream has not reviewed or accepted the fork's change.\n\nRelease 1.4535 is upstream `main` at 2.0.0-alpha11 plus 49 commits. It keeps release 1.4518's changes to qbsp, which split thin brush fragments with `PLANESIDE_EPSILON` and cut a whole brush thinner than 0.02 units out of the slab it lies in, and release 1.4524's: entity key lines kept in order, `light -lmextents float32` and two portal-split repairs (see the release notes). Release 1.4533 added four more to qbsp: faces of tiny portals, of sliver leaves and of thin dead-end leaves are drawn where earlier releases left them out, and the clip hulls of a large hollow pipe build in minutes where they ran out of time or memory, with equal collision. Release 1.4535 adds one parser fix: map text is read only to its end. Every program prints `ericw-tools 2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535`, and the check on this profile shows that line, so you can see which release you pointed it at. A newer release from the same page works with this profile; the check says which one it is.\n\nReleases 1.4502 and 1.4505 carried only the first of those changes and are not to be built with: measured, they put solid in a map's air beside geometry that is not in one plane — a pipe that leaves its plane, a bent duct — and leave the faces behind it undrawn, with no leak and exit status 0. This profile names both, and says so beside a program that is one of them instead of building with it. Releases 1.4510 and 1.4513 have every change but the last and are not refused, but measured: with them a free fin thinner than 0.02 units can fill half of its room with solid, with no leak and exit status 0, and a plate that thin which alone closes a hole is reported as a leak. Use 1.4518 or newer; this profile is written for 1.4535. Not 1.4532: its tests failed on Apple silicon.\n\nKnown limits, measured on 1.4518 and held by the fork's own tests on every release since, 1.4535 included: a whole brush thinner than 0.001 units is dropped — no material, and no solid in the map's air; a room only such a brush seals is reported as a leak. From 0.00101 units up the measured cases are exact, with and without `-forcegoodtree`. Where two slabs thinner than 0.2 units cross, the hairline column they share is solid where the map has air, with nothing drawn. A brush of zero thickness crashes qbsp, as upstream's does. A face strip narrower than 0.1 units under a tiny portal is not drawn.\n\nThe archive unpacks to one folder holding `bin/`, `licenses/`, `README.md`, `build-info.json` and `MANIFEST.json`. The programs are in `bin/`, beside the Embree and oneTBB libraries they load, so choose the unpacked folder itself — the one that contains `bin/` — not `bin/`. Each release also publishes `SHA256SUMS` and a `release-manifest.json`; check the archive against them before unpacking. The Companion downloads nothing: you fetch the archive, and this profile runs what you unpacked.\n\nThis is a second profile beside the built-in ericw-tools one for Quake 1, not a replacement for it. The built-in build profiles keep naming the upstream compiler, so nothing you already build changes. To build with this one, duplicate a build profile in Profiles and choose this tool for its stages.\n\nThe actions, options and file names are the built-in Quake 1 profile's own, measured on upstream 2.0.0-alpha11, which this build is based on. On 2026-10-12 releases 1.4513 and 1.4518 were each bound through this profile on Linux, and its compile, full VIS and LIGHT actions built controls with them.",
   "publisher": {
     "name": "Auto-Pigeon",
     "url": "https://github.com/auto-pigeon/auto-pigeon-companion"
@@ -13,13 +13,13 @@
   "source": {
     "homepage": "https://github.com/auto-pigeon/ericw-tools/releases",
     "repository": "https://github.com/auto-pigeon/ericw-tools",
-    "release_notes": "https://github.com/auto-pigeon/ericw-tools/releases/tag/auto-pigeon-ericw-v1.4533"
+    "release_notes": "https://github.com/auto-pigeon/ericw-tools/releases/tag/auto-pigeon-ericw-v1.4535"
   },
   "license": {
     "spdx": "GPL-3.0-or-later",
     "name": "GNU General Public License v3.0 or later",
     "url": "https://www.gnu.org/licenses/gpl-3.0.html",
-    "corresponding_source": "https://github.com/auto-pigeon/ericw-tools/tree/auto-pigeon-ericw-v1.4533",
+    "corresponding_source": "https://github.com/auto-pigeon/ericw-tools/tree/auto-pigeon-ericw-v1.4535",
     "notice": "The Auto-Pigeon build of ericw-tools is a fork of somebody else's program, under that program's own licence, and describing it here changes nothing about that. ericw-tools' own source terms are GPL-2.0-or-later; this build ships Embree and oneTBB beside the programs, and builds using Embree are conveyed under GPL-3.0-or-later for compatibility with the Apache licence. The archive's `licenses/` folder carries the GPL texts and the notices of every library in `bin/`. The corresponding source for exactly this release is the fork's tag named above, and each release also publishes a source archive. Auto-Pigeon Companion is MIT and separate: it runs these programs as separate processes and does not contain, link or relicense them."
   },
   "compatibility": {
@@ -31,7 +31,7 @@
     "slug": "quake1",
     "engine_family": "quake1"
   },
-  "tool_version": "2.0.0-alpha11-47-gcaad08e1+auto-pigeon.1.4533",
+  "tool_version": "2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535",
   "platforms": [
     {
       "platform": {
@@ -39,7 +39,7 @@
         "arch": "amd64"
       },
       "status": "supported",
-      "note": "release 1.4533 passed the fork's CI acceptance; on 2026-10-21 its check through this profile on Linux: compatible (the 2026-10-12 builds here were 1.4513 and 1.4518). Needs glibc 2.34+"
+      "note": "release 1.4535 passed the fork's CI acceptance; on 2026-10-26 its check through this profile on Linux: compatible (the 2026-10-12 builds here were 1.4513 and 1.4518). Needs glibc 2.34+"
     },
     {
       "platform": {
@@ -47,7 +47,7 @@
         "arch": "amd64"
       },
       "status": "unverified",
-      "note": "release 1.4533 passed the fork's native acceptance on Windows; nobody here has run it through this profile"
+      "note": "release 1.4535 passed the fork's native acceptance on Windows; nobody here has run it through this profile"
     },
     {
       "platform": {
@@ -55,7 +55,7 @@
         "arch": "amd64"
       },
       "status": "unverified",
-      "note": "release 1.4533 passed the fork's native acceptance on an Intel Mac; not run through this profile; unsigned, so recent macOS refuses it until you allow it"
+      "note": "release 1.4535 passed the fork's native acceptance on an Intel Mac; not run through this profile; unsigned, so recent macOS refuses it until you allow it"
     },
     {
       "platform": {
@@ -63,7 +63,7 @@
         "arch": "arm64"
       },
       "status": "unverified",
-      "note": "release 1.4533 passed the fork's native acceptance on Apple silicon; not run through this profile; unsigned, so recent macOS refuses it until you allow it"
+      "note": "release 1.4535 passed the fork's native acceptance on Apple silicon; not run through this profile; unsigned, so recent macOS refuses it until you allow it"
     },
     {
       "platform": {
@@ -87,7 +87,7 @@
       "mode": "user_path",
       "title": "Use the release you downloaded",
       "hint": "choose the unpacked auto-pigeon-ericw-tools folder — the one that contains bin/, not bin/ itself",
-      "note": "Download the archive for your platform from https://github.com/auto-pigeon/ericw-tools/releases/tag/auto-pigeon-ericw-v1.4533, check it against the SHA256SUMS published beside it, and unpack it into a folder of its own. Release 1.4533, SHA-256 of each archive: auto-pigeon-ericw-tools-1.4533-linux-amd64.zip 32c37b2ff1947c548ffba72d5d59ace3bb06107fed8283d90538c47f602f4ea8; auto-pigeon-ericw-tools-1.4533-windows-amd64.zip f811a8d1eed29218949ee4eb0c8d08089bf1ea223b3527d081f705c3c31aa542; auto-pigeon-ericw-tools-1.4533-macos-amd64.zip ca803b696306d0fde2a59bf913733a45caa91fb1015f8f07d5f12826555726f7; auto-pigeon-ericw-tools-1.4533-macos-arm64.zip c5c177e792efbead421efc03dc339ca196eff8245a1bff96a8414e9c761cb051. A SHA-256 shows the download is intact; these builds are not signed. You are the authority for what you pointed at: the check says which release it is."
+      "note": "Download the archive for your platform from https://github.com/auto-pigeon/ericw-tools/releases/tag/auto-pigeon-ericw-v1.4535, check it against the SHA256SUMS published beside it, and unpack it into a folder of its own. Release 1.4535, SHA-256 of each archive: auto-pigeon-ericw-tools-1.4535-linux-amd64.zip 91cad841131f28af8d360b2748e6a0b4aa3f7b40fcc67b904de17ac321d65b90; auto-pigeon-ericw-tools-1.4535-windows-amd64.zip 140c70ba7628bf26095349c4635c2db80c30544da0345a9665a1a9101d272a22; auto-pigeon-ericw-tools-1.4535-macos-amd64.zip 935d2e13aa1d9485812ee5d9b592a4283d02b483be1bf92725fdb228fefa2e0b; auto-pigeon-ericw-tools-1.4535-macos-arm64.zip 238c8c77ba09aaa9499a0bca0e1c596168428ce81657d9d5289c4b05fcce0f6b. A SHA-256 shows the download is intact; these builds are not signed. You are the authority for what you pointed at: the check says which release it is."
     },
     {
       "mode": "system_path",

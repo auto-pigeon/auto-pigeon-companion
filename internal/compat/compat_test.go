@@ -35,10 +35,14 @@ const (
 	// until NEW_329D, as its published programs print it; 1.4518 above stays accepted.
 	releaseLight = "---- ClearLightmapSurfaces ----\n---- light / ericw-tools 2.0.0-alpha11-38-gd4717d68+auto-pigeon.1.4524 ----\nlight compiles lightmap data for BSPs\n\n  -logfile \"path\"               File to output logging data to. If unchanged, it is set by the tool.\n"
 	releaseQbsp  = "---- qbsp / ericw-tools 2.0.0-alpha11-38-gd4717d68+auto-pigeon.1.4524 ----\nqbsp performs geometric level processing of Quake .MAP files to create\nQuake .BSP files.\n"
-	// Release 1.4533 (`NEW_329D`), the release the fork's profiles are written for
-	// now, as its published programs print it; 1.4524 and 1.4518 stay accepted.
+	// Release 1.4533 (`NEW_329D`), the release the fork's profiles were written for
+	// until NEW_353A, as its published programs print it; 1.4524 and 1.4518 stay accepted.
 	pinnedNowLight = "---- ClearLightmapSurfaces ----\n---- light / ericw-tools 2.0.0-alpha11-47-gcaad08e1+auto-pigeon.1.4533 ----\nlight compiles lightmap data for BSPs\n\n  -logfile \"path\"               File to output logging data to. If unchanged, it is set by the tool.\n"
 	pinnedNowQbsp  = "---- qbsp / ericw-tools 2.0.0-alpha11-47-gcaad08e1+auto-pigeon.1.4533 ----\nqbsp performs geometric level processing of Quake .MAP files to create\nQuake .BSP files.\n"
+	// Release 1.4535 (`NEW_353A`), the release the fork's profiles are written for
+	// now, as its published programs print it; 1.4533, 1.4524 and 1.4518 stay accepted.
+	pinned1535Light = "---- ClearLightmapSurfaces ----\n---- light / ericw-tools 2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535 ----\nlight compiles lightmap data for BSPs\n\n  -logfile \"path\"               File to output logging data to. If unchanged, it is set by the tool.\n"
+	pinned1535Qbsp  = "---- qbsp / ericw-tools 2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535 ----\nqbsp performs geometric level processing of Quake .MAP files to create\nQuake .BSP files.\n"
 	// Release 1.4513: superseded, and still a release the fork profile builds with.
 	earlierQbsp = "---- qbsp / ericw-tools 2.0.0-alpha11-27-g69db3ffa+auto-pigeon.1.4513 ----\nqbsp performs geometric level processing of Quake .MAP files to create\nQuake .BSP files.\n"
 )
@@ -87,6 +91,8 @@ func TestAProgramIsJudgedByItsOwnWords(t *testing.T) {
 		{"1.4524 qbsp under the fork profile", fork, "qbsp", releaseQbsp, binding.FactCompatible, "2.0.0-alpha11-38-gd4717d68+auto-pigeon.1.4524", ""},
 		{"1.4533 light under the fork profile", fork, "light", pinnedNowLight, binding.FactCompatible, "2.0.0-alpha11-47-gcaad08e1+auto-pigeon.1.4533", ""},
 		{"1.4533 qbsp under the fork profile", fork, "qbsp", pinnedNowQbsp, binding.FactCompatible, "2.0.0-alpha11-47-gcaad08e1+auto-pigeon.1.4533", ""},
+		{"1.4535 light under the fork profile", fork, "light", pinned1535Light, binding.FactCompatible, "2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535", ""},
+		{"1.4535 qbsp under the fork profile", fork, "qbsp", pinned1535Qbsp, binding.FactCompatible, "2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535", ""},
 		// 1.4513 has a measured limit (a whole brush thinner than 0.02 units)
 		// that the profile describes and does not refuse: the operator chose to
 		// publish it with that limit stated, and a binding to it keeps working.

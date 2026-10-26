@@ -1,0 +1,73 @@
+---- qbsp / ericw-tools 2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535 ----
+low priority not compiled into this version
+logging to /q2010/jobs/g_degenerate_plane/work/level.log (truncate)
+
+--- Options Summary ---
+    "nocolor" was set to "1" (from command line)
+    "gamedir" was set to "/q2010/content" (from command line)
+    "basedir" was set to "/q2010/game/baseq2" (from command line)
+    "q2bsp" was set to "1" (from command line)
+    "chop" was set to "1" (from game target)
+    "leaktest" was set to "1" (from command line)
+    "maxedges" was set to "0" (from game target)
+
+Input file: /q2010/jobs/g_degenerate_plane/input/g_degenerate_plane.map
+Output file: /q2010/jobs/g_degenerate_plane/work/level.bsp
+
+using gamedir: '/q2010/content'
+using basedir: '/q2010/game/baseq2'
+WARNING: Couldn't locate texture for skip
+---- LoadMapFile ----
+WARNING: /q2010/jobs/g_degenerate_plane/input/g_degenerate_plane.map[line 47]: Brush plane with no normal
+     3 entities
+     2 unique textures
+     4 texinfos
+    24 unique planes
+
+---- ProcessMapBrushes ----
+INFO: world extents calculated to 568 units
+[  0%]  ...WARNING: /q2010/jobs/g_degenerate_plane/input/g_degenerate_plane.map[line 45]: brush bounds out of range
+[ 33%]  est: 00:00:00[ 66%]  est: 00:00:00[100%] time elapsed: 00:00:00.000047
+     6 brushes
+    35 sides
+     1 side bevels
+
+Processing map...
+---- Brush_LoadEntity ----
+[  0%]  ...[ 16%]  est: 00:00:00[ 33%]  est: 00:00:00[ 50%]  est: 00:00:00[ 66%]  est: 00:00:00[ 83%]  est: 00:00:00WARNING: /q2010/jobs/g_degenerate_plane/input/g_degenerate_plane.map[line 45]: brush bounds out of range
+[100%] time elapsed: 00:00:00.000036
+---- CountBrushes ----
+    5 SOLID brushes
+    5 brushes total
+    30 visible sides
+INFO: calculating BSP for 5 brushes with 30 sides
+---- ChopBrushes ----
+[  0%]  ...[ 20%]  est: 00:00:00[ 40%]  est: 00:00:00[ 60%]  est: 00:00:00[ 80%]  est: 00:00:00[100%] time elapsed: 00:00:00.000011
+chopped 5 brushes into 5
+---- BrushBSP ----
+     5 brushes
+    30 visible faces
+[.   ][done] time elapsed: 00:00:00.000390
+    21 nodes
+    21 expensive split nodes
+    22 leaves
+---- CountLeafs ----
+     5 SOLID leafs
+    17 EMPTY leafs
+    22 leafs total
+    8 max tree height
+    6 avg tree height
+---- MakeTreePortals ----
+[  0%]  ...[  2%]  est: 00:00:00[  4%]  est: 00:00:00[ 11%]  est: 00:00:00[ 13%]  est: 00:00:00[ 20%]  est: 00:00:00[ 27%]  est: 00:00:00[ 44%]  est: 00:00:00[ 67%]  est: 00:00:00[ 72%]  est: 00:00:00[ 81%]  est: 00:00:00[ 95%]  est: 00:00:00[100%] time elapsed: 00:00:00.000163
+---- CalcTreeBounds ----
+[.   ][done] time elapsed: 00:00:00.000021
+    107 tree portals
+---- FillOutside ----
+[.   ]WARNING: Reached occupant "light" at (0 0 192), no filling performed.
+Leak file written to /q2010/jobs/g_degenerate_plane/work/level.pts
+---- WriteDebugPortals ----
+            3 portals written to /q2010/jobs/g_degenerate_plane/work/level.leak.prt
+[done] time elapsed: 00:00:00.000203
+************ ERROR ************
+FillOutside: Aborting because -leaktest was used.
+

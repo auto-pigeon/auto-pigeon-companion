@@ -1,0 +1,22 @@
+---- qbsp / ericw-tools 2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535 ----
+low priority not compiled into this version
+logging to /q2010/jobs/g_truncated/work/level.log (truncate)
+
+--- Options Summary ---
+    "nocolor" was set to "1" (from command line)
+    "gamedir" was set to "/q2010/content" (from command line)
+    "basedir" was set to "/q2010/game/baseq2" (from command line)
+    "q2bsp" was set to "1" (from command line)
+    "chop" was set to "1" (from game target)
+    "leaktest" was set to "1" (from command line)
+    "maxedges" was set to "0" (from game target)
+
+Input file: /q2010/jobs/g_truncated/input/g_truncated.map
+Output file: /q2010/jobs/g_truncated/work/level.bsp
+
+using gamedir: '/q2010/content'
+using basedir: '/q2010/game/baseq2'
+WARNING: Couldn't locate texture for skip
+---- LoadMapFile ----
+************ ERROR ************
+parse_token: /q2010/jobs/g_truncated/input/g_truncated.map[line 4]: Line is incomplete
