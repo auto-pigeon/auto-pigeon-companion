@@ -7,15 +7,17 @@ import (
 	"fmt"
 	"net"
 	"os/exec"
+	"runtime"
 	"testing"
 	"time"
 )
 
 // `NEW_353A`: a real connection from a second account, natively. A client run
 // as `nobody` connects to this process's listener and the accepted connection
-// is judged another account's — the exact verdict, not just a 403, which an
-// unidentified peer would also get. It needs a non-interactive `sudo` (the CI
-// runners have one); without it the control is skipped and says so.
+// is judged another account's — the exact verdict on Linux, not just a 403,
+// which an unidentified peer would also get; on macOS, a refusing verdict. It
+// needs a non-interactive `sudo` (the CI runners have one); without it the
+// control is skipped and says so.
 func TestASecondAccountsRealConnectionIsAnotherAccount(t *testing.T) {
 	if err := exec.Command("sudo", "-n", "-u", "nobody", "true").Run(); err != nil {
 		t.Skipf("no non-interactive sudo to the nobody account here: %v", err)
@@ -43,7 +45,16 @@ func TestASecondAccountsRealConnectionIsAnotherAccount(t *testing.T) {
 		t.Fatalf("the second account's client never connected: %v", err)
 	}
 	defer conn.Close()
-	if verdict := identifyPeer(conn); verdict != peerOtherUser {
+	verdict := identifyPeer(conn)
+	t.Logf("%s: identifyPeer on nobody's connection = %d (other account %d, unidentified %d)",
+		runtime.GOOS, verdict, peerOtherUser, peerUnidentified)
+	switch {
+	case runtime.GOOS == "linux" && verdict != peerOtherUser:
+		// /proc/net/tcp lists every account's sockets: the answer is exact.
 		t.Fatalf("identifyPeer on nobody's connection = %d, want peerOtherUser (%d)", verdict, peerOtherUser)
+	case verdict != peerOtherUser && verdict != peerUnidentified:
+		// macOS may not list another account's socket to this one; either way
+		// the connection must be refused, never served.
+		t.Fatalf("identifyPeer on nobody's connection = %d, which peerGuard serves", verdict)
 	}
 }
