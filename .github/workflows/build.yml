@@ -63,6 +63,14 @@ jobs:
       # and 2.7x the slowest package ever observed; a real hang still fails.
       - name: go test
         run: go test -timeout 20m ./...
+      # The local-account boundary is platform code, and `ok internal/web`
+      # cannot say whether this runner's own native tests ran or skipped (no Mac
+      # exists outside CI, HITL 2026-10-26). Run them again by name, verbosely,
+      # so each OS's verdict — PASS or SKIP with its reason — is in the log
+      # (NEW_353A). Same tests, same assertions; nothing is skipped here that
+      # the step above ran.
+      - name: native peer-ownership tests, by name
+        run: go test -count=1 -v -run 'Peer|SocketOwner|SecondAccount|AccountsConnection|AccountsOwnConnection|PlatformThatCannotAsk|PCBList|OwnerPIDFromTable' ./internal/web
 
   gofmt:
     name: gofmt
