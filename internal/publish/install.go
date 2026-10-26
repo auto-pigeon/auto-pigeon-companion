@@ -19,6 +19,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile/builtin"
 )
 
 // Installing: five checks, in an order that matters.
@@ -53,6 +54,11 @@ var ErrRefusedByReview = errors.New("publish: nothing was installed, because the
 // two different documents under one version means one of them is not what
 // somebody reviewed. `profile.CheckVersionImmutable` is what says so.
 var ErrVersionMoved = errors.New("publish: that version is already installed with different content")
+
+// ErrIdentityConflict reports an install refused because what is already here
+// under that id is not this publication's: a built-in, a document written here,
+// another listing or publisher, or an install whose origin was never recorded.
+var ErrIdentityConflict = errors.New("publish: that id is already installed from somewhere else")
 
 // Plan is everything an install would do, computed without doing any of it.
 type Plan struct {
@@ -201,6 +207,11 @@ type InstallPaths struct {
 	Profiles string
 	// Bindings is the file recording what is installed on this machine.
 	Bindings string
+	// OwnAccount says the caller knows the listing is the signed-in account's
+	// own (the account sync reads it from the account's own listings), so it may
+	// replace a document this person wrote here under the same id. Nothing else
+	// sets it.
+	OwnAccount bool
 }
 
 // Apply writes the document and, when the review was approved, the binding.
@@ -231,21 +242,37 @@ func Apply(plan Plan, paths InstallPaths, approved bool) (binding.LocalBinding, 
 	if err != nil {
 		return binding.LocalBinding{}, err
 	}
-	if err := writeAtomically(filepath.Join(paths.Profiles, name), plan.Document); err != nil {
-		return binding.LocalBinding{}, err
+	origin := binding.InstallOrigin{ListingID: plan.Listing.ID, PublisherID: plan.Listing.Publisher.UserID}
+	if origin.ListingID == "" || origin.PublisherID == "" {
+		return binding.LocalBinding{}, fmt.Errorf("%w: the catalog did not say which listing and which account %s comes from, "+
+			"so nothing could tell a later update from somebody else's document under the same id", ErrIdentityConflict, meta.ID)
+	}
+	if _, err := builtin.Find(meta.ID); err == nil {
+		return binding.LocalBinding{}, fmt.Errorf("%w: %s is a profile built into this program; a publication cannot replace it. "+
+			"Ask its publisher to publish it under an id of their own", ErrIdentityConflict, meta.ID)
 	}
 
 	// Read, changed and written inside one cross-process lock, so an install
 	// running beside a GUI server cannot discard a grant or an engine path the
-	// other recorded. See [binding.Update].
+	// other recorded. See [binding.Update]. The identity is decided inside it
+	// too, before the document is written: a refusal leaves the document, the
+	// paths, the arguments and the approval exactly as they were.
 	var local binding.LocalBinding
 	if _, err := binding.Update(paths.Bindings, func(set *binding.Set) error {
-		local, _ = set.Find(meta.ID)
+		existing, installed := set.Find(meta.ID)
+		if err := checkIdentity(meta.ID, paths, existing, installed, origin); err != nil {
+			return err
+		}
+		if err := writeAtomically(filepath.Join(paths.Profiles, name), plan.Document); err != nil {
+			return err
+		}
+		local = existing
 		local.SchemaVersion = binding.SchemaVersion
 		local.ProfileID = meta.ID
 		local.ProfileVersion = meta.Version
 		local.ProfileDigest = plan.Digest
 		local.Trust = plan.Trust
+		local.Origin = &origin
 		if local.Acquisition == "" {
 			local.Acquisition = profile.AcquireUserPath
 		}
@@ -260,6 +287,48 @@ func Apply(plan Plan, paths InstallPaths, approved bool) (binding.LocalBinding, 
 	}
 
 	return local, nil
+}
+
+// checkIdentity decides whether a publication from `origin` may be installed
+// under `id` (NEW_353A).
+//
+// A profile id is the publisher's own name for a document, and AUB keys a
+// listing on (publisher, id), so the id alone says nothing about whose a
+// document is. What is installed under it may be replaced only by the same
+// listing of the same account. A document written or pasted here is the
+// person's own, replaced only by their own account's publication of it (the
+// account sync says so). An install whose origin was never recorded — one made
+// before bindings carried it — is never replaced by a matching id: the person
+// removes it and installs again, deliberately.
+func checkIdentity(id string, paths InstallPaths, existing binding.LocalBinding, installed bool, origin binding.InstallOrigin) error {
+	if !installed {
+		// No binding, but perhaps a document: one written or pasted here and
+		// never set up, or a stray file. Either way it is not this listing's.
+		_, err := job.NewCatalog(paths.Profiles).Lookup(id)
+		switch {
+		case err == nil && paths.OwnAccount:
+			return nil
+		case err == nil:
+			return fmt.Errorf("%w: a document with the id %s is already here and did not come from this listing", ErrIdentityConflict, id)
+		case !errors.Is(err, job.ErrNoProfile):
+			return err
+		}
+		return nil
+	}
+	switch {
+	case existing.Trust == profile.TrustCommunity && existing.Origin != nil && *existing.Origin == origin:
+		return nil
+	case existing.Trust == profile.TrustCommunity && existing.Origin != nil:
+		return fmt.Errorf("%w: %s is installed from another listing or another account; this publication cannot replace it",
+			ErrIdentityConflict, id)
+	case existing.Trust == profile.TrustCommunity:
+		return fmt.Errorf("%w: %s was installed before this Companion recorded where installs come from, so it cannot "+
+			"tell whether this publication is the same one; remove it and install this one if you mean to replace it", ErrIdentityConflict, id)
+	case existing.Trust == profile.TrustLocal && paths.OwnAccount:
+		return nil
+	default:
+		return fmt.Errorf("%w: %s is %s on this computer; a publication cannot replace it", ErrIdentityConflict, id, existing.Trust)
+	}
 }
 
 // DocumentFileName is the name a published document is stored under.

@@ -150,9 +150,10 @@ passes — never the other way round, and never from a banner sorted by eye. A r
 only after the fork's workflow accepted its archives; a compatible program is still not a correct
 compiler, and what a release was measured NOT to do goes in the profile's description.
 
-The binding store is `aucom.local-binding/1.4`. A 1.3 store is read unchanged and stamped 1.4 on
-the first write (`internal/binding/upgrade_test.go`); a build that reads only up to 1.3 refuses a
-1.4 file whole. Never write a downgrade and never promise a rollback without the user's own copy.
+The binding store is `aucom.local-binding/1.5` (1.5 added `origin`, the listing and account an
+installed document came from — `NEW_353A`, `internal/publish/install.go:checkIdentity`). An older
+store is read unchanged and stamped 1.5 on the first write (`internal/binding/upgrade_test.go`); a
+build that reads only up to 1.4 refuses a 1.5 file whole. Never write a downgrade and never promise a rollback without the user's own copy.
 
 ## Tests that hold it
 

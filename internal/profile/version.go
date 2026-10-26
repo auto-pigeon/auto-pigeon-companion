@@ -33,7 +33,7 @@ var SupportedSchemaVersions = []string{"aucom.profile/1.0", "aucom.profile/1.1"}
 // separate from SchemaVersion because bindings are never published: the two
 // formats have different compatibility obligations and tying them together
 // would force a migration of local state every time the portable format moved.
-const LocalBindingSchemaVersion = "aucom.local-binding/1.4"
+const LocalBindingSchemaVersion = "aucom.local-binding/1.5"
 
 // SupportedLocalBindingSchemaVersions is every binding format this build reads,
 // oldest first. A stored binding is re-stamped to the current version the next
@@ -50,8 +50,10 @@ const LocalBindingSchemaVersion = "aucom.local-binding/1.4"
 // STAGE of a pipeline, on the pipeline's binding — where parameters belong,
 // rather than on the tool every pipeline shares (operator, 2026-10-03). 1.4
 // added `compatibility`: what each program said about itself when it was last
-// asked, and for exactly which file and which requirement (NEW_323D).
-var SupportedLocalBindingSchemaVersions = []string{"aucom.local-binding/1.0", "aucom.local-binding/1.1", "aucom.local-binding/1.2", "aucom.local-binding/1.3", "aucom.local-binding/1.4"}
+// asked, and for exactly which file and which requirement (NEW_323D). 1.5
+// added `origin`: the catalog listing and the publishing account an installed
+// document came from, which is what an update must match (NEW_353A).
+var SupportedLocalBindingSchemaVersions = []string{"aucom.local-binding/1.0", "aucom.local-binding/1.1", "aucom.local-binding/1.2", "aucom.local-binding/1.3", "aucom.local-binding/1.4", "aucom.local-binding/1.5"}
 
 // LocalBindingSchemaSupported reports whether this build reads a binding
 // format.

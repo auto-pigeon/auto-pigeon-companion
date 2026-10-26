@@ -319,8 +319,10 @@ func (s *Server) handleAccountSync(w http.ResponseWriter, r *http.Request) {
 					continue
 				}
 				// The person read these permissions in the review and pressed
-				// Sync: that is the approval Apply records, for this machine.
-				_, err = publish.Apply(plan, publish.InstallPaths{Profiles: profilesDir, Bindings: bindingsPath}, true)
+				// Sync: that is the approval Apply records, for this machine. The
+				// listing is one of the account's own (`Mine`), so it may replace
+				// what this person wrote here under the same id (NEW_353A).
+				_, err = publish.Apply(plan, publish.InstallPaths{Profiles: profilesDir, Bindings: bindingsPath, OwnAccount: true}, true)
 			}
 			outcome.Result, outcome.Error = resultOf(err)
 			outcomes = append(outcomes, outcome)

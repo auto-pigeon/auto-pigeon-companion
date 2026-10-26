@@ -49,6 +49,16 @@ type PinnedInstall struct {
 	PinnedAt time.Time `json:"pinned_at"`
 }
 
+// InstallOrigin is where an installed document came from: the catalog's
+// listing record and the account that published it. AUB keys a listing on
+// (publisher, profile id), so two accounts may publish one short id; this pair,
+// never the id or a name the document declares about itself, is what an update
+// must match (NEW_353A).
+type InstallOrigin struct {
+	ListingID   string `json:"listing_id"`
+	PublisherID string `json:"publisher_id"`
+}
+
 // LocalBinding is one profile, as installed on this machine.
 type LocalBinding struct {
 	SchemaVersion string `json:"schema_version"`
@@ -60,6 +70,10 @@ type LocalBinding struct {
 	ProfileVersion string        `json:"profile_version"`
 	ProfileDigest  string        `json:"profile_digest"`
 	Trust          profile.Trust `json:"trust"`
+	// Origin is the listing a `community` document was installed from. Absent
+	// for a built-in, for a document written or pasted here, and for an install
+	// made before 1.5 — which is therefore never updated by a matching id alone.
+	Origin *InstallOrigin `json:"origin,omitempty"`
 	// Acquisition is how the executables got here.
 	Acquisition profile.AcquisitionMode `json:"acquisition"`
 	// Executables maps a declared executable name to its absolute path here.
@@ -125,6 +139,9 @@ func (b LocalBinding) Validate() error {
 		add("profile_digest is empty; a binding with no digest cannot tell whether the document has changed since it was approved")
 	case !strings.HasPrefix(b.ProfileDigest, "sha256:"):
 		add("profile_digest %q does not name its algorithm", b.ProfileDigest)
+	}
+	if b.Origin != nil && (b.Origin.ListingID == "" || b.Origin.PublisherID == "") {
+		add("origin names no listing or no publisher; an origin is both, or absent")
 	}
 	if b.Trust != "" && !b.Trust.Valid() {
 		add("trust is %q, which is not a trust state", b.Trust)

@@ -542,6 +542,12 @@ func reportInstallError(env *Env, err error) int {
 				"nobody else would produce for the same document.")
 
 		return 1
+	case errors.Is(err, publish.ErrIdentityConflict):
+		fmt.Fprintf(env.Stderr, "error: %v\n", err)
+		fmt.Fprintln(env.Stderr,
+			"nothing was written: the installed document, its program paths, arguments and approval are unchanged.")
+
+		return 1
 	case errors.Is(err, publish.ErrVersionMoved):
 		fmt.Fprintf(env.Stderr, "error: %v\n", err)
 		fmt.Fprintln(env.Stderr,

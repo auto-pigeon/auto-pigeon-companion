@@ -22,6 +22,7 @@ func sampleBinding(t *testing.T) LocalBinding {
 		ProfileVersion: "0.3.0",
 		ProfileDigest:  fakeDigest,
 		Trust:          profile.TrustCommunity,
+		Origin:         &InstallOrigin{ListingID: "listing1", PublisherID: "publisher-a"},
 		Acquisition:    profile.AcquireUserPath,
 		Executables:    map[string]string{"qbsp": filepath.Join(base, "tools", "ericw", "qbsp")},
 		Arguments:      map[string][]string{"qbsp": {"-nopercent"}},
@@ -288,7 +289,7 @@ func TestPutRefusesAnInvalidBinding(t *testing.T) {
 // shared, but so the file a user may have to read and repair is documented and
 // versioned.
 func TestTheLocalBindingSchemaIsPublishedAndMatchesTheStoredShape(t *testing.T) {
-	raw, err := profile.SchemaFile("local-binding-1.4.schema.json")
+	raw, err := profile.SchemaFile("local-binding-1.5.schema.json")
 	if err != nil {
 		t.Fatalf("%v", err)
 	}

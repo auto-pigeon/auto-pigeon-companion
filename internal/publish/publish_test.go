@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -39,6 +40,11 @@ type stub struct {
 	yanked   bool
 	yankWhy  string
 
+	// listing and publisher are the catalog's identity for the publication: the
+	// listing record and the account that published it (NEW_353A).
+	listing   string
+	publisher string
+
 	// published records what a publication actually sent.
 	published map[string]any
 }
@@ -51,6 +57,9 @@ func newStub(t testing.TB, document []byte) *stub {
 		document: document,
 		digest:   "sha256:" + hex.EncodeToString(sum[:]),
 		trust:    "community",
+
+		listing:   "listing1",
+		publisher: "publisher-a",
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/companion-profiles", func(w http.ResponseWriter, r *http.Request) {
@@ -72,8 +81,9 @@ func newStub(t testing.TB, document []byte) *stub {
 		write(w, map[string]any{
 			"schema_version": aub.ProfileCatalogSchema,
 			"profile": map[string]any{
-				"id": "listing1", "profile_id": "x", "kind": "tool",
+				"id": s.listing, "profile_id": "x", "kind": "tool",
 				"trust": s.trust, "latest_version": "1.0.0", "visibility": "public",
+				"publisher": map[string]any{"user_id": s.publisher},
 			},
 			"versions": []any{map[string]any{"version": "1.0.0", "digest": s.digest}},
 		})
@@ -545,5 +555,216 @@ func TestAVersionThatMovedIsRefusedRatherThanTreatedAsAnUpdate(t *testing.T) {
 		job.NewCatalog(where.Profiles), "listing1", tool.Version)
 	if !errors.Is(err, publish.ErrVersionMoved) {
 		t.Fatalf("err = %v, want ErrVersionMoved", err)
+	}
+}
+
+// ---- install identity (NEW_353A) ------------------------------------------------------------------
+//
+// A profile id is the publisher's own name for a document, and AUB keys a
+// listing on (publisher, id): two accounts may publish the same short id. An
+// install used to key on the id alone, so a second publisher's document — or a
+// document claiming a built-in's id — replaced what was installed and kept its
+// executable paths and arguments (NEW_349 aucom/publish/install.go:Apply:
+// profile-id-only-identity-shadows-builtin-or-other-publisher).
+
+// installWithConfiguration installs `document` from (listing, publisher), then
+// records what a person sets up afterwards: a program path and an argument.
+func installWithConfiguration(t *testing.T, where publish.InstallPaths, document []byte, listing, publisher string) {
+	t.Helper()
+	stub := newStub(t, document)
+	stub.listing, stub.publisher = listing, publisher
+	plan, err := publish.PlanInstall(context.Background(), stub.client(t), nil, listing, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := publish.Apply(plan, where, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := binding.Update(where.Bindings, func(set *binding.Set) error {
+		local, _ := set.Find(plan.Profile().Metadata().ID)
+		local.Executables = map[string]string{"qbsp": filepath.Join(t.TempDir(), "my-qbsp")}
+		local.Arguments = map[string][]string{"qbsp": {"-notex"}}
+		return set.Put(local)
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// snapshotInstall is every byte an install could change.
+func snapshotInstall(t *testing.T, where publish.InstallPaths) map[string]string {
+	t.Helper()
+	out := map[string]string{}
+	if raw, err := os.ReadFile(where.Bindings); err == nil {
+		out["bindings.json"] = string(raw)
+	}
+	entries, _ := os.ReadDir(where.Profiles)
+	for _, entry := range entries {
+		raw, _ := os.ReadFile(filepath.Join(where.Profiles, entry.Name()))
+		out[entry.Name()] = string(raw)
+	}
+	return out
+}
+
+func nextVersion(t *testing.T, document profile.Profile, version string) []byte {
+	t.Helper()
+	tool := *document.(*profile.ToolProfile)
+	tool.Version = version
+	raw, err := profile.Export(&tool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
+}
+
+func planFrom(t *testing.T, where publish.InstallPaths, document []byte, listing, publisher string) publish.Plan {
+	t.Helper()
+	stub := newStub(t, document)
+	stub.listing, stub.publisher = listing, publisher
+	plan, err := publish.PlanInstall(context.Background(), stub.client(t), job.NewCatalog(where.Profiles), listing, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return plan
+}
+
+func TestAnotherPublishersProfileWithTheSameIDIsRefusedWithoutAChange(t *testing.T) {
+	canonical, document := canonicalBuiltin(t)
+	where := paths(t)
+	installWithConfiguration(t, where, canonical, "listing1", "publisher-a")
+	before := snapshotInstall(t, where)
+
+	plan := planFrom(t, where, nextVersion(t, document, "2.0.0"), "listing9", "publisher-b")
+	if _, err := publish.Apply(plan, where, true); !errors.Is(err, publish.ErrIdentityConflict) {
+		t.Fatalf("err = %v, want ErrIdentityConflict", err)
+	}
+	if after := snapshotInstall(t, where); !reflect.DeepEqual(after, before) {
+		t.Fatal("a refused install changed the installed document or its binding")
+	}
+}
+
+func TestABuiltinsIDIsRefusedWithoutAChange(t *testing.T) {
+	entry, err := builtin.Find("auto-pigeon.ericw-tools.q1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tool := *entry.Profile.(*profile.ToolProfile)
+	tool.Version = "99.0.0"
+	claimed, err := profile.Export(&tool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	where := paths(t)
+	// The built-in as this person set it up: their compiler, their argument.
+	if _, err := binding.Update(where.Bindings, func(set *binding.Set) error {
+		return set.Put(binding.LocalBinding{
+			ProfileID: tool.ID, ProfileVersion: entry.Profile.Metadata().Version, ProfileDigest: entry.Digest,
+			Trust: profile.TrustBuiltin, Acquisition: profile.AcquireUserPath,
+			Executables: map[string]string{"qbsp": filepath.Join(t.TempDir(), "qbsp")},
+			Arguments:   map[string][]string{"qbsp": {"-notex"}},
+		})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	before := snapshotInstall(t, where)
+	plan := planFrom(t, where, claimed, "listing1", "publisher-a")
+	if _, err := publish.Apply(plan, where, true); !errors.Is(err, publish.ErrIdentityConflict) {
+		t.Fatalf("err = %v, want ErrIdentityConflict", err)
+	}
+	if after := snapshotInstall(t, where); !reflect.DeepEqual(after, before) {
+		t.Fatal("a refused install changed something")
+	}
+}
+
+func TestTheSameListingsUpdateIsInstalledAndKeepsTheLocalConfiguration(t *testing.T) {
+	canonical, document := canonicalBuiltin(t)
+	where := paths(t)
+	installWithConfiguration(t, where, canonical, "listing1", "publisher-a")
+	set, _ := binding.LoadFile(where.Bindings)
+	was, _ := set.Find(document.Metadata().ID)
+
+	plan := planFrom(t, where, nextVersion(t, document, "2.0.0"), "listing1", "publisher-a")
+	local, err := publish.Apply(plan, where, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if local.ProfileVersion != "2.0.0" || local.Origin == nil || local.Origin.ListingID != "listing1" || local.Origin.PublisherID != "publisher-a" {
+		t.Fatalf("the update was not recorded with its origin: %+v", local)
+	}
+	if !reflect.DeepEqual(local.Executables, was.Executables) || !reflect.DeepEqual(local.Arguments, was.Arguments) {
+		t.Fatalf("the update lost the person's set-up: %v %v", local.Executables, local.Arguments)
+	}
+}
+
+func TestALocalCloneIsItsOwnProfileAndIsNotReplaced(t *testing.T) {
+	canonical, document := canonicalBuiltin(t)
+	where := paths(t)
+	// The person's own copy, under their own id, written here.
+	clone := *document.(*profile.ToolProfile)
+	clone.ID = "local.my-q1-tools"
+	raw, err := profile.Export(&clone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(where.Profiles, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(where.Profiles, "local.my-q1-tools.tool.json"), raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Installing the published one beside it: both are there, each its own.
+	installWithConfiguration(t, where, canonical, "listing1", "publisher-a")
+	catalog := job.NewCatalog(where.Profiles)
+	for _, id := range []string{clone.ID, document.Metadata().ID} {
+		if _, err := catalog.Lookup(id); err != nil {
+			t.Fatalf("%s is not selectable: %v", id, err)
+		}
+	}
+	// A publication claiming the clone's id does not replace it.
+	before := snapshotInstall(t, where)
+	plan := planFrom(t, where, nextVersion(t, &clone, "2.0.0"), "listing7", "publisher-b")
+	if _, err := publish.Apply(plan, where, true); !errors.Is(err, publish.ErrIdentityConflict) {
+		t.Fatalf("err = %v, want ErrIdentityConflict", err)
+	}
+	if after := snapshotInstall(t, where); !reflect.DeepEqual(after, before) {
+		t.Fatal("a refused install changed the local clone")
+	}
+	// Unless it is this person's own publication coming back (the account sync).
+	own := planFrom(t, where, nextVersion(t, &clone, "2.0.0"), "listing7", "publisher-b")
+	ownWhere := where
+	ownWhere.OwnAccount = true
+	if _, err := publish.Apply(own, ownWhere, true); err != nil {
+		t.Fatalf("this account's own newer version was refused: %v", err)
+	}
+}
+
+func TestAnInstallWithNoKnownOriginIsNeverReplacedByTheFirstMatch(t *testing.T) {
+	canonical, document := canonicalBuiltin(t)
+	where := paths(t)
+	installWithConfiguration(t, where, canonical, "listing1", "publisher-a")
+	// What an install made before NEW_353A looks like: no origin recorded.
+	if _, err := binding.Update(where.Bindings, func(set *binding.Set) error {
+		local, _ := set.Find(document.Metadata().ID)
+		local.Origin = nil
+		return set.Put(local)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	before := snapshotInstall(t, where)
+	plan := planFrom(t, where, nextVersion(t, document, "2.0.0"), "listing1", "publisher-a")
+	if _, err := publish.Apply(plan, where, true); !errors.Is(err, publish.ErrIdentityConflict) {
+		t.Fatalf("err = %v, want ErrIdentityConflict", err)
+	}
+	if after := snapshotInstall(t, where); !reflect.DeepEqual(after, before) {
+		t.Fatal("a refused install changed something")
+	}
+
+	// And a catalog answer that names no publisher is no identity at all.
+	fresh := paths(t)
+	anonymous := planFrom(t, fresh, canonical, "listing1", "")
+	if _, err := publish.Apply(anonymous, fresh, true); !errors.Is(err, publish.ErrIdentityConflict) {
+		t.Fatalf("err = %v, want ErrIdentityConflict", err)
+	}
+	if len(snapshotInstall(t, fresh)) != 0 {
+		t.Fatal("an install with no publisher wrote something")
 	}
 }

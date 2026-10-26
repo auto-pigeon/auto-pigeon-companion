@@ -964,6 +964,28 @@ $ sudo -u someone-else curl -s -o /dev/null -w '%{http_code}\n' "http://[::ffff:
 403
 ```
 
+**An installed profile is replaced only by its own publisher.** A profile's id
+is its publisher's own name for it, and two accounts may publish the same one.
+Installing from the catalog therefore records which listing and which account a
+document came from, and an update must come from that same listing
+(`NEW_353A`). A publication that claims a built-in's id, the id of a profile you
+wrote or pasted here, or the id of something installed from another account is
+refused before anything is written — your program paths, arguments, approvals
+and pipelines stay exactly as they were. Your account's own profiles coming back
+through **Sync** may replace the copy you wrote here. A profile installed before
+this release has no recorded origin, so an update to it is refused rather than
+guessed; remove it and install it again if you mean to replace it.
+
+```console
+$ companion toolchain install <listing-id> --approve
+error: publish: that id is already installed from somewhere else: community.example.q1-tools is installed from another listing or another account; this publication cannot replace it
+nothing was written: the installed document, its program paths, arguments and approval are unchanged.
+```
+
+This release writes its binding store as `aucom.local-binding/1.5`. An older
+Companion refuses a 1.5 store by name; keep a copy of `bindings.json` before the
+first run if you may go back.
+
 ## Configuration
 
 Settings are saved in a per-user `config.json`, written with mode 0600 because
