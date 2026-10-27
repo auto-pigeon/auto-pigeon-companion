@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -228,15 +229,48 @@ func copyVerified(from, to string, member texturebundle.Member) error {
 }
 
 // leakTextureError says why the textures could not be had, in the request's
-// terms. The account server's address is the reader's own and is not repeated:
-// a transport failure is said without the URL it was for.
+// terms: the first line is the sentence the page shows, naming the bundle and
+// what to do; the lines under it are the codes, for Technical details. The
+// account server's address and its routes are never repeated — they are the
+// reader's own, and an internal route is not something to act on (NEW_357).
 func leakTextureError(revision int, err error) error {
+	subject := fmt.Sprintf("This leak test needs the texture bundle of saved revision %d from your account", revision)
+	var api *aub.APIError
+	var refusal *aub.TextureExportRefusal
 	var transport *url.Error
-	if errors.As(err, &transport) {
-		err = transport.Err
+	switch {
+	case errors.As(err, &api) && api.StatusCode == http.StatusUnauthorized:
+		return &leakTextureFailure{cause: err, text: subject + ", and your account no longer accepts this Companion's " +
+			"sign-in, so nothing was compiled. Sign in again, then press Check again.\n" +
+			fmt.Sprintf("texture export: HTTP %d%s", api.StatusCode, reasonSuffix(api.Reason))}
+	case errors.As(err, &api):
+		return &leakTextureFailure{cause: err, text: subject + ", and your account refused to send it, so nothing " +
+			"was compiled.\n" + fmt.Sprintf("texture export: HTTP %d%s", api.StatusCode, reasonSuffix(api.Reason))}
+	case errors.As(err, &refusal):
+		return &leakTextureFailure{cause: err, text: subject + ", and your account refused to send it, so nothing " +
+			"was compiled. " + refusal.Detail + "\n" + fmt.Sprintf("texture export: HTTP %d%s", refusal.Status, reasonSuffix(refusal.Reason))}
+	case errors.As(err, &transport):
+		return &leakTextureFailure{cause: err, text: subject + ", and your account's server could not be reached, so " +
+			"nothing was compiled. Press Check again when it is back.\n" + transport.Err.Error()}
 	}
-	return fmt.Errorf("this leak test needs the textures of saved revision %d from your account, "+
-		"and they could not be fetched, so nothing was compiled: %w", revision, err)
+	return &leakTextureFailure{cause: err, text: subject + ", and it could not be fetched, so nothing was compiled.\n" + err.Error()}
+}
+
+// leakTextureFailure is leakTextureError's answer: its own text, and the
+// cause kept for the status it maps to.
+type leakTextureFailure struct {
+	text  string
+	cause error
+}
+
+func (e *leakTextureFailure) Error() string { return e.text }
+func (e *leakTextureFailure) Unwrap() error { return e.cause }
+
+func reasonSuffix(reason string) string {
+	if reason == "" {
+		return ""
+	}
+	return " (" + reason + ")"
 }
 
 // sweepLeakTextures removes job-owned texture copies a stopped Companion left:

@@ -592,8 +592,9 @@ func TestALeakTestWhoseTexturesCannotBeHadRefusesAndUsesNoHostWAD(t *testing.T) 
 		bundle  []byte
 		want    string
 	}{
-		"AUB refuses the export":     {refusal: http.StatusForbidden, want: "could not be fetched, so nothing was compiled"},
-		"the bundle does not verify": {bundle: tampered, want: "could not be fetched, so nothing was compiled"},
+		"AUB refuses the export":     {refusal: http.StatusForbidden, want: "your account refused to send it, so nothing was compiled"},
+		"the session has ended":      {refusal: http.StatusUnauthorized, want: "no longer accepts this Companion's sign-in, so nothing was compiled. Sign in again, then press Check again."},
+		"the bundle does not verify": {bundle: tampered, want: "it could not be fetched, so nothing was compiled"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			m, _ := newLeakMachine(t)
@@ -615,8 +616,11 @@ func TestALeakTestWhoseTexturesCannotBeHadRefusesAndUsesNoHostWAD(t *testing.T) 
 			if run.status < 400 || !strings.Contains(fmt.Sprint(run.body["error"]), c.want) {
 				t.Fatalf("%d %v", run.status, run.body)
 			}
-			if strings.Contains(fmt.Sprint(run.body["error"]), m.backend.url()) {
-				t.Errorf("the refusal names the account server's address: %v", run.body["error"])
+			if text := fmt.Sprint(run.body["error"]); strings.Contains(text, m.backend.url()) || strings.Contains(text, "/api/") {
+				t.Errorf("the refusal names the account server's address or a route: %v", text)
+			}
+			if first := strings.SplitN(fmt.Sprint(run.body["error"]), "\n", 2)[0]; !strings.Contains(first, "texture bundle of saved revision 1") {
+				t.Errorf("the sentence does not name the bundle: %q", first)
 			}
 			if got := len(m.jobIDs()); got != jobs || len(m.leakTextureDirs()) != 0 {
 				t.Errorf("%d job(s) started, texture copies %v", got-jobs, m.leakTextureDirs())
@@ -1004,7 +1008,7 @@ func TestTheLeakReviewPreviewShowsTheBundleTheBuildWillCompileWith(t *testing.T)
 	request["inputs"] = map[string]string{"source_map": "aub:map/new357q@" + m.backend.asset.revisionID + "#fixture.apmap"}
 	request["leak_request_id"] = refused.RequestID
 	if status, body := m.call(http.MethodPost, "/api/v1/build/preview", request); status < 400 ||
-		!strings.Contains(fmt.Sprint(body["error"]), "could not be fetched") {
+		!strings.Contains(fmt.Sprint(body["error"]), "refused to send it") {
 		t.Errorf("a preview whose textures are refused: %d %v", status, body)
 	}
 }
