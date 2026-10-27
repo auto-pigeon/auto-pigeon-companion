@@ -171,33 +171,41 @@ const playMapInput = "map"
 // playFetchBundle downloads and verifies the texture export for the same
 // revision, reusing a complete verified cache entry when there is one.
 func (s *Server) playFetchBundle(ctx context.Context, request playrun.Request) (playrun.BundleResult, error) {
-	cache, err := s.textureCache()
-	if err != nil {
-		return playrun.BundleResult{}, err
-	}
-	want := texturebundle.Expect{MapID: request.AssetID, Revision: request.RevisionNumber}
-
-	// Offline first. A verified entry is re-checked by Lookup itself, so a
-	// reuse is a reuse of files that still hash to what was verified.
-	if entry, found := cache.Lookup(want); found {
-		return bundleResult(entry, s.backendAddress()), nil
-	}
-
-	client := s.aubClient()
-	if client == nil || !client.Authenticated() {
-		return playrun.BundleResult{}, errors.New(
-			"this map's textures are not in the local cache yet, and downloading them needs you to be signed in")
-	}
-	bundle, err := client.TextureExport(ctx, request.AssetID, request.RevisionNumber)
-	if err != nil {
-		return playrun.BundleResult{}, err
-	}
-	entry, err := cache.Publish(ctx, bundle, want)
+	entry, err := s.verifiedTextureBundle(ctx, request.AssetID, request.RevisionNumber)
 	if err != nil {
 		return playrun.BundleResult{}, err
 	}
 
 	return bundleResult(entry, s.backendAddress()), nil
+}
+
+// verifiedTextureBundle is the one place a map revision's texture export is
+// found or fetched: Build & Run and the editor's leak test both come here
+// (NEW_357), so neither has a cache, a download or a check of its own.
+func (s *Server) verifiedTextureBundle(ctx context.Context, mapID string, revision int) (texturebundle.Entry, error) {
+	cache, err := s.textureCache()
+	if err != nil {
+		return texturebundle.Entry{}, err
+	}
+	want := texturebundle.Expect{MapID: mapID, Revision: revision}
+
+	// Offline first. A verified entry is re-checked by Lookup itself, so a
+	// reuse is a reuse of files that still hash to what was verified.
+	if entry, found := cache.Lookup(want); found {
+		return entry, nil
+	}
+
+	client := s.aubClient()
+	if client == nil || !client.Authenticated() {
+		return texturebundle.Entry{}, errors.New(
+			"this map's textures are not in the local cache yet, and downloading them needs you to be signed in")
+	}
+	bundle, err := client.TextureExport(ctx, mapID, revision)
+	if err != nil {
+		return texturebundle.Entry{}, err
+	}
+
+	return cache.Publish(ctx, bundle, want)
 }
 
 // bundleResult turns a verified cache entry into the portable identity the run

@@ -323,6 +323,7 @@ func NewServer(options Options) (*Server, error) {
 	// wrong in, and both are cheap to put right exactly once, here.
 	server.recoverPlayRuns()
 	server.sweepTextureBundles()
+	server.sweepLeakTextures(time.Hour)
 
 	return server, nil
 }

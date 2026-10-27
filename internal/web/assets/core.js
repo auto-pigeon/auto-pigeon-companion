@@ -271,7 +271,11 @@ function tabsFor(selectId) {
 }
 
 function pathField(options) {
-  const { id, label, kind = "directory", value = "", hint = "", onChange } = options;
+  // `accepts`, when given, is asked first: a value it describes is one the
+  // caller's own server accepts though it is not a path (a Build map input
+  // takes an `aub:` reference, NEW_357), and its sentence is shown instead
+  // of a path check that could only refuse it.
+  const { id, label, kind = "directory", value = "", hint = "", onChange, accepts } = options;
   const input = el("input", {
     attrs: { id, type: "text", value: value || "", spellcheck: "false", autocomplete: "off" },
   });
@@ -292,6 +296,13 @@ function pathField(options) {
       setMessage(status, "");
       input.removeAttribute("aria-invalid");
       return null;
+    }
+    const accepted = accepts ? accepts(input.value.trim()) : "";
+    if (accepted) {
+      input.removeAttribute("aria-invalid");
+      setMessage(status, accepted);
+      if (onChange) onChange(input.value.trim());
+      return input.value.trim();
     }
     const { body } = await api("/api/v1/paths/validate", {
       method: "POST",

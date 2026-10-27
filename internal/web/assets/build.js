@@ -355,6 +355,7 @@
     const file = window.AUCOM.pathField({
       id,
       kind: kind === "textures" || kind === "directory" ? "directory" : "open-file",
+      accepts: kind === "map" ? savedRevisionNote : undefined,
       label: titled,
       hint:
         kind === "textures"
@@ -549,6 +550,17 @@
       }
       row.apply();
     }
+  }
+
+  // A map input also takes a saved revision of the account, written
+  // `aub:map/<id>@<revision>#<file>` — the build fetches and verifies it
+  // (internal/assetref). Typed into the field, it was answered "is not an
+  // absolute path" while the build accepted it (NEW_353A, O6). Only the shape
+  // is judged here; whether the revision exists is the build's to say.
+  function savedRevisionNote(value) {
+    return /^aub:map\/[A-Za-z0-9_-]+@[A-Za-z0-9_-]+(#\S+)?$/.test(value)
+      ? t("A saved map revision from your account. The build downloads it and checks its digest.")
+      : "";
   }
 
   function requestBody() {

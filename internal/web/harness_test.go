@@ -57,6 +57,8 @@ func TestMain(m *testing.M) {
 			os.Exit(buildHelperMain(os.Args[2:]))
 		case enginefixture.Flag:
 			os.Exit(enginefixture.Main(os.Args[2:]))
+		case leakQbspFlag:
+			os.Exit(leakQbspMain(os.Args[2:]))
 		}
 	}
 	os.Exit(m.Run())
@@ -243,6 +245,11 @@ type fixtureBackend struct {
 	// textures, when set, is the bundle the texture-export route serves
 	// instead of the default two-WAD one.
 	textures []byte
+	// textureExports counts texture-export requests, so a test can tell a
+	// cold fetch from a reuse; textureRefusal, when set, is the status the
+	// route answers instead of a bundle (NEW_357).
+	textureExports int
+	textureRefusal int
 
 	// notices, when set, answers AUB's operational-notice route (241).
 	// Unset, the route is a 404, as on a deployment that predates it.
@@ -552,6 +559,19 @@ func (b *fixtureBackend) serve(w http.ResponseWriter, r *http.Request) {
 // textures, when set, replaces the default two-WAD bundle. A test that wants a
 // refusal or a wrong revision sets it.
 func (b *fixtureBackend) serveTextureExport(w http.ResponseWriter, r *http.Request) {
+	b.mu.Lock()
+	b.textureExports++
+	refusal := b.textureRefusal
+	b.mu.Unlock()
+	if refusal != 0 {
+		w.WriteHeader(refusal)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"message": "This map's textures are not available to this account.",
+			"data":    map[string]any{"reason": map[string]any{"code": "map_access_denied"}},
+		})
+
+		return
+	}
 	if r.Header.Get("Authorization") == "" {
 		w.WriteHeader(http.StatusUnauthorized)
 		_ = json.NewEncoder(w).Encode(map[string]any{"code": "unauthorized", "message": "no session"})

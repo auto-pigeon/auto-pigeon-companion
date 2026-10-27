@@ -449,6 +449,24 @@ its game's leak-test pipeline into Build; the preview shows the exact command,
 and only **Build** runs the compiler. **Dismiss** forgets that request. The game
 is read from the saved map itself, never from the link.
 
+**A Quake 1 leak test compiles with the map's own textures.** When you press
+**Build**, the Companion takes the texture bundle of exactly the saved revision
+the editor asked about — from its verified cache, or downloaded and verified
+from your account, the same bundle Build & Run uses — and gives the compiler
+its own copy (`-wadpath`), removed when the build ends. The build log says
+which bundle it was. A texture folder typed on the Build page is not used for
+an editor's request, and nothing is looked for elsewhere on this computer: when
+the textures cannot be fetched (signed out, refused, a download that does not
+verify), nothing runs, the request stays open, and **Build** can be pressed
+again. A bundle your account marks incomplete is compiled as it is, and the
+compiler's warnings name the WAD or texture that was missing. The manifest
+records which bundle the build used:
+
+```sh
+$ ./companion build show <build-id> --json |
+    jq '.roots[] | select(.role == "content_root") | .source | {kind, bundle: (.bundle | {map_id, revision, digest, compiler_ready})}'
+```
+
 **Which pipeline tests a game's maps is yours to choose, once per game.** The
 first request for a game opens **Choose a leak-test pipeline**, listing every
 installed pipeline that can test it, the built-in one first. Pick a ready one —

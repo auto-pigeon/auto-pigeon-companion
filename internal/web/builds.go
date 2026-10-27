@@ -611,6 +611,18 @@ func (s *Server) handleBuildPreview(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	// The review of an editor's Quake 1 leak test shows the texture root the
+	// build will be given (NEW_357), and fetches it now if it must: a bundle
+	// that cannot be had is said here, before anybody presses Build.
+	if conversion := conversions["source_map"]; request.LeakRequestID != "" &&
+		conversion.Game == leakadapter.ProfileQuake1 &&
+		s.matchesPendingLeakRequest(request.LeakRequestID, sources["source_map"]) {
+		roots, rootSources, err = s.previewLeakTextureRoots(r.Context(), request, sources["source_map"], roots, rootSources)
+		if err != nil {
+			writeError(w, leakTextureStatus(err), err)
+			return
+		}
+	}
 	manifest, err := runner.Preview(build.Request{
 		PipelineID:  request.Pipeline,
 		Inputs:      inputs,
@@ -689,6 +701,9 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 	// editor which step is running (leakrelay.go).
 	var leakRequest *aub.LeakTestLink
 	var leakBinding *leakadapter.Binding
+	// The job-owned texture copy a Quake 1 leak test compiles with; "" for
+	// every other build.
+	var leakTextures string
 	announce := func(manifest *build.Manifest) {
 		if leakRequest != nil {
 			s.reportLeakBuild(*leakRequest, manifest)
@@ -725,15 +740,29 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		leakBinding = &binding
+		// A Quake 1 leak test compiles with the texture bundle of the revision
+		// it pinned, as Build & Run of that revision does (NEW_357). Fetched
+		// before the request is used, so a refusal leaves it pending to retry.
+		if binding.Game == leakadapter.ProfileQuake1 {
+			roots, rootSources, leakTextures, err = s.leakTextureRoots(r.Context(), request, sources["source_map"],
+				inputs["source_map"], roots, rootSources, run.log)
+			if err != nil {
+				cancel()
+				writeError(w, leakTextureStatus(err), err)
+				return
+			}
+		}
 		configDir, err := s.configDir()
 		if err != nil {
 			cancel()
+			removeLeakTextures(leakTextures)
 			writeError(w, http.StatusInternalServerError, err)
 			return
 		}
 		consumed, err := leakintent.Consume(leakintent.Path(configDir), request.LeakRequestID, time.Now().UTC())
 		if err != nil || consumed == nil {
 			cancel()
+			removeLeakTextures(leakTextures)
 			writeError(w, http.StatusConflict, errors.New("the editor leak request was already used"))
 			return
 		}
@@ -743,6 +772,9 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 	failed := make(chan error, 1)
 	go func() {
 		defer cancel()
+		// The run's own copy of the textures goes with the run, however it
+		// ended: finished, failed, cancelled.
+		defer removeLeakTextures(leakTextures)
 		manifest, err := runner.Run(ctx, build.Request{
 			PipelineID:  request.Pipeline,
 			Inputs:      inputs,

@@ -7,6 +7,7 @@
 window.AUCOM_LOCALES = window.AUCOM_LOCALES || {};
 window.AUCOM_LOCALES.it = {
   "Open Profiles": "Apri Profili",
+  "A saved map revision from your account. The build downloads it and checks its digest.": "Una revisione salvata di una mappa del tuo account. La build la scarica e ne verifica il digest.",
   "Leak test requested by the editor": "Test delle perdite richiesto dall’editor",
   "{name}, saved revision {n} — received {time}": "{name}, revisione salvata {n} — ricevuta alle {time}",
   "Its content still matches what the editor asked about. It is a {game} map, so the test is {compiler}'s. Review the compiler command first; nothing runs until you press Build.": "Il contenuto corrisponde ancora a ciò che l’editor ha chiesto. È una mappa di {game}, quindi il test è quello di {compiler}. Prima esamina il comando del compilatore; nulla viene eseguito finché non premi Compila.",

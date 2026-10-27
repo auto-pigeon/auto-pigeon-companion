@@ -84,30 +84,12 @@ func declaredRelative(declared string) string {
 // placed; nothing is placed, and the root left as it is, when the map declares
 // only file names or every declared path is already there.
 func (s *Service) placeDeclaredWADs(record *Record, mapPath string) ([]string, error) {
-	declared, err := DeclaredWADs(mapPath)
-	if err != nil || len(declared) == 0 || record.BundleRoot == "" {
-		return nil, err
-	}
-	names, err := rootFileNames(record.BundleRoot)
-	if err != nil {
-		return nil, err
-	}
-	type placement struct{ from, to string }
-	var needed []placement
-	for _, entry := range declared {
-		relative := declaredRelative(entry)
-		if relative == "" {
-			continue
-		}
-		if _, err := os.Stat(filepath.Join(record.BundleRoot, filepath.FromSlash(relative))); err == nil {
-			continue
-		}
-		if actual, ok := names[strings.ToLower(path.Base(relative))]; ok {
-			needed = append(needed, placement{from: actual, to: relative})
-		}
-	}
-	if len(needed) == 0 {
+	if record.BundleRoot == "" {
 		return nil, nil
+	}
+	needed, err := declaredPlacements(record.BundleRoot, mapPath)
+	if err != nil || len(needed) == 0 {
+		return nil, err
 	}
 
 	root := filepath.Join(s.store.Root(), record.ID+".textures")
@@ -118,6 +100,55 @@ func (s *Service) placeDeclaredWADs(record *Record, mapPath string) ([]string, e
 		}
 		record.BundleRoot = root
 	}
+
+	return place(root, needed)
+}
+
+// PlaceDeclaredWADs is the same placement for a content root the caller
+// already owns — the editor's leak test stages its own copy of the verified
+// bundle (NEW_357) — so it is written in place and never copied first.
+func PlaceDeclaredWADs(root, mapPath string) ([]string, error) {
+	needed, err := declaredPlacements(root, mapPath)
+	if err != nil || len(needed) == 0 {
+		return nil, err
+	}
+
+	return place(root, needed)
+}
+
+// placement is one declared WAD path and the root's file that supplies it.
+type placement struct{ from, to string }
+
+// declaredPlacements is each WAD the map declares under a directory that the
+// root does not hold at that path, but holds under its file name.
+func declaredPlacements(root, mapPath string) ([]placement, error) {
+	declared, err := DeclaredWADs(mapPath)
+	if err != nil || len(declared) == 0 {
+		return nil, err
+	}
+	names, err := rootFileNames(root)
+	if err != nil {
+		return nil, err
+	}
+	var needed []placement
+	for _, entry := range declared {
+		relative := declaredRelative(entry)
+		if relative == "" {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(relative))); err == nil {
+			continue
+		}
+		if actual, ok := names[strings.ToLower(path.Base(relative))]; ok {
+			needed = append(needed, placement{from: actual, to: relative})
+		}
+	}
+
+	return needed, nil
+}
+
+// place copies each needed WAD to its declared path under root.
+func place(root string, needed []placement) ([]string, error) {
 	placed := make([]string, 0, len(needed))
 	for _, p := range needed {
 		if _, _, err := copyFile(filepath.Join(root, p.from), filepath.Join(root, filepath.FromSlash(p.to))); err != nil {
