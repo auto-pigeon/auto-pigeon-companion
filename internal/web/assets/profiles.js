@@ -23,6 +23,11 @@
   let validatedKey = "";
   let validatedStageTokens = [];
   let pendingInstallation = null;
+  // unsavedStages is what the New profile form could not save after installing
+  // a pipeline: { id, unsaved: [{stage, arguments}], problem: {stage, message} }.
+  // That pipeline's page opens with those tokens in its stage editors, not yet
+  // saved, and the refusal beside the stage it names (NEW_360).
+  let unsavedStages = null;
   let installing = false;
 
   function invalidateDraft() {
@@ -623,6 +628,9 @@
       className: "muted",
       text: t("Each stage is run by one tool. Add arguments for a stage here — a flag the tool does not offer as an option. Each box is one argument exactly as you type it; nothing splits or quotes it. They belong to this stage of this pipeline only: another pipeline using the same tool does not get them, and the same tool twice in one pipeline gets two lists. The Build area's last step shows the exact command before anything runs."),
     }));
+    const handoff = unsavedStages && unsavedStages.id === body.id ? unsavedStages : null;
+    unsavedStages = null;
+    let focusOn = null;
     for (const stage of stages) {
       const tool = stage.tool;
       const legend = `${stage.title || stage.id} (${stage.id})`;
@@ -644,18 +652,29 @@
           text: t("{tool} also has arguments of its own recorded earlier, which reach this stage first: {tokens}. Remove them on the tool's page to keep everything here.", { tool: tool?.profile_name || "", tokens: stage.tool_arguments.join(" ") }),
         }));
       }
-      section.append(argumentsEditor({
-        profile: body, legend, name: stage.id, tokens: stage.arguments || [], route: "stage-arguments", key: "stage",
+      const unsaved = handoff?.unsaved?.find((item) => item.stage === stage.id);
+      const refused = handoff?.problem?.stage === stage.id ? handoff.problem.message : "";
+      const editor = argumentsEditor({
+        profile: body, legend, name: stage.id, tokens: unsaved ? unsaved.arguments : stage.arguments || [], route: "stage-arguments", key: "stage",
         read: (out) => (out.stages || []).find((item) => item.id === stage.id)?.arguments || [], notes, stage: true,
-      }));
+        initial: refused
+          ? { text: t("Installed, but these arguments were not saved: {reason} Correct them and press Save arguments.", { reason: refused }), kind: "error" }
+          : unsaved ? { text: t("Not saved yet: press Save arguments to keep these."), kind: "" } : null,
+      });
+      if (refused) focusOn = editor;
+      section.append(editor);
     }
     detail.append(section);
+    if (focusOn) {
+      focusOn.scrollIntoView({ block: "center" });
+      focusOn.querySelector("input")?.focus();
+    }
   }
 
   // One list of argument tokens with Add, Save and Reset. `route` and `key`
   // say whose they are (a program of a profile, or a stage of a pipeline);
   // `removeOnly` is a build tool's older tokens, which can only be taken away.
-  function argumentsEditor({ profile: body, legend, name, tokens, route, key, read, previews, notes = [], removeOnly = false, stage = false }) {
+  function argumentsEditor({ profile: body, legend, name, tokens, route, key, read, previews, notes = [], removeOnly = false, stage = false, initial = null }) {
     const id = (stage ? "profile-stage-args-" : "profile-args-") + name;
     const fieldset = el("fieldset", { className: "args-editor", attrs: { id } });
     fieldset.append(el("legend", { text: legend }));
@@ -713,6 +732,7 @@
       t("Reset. {program} runs with the profile's own arguments only.", { program: name })));
 
     fieldset.append(list, el("div", { className: "row-actions", children: removeOnly ? [reset] : [add, reset, save] }), status);
+    if (initial) setMessage(status, initial.text, initial.kind);
     return fieldset;
   }
 
@@ -1080,7 +1100,7 @@
       // Editing a document the user pasted: the form fields are not applied on
       // top of it, because they belong to a different document and would
       // silently rewrite what somebody pasted.
-      return { document: fromDocument, template: $("wizard-template").value };
+      return { document: fromDocument, template: $("wizard-template").value, stage_arguments: window.AUCOM.scratch.stageTokens() };
     }
     const kind = $("wizard-kind").value;
     const value = (id) => $(id).value.trim() || undefined;
@@ -1088,6 +1108,7 @@
       scratch: window.AUCOM.scratch.request(),
       name: value("wizard-name"), version: value("wizard-version"), summary: value("wizard-summary"),
       publisher_name: value("wizard-publisher"), license_spdx: value("wizard-license"),
+      stage_arguments: window.AUCOM.scratch.stageTokens(),
     };
     if (kind !== "pipeline") request.homepage = value("wizard-homepage");
     if (kind === "engine") {
@@ -1117,6 +1138,13 @@
       for (const problem of body.problems || []) {
         const id = identityFields[problem.path];
         if (id) { setStep(2); first ||= fieldError(id, problem.message); }
+        // A stage's own argument the stage already passes (NEW_360): refused
+        // here, before anything is installed, and shown where it was typed.
+        if (!first && problem.path.startsWith("stage_arguments.")) {
+          setStep(3);
+          window.AUCOM.scratch.stageProblem(problem.path.slice("stage_arguments.".length), problem.message);
+          return null;
+        }
       }
       (first || $("scratch-body").querySelector("input, select, textarea, button"))?.focus();
       return null;
@@ -1356,8 +1384,15 @@
           method: "POST", body: item,
         });
         if (!saved.ok) {
-          setMessage("wizard-message", `Installed ${pendingInstallation.name}, but setup is incomplete: stage ${item.stage} arguments were not saved. ${saved.body.error || ""} Retry saves these arguments without installing again.`, "error");
-          $("wizard-import").textContent = "Retry saving stage arguments";
+          // Retrying the same tokens would be refused the same way (NEW_360).
+          // The pipeline is installed, so correcting them is its own page's
+          // job: it opens with the unsaved tokens filled in and the refusal
+          // beside them. Nothing is installed twice.
+          const { id, name, stages } = pendingInstallation;
+          pendingInstallation = null;
+          composed = null;
+          record(`Installed the profile ${name || ""}, but stage ${item.stage} arguments were refused`.trim(), saved.body.error || "", "failed");
+          await window.AUCOM.openInstalledProfile(id, { unsaved: stages, problem: { stage: item.stage, message: saved.body.error || "" } });
           return;
         }
         pendingInstallation.stages.shift();
@@ -1389,7 +1424,8 @@
   // After an install on the New profile page, this tab becomes Profiles with
   // the new document's review open: approving it and saying where its programs
   // are is the next thing to do, and both live there.
-  window.AUCOM.openInstalledProfile = async (id) => {
+  window.AUCOM.openInstalledProfile = async (id, handoff = null) => {
+    unsavedStages = handoff ? { id, ...handoff } : null;
     document.body.classList.remove("single-view");
     window.AUCOM.showArea("profiles");
     await refreshList();

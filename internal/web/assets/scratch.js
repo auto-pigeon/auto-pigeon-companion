@@ -37,6 +37,9 @@
     pipeline: { inputs: [], steps: [], outputs: [] },
   };
   let providers = []; // installed actions a pipeline stage can use, by capability
+  // refusedStageArguments is, per stage id, why composing refused that stage's own
+  // arguments; set by stageProblem, cleared when one of its boxes is edited.
+  const refusedStageArguments = {};
   let basedOn = ""; // the tested profile the fields were filled from, or ""
 
   const kind = () => $("wizard-kind").value;
@@ -44,10 +47,11 @@
   // --- small builders --------------------------------------------------------
 
   let counter = 0;
-  function text(label, value, onInput, { placeholder = "", hint = "", grow = false, list = "" } = {}) {
+  function text(label, value, onInput, { placeholder = "", hint = "", grow = false, list = "", invalid = false } = {}) {
     const id = "scratch-f-" + ++counter;
     const input = el("input", { attrs: { id, type: "text", value: value || "", placeholder, spellcheck: "false", autocomplete: "off" } });
     if (list) input.setAttribute("list", list);
+    if (invalid) input.setAttribute("aria-invalid", "true");
     input.addEventListener("input", () => onInput(input.value));
     const children = [el("label", { text: label, attrs: { for: id } }), input];
     if (hint) children.push(el("span", { className: "hint", text: hint }));
@@ -427,16 +431,28 @@
   // part of the document, and are saved when the profile is installed.
   function stageArguments(step) {
     step.arguments = step.arguments || [];
-    const box = el("fieldset", { className: "scratch-list", children: [el("legend", { text: "Arguments for this stage" })] });
+    const box = el("fieldset", {
+      className: "scratch-list",
+      attrs: { "data-stage-arguments": step.id || "" },
+      children: [el("legend", { text: "Arguments for this stage" })],
+    });
     box.append(el("p", {
       className: "muted",
       text: "Extra words for this stage's command, before its input files — a flag the tool does not offer as a parameter. Each box is one argument exactly as you type it; nothing splits or quotes it. They stay on this computer: a profile you export carries none of them.",
     }));
+    // Why composing refused these arguments (NEW_360): shown here, beside the
+    // boxes to correct, and gone as soon as one of them is edited.
+    const problem = refusedStageArguments[step.id];
+    const note = problem ? el("p", { className: "message error", attrs: { role: "alert" }, text: problem }) : null;
+    if (note) box.append(note);
     step.arguments.forEach((token, index) => {
       box.append(el("div", {
         className: "row scratch-row",
         children: [
-          text("Argument", token, (v) => (step.arguments[index] = v), { placeholder: "-nopercent", grow: true }),
+          text("Argument", token, (v) => {
+            step.arguments[index] = v;
+            if (refusedStageArguments[step.id]) { delete refusedStageArguments[step.id]; note?.remove(); }
+          }, { placeholder: "-nopercent", grow: true, invalid: Boolean(problem) }),
           removeButton("Remove this argument", () => step.arguments.splice(index, 1)),
         ],
       }));
@@ -704,8 +720,18 @@
     providers.sort((a, b) => a.capability.localeCompare(b.capability) || a.profileName.localeCompare(b.profileName));
   }
 
+  // stageProblem shows why a stage's arguments were refused beside them and
+  // puts the cursor in the first one, so the person corrects the argument
+  // where they typed it.
+  function stageProblem(stage, message) {
+    refusedStageArguments[stage] = message;
+    render();
+    const box = [...document.querySelectorAll("[data-stage-arguments]")].find((node) => node.dataset.stageArguments === stage);
+    box?.querySelector("input")?.focus();
+  }
+
   window.AUCOM.scratch = {
-    state, render, request, stageTokens, clear, fill, pendingReview,
+    state, render, request, stageTokens, clear, fill, pendingReview, stageProblem,
     async refresh() {
       await refreshProviders();
       render();

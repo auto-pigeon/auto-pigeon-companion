@@ -86,8 +86,12 @@ holding a value nothing provides any more shows that value, marked, rather than 
   same id** makes a new version; the same version can never be rewritten, and the new version needs
   its own approval. Another name is a separate profile.
 - **Next** keeps the user at the current step when required fields or server validation fail.
-  Installing opens the approval and setup page. If saving stage arguments fails, setup stays
-  incomplete and **Retry saving stage arguments** saves them without reinstalling.
+  Installing opens the approval and setup page. Stage arguments travel with **compose**
+  (`stage_arguments`) and are checked by the same refusal saving uses (`stageArgumentsRefusal`),
+  so a token the stage already passes keeps the form at step 3, beside that stage's boxes, with
+  nothing installed (`NEW_360`). If saving still fails after installing, the pipeline's own page
+  opens with the unsaved tokens filled in and the refusal beside that stage — corrected there,
+  never retried unchanged and never installed twice.
 - Execution lists keep unavailable profiles and actions visible but disabled (`— needs setup`), with
   what each needs in one closed list under the select and a **Set up** link to the profile that is
   actually missing (`aucom.ux`).

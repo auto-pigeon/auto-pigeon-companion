@@ -415,6 +415,12 @@ type composeRequest struct {
 	// written from nothing — see scratch.go. The identity members above still
 	// apply on top of it.
 	Scratch *scratchDocument `json:"scratch,omitempty"`
+
+	// StageArguments are the pipeline stages' own arguments the form will save
+	// after installing. Composing checks them with the same refusal saving
+	// uses, so a token the stage already passes is refused while it can still
+	// be corrected in the form — not after the profile is installed.
+	StageArguments []stageArgumentsRequest `json:"stage_arguments,omitempty"`
 }
 
 // handleProfileCompose applies the wizard's fields and returns the result.
@@ -472,6 +478,16 @@ func (s *Server) handleProfileCompose(w http.ResponseWriter, r *http.Request) {
 			if refusal := pipelineWiringRefusal(pipeline, runner.Resolver()); refusal != nil {
 				body["valid"] = false
 				body["error"] = refusal.Error()
+				writeJSON(w, http.StatusOK, body)
+				return
+			}
+		}
+		for _, item := range request.StageArguments {
+			stage := strings.TrimSpace(item.Stage)
+			if refusal := s.stageArgumentsRefusal(pipeline, stage, item.Arguments); refusal != nil {
+				body["valid"] = false
+				body["error"] = refusal.Error()
+				body["problems"] = []map[string]string{{"path": "stage_arguments." + stage, "message": refusal.Error()}}
 				writeJSON(w, http.StatusOK, body)
 				return
 			}

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 // Drive the shipped event handlers with controlled network completion order.
 // Live browser acceptance separately exercises the real controls/server.
 function harness() {
-  const nodes=new Map(), requests=[], messages=[], installs=[];
+  const nodes=new Map(), requests=[], messages=[], installs=[], handoffs=[];
   class Node {
     constructor(id='') {this.id=id;this.value='';this.children=[];this.dataset={};this.disabled=false;this.listeners={};this.attrs={};const classes=new Set(); this.classList={toggle(c,on){if(on===undefined)on=!classes.has(c);on?classes.add(c):classes.delete(c);},remove(c){classes.delete(c);},contains(c){return classes.has(c);}};}
     addEventListener(type,fn){(this.listeners[type] ||= []).push(fn);}
@@ -33,9 +33,9 @@ function harness() {
   for(const [id,value] of Object.entries({name:'A tool',version:'1.0.0',summary:'A compiler',publisher:'Local',license:'NOASSERTION'}))$('wizard-'+id).value=value;
   runInNewContext(readFileSync(new URL('../assets/profiles.js',import.meta.url),'utf8'),{window:{AUCOM},document,console,structuredClone,URLSearchParams,Event:class{constructor(type){this.type=type;}},navigator:{}});
   // The shipped file installs this navigation helper; no navigation is needed here.
-  AUCOM.openInstalledProfile=async id=>installs.push(id);
+  AUCOM.openInstalledProfile=async (id,handoff=null)=>{installs.push(id);handoffs.push(handoff);};
   const valid={valid:true,id:'local.a',kind:'tool',name:'A tool',version:'1.0.0',trust:'local',document:{name:'A tool',publisher:{name:'Local'},license:{spdx:'NOASSERTION'},executables:[],actions:[]}};
-  return {$,AUCOM,requests,messages,installs,scratch,valid,setTokens:value=>tokens=value,
+  return {$,AUCOM,requests,messages,installs,handoffs,scratch,valid,setTokens:value=>tokens=value,
     invalidate:()=>$('area-new-profile').fire('input'),
     answer:(body,ok=true)=>requests.shift().resolve({ok,body}),
     next:()=>$('wizard-next').fire('click'),
@@ -70,11 +70,23 @@ await test('double install submits once',async()=>{
  const install=h.$('wizard-import').fire('click');await h.$('wizard-import').fire('click');assert.equal(h.requests.length,1);
  h.answer({id:'local.a',name:'A tool'});await install;assert.deepEqual(h.installs,['local.a']);assert.equal(h.$('wizard-import').disabled,true);
 });
-await test('failed stage argument save stays incomplete and retries without import',async()=>{
- const h=harness();h.setTokens([{stage:'compile',arguments:['-verbose']}]);await h.next();await h.next();const done=h.next();h.answer(h.valid);await done;
- const install=h.$('wizard-import').fire('click');h.answer({id:'local.a',name:'A tool'});await h.tick();assert.match(h.requests[0].path,/stage-arguments/);h.answer({error:'disk full'},false);await install;
- assert.deepEqual(h.installs,[]);assert.match(h.messages.at(-1).text,/setup is incomplete/);assert.equal(h.$('wizard-import').textContent,'Retry saving stage arguments');
- const retry=h.$('wizard-import').fire('click');assert.match(h.requests[0].path,/stage-arguments/);h.answer({});await retry;assert.deepEqual(h.installs,['local.a']);
+await test('a refused stage argument save opens the installed page with the unsaved tokens, never importing twice',async()=>{
+ // NEW_360: Retry used to resend the refused tokens unchanged, with every field locked.
+ const h=harness();h.setTokens([{stage:'compile',arguments:['-verbose']},{stage:'vis',arguments:['-fast']}]);await h.next();await h.next();const done=h.next();h.answer(h.valid);await done;
+ const install=h.$('wizard-import').fire('click');assert.match(h.requests[0].path,/import/);h.answer({id:'local.a',name:'A tool'});await h.tick();
+ assert.match(h.requests[0].path,/local\.a\/stage-arguments/);h.answer({error:'argument 1 (-verbose) is already given'},false);await install;
+ assert.equal(h.requests.length,0);assert.deepEqual(h.installs,['local.a']);
+ assert.deepEqual(JSON.parse(JSON.stringify(h.handoffs[0])),{unsaved:[{stage:'compile',arguments:['-verbose']},{stage:'vis',arguments:['-fast']}],problem:{stage:'compile',message:'argument 1 (-verbose) is already given'}});
+ assert.notEqual(h.$('wizard-import').textContent,'Retry saving stage arguments');
+ await h.$('wizard-import').fire('click');assert.equal(h.requests.length,0);
+});
+await test('a stage argument refused while composing returns to its stage, nothing installed',async()=>{
+ const h=harness();let marked=null;h.AUCOM.scratch.stageProblem=(stage,message)=>marked={stage,message};
+ h.setTokens([{stage:'compile',arguments:['-nopercent']}]);await h.next();await h.next();const done=h.next();
+ assert.deepEqual(JSON.parse(JSON.stringify(h.requests[0].options.body.stage_arguments)),[{stage:'compile',arguments:['-nopercent']}]);
+ h.answer({valid:false,error:'already given',problems:[{path:'stage_arguments.compile',message:'already given'}]});await done;
+ assert.deepEqual(marked,{stage:'compile',message:'already given'});assert.equal(h.$('wizard-step-3').classList.contains('active'),true);
+ assert.equal(h.$('wizard-import').disabled,true);assert.deepEqual(h.installs,[]);
 });
 await test('out-of-order template lists cannot overwrite another kind',async()=>{
  const h=harness();const first=h.AUCOM.areas['new-profile'].refresh('');await h.tick();assert.match(h.requests[0].path,/kind=tool/);

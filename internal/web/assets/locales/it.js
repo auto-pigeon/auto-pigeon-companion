@@ -810,4 +810,6 @@ window.AUCOM_LOCALES.it = {
   "not checked since it changed": "non controllato da quando è cambiato",
   "no path yet": "nessun percorso ancora",
   "This is the pipeline you chose, and it needs setup: {problems} Nothing else was chosen for you. Set it up in Profiles, or choose another pipeline.": "Questa è la pipeline che hai scelto, e va configurata: {problems} Non è stato scelto nient'altro al posto tuo. Configurala in Profili, oppure scegli un'altra pipeline.",
+  "Installed, but these arguments were not saved: {reason} Correct them and press Save arguments.": "Installato, ma questi argomenti non sono stati salvati: {reason} Correggili e premi «Save arguments».",
+  "Not saved yet: press Save arguments to keep these.": "Non ancora salvati: premi «Save arguments» per tenerli.",
 };

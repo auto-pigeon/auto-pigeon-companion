@@ -157,32 +157,13 @@ func (s *Server) handleProfileStageArguments(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	stage := strings.TrimSpace(request.Stage)
-	known := false
-	for _, step := range pipeline.Steps {
-		known = known || step.ID == stage
-	}
-	if stage == "" || !known {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("%s has no stage called %q", meta.Name, stage))
-		return
-	}
 	tokens := request.Arguments
 	if request.Reset {
 		tokens = nil
 	}
-	if err := profile.ValidateCustomArgs(tokens); err != nil {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("the arguments for the stage %s: %w", stage, err))
+	if err := s.stageArgumentsRefusal(pipeline, stage, tokens); err != nil {
+		writeError(w, http.StatusBadRequest, err)
 		return
-	}
-	if catalog, catalogErr := s.catalog(); catalogErr == nil {
-		for _, step := range pipeline.Steps {
-			if step.ID != stage {
-				continue
-			}
-			if err := job.StageTokenConflict(catalog, step, tokens); err != nil {
-				writeError(w, http.StatusBadRequest, fmt.Errorf("the arguments for the stage %s: %w", stage, err))
-				return
-			}
-		}
 	}
 	path, err := s.bindingsPath()
 	if err != nil {
@@ -195,6 +176,36 @@ func (s *Server) handleProfileStageArguments(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	writeJSON(w, http.StatusOK, s.describeCatalogEntry(entry, local))
+}
+
+// stageArgumentsRefusal is why tokens cannot be one stage's own arguments, or
+// nil. It is the one check: saving them on an installed pipeline and composing
+// a pipeline in the New profile form both ask it, so the form refuses a token
+// before installing rather than after (NEW_360).
+func (s *Server) stageArgumentsRefusal(pipeline *profile.PipelineProfile, stage string, tokens []string) error {
+	known := false
+	for _, step := range pipeline.Steps {
+		known = known || step.ID == stage
+	}
+	if stage == "" || !known {
+		return fmt.Errorf("%s has no stage called %q", pipeline.Metadata().Name, stage)
+	}
+	if err := profile.ValidateCustomArgs(tokens); err != nil {
+		return fmt.Errorf("the arguments for the stage %s: %w", stage, err)
+	}
+	catalog, err := s.catalog()
+	if err != nil {
+		return nil
+	}
+	for _, step := range pipeline.Steps {
+		if step.ID != stage {
+			continue
+		}
+		if err := job.StageTokenConflict(catalog, step, tokens); err != nil {
+			return fmt.Errorf("the arguments for the stage %s: %w", stage, err)
+		}
+	}
+	return nil
 }
 
 // describeStages is a pipeline's stages as the page shows them: what each one
