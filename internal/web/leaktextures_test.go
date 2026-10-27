@@ -104,6 +104,9 @@ func leakQbspMain(args []string) int {
 			say("unable to find texture %s", texture)
 		}
 	}
+	// ericw-tools 2.0 says this for every Quake 1 map, whatever it opened
+	// (measured live, NEW_357): `skip` has no picture in any WAD.
+	say("WARNING: unable to find texture skip")
 	leaks := strings.Contains(string(contents), "// leaks")
 	if leaks {
 		say("Reached occupant at (0 0 0), no filling performed.")
@@ -413,6 +416,24 @@ func compileDiagnostics(manifest map[string]any) []string {
 	return ids
 }
 
+// findingsOf is the compiler lines the compile step's findings of one
+// severity matched.
+func findingsOf(manifest map[string]any, severity string) []string {
+	var lines []string
+	steps, _ := manifest["steps"].([]any)
+	for _, raw := range steps {
+		step, _ := raw.(map[string]any)
+		diagnostics, _ := step["diagnostics"].([]any)
+		for _, rawDiagnostic := range diagnostics {
+			diagnostic, _ := rawDiagnostic.(map[string]any)
+			if diagnostic["severity"] == severity {
+				lines = append(lines, diagnostic["raw"].(string))
+			}
+		}
+	}
+	return lines
+}
+
 func compileArgs(manifest map[string]any) []string {
 	steps, _ := manifest["steps"].([]any)
 	step, _ := steps[0].(map[string]any)
@@ -444,14 +465,19 @@ func TestAnEditorLeakTestCompilesWithItsRevisionsTextureBundle(t *testing.T) {
 			t.Errorf("cold: the compiler's log has no %q:\n%s", want, cold.log)
 		}
 	}
-	for _, refused := range []string{"No valid WAD filenames", "not found", "unable to find texture"} {
+	for _, refused := range []string{"No valid WAD filenames", "not found", "unable to find texture n357"} {
 		if strings.Contains(cold.log, refused) {
 			t.Errorf("cold: the compiler said %q:\n%s", refused, cold.log)
 		}
 	}
 	if ids := strings.Join(compileDiagnostics(cold.manifest), ","); strings.Contains(ids, "no_valid_wad") ||
-		strings.Contains(ids, "not_found") || cold.manifest["state"] != "succeeded" {
+		strings.Contains(ids, "wad_not_found") || cold.manifest["state"] != "succeeded" {
 		t.Errorf("cold: state %v, findings %s", cold.manifest["state"], ids)
+	}
+	// The one line every 2.0 compile prints, about `skip`, is information: a
+	// sealed test with every texture found is a complete result.
+	if warned := findingsOf(cold.manifest, "warning"); len(warned) != 0 {
+		t.Errorf("cold: a compile that found every texture warned: %v", warned)
 	}
 	args := compileArgs(cold.manifest)
 	wadpath := ""
@@ -687,6 +713,10 @@ func TestALeakTestWithAnIncompleteBundleKeepsTheMissingWADVisible(t *testing.T) 
 	ids := strings.Join(compileDiagnostics(run.manifest), ",")
 	if !strings.Contains(ids, "wad_not_found") || !strings.Contains(ids, "texture_not_found") {
 		t.Errorf("the findings lost the missing WAD: %s", ids)
+	}
+	if warned := strings.Join(findingsOf(run.manifest, "warning"), "|"); !strings.Contains(warned, "n357_other") ||
+		!strings.Contains(warned, "n357_extra.wad") || strings.Contains(warned, "texture skip") {
+		t.Errorf("the warnings are not the missing WAD and texture: %s", warned)
 	}
 	if bundle := rootBundle(t, run.manifest); bundle["compiler_ready"] != false {
 		t.Errorf("the recorded bundle calls itself ready: %v", bundle)

@@ -862,7 +862,7 @@ func (r *Runner) runStep(ctx context.Context, request Request, layout layout, re
 	step.Command = finished.Command
 	step.ExitCode = finished.ExitCode
 	step.TimedOut = finished.TimedOut
-	step.Diagnostics = finished.Diagnostics
+	step.Diagnostics = expectedToolTextures(finished.Diagnostics)
 	step.Stdout, step.Stderr = finished.Stdout, finished.Stderr
 	step.StartedAt, step.FinishedAt = finished.StartedAt, finished.FinishedAt
 	step.DurationMS = finished.Duration().Milliseconds()

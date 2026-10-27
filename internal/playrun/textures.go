@@ -3,7 +3,6 @@ package playrun
 import (
 	"errors"
 	"fmt"
-	"path"
 	"sort"
 	"strings"
 
@@ -29,20 +28,11 @@ import (
 // map would be a placeholder.
 var ErrNoTextures = errors.New("playrun: the compiler found none of the map's textures")
 
-// missingTextureRules and noWADRules are the diagnostic rule ids, across the
-// built-in tool profiles, that mean "a texture was not found" and "no WAD could
-// be opened". A profile with other ids is simply not checked.
-var (
-	missingTextureRules = map[string]bool{"texture_missing": true, "texture_not_found": true}
-	noWADRules          = map[string]bool{"no_wad": true, "no_valid_wad": true}
-)
-
-// toolTextures have no picture in any WAD by design: the compiler reads their
-// name and drops or reinterprets the face.
-var toolTextures = map[string]bool{
-	"skip": true, "clip": true, "hint": true, "hintskip": true, "trigger": true,
-	"origin": true, "nodraw": true, "null": true, "areaportal": true, "clipmon": true,
-}
+// noWADRules are the diagnostic rule ids, across the built-in tool profiles,
+// that mean "no WAD could be opened". "A texture was not found", and which
+// textures are tool textures that never count, are internal/build's
+// (tooltextures.go): a build and a Build & Run must agree about them.
+var noWADRules = map[string]bool{"no_wad": true, "no_valid_wad": true}
 
 // textureCheck is what one build's diagnostics say about its textures.
 type textureCheck struct {
@@ -61,9 +51,9 @@ func checkTextures(manifest *build.Manifest) textureCheck {
 			switch {
 			case noWADRules[d.RuleID]:
 				check.NoWAD = true
-			case missingTextureRules[d.RuleID]:
-				name := textureName(d.Raw)
-				if name == "" || toolTextures[strings.ToLower(path.Base(name))] || seen[name] {
+			case build.MissingTextureRules[d.RuleID]:
+				name := build.TextureNamed(d.Raw)
+				if name == "" || build.IsToolTexture(name) || seen[name] {
 					continue
 				}
 				seen[name] = true
@@ -74,18 +64,6 @@ func checkTextures(manifest *build.Manifest) textureCheck {
 	sort.Strings(check.Missing)
 
 	return check
-}
-
-// textureName is the last word of the compiler's line, which is where every
-// supported compiler puts it: `WARNING: unable to find texture SKY4`,
-// `Couldn't locate texture for e1u1/floor1_3`.
-func textureName(raw string) string {
-	fields := strings.Fields(raw)
-	if len(fields) == 0 {
-		return ""
-	}
-
-	return strings.Trim(fields[len(fields)-1], "`'\".,:;()")
 }
 
 // verdict turns the check into a failure or a warning. A failure is returned as

@@ -671,7 +671,16 @@ $ companion build run --pipeline auto-pigeon.q3.fast-preview --input source_map=
 
 **A build that succeeded with warnings is not a finished map.** When a shader
 the map names has no image Q3Map2 could find, the BSP is still written and the
-build says `succeeded with 1 warning(s): not a complete result`.
+build says `succeeded with 1 warning(s): not a complete result`. A compiler's
+line about a tool texture — ericw-tools 2.0 prints `unable to find texture skip`
+for every Quake 1 map — is kept in the build's findings as information, not as a
+warning: `skip`, `clip`, `hint` and the other tool textures have no picture in
+any WAD, so they are never missing. Any other texture that was not found is still
+a warning:
+
+```sh
+$ ./companion build show <build-id> --json | jq '[.steps[].diagnostics[] | {severity, raw}]'
+```
 
 **A file the map names is looked for in the game data, never beside the map.**
 A terrain's index image (`"alphamap" "hills.pcx"`) must be loose in your game or
