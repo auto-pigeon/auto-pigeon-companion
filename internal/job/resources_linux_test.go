@@ -118,9 +118,14 @@ func TestTheSamplerMeasuresTheToolsOwnTreeBusyThenQuiet(t *testing.T) {
 	h.waitFor(single.ID)
 
 	t.Logf("busiest %.0f%%, quietest %.0f%%, busy RSS %d MiB", busiest, quietest, busyRSS/mib)
-	want := float64(2*workers) * 100 * 0.6
+	// More than ONE of the two processes can use (workers × 100%) proves the
+	// reading sums the tree. The old bound, 60% of both processes' ideal
+	// (240%), failed twice on 4-vCPU hosted runners where the other job of
+	// this test competes for the same cores (211% and 220%, NEW_368 CI runs
+	// 40781568388 and 40781568422) while still showing both processes counted.
+	want := float64(workers)*100 + 5
 	if busiest < want {
-		t.Errorf("busiest reading %.0f%%, want at least %.0f%% for %d busy goroutines in each of two processes", busiest, want, workers)
+		t.Errorf("busiest reading %.0f%%, want more than %.0f%% — what one process with %d busy goroutines can use — for the two processes summed", busiest, want, workers)
 	}
 	if quietest > 25 {
 		t.Errorf("quietest reading %.0f%% while both processes slept", quietest)
