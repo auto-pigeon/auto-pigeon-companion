@@ -349,6 +349,7 @@ func (s *Server) buildRunner(announce func(*build.Manifest)) (*build.Runner, err
 		Bindings:  binding.Lookup(bindingsPath),
 		Companion: s.version,
 		Announce:  announce,
+		Hold:      s.toolGate.hold,
 	})
 }
 

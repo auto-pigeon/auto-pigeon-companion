@@ -100,9 +100,18 @@ $ ./companion extractor status
 extractor: shipped with this Companion, checked against its bundle manifest
 ```
 
-The Companion downloads no program. Map-building tools and game engines are
-ones you install yourself; the Companion finds them in a folder you choose, on
-your `PATH`, or in a game's own installation.
+**Build tools are set up for you.** The first time the Companion starts, it
+installs Auto-Pigeon's own builds of the map compilers — **EricW tools** (Quake 1
+and Quake II) and **q3map2** (Quake III) — from their official GitHub releases, in
+the background. A **Setting up build tools** card shows each one downloading,
+verifying and ready; the page works meanwhile, and nothing builds or starts on
+its own when it finishes. While it runs, the Companion checks those two releases
+about once an hour and **offers** a newer version — it never updates unasked (see
+[Build tools: setup and updates](#build-tools-setup-and-updates)).
+
+Those two toolchains are the only programs the Companion downloads. Game engines,
+game data and any other tool are ones you install yourself; the Companion finds
+them in a folder you choose, on your `PATH`, or in a game's own installation.
 
 **Stopping.** Closing the Companion's last browser tab stops it about 15 seconds
 later, so a reload does not. A build, a game or a download it started keeps it
@@ -172,7 +181,80 @@ deployments by name — **Auto-Pigeon** (`https://auto-pigeon.com`) and
 **Auto-Pigeon beta** (`https://beta.auto-pigeon.com`). Nothing is contacted
 until you pick one.
 
+### Build tools: setup and updates
+
+**First launch.** The Companion installs, once, the newest release of each of
+`auto-pigeon/ericw-tools` and `auto-pigeon/q3map2` that publishes a build for this
+computer, passed its own acceptance there, and is accepted by the built-in
+profile. One EricW installation serves Quake 1 and Quake II. Every built-in
+profile for those compilers that you have **not** set up yourself is bound to it,
+and its programs are asked what they are before any profile reads ready. A
+profile you pointed at your own programs is left exactly as it is; Settings
+offers **Use the Companion's … for …** beside it.
+
+Where they go: a folder of the Companion's own, one per version, never your
+`PATH`, a system folder or a game folder, and no administrator rights:
+
+| System | Tools folder |
+| --- | --- |
+| Linux | `~/.local/share/auto-pigeon-companion/tools` (or `$XDG_DATA_HOME/…`) |
+| macOS | `~/Library/Application Support/auto-pigeon-companion/tools` |
+| Windows | `%LocalAppData%\auto-pigeon-companion\tools` |
+
+**What is checked.** Each release's `release-manifest.json` (its schema, tag,
+version and the build for this platform), the archive's SHA-256 and size against
+it and against GitHub's own digest, and then every file in the archive against
+the archive's file list — before anything is unpacked into place and before
+anything runs. A SHA-256 published in the same release shows the download is
+intact and is the one the release describes; it does **not** show who published
+it, and these builds are **not signed**. Offline, a failed setup retries a minute
+later and then less often, with a **Retry** button; a working installation keeps
+working offline.
+
+**Updates.** About once an hour while the Companion runs (and from **Settings →
+Build tools → Check for updates**), a newer eligible release is offered in a
+dialog naming the tool, the installed and the offered version, and its release
+notes:
+
+- **Update now** — downloads and verifies it at once; it is switched on as soon
+  as no build is using the version it replaces. A build that is running finishes
+  with the programs it started with.
+- **Update when I close Companion** — downloads it in the background and switches
+  when the Companion closes normally. If the Companion is killed instead, the
+  switch happens at the next start, before anything runs.
+- **Cancel** — not now. It is offered again at the next start (or a day later).
+  Tick **Don't ask again for this version** to skip exactly that version; a newer
+  one is still offered, and **Settings → Offer skipped versions again** undoes it.
+
+The previous version is kept for rollback; a version that fails its check is
+never switched on. The same from a terminal, against the running Companion:
+
+```console
+$ companion tools status
+Build tools for linux-amd64 (beta channel), in /home/me/.local/share/auto-pigeon-companion/tools
+  EricW tools (Auto-Pigeon build)    ready 1.4535
+      auto-pigeon-ericw-v1.4535, 2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535, sha256 91cad841…
+  q3map2 (Auto-Pigeon build)         ready 2.5.17n-ap.3030
+$ companion tools check
+$ companion tools update ericw-tools --now          # or --on-close
+$ companion tools skip ericw-tools --dont-ask-again
+$ companion tools reset-skipped
+$ companion tools use-managed auto-pigeon.ericw-tools.q1
+$ curl -fsS -H "X-AUCOM-Token: $token" "$api/api/v1/tools" | jq '.tools[] | {id, phase, version, offer: .offer.version}'
+```
+
+The official releases are prereleases today, so the Companion follows the
+**beta** channel; `"tools_channel": "stable"` in `config.json` takes only stable
+releases. `"managed_tools_off": true` turns setup and checks off (what is
+installed stays usable). `companion serve` does none of this unless started with
+`--managed-tools on`. No platform without a published, qualified build is
+offered one: EricW has no Linux ARM build, and the Companion says so and leaves
+setting one up by hand to you.
+
 ### Setting up the Quake 1 compiler
+
+Normally there is nothing to do: the Companion installs the Auto-Pigeon build
+(above). To use another ericw-tools instead:
 
 The qualified compiler is ericw-tools **2.0.0-alpha11** (v0.18.1 is retired).
 Download it from its homepage (the profile's **Homepage** button), unpack it,
@@ -221,7 +303,9 @@ Releases 1.4502 and 1.4505 are refused by the Quake 1 profile (they can fill a
 map's air with solid without reporting anything); unpack a newer one. These
 profiles are **alternatives**: every built-in build profile keeps naming the
 upstream compiler. To build with the Auto-Pigeon one, duplicate a build profile
-in **Profiles** and choose it as the tool of each stage.
+in **Profiles** and choose it as the tool of each stage. When the Companion set
+the tools up itself, every built-in build profile already runs the Auto-Pigeon
+build, because the upstream-named profiles are bound to it too.
 
 ### A program is asked what it is
 
@@ -1045,11 +1129,12 @@ usage:
   companion <command> [arguments]
 
 commands:
-  serve [--port <n>] [--open] [--debug] [--interactive | --stay-running]   run the local GUI server; it keeps running until stopped unless --interactive
+  serve [--port <n>] [--open] [--debug] [--interactive | --stay-running] [--managed-tools auto|on|off]   run the local GUI server; it keeps running until stopped unless --interactive
   auth login [--email <address>] | status | logout   authenticate against auto-pigeon-backend
   aub capabilities | catalog | show | revisions | sync | cached | verify | export | clean   browse auto-pigeon-backend's assets and sync exact revisions to this machine
   job run | preview | list | show | logs | output | cancel | retry | artifacts | profiles   run a profile action as a supervised job, and inspect what ran
   autobuild list | show | on | off | pipeline | build-now | retry   rebuild a hosted map automatically when a new revision is saved (inside a running Companion)
+  tools status | check | retry | update | skip | cancel-pending | reset-skipped | use-managed   the build tools the Companion installs and updates itself: EricW tools and q3map2 (inside a running Companion)
   build run | preview | list | show | pipelines   build a map through a pipeline: several supervised jobs, wired, with a manifest
   package targets | preview | create | inspect | verify | extract | map …   build a PAK or PK3 from what a build produced, read one somebody else made, and package, install and run a Quake III or Quake II map
   toolchain validate | show | canonicalize | digest | diff | list | schema | review | grant | withdraw | homepage | args | check  read, check and compare tool, engine and pipeline toolchains, and approve one to run
@@ -1203,6 +1288,8 @@ A development build (from source) reads all of these:
 | `AUCOM_PASSWORD` | the password for a scripted `auth login` |
 | `AUCOM_OFFLINE` | `1` forbids every network access |
 | `AUCOM_JOBS_DIR`, `AUCOM_PROFILES_DIR`, `AUCOM_ASSET_CACHE_DIR` | where jobs, imported profiles and synced assets live |
+| `AUCOM_TOOLS_DIR` | where the Companion installs its build tools (also `managed_tools_dir` in `config.json`) |
+| `AUCOM_MANAGED_TOOLS` | `off` keeps the Companion from setting up or checking its build tools at all |
 | `AUCOM_AUE_BINARY` | a development build's extractor instead of the bundled one; shown as **unverified** everywhere |
 | `AUCOM_ENV_FILE` | a `.env` to read instead of `./.env` (development only) |
 

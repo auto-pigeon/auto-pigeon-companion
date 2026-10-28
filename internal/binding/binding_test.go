@@ -289,7 +289,7 @@ func TestPutRefusesAnInvalidBinding(t *testing.T) {
 // shared, but so the file a user may have to read and repair is documented and
 // versioned.
 func TestTheLocalBindingSchemaIsPublishedAndMatchesTheStoredShape(t *testing.T) {
-	raw, err := profile.SchemaFile("local-binding-1.5.schema.json")
+	raw, err := profile.SchemaFile("local-binding-1.6.schema.json")
 	if err != nil {
 		t.Fatalf("%v", err)
 	}

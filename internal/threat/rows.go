@@ -88,13 +88,18 @@ var rows = []Row{
 		ID: "T05", Category: CatSupply,
 		Title:      "Something makes the Companion fetch a program and run it",
 		Asset:      "every executable this machine runs",
-		Vector:     "A profile that still lists a `managed_download` route, a command that used to install a toolchain, or a future change that adds a download path back. Each would put this program in the position of deciding what bytes land on somebody's disk.",
-		Mitigation: "There is no such path (operator, 2026-09-23). The packages that find programs import no HTTP client; a legacy `managed_download` route is read and refused with what to do instead; `acquire install` and `extractor install` are gone and say so. Every program is one the person installed, or the extractor shipped beside the Companion.",
+		Vector:     "A profile that still lists a `managed_download` route, a command that used to install a toolchain, a downloaded profile or a page naming a URL, or a future change that adds a download path back. Each would put this program in the position of deciding what bytes land on somebody's disk.",
+		Mitigation: "Only the two toolchains Auto-Pigeon maintains are ever downloaded (operator, 2026-10-28; ADR-0010), by internal/managedtools alone, from repositories, tag families and hosts compiled into it: no profile, binding, config file or page can add a source, and a release build has no override (the loopback seam is test-only and refuses every other host). The packages that find programs still import no HTTP client; a legacy `managed_download` route is read and refused; `managed_official` is a binding's mode that no document can declare. Installing is not running: the version check and every build go through the executor and its approvals.",
 		Evidence: []Evidence{
 			{"internal/acquire", "TestNothingThatFindsAProgramCanDownloadOne"},
 			{"internal/acquire", "TestAManagedDownloadRouteIsRefusedWithTheWayAround"},
 			{"internal/cli", "TestAcquireDownloadCommandsAreGoneAndSaySo"},
 			{"internal/cli", "TestExtractorInstallSaysNothingDownloadsIt"},
+			{"internal/managedtools", "TestTheAllowlistIsExactlyTheTwoOfficialRepositories"},
+			{"internal/managedtools", "TestTheProductionSourceGoesOnlyToGitHubReleaseHostsOverHTTPS"},
+			{"internal/managedtools", "TestALoopbackSourceRefusesEveryOtherHost"},
+			{"internal/managedtools", "TestDownloadsFollowOnlyRedirectsToTheReleaseHosts"},
+			{"internal/cli", "TestAReleaseBuildHasNoFixtureReleaseSource"},
 		},
 	},
 	{
@@ -785,6 +790,45 @@ var rows = []Row{
 			{"cmd/companion", "TestUninstallingRemovesTheHandlerOnEveryPackagedPlatform"},
 			{"internal/cli", "TestUninstallShowsWhatItWouldDeleteAndDeletesNothingWithoutConfirmation"},
 			{"internal/cli", "TestUninstallPurgeRemovesOnlyThisProgramsDirectories"},
+		},
+	},
+	{
+		ID: "T55", Category: CatSupply,
+		Title:      "A managed toolchain release is not what its release says, or unpacks outside its folder",
+		Asset:      "the compiler every built-in build profile runs, and the rest of the user's disk",
+		Vector:     "A release asset replaced after publication, a download cut short, a republished version with other bytes, an archive with a `../` or absolute name, a link, two names that are one file on Windows or macOS, a zip bomb, a library missing beside a program, or an x86 build on an ARM machine.",
+		Mitigation: "internal/managedtools checks the release manifest's schema, tag, version, target, acceptance and SHA-256 against GitHub's listing and its own asset digest before downloading; hashes the archive against both before unpacking; unpacks into a staging folder under bounds on entries and bytes, refusing every escaping, absolute, linked, device-named or case-colliding entry; checks every file against the archive's own file list and each program's header against this processor; and makes the installation one rename. Nothing refused is run; the active installation is untouched; a version seen with other bytes is an integrity event and never installed.",
+		Evidence: []Evidence{
+			{"internal/managedtools", "TestEveryArchiveThatIsNotWhatItsReleaseSaysIsRefused"},
+			{"internal/managedtools", "TestIneligibleReleasesAreRefusedForTheirReasonAndAnOlderOneIsChosen"},
+			{"internal/managedtools", "TestAVersionRepublishedWithOtherBytesIsAnIntegrityEventAndNeverInstalled"},
+			{"internal/managedtools", "TestAFailedVersionCheckLeavesThePriorVersionActive"},
+			{"internal/managedtools", "TestAnUnwritableToolsFolderFailsAndSaysWhere"},
+			{"internal/web", "TestTheManagedEricWIsVerifiedAndBindsQuake1AndQuakeIIToOneInstallation"},
+		},
+		Residual: &Residual{
+			What: "The digests a managed toolchain is checked against are published in the same GitHub release as the archive, " +
+				"so they prove the download is the one the release describes, not who published it: an attacker who can " +
+				"publish a release in auto-pigeon/ericw-tools or auto-pigeon/q3map2 can publish matching digests.",
+			Why: "The releases are not signed and publish no attestation this build can verify; the trust root is the " +
+				"allowlisted official repository and its own qualification records (operator, 2026-10-28). The page and the " +
+				"install record say \"not signed\" rather than imply otherwise, and every update is offered, never applied unasked.",
+			Owner:  "operator (HITL), NEW_367",
+			Review: "2027-04-28",
+		},
+	},
+	{
+		ID: "T56", Category: CatRace,
+		Title:      "A managed toolchain is switched under a build that is using it",
+		Asset:      "the reproducibility of every build, and the build that is running",
+		Vector:     "An update activates between two stages of a pipeline, so one map is compiled by two versions; or replaces a program file a running compile has open; or removes the version a queued job pinned; or two Companions install the same release at once and leave half an installation.",
+		Mitigation: "Every version is its own folder and is never changed after its rename; a job pins absolute paths at admission. Activation happens only while no job uses the old folder and no pipeline holds the server's tool gate, which every build.Runner.Run holds for its whole length, and it rewrites every binding of the tool in one locked write. The previous version is kept; pruning skips anything in use. One install per tool across processes, by its lock file.",
+		Evidence: []Evidence{
+			{"internal/managedtools", "TestUpdateNowWaitsForWorkAndKeepsThePreviousInstallation"},
+			{"internal/managedtools", "TestTwoCompanionsStartingTogetherDownloadEachArchiveOnce"},
+			{"internal/managedtools", "TestOldInstallationsArePrunedButNeverTheActiveOrPrevious"},
+			{"internal/web", "TestAnUpdateWaitsForARunningBuildAndTheNextBuildRecordsTheInstalledBytes"},
+			{"internal/web", "TestAnActivationNeverLandsWhileAPipelineHoldsTheTools"},
 		},
 	},
 	{

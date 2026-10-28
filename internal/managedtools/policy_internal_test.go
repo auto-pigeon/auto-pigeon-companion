@@ -1,0 +1,52 @@
+package managedtools
+
+import (
+	"errors"
+	"net/url"
+	"strings"
+	"testing"
+)
+
+// The production source's whole address policy.
+func TestTheProductionSourceGoesOnlyToGitHubReleaseHostsOverHTTPS(t *testing.T) {
+	source := NewGitHubSource("test").(*githubSource)
+	for address, allowed := range map[string]bool{
+		"https://api.github.com/repos/auto-pigeon/q3map2/releases":    true,
+		"https://github.com/auto-pigeon/q3map2/releases/download/a/b": true,
+		"https://release-assets.githubusercontent.com/x?sig=1":        true,
+		"https://objects.githubusercontent.com/x":                     true,
+		"http://objects.githubusercontent.com/x":                      false,
+		"https://user:pass@github.com/x":                              false,
+		"https://evil.example/x":                                      false,
+		"https://github.com.evil.example/x":                           false,
+		"https://127.0.0.1/x":                                         false,
+	} {
+		parsed, _ := url.Parse(address)
+		if err := source.allowed(parsed); (err == nil) != allowed {
+			t.Errorf("%s: allowed=%v, err=%v", address, allowed, err)
+		}
+	}
+	if source.api != "https://api.github.com" || source.downloads != "https://github.com" {
+		t.Fatalf("the production source points at %s and %s", source.api, source.downloads)
+	}
+}
+
+func TestANetworkErrorNeverCarriesASignedQueryString(t *testing.T) {
+	err := redact(&url.Error{Op: "Get", URL: "https://release-assets.githubusercontent.com/a?X-Amz-Signature=secret&token=t", Err: errors.New("reset")})
+	if strings.Contains(err.Error(), "secret") || strings.Contains(err.Error(), "token") || !strings.Contains(err.Error(), "reset") {
+		t.Fatalf("redacted: %v", err)
+	}
+}
+
+// The compiled-in allowlist is the two official repositories and nothing
+// else; nothing outside this package can add one.
+func TestTheAllowlistIsExactlyTheTwoOfficialRepositories(t *testing.T) {
+	var got []string
+	for _, tool := range Tools {
+		got = append(got, tool.Owner+"/"+tool.Repo+" "+tool.TagPrefix)
+	}
+	want := "auto-pigeon/ericw-tools auto-pigeon-ericw-v|auto-pigeon/q3map2 auto-pigeon-q3map2-v"
+	if strings.Join(got, "|") != want {
+		t.Fatalf("allowlist %v", got)
+	}
+}

@@ -1419,6 +1419,9 @@ func (s *Server) handleProfileBind(w http.ResponseWriter, r *http.Request) {
 		if len(executables) > 0 && local.Acquisition != profile.AcquireUserPath {
 			local.Acquisition = profile.AcquireUserPath
 			local.Installs = nil
+			// A program the person chose replaces a Companion-made
+			// installation outright; an update never moves it back (NEW_367).
+			local.Managed = nil
 		}
 		for name, value := range executables {
 			if value == "" {

@@ -111,6 +111,31 @@ func (s *Service) CheckCompatibility(profileID string, again bool) (map[string]b
 	return facts, nil
 }
 
+// ProbeAt asks the programs at paths what they are, exactly as profileID's
+// version check asks its bound programs — the same supervised job, the same
+// bounds, the same approval rule — and records nothing on any binding. It is
+// how a managed installation is verified before anything is bound to it
+// (NEW_367): "installed" is not "ready" until its programs have answered.
+// Names the profile does not probe are ignored.
+func (s *Service) ProbeAt(profileID string, paths map[string]string) (map[string]binding.ExecutableFact, error) {
+	entry, err := s.catalog.Lookup(profileID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authorize(entry, Request{ProfileID: profileID}); err != nil {
+		return nil, err
+	}
+	facts := map[string]binding.ExecutableFact{}
+	for _, name := range compat.ProbedExecutables(entry.Profile) {
+		path, ok := paths[name]
+		if !ok {
+			continue
+		}
+		facts[name] = s.probe(entry, name, path, Request{ProfileID: profileID})
+	}
+	return facts, nil
+}
+
 // Compatible answers, for one action of one profile as this machine has it
 // bound, what [Service.Submit] would answer about its program — without a
 // request, an input or a job. It is how a build asks about EVERY mandatory

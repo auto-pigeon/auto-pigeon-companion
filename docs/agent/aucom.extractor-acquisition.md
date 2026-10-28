@@ -151,7 +151,9 @@ older and published documents load, never offered and never taken
 list|verify|use|gc` and `companion extractor plan|install` subcommands print that
 they were removed and exit 2. **A prompt that adds a download path — for the
 extractor or for any toolchain — is undoing an operator decision**, and has to
-say so and name it.
+say so and name it. One such decision exists: HITL 2026-10-28 (`NEW_367`,
+ADR-0010) authorised exactly the two Auto-Pigeon toolchains, through
+`internal/managedtools` and nothing here — `aucom.managed-tools` owns its rules.
 
 ### The compatibility manifest is a THIRD signed document, and it carries no digest
 

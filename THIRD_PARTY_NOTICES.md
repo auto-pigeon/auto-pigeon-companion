@@ -244,9 +244,21 @@ assumed one, and the two halves differ — see the per-tool section below.
 They are **obtained by the user** — from each project's homepage, a package
 manager, or a copy that came with a game — as **independent, prebuilt
 binaries**, and invoked as **separate operating-system processes** via
-`os/exec`. The Companion downloads none of them. Communication is process-level
-only: command-line arguments, environment, working directory, standard input
-and output, exit status, and files on disk.
+`os/exec`. Communication is process-level only: command-line arguments,
+environment, working directory, standard input and output, exit status, and
+files on disk.
+
+**Two exceptions are installed by the Companion on the user's behalf** (operator,
+2026-10-28; [ADR-0010](docs/adr/0010-the-companion-installs-and-updates-two-official-toolchains.md)):
+the Auto-Pigeon builds of ericw-tools (GPL-3.0-or-later as built, with Embree and
+oneTBB) and of q3map2 (GPL-2.0-or-later), each fetched **unchanged** from its own
+official GitHub release (`auto-pigeon/ericw-tools`, `auto-pigeon/q3map2`) into a
+per-user folder of the Companion's own. The archive is unpacked whole, so its
+`licenses/` folder — the GPL texts and the notice of every library beside the
+programs — stays in the installation; the installation's `install.json` names the
+release tag, whose source tree and source archive the same release publishes. The
+Companion's own release archives still carry none of them, and nothing here
+modifies, links or relicenses them. Every other tool is the user's to install.
 
 They are never:
 
@@ -452,7 +464,9 @@ detector reports the repository as `Other`; the corresponding source for the
 build described here is
 `https://github.com/Garux/netradiant-custom/tree/20260114`.
 
-The Companion downloads no program, so this is no longer what sets Q3Map2 apart.
+The Companion downloads no program but the two Auto-Pigeon toolchains — and for
+q3map2 that is Auto-Pigeon's own build, never this upstream release — so this is
+no longer what sets upstream Q3Map2 apart.
 What upstream publishes is still worth recording, because it is why the profile
 tells the user to find the program inside the editor they already have:
 
@@ -502,9 +516,11 @@ game directory out of a placeholder file of this repository's own.
 
 ### Requirement to revisit: bundling a GPL tool
 
-Today **no map-building tool or engine binary is downloaded by the Companion or
-shipped in any release archive, installer, or package**, so no GPL material is
-redistributed by this project. The one program a release carries besides the
+Today **no map-building tool or engine binary is shipped in any release archive,
+installer, or package**. The two Auto-Pigeon toolchains the Companion installs
+are fetched from their own official releases, which carry their licence texts
+and corresponding source (see *How they are used*); no other GPL material is
+fetched, and none is redistributed in the Companion's own release. The one program a release carries besides the
 Companion is the proprietary extractor, above, whose own licence file travels
 with it and whose licence the bundle manifest names.
 

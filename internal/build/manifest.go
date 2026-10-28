@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/fsshare"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/leakadapter"
 	"os"
@@ -251,6 +252,11 @@ type ToolRecord struct {
 	// Diagnostic, like every absolute path here, and not part of the
 	// reproducible key.
 	Roots map[string]string `json:"roots,omitempty"`
+	// Managed names the Companion-made installation the programs came from —
+	// the official release, its tag and the exact archive bytes — when the
+	// binding was the Companion's own (NEW_367). It is what the binding said
+	// when this build started, never what a later release check found.
+	Managed *binding.ManagedInstall `json:"managed,omitempty"`
 }
 
 // Step is one stage of the pipeline as it actually happened.

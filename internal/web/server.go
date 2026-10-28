@@ -46,6 +46,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
@@ -56,6 +57,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/failure"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/incident"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/managedtools"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/pathpick"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/playrun"
 )
@@ -123,6 +125,12 @@ type Server struct {
 	// buildrelay.go.
 	buildReqs *buildRelay
 	logf      func(format string, args ...any)
+	// tools is the managed-toolchain coordinator (NEW_367), or nil when this
+	// process does not run one; toolGate is held by every pipeline run so an
+	// activation never lands between two stages. See managedtools.go.
+	tools        *managedtools.Manager
+	toolGate     toolGate
+	toolsExiting atomic.Bool
 	// games is the Games area's process-wide state: download and launch
 	// coordination, and the reviews waiting for an approval.
 	games  *gameState
@@ -431,7 +439,7 @@ func (s *Server) api() map[string]http.HandlerFunc {
 		s.engineAPI(), s.buildAPI(), s.playAPI(), s.settingsAPI(), s.siteLinksRoutes(), s.hostingRoutes(), s.bugReportRoutes(), s.pathAPI(),
 		s.feedbackAPI(), s.aboutAPI(), s.accountAPI(), s.gamesAPI(), s.noticesAPI(),
 		s.lifecycleAPI(), s.leakTestAPI(), s.leakPipelineAPI(), s.uriAPI(), s.autobuildAPI(), s.q3API(), s.q2API(),
-		s.buildRequestAPI(),
+		s.buildRequestAPI(), s.toolsAPI(),
 	} {
 		for pattern, handler := range table {
 			if _, clash := routes[pattern]; clash {

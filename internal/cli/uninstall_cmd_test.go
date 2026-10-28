@@ -21,6 +21,7 @@ func uninstallEnv(t *testing.T) (*Env, map[string]string) {
 		"config": filepath.Join(base, "config", config.AppDirName),
 		"jobs":   filepath.Join(base, "cache", config.AppDirName, "jobs"),
 		"assets": filepath.Join(base, "cache", config.AppDirName, "assets"),
+		"tools":  filepath.Join(base, "data", config.AppDirName, "tools"),
 	}
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -44,6 +45,7 @@ func uninstallEnv(t *testing.T) (*Env, map[string]string) {
 		Port:          config.DefaultPort,
 		JobsDir:       dirs["jobs"],
 		AssetCacheDir: dirs["assets"],
+		ToolsDir:      dirs["tools"],
 	}); err != nil {
 		t.Fatal(err)
 	}

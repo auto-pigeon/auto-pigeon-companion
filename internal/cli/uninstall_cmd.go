@@ -158,6 +158,7 @@ func uninstallTargets(env *Env) ([]removable, error) {
 	}{
 		{"build history", "job records, logs and published artifacts", settings.Jobs},
 		{"asset cache", "maps and other assets synced from auto-pigeon-backend", settings.AssetCache},
+		{"build tools", "the EricW tools and q3map2 builds the Companion installed itself; profiles bound to them need setting up again", settings.Tools},
 	} {
 		path, err := resolve.fn()
 		if err != nil {

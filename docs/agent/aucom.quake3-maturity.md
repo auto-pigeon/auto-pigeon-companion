@@ -52,7 +52,7 @@ surface that would one day not be told.
 
 **There is no managed download for Q3Map2, and that is the decision, not a gap.**
 Since 2026-09-23 there is no managed download for anything — the Companion
-downloads no program, and a `managed_download` route is legacy, read and refused
+downloads no program except the two Auto-Pigeon toolchains (`aucom.managed-tools`), and a `managed_download` route is legacy, read and refused
 (`acquire.ErrNoDownloads`). The Q3-specific reason still stands and still
 matters to a prompt that wants to point users at an artifact: upstream's Linux
 release is a `.7z` holding one AppImage of the whole NetRadiant editor; Windows

@@ -439,12 +439,14 @@ func TestTheTwoModesAreExclusive(t *testing.T) {
 }
 
 func TestTheNoSubcommandLaunchIsInteractiveAndStayRunningIsServerMode(t *testing.T) {
+	// Either way the application starts, it sets its build tools up
+	// (NEW_367); only a `serve` a script starts leaves them alone.
 	cases := map[string][]string{
-		"":                       {"--open", "--interactive"},
-		"--debug":                {"--open", "--debug", "--interactive"},
-		"--stay-running":         {"--open", "--stay-running"},
-		"--stay-running --debug": {"--open", "--debug", "--stay-running"},
-		"--debug --stay-running": {"--open", "--debug", "--stay-running"},
+		"":                       {"--open", "--managed-tools", "on", "--interactive"},
+		"--debug":                {"--open", "--managed-tools", "on", "--debug", "--interactive"},
+		"--stay-running":         {"--open", "--managed-tools", "on", "--stay-running"},
+		"--stay-running --debug": {"--open", "--managed-tools", "on", "--debug", "--stay-running"},
+		"--debug --stay-running": {"--open", "--managed-tools", "on", "--debug", "--stay-running"},
 	}
 	for given, want := range cases {
 		args := strings.Fields(given)

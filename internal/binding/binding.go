@@ -59,6 +59,19 @@ type InstallOrigin struct {
 	PublisherID string `json:"publisher_id"`
 }
 
+// ManagedInstall names the Companion-made installation a binding's programs
+// are in (NEW_367): the tool, the release and the exact bytes. Present only
+// when the Companion bound the profile itself — a person who chooses a folder
+// or a program replaces it — and it is what lets an update move the binding
+// on without ever touching one somebody chose.
+type ManagedInstall struct {
+	Tool    string `json:"tool"`
+	Version string `json:"version"`
+	Tag     string `json:"tag"`
+	SHA256  string `json:"sha256"`
+	Dir     string `json:"dir"`
+}
+
 // LocalBinding is one profile, as installed on this machine.
 type LocalBinding struct {
 	SchemaVersion string `json:"schema_version"`
@@ -109,6 +122,9 @@ type LocalBinding struct {
 	// by slug. Resolving the slug is an account-and-deployment question, which
 	// is why the answer lives here and the question lives in the document.
 	GameProfileID string `json:"game_profile_id,omitempty"`
+	// Managed is the Companion-made installation the programs are in, when
+	// the Companion bound them (aucom.local-binding/1.6). See [ManagedInstall].
+	Managed *ManagedInstall `json:"managed,omitempty"`
 	// Installs is LEGACY and never written. See [PinnedInstall].
 	Installs []PinnedInstall `json:"installs,omitempty"`
 	// Grant is what the user approved, against ProfileDigest.
@@ -185,6 +201,16 @@ func (b LocalBinding) Validate() error {
 	}
 	if b.ResolvedVersion != "" && b.VersionCheckedAt.IsZero() {
 		add("resolved_version is set but version_checked_at is not; a recorded version with no timestamp never goes stale")
+	}
+	if m := b.Managed; m != nil {
+		switch {
+		case m.Tool == "" || m.Version == "":
+			add("the managed installation names no tool or no version")
+		case !filepath.IsAbs(m.Dir):
+			add("the managed installation's folder %q is not absolute", m.Dir)
+		case b.Acquisition != profile.AcquireManagedOfficial:
+			add("a managed installation is recorded and the acquisition is %q", b.Acquisition)
+		}
 	}
 	seenInstall := map[string]bool{}
 	for _, install := range b.Installs {

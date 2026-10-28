@@ -23,6 +23,13 @@ const (
 	// published documents carry it — and the route is never offered or taken;
 	// internal/acquire answers it with ErrNoDownloads.
 	AcquireManagedDownload AcquisitionMode = "managed_download"
+	// AcquireManagedOfficial is a BINDING's mode, never a document's: the
+	// programs are an installation the Companion made itself of one of the two
+	// toolchains Auto-Pigeon maintains, from their official releases
+	// (internal/managedtools, NEW_367, ADR-0010). No profile can declare it —
+	// it is not in the document schema's list — so no document can make the
+	// Companion download anything.
+	AcquireManagedOfficial AcquisitionMode = "managed_official"
 	// AcquireAlreadyInstalled: shipped with a game or another package, found
 	// at a known place relative to a root the user has already configured.
 	AcquireAlreadyInstalled AcquisitionMode = "already_installed"

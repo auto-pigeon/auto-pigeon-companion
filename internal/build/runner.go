@@ -52,6 +52,13 @@ type Options struct {
 	// must not block and must not keep the pointer: the manifest goes on
 	// changing underneath. Copy what is needed. Nil discards them.
 	Announce func(*Manifest)
+	// Hold is taken for the whole of a Run and released when it returns. A
+	// pipeline resolves each stage's program when the stage starts, so a
+	// managed toolchain switched between two stages would build one map with
+	// two versions; whoever switches it (internal/managedtools, through the
+	// GUI server) does so only while no Run holds this (NEW_367). Nil holds
+	// nothing.
+	Hold func() (release func())
 }
 
 // Runner runs pipelines.
@@ -161,6 +168,9 @@ type Request struct {
 // things a manifest is most useful for, and returning only an error would throw
 // away the record of the two stages that did work.
 func (r *Runner) Run(ctx context.Context, request Request) (*Manifest, error) {
+	if r.options.Hold != nil {
+		defer r.options.Hold()()
+	}
 	pipeline, entry, err := r.pipeline(request.PipelineID)
 	if err != nil {
 		return nil, err
@@ -669,6 +679,10 @@ func (r *Runner) tools(steps []profile.ResolvedStep) []ToolRecord {
 		if bound {
 			record.ResolvedVersion = local.ResolvedVersion
 			record.Acquisition = local.Acquisition
+			if local.Managed != nil {
+				managed := *local.Managed
+				record.Managed = &managed
+			}
 			for role, path := range local.Roots {
 				if record.Roots == nil {
 					record.Roots = map[string]string{}

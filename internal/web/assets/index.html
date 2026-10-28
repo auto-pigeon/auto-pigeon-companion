@@ -141,6 +141,24 @@
     -->
     <section id="build-request" class="leak-request" role="status" aria-live="polite" aria-label="Build request" hidden></section>
 
+    <!-- Setting up build tools (NEW_367): the Companion installs Auto-Pigeon's
+         own EricW tools and q3map2 on first launch, in the background. One
+         compact card with each tool's real state; the details on demand. It
+         never starts a compiler: what was waiting for setup is checked again
+         and goes back to review. tools.js. -->
+    <section id="tools-setup" class="panel notice tools-setup" role="status" aria-live="polite" aria-labelledby="tools-setup-title" hidden>
+      <h3 id="tools-setup-title">Setting up build tools</h3>
+      <ul id="tools-setup-list" class="rows tools-list"></ul>
+      <div class="row">
+        <button type="button" id="tools-setup-retry" class="secondary" hidden>Retry</button>
+      </div>
+      <p id="tools-setup-message" class="message" role="alert"></p>
+      <details>
+        <summary>Details</summary>
+        <dl id="tools-setup-details" class="paths"></dl>
+      </details>
+    </section>
+
     <!-- Back online with something to sync: said once, where the person is. -->
     <div id="reconnect-banner" class="reconnect-banner" role="status" hidden>
       <p id="reconnect-text"></p>
@@ -228,6 +246,37 @@
             <button type="button" id="quit-keep" class="secondary">Keep running</button>
           </div>
           <p id="quit-message" class="message" role="alert"></p>
+        </section>
+      </div>
+    </div>
+
+    <!-- An update of a build tool (NEW_367): offered, never applied unasked.
+         Three answers and a box beside Cancel; the X and Escape are Cancel
+         without the box. Nothing that downloads or switches has the focus. -->
+    <div id="tools-update-modal" class="auth-modal" hidden>
+      <div class="auth-overlay" data-dismiss="tools-update"></div>
+      <div class="auth-dialog__layer">
+        <section id="tools-update-dialog" class="auth-dialog tools-update-dialog" role="dialog" aria-modal="true" aria-labelledby="tools-update-heading" aria-describedby="tools-update-intro">
+          <div class="auth-dialog__head">
+            <h2 id="tools-update-heading">Update a build tool?</h2>
+            <p id="tools-update-intro"></p>
+            <button type="button" id="tools-update-close" class="auth-dialog__close" aria-label="Close">×</button>
+          </div>
+          <p><a id="tools-update-notes" href="#" target="_blank" rel="noopener noreferrer">Release notes</a></p>
+          <details>
+            <summary>Details</summary>
+            <dl id="tools-update-details" class="paths"></dl>
+          </details>
+          <div class="row tools-update-actions">
+            <button type="button" id="tools-update-now" class="secondary">Update now</button>
+            <button type="button" id="tools-update-later" class="secondary">Update when I close Companion</button>
+            <button type="button" id="tools-update-cancel" class="secondary">Cancel</button>
+            <label class="check tools-update-skip" for="tools-update-skip">
+              <input type="checkbox" id="tools-update-skip" />
+              <span id="tools-update-skip-label">Don't ask again for this version</span>
+            </label>
+          </div>
+          <p id="tools-update-message" class="message" role="alert"></p>
         </section>
       </div>
     </div>
@@ -1208,6 +1257,25 @@
             <p id="uri-message" class="message" role="alert"></p>
           </div>
 
+          <div class="panel" id="tools-settings">
+            <h3>Build tools</h3>
+            <p class="muted">
+              The Companion installs Auto-Pigeon's own builds of EricW tools and
+              q3map2 from their GitHub releases, and checks for new ones about
+              once an hour while it runs. Updates are offered, never applied
+              unasked. A SHA-256 published in the same release shows each download
+              is intact; these builds are not signed. Programs you set up yourself
+              are left as they are.
+            </p>
+            <p id="tools-settings-state" class="muted" role="status">Checking…</p>
+            <ul id="tools-settings-list" class="rows tools-list"></ul>
+            <div class="row">
+              <button type="button" id="tools-check" class="secondary" hidden>Check for updates</button>
+              <button type="button" id="tools-reset-skipped" class="secondary" hidden>Offer skipped versions again</button>
+            </div>
+            <p id="tools-check-message" class="message" role="status"></p>
+          </div>
+
           <div class="panel">
             <h3>Extractor</h3>
             <p id="extractor-state" class="muted">Checking…</p>
@@ -1380,6 +1448,7 @@
     <script src="stageswitch.js"></script>
     <script src="scratch.js"></script>
     <script src="jobs.js"></script>
+    <script src="tools.js"></script>
     <script src="settings.js"></script>
     <script src="footer.js"></script>
     <script src="account.js"></script>

@@ -1,6 +1,6 @@
 # ADR-0008: The Companion downloads no program, and the extractor ships beside it
 
-- Status: Accepted
+- Status: Accepted; superseded in part by [ADR-0010](0010-the-companion-installs-and-updates-two-official-toolchains.md) (2026-10-28)
 - Date: 2026-09-23
 - Affected components: AUCOM (and AUE, as the program a release carries)
 - Decision owners: the operator, 2026-09-23 (HITL)
@@ -164,3 +164,15 @@ moved into a `dependencies/` folder beside the Companion, so an archive's root
 holds only the program a person starts. "Beside the Companion's own executable"
 above now means that folder; a macOS `.app` is unchanged. There is no fallback
 to the old location.
+
+## 2026-10-28 — Superseded in part by ADR-0010 (NEW_367)
+
+The narrative above is left as it was decided. On 2026-10-28 the operator
+authorised the Companion to install and update exactly two toolchains — the
+Auto-Pigeon builds of ericw-tools and q3map2, from their official GitHub
+releases — through one closed owner, `internal/managedtools`. Everything else
+here still holds: `internal/acquire` only finds programs, a document's
+`managed_download` route is read and refused, the extractor ships beside the
+Companion, and engines, game data and every other tool are never downloaded.
+[ADR-0010](0010-the-companion-installs-and-updates-two-official-toolchains.md)
+is the authority on the exception.

@@ -189,6 +189,8 @@ func runServe(env *Env, args []string) int {
 		"interactive: how long to wait after the last page closed, for a reload or a crashed tab to come back")
 	startupWindow := set.Duration("startup-window", web.DefaultStartupWindow,
 		"interactive: how long to wait for the first page before stopping")
+	managedTools := set.String("managed-tools", "auto",
+		"install and update the official EricW and q3map2 builds: auto (interactive only), on or off")
 	if _, code, ok := parseFlags(env, set, args); !ok {
 		return code
 	}
@@ -329,6 +331,11 @@ func runServe(env *Env, args []string) int {
 	if err != nil {
 		return fail(env, err)
 	}
+	// Asked before this run's token replaces the running one's: a second
+	// `serve` for one configuration does not run a second build-tool
+	// coordinator, which could switch a toolchain under the first one's
+	// build (NEW_367).
+	otherAddress, _, otherRunning := runningCompanion(configDir)
 	if err := web.WriteToken(tokenPath, token); err != nil {
 		return fail(env, err)
 	}
@@ -427,6 +434,29 @@ func runServe(env *Env, args []string) int {
 	listener, err := web.Listen(chosen)
 	if err != nil {
 		return fail(env, err)
+	}
+	// The two toolchains Auto-Pigeon maintains: installed on first launch and
+	// checked about hourly while this runs (NEW_367, ADR-0010). In the
+	// background, and only once this process has its port: a start that
+	// fails to listen must not have applied an update on its way out.
+	switch on, why, err := managedToolsMode(*managedTools, *interactive, settings); {
+	case err != nil:
+		return fail(env, err)
+	case !on:
+		logf("managed tools: off (%s)", why)
+	case otherRunning:
+		logf("managed tools: the Companion already running at %s manages the build tools for this configuration; this one does not", otherAddress)
+	default:
+		tools, err := newManagedTools(env, settings, configDir, server, why != "", logf)
+		if err != nil {
+			logf("warning: build-tool setup is unavailable: %v", err)
+			break
+		}
+		server.SetManagedTools(tools)
+		if why != "" {
+			logf("managed tools: not checking or installing (%s)", why)
+		}
+		server.StartManagedTools(ctx)
 	}
 	// Readiness: does the configured AUB answer within its bound? Checked once,
 	// in the background — the page works offline, so a server that is down
@@ -561,11 +591,22 @@ func runServe(env *Env, args []string) int {
 		logf("shutdown: builds, Build & Run and hosted listings ended %s after the decision", since(decided))
 		service.Close()
 		logf("shutdown: jobs closed %s after the decision; printing the exit line and exiting", since(decided))
+		// "Update when I close Companion": now, with the work ended and the
+		// job records written. A crash never gets here, and the next start
+		// applies it instead (NEW_367).
+		for _, line := range server.ApplyToolUpdatesOnExit() {
+			logf("managed tools: %s", line)
+		}
 		fmt.Fprintln(env.Stdout, web.ExitLine(cause, *startupWindow))
 		if detailPath != "" && cause == web.ExitStartupTimeout {
 			fmt.Fprintf(env.Stdout, "Details: %s\n", detailPath)
 		}
 		return 0
+	}
+	server.Close()
+	service.Close()
+	for _, line := range server.ApplyToolUpdatesOnExit() {
+		logf("managed tools: %s", line)
 	}
 	if cause == web.ExitQuit {
 		fmt.Fprintln(env.Stdout, "stopped: Quit was chosen in the page")

@@ -142,7 +142,7 @@ type Command struct {
 // commands is the registry. Order here is display order in the usage text.
 var commands = []Command{
 	{
-		Name: "serve", Usage: "[--port <n>] [--open] [--debug] [--interactive | --stay-running]",
+		Name: "serve", Usage: "[--port <n>] [--open] [--debug] [--interactive | --stay-running] [--managed-tools auto|on|off]",
 		Summary: "run the local GUI server; it keeps running until stopped unless --interactive",
 		Run:     runServe,
 	},
@@ -165,6 +165,11 @@ var commands = []Command{
 		Name: "autobuild", Usage: "list | show | on | off | pipeline | build-now | retry",
 		Summary: "rebuild a hosted map automatically when a new revision is saved (inside a running Companion)",
 		Run:     runAutobuild,
+	},
+	{
+		Name: "tools", Usage: "status | check | retry | update | skip | cancel-pending | reset-skipped | use-managed",
+		Summary: "the build tools the Companion installs and updates itself: EricW tools and q3map2 (inside a running Companion)",
+		Run:     runTools,
 	},
 	{
 		Name: "build", Usage: "run | preview | list | show | pipelines",
@@ -343,7 +348,9 @@ func Run(env *Env, args []string) int {
 // unknown `--flag` stays an unknown command rather than becoming a serve
 // flag nobody documented here.
 func guiArguments(args []string) ([]string, bool) {
-	gui := []string{"--open"}
+	// The application, either way it is started, sets its build tools up
+	// (NEW_367); a `serve` a script starts does not unless it asks.
+	gui := []string{"--open", "--managed-tools", "on"}
 	stay := false
 	for _, arg := range args {
 		switch arg {

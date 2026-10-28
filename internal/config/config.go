@@ -35,6 +35,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -144,6 +145,74 @@ type Config struct {
 	// out of the box (NEW_310, HITL): the Companion asks when the editor's
 	// first request for that game arrives.
 	LeakTestPipelines map[string]string `json:"leak_test_pipelines,omitempty"`
+
+	// ManagedToolsOff turns off the automatic setup and hourly update checks
+	// of the two toolchains Auto-Pigeon maintains (NEW_367). Off, nothing is
+	// downloaded; an installation already made stays usable.
+	ManagedToolsOff bool `json:"managed_tools_off,omitempty"`
+	// ToolsChannel is "beta" (the default: the official releases are
+	// prereleases today) or "stable".
+	ToolsChannel string `json:"tools_channel,omitempty"`
+	// ToolsDir overrides where those toolchains are installed. Empty means
+	// DefaultToolsDir. Not `tool_cache_dir`, which is the retired download
+	// cache's setting and is still ignored.
+	ToolsDir string `json:"managed_tools_dir,omitempty"`
+}
+
+// EnvToolsDir overrides where the managed toolchains are installed, like
+// EnvJobsDir does for the job store: for a small home disk, and for a test
+// that must not touch the person's own installation.
+const EnvToolsDir = "AUCOM_TOOLS_DIR"
+
+// DefaultToolsDir is where the managed toolchains are installed: the
+// per-user DATA directory, not the cache (a cache clean must not take away
+// the compiler a profile is bound to) and not the roaming configuration (on
+// Windows %AppData% roams; programs belong in %LocalAppData%).
+//
+//	Linux    $XDG_DATA_HOME/auto-pigeon-companion/tools, else ~/.local/share/…
+//	macOS    ~/Library/Application Support/auto-pigeon-companion/tools
+//	Windows  %LocalAppData%\auto-pigeon-companion\tools
+func DefaultToolsDir() (string, error) {
+	var base string
+	switch runtime.GOOS {
+	case "windows":
+		base = os.Getenv("LocalAppData")
+		if base == "" {
+			cache, err := os.UserCacheDir() // %LocalAppData% on Windows
+			if err != nil {
+				return "", fmt.Errorf("config: locating the per-user data directory: %w", err)
+			}
+			base = cache
+		}
+	case "darwin":
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("config: locating the home directory: %w", err)
+		}
+		base = filepath.Join(home, "Library", "Application Support")
+	default:
+		if xdg := strings.TrimSpace(os.Getenv("XDG_DATA_HOME")); filepath.IsAbs(xdg) {
+			base = xdg
+		} else {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return "", fmt.Errorf("config: locating the home directory: %w", err)
+			}
+			base = filepath.Join(home, ".local", "share")
+		}
+	}
+	return filepath.Join(base, AppDirName, "tools"), nil
+}
+
+// Tools resolves the effective managed-toolchain directory.
+func (c Config) Tools() (string, error) {
+	if fromEnv := strings.TrimSpace(os.Getenv(EnvToolsDir)); fromEnv != "" {
+		return filepath.Abs(fromEnv)
+	}
+	if c.ToolsDir != "" {
+		return filepath.Abs(c.ToolsDir)
+	}
+	return DefaultToolsDir()
 }
 
 // URIHandler is the record of a registered `autopigeon://` handler.

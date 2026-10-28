@@ -186,6 +186,7 @@ func writeBinding(env *Env, document profile.Profile, result *acquire.Result, ro
 			local.Trust = profile.TrustLocal
 		}
 		local.Acquisition = result.Mode
+		local.Managed = nil
 		local.Executables = result.Executables
 		if local.Roots == nil && len(roots) > 0 {
 			local.Roots = map[string]string{}

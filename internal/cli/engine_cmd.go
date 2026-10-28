@@ -498,6 +498,7 @@ func engineBind(env *Env, args []string) int {
 		local.ProfileDigest = entry.Digest
 		local.Trust = entry.Trust
 		local.Acquisition = profile.AcquireUserPath
+		local.Managed = nil
 		for name, path := range newExecutables {
 			if local.Executables == nil {
 				local.Executables = map[string]string{}

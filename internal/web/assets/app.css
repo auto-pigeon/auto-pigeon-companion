@@ -1532,3 +1532,17 @@ option:disabled { color: var(--ink-faint); }
 .joblog__scroll--nowrap .joblog__text { white-space: pre; overflow-wrap: normal; }
 .joblog__scroll--nowrap { overflow-x: auto; }
 .job-live, .activity-run__live { margin-block: 0.25rem; }
+
+/* Build tools the Companion installs and updates itself (NEW_367, tools.js).
+   The setup card is compact: one line per tool, the details on demand. */
+.tools-setup { margin: 0.75rem 1rem; display: grid; gap: 0.4rem; }
+.tools-setup h3 { margin: 0; }
+.tools-setup .row:has(> button[hidden]:only-child), .tools-setup .message:empty { display: none; }
+.tools-list { display: grid; gap: 0.35rem; margin: 0; padding: 0; list-style: none; }
+.tools-row p { margin: 0.15rem 0; }
+.tools-row--failed strong, .tools-row--unsupported strong { color: var(--bad); }
+.tools-row--ready strong { color: var(--ok); }
+.tools-details-head { font-weight: 600; margin-top: 0.5rem; }
+/* The answers in one row at the bottom, the box beside Cancel. */
+.tools-update-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 0.75rem; }
+.tools-update-skip { margin-left: 0.25rem; }

@@ -40,8 +40,9 @@ like the cause of whatever you are investigating, say so and stop.
 
 This repository is **Auto-Pigeon Companion**, abbreviated **AUCOM**. Its expected location is
 `mapper-code/auto-pigeon-companion/`. It is the program that runs on a user's own machine: it
-finds and runs the toolchains a map needs (it downloads no program — the user installs them, and the
-extractor ships beside it in the release), holds the profiles and approvals that say what may run,
+finds and runs the toolchains a map needs (it downloads only the two toolchains Auto-Pigeon maintains,
+through one owner — `aucom.managed-tools`; every other program the user installs, and the extractor
+ships beside it in the release), holds the profiles and approvals that say what may run,
 publishes and installs portable profiles, and joins a hosted game with verified content.
 
 It is one of the repositories under `mapper-code/` and follows the same mapper-wide prompt/handoff
@@ -168,6 +169,7 @@ the router resolves those for you rather than making you read the table.
 | module | the authority on | topics |
 | --- | --- | --- |
 | `aucom.extractor-acquisition` | The extractor ships beside the Companion — never embedded, never downloaded | extractor, aue, acquisition, bundle, bundled, release, manifest, download, licence |
+| `aucom.managed-tools` | Two official toolchains are installed and updated by one owner, and nothing else is downloaded | managed-tools, ericw-tools, q3map2, install, update, github-release, first-launch, skipped-version |
 | `aucom.extractor-execution` | Running it — the handshake, bounded invocation, and what was retired with the downloads | extractor, handshake, protocol, offline, bounds, timeout, authorization, verification |
 | `aucom.job-bounds` | A bound is not a measurement, and the bound comes from here | job, bounds, retention, logbuf, memory, disk, stress, limits, recovery, ownership |
 | `aucom.compiler-compatibility` | A program is asked what it is, and a profile decides only for itself | compatibility, compiler, probe, version, ericw, vis, logfile, readiness, rebind |

@@ -59,6 +59,17 @@ func TestMain(m *testing.M) {
 	if base := strings.TrimSuffix(filepath.Base(os.Args[0]), ".exe"); base == q3ToolName {
 		os.Exit(q3ToolMain(os.Args[1:]))
 	}
+	// No test starts a coordinator that would ask GitHub for releases or
+	// install into this machine's data folder (NEW_367): every `serve` here
+	// runs with build-tool setup off, and the data folder is the test's own.
+	// The decision itself is tested on managedToolsMode.
+	os.Setenv(EnvManagedTools, "off")
+	if data, err := os.MkdirTemp("", "aucom-cli-data-"); err == nil {
+		os.Setenv("XDG_DATA_HOME", data)
+		code := m.Run()
+		os.RemoveAll(data)
+		os.Exit(code)
+	}
 	os.Exit(m.Run())
 }
 
