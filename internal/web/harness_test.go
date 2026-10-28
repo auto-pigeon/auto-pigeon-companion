@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -305,6 +306,67 @@ type fixtureBackend struct {
 	// holdCatalog, when set, holds every catalog request until it is closed:
 	// an answer that arrives after the person switched account (NEW_363).
 	holdCatalog chan struct{}
+
+	// buildRequests answers AUB's build-request routes, by request id: what a
+	// GET returns. buildStatuses is every status AUB STORED, in order, as
+	// "<id> <state> <stage>"; buildStatusPosts counts every POST, stored or
+	// not. AUB's rules hold: a terminal state is final and a lower sequence
+	// than the one stored is ignored — both answered `superseded`.
+	buildRequests     map[string]map[string]any
+	buildStatuses     []string
+	buildStatusBodies []map[string]any
+	buildStatusPosts  int
+	// failBuildStatus answers that many status POSTs 503 first.
+	failBuildStatus int
+}
+
+// serveBuildRequest is AUB's build-request store, as the contract says it.
+func (b *fixtureBackend) serveBuildRequest(w http.ResponseWriter, r *http.Request, rest string) {
+	write := func(status int, body any) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(body)
+	}
+	id, tail, _ := strings.Cut(rest, "/")
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	request := b.buildRequests[id]
+	if request == nil {
+		write(http.StatusNotFound, map[string]any{"code": 404, "message": "The requested resource wasn't found."})
+		return
+	}
+	switch {
+	case r.Method == http.MethodGet && tail == "":
+		write(http.StatusOK, request)
+	case r.Method == http.MethodPost && tail == "status":
+		b.buildStatusPosts++
+		if b.failBuildStatus > 0 {
+			b.failBuildStatus--
+			write(http.StatusServiceUnavailable, map[string]any{"message": "the server is away"})
+			return
+		}
+		var status map[string]any
+		if err := json.NewDecoder(io.LimitReader(r.Body, 2048)).Decode(&status); err != nil ||
+			status["schema_version"] != aub.BuildRequestStatusSchema {
+			write(http.StatusBadRequest, map[string]any{"message": "bad status"})
+			return
+		}
+		sequence, _ := status["sequence"].(float64)
+		held, _ := request["sequence"].(float64)
+		stored, _ := request["state"].(string)
+		if aub.BuildRequestTerminal(stored) || sequence <= held {
+			write(http.StatusOK, map[string]any{"request_id": id, "state": stored, "superseded": true})
+			return
+		}
+		state, _ := status["state"].(string)
+		stage, _ := status["stage"].(string)
+		request["state"], request["sequence"] = state, sequence
+		b.buildStatusBodies = append(b.buildStatusBodies, status)
+		b.buildStatuses = append(b.buildStatuses, strings.TrimSpace(id+" "+state+" "+stage))
+		write(http.StatusOK, map[string]any{"request_id": id, "state": state, "superseded": false})
+	default:
+		write(http.StatusMethodNotAllowed, map[string]any{"message": "no"})
+	}
 }
 
 func (b *fixtureBackend) catalogFaulted() bool {
@@ -453,6 +515,9 @@ func (b *fixtureBackend) serve(w http.ResponseWriter, r *http.Request) {
 	asset := b.asset
 
 	switch {
+	case strings.HasPrefix(rest, "/build-requests/"):
+		b.serveBuildRequest(w, r, strings.TrimPrefix(rest, "/build-requests/"))
+		return
 	case strings.HasPrefix(rest, "/leak-status/") && r.Method == http.MethodPost:
 		var status map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&status); err != nil || status["schema_version"] != aub.LeakStatusSchema {

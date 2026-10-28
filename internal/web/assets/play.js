@@ -96,6 +96,11 @@
     // planKey is what the plan was computed for. Any change to an identity
     // invalidates it, and the page says so rather than reviewing a stale one.
     planKey: "",
+    // buildRequest is the editor's build request this form was opened for
+    // (buildrequest.js, adoptBuildRequest): its id, map, exact revision and
+    // whether the editor asked to run it. A start carries its id only while
+    // the choices on screen are still that (askedByEditor); never remembered.
+    buildRequest: null,
   };
 
   // --- remembered choices ------------------------------------------------------
@@ -159,6 +164,47 @@
     }
     $("play-mod").value = state.mod;
     $("play-strict").checked = state.strict;
+  }
+
+  // --- the editor's build request -------------------------------------------------
+  //
+  // Review build in the editor's notice puts its request here. The form is the
+  // same form: the press of Build or Build & Run is the authorization, and the
+  // request travels with the start only while the map, the exact revision and
+  // Run after build are still what the editor asked for. A person who changes
+  // one of them is building something else, and is told so once.
+
+  function askedByEditor() {
+    return Boolean(state.buildRequest) && window.AUCOM.buildRequest?.stillAsked(state.buildRequest, {
+      source: state.source, asset_id: state.map?.asset_id, revision_id: state.revision?.revision_id, run_after: state.runAfter,
+    }) === true;
+  }
+
+  function dropBuildRequest() {
+    const id = state.buildRequest?.id;
+    if (!id) return;
+    state.buildRequest = null;
+    const note = $("play-request-note");
+    note.textContent = t("This build is no longer the one the editor asked for; the editor will not be told about it.");
+    note.hidden = false;
+    document.dispatchEvent(new CustomEvent("aucom:build-request-dropped", { detail: { id } }));
+  }
+
+  // checkBuildRequest drops the request when a person's change made the form
+  // build something else.
+  function checkBuildRequest() {
+    if (state.buildRequest && !askedByEditor()) dropBuildRequest();
+  }
+
+  // preferredPipeline is the build profile a request is opened with when none
+  // fitting is chosen: a ready one whose every stage runs the Auto-Pigeon build
+  // of the game's compiler, else the game's built-in normal build when ready.
+  // The server names both (buildRequestTools); every profile stays offered.
+  function preferredPipeline() {
+    const request = state.buildRequest;
+    const fits = state.pipelines.filter((p) => !p.leak_test && p.engine_family === request.game && window.AUCOM.pipelineReady(p));
+    const ownBuild = (p) => (p.steps || []).length > 0 && p.steps.every((step) => step.provider?.id === request.preferred_tool);
+    return (fits.find(ownBuild) || fits.find((p) => p.id === request.normal_pipeline))?.id || "";
   }
 
   // --- the form ------------------------------------------------------------------
@@ -574,6 +620,13 @@
     if (!ok) { state.pipelines = []; state.pipeline = ""; $("play-pipeline").replaceChildren(); renderStages(); renderFinalSummary(); return; }
     state.pipelines = body.items || [];
     const select = $("play-pipeline");
+    // An editor's request just adopted, with no build profile chosen for its
+    // game: the preferred one, once. A chosen profile for this game is kept.
+    if (state.buildRequest?.pickPipeline) {
+      state.buildRequest.pickPipeline = false;
+      const chosen = state.pipelines.find((p) => p.id === state.pipeline);
+      if (!chosen || chosen.engine_family !== state.buildRequest.game) state.pipeline = preferredPipeline() || state.pipeline;
+    }
     state.pipeline = window.AUCOM.executionChoices(select, state.pipelines, state.pipeline, window.AUCOM.pipelineReady,
       // What it waits for is in the closed list under the select (NEW_345).
       (pipeline) => pipeline.name + (window.AUCOM.pipelineReady(pipeline) ? "" : " — " + t("needs setup")),
@@ -1081,6 +1134,7 @@
         map: $("play-map-name").value.trim(),
         own_wads_dir: state.ownWadsDir || undefined,
         build_only: true,
+        ...(askedByEditor() ? { build_request_id: state.buildRequest.id } : {}),
       };
     }
     return {
@@ -1099,6 +1153,7 @@
       listing: listingBody(),
       grants: grantsBody(),
       accept_reason: packaged() && state.grant.accept ? state.grant.reason.trim() || undefined : undefined,
+      ...(askedByEditor() ? { build_request_id: state.buildRequest.id } : {}),
     };
   }
 
@@ -1676,8 +1731,15 @@
 
   async function start() {
     const key = planKey();
-    const { ok, body } = await api("/api/v1/play/runs", { method: "POST", body: requestBody() });
+    const sent = requestBody();
+    const { ok, body } = await api("/api/v1/play/runs", { method: "POST", body: sent });
     const status = $("play-start-message");
+    if (ok && sent.build_request_id && state.buildRequest?.id === sent.build_request_id) {
+      // The start consumed the editor's request: the next press is an
+      // ordinary build of whatever is on screen.
+      state.buildRequest = null;
+      document.dispatchEvent(new CustomEvent("aucom:build-request-started", { detail: { id: sent.build_request_id } }));
+    }
     if (!ok) {
       status.dataset.pressed = "refused";
       if (body.code === "already_running" && body.run_id) {
@@ -2345,7 +2407,7 @@
     else renderFinalSummary();
   }
   for (const radio of [$("play-source-saved"), $("play-source-local")]) {
-    radio.addEventListener("change", () => { if (radio.checked) setSource(radio.value); });
+    radio.addEventListener("change", () => { if (radio.checked) { setSource(radio.value); checkBuildRequest(); } });
   }
   $("play-run-after").addEventListener("change", (event) => {
     state.runAfter = event.target.checked;
@@ -2353,6 +2415,7 @@
     invalidate(state.runAfter ? "The game starts after the build now, so the review is worked out again."
       : "Nothing starts after the build now, so the review is worked out again.");
     renderListing();
+    checkBuildRequest();
   });
 
   // `change` only, and every change re-reads the revisions — including a
@@ -2363,9 +2426,15 @@
     state.map = state.maps.find((m) => m.asset_id === event.target.value) || null;
     invalidate("You changed the map, so its textures have to be checked again.");
     showAutobuild();
-    loadRevisions(event.target.value);
+    checkBuildRequest();
+    loadRevisions(event.target.value).then(checkBuildRequest);
   });
-  $("play-revision").addEventListener("change", (event) => chooseRevision(event.target.value));
+  $("play-revision").addEventListener("change", (event) => chooseRevision(event.target.value).then(checkBuildRequest));
+  // The editor's request went away — dismissed, expired or replaced — while
+  // this form was building it.
+  document.addEventListener("aucom:build-request-gone", (event) => {
+    if (state.buildRequest?.id === event.detail?.id) dropBuildRequest();
+  });
   $("play-source-file").addEventListener("change", (event) => {
     state.sourceFile = event.target.value;
     invalidate("You changed which file is built.");
@@ -2492,6 +2561,35 @@
     // build.js reads and sets the build profile a file is built with, so the
     // choice carries across when somebody switches source.
     pipeline: () => state.pipeline,
+    // The editor's build request, from its notice (buildrequest.js): the form
+    // opens on the saved map, the exact revision and the Run after build the
+    // editor asked for, and the automatic check runs as for any choice.
+    // Nothing starts until the person presses the button.
+    async adoptBuildRequest(request) {
+      if (!restored) {
+        restored = true;
+        restore();
+      }
+      state.buildRequest = {
+        id: request.request_id, asset_id: request.asset_id, revision_id: request.revision_id,
+        run_after: request.run_after === true, game: request.game_profile,
+        preferred_tool: request.preferred_tool, normal_pipeline: request.normal_pipeline, pickPipeline: true,
+      };
+      $("play-request-note").hidden = true;
+      state.source = "saved";
+      state.runAfter = state.buildRequest.run_after;
+      $("play-run-after").checked = state.runAfter;
+      pendingMap = request.asset_id;
+      pendingRevision = request.revision_id;
+      state.map = null;
+      state.revision = null;
+      remember();
+      window.AUCOM.showArea("play");
+      await ready;
+      // The exact revision was not listed, or the map could not be read:
+      // what is on screen is not the editor's request, and is said to be.
+      checkBuildRequest();
+    },
   };
 
   // Activity is not an area: it belongs to the window, and a run started here

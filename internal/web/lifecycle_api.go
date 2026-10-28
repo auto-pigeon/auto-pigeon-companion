@@ -175,6 +175,7 @@ func (s *Server) Close() {
 	// Nothing is said to the editor after this: a status posted by a program
 	// that has stopped would be a line nobody can follow up.
 	defer s.leaks.close()
+	defer s.buildReqs.close()
 	s.endHostedGames()
 	s.playLive.CancelAll()
 	// A Quake III run that is still waiting for its engine's word stops

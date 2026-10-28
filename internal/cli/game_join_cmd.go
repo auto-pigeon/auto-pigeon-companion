@@ -17,6 +17,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/buildintent"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/config"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/engine"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/hostgame"
@@ -302,6 +303,12 @@ func printJoinPlan(env *Env, plan hostgame.Plan) {
 // validated by aub.ParseLeakTestLink, recorded through internal/leakintent and
 // shown in the Build area — and it starts nothing either: the page resolves it
 // against AUB, shows the exact command, and a person presses Run.
+//
+// A third kind, `autopigeon://build/request/…` — the editor's Build button —
+// is validated by aub.ParseBuildRequestLink, recorded through
+// internal/buildintent (never leakintent) and shown in Build & Run. It names an
+// opaque request and nothing else: the page asks AUB what it is with the
+// Companion's own session, and a person presses Build or Build & Run.
 func gameOpen(env *Env, args []string) int {
 	set := newFlagSet(env, "game open")
 	noBrowser := set.Bool("no-browser", false, "record the link and print the page address, opening nothing")
@@ -316,14 +323,22 @@ func gameOpen(env *Env, args []string) int {
 	}
 	area, what := "games", "this game"
 	var record func(dir string) error
-	if aub.IsLeakTestLink(rest[0]) {
+	switch {
+	case aub.IsBuildRequestLink(rest[0]):
+		link, err := aub.ParseBuildRequestLink(rest[0])
+		if err != nil {
+			return fail(env, err)
+		}
+		area, what = "play", "this build request"
+		record = func(dir string) error { return buildintent.Receive(buildintent.Path(dir), link, time.Now().UTC()) }
+	case aub.IsLeakTestLink(rest[0]):
 		link, err := aub.ParseLeakTestLink(rest[0])
 		if err != nil {
 			return fail(env, err)
 		}
 		area, what = "build", "this leak test"
 		record = func(dir string) error { return leakintent.Receive(leakintent.Path(dir), link, time.Now().UTC()) }
-	} else {
+	default:
 		ticketID, err := aub.ParseJoinLink(rest[0])
 		if err != nil {
 			return fail(env, err)

@@ -118,7 +118,11 @@ type Server struct {
 	// leaks tells the editor, through AUB, what is happening to its leak
 	// requests. One worker, stopped by Close. See leaksender.go.
 	leaks *leakSender
-	logf  func(format string, args ...any)
+	// buildReqs does the same for the editor's normal build requests, and
+	// remembers what each resolved to and which run it started. See
+	// buildrelay.go.
+	buildReqs *buildRelay
+	logf      func(format string, args ...any)
 	// games is the Games area's process-wide state: download and launch
 	// coordination, and the reviews waiting for an approval.
 	games  *gameState
@@ -316,6 +320,7 @@ func NewServer(options Options) (*Server, error) {
 	}
 	server.index = index
 	server.leaks = newLeakSender(nil, server.leakSession, logf)
+	server.buildReqs = newBuildRelay(nil, server.buildRelaySession, logf)
 	server.handler = server.routes()
 
 	// Records a previous Companion left mid-run, and the temporary directories
@@ -426,6 +431,7 @@ func (s *Server) api() map[string]http.HandlerFunc {
 		s.engineAPI(), s.buildAPI(), s.playAPI(), s.settingsAPI(), s.siteLinksRoutes(), s.hostingRoutes(), s.bugReportRoutes(), s.pathAPI(),
 		s.feedbackAPI(), s.aboutAPI(), s.accountAPI(), s.gamesAPI(), s.noticesAPI(),
 		s.lifecycleAPI(), s.leakTestAPI(), s.leakPipelineAPI(), s.uriAPI(), s.autobuildAPI(), s.q3API(), s.q2API(),
+		s.buildRequestAPI(),
 	} {
 		for pattern, handler := range table {
 			if _, clash := routes[pattern]; clash {
@@ -729,6 +735,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		// A leak request that arrived while nobody was signed in is
 		// acknowledged to the editor now.
 		s.leaks.sessionChanged()
+		s.buildReqs.sessionChanged()
 	} else {
 		// The login itself succeeded and the in-memory client is usable; only
 		// persistence failed, so this is reported without failing the request.

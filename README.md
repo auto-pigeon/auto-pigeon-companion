@@ -548,6 +548,43 @@ separate step you take after reviewing the exact command the page shows.
 **Help to connect**, which explains the manual UDP port forwarding people
 outside your network need to reach you.
 
+## Building a map from the editor
+
+Make sure the `autopigeon://` handler is registered (above), save the map to
+your account in the editor and press **Build** (or **Build & Run**) there. The
+editor opens a link that names only an opaque request:
+
+```console
+$ ./companion game open 'autopigeon://build/request/<id>?intent=build' --no-browser
+the Companion is open at http://127.0.0.1:<port>/#play
+```
+
+Opening it starts nothing and asks nobody anything. A notice — **Build requested
+by the editor** or **Build & Run requested by the editor** — appears in the open
+Companion window. The Companion asks your account, with its own sign-in, which
+saved map and revision the request is about, and checks that revision itself.
+**Review build** opens Build & Run on that exact saved revision, with Run after
+build set as the editor asked, and checks the setup as usual; nothing runs until
+you press **Build** or **Build & Run**. If a compiler is not set up yet, **Set up**
+beside the button takes you there, and the request waits (up to thirty minutes).
+**Dismiss** forgets the request and tells the editor.
+
+The editor sees what happens — received, in review, building, then finished,
+failed or cancelled. If you change the map, the revision or Run after build, the
+build is no longer the editor's: it still runs when you press the button, and
+the editor is not told about it. A request for another account or server, or an
+expired one, says the Companion cannot find it; sign in to the account the
+editor uses and press **Retry**. Quake III maps are not built this way yet.
+
+```bash
+# the pending request, from this machine only
+curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
+  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/build-request/request"
+# what your account says it is about
+curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
+  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/build-request/pending"
+```
+
 ## Testing an editor map for leaks
 
 Make sure the `autopigeon://` handler is registered (above), save the map to

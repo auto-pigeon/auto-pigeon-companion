@@ -24,6 +24,7 @@ paths:
   - internal/joinready/**
   - internal/joincontent/**
   - internal/joinintent/**
+  - internal/buildintent/**
   - internal/hostgame/**
   - internal/assetsync/**
   - internal/urischeme/**
@@ -82,6 +83,28 @@ validates the link's shape before anything else, records it through
 redeemed, deduplicated by digest), and starts or raises the page. The server
 redeems it once when the page asks. Never make the handler resolve, download or
 launch.
+
+**The editor's Build button is a third link, and it is not a leak test.**
+`autopigeon://build/request/<32 hex>?intent=build|build_run` is parsed only by
+`aub.ParseBuildRequestLink` (exactly that query, spelled exactly so) and recorded only in
+`internal/buildintent` (`build-request-intent.json`, 0600, thirty minutes, re-validated on every
+read); the leak-test parser, intent file, routes, statuses and pipelines never see it, and the
+handler opens `#play` and asks nobody anything. The page resolves the opaque id against AUB
+(`GET /api/companion/v1/build-requests/{id}`) with the Companion's own session, then checks it
+itself: the link's intent equals AUB's, the Companion's own revision read is immutable with the
+request's number and digest, the game is read from the pinned APMap and AUB's game must agree, and
+only a game Build & Run builds (Quake 1, Quake II — Quake III is refused there) is reviewed. AUB's
+404 (unknown, expired, another account's, map unreadable) keeps the intent. **Review build** only
+fills the ordinary Build & Run form; the press of Build / Build & Run is the authorization, and its
+`build_request_id` is accepted only for the pending id, its exact revision and its intent (a
+`build` request never starts an engine). The start consumes the intent once and runs an ordinary
+saved-map build, so `build.Latest` finds it. Statuses (`received` once, `reviewing`, `building`,
+then `completed`/`failed`/`cancelled` once; `blocked` with a token stage) go to
+`POST …/build-requests/{id}/status` through `internal/web/buildrelay.go`: accepted-then-said,
+sequence strictly increasing and above AUB's, nothing after an ending, backoff and sign-in holds as
+the leak relay's — and never blocking the local flow. Tests: `internal/aub/buildlink_test.go`,
+`internal/buildintent`, `internal/cli/buildrequest_open_test.go`,
+`internal/web/buildrequest_test.go`, `testdata/buildrequest.check.mjs`.
 
 **The handler is registered once, at first interactive use (moved from README.md, 2026-10-17).**
 The first no-subcommand start (a double-click) registers `autopigeon://` and records that it did

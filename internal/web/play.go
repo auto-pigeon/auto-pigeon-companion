@@ -665,6 +665,10 @@ type playRequestBody struct {
 	// installed and no engine starts — so Engine, Action and Mod are not asked
 	// for. See playrun.Request.BuildOnly.
 	BuildOnly bool `json:"build_only,omitempty"`
+	// BuildRequestID names the editor's build request this start answers
+	// (buildrequest.go). Optional: a start without it is unchanged. Not part
+	// of the run's request, so it never makes two builds different ones.
+	BuildRequestID string `json:"build_request_id,omitempty"`
 }
 
 // playListingBody is the listing the page confirmed in step 3.
@@ -853,6 +857,10 @@ func (s *Server) playRequest(body playRequestBody) (playrun.Request, int, error)
 func (s *Server) handlePlayStart(w http.ResponseWriter, r *http.Request) {
 	var body playRequestBody
 	if !decodeJSON(w, r, &body) {
+		return
+	}
+	if body.BuildRequestID != "" {
+		s.startForBuildRequest(w, r, body)
 		return
 	}
 	request, status, err := s.playRequest(body)

@@ -134,6 +134,13 @@
     -->
     <section id="leak-request" class="leak-request" role="status" aria-live="polite" aria-label="Leak test request" hidden></section>
 
+    <!--
+      The editor's build request (buildrequest.js), above every area: Review build
+      takes it into Build & Run on the exact saved revision. Nothing runs until a
+      person presses Build or Build & Run there.
+    -->
+    <section id="build-request" class="leak-request" role="status" aria-live="polite" aria-label="Build request" hidden></section>
+
     <!-- Back online with something to sync: said once, where the person is. -->
     <div id="reconnect-banner" class="reconnect-banner" role="status" hidden>
       <p id="reconnect-text"></p>
@@ -363,6 +370,8 @@
                       <select id="play-revision"></select>
                     </div>
                   </div>
+                  <!-- Said once when the form stops building what the editor asked for (play.js). -->
+                  <p id="play-request-note" class="hint" role="status" hidden></p>
                   <div class="field" id="play-source-file-field" hidden>
                     <label for="play-source-file">Map file in this revision</label>
                     <select id="play-source-file"></select>
@@ -1375,6 +1384,7 @@
     <script src="footer.js"></script>
     <script src="account.js"></script>
     <script src="leakrequest.js"></script>
+    <script src="buildrequest.js"></script>
     <script src="lifecycle.js"></script>
     <script src="app.js"></script>
     <!-- An ES module: it imports the vendored notice contract, which imports

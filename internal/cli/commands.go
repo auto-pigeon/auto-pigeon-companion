@@ -180,7 +180,7 @@ func runServe(env *Env, args []string) int {
 	port := set.Int("port", 0, "loopback port to bind; 0 uses the configured port")
 	open := set.Bool("open", false, "open the page in the default browser")
 	debug := set.Bool("debug", false, "unlock the developer controls: typing any server address in Settings")
-	openArea := set.String("open-area", "", "with --open, the area to show first (games, build)")
+	openArea := set.String("open-area", "", "with --open, the area to show first (games, build, play)")
 	interactive := set.Bool("interactive", false,
 		"application mode: stop once the last page has closed and nothing is running")
 	stayRunning := set.Bool("stay-running", false,
@@ -247,7 +247,7 @@ func runServe(env *Env, args []string) int {
 			releaseStart()
 			page := strings.TrimRight(address, "/") + "/"
 			switch *openArea {
-			case "games", "build":
+			case "games", "build", "play":
 				page += "#" + *openArea
 			}
 			// Which build answers, honestly: the running one, not this binary.
@@ -476,7 +476,7 @@ func runServe(env *Env, args []string) int {
 		// handler should still be able to use the server.
 		page := url
 		switch *openArea {
-		case "games", "build":
+		case "games", "build", "play":
 			page = url + "#" + *openArea
 		}
 		asked := time.Now()

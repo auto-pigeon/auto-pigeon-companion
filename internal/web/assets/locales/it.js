@@ -1023,5 +1023,22 @@ window.AUCOM_LOCALES.it = {
   "peak CPU {n}%": "CPU di picco {n}%",
   "CPU and RAM not available here": "CPU e RAM non disponibili qui",
   "recorded as running; this Companion is not supervising it": "registrato come in esecuzione; questo Companion non lo supervisiona",
-  "Makes a NEW job with the same request; this one stays as it is.": "Crea un NUOVO job con la stessa richiesta; questo resta com’è."
+  "Makes a NEW job with the same request; this one stays as it is.": "Crea un NUOVO job con la stessa richiesta; questo resta com’è.",
+  "Build request": "Richiesta di compilazione",
+  "Build & Run requested by the editor": "Build & Run richiesto dall’editor",
+  "Build requested by the editor": "Compilazione richiesta dall’editor",
+  "Checking the request with your account…": "Verifica della richiesta con il tuo account…",
+  "Sign in to the account the editor uses. The Companion cannot read this request while signed out.": "Accedi all’account usato dall’editor. Senza accesso il Companion non può leggere questa richiesta.",
+  "This account cannot find the request. The Companion may be signed in to another server or account, or the request expired.": "Questo account non trova la richiesta. Il Companion potrebbe essere collegato a un altro server o account, oppure la richiesta è scaduta.",
+  "This request cannot be built: {why}.": "Questa richiesta non può essere compilata: {why}.",
+  "The request could not be checked: {why}": "Non è stato possibile verificare la richiesta: {why}",
+  "This saved revision is a {game} map. Build & Run builds {list} maps only, so nothing will run.": "Questa revisione salvata è una mappa di {game}. Build & Run compila solo mappe di {list}, quindi non verrà eseguito nulla.",
+  "In review in Build & Run. Nothing runs until you press {action}.": "In esame in Build & Run. Nulla viene eseguito finché non premi {action}.",
+  "It is still the saved revision the editor asked about. Review it; nothing runs until you press {action} there.": "È ancora la revisione salvata indicata dall’editor. Controllala; nulla viene eseguito finché non premi {action} lì.",
+  "The editor cannot be told about this request: the account server rejected it.": "Non è possibile informare l’editor di questa richiesta: il server dell’account l’ha rifiutata.",
+  "The editor has not been told yet: the account server is not answering. The Companion keeps trying; the request stays here.": "L’editor non è ancora stato informato: il server dell’account non risponde. Il Companion continua a provare; la richiesta resta qui.",
+  "This build is no longer the one the editor asked for; the editor will not be told about it.": "Questa compilazione non è più quella richiesta dall’editor; l’editor non ne sarà informato.",
+  "Quake 1": "Quake 1",
+  "unknown game": "gioco sconosciuto",
+  "the account server did not answer": "il server dell’account non ha risposto"
 };
