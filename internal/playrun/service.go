@@ -178,6 +178,12 @@ var ErrPackageHeld = errors.New("playrun: the package is held")
 type RemedyError struct {
 	Err    error
 	Remedy string
+	// Code is the failure's category, for a page to say in its reader's
+	// language (a download refused by the server: web/failurewords.go), and
+	// Summary the one sentence an ordinary message shows instead of the
+	// error's first line. Both optional.
+	Code    string
+	Summary string
 }
 
 func (e *RemedyError) Error() string { return e.Err.Error() }
@@ -281,6 +287,9 @@ type Service struct {
 	store *Store
 	deps  Deps
 	live  *Live
+	// retrying makes "is there a retry of this run yet?" and starting one a
+	// single step in this process (Retry).
+	retrying sync.Mutex
 }
 
 // NewService builds a coordinator.
@@ -421,6 +430,18 @@ func (s *Service) Retry(id string) (*Record, error) {
 	if !previous.Retryable() {
 		return nil, fmt.Errorf("playrun: run %s is %s, and only a failed or cancelled run is retried",
 			id, previous.State)
+	}
+	// Try again is pressed once per failure: a second press — another tab, a
+	// double click, a reload that replays it — is answered with the retry that
+	// already exists, never a second build of the same pinned request (NEW_363).
+	s.retrying.Lock()
+	defer s.retrying.Unlock()
+	if records, listErr := s.store.List(); listErr == nil {
+		for _, record := range records {
+			if record.RetryOf == previous.ID {
+				return record, nil
+			}
+		}
 	}
 	return s.start(previous.Request, previous.ID)
 }

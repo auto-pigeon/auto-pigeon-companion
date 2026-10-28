@@ -65,6 +65,21 @@ type Expect struct {
 // current revision and start again, never "use it anyway".
 var ErrRevisionMismatch = errors.New("texturebundle: the bundle is not the map revision that was requested")
 
+// ErrDamaged reports a bundle whose bytes are not what its manifest declares —
+// an unreadable archive, or a member of another size or digest. Nothing is
+// published; a person may download it again, explicitly (NEW_363: a corrupt
+// asset is a different failure from a server that is down). The error's own
+// text is unchanged: [damaged] only marks it.
+var ErrDamaged = errors.New("texturebundle: the bundle does not match its manifest")
+
+type damagedError struct{ err error }
+
+func (e damagedError) Error() string        { return e.err.Error() }
+func (e damagedError) Unwrap() error        { return e.err }
+func (e damagedError) Is(target error) bool { return target == ErrDamaged }
+
+func damaged(err error) error { return damagedError{err} }
+
 // ErrCancelled reports an extraction stopped by its context. Nothing is
 // published and the temporary directory is gone.
 var ErrCancelled = errors.New("texturebundle: the bundle was cancelled before it was published")
@@ -114,7 +129,7 @@ func extract(ctx context.Context, parent string, bundle []byte, want Expect, lim
 	}
 	reader, err := zip.NewReader(bytes.NewReader(bundle), int64(len(bundle)))
 	if err != nil {
-		return nil, fmt.Errorf("texturebundle: the bundle is not a readable archive: %w", err)
+		return nil, damaged(fmt.Errorf("texturebundle: the bundle is not a readable archive: %w", err))
 	}
 	if len(reader.File) > limits.Members {
 		return nil, fmt.Errorf("texturebundle: the bundle holds %d members and the limit is %d",
@@ -222,12 +237,12 @@ func extract(ctx context.Context, parent string, bundle []byte, want Expect, lim
 			return fail(writeErr)
 		}
 		if size != file.Bytes {
-			return fail(fmt.Errorf("texturebundle: %s is %d bytes and its manifest declares %d",
-				name, size, file.Bytes))
+			return fail(damaged(fmt.Errorf("texturebundle: %s is %d bytes and its manifest declares %d",
+				name, size, file.Bytes)))
 		}
 		if !strings.EqualFold(digest, file.SHA256) {
-			return fail(fmt.Errorf("texturebundle: %s hashes to %s and its manifest declares %s",
-				name, digest, file.SHA256))
+			return fail(damaged(fmt.Errorf("texturebundle: %s hashes to %s and its manifest declares %s",
+				name, digest, file.SHA256)))
 		}
 		out.files = append(out.files, Member{Path: name, Source: file.Source, SHA256: strings.ToLower(digest), Bytes: size})
 	}
@@ -264,12 +279,12 @@ func extract(ctx context.Context, parent string, bundle []byte, want Expect, lim
 			return fail(writeErr)
 		}
 		if size != notice.Bytes {
-			return fail(fmt.Errorf("texturebundle: the notice %s is %d bytes and its manifest declares %d",
-				name, size, notice.Bytes))
+			return fail(damaged(fmt.Errorf("texturebundle: the notice %s is %d bytes and its manifest declares %d",
+				name, size, notice.Bytes)))
 		}
 		if !strings.EqualFold(digest, notice.SHA256) {
-			return fail(fmt.Errorf("texturebundle: the notice %s hashes to %s and its manifest declares %s",
-				name, digest, notice.SHA256))
+			return fail(damaged(fmt.Errorf("texturebundle: the notice %s hashes to %s and its manifest declares %s",
+				name, digest, notice.SHA256)))
 		}
 		out.notices = append(out.notices, NoticeMember{
 			Path: name, SHA256: strings.ToLower(digest), Bytes: size, Sources: notice.Sources,

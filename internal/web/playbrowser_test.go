@@ -55,6 +55,37 @@ func (d *playDriveHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
+	if r.URL.Path == "/journey/catalog-fault" {
+		// What the account's map list answers next: AUB's status and reason
+		// code, or {status: 0} for the list again (NEW_363, NEW_360 F2).
+		// `hold` keeps the refusal in the air until a later call with
+		// `release`: an answer that lands after an account switch.
+		var fault struct {
+			Status  int    `json:"status"`
+			Reason  string `json:"reason"`
+			Message string `json:"message"`
+			Hold    bool   `json:"hold"`
+			Release bool   `json:"release"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&fault)
+		d.backend.mu.Lock()
+		if fault.Release {
+			if d.backend.holdCatalog != nil {
+				close(d.backend.holdCatalog)
+				d.backend.holdCatalog = nil
+			}
+		} else {
+			d.backend.catalogFault.status, d.backend.catalogFault.reason, d.backend.catalogFault.message =
+				fault.Status, fault.Reason, fault.Message
+			if fault.Hold {
+				d.backend.holdCatalog = make(chan struct{})
+			}
+		}
+		d.backend.mu.Unlock()
+		w.WriteHeader(http.StatusNoContent)
+
+		return
+	}
 	if r.URL.Path == "/journey/break-textures" {
 		// The map is SAVED, and the new revision's textures are incomplete.
 		//

@@ -493,8 +493,11 @@ func (s *Service) failed(record *Record, state State, cause error) {
 	record.FailedAt = state
 	record.Error = cause.Error()
 	var remedied *RemedyError
-	if record.Remedy == "" && errors.As(cause, &remedied) && remedied.Remedy != "" {
-		record.Remedy = remedied.Remedy
+	if errors.As(cause, &remedied) {
+		if record.Remedy == "" && remedied.Remedy != "" {
+			record.Remedy = remedied.Remedy
+		}
+		record.Summary, record.FailureCode = remedied.Summary, remedied.Code
 	}
 	if record.Remedy == "" {
 		record.Remedy = remedyFor(state, cause)

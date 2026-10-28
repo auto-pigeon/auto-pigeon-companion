@@ -1,5 +1,7 @@
-// The Build area: stage progress, the exact command, bounded live output,
-// cancellation, warnings and artifacts.
+// A file on this computer, in Build & Run (NEW_363: until then the separate
+// Build wizard): its inputs, the build profiles that take them, the check of
+// the exact commands, and the build's stage progress, bounded live output,
+// cancellation, warnings and artifacts. The form around it is play.js's.
 //
 // The page never holds a build's state as the truth. It starts one, is given an
 // id, and from then on polls the manifest the runner writes after every stage.
@@ -36,11 +38,10 @@
   // The last answer drawn, so a choice made on the page (fold or unfold the
   // output) redraws at once instead of waiting for the next poll.
   let lastBody = null;
-  // The wizard. `step` is the panel on screen; `checked` is what the last check
-  // (step 3) found for the choices as they are now — "ok", "blocked", or null
-  // once anything in steps 1 and 2 changed after it; `outcome` is the state of
-  // the build step 4 is showing.
-  let step = 1;
+  // `checked` is what the last check found for the choices as they are now —
+  // "ok", "blocked", or null once anything changed after it; it is what the
+  // one button says ("Review build" until "ok", then "Build"). `outcome` is the
+  // state of the build the progress panel is showing.
   let checked = null;
   let outcome = null;
   // Bumped by every change to steps 1 and 2, so a check that was out while the
@@ -206,7 +207,9 @@
     // when it started (NEW_244D found two overlapping refreshes doing exactly
     // that, and a build then ran a pipeline nobody chose).
     if (sequence !== pipelineRefresh) return;
-    const previous = select.value || chosenPipeline;
+    // Nothing chosen for a file yet: the build profile chosen for a saved map
+    // carries over, when it takes a file too (NEW_363: one form).
+    const previous = select.value || chosenPipeline || window.AUCOM.areas.play?.pipeline?.() || "";
     // What the user already filled in survives a refresh of the same pipeline.
     // Leaving Build to set a compiler up in Profiles and coming back used to
     // come back to an empty map field.
@@ -259,11 +262,9 @@
     inputFields = new Map();
     if (!pipeline) {
       $("build-pipeline-note").textContent = "Choose a ready pipeline. Set up its dependencies in Profiles, then Refresh.";
-      $("build-preview").disabled = true;
-      $("build-start").disabled = true;
+      renderSteps();
       return;
     }
-    $("build-preview").disabled = !window.AUCOM.pipelineReady(pipeline);
 
     $("build-pipeline-note").textContent = pipeline.runnable
       ? t("{n} stage(s). Version {version}.", { n: pipeline.steps.length, version: pipeline.version })
@@ -441,49 +442,36 @@
     return (pipeline?.inputs || []).filter((input) => input.required && !body.inputs[input.name]);
   }
 
+  // The one button, said and enabled from what the choices need now.
   function renderSteps() {
     const pipeline = currentPipeline();
-    const files = chosenFiles();
     const missing = missingRequired();
-    // Three steps: Check and Build were one step in two panels, and the
-    // operator asked for the Check step to go (2026-09-23). Panel 4 (the
-    // running build) is shown under step 3's tab.
-    const summaries = {
-      1: pipeline ? pipeline.name : "",
-      2: files.length ? files.join(", ") : "nothing chosen yet",
-      3: outcome ? outcome : checked === "ok" ? "ready to build" : checked === "blocked" ? "something is missing" : "not checked yet",
-    };
-    const done = { 1: Boolean(pipeline), 2: Boolean(pipeline) && missing.length === 0 && files.length > 0,
-      3: outcome === "succeeded" };
-    const attention = { 3: checked === "blocked" || (Boolean(outcome) && !["succeeded", "running", "queued"].includes(outcome)) };
-    const shown = step === 4 ? 3 : step;
-    for (let n = 1; n <= 3; n += 1) {
-      const tab = $("build-step-tab-" + n);
-      tab.classList.toggle("current", n === shown);
-      tab.classList.toggle("done", n !== shown && done[n]);
-      tab.classList.toggle("attention", n !== shown && !done[n] && Boolean(attention[n]));
-      if (n === shown) tab.setAttribute("aria-current", "step");
-      else tab.removeAttribute("aria-current");
-      $("build-step-summary-" + n).textContent = summaries[n];
-    }
-    $("build-start").disabled = checked !== "ok" || !window.AUCOM.pipelineReady(currentPipeline());
+    const ready = Boolean(pipeline) && window.AUCOM.pipelineReady(pipeline);
+    const button = $("build-start");
+    button.textContent = checked === "ok" ? t("Build") : t("Review build");
+    button.disabled = !ready || missing.length > 0 || chosenFiles().length === 0 || outcome === "running";
+    const why = !pipeline ? t("Choose a ready build profile first.")
+      : !ready ? t("The chosen build profile needs setup first.")
+        : missing.length || !chosenFiles().length ? t("Choose the map file first.")
+          : outcome === "running" ? t("A build is running; it can be cancelled below.") : "";
+    button.title = why;
   }
 
-  // showStep puts one panel on screen. Arriving at the check runs it, because a
-  // check of choices that have since changed is not a check of anything.
-  function showStep(n, { check = true, focus = true } = {}) {
-    step = n;
-    for (let i = 1; i <= 4; i += 1) $("build-step-" + i).hidden = i !== n;
+  // showStep (kept for the callers it had as a wizard: My Maps, the leak-test
+  // request, a refused input) brings the part of the form that step was to
+  // the reader: 1 the build profile, 2 the map, 3 the check, 4 the progress.
+  function showStep(n, { focus = true } = {}) {
     renderSteps();
-    if (focus) {
-      const heading = $("build-step-" + n).querySelector("h3");
-      if (heading) {
-        heading.setAttribute("tabindex", "-1");
-        heading.focus({ preventScroll: true });
-      }
-      $("build-steps").scrollIntoView({ block: "nearest" });
-    }
-    if (n === 3 && check && checked === null) preview($("build-preview"));
+    const target = { 1: "build-pipeline", 2: "build-inputs", 3: "build-start", 4: "build-step-4" }[n];
+    const node = $(target);
+    if (n === 4) $("build-step-4").hidden = !currentBuild;
+    if (!node || !focus) return;
+    node.scrollIntoView({ block: "nearest" });
+    const control = n === 2 ? node.querySelector("input, select, button") : node;
+    if (n === 4) {
+      $("build-current-title").setAttribute("tabindex", "-1");
+      $("build-current-title").focus({ preventScroll: true });
+    } else control?.focus?.({ preventScroll: true });
   }
 
   function choicesChanged() {
@@ -742,7 +730,6 @@
   let checking = null;
 
   function preview(button) {
-    if (step !== 3) showStep(3, { check: false });
     if (!checking) {
       checking = (async () => {
         // Choices that changed while a check was out (a chosen revision's file
@@ -750,7 +737,7 @@
         for (let round = 0; round < 3; round += 1) {
           const asked = generation;
           await runPreview(button, asked);
-          if (asked === generation || step !== 3) break;
+          if (asked === generation) break;
         }
       })().finally(() => { checking = null; });
     }
@@ -829,14 +816,15 @@
       setMessage("build-message", "The build has started.", "ok");
       outcome = "running";
       setMessage("build-result", "", "");
-      showStep(4, { focus: false });
       record(`Build started: ${$("build-label").value.trim() || currentPipeline()?.name || "untitled"}`, "", "running");
       currentBuild = body.build;
       leakRequestID = null;
       $("build-current-panel").hidden = false;
+      $("build-step-4").hidden = false;
       $("build-current-title").textContent = "Building " + ($("build-label").value.trim() || currentPipeline()?.name || "");
       $("build-current-title").setAttribute("tabindex", "-1");
       $("build-current-title").focus();
+      renderSteps();
       poll();
     });
   }
@@ -1012,7 +1000,7 @@
     // there disabled and red.
     $("build-cancel").hidden = !body.live;
     $("build-output-heading").textContent = body.live ? t("Output so far") : t("Output");
-    $("build-current-empty").hidden = true;
+    $("build-step-4").hidden = false;
     // Play this build: a finished build with a level goes straight to Run.
     // A Quake III map is not played by dropping its BSP into a mod folder: its
     // textures, shaders and models have to travel with it. That build gets the
@@ -1293,6 +1281,7 @@
     $("build-current-panel").hidden = false;
     setMessage("build-result", "", "");
     showStep(4, { focus: false });
+    renderSteps();
   }
 
   async function refreshHistory() {
@@ -1324,8 +1313,9 @@
         .join(" · ");
       const open = el("button", { text: "Open", attrs: { type: "button", class: "secondary" } });
       open.addEventListener("click", () => {
-        // Opened from Builds on this machine: the build is watched in Build.
-        if ($("area-build").hidden) window.AUCOM.showArea("build");
+        // Opened from Builds on this machine: the build is watched in Build &
+        // Run, on a file on this computer.
+        window.AUCOM.showArea("build");
         currentBuild = manifest.build_id;
         $("build-current-panel").hidden = false;
         outcome = manifest.state;
@@ -1370,22 +1360,19 @@
     $(id).addEventListener("input", choicesChanged);
     $(id).addEventListener("change", choicesChanged);
   }
-  for (const tab of document.querySelectorAll("#build-steps .bwiz-step")) {
-    // Step 3 is where a build is started AND watched: once there is one, its
-    // tab shows it; "Build this again" goes back to the commands.
-    tab.addEventListener("click", () => {
-      const n = Number(tab.dataset.step);
-      showStep(n === 3 && currentBuild ? 4 : n);
-    });
-  }
-  for (const go of document.querySelectorAll("#area-build [data-go]")) {
-    go.addEventListener("click", () => showStep(Number(go.dataset.go)));
-  }
-  $("build-preview").addEventListener("click", (event) => {
-    checked = null;
-    preview(event.currentTarget);
+  // One button: the check of these exact choices first ("Review build"), and
+  // Build only once that check is on screen and found everything in place.
+  $("build-start").addEventListener("click", async (event) => {
+    if (checked !== "ok") {
+      checked = null;
+      await preview(event.currentTarget);
+      $("build-review-details").open = checked !== "ok";
+      if (checked === "ok") window.AUCOM.announce(t("Review ready. Press Build to start."));
+    } else {
+      await start(event.currentTarget);
+    }
+    renderSteps();
   });
-  $("build-start").addEventListener("click", (event) => start(event.currentTarget));
   $("build-history-refresh").addEventListener("click", (event) => withBusy(event.currentTarget, refreshHistory));
   $("build-play").addEventListener("click", async () => {
     if (!currentBuild) return;
@@ -1454,9 +1441,9 @@
       renderSteps();
       // Back from Profiles after "Set up …": the check that sent the person
       // there is out of date, so it runs again rather than waiting for a click.
-      if (step === 3 && checked !== "ok") {
+      if (checked === "blocked") {
         checked = null;
-        preview($("build-preview"));
+        preview($("build-start"));
       }
       if (currentBuild) poll();
     },

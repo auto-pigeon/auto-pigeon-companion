@@ -36,10 +36,12 @@ func TestBuildRemembersTheChosenPipelineAndStartsNothingUnready(t *testing.T) {
 	page := string(source)
 	for _, want := range []string{
 		`"Choose a ready pipeline…", true, true, undefined, { setupLabel: "pipelines" });`,
-		`const previous = select.value || chosenPipeline;`,
+		`const previous = select.value || chosenPipeline || window.AUCOM.areas.play?.pipeline?.() || "";`,
 		`rememberPipeline($("build-pipeline").value);`,
-		`$("build-preview").disabled = !window.AUCOM.pipelineReady(pipeline);`,
-		`$("build-start").disabled = checked !== "ok" || !window.AUCOM.pipelineReady(currentPipeline());`,
+		// One button since NEW_363: "Review build", then Build — and neither
+		// while the chosen pipeline is not ready.
+		`const ready = Boolean(pipeline) && window.AUCOM.pipelineReady(pipeline);`,
+		`button.disabled = !ready || missing.length > 0 || chosenFiles().length === 0 || outcome === "running";`,
 		`Nothing else was chosen for you.`,
 	} {
 		if !strings.Contains(page, want) {

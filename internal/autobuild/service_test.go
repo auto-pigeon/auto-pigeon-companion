@@ -26,6 +26,8 @@ type fixture struct {
 	runs     map[string]string
 	why      map[string]string
 	startErr error
+	// notReady is why a build profile cannot build now, by id (NEW_363).
+	notReady map[string]error
 }
 
 type startCall struct {
@@ -40,7 +42,7 @@ func newFixture(t *testing.T) *fixture {
 		t: t, now: time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC),
 		path: filepath.Join(t.TempDir(), "autobuild", "state.json"),
 		aub:  map[string]Revision{}, fail: map[string]error{},
-		runs: map[string]string{}, why: map[string]string{},
+		runs: map[string]string{}, why: map[string]string{}, notReady: map[string]error{},
 	}
 	f.svc = f.service()
 	return f
@@ -82,6 +84,11 @@ func (f *fixture) service() *Service {
 				return "", "", errors.New("no such run")
 			}
 			return state, f.why[run], nil
+		},
+		Ready: func(pipeline string) error {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			return f.notReady[pipeline]
 		},
 		Now: func() time.Time {
 			f.mu.Lock()

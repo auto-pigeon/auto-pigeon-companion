@@ -62,8 +62,8 @@ func TestNoResultDumpAndNoNewTab(t *testing.T) {
 	if !strings.Contains(play, `$("activity-body")`) {
 		t.Error("play.js does not render into the Activity surface")
 	}
-	// The Build & Run page's own panels end with the wizard's navigation, not
-	// with an output region.
+	// The Build & Run page's own blocks end with the review's one primary
+	// action and a run's concise card, not with an output region.
 	page := asset(t, "index.html")
 	area := page[strings.Index(page, `id="area-play"`):]
 	area = area[:strings.Index(area, `id="area-library"`)]
@@ -80,10 +80,16 @@ func TestModesAreChoicesAndResourcesAreSelects(t *testing.T) {
 	play := asset(t, "play.js")
 	page := asset(t, "index.html")
 
-	// The action — a small fixed set — is a row of radio cards, each saying in
-	// words what it does (operator, 2026-09-22: four tabs nobody could read).
-	if !strings.Contains(page, `id="play-action-choices"`) || !strings.Contains(play, `type: "radio"`) {
+	// The action — a small fixed set — is a row of radio choices, and what the
+	// chosen one does is said in words beneath it (operator, 2026-09-22: four
+	// tabs nobody could read; NEW_363: once, for the chosen one, and only when
+	// there is more than one to choose from).
+	if !strings.Contains(page, `id="play-action-choices"`) || !strings.Contains(play, `type: "radio"`) ||
+		!strings.Contains(play, `$("play-action-note").textContent = ACTIONS[state.action]`) {
 		t.Error("the engine's action is not offered as a set of explained choices")
+	}
+	if !strings.Contains(play, `$("play-action-field").hidden = !engine || offered.length < 2;`) {
+		t.Error("the engine's action is offered even when there is nothing to choose")
 	}
 	for _, id := range []string{"play_map", "host_listen", "host_dedicated"} {
 		if !strings.Contains(play, id+": {") {

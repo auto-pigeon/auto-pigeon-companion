@@ -137,6 +137,10 @@ type Entry struct {
 	// bounded. It is what makes "never build a revision twice" survive a
 	// restart.
 	Submitted []string `json:"submitted,omitempty"`
+	// ByHand is every revision id a person built by hand with Build & Run
+	// (NEW_363, [Service.NoteManual]), newest last, bounded like Submitted:
+	// the poller does not build one of them again.
+	ByHand []string `json:"by_hand,omitempty"`
 }
 
 // maxSubmitted bounds the remembered keys. Far more than the revisions a map
@@ -159,6 +163,25 @@ func (e *Entry) remember(key string) {
 	e.Submitted = append(e.Submitted, key)
 	if len(e.Submitted) > maxSubmitted {
 		e.Submitted = append([]string(nil), e.Submitted[len(e.Submitted)-maxSubmitted:]...)
+	}
+}
+
+func (e *Entry) builtByHand(revisionID string) bool {
+	for _, seen := range e.ByHand {
+		if seen == revisionID {
+			return true
+		}
+	}
+	return false
+}
+
+func (e *Entry) rememberByHand(revisionID string) {
+	if e.builtByHand(revisionID) {
+		return
+	}
+	e.ByHand = append(e.ByHand, revisionID)
+	if len(e.ByHand) > maxSubmitted {
+		e.ByHand = append([]string(nil), e.ByHand[len(e.ByHand)-maxSubmitted:]...)
 	}
 }
 

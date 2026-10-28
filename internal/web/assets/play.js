@@ -1,7 +1,9 @@
 // Build & Run — the main product journey, and the Activity surface.
 //
-// Five steps, one confirmation, and everything after that confirmation happens
-// on the server. This file does NOT sequence the work: it collects the exact
+// One form (NEW_363): the map, the build profile, whether to run it after the
+// build, and a review whose one primary action says what it does — "Review
+// build" until a review of these exact choices is on screen, then "Build &
+// Run" or "Build". Everything after that press happens on the server. This file does NOT sequence the work: it collects the exact
 // identities, asks the server what it would do, sends one request, and then
 // reads a durable record back. A browser tab that orchestrated eight stages
 // would be a tab whose being closed lost the run.
@@ -49,7 +51,12 @@
   // The whole of this page's state. Exact identities, never display labels: a
   // request carrying "dm1, latest" would mean something different tomorrow.
   const state = {
-    step: 1,
+    // "saved" (a map revision from the account, this file) or "local" (a file
+    // on this computer, built by build.js). One form, two sources.
+    source: "saved",
+    // "Run after build": off, the run stops once the map is compiled
+    // (playrun.Request.BuildOnly) and the primary says Build.
+    runAfter: true,
     maps: [],
     revisions: [],
     pipelines: [],
@@ -98,7 +105,7 @@
   // is what a fresh visit does anyway.
   const REMEMBERED = {
     map: "asset_id", rev: "revision_id", name: "map_name", build: "pipeline",
-    strict: "strict", engine: "engine", action: "action", mod: "mod", step: "step",
+    strict: "strict", engine: "engine", action: "action", mod: "mod", src: "source", run: "run_after",
   };
   let pendingMap = "";
   let pendingRevision = "";
@@ -110,9 +117,12 @@
       asset_id: state.map?.asset_id || pendingMap, revision_id: state.revision?.revision_id || pendingRevision,
       map_name: $("play-map-name").value.trim(), pipeline: state.pipeline,
       strict: state.strict ? "1" : "", engine: state.engine, action: state.action,
-      mod: state.mod === "auto-pigeon" ? "" : state.mod, step: state.step > 1 ? String(state.step) : "",
+      mod: state.mod === "auto-pigeon" ? "" : state.mod,
+      source: state.source === "local" ? "local" : "", run_after: state.runAfter ? "" : "0",
     };
     const query = new URLSearchParams(window.location.search);
+    // The wizard's step (before NEW_363) means nothing to the form.
+    query.delete("step");
     for (const [key, field] of Object.entries(REMEMBERED)) {
       if (values[field]) query.set(key, values[field]);
       else query.delete(key);
@@ -136,7 +146,9 @@
     state.engine = saved.engine;
     state.action = saved.action;
     state.mod = saved.mod || "auto-pigeon";
-    state.step = Math.min(5, Math.max(1, Number(saved.step) || 1));
+    if (saved.source) state.source = saved.source === "local" ? "local" : "saved";
+    state.runAfter = saved.run_after !== "0";
+    $("play-run-after").checked = state.runAfter;
     if (saved.map_name) {
       $("play-map-name").value = saved.map_name;
       state.mapName = saved.map_name;
@@ -145,101 +157,31 @@
     $("play-strict").checked = state.strict;
   }
 
-  // --- step navigation --------------------------------------------------------
+  // --- the form ------------------------------------------------------------------
 
-  function show(step) {
-    state.step = step;
-    remember();
-    for (const panel of document.querySelectorAll("#area-play .bwiz-panel")) {
-      panel.hidden = Number(panel.dataset.step) !== step;
-    }
-    markSteps();
-    summarize();
-    // "Started" describes the run that was started, not the next one.
-    if (step !== 5) setMessage("play-start-message", "");
-    // Not while the lists are still arriving: a plan asked for then would be
-    // a plan for choices that are not restored yet.
-    if (step === 4 && !loading) refreshPlan();
-    if (step === 5 && !loading) renderFinalSummary();
-    if (step === 1) showAutobuild();
-    const panel = $("play-step-" + step);
-    panel?.querySelector("h3")?.focus?.();
-  }
-
-  // What each step chose, written under its name in the step bar: the value
-  // itself large and bright, its qualifier small beneath it. The step bar is
-  // the one place a person can read the whole journey at a glance, so what was
-  // chosen must stand out from the labels around it.
-  function summarize() {
-    const put = (n, value, detail, empty = t("not chosen yet")) => {
-      const node = $("play-step-summary-" + n);
-      node.replaceChildren();
-      if (!value) {
-        if (empty) node.append(el("span", { className: "bwiz-step__empty", text: empty }));
-        return;
-      }
-      node.append(el("span", { className: "bwiz-step__value", text: value }));
-      if (detail) node.append(el("span", { className: "bwiz-step__detail", text: detail }));
-    };
-    put(1, state.revision ? state.map?.display_name || state.map?.asset_id || "" : "",
-      state.revision ? t("revision {n}", { n: state.revision.revision }) +
-        ($("play-map-name").value.trim() ? ` · +map ${$("play-map-name").value.trim()}` : "") : "");
-    put(2, nameOfPipeline(state.pipeline), state.strict ? t("strict") : "");
-    put(3, state.engine ? nameOfEngine(state.engine) : "",
-      state.engine ? [actionTitle(state.action), modFolder()].filter(Boolean).join(" · ") : "");
-    put(4, state.plan ? t("checked") : "", "", t("not checked yet"));
-    const node5 = $("play-step-summary-5");
-    node5.replaceChildren();
-    markSteps();
-  }
-
-  // The current step is teal, a step whose choice is made carries a tick, and a
-  // step that would stop the run is red — the same three states the Build
-  // wizard draws. Before this only aria-current was set, and the stylesheet
-  // styles classes, so the step a person was on looked like every other.
-  function markSteps() {
-    const done = {
-      1: Boolean(state.revision),
-      2: Boolean(state.pipeline),
-      3: Boolean(state.engine && state.action && state.gameRoot),
-      4: Boolean(state.plan),
-      5: false,
-    };
-    const attention = {
-      3: Boolean(state.engine) && !state.gameRoot,
-      4: state.plan?.textures?.compiler_ready === false && !state.plan?.textures?.ready_with_own_wads,
-    };
-    // Each "Next" is active only when its step has what it needs, and says
-    // what is missing when it is not (operator, 2026-09-23).
-    const hosting = state.action === "host_listen" || state.action === "host_dedicated";
-    const listed = !hosting || !state.listing.enabled ||
+  // What stops this form being reviewed or started, in one sentence, or "".
+  // Said beside the primary rather than on a disabled button nobody can ask
+  // (operator, 2026-09-23).
+  function missingSentence() {
+    if (!window.AUCOM.status?.authenticated) return t("Sign in to build a saved map.");
+    if (!state.revision) return t("Choose a map and one of its revisions first.");
+    if (!String(state.mapName || "").trim()) return t("Give the map a name in the game first.");
+    const pipeline = state.pipelines.find((p) => p.id === state.pipeline);
+    if (!pipeline) return t("Choose a build profile first.");
+    if (!window.AUCOM.pipelineReady(pipeline)) return t("The chosen build profile needs setup first.");
+    if (!state.runAfter) return "";
+    const listed = !hosting() || !state.listing.enabled ||
       (String(state.listing.host || "").trim() !== "" && Number(state.listing.port) > 0);
-    const missing = {
-      2: !state.revision ? t("Choose a map and one of its revisions first.")
-        : !String(state.mapName || "").trim() ? t("Give the map a name in the game first.") : "",
-      3: !state.pipeline ? t("Choose a build profile first.") : "",
-      4: !state.engine ? t("Choose an engine first.")
-        : !state.action ? t("Choose how to play it first.")
-        : !state.gameRoot ? t("Set up where the game is first: Setup, in Profiles.")
-        : !listed ? t("Give the address and port players connect to first.") : "",
-      5: !state.plan ? t("The review is not ready yet.")
-        : attention[4] ? t("Some textures are missing: use your own copy first.") : "",
-    };
-    for (const button of document.querySelectorAll("#area-play [data-go]")) {
-      const target = Number(button.dataset.go);
-      const why = target > state.step ? missing[target] || "" : "";
-      button.disabled = Boolean(why);
-      button.title = why;
-    }
-    for (const tab of document.querySelectorAll("#play-steps .bwiz-step")) {
-      const n = Number(tab.dataset.step);
-      const current = n === state.step;
-      tab.classList.toggle("current", current);
-      tab.classList.toggle("done", !current && done[n]);
-      tab.classList.toggle("attention", !current && Boolean(attention[n]));
-      if (current) tab.setAttribute("aria-current", "step");
-      else tab.removeAttribute("aria-current");
-    }
+    if (!state.engine) return t("Choose an engine first.");
+    if (!state.action) return t("Choose how to play it first.");
+    if (!state.gameRoot) return t("Set up where the game is first: Setup, in Profiles.");
+    if (!listed) return t("Give the address and port players connect to first.");
+    return "";
+  }
+
+  // The review is current only for the exact choices it was worked out for.
+  function reviewed() {
+    return Boolean(state.plan) && state.planKey === planKey();
   }
 
   function actionTitle(id) {
@@ -291,12 +233,17 @@
   function invalidate(why) {
     setMessage("play-start-message", "");
     remember();
-    markSteps();
-    if (!state.plan) return;
+    if (!state.plan) {
+      renderFinalSummary();
+      return;
+    }
     state.plan = null;
     state.planKey = "";
-    setMessage("play-review-message", why);
-    announce(why);
+    $("play-review").replaceChildren();
+    $("play-review-attention").replaceChildren();
+    setMessage("play-review-message", t(why));
+    announce(t(why));
+    renderFinalSummary();
   }
 
   function planKey() {
@@ -307,7 +254,7 @@
     ].join("|");
   }
 
-  // --- step 1: the map ---------------------------------------------------------
+  // --- the map ------------------------------------------------------------------
 
   // Every map in the account, a page at a time. The first 200 used to be all
   // the list ever held, so an older map — dm2, on an account with a few
@@ -334,26 +281,90 @@
     announce(box.firstChild.textContent);
   }
 
+  // Which account an answer belongs to: the server and the person signed in
+  // when it was asked. A list asked for one account and answered after a
+  // sign-out, a switch of account or of server is not this account's list —
+  // nor is its error (NEW_360 F2: a stale 401 stayed under the map list after
+  // a successful sign-in).
+  function accountKey() {
+    const status = window.AUCOM.status || {};
+    return [status.aub_base_url || "", status.email || "", Boolean(status.authenticated)].join("|");
+  }
+
+  // A refusal of the map list, as one sentence and the action that fixes it,
+  // chosen by the code the Companion classified from AUB's status and reason
+  // (internal/web/failurewords.go) — never by reading the English. The
+  // server's own words stay one click away under Technical details.
+  function mapsRefused(status, body) {
+    const code = body.code || (status === 502 || status === 503 ? "server_unavailable" : "");
+    if (code === "server_unavailable") {
+      mapsUnreachable(body.error);
+      return;
+    }
+    const box = $("play-map-message");
+    box.className = "message error";
+    box.replaceChildren();
+    if (code === "sign_in_required") {
+      box.append(document.createTextNode(t("Your sign-in has expired, so your maps cannot be listed.") + " "));
+      const signIn = el("button", { text: t("Sign in"), attrs: { type: "button" } });
+      signIn.addEventListener("click", () => $("sign-in-open").click());
+      box.append(signIn);
+    } else if (code === "legal_review_required") {
+      // Only the person can review and accept them, on the Auto-Pigeon site
+      // the account is on; this program never accepts anything for them.
+      box.append(document.createTextNode(t("The Terms or the notices changed. Review and accept them on the Auto-Pigeon site to list your maps.") + " "));
+      const site = window.AUCOM.officialSite?.(window.AUCOM.status || {});
+      if (site) {
+        box.append(el("a", { text: t("Review them on {site}", { site: site.host }),
+          attrs: { href: site.url, target: "_blank", rel: "noopener noreferrer" } }));
+      }
+    } else {
+      box.append(document.createTextNode(t("The Auto-Pigeon server refused to list your maps.") + " "));
+      const retry = el("button", { text: t("Try again"), attrs: { type: "button" } });
+      retry.addEventListener("click", () => window.AUCOM.withBusy(retry, loadMaps));
+      box.append(retry);
+    }
+    box.append(technicalDetails(body.error));
+    announce(box.firstChild.textContent);
+  }
+
+  // The server's exact words, folded: for whoever has to report it.
+  function technicalDetails(text) {
+    if (!text) return document.createTextNode("");
+    return el("details", { className: "message-details", children: [
+      el("summary", { text: t("Technical details") }),
+      el("pre", { className: "activity-raw", text }),
+    ] });
+  }
+
+  let mapsAsked = 0;
   async function loadMaps() {
+    const asked = ++mapsAsked;
+    const account = accountKey();
+    const current = () => asked === mapsAsked && account === accountKey();
     let items = [];
     let cursor = "";
     for (let page = 0; page < MAP_PAGES; page += 1) {
       const query = new URLSearchParams({ type: "map", limit: "200" });
       if (cursor) query.set("cursor", cursor);
       const { ok, status, body } = await api("/api/v1/library/catalog?" + query.toString());
+      if (!current()) return;
       if (!ok) {
-        if (status === 502) mapsUnreachable(body.error);
-        else setMessage("play-map-message", body.error, "error");
-        break;
+        mapsRefused(status, body);
+        return;
       }
       items = items.concat(body.items || []);
       cursor = body.has_more ? body.next_cursor || "" : "";
       if (!cursor) break;
     }
+    // This account's list arrived: whatever an earlier question failed with is
+    // no longer true.
+    setMessage("play-map-message", "");
     // A remembered map the listing did not reach is asked for by id, so a link
     // to a map always opens on it.
     if (pendingMap && !items.some((m) => m.asset_id === pendingMap)) {
       const { ok, body } = await api(`/api/v1/library/assets/map/${encodeURIComponent(pendingMap)}`);
+      if (!current()) return;
       if (ok && body.asset) items.push(body.asset);
     }
     // Newest saved first (NEW_265): the map somebody has just saved in the
@@ -422,10 +433,10 @@
     state.revisions = [];
     state.revision = null;
     if (!assetID) return;
-    const { ok, body } = await api(`/api/v1/library/assets/map/${encodeURIComponent(assetID)}`);
+    const { ok, status, body } = await api(`/api/v1/library/assets/map/${encodeURIComponent(assetID)}`);
     if (request !== revisionRequest) return;
     if (!ok) {
-      setMessage("play-map-message", body.error, "error");
+      mapsRefused(status, body);
       return;
     }
     state.revisions = body.revisions || [];
@@ -456,9 +467,8 @@
   async function chooseRevision(revisionID) {
     state.revision = state.revisions.find((r) => r.revision_id === revisionID) || null;
     invalidate("You changed the revision, so the textures this build would use have to be checked again.");
-    summarize();
     await loadSourceFiles();
-    summarize();
+    renderFinalSummary();
   }
 
   let sourceFileRequest = 0;
@@ -516,10 +526,12 @@
     suggestedMapName = state.mapName;
   }
 
-  // Auto-build on the chosen map (autobuild.js): shown under the map while a
-  // signed-in person is on step 1.
+  // Auto-build on the chosen map (autobuild.js) when it is a saved one, under
+  // the build profile it uses — the one chosen here. A file on this computer
+  // has no saved revisions to watch, so it is not offered there.
   function showAutobuild() {
-    window.AUCOM.autobuildPanel?.show(state.map, Boolean(window.AUCOM.status?.authenticated));
+    const saved = state.source === "saved" ? state.map : null;
+    window.AUCOM.autobuildPanel?.show(saved, Boolean(window.AUCOM.status?.authenticated));
   }
   window.AUCOM.play = {
     pipelines: () => state.pipelines,
@@ -528,7 +540,7 @@
     pollActivity: () => poll(),
   };
 
-  // --- step 2: the build profile -------------------------------------------------
+  // --- the build profile ---------------------------------------------------------
 
   let pipelineRefresh = 0;
   let engineRefresh = 0;
@@ -536,7 +548,7 @@
     const sequence = ++pipelineRefresh;
     const { ok, body } = await api("/api/v1/build/pipelines");
     if (sequence !== pipelineRefresh) return;
-    if (!ok) { state.pipelines = []; state.pipeline = ""; $("play-pipeline").replaceChildren(); renderStages(); renderSteps(); return; }
+    if (!ok) { state.pipelines = []; state.pipeline = ""; $("play-pipeline").replaceChildren(); renderStages(); renderFinalSummary(); return; }
     state.pipelines = body.items || [];
     const select = $("play-pipeline");
     state.pipeline = window.AUCOM.executionChoices(select, state.pipelines, state.pipeline, window.AUCOM.pipelineReady,
@@ -551,27 +563,75 @@
     renderStages();
     // The engines may have arrived first; which of them fit is the family's.
     if (state.engines.length) renderEngines();
+    pipelineChanged();
   }
 
   function renderStages() {
     const list = $("play-stages");
     list.replaceChildren();
     const pipeline = state.pipelines.find((p) => p.id === state.pipeline);
-    $("play-pipeline-note").textContent = pipeline?.summary || "";
     for (const step of pipeline?.steps || []) {
       list.append(el("li", {
         text: `${step.title || step.id} — ${step.provider?.name || step.capability}`,
       }));
     }
+    renderPipelineState();
   }
 
-  // --- step 3: the engine ---------------------------------------------------------
+  // The programs that run, by their own name and version — what meaningfully
+  // identifies a build profile in one line ("ericw-tools 2.0.0-alpha11").
+  function programsOf(pipeline) {
+    const names = (pipeline?.steps || []).map((step) => step.provider
+      ? `${step.provider.name} ${step.provider.version || ""}`.trim() : "").filter(Boolean);
+    return [...new Set(names)].join(", ");
+  }
+
+  // The SELECTED build profile's state, beside the list (NEW_345's rule): ready
+  // and what runs, or what it waits for and where that is set up. The other
+  // profiles' setup is the closed list under it, from executionChoices.
+  function renderPipelineState() {
+    const node = $("play-pipeline-state");
+    node.replaceChildren();
+    node.className = "choice-state";
+    for (const stale of node.parentElement.querySelectorAll(".wip")) stale.remove();
+    const pipeline = state.pipelines.find((p) => p.id === state.pipeline);
+    if (!pipeline) {
+      if (state.pipelines.length && !state.pipelines.some(window.AUCOM.pipelineReady)) {
+        node.textContent = t("No build profile is ready on this computer yet. Set one up from the list below.");
+        node.classList.add("choice-state--attention");
+      }
+      return;
+    }
+    if (window.AUCOM.pipelineReady(pipeline)) {
+      node.append(window.AUCOM.badge(t("ready"), "succeeded"), document.createTextNode(" " + programsOf(pipeline)));
+    } else {
+      node.classList.add("choice-state--attention");
+      for (const cause of window.AUCOM.setupCauses(pipeline)) {
+        node.append(document.createTextNode(cause.text + " "), window.AUCOM.setupLink(cause));
+      }
+    }
+    // A work-in-progress game says so, beside the profile that builds it.
+    const note = window.AUCOM.maturityNote(pipeline.maturity, () =>
+      window.AUCOM.openCompatibilityReport({
+        family: pipeline.engine_family, operation: "compile",
+        about: `About the ${pipeline.name} build profile.`,
+        profiles: [{ role: "pipeline", id: pipeline.id, version: pipeline.version }],
+      }));
+    if (note) node.after(note);
+  }
+
+  // Auto-build reads the profile chosen here; it is told when that changes.
+  function pipelineChanged() {
+    document.dispatchEvent(new CustomEvent("aucom:play-pipeline"));
+  }
+
+  // --- run after build: the engine ---------------------------------------------
 
   async function loadEngines() {
     const sequence = ++engineRefresh;
     const { ok, body } = await api("/api/v1/engines");
     if (sequence !== engineRefresh) return;
-    if (!ok) { state.engines = []; state.engine = ""; $("play-engine").replaceChildren(); renderActions(); renderSteps(); return; }
+    if (!ok) { state.engines = []; state.engine = ""; $("play-engine").replaceChildren(); renderActions(); renderFinalSummary(); return; }
     state.engines = body.items || [];
     renderEngines();
   }
@@ -614,9 +674,7 @@
 
   function renderActions() {
     const select = $("play-action");
-    const choices = $("play-action-choices");
     select.replaceChildren();
-    choices.replaceChildren();
     const engine = state.engines.find((e) => e.id === state.engine);
     // Only what makes sense for one freshly built map, in the order a person
     // would pick them. "Join a server" and "Play a mod or package" belong to
@@ -629,18 +687,27 @@
       .map((id) => (engine?.actions || []).find((action) => action.id === id))
       .filter(Boolean);
     for (const action of offered) {
-      select.append(el("option", { text: (action.title || action.id) + (window.AUCOM.actionReady(engine, action.id) ? "" : " — needs setup: " + (engine.action_problems?.[action.id] || []).map(p => p.summary).join(" ")), attrs: { value: action.id, disabled: window.AUCOM.actionReady(engine, action.id) ? null : "disabled" } }));
+      const ready = window.AUCOM.actionReady(engine, action.id);
+      // An option's own label says only that it needs setup (aucom.ux); what
+      // it waits for is said below, for the action chosen.
+      select.append(el("option", {
+        text: actionTitle(action.id) + (ready ? "" : " — " + t("needs setup")),
+        attrs: { value: action.id, disabled: ready ? null : "disabled" },
+      }));
     }
     if (state.action && offered.some((a) => a.id === state.action && window.AUCOM.actionReady(engine, a.id))) select.value = state.action;
     else select.value = offered.find((a) => window.AUCOM.actionReady(engine, a.id))?.id || "";
     state.action = select.value || "";
+    // A choice only when there genuinely is one: an engine that offers one way
+    // to play a freshly built map (a Quake II build's "Play it") has nothing to
+    // choose, and a select of one says nothing (NEW_363).
+    const choices = $("play-action-choices");
+    choices.replaceChildren();
     for (const action of offered) {
-      const meaning = ACTIONS[action.id];
       const input = el("input", {
         attrs: { type: "radio", name: "play-action-choice", value: action.id, id: "play-action-" + action.id },
       });
       input.disabled = !window.AUCOM.actionReady(engine, action.id);
-      input.setAttribute("aria-disabled", String(input.disabled));
       input.checked = !input.disabled && action.id === state.action;
       input.addEventListener("change", () => {
         if (input.disabled || !input.checked) return;
@@ -648,19 +715,13 @@
         select.dispatchEvent(new Event("change", { bubbles: true }));
       });
       choices.append(el("label", {
-        className: "choice-card",
+        className: "segmented__option",
         attrs: { for: input.id },
-        children: [
-          input,
-          el("span", { className: "choice-card__title", text: t(meaning.title) }),
-          el("span", { className: "choice-card__text", text: t(meaning.text) }),
-        ],
+        children: [input, el("span", { text: actionTitle(action.id) + (input.disabled ? " — " + t("needs setup") : "") })],
       }));
     }
-    $("play-action-fieldset").hidden = !engine;
-    if (engine && !offered.length) {
-      choices.append(el("p", { className: "muted", text: t("This engine's profile offers no way to play a single map.") }));
-    }
+    $("play-action-field").hidden = !engine || offered.length < 2;
+    $("play-action-note").textContent = ACTIONS[state.action] ? t(ACTIONS[state.action].text) : "";
     const root = engine?.binding?.roots?.game_root || "";
     state.gameRoot = root;
     // The mod folder field: a Quake II package's own folder (aup-<map>) is
@@ -699,11 +760,15 @@
       setMessage("play-run-message", t("{engine} cannot start yet: {why} Set it up in Profiles.", {
         engine: engine.name, why: problems.map((problem) => problem.summary).join(" "),
       }), "error");
+    } else if (engine && !offered.length) {
+      setMessage("play-run-message", t("This engine's profile offers no way to play a single map."), "error");
     } else {
-      setMessage("play-run-message", missing ? "Choose this engine's game folder before continuing." : "",
+      setMessage("play-run-message", missing ? t("Choose this engine's game folder before continuing.") : "",
         missing ? "error" : "");
     }
     renderListing();
+    // The action and the game folder decide what the primary may do.
+    renderFinalSummary();
   }
 
   // --- step 3: the listing of a hosted game ------------------------------------
@@ -871,25 +936,29 @@
     return card;
   }
 
-  // --- step 4: the review -----------------------------------------------------------
+  // --- the review ------------------------------------------------------------------
 
   async function refreshPlan() {
     const key = planKey();
     if (state.plan && state.planKey === key) return;
     const review = $("play-review");
-    review.replaceChildren(el("p", { className: "muted", text: "Working out what this would do…" }));
+    review.replaceChildren();
+    busyMessage("play-review-message", t("Working out what this would do…"));
     const { ok, body } = await api("/api/v1/play/plan", { method: "POST", body: requestBody() });
+    // A plan for choices changed while it was worked out is not shown.
+    if (key !== planKey()) return;
     if (!ok) {
       state.plan = null;
       review.replaceChildren();
       setMessage("play-review-message", body.error, "error");
+      renderFinalSummary();
       return;
     }
     state.plan = body;
     state.planKey = key;
     setMessage("play-review-message", "");
     renderReview(body);
-    summarize();
+    renderFinalSummary();
 
     // The ordered WAD set is part of what the review is FOR, and the plan does
     // not download anything — so when this machine holds no verified bundle for
@@ -917,8 +986,9 @@
       if (gotTextures && textures.known) {
         state.plan.textures = textures;
         renderReview(state.plan);
+        renderFinalSummary();
       } else if (!gotTextures) {
-        setMessage("play-review-message", textures.error, "error");
+        serverFailure("play-review-message", textures);
       }
     }
   }
@@ -941,6 +1011,22 @@
   }
 
   function requestBody() {
+    if (!state.runAfter) {
+      // Build only (NEW_363): the same coordinator, and nothing installed or
+      // started — so no engine, folder, listing or package answers.
+      return {
+        asset_type: "map",
+        asset_id: state.map?.asset_id || "",
+        revision_id: state.revision?.revision_id || "",
+        revision_number: state.revision?.revision || 0,
+        source_file: state.sourceFile,
+        pipeline: state.pipeline,
+        strict: state.strict,
+        map: $("play-map-name").value.trim(),
+        own_wads_dir: state.ownWadsDir || undefined,
+        build_only: true,
+      };
+    }
     return {
       asset_type: "map",
       asset_id: state.map?.asset_id || "",
@@ -960,14 +1046,33 @@
     };
   }
 
-  // The review is a grid of cards, two to a row on a wide window: what is
-  // downloaded beside its textures, the programs beside where files go, and
-  // the command across the whole width at the bottom (operator, 2026-09-22:
-  // "the right side of the page is always empty").
+  // The review, in two parts (NEW_363). What only the person can settle before
+  // this build can run — a texture the server did not send, a Quake II
+  // package's own files, a Live Games listing — is in the open, under the
+  // summary. Everything else that will happen — what is downloaded, which
+  // programs run at which version, where files are written, the exact command —
+  // is under Technical details, as a grid of cards two to a row on a wide window
+  // (operator, 2026-09-22). It used to be a whole step, and then a second step
+  // that said most of it again.
   function renderReview(plan) {
+    const attention = $("play-review-attention");
+    attention.replaceChildren();
     const review = $("play-review");
     review.replaceChildren();
     review.className = "review-grid";
+
+    if (plan.textures?.known && plan.textures.compiler_ready === false) {
+      attention.append(plan.textures.own_wads_possible ? ownWadsOffer(plan.textures) : refusalNotice(plan.textures));
+    }
+    if (plan.textures_warning) {
+      attention.append(el("p", { className: "message error", attrs: { role: "alert" }, text: t(plan.textures_warning) }));
+    }
+    if (plan.packaged) attention.append(packageSection(plan));
+    if (hosting() && state.runAfter) {
+      const placeholder = el("section", { className: "panel review-card" });
+      attention.append(placeholder);
+      listingCard().then((card) => placeholder.replaceWith(card));
+    }
 
     review.append(section(t("What will be downloaded"), [
       line(t("Map"), state.map?.display_name || plan.map.asset_id),
@@ -977,10 +1082,6 @@
     ]));
 
     review.append(texturesSection(plan.textures));
-    if (plan.packaged) review.append(packageSection(plan));
-    if (plan.textures_warning) {
-      review.append(el("p", { className: "message error", attrs: { role: "alert" }, text: t(plan.textures_warning) }));
-    }
 
     const programs = [line(t("Build profile"), nameOfPipeline(plan.build.pipeline))];
     const pipeline = state.pipelines.find((p) => p.id === plan.build.pipeline);
@@ -989,34 +1090,31 @@
         `${step.provider?.name || step.capability} ${step.provider?.version || ""}`.trim()));
     }
     programs.push(line(t("Extractor"), t("Auto-Pigeon Extractor, when the map needs converting")));
-    programs.push(line(t("Engine"), `${nameOfEngine(state.engine)} · ${actionTitle(state.action)}`));
+    if (!plan.build_only) programs.push(line(t("Engine"), `${nameOfEngine(state.engine)} · ${actionTitle(state.action)}`));
     review.append(section(t("Which programs will run"), programs));
 
-    // Once the verified bundle is known, the WAD line names the actual files
-    // rather than a placeholder for them.
-    const carried = (plan.textures?.known ? plan.textures.wads || [] : [])
-      .filter((wad) => wad.included)
-      .flatMap((wad) => (wad.files || []).map((file) => file.path));
-    const files = plan.writes.files.flatMap((file) =>
-      carried.length && file.includes("<the map's declared WADs")
-        ? carried.map((path) => `${plan.run.mod}/wads/${path}`)
-        : [file]);
-    review.append(el("section", {
-      className: "panel review-card",
-      children: [
-        el("h4", { text: t("Where files will be written") }),
-        el("dl", { className: "summary-list", children: line(t("Folder"), plan.writes.directory).flat() }),
-        el("ul", { className: "file-list", children: files.map((file) => el("li", { children: [el("code", { text: file })] })) }),
-        el("p", { className: "muted small", text: t("Never written to: {what}.", { what: plan.writes.never_writes }) }),
-      ],
-    }));
-
-    review.append(launchSection(plan.launch));
-    if (hosting()) {
-      const placeholder = el("section", { className: "panel review-card review-card--wide" });
-      review.append(placeholder);
-      listingCard().then((card) => placeholder.replaceWith(card));
+    if (plan.writes) {
+      // Once the verified bundle is known, the WAD line names the actual files
+      // rather than a placeholder for them.
+      const carried = (plan.textures?.known ? plan.textures.wads || [] : [])
+        .filter((wad) => wad.included)
+        .flatMap((wad) => (wad.files || []).map((file) => file.path));
+      const files = plan.writes.files.flatMap((file) =>
+        carried.length && file.includes("<the map's declared WADs")
+          ? carried.map((path) => `${plan.run.mod}/wads/${path}`)
+          : [file]);
+      review.append(el("section", {
+        className: "panel review-card",
+        children: [
+          el("h4", { text: t("Where files will be written") }),
+          el("dl", { className: "summary-list", children: line(t("Folder"), plan.writes.directory).flat() }),
+          el("ul", { className: "file-list", children: files.map((file) => el("li", { children: [el("code", { text: file })] })) }),
+          el("p", { className: "muted small", text: t("Never written to: {what}.", { what: plan.writes.never_writes }) }),
+        ],
+      }));
     }
+
+    if (plan.launch) review.append(launchSection(plan.launch));
     if (plan.build_preview_note) {
       review.append(el("p", { className: "muted small review-note", text: plan.build_preview_note }));
     }
@@ -1102,7 +1200,6 @@
       className: "muted small",
       text: t("Later declarations win a name two WADs both hold. The compiler reads these files; a compiled Quake 1 map carries its own textures, so the game does not read these files at run time — they are kept with the map so the build can be inspected and repeated."),
     }));
-    if (!textures.compiler_ready) children.push(textures.own_wads_possible ? ownWadsOffer(textures) : refusalNotice(textures));
     return el("section", { className: "panel review-card", children });
   }
 
@@ -1245,7 +1342,7 @@
     // that does nothing is the one thing a person cannot debug.
     await ready;
     if (!state.map || !state.revision) {
-      setMessage("play-review-message", t("Choose a map and one of its revisions first (step 1)."), "error");
+      setMessage("play-review-message", t("Choose a map and one of its revisions first."), "error");
       return;
     }
     if (!state.plan) await refreshPlan();
@@ -1264,7 +1361,7 @@
     state.planKey = planKey();
     remember();
     renderReview(state.plan);
-    summarize();
+    renderFinalSummary();
   }
 
   // The command as it would be typed on THIS machine, for DISPLAY: the paths
@@ -1339,55 +1436,116 @@
     return [el("dt", { text: term }), el("dd", { text: value })];
   }
 
-  // --- step 5: one confirmation -------------------------------------------------------
+  // --- the summary and the one primary action ----------------------------------------
 
+  // The review's summary: what this form would build, from the choices on
+  // screen; then the one primary action. What it says is what it does.
   function renderFinalSummary() {
+    if (state.source !== "saved") return;
     const summary = $("play-final-summary");
     const textures = state.plan?.textures;
     const own = textures?.ready_with_own_wads && textures.own_wads_dir === state.ownWadsDir;
+    const listing = state.runAfter ? listingBody() : undefined;
     summary.replaceChildren(
-      ...line(t("Map"), `${state.map?.display_name || ""} · ${t("revision {n}", { n: state.revision?.revision ?? "" })}`),
-      ...line(t("Build"), nameOfPipeline(state.pipeline)),
-      ...line(t("Run"), `${nameOfEngine(state.engine)} · ${actionTitle(state.action)} → ${state.gameRoot}/${modFolder()}`),
-      ...line(t("Name in the game"), $("play-map-name").value.trim()),
-      ...(packaged() ? line(t("Your own files in the package"),
+      ...line(t("Map"), state.revision
+        ? `${state.map?.display_name || ""} · ${t("revision {n}", { n: state.revision.revision })}` : t("not chosen yet")),
+      ...line(t("Build profile"), nameOfPipeline(state.pipeline) || t("not chosen yet")),
+      ...line(t("Then"), !state.runAfter ? t("Nothing starts: the build stops once the map is compiled.")
+        : state.engine ? `${nameOfEngine(state.engine)} · ${actionTitle(state.action)}` +
+          (state.gameRoot ? ` → ${state.gameRoot}/${modFolder()}` : "") : t("not chosen yet")),
+      ...(packaged() && state.runAfter ? line(t("Your own files in the package"),
         t((GRANT_BASES.find(([value]) => value === state.grant.basis) || GRANT_BASES[0])[1]) +
         (state.grant.accept ? " · " + t("what it will not carry is accepted in writing") : "")) : []),
       ...(own ? line(t("Your own WADs"), `${(textures.own_wads_needed || []).join(", ")} ← ${state.ownWadsDir}`) : []),
-      ...(listingBody() ? line(t("Live Games"), `${listingBody().title} · ${$("play-listing-visibility").selectedOptions[0]?.textContent || ""}` +
-        ` · ${listingBody().endpoint_host}:${listingBody().endpoint_port}`) : []),
+      ...(listing ? line(t("Live Games"), `${listing.title} · ${$("play-listing-visibility").selectedOptions[0]?.textContent || ""}` +
+        ` · ${listing.endpoint_host}:${listing.endpoint_port}`) : []),
     );
-    const reviewed = Boolean(state.plan);
-    const ready = reviewed && (state.plan?.packaged || textures?.compiler_ready !== false ||
-      Boolean(textures?.ready_with_own_wads && textures.own_wads_dir === state.ownWadsDir));
-    $("play-start").disabled = !ready;
-    setMessage("play-start-message", ready ? "" : !reviewed ? t("The review is not ready yet — see step 4.") :
-      "This map's textures are not complete enough to compile — see step 4.", ready ? "" : "error");
+    const why = missingSentence();
+    const current = reviewed();
+    const texturesOk = !current || state.plan.packaged || textures?.compiler_ready !== false || Boolean(own);
+    const button = $("play-start");
+    button.textContent = !current ? t("Review build") : state.runAfter ? t("Build & Run") : t("Build");
+    button.disabled = Boolean(why) || !texturesOk;
+    // A message the button's own press wrote ("Started.") stays until the
+    // next change; otherwise this is what stops the press, or nothing.
+    if (!$("play-start-message").dataset.pressed) {
+      setMessage("play-start-message", why || (!texturesOk ? t("This map's textures are not complete enough to compile — see the review.") : ""));
+    }
+  }
+
+  // The primary: work the review out, or — once it is on screen for exactly
+  // these choices — start. Never both in one press: what is started is what
+  // was reviewed.
+  async function primary() {
+    delete $("play-start-message").dataset.pressed;
+    if (!reviewed()) {
+      await refreshPlan();
+      if (reviewed()) {
+        announce(state.runAfter ? t("Review ready. Press Build & Run to start.") : t("Review ready. Press Build to start."));
+      }
+      return;
+    }
+    await start();
   }
 
   async function start() {
     setMessage("play-start-message", "");
     const { ok, body } = await api("/api/v1/play/runs", { method: "POST", body: requestBody() });
     if (!ok) {
-      setMessage("play-start-message", body.error, "error");
+      setMessage("play-start-message", body.code === "auto_build_running"
+        ? t("An automatic build of this revision is already running. Follow it with View progress.") : body.error, "error");
+      $("play-start-message").dataset.pressed = "1";
       return;
     }
     // Everyone was this launch's choice, not the next one's (NEW_247A2): the
-    // next launch starts Private. The summary is drawn again, so what is
-    // pressed next is what is on the screen, and the review, asked for with
-    // the listing it previews, is worked out again when it is next opened.
+    // next launch starts Private. The review, asked for with the listing it
+    // previews, is worked out again before the next start.
     if (state.listing.visibility !== FRESH_VISIBILITY) {
       state.listing.visibility = FRESH_VISIBILITY;
       renderListing();
-      if (state.step === 5) renderFinalSummary();
+      invalidate("The next game you host starts Private again, so the review is worked out again.");
     }
-    // A short confirmation is a status line; the DETAIL is in Activity, which
-    // opens on its own because that is where the run now lives.
-    setMessage("play-start-message", "Started. Progress is in the Activity panel.");
-    announce("Build and run started.");
-    openActivity();
+    setMessage("play-start-message", t("Started."), "ok");
+    $("play-start-message").dataset.pressed = "1";
+    announce(state.runAfter ? t("Build and run started.") : t("Build started."));
     watch(body.id);
   }
+
+  function busyMessage(id, text) {
+    window.AUCOM.busy(id, text);
+  }
+
+  // One sentence for a failure the Companion classified (failurewords.go),
+  // in this page's language, and the server's own words under Technical
+  // details. Used for a run's card and for the review's texture check.
+  const FAILURE_WORDS = {
+    sign_in_required: ["Your sign-in has expired, so the download could not finish.", "Sign in again, then press Try again."],
+    legal_review_required: ["The Terms or the notices changed, so the server will not send anything until you review them.",
+      "Review and accept them on the Auto-Pigeon site, then press Try again."],
+    map_access_denied: ["Your account may not read this map.", "Ask the map's owner to share it with you."],
+    refused: ["The Auto-Pigeon server refused this download.", "Technical details show what it answered."],
+    server_unavailable: ["The Auto-Pigeon server is temporarily unavailable, so the download could not finish.",
+      "Try again in a moment. The same revision is used, and nothing was compiled."],
+    revision_changed: ["The map was saved again after this revision was chosen.", "Choose the revision again, then build."],
+    download_damaged: ["What was downloaded did not match what the server declared, so nothing was compiled.",
+      "Press Try again to download it again. If it happens again, report it."],
+  };
+
+  function serverFailure(id, body) {
+    const words = FAILURE_WORDS[body.code];
+    const box = $(id);
+    if (!words) {
+      setMessage(id, body.error, "error");
+      return;
+    }
+    box.className = "message error";
+    box.replaceChildren(document.createTextNode(t(words[0]) + " " + t(words[1])), technicalDetails(body.error));
+    announce(t(words[0]));
+  }
+  window.AUCOM.failureWords = (run) => {
+    const words = FAILURE_WORDS[run?.failure_code];
+    return words ? { summary: t(words[0]), remedy: t(words[1]) } : null;
+  };
 
   // --- Activity ---------------------------------------------------------------------
 
@@ -1430,6 +1588,7 @@
     clearTimeout(pollTimer);
     const { ok, body } = await api("/api/v1/play/runs");
     const current = ok ? renderActivity(body.items || []) : [];
+    if (ok) renderCurrent(body.items || []);
     const active = (body.items || []).some((run) => run.active);
     $("activity-open").hidden = !(body.items || []).length;
     $("activity-count").textContent = active ? "running" : "";
@@ -1444,6 +1603,59 @@
     // Scheduled once this poll, its outputs included, is done, so a slow read
     // never overlaps the next one.
     pollTimer = setTimeout(poll, active ? 1000 : !$("activity").hidden ? 3000 : 15000);
+  }
+
+  // --- the current run's card -----------------------------------------------------
+  //
+  // The run this window started, or a build somebody started by hand that is
+  // running now (another tab, an earlier visit): one card, with the identities
+  // pinned in the run's own record — never the form's, which is a draft for the
+  // NEXT build — and one way to its progress, the Activity drawer. An automatic
+  // build is shown by Auto-build, under the build profile.
+  let currentCardKey = "";
+  function renderCurrent(runs) {
+    const run = runs.find((r) => r.id === watching) || runs.find((r) => r.active && r.trigger !== "auto_build");
+    const card = $("play-current");
+    if (!run) {
+      card.hidden = true;
+      currentCardKey = "";
+      return;
+    }
+    const stage = run.active ? (run.stages || []).at(-1)?.title || run.title : "";
+    const key = JSON.stringify([run.id, run.state, stage, run.failure_code, run.error_summary, run.can_retry]);
+    card.hidden = false;
+    // Redrawn only when the run moved on, so a focused button is not replaced
+    // under the keyboard, and the polite status line speaks once per stage.
+    if (key === currentCardKey) return;
+    currentCardKey = key;
+    const name = run.map || run.asset_id;
+    $("play-current-title").textContent = run.active ? t("Building {map}", { map: name })
+      : run.state === "succeeded" ? (run.build_only ? t("{map} is built", { map: name }) : t("{map} is built and started", { map: name }))
+        : run.state === "cancelled" ? t("{map}: cancelled", { map: name })
+          : t("{map}: the build stopped", { map: name });
+    $("play-current-detail").textContent = [t("revision {n}", { n: run.revision }), nameOfPipeline(run.pipeline),
+      run.build_only ? "" : nameOfEngine(run.engine)].filter(Boolean).join(" · ");
+    if (run.active) setMessage("play-current-status", t("Now: {stage}", { stage }), "busy");
+    else if (run.state === "succeeded") {
+      setMessage("play-current-status", run.build_only ? t("Built. Nothing was started.") : t("The game was started."), "ok");
+    } else if (run.state === "cancelled") setMessage("play-current-status", t("You cancelled it."), "");
+    else {
+      setMessage("play-current-status", `${run.failed_at_title || t("It stopped")}: ${failureSummary(run)} ${failureRemedy(run)}`.trim(), "error");
+    }
+    // One primary per state: the recovery when it failed, else the way to
+    // its progress.
+    const actions = $("play-current-actions");
+    actions.replaceChildren();
+    const failed = !run.active && run.state !== "succeeded" && run.state !== "cancelled";
+    if (failed && run.can_retry) {
+      const retry = el("button", { text: t("Try again"), className: "primary", attrs: { type: "button" } });
+      retry.addEventListener("click", () => window.AUCOM.withBusy(retry, () => retryRun(run.id)));
+      actions.append(retry);
+    }
+    const progress = el("button", { text: t("View progress"), className: failed && run.can_retry ? "secondary" : "primary",
+      attrs: { type: "button", "aria-controls": "activity" } });
+    progress.addEventListener("click", openActivity);
+    actions.append(progress);
   }
 
   // Activity is polled once a second while a run is active. A card is rebuilt
@@ -1684,10 +1896,11 @@
       // Technical details, not painted across the card.
       children.push(el("p", {
         className: "message error",
-        text: `${run.failed_at_title || "It stopped"}: ${run.error_summary || run.error}`,
+        text: `${run.failed_at_title || "It stopped"}: ${failureSummary(run)}`,
       }));
     }
-    if (run.remedy) children.push(el("p", { className: "muted", text: run.remedy }));
+    const remedy = failureRemedy(run);
+    if (remedy) children.push(el("p", { className: "muted", text: remedy }));
     for (const warning of run.warnings || []) {
       children.push(el("p", { className: "message warning", text: warning }));
     }
@@ -1738,6 +1951,16 @@
     children.push(details(run));
 
     return el("section", { className: "panel activity-run", children });
+  }
+
+  // A run's failure in this page's language when the Companion classified it
+  // (a download refused or interrupted), else the server's own sentence.
+  function failureSummary(run) {
+    return window.AUCOM.failureWords(run)?.summary || run.error_summary || run.error || "";
+  }
+
+  function failureRemedy(run) {
+    return window.AUCOM.failureWords(run)?.remedy || run.remedy || "";
   }
 
   function wadOrigin(origin) {
@@ -1860,12 +2083,48 @@
 
   // --- wiring ------------------------------------------------------------------------
 
-  for (const tab of document.querySelectorAll("#play-steps .bwiz-step")) {
-    tab.addEventListener("click", () => show(Number(tab.dataset.step)));
+  // Saved map or a file on this computer: one form, two sources. A file is
+  // built by build.js — its inputs, build profile list, check and Build are
+  // that file's — and shown in the same blocks; Run after build is not
+  // offered for it, and its finished build offers Play.
+  function setSource(source, { remembered = true } = {}) {
+    state.source = source === "local" ? "local" : "saved";
+    const local = state.source === "local";
+    $("play-source-saved").checked = !local;
+    $("play-source-local").checked = local;
+    for (const id of ["play-saved-map", "play-pipeline-field", "play-stages", "play-strict-field",
+      "play-final-summary", "play-review-attention", "play-review-message", "play-review-details", "play-start"]) {
+      $(id).hidden = local;
+    }
+    for (const id of ["play-local-map", "build-pipeline-field", "build-stages", "build-strict-field",
+      "build-message", "build-review-details", "build-start"]) {
+      $(id).hidden = !local;
+    }
+    $("play-signed-out").hidden = local || Boolean(window.AUCOM.status?.authenticated);
+    $("play-run-after").disabled = local;
+    $("play-run-after").checked = !local && state.runAfter;
+    $("play-run-after-note").hidden = !local;
+    $("play-run-after-note").textContent = local ? t("For a file on this computer, play the build when it finishes.") : "";
+    $("play-run-fields").hidden = local || !state.runAfter;
+    showAutobuild();
+    if (remembered) remember();
+    const hash = local ? "#play/local" : "#play";
+    if (!$("area-play").hidden && window.location.hash !== hash) {
+      window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search + hash);
+    }
+    if (local) window.AUCOM.areas.build?.refresh?.();
+    else renderFinalSummary();
   }
-  for (const button of document.querySelectorAll("#area-play [data-go]")) {
-    button.addEventListener("click", () => show(Number(button.dataset.go)));
+  for (const radio of [$("play-source-saved"), $("play-source-local")]) {
+    radio.addEventListener("change", () => { if (radio.checked) setSource(radio.value); });
   }
+  $("play-run-after").addEventListener("change", (event) => {
+    state.runAfter = event.target.checked;
+    $("play-run-fields").hidden = !state.runAfter;
+    invalidate(state.runAfter ? "The game starts after the build now, so the review is worked out again."
+      : "Nothing starts after the build now, so the review is worked out again.");
+    renderListing();
+  });
 
   // `change` only, and every change re-reads the revisions — including a
   // re-selection of the same map, which is how somebody who has just saved in
@@ -1888,8 +2147,10 @@
     // A Quake II package's folder is named after the map.
     if (packaged()) renderActions();
   });
-  // Why an engine was just cleared is read with the list it was cleared from.
+  // Why an engine was just cleared is read with the list it was cleared from,
+  // and the chosen build profile's state with its list.
   $("play-engine").setAttribute("aria-describedby", "play-engine-message");
+  $("play-pipeline").setAttribute("aria-describedby", "play-pipeline-state");
   $("play-pipeline").addEventListener("change", (event) => {
     state.pipeline = event.target.value;
     invalidate("You changed the build profile, so what it would run has to be worked out again.");
@@ -1897,7 +2158,7 @@
     // Which engines fit depends on the family (a Quake II build needs a
     // Quake II engine), so the engine list is drawn again.
     renderEngines();
-    summarize();
+    pipelineChanged();
   });
   $("play-strict").addEventListener("change", (event) => {
     state.strict = event.target.checked;
@@ -1907,13 +2168,12 @@
     state.engine = event.target.value;
     invalidate("You changed the engine, so the command it would run has to be worked out again.");
     renderActions();
-    summarize();
   });
   $("play-action").addEventListener("change", (event) => {
     state.action = event.target.value;
+    $("play-action-note").textContent = ACTIONS[state.action] ? t(ACTIONS[state.action].text) : "";
     invalidate("You changed what the engine does.");
     renderListing();
-    summarize();
   });
   $("play-list-it").addEventListener("change", (event) => {
     state.listing.enabled = event.target.checked;
@@ -1935,7 +2195,10 @@
     invalidate("You changed the folder this installs into.");
     renderActions();
   });
-  $("play-start").addEventListener("click", start);
+  // withBusy puts the button back as it found it; what it may do next is
+  // decided again from the state the press left.
+  $("play-start").addEventListener("click", (event) =>
+    window.AUCOM.withBusy(event.currentTarget, primary).then(renderFinalSummary));
   // The gallery's address arrives from the footer's one question to the server.
   document.addEventListener("aucom:site-links", () => {
     renderHelpToConnect();
@@ -1956,48 +2219,50 @@
   }
 
   let restored = false;
-  let loading = false;
   // Settles when the lists the current refresh asked for have arrived and the
   // remembered map and revision are chosen again. See checkOwnWads.
   let ready = Promise.resolve();
   window.AUCOM.areas.play = {
-    async refresh() {
+    // `argument` is the view a route asked for (app.js aliases): "local" for a
+    // file on this computer (the old `#build`), "autobuild" for the automatic
+    // build checkbox, "saved" for a saved map.
+    async refresh(argument) {
       if (!restored) {
         restored = true;
         restore();
       }
       const signedIn = Boolean(window.AUCOM.status?.authenticated);
-      $("play-signed-out").hidden = signedIn;
-      // The step a link or a reload named is shown at once; the lists fill
-      // in behind it rather than step 1 standing in for a few seconds.
-      loading = true;
-      // Nothing on the review may be pressed while the map it is about is
-      // still arriving: the review is drawn again once it has.
-      if (state.step >= 4) {
-        state.plan = null;
-        state.planKey = "";
-        $("play-review").replaceChildren(el("p", { className: "muted", text: t("Loading the map this page was opened on…") }));
-      }
-      // The one button is pressed only after a review of these exact choices.
-      // A reload (or a link) that named step 5 has no review any more, and
-      // whatever the person confirmed in it — their own WADs among it — is
-      // not remembered: so it lands on the review, which is worked out again,
-      // rather than on a button that would start the old choices unseen
-      // (NEW_310A, live on Windows).
-      if (state.step === 5) state.step = 4;
-      show(state.step);
+      if (argument === "local") state.source = "local";
+      else if (argument === "saved" || argument === "autobuild") state.source = "saved";
+      else if (!signedIn && !new URLSearchParams(window.location.search).get("src")) state.source = "local";
+      setSource(state.source);
+      // Coming back to the form is not a confirmation of it: the review is
+      // worked out again for the lists as they are now, before anything can
+      // start (NEW_310A: a reload must never land on a button that would start
+      // choices nobody has just seen).
+      state.plan = null;
+      state.planKey = "";
+      $("play-review").replaceChildren();
+      $("play-review-attention").replaceChildren();
       let settle;
       ready = new Promise((resolve) => { settle = resolve; });
       try {
         await Promise.all([loadPipelines(), loadEngines(), signedIn ? loadMaps() : null]);
         if (signedIn && state.map) await loadRevisions(state.map.asset_id, { keep: true });
       } finally {
-        loading = false;
         settle();
       }
-      show(state.step);
+      showAutobuild();
+      renderFinalSummary();
+      if (argument === "autobuild") {
+        const box = $("play-autobuild-on");
+        (box && !$("play-autobuild").hidden ? box : $("play-map")).focus();
+      }
       poll();
     },
+    // build.js reads and sets the build profile a file is built with, so the
+    // choice carries across when somebody switches source.
+    pipeline: () => state.pipeline,
   };
 
   // Activity is not an area: it belongs to the window, and a run started here

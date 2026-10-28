@@ -291,6 +291,26 @@ type fixtureBackend struct {
 	// holdDetail, when set, holds every map-detail request until it is
 	// closed or the caller gives up: a slow AUB (NEW_265A).
 	holdDetail chan struct{}
+
+	// textureOutages answers that many texture-export requests 503 with no
+	// reason, the way a server that is away does (NEW_363, NEW_360 F3).
+	textureOutages int
+	// catalogFault, when its status is set, is what the catalog route answers
+	// instead of the list: a status and AUB's reason code (NEW_363, F2).
+	catalogFault struct {
+		status  int
+		reason  string
+		message string
+	}
+	// holdCatalog, when set, holds every catalog request until it is closed:
+	// an answer that arrives after the person switched account (NEW_363).
+	holdCatalog chan struct{}
+}
+
+func (b *fixtureBackend) catalogFaulted() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.catalogFault.status != 0
 }
 
 func (b *fixtureBackend) refusesLeakResult() bool {
@@ -487,6 +507,24 @@ func (b *fixtureBackend) serve(w http.ResponseWriter, r *http.Request) {
 			"page":        map[string]any{"catalog_default_limit": 25, "catalog_max_limit": 100},
 			"server_time": "2026-09-07T00:00:00Z",
 		})
+	case rest == "/catalog" && b.catalogFaulted():
+		b.mu.Lock()
+		fault, hold := b.catalogFault, b.holdCatalog
+		b.mu.Unlock()
+		if hold != nil {
+			select {
+			case <-hold:
+			case <-r.Context().Done():
+				return
+			}
+		}
+		w.WriteHeader(fault.status)
+		body := map[string]any{"code": fault.status, "message": fault.message}
+		if fault.reason != "" {
+			body["data"] = map[string]any{"reason": map[string]any{"code": fault.reason}}
+		}
+		write(body)
+		return
 	case rest == "/catalog":
 		// Two pages, so the page's "Show more" is exercised: the account has
 		// more than one page of assets, as the operator's did (NEW_244D).
@@ -562,7 +600,17 @@ func (b *fixtureBackend) serveTextureExport(w http.ResponseWriter, r *http.Reque
 	b.mu.Lock()
 	b.textureExports++
 	refusal := b.textureRefusal
+	outage := b.textureOutages > 0
+	if outage {
+		b.textureOutages--
+	}
 	b.mu.Unlock()
+	if outage {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte("Service Unavailable"))
+
+		return
+	}
 	if refusal != 0 {
 		w.WriteHeader(refusal)
 		_ = json.NewEncoder(w).Encode(map[string]any{

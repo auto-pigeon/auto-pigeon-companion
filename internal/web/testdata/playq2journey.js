@@ -42,7 +42,6 @@
     node.dispatchEvent(new Event("input", { bubbles: true }));
     node.dispatchEvent(new Event("change", { bubbles: true }));
   };
-  const stepButton = (n) => $("play-step-tab-" + n);
 
   try {
     const settings = await (await fetch("/journey/config")).json();
@@ -62,20 +61,15 @@
     await waitFor("the revisions", () => $("play-revision").options.length > 0);
     setValue($("play-map-name"), "q2room");
 
-    stepButton(2).click();
     await waitFor("the build profiles", () => $("play-pipeline").options.length > 1);
     // NEW_330: a Quake 1 build and its Quake 1 engine first; switching to the
     // Quake II build clears that engine at once and says why.
     setValue($("play-pipeline"), settings.other_pipeline_id);
-    stepButton(3).click();
     await waitFor("the engines", () => $("play-engine").options.length > 1);
     setValue($("play-engine"), settings.other_engine_id);
     await waitFor("the Quake 1 engine chosen", () => $("play-engine").value === settings.other_engine_id);
-    stepButton(2).click();
     setValue($("play-pipeline"), settings.pipeline_id);
     await waitFor("the stages", () => $("play-stages").children.length > 0);
-
-    stepButton(3).click();
     await waitFor("the engines", () => $("play-engine").options.length > 1);
     record("switching to a Quake II build clears the Quake 1 engine and says why",
       $("play-engine").value === "" && /plays Quake maps/.test(textOf($("play-engine-message"))),
@@ -86,17 +80,20 @@
     setValue($("play-engine"), settings.engine_id);
     await waitFor("the actions", () => $("play-action").options.length > 0);
     const cards = [...document.querySelectorAll("#play-action-choices input[type=radio]")].map((input) => input.value);
-    record("only Play it is offered for a Quake II map", cards.join(",") === "play_map", cards.join(","));
+    record("only Play it is offered for a Quake II map, so there is no choice to show",
+      cards.join(",") === "play_map" && $("play-action-field").hidden, cards.join(","));
     record("the page names the package folder and leaves baseq2 alone",
       textOf($("play-game-root")).includes("aup-q2room") && textOf($("play-game-root")).includes("baseq2"),
       textOf($("play-game-root")).slice(0, 140));
 
-    stepButton(4).click();
+    await waitFor("the primary to offer a review", () => /Review build/.test(textOf($("play-start"))) && !$("play-start").disabled);
+    $("play-start").click();
     await waitFor("the review", () => textOf($("play-review")).includes("Where files will be written"), 40000);
-    await waitFor("the package card", () => $("play-grant-basis"), 10000);
+    // The package's one question is the person's, so it is in the open.
+    await waitFor("the package card", () => $("play-review-attention").querySelector("#play-grant-basis"), 10000);
     // Long enough for the second request a Quake 1 review makes for its WADs.
     await sleep(3000);
-    const review = textOf($("play-review"));
+    const review = textOf($("play-review")) + " " + textOf($("play-review-attention"));
     record("the review of a Quake II run lists no Quake 1 WADs and says where its .wal files come from",
       !document.querySelector("#play-review .wad-list") && !/Not sent with this map's textures/.test(review) &&
         review.includes(".wal") && !textOf($("play-review-message")),
@@ -105,10 +102,10 @@
       review.includes("aup-q2room") && review.includes("q2room.pak"), review.match(/aup-q2room[^ ]*/)?.[0] || "");
     setValue($("play-grant-basis"), "own_work");
 
-    stepButton(5).click();
-    await waitFor("the final step", () => visible($("play-step-5")));
-    record("the last step restates the answer about your own files and can start",
-      textOf($("play-final-summary")).includes("It is my own work") && !$("play-start").disabled,
+    await waitFor("the summary to restate the answer", () => textOf($("play-final-summary")).includes("It is my own work"));
+    record("the summary restates the answer about your own files and can start",
+      textOf($("play-final-summary")).includes("It is my own work") && !$("play-start").disabled &&
+        textOf($("play-start")) === "Build & Run",
       `${textOf($("play-final-summary")).replace(/\s+/g, " ").slice(0, 160)} · start disabled=${$("play-start").disabled}`);
     $("play-start").click();
 

@@ -75,6 +75,15 @@
   // 420 pixels is most of them.
   const overflowed = [];
 
+  // Build is Build & Run on "File on this computer" (NEW_363): its old route,
+  // as a saved link would reach it.
+  async function goBuild() {
+    window.location.hash = "#build";
+    await waitFor("Build & Run on a file on this computer", () =>
+      visible($("area-play")) && visible($("play-local-map")) && visible($("build-start")));
+    await sleep(60);
+  }
+
   async function go(area) {
     document.querySelector(`.area-tab[data-area="${area}"]`).click();
     await waitFor(`the ${area} area`, () => visible($("area-" + area)));
@@ -107,12 +116,14 @@
     await waitFor("the application to boot", () => window.AUCOM && window.AUCOM.status.version);
     record("the page loads", true, `version ${window.AUCOM.status.version}`);
 
-    // NEW_244D: a fresh, signed-out machine opens on Build with nothing in the
-    // way. Signing in is for the Library, and is a dialog a person opens.
+    // NEW_244D: a fresh, signed-out machine opens where local work is, with
+    // nothing in the way — since NEW_363 Build & Run on a file on this
+    // computer. Signing in is for the Library, and is a dialog a person opens.
     await waitFor("the first area", () => document.querySelector('.area-tab[aria-current="page"]'));
+    await waitFor("the file source", () => visible($("play-local-map")));
     record(
-      "a fresh signed-out machine opens on Build, not on a sign-in form",
-      visible($("area-build")) && !visible($("first-run")),
+      "a fresh signed-out machine opens on Build & Run for a file, not on a sign-in form",
+      visible($("area-play")) && visible($("play-local-map")) && !visible($("first-run")),
       `current area ${document.querySelector('.area-tab[aria-current="page"]').dataset.area}`
     );
     await go("library");
@@ -144,8 +155,9 @@
     // is for (`AUCOM/AUE/AUT 246I1`), and a signed-in window opens on it.
     // Settings moved behind the cog and About into the footer (operator,
     // 2026-09-22), so the sidebar names the areas a person works in.
-    // Builds on this machine is a sub-item of Build, drawn only while in Build.
-    const AREAS = ["play", "library", "build", "builds", "run", "games", "profiles", "jobs"];
+    // Builds on this machine is a sub-item, drawn only while it is open. Build
+    // is no longer a second journey beside Build & Run (NEW_363).
+    const AREAS = ["play", "library", "builds", "run", "games", "profiles", "jobs"];
     const tabs = [...document.querySelectorAll(".area-tab")];
     const named = tabs.map((tab) => tab.dataset.area);
     record(
@@ -215,7 +227,7 @@
     buttonIn(cachedRow, "Use in a build").click();
     record("a revision can be chosen for a build", Boolean(window.AUCOM.chosenRevision),
       window.AUCOM.chosenRevision ? window.AUCOM.chosenRevision.revision_id : "nothing chosen");
-    await waitFor("Build to open on the chosen map", () => visible($("area-build")) && visible($("build-step-2")));
+    await waitFor("Build & Run to open on the chosen map", () => visible($("area-play")) && visible($("play-local-map")));
     await waitFor("pipeline readiness to arrive", () => $("build-pipeline").options.length > 1);
     record("an unready pipeline stays visible and disabled while the chosen revision is kept",
       [...$("build-pipeline").options].find(o => o.value === settings.pipeline_id)?.disabled === true &&
@@ -276,7 +288,7 @@
     record("recording where a tool is on this machine", true, settings.tool_path);
 
     // --- 6. build -----------------------------------------------------------
-    await go("build");
+    await goBuild();
     await waitFor("the configured pipeline to become selectable", () =>
       [...$("build-pipeline").options].some(option => option.value === settings.pipeline_id && !option.disabled));
     setValue($("build-pipeline"), settings.pipeline_id);
@@ -307,14 +319,16 @@
     setValue(inputSource, "asset");
     setValue($("build-label"), "the browser journey");
 
-    $("build-preview").click();
-    await waitFor("the command preview", () => visible($("build-preview-out")) &&
-      $("build-preview-out").querySelector("pre"));
+    record("the one button first offers a review", textOf($("build-start")) === "Review build", textOf($("build-start")));
+    $("build-start").click();
+    await waitFor("the command preview", () => $("build-preview-out").querySelector("pre"));
     record(
       "the exact command is shown before anything runs",
       textOf($("build-preview-out")).includes(settings.tool_path),
       textOf($("build-preview-out").querySelector("pre")).slice(0, 120)
     );
+    await waitFor("the button to say Build", () => textOf($("build-start")) === "Build" && !$("build-start").disabled);
+    record("once checked, the same button says Build", true, textOf($("build-start")));
 
     $("build-start").click();
     await waitFor("the build panel", () => visible($("build-current-panel")), 60000)
@@ -404,9 +418,8 @@
     if (notReady) setValue($("run-engine"), notReady.value);
     // Through the button, as a person gets there: showing Run starts its own
     // refresh, and the choice must survive it (the live check lost it).
-    await go("build");
-    $("build-step-tab-3").click();
-    await waitFor("Play this build on the Build step", () => visible($("build-play")));
+    await goBuild();
+    await waitFor("Play this build under the finished build", () => visible($("build-play")));
     $("build-play").click();
     await waitFor("Run to open on the build", () => visible($("area-run")) && $("run-build").value !== "");
     await sleep(1500);
@@ -491,7 +504,7 @@
     // the browser puts all of them in the tab order; the check is that none of
     // them was made unreachable by a negative tabindex or a div-with-a-click.
     const controls = [
-      "sign-in", "library-refresh", "build-pipeline", "build-preview", "build-start",
+      "sign-in", "library-refresh", "build-pipeline", "build-start",
       "run-engine", "run-action", "run-launch", "jobs-refresh",
     ].map((id) => $(id));
     const unreachable = controls.filter(
@@ -507,45 +520,27 @@
     // first — a keyboard user should not have to walk six area tabs to reach
     // the page — and the whole build flow has to be inside the walk rather than
     // only inside the DOM.
-    await go("build");
+    await goBuild();
     const focusable = [...document.querySelectorAll(
       'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
     )].filter((node) => node.offsetParent !== null || node.classList.contains("skip-link"));
-    const order = focusable.map((node) => node.id).filter(Boolean);
     record(
       "the first thing in the tab order is the skip link",
       focusable[0] && focusable[0].classList.contains("skip-link"),
       focusable[0] ? focusable[0].className || focusable[0].tagName : "nothing focusable"
     );
-    // The build is a wizard: the step buttons come first, then the current
-    // step's controls, and the check step holds Check again before Build.
-    const tabOrder = () => [...document.querySelectorAll(
+    // One form, walked in the order it is used: where the map comes from, the
+    // map, the build profile, then the one button at the review's foot.
+    const tabOrder = [...document.querySelectorAll(
       'button:not([disabled]), input:not([disabled]), select:not([disabled])'
     )].filter((node) => node.offsetParent !== null).map((node) => node.id).filter(Boolean);
-    $("build-step-tab-1").click();
-    const focusedHeading = document.activeElement;
+    const positions = ["play-source-local", "build-label", "build-pipeline", "build-start"]
+      .map((id) => tabOrder.indexOf(id));
     record(
-      "a wizard step's heading takes focus without a focus box round it",
-      focusedHeading && focusedHeading.tagName === "H3" && getComputedStyle(focusedHeading).outlineStyle === "none",
-      focusedHeading ? `${focusedHeading.tagName} outline ${getComputedStyle(focusedHeading).outlineStyle}` : "nothing focused"
+      "the form is reachable by tabbing, in the order it is used",
+      positions.every((index, i) => index >= 0 && (i === 0 || index > positions[i - 1])),
+      positions.join(" → ")
     );
-    const first = tabOrder();
-    window.AUCOM.areas.build.showStep(3, { check: false, focus: false });
-    // Arriving back on Build re-runs a stale check, and a button is disabled
-    // while its own request is out.
-    await waitFor("the check to settle", () => !$("build-preview").disabled, 30000);
-    const third = tabOrder();
-    const positions = [
-      first.indexOf("build-step-tab-1"), first.indexOf("build-step-tab-3"), first.indexOf("build-pipeline"),
-    ];
-    record(
-      "the build wizard is reachable by tabbing, in the order it is used",
-      positions.every((index, i) => index >= 0 && (i === 0 || index > positions[i - 1])) &&
-        // The builds list is its own page now (Builds on this machine).
-        third.indexOf("build-preview") >= 0,
-      `step buttons ${positions.slice(0, 2).join("→")}, pipeline @${positions[2]}; check again @${third.indexOf("build-preview")}`
-    );
-    $("build-step-tab-1").click();
 
     // --- About, and Settings behind the cog ---------------------------------
     //
@@ -572,7 +567,7 @@
 
     // Switching area moves focus to the heading, so a keyboard user lands on
     // the content that just changed rather than being left behind in it.
-    await go("build");
+    await go("play");
     record(
       "switching area moves focus to the new heading",
       document.activeElement === $("area-heading"),

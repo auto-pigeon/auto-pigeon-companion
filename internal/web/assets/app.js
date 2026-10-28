@@ -23,11 +23,18 @@
 
   // About is not an area any more: it opens from the footer (operator,
   // 2026-09-22), and Settings is reached from the cog, top right.
-  const areaNames = ["play", "library", "build", "builds", "run", "games", "profiles", "new-profile", "jobs", "settings"];
+  const areaNames = ["play", "library", "builds", "run", "games", "profiles", "new-profile", "jobs", "settings"];
+  // Routes that are a view of another area (NEW_363). Build & Run is one form
+  // now: the old Build wizard's `#build` opens it on "File on this computer",
+  // and `#autobuild` on its automatic-build checkbox. Saved links keep
+  // working; there is no second build journey behind them.
+  const aliases = {
+    build: ["play", "local"],
+    autobuild: ["play", "autobuild"],
+  };
   const titles = {
     play: "Build & Run",
     library: "My Maps",
-    build: "Build",
     builds: "Builds on this machine",
     run: "Run",
     games: "Live Games",
@@ -37,14 +44,11 @@
     settings: "Settings",
   };
 
-  // The area a fresh page opens on. Signed out, that is Build: local work needs
-  // no account, and opening on the one area that does told a first-time user
-  // otherwise (NEW_244D).
-  // Build & Run is the journey the program is for, so a signed-in window opens
-  // on it. Signed out it is not usable — the map comes from the account — and
-  // Build still is, so that is where a first run lands (NEW_244D).
+  // The area a fresh page opens on: Build & Run, the journey the program is
+  // for. Signed out it opens on a file on this computer, which needs no
+  // account (NEW_244D, NEW_363).
   function defaultArea() {
-    return window.AUCOM.status?.authenticated ? "play" : "build";
+    return window.AUCOM.status?.authenticated ? "play" : "play/local";
   }
 
   function show(area, { focus = true } = {}) {
@@ -54,7 +58,10 @@
     if (typeof area === "string" && area.includes("/")) {
       [area, argument] = [area.slice(0, area.indexOf("/")), area.slice(area.indexOf("/") + 1)];
     }
-    if (!areaNames.includes(area)) area = defaultArea();
+    if (aliases[area]) [area, argument] = aliases[area];
+    if (!areaNames.includes(area)) {
+      [area, argument = ""] = defaultArea().split("/");
+    }
     for (const name of areaNames) {
       $("area-" + name).hidden = name !== area;
     }
@@ -62,8 +69,8 @@
       if (tab.dataset.area === area) tab.setAttribute("aria-current", "page");
       else tab.removeAttribute("aria-current");
     }
-    // Builds on this machine is a sub-item of Build, shown only while in Build.
-    $("builds-tab").hidden = area !== "build" && area !== "builds";
+    // Builds on this machine is a sub-item, shown only while it is open.
+    $("builds-tab").hidden = area !== "builds";
     // A report opened from the Build area is about the Build area. Leaving it
     // on screen after a move to Settings would be a form whose context the user
     // can no longer see.

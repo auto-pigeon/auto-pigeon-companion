@@ -77,10 +77,20 @@
     node.dispatchEvent(new Event("input", { bubbles: true }));
     node.dispatchEvent(new Event("change", { bubbles: true }));
   };
-  const stepButton = (n) => $("play-step-tab-" + n);
+  // The review's one primary: "Review build" works the review out, and once it
+  // is on screen for these exact choices it says "Build & Run".
+  async function reviewBuild() {
+    await waitFor("the primary to offer a review", () => /Review build/.test(textOf($("play-start"))) && !$("play-start").disabled, 20000);
+    $("play-start").click();
+  }
+  async function buildAndRun() {
+    await waitFor("the primary to say Build & Run", () => textOf($("play-start")) === "Build & Run" && !$("play-start").disabled, 40000);
+    $("play-start").click();
+  }
   const helpIn = (root) => (root ? root.querySelector("[data-help-to-connect]") : null);
-  // The review's Live Games card, found by its heading: several cards share a class.
-  const listingCard = () => [...$("play-review").querySelectorAll(".review-card")]
+  // The review's Live Games card, found by its heading: several cards share a
+  // class. It is in the open, beside the summary: the listing is the person's.
+  const listingCard = () => [...$("play-review-attention").querySelectorAll(".review-card")]
     .find((card) => textOf(card.querySelector("h4")) === "Live Games listing") || null;
   const api = async (path, options = {}) => {
     const response = await fetch(path, {
@@ -136,10 +146,8 @@
     setValue($("play-map"), settings.asset_id);
     await waitFor("the revisions", () => $("play-revision").options.length > 0);
     setValue($("play-map-name"), "dm1");
-    stepButton(2).click();
     await waitFor("the build profiles", () => $("play-pipeline").options.length > 1);
     setValue($("play-pipeline"), settings.pipeline_id);
-    stepButton(3).click();
     await waitFor("the engines", () => $("play-engine").options.length > 1);
     setValue($("play-engine"), settings.engine_id);
     await waitFor("the host action", () => $("play-action-host_listen"));
@@ -167,17 +175,15 @@
     await snap("configure-private-default");
 
     // The review of the untouched choice: Private, and no link.
-    stepButton(4).click();
+    await reviewBuild();
     await waitFor("the listing card", () => /Players connect to/.test(textOf(listingCard())), 40000);
     record(
       "the review of an untouched listing offers no help link",
-      !helpIn($("play-review")) && /only you/.test(textOf(listingCard())),
+      !helpIn($("play-review-attention")) && /only you/.test(textOf(listingCard())),
       squash(textOf(listingCard())).slice(0, 160)
     );
 
     // --- Everyone, chosen ----------------------------------------------------
-    stepButton(3).click();
-    await waitFor("the run step", () => visible($("play-step-3")));
     setValue(select, "public");
     await waitFor("the help beside the listing fields", () => visible($("play-listing-help")));
     checkHelp("beside the listing fields", $("play-listing-help"));
@@ -210,7 +216,7 @@
     );
 
     // --- the review -----------------------------------------------------------
-    stepButton(4).click();
+    await reviewBuild();
     const card = await waitFor("the public listing card", () => {
       const found = listingCard();
       return found && /Players connect to/.test(textOf(found)) && helpIn(found) ? found : null;
@@ -225,14 +231,14 @@
     await snap("review-public-help");
 
     // --- launch ---------------------------------------------------------------
-    stepButton(5).click();
-    await waitFor("the final step", () => visible($("play-step-5")));
     record(
-      "the last step says who will see it",
+      "the summary says who will see it",
       textOf($("play-final-summary")).includes("Everyone"),
       squash(textOf($("play-final-summary"))).slice(-120)
     );
-    $("play-start").click();
+    await buildAndRun();
+    await waitFor("the run's card", () => visible($("play-current")), 20000);
+    [...$("play-current").querySelectorAll("button")].find((b) => textOf(b) === "View progress").click();
     await waitFor("Activity", () => onScreen($("activity")), 20000);
     await waitFor("the public game listed", () => /Listed in Live Games/.test(textOf($("activity-body"))), 120000)
       .catch((err) => { throw new Error(`${err.message}; Activity said: ${squash(textOf($("activity-body"))).slice(0, 400)}`); });
@@ -247,7 +253,7 @@
       `visibility=${select.value}`
     );
     record(
-      "and the last step says so before anything else is pressed",
+      "and the summary says so before anything else is pressed",
       textOf($("play-final-summary")).includes("Only you"),
       squash(textOf($("play-final-summary"))).slice(-120)
     );
@@ -263,16 +269,14 @@
 
     // Second launch, nothing chosen: Private, and no link anywhere.
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    stepButton(4).click();
+    await reviewBuild();
     await waitFor("the private listing card", () => {
       const next = listingCard();
       return next && /Players connect to/.test(textOf(next)) && /only you/.test(textOf(next)) ? next : null;
     }, 40000).catch((err) => { throw new Error(`${err.message}; the review said: ${squash(textOf(listingCard())).slice(0, 300)}`); });
-    record("the next review asks for Private and offers no help link", !helpIn($("play-review")),
+    record("the next review asks for Private and offers no help link", !helpIn($("play-review-attention")),
       squash(textOf(listingCard())).slice(0, 160));
-    stepButton(5).click();
-    await waitFor("the final step", () => visible($("play-step-5")));
-    $("play-start").click();
+    await buildAndRun();
     await waitFor("the second game listed", () => {
       const run = current();
       return run && /\(private\)/.test(textOf(run)) ? run : null;

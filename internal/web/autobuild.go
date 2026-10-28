@@ -63,6 +63,7 @@ func (s *Server) autobuildService() (*autobuild.Service, error) {
 			Current:  s.autobuildCurrent,
 			Start:    s.autobuildStart,
 			RunState: s.autobuildRunState,
+			Ready:    s.pipelineNotReady,
 			Logf:     s.logf,
 		})
 	})
@@ -168,6 +169,14 @@ func (s *Server) autobuildView(service *autobuild.Service, entry autobuild.Entry
 		"pipeline_id": entry.PipelineID, "enabled": entry.Enabled,
 		"baseline": entry.Baseline, "observed": entry.Observed, "pending": entry.Pending,
 		"check_error": entry.CheckError, "failures": entry.Failures, "halted": entry.Halted,
+	}
+	// Why the chosen profile cannot build now, said with the profile still
+	// chosen: nothing more is dispatched until it is set up again, and then
+	// the waiting revision builds (NEW_363).
+	if entry.PipelineID != "" {
+		if why := s.pipelineNotReady(entry.PipelineID); why != nil {
+			view["unready"] = why.Error()
+		}
 	}
 	if !entry.EnabledAt.IsZero() {
 		view["enabled_at"] = entry.EnabledAt
@@ -308,6 +317,41 @@ func (s *Server) pipelineExists(id string) error {
 	return nil
 }
 
+// pipelineNotReady is why a build profile cannot build on this machine now, or
+// nil: the same readiness decision as the build-profile list Build & Run reads
+// (pipelineReadiness), so Auto-build never offers or starts a profile the
+// manual form calls "needs setup" (NEW_360 F1, NEW_363).
+func (s *Server) pipelineNotReady(id string) error {
+	if err := s.pipelineExists(id); err != nil {
+		return err
+	}
+	runner, err := s.buildRunner(nil)
+	if err != nil {
+		return err
+	}
+	catalog, err := s.catalog()
+	if err != nil {
+		return err
+	}
+	entry, err := catalog.Lookup(id)
+	if err != nil {
+		return err
+	}
+	set, _, err := s.bindings()
+	if err != nil {
+		return err
+	}
+	verdict := pipelineReadiness(entry.Profile.(*profile.PipelineProfile), runner.Resolver(), set)
+	if verdict.Ready {
+		return nil
+	}
+	summaries := make([]string, 0, len(verdict.Problems))
+	for _, problem := range verdict.Problems {
+		summaries = append(summaries, problem.Summary)
+	}
+	return fmt.Errorf("%s needs setup: %s", entry.Profile.Metadata().Name, strings.Join(summaries, " "))
+}
+
 func (s *Server) handleAutobuildEnable(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		Pipeline    string `json:"pipeline"`
@@ -320,7 +364,9 @@ func (s *Server) handleAutobuildEnable(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := s.pipelineExists(request.Pipeline); err != nil {
+	// Switching it on needs a profile that can build now: one that needs
+	// setup would only be scheduled to fail.
+	if err := s.pipelineNotReady(request.Pipeline); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
@@ -359,7 +405,7 @@ func (s *Server) handleAutobuildPipeline(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	if err := s.pipelineExists(request.Pipeline); err != nil {
+	if err := s.pipelineNotReady(request.Pipeline); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
@@ -425,7 +471,8 @@ func (s *Server) writeAutobuildEntry(w http.ResponseWriter, service *autobuild.S
 
 func autobuildStatus(err error) int {
 	switch {
-	case errors.Is(err, autobuild.ErrBusy):
+	case errors.Is(err, autobuild.ErrBusy), errors.Is(err, autobuild.ErrSameRevisionRunning),
+		errors.Is(err, autobuild.ErrNotReady):
 		return http.StatusConflict
 	case errors.Is(err, autobuild.ErrAccess):
 		return http.StatusUnauthorized

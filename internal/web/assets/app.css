@@ -1460,3 +1460,59 @@ main { padding: 1.25rem 1.75rem 3rem; }
 /* Execution entries stay visible while their setup is incomplete. */
 option:disabled { color: var(--ink-faint); }
 .choice-card:has(input:disabled) { opacity: .6; cursor: default; }
+
+/* Build & Run as ONE form (NEW_363). Two columns on a wide window — the map,
+   the build profile and "Run after build" on the left, the review with its one
+   primary action on the right, beside them rather than below a long scroll —
+   and one column, in the same order, on a narrow one. Each column has a width a
+   form can be read at: a three-word select is not stretched across an
+   ultrawide screen. */
+.brun-form {
+  display: grid; gap: 0 1.25rem; align-items: start;
+  grid-template-columns: minmax(0, 40rem) minmax(0, 30rem);
+}
+.brun-column { min-width: 0; }
+.brun-block { margin-bottom: 1rem; }
+.brun-block > h3 { margin: 0 0 0.6rem; font-size: 1rem; }
+.brun-review { position: sticky; top: 1rem; }
+@media (max-width: 75rem) {
+  .brun-form { grid-template-columns: minmax(0, 44rem); }
+  .brun-review { position: static; }
+}
+#area-play .brun-block > .field, #area-play .brun-block .row { margin-top: 0.5rem; }
+#area-play .brun-block .field { min-width: 0; }
+
+/* The source of the map: two fixed choices, one row (UI-DESIGN §4). A radio
+   group, so arrow keys move between them and the choice is announced. */
+.segmented { display: inline-flex; flex-wrap: wrap; gap: 2px; margin: 0 0 0.5rem; padding: 2px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--inset); }
+.segmented__option { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.75rem; border-radius: var(--radius); cursor: pointer; font-size: 0.875rem; color: var(--ink-muted); }
+.segmented__option input { accent-color: var(--accent); margin: 0; }
+.segmented__option:has(input:checked) { background: var(--accent-soft); color: var(--accent-strong); }
+.segmented__option:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+/* The SELECTED choice's state, beside its list (aucom.ux). */
+.choice-state { margin: 0.3rem 0 0; font-size: 0.875rem; color: var(--ink-muted); }
+.choice-state--attention { color: var(--ink); }
+.choice-state a { margin-left: 0.15rem; }
+
+.brun-options { margin: 0.6rem 0 0; font-size: 0.875rem; }
+.brun-options > summary { cursor: pointer; color: var(--ink-muted); padding: 0.2rem 0; }
+.brun-options[open] > summary { color: var(--ink); }
+.brun-technical { margin: 0.6rem 0 0; }
+.brun-technical > summary { cursor: pointer; color: var(--ink-muted); padding: 0.2rem 0; font-size: 0.875rem; }
+.brun-technical .review-grid { margin-top: 0.5rem; }
+
+/* The review's one primary action, at its foot, with what stops it beside. */
+.brun-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.5rem 0.75rem; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--line); }
+.brun-footer .message { margin: 0; flex: 1 1 12rem; min-height: 0; }
+.brun-footer .primary { min-height: 2.5rem; padding-inline: 1.25rem; }
+
+.brun-current { max-width: 71.25rem; }
+.brun-current > h3 { margin: 0 0 0.25rem; }
+.brun-current .row-actions { margin-top: 0.5rem; }
+.message-details { margin-top: 0.35rem; font-weight: normal; color: var(--ink-muted); }
+.message-details > summary { cursor: pointer; }
+
+.autobuild__expanded { margin-top: 0.4rem; }
+.autobuild__apply { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.75rem; margin: 0.4rem 0; }
+.autobuild__apply p { margin: 0; }

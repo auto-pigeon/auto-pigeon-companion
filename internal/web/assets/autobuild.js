@@ -1,10 +1,18 @@
-// Auto-build, on the map chosen in Build & Run step 1 (NEW_265).
+// Auto-build, on the saved map chosen in Build & Run (NEW_265; NEW_363 made it
+// one checkbox under the build profile).
 //
 // The page shows and asks; it never polls AUB and never decides what to build.
 // One poller in the Companion does that (internal/autobuild) whatever number of
 // windows are open — this file only reads that poller's record for the chosen
-// map, a local request every few seconds while the panel is on screen, and
-// sends the switch, the build profile and the two explicit actions.
+// map, a local request every few seconds while the checkbox is on screen, and
+// sends the switch, the build profile and the explicit actions.
+//
+// It has no build profile list of its own. Until NEW_363 it had one, filled
+// with every pipeline whose stages had a provider (`runnable`), so a profile
+// the manual form called "needs setup" could be chosen here (NEW_360 F1). Now
+// automatic builds use the profile chosen in the form, judged by the same
+// readiness decision (`pipelineReady`); a different one is applied only when
+// somebody says so, and the server refuses an unready one as well.
 
 "use strict";
 
@@ -15,9 +23,12 @@
   let displayName = "";
   let timer = null;
   let actionsKey = "";
+  // The poller's last record for this map, drawn again when the form's build
+  // profile changes.
+  let last = null;
 
   function visible() {
-    return !$("area-play").hidden && !$("play-step-1").hidden && Boolean(assetID);
+    return !$("area-play").hidden && !$("play-autobuild").hidden && Boolean(assetID);
   }
 
   // While a question to AUB is in flight, or the baseline is not yet taken,
@@ -29,19 +40,14 @@
     if (visible()) timer = setTimeout(refresh, soon ? 1000 : 5000);
   }
 
-  function pipelines() {
-    return window.AUCOM.play?.pipelines?.() || [];
+  // The build profile chosen in the form, and the one automatic builds use.
+  function chosen() {
+    const id = window.AUCOM.play?.pipeline?.() || "";
+    return (window.AUCOM.play?.pipelines?.() || []).find((p) => p.id === id) || null;
   }
 
-  function fillPipelines(chosen) {
-    const select = $("play-autobuild-pipeline");
-    const want = pipelines().filter((p) => p.runnable);
-    const have = [...select.options].map((o) => o.value).join("|");
-    if (have !== want.map((p) => p.id).join("|")) {
-      select.replaceChildren(...want.map((p) => el("option", { text: p.name, attrs: { value: p.id } })));
-    }
-    if (chosen && want.some((p) => p.id === chosen)) select.value = chosen;
-    else if (!select.value) select.value = window.AUCOM.play?.pipeline?.() || want[0]?.id || "";
+  function named(id) {
+    return (window.AUCOM.play?.pipelines?.() || []).find((p) => p.id === id) || null;
   }
 
   function revisionText(revision) {
@@ -62,16 +68,71 @@
 
   let runningFor = "";
 
+  // The checkbox: it can be switched on only for a saved map with a READY
+  // build profile; a profile that needs setup is said, with where to set it up,
+  // and nothing is scheduled for it.
+  function renderSwitch(entry) {
+    const on = $("play-autobuild-on");
+    const enabled = Boolean(entry?.enabled);
+    const pipeline = chosen();
+    const ready = Boolean(pipeline) && window.AUCOM.pipelineReady(pipeline);
+    on.checked = enabled;
+    on.disabled = !enabled && !ready;
+    const message = $("play-autobuild-message");
+    // An error the last action wrote stays until the next action.
+    if (message.dataset.error) return;
+    message.className = "message";
+    message.replaceChildren();
+    // The profile automatic builds use cannot build now: nothing more is
+    // dispatched, the profile stays chosen, and this says what to repair.
+    const used = enabled ? named(entry.pipeline_id) : null;
+    if (enabled && (entry.unready || (used && !window.AUCOM.pipelineReady(used)))) {
+      message.className = "message warning";
+      message.append(document.createTextNode(t("Automatic builds wait until {name} is set up.",
+        { name: used?.name || entry.pipeline_id }) + " "));
+      for (const cause of used ? window.AUCOM.setupCauses(used) : []) {
+        message.append(document.createTextNode(cause.text + " "), window.AUCOM.setupLink(cause));
+      }
+      return;
+    }
+    if (entry?.check_error) {
+      setMessage(message, entry.check_error, "error");
+      return;
+    }
+    if (!enabled && !ready) {
+      message.textContent = t("Choose a ready build profile above to build new revisions automatically.");
+    }
+  }
+
+  // "Apply to automatic builds": the form's profile changed while automatic
+  // builds are on. They keep the one they had until this is pressed; a build
+  // already running keeps its own.
+  function renderApply(entry) {
+    const box = $("play-autobuild-apply");
+    const pipeline = chosen();
+    const differs = Boolean(entry?.enabled) && Boolean(pipeline) && pipeline.id !== entry.pipeline_id;
+    box.hidden = !differs;
+    if (!differs) return;
+    $("play-autobuild-apply-text").textContent = t("Automatic builds use {current}.",
+      { current: named(entry.pipeline_id)?.name || entry.pipeline_id });
+    const button = $("play-autobuild-apply-button");
+    button.disabled = !window.AUCOM.pipelineReady(pipeline);
+    button.setAttribute("aria-label", t("Apply {name} to automatic builds", { name: pipeline.name }));
+  }
+
   function render(entry) {
+    last = entry;
     // A build Auto-build started is news for the Activity drawer now, not at
     // its next slow poll.
     const running = entry.running?.run_id || "";
     if (running && running !== runningFor) window.AUCOM.play?.pollActivity?.();
     runningFor = running;
-    const on = $("play-autobuild-on");
-    on.checked = Boolean(entry.enabled);
-    on.setAttribute("aria-checked", String(Boolean(entry.enabled)));
-    fillPipelines(entry.pipeline_id);
+    renderSwitch(entry);
+    renderApply(entry);
+    // Expanded only while there is something to say: switched on, or a build
+    // of its own still running after it was switched off.
+    $("play-autobuild-expanded").hidden = !entry.enabled && !entry.running;
+    $("play-autobuild-stop").hidden = !entry.enabled;
 
     const now = Date.parse(entry.now || "") || Date.now();
     soon = Boolean(entry.checking_since) || (Boolean(entry.enabled) && !entry.baseline && !entry.halted);
@@ -124,11 +185,6 @@
         actions.append(retry);
       }
     }
-    $("play-autobuild-now").disabled = Boolean(entry.running);
-
-    if (entry.check_error) setMessage("play-autobuild-message", entry.check_error, "error");
-    else if (!entry.enabled && !entry.running) setMessage("play-autobuild-message", t("Auto-build is off for this map."), "");
-    else setMessage("play-autobuild-message", "");
   }
 
   async function refresh() {
@@ -143,12 +199,15 @@
   }
 
   async function act(what, payload) {
+    const message = $("play-autobuild-message");
+    delete message.dataset.error;
     const { ok, body } = await api(`/api/v1/autobuild/${encodeURIComponent(assetID)}/${what}`, {
       method: "POST", body: payload || {},
     });
     if (!ok) {
-      setMessage("play-autobuild-message", body.error || t("That did not work."), "error");
       await refresh();
+      setMessage(message, body.error || t("That did not work."), "error");
+      message.dataset.error = "1";
       return false;
     }
     render(body);
@@ -156,28 +215,41 @@
     return true;
   }
 
+  // Switching it on needs a saved map, a ready profile and nothing else: it
+  // builds nothing at once (the revision saved now is its starting point), never
+  // starts the game, downloads no update and accepts no permission.
   $("play-autobuild-on").addEventListener("change", (event) => {
     const on = event.target.checked;
     withBusy(event.target, async () => {
-      const pipeline = $("play-autobuild-pipeline").value;
-      if (on && !pipeline) {
+      const pipeline = chosen();
+      if (on && (!pipeline || !window.AUCOM.pipelineReady(pipeline))) {
         event.target.checked = false;
-        setMessage("play-autobuild-message", t("Choose a build profile first: none is installed and ready on this machine."), "error");
+        renderSwitch(last);
         return;
       }
-      await (on ? act("enable", { pipeline, display_name: displayName }) : act("disable"));
-    });
+      // Off stops what would be scheduled next; a build already running is
+      // left to finish, under its ordinary controls.
+      await (on ? act("enable", { pipeline: pipeline.id, display_name: displayName }) : act("disable"));
+    }).then(() => { if (last) renderSwitch(last); });
   });
-  $("play-autobuild-pipeline").addEventListener("change", (event) => {
-    if ($("play-autobuild-on").checked) act("pipeline", { pipeline: event.target.value });
-  });
-  $("play-autobuild-now").addEventListener("click", (event) => withBusy(event.currentTarget, async () => {
-    // The build profile on screen goes with it: a map never switched on gets
-    // it recorded, and Auto-build stays off.
-    await act("build-now", { pipeline: $("play-autobuild-pipeline").value, display_name: displayName });
+  $("play-autobuild-stop").addEventListener("click", (event) => withBusy(event.currentTarget, () => act("disable")));
+  $("play-autobuild-apply-button").addEventListener("click", (event) => withBusy(event.currentTarget, async () => {
+    const pipeline = chosen();
+    if (pipeline) await act("pipeline", { pipeline: pipeline.id });
   }));
+  // The form's build profile changed, or its list was read again (back from
+  // Profiles after a repair): what the checkbox may do is decided again, at
+  // once and without a reload.
+  document.addEventListener("aucom:play-pipeline", () => {
+    if (last) {
+      renderSwitch(last);
+      renderApply(last);
+    } else if (!$("play-autobuild").hidden) {
+      renderSwitch(null);
+    }
+  });
 
-  // Called by play.js whenever the chosen map changes or the page is shown.
+  // Called by play.js whenever the chosen saved map changes or the page is shown.
   window.AUCOM.autobuildPanel = {
     show(map, signedIn) {
       const panel = $("play-autobuild");
@@ -187,11 +259,15 @@
       if (next !== assetID) {
         assetID = next;
         actionsKey = "";
+        last = null;
         $("play-autobuild-status").replaceChildren();
         $("play-autobuild-actions").replaceChildren();
+        $("play-autobuild-expanded").hidden = true;
+        $("play-autobuild-apply").hidden = true;
+        delete $("play-autobuild-message").dataset.error;
         setMessage("play-autobuild-message", "");
+        renderSwitch(null);
       }
-      fillPipelines();
       if (!panel.hidden) refresh();
       else clearTimeout(timer);
     },

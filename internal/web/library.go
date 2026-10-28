@@ -52,7 +52,7 @@ func (s *Server) handleLibraryMapTextures(w http.ResponseWriter, r *http.Request
 	}
 	textures, err := client.TextureRequirements(r.Context(), r.PathValue("id"))
 	if err != nil {
-		writeError(w, aubStatus(err), err)
+		writeAUBError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, textures)
@@ -68,6 +68,10 @@ func aubStatus(err error) int {
 	var apiErr *aub.APIError
 	if errors.As(err, &apiErr) {
 		switch {
+		case apiErr.Reason == reasonLegalAcceptanceRequired:
+			// The legal gate is not a lost sign-in: signing in again would
+			// not help, and the page must not say it would (NEW_360 F2).
+			return http.StatusForbidden
 		case apiErr.Unauthorized():
 			return http.StatusUnauthorized
 		case apiErr.StatusCode == http.StatusNotFound:
@@ -114,7 +118,7 @@ func (s *Server) handleLibraryCapabilities(w http.ResponseWriter, r *http.Reques
 	}
 	capabilities, err := client.Capabilities(r.Context())
 	if err != nil {
-		writeError(w, aubStatus(err), err)
+		writeAUBError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, capabilities)
@@ -144,7 +148,7 @@ func (s *Server) handleLibraryCatalog(w http.ResponseWriter, r *http.Request) {
 	}
 	page, err := client.Catalog(r.Context(), query)
 	if err != nil {
-		writeError(w, aubStatus(err), err)
+		writeAUBError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, page)
@@ -163,7 +167,7 @@ func (s *Server) handleLibraryAsset(w http.ResponseWriter, r *http.Request) {
 	assetType, assetID := r.PathValue("type"), r.PathValue("id")
 	detail, err := client.Asset(r.Context(), assetType, assetID)
 	if err != nil {
-		writeError(w, aubStatus(err), err)
+		writeAUBError(w, err)
 		return
 	}
 	limit := 50
@@ -202,7 +206,7 @@ func (s *Server) handleLibraryRevision(w http.ResponseWriter, r *http.Request) {
 	revision, err := client.Revision(r.Context(),
 		r.PathValue("type"), r.PathValue("id"), r.PathValue("rev"))
 	if err != nil {
-		writeError(w, aubStatus(err), err)
+		writeAUBError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, revision)
@@ -260,12 +264,12 @@ func (s *Server) handleLibrarySync(w http.ResponseWriter, r *http.Request) {
 	}
 	syncer, err := assetsync.NewSyncer(r.Context(), client, store)
 	if err != nil {
-		writeError(w, aubStatus(err), err)
+		writeAUBError(w, err)
 		return
 	}
 	result, err := syncer.Sync(r.Context(), request.AssetType, request.AssetID, request.Revision)
 	if err != nil {
-		writeError(w, aubStatus(err), err)
+		writeAUBError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{

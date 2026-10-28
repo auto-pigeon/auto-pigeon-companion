@@ -68,7 +68,12 @@ type Deps struct {
 	// RunState reports a run's state and, once it failed, why. An error means
 	// the run is not there to ask about.
 	RunState func(runID string) (state, why string, err error)
-	Now      func() time.Time
+	// Ready reports why a build profile cannot build now — a program it
+	// needs is missing, unapproved or the wrong version — or nil when it can.
+	// The same readiness decision the manual Build & Run uses (NEW_363,
+	// NEW_360 F1). Optional: without it every profile is taken as ready.
+	Ready func(pipelineID string) error
+	Now   func() time.Time
 	Logf     func(format string, args ...any)
 }
 
@@ -435,6 +440,7 @@ func (s *Service) observe(entry *Entry, answer observation) {
 	switch {
 	case revision.Key() == entry.Baseline.Key(),
 		entry.submitted(revision.Key()),
+		entry.builtByHand(revision.ID),
 		entry.Pending != nil && entry.Pending.Key() == revision.Key(),
 		revision.Number <= entry.Baseline.Number,
 		entry.Pending != nil && revision.Number < entry.Pending.Number:
@@ -474,19 +480,31 @@ func (s *Service) startOwed(assetID string) error {
 		if _, owed := owedBuild(&entry); !owed {
 			continue
 		}
-		if err := s.submit(entry.AssetID, false, owedBuild); err != nil && !errors.Is(err, ErrBusy) && !errors.Is(err, errNotOwed) {
+		if err := s.submit(entry.AssetID, false, owedBuild); err != nil && !errors.Is(err, ErrBusy) &&
+			!errors.Is(err, errNotOwed) && !errors.Is(err, ErrNotReady) {
 			s.deps.Logf("autobuild %s: %v", entry.AssetID, err)
 		}
 	}
 	return nil
 }
 
+// ErrNotReady: the map's build profile cannot build now. Nothing is started and
+// nothing is forgotten: the revision stays waiting, the profile stays chosen,
+// and the build starts once the profile is set up again (NEW_363).
+var ErrNotReady = errors.New("autobuild: the build profile needs setup")
+
+// ErrSameRevisionRunning: a person asked to build, by hand, the revision an
+// automatic build is building now.
+var ErrSameRevisionRunning = errors.New(
+	"autobuild: an automatic build of this revision is already running; follow it in Activity")
+
 // errNotOwed: by the time the lock was held, the build was no longer owed.
 var errNotOwed = errors.New("autobuild: no build is owed")
 
 // owedBuild is the revision an enabled map is waiting to have built, if any.
 func owedBuild(entry *Entry) (Revision, bool) {
-	if !entry.Enabled || entry.Running != nil || entry.Pending == nil || entry.submitted(entry.Pending.Key()) {
+	if !entry.Enabled || entry.Running != nil || entry.Pending == nil || entry.submitted(entry.Pending.Key()) ||
+		entry.builtByHand(entry.Pending.ID) {
 		return Revision{}, false
 	}
 	return *entry.Pending, true
@@ -495,6 +513,9 @@ func owedBuild(entry *Entry) (Revision, bool) {
 // submit submits a build of one revision: written down first, then started.
 // pick names the revision from the entry as it is inside the lock.
 func (s *Service) submit(assetID string, manual bool, pick func(*Entry) (Revision, bool)) error {
+	if err := s.ready(assetID); err != nil {
+		return err
+	}
 	var snapshot Entry
 	var revision Revision
 	s.mu.Lock()
@@ -556,6 +577,45 @@ func (s *Service) submit(assetID string, manual bool, pick func(*Entry) (Revisio
 		return startErr
 	}
 	s.deps.Logf("autobuild %s: building revision %d (run %s)", assetID, revision.Number, runID)
+	return err
+}
+
+// ready is [Deps.Ready] for the build profile a map's auto-build uses now.
+func (s *Service) ready(assetID string) error {
+	if s.deps.Ready == nil {
+		return nil
+	}
+	entry, err := s.entry(assetID)
+	if err != nil || strings.TrimSpace(entry.PipelineID) == "" {
+		return nil // submit says what is missing
+	}
+	if why := s.deps.Ready(entry.PipelineID); why != nil {
+		return fmt.Errorf("%w: %v", ErrNotReady, why)
+	}
+	return nil
+}
+
+// NoteManual records that a person started a build of one exact revision by
+// hand — Build & Run with "Run after build" off (NEW_363). The poller then
+// never builds that revision a second time, and a hand build of the revision
+// an automatic build is building now is refused with [ErrSameRevisionRunning].
+// A map with no auto-build is not given one.
+func (s *Service) NoteManual(assetID, revisionID string) error {
+	_, err := Update(s.path, func(state *State) error {
+		entry, found := state.Find(assetID)
+		if !found || revisionID == "" {
+			return errUnchanged
+		}
+		if entry.Running != nil && entry.Running.Revision.ID == revisionID {
+			return ErrSameRevisionRunning
+		}
+		entry.rememberByHand(revisionID)
+		if entry.Pending != nil && entry.Pending.ID == revisionID {
+			entry.remember(entry.Pending.Key())
+			entry.Pending = nil
+		}
+		return nil
+	})
 	return err
 }
 

@@ -388,6 +388,13 @@ type Record struct {
 	// "sign in again", "ask the map's owner for the missing WAD". Empty when
 	// there is nothing to suggest beyond the error.
 	Remedy string `json:"remedy,omitempty"`
+	// Summary is the one sentence an ordinary message shows for the failure
+	// when the stage that failed knew it ([RemedyError]); the whole text stays
+	// in Error. FailureCode is that failure's category (NEW_363), e.g.
+	// `server_unavailable` for a 503 while downloading — never derived from
+	// Error's English.
+	Summary     string `json:"summary,omitempty"`
+	FailureCode string `json:"failure_code,omitempty"`
 
 	CreatedAt  time.Time `json:"created_at"`
 	StartedAt  time.Time `json:"started_at,omitempty"`

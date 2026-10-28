@@ -13,6 +13,7 @@ import (
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/assetref"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/assetsync"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/autobuild"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/engine"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
@@ -156,7 +157,7 @@ func (s *Server) playFetchMap(ctx context.Context, request playrun.Request) (pla
 	resolved, sources, err := assetref.ResolveAll(ctx, store, syncer,
 		map[string]string{playMapInput: reference}, stage)
 	if err != nil {
-		return playrun.MapResult{}, err
+		return playrun.MapResult{}, downloadFailure(err)
 	}
 	source := sources[playMapInput]
 
@@ -173,7 +174,7 @@ const playMapInput = "map"
 func (s *Server) playFetchBundle(ctx context.Context, request playrun.Request) (playrun.BundleResult, error) {
 	entry, err := s.verifiedTextureBundle(ctx, request.AssetID, request.RevisionNumber)
 	if err != nil {
-		return playrun.BundleResult{}, err
+		return playrun.BundleResult{}, downloadFailure(err)
 	}
 
 	return bundleResult(entry, s.backendAddress()), nil
@@ -659,6 +660,11 @@ type playRequestBody struct {
 	AcceptReason string         `json:"accept_reason,omitempty"`
 	// Listing lists a hosted game in Live Games. See hosting.go.
 	Listing *playListingBody `json:"listing,omitempty"`
+	// BuildOnly is Build & Run with "Run after build" switched off (NEW_363):
+	// the same coordinator, downloads and build, and then nothing is
+	// installed and no engine starts — so Engine, Action and Mod are not asked
+	// for. See playrun.Request.BuildOnly.
+	BuildOnly bool `json:"build_only,omitempty"`
 }
 
 // playListingBody is the listing the page confirmed in step 3.
@@ -683,6 +689,7 @@ func (b playRequestBody) request(gameRoot string) playrun.Request {
 		EngineProfileID: b.Engine, EngineActionID: b.Action,
 		GameRoot: gameRoot, ModName: b.Mod, MapName: b.Map, Label: b.Label,
 		OwnWADsDir: b.OwnWADsDir, Grants: b.Grants, AcceptReason: b.AcceptReason,
+		BuildOnly: b.BuildOnly,
 	}
 }
 
@@ -820,6 +827,17 @@ func (s *Server) playRequest(body playRequestBody) (playrun.Request, int, error)
 		return playrun.Request{}, http.StatusConflict, err
 	}
 	family := s.playFamily(body.Pipeline)
+	if body.BuildOnly {
+		// Nothing is installed and no engine starts: an engine named anyway
+		// would be a choice the run silently ignores, so it is refused.
+		if body.Engine != "" || body.Action != "" || body.Listing != nil {
+			return playrun.Request{}, http.StatusBadRequest,
+				errors.New("a build without running names no engine, action or listing")
+		}
+		request := body.request("")
+		request.Family = family
+		return request, http.StatusOK, nil
+	}
 	if err := s.playFits(family, body.Engine, body.Action); err != nil {
 		return playrun.Request{}, http.StatusBadRequest, err
 	}
@@ -847,10 +865,29 @@ func (s *Server) handlePlayStart(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, err)
 		return
 	}
+	// A build by hand of the revision Auto-build is building now is the same
+	// build twice: refused, pointing at the one running (NEW_363).
+	autobuilds, _ := s.autobuildService()
+	if request.BuildOnly && autobuilds != nil {
+		if state, stateErr := autobuilds.State(); stateErr == nil {
+			if entry, found := state.Find(request.AssetID); found && entry.Running != nil &&
+				entry.Running.Revision.ID == request.RevisionID {
+				writeJSON(w, http.StatusConflict, errorBody{Error: autobuild.ErrSameRevisionRunning.Error(),
+					Code: "auto_build_running"})
+				return
+			}
+		}
+	}
 	record, err := service.Start(request)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
+	}
+	// ...and once started, the poller never builds that revision again.
+	if request.BuildOnly && autobuilds != nil {
+		if noteErr := autobuilds.NoteManual(request.AssetID, request.RevisionID); noteErr != nil {
+			s.logf("play: noting the hand build of %s for Auto-build: %v", request.AssetID, noteErr)
+		}
 	}
 	writeJSON(w, http.StatusAccepted, playView(record, time.Now().UTC()))
 }
@@ -1022,6 +1059,13 @@ func playView(record *playrun.Record, now time.Time) map[string]any {
 		// One sentence for the Activity card; the whole text stays in
 		// "error" for Technical details and Jobs.
 		out["error_summary"] = playrun.Summary(record.Error)
+		if record.Summary != "" {
+			out["error_summary"] = record.Summary
+		}
+		// The category a page says in its reader's language (failurewords.go).
+		if record.FailureCode != "" {
+			out["failure_code"] = record.FailureCode
+		}
 		out["failed_at"] = record.FailedAt
 		out["failed_at_title"] = record.FailedAt.Title()
 	}
@@ -1205,12 +1249,12 @@ func (s *Server) handlePlayTextures(w http.ResponseWriter, r *http.Request) {
 		}
 		bundle, downloadErr := client.TextureExport(r.Context(), assetID, revision)
 		if downloadErr != nil {
-			writeError(w, aubStatus(downloadErr), downloadErr)
+			writeAUBError(w, downloadErr)
 			return
 		}
 		entry, err = cache.Publish(r.Context(), bundle, want)
 		if err != nil {
-			writeError(w, http.StatusConflict, err)
+			writeJSON(w, http.StatusConflict, errorBody{Error: err.Error(), Code: aubFailureCode(err)})
 			return
 		}
 	}
@@ -1335,12 +1379,12 @@ func (s *Server) handlePlayPlan(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	if err = engine.CheckModName(request.ModName); err != nil {
+	if err = engine.CheckModName(request.ModName); err != nil && !request.BuildOnly {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
 
-	if request.Packaged() {
+	if request.Packaged() && !request.BuildOnly {
 		s.playPlanPackaged(w, request)
 		return
 	}
@@ -1387,6 +1431,23 @@ func (s *Server) handlePlayPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	plan["map_input"] = inputName
+	if request.BuildOnly {
+		// Build only (NEW_363): nothing is written into a game folder and no
+		// engine is started, so the plan names neither.
+		delete(plan, "run")
+		delete(plan, "writes")
+		plan["build_only"] = true
+	}
+	if request.BuildOnly && request.Packaged() {
+		// A Quake II compiler reads the game folders bound to it; the map's
+		// account textures come with the run (Q2_015A). Nothing to look up.
+		plan["textures"] = map[string]any{
+			"cached": false, "known": false,
+			"message": "This revision's account textures are downloaded when the build starts.",
+		}
+		writeJSON(w, http.StatusOK, plan)
+		return
+	}
 	// Whether the compiler will be given the map's textures at all (NEW_310A,
 	// the dark dm2 on Windows): a build profile whose stages read no texture
 	// folder compiles a map whose WADs it cannot open, and the BSP carries no
@@ -1402,7 +1463,9 @@ func (s *Server) handlePlayPlan(w http.ResponseWriter, r *http.Request) {
 
 	// The engine's argv, resolved through the same resolver the executor uses.
 	// Where a fact depends on a file that does not exist yet, it is marked.
-	plan["launch"] = s.previewLaunch(request)
+	if !request.BuildOnly {
+		plan["launch"] = s.previewLaunch(request)
+	}
 	plan["build_preview_note"] = "The compiler's exact arguments are resolved once the map and its " +
 		"textures are downloaded, because `-wadpath` is the verified bundle's own directory."
 
@@ -1417,7 +1480,7 @@ func (s *Server) handlePlayPlan(w http.ResponseWriter, r *http.Request) {
 		} else {
 			plan["textures"] = map[string]any{
 				"cached": false, "known": false,
-				"message": "This revision's textures will be downloaded and verified when you press Build & Run.",
+				"message": "This revision's textures will be downloaded and verified when the build starts.",
 			}
 		}
 	}

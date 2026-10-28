@@ -48,11 +48,17 @@ type TextureExportRefusal struct {
 }
 
 func (r *TextureExportRefusal) Error() string {
+	// The reason in parentheses only when AUB gave one, and the status when it
+	// did not: "refused (): …" said nothing (NEW_360 F3).
+	why := r.Reason
+	if why == "" {
+		why = fmt.Sprintf("HTTP %d", r.Status)
+	}
 	if r.Detail != "" {
-		return fmt.Sprintf("aub: the texture export was refused (%s): %s", r.Reason, r.Detail)
+		return fmt.Sprintf("aub: the texture export was refused (%s): %s", why, r.Detail)
 	}
 
-	return fmt.Sprintf("aub: the texture export was refused (%s)", r.Reason)
+	return fmt.Sprintf("aub: the texture export was refused (%s)", why)
 }
 
 // The refusal reasons this client names. Others are passed through as their own

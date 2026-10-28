@@ -292,7 +292,6 @@
           <p class="areas-group__title" id="areas-actions">Actions</p>
           <ul aria-labelledby="areas-actions">
             <li><button type="button" class="area-tab area-tab--sub" data-area="library">My Maps</button></li>
-            <li><button type="button" class="area-tab area-tab--sub" data-area="build">Build</button></li>
             <li><button type="button" class="area-tab area-tab--sub area-tab--child" data-area="builds" id="builds-tab" hidden>Builds on this machine</button></li>
             <li><button type="button" class="area-tab area-tab--sub" data-area="run">Run</button></li>
             <li><button type="button" class="area-tab area-tab--sub" data-area="games">Live Games</button></li>
@@ -321,387 +320,232 @@
         </div>
 
         <!-- Build & Run ---------------------------------------------------
-             The main product journey, in one page: sign in, choose an exact map
-             revision, choose a Build profile, choose a Run profile, review, and
-             press one button. Everything after that button is server-side and
-             durable — the Activity drawer shows it, the Jobs page keeps it, and
-             closing this tab does not stop it. `AUCOM/AUE/AUT 246I1`.
+             The program's one main journey, as ONE form (NEW_363): the map,
+             the build profile, whether to run it after the build, and a review
+             with one primary action at its foot. It replaced a five-step
+             wizard that ended in two near-identical review screens and a
+             second, three-step Build wizard for a file on this computer — the
+             same job twice, with different words. `#build` still opens here,
+             on "File on this computer".
 
-             Tabs for the small fixed choices; searchable selects for the
-             unbounded ones. Fifty maps are not fifty tabs. -->
-        <section id="area-play" class="area" aria-labelledby="area-heading" hidden>
-          <p class="lede">
-            Five steps, and nothing starts until the last one. The Companion
-            downloads the exact map revision you choose and that revision's
-            textures, converts, compiles, installs them into a folder of its own
-            beside the game's own data — <code>id1</code> for Quake,
-            <code>baseq2</code> for Quake II, <code>baseq3</code> for Quake III —
-            and starts the game. It never writes into the game's own data.
-          </p>
+             Nothing starts until the primary is pressed, and it is pressed
+             only after a review of these exact choices: while the review is
+             not current it says "Review build". Everything after it is
+             server-side and durable — Activity and Jobs follow the run, and
+             closing this tab does not stop it. -->
+        <section id="area-play" class="area brun" aria-labelledby="area-heading" hidden>
+          <p class="lede">Choose a map and a build profile, review, then build — and play it if you like.</p>
 
           <div id="play-signed-out" class="panel notice" hidden>
             <p>
-              <strong>Build &amp; Run needs your Auto-Pigeon account.</strong>
-              The map and its textures come from the server, at the exact
-              revision you pick. Sign in at the top of the window to begin.
+              <strong>Saved maps need your Auto-Pigeon account.</strong>
+              Sign in at the top of the window, or build a file on this computer.
             </p>
           </div>
 
-          <nav class="bwiz" aria-label="Build and run steps">
-            <ol class="bwiz-steps" id="play-steps">
-              <li><button type="button" class="bwiz-step" data-step="1" id="play-step-tab-1">
-                <span class="bwiz-step__n" aria-hidden="true">1</span>
-                <span class="bwiz-step__text"><span class="bwiz-step__label">Map</span>
-                <span class="bwiz-step__summary" id="play-step-summary-1"></span></span>
-              </button></li>
-              <li><button type="button" class="bwiz-step" data-step="2" id="play-step-tab-2">
-                <span class="bwiz-step__n" aria-hidden="true">2</span>
-                <span class="bwiz-step__text"><span class="bwiz-step__label">Build</span>
-                <span class="bwiz-step__summary" id="play-step-summary-2"></span></span>
-              </button></li>
-              <li><button type="button" class="bwiz-step" data-step="3" id="play-step-tab-3">
-                <span class="bwiz-step__n" aria-hidden="true">3</span>
-                <span class="bwiz-step__text"><span class="bwiz-step__label">Run</span>
-                <span class="bwiz-step__summary" id="play-step-summary-3"></span></span>
-              </button></li>
-              <li><button type="button" class="bwiz-step" data-step="4" id="play-step-tab-4">
-                <span class="bwiz-step__n" aria-hidden="true">4</span>
-                <span class="bwiz-step__text"><span class="bwiz-step__label">Review</span>
-                <span class="bwiz-step__summary" id="play-step-summary-4"></span></span>
-              </button></li>
-              <li><button type="button" class="bwiz-step" data-step="5" id="play-step-tab-5">
-                <span class="bwiz-step__n" aria-hidden="true">5</span>
-                <span class="bwiz-step__text"><span class="bwiz-step__label">Build &amp; Run</span>
-                <span class="bwiz-step__summary" id="play-step-summary-5"></span></span>
-              </button></li>
-            </ol>
-          </nav>
+          <div class="brun-form">
+            <div class="brun-column">
+              <section class="panel brun-block" aria-labelledby="brun-map-title">
+                <h3 id="brun-map-title">Map</h3>
+                <div class="segmented" role="radiogroup" aria-label="Where the map comes from">
+                  <label class="segmented__option"><input type="radio" name="play-source" id="play-source-saved" value="saved" checked /> <span>Saved map</span></label>
+                  <label class="segmented__option"><input type="radio" name="play-source" id="play-source-local" value="local" /> <span>File on this computer</span></label>
+                </div>
 
-          <div class="panel bwiz-panel" id="play-step-1" data-step="1">
-            <h3>1. The map</h3>
-            <p class="muted">
-              A revision is one saved version, for ever. The build keeps the one
-              you choose here: saving a newer version in the editor afterwards
-              never changes a build that is already running.
-            </p>
-            <div class="row">
-              <div class="field">
-                <label for="play-map">Map</label>
-                <select id="play-map"></select>
-              </div>
-              <div class="field">
-                <label for="play-revision">Revision</label>
-                <select id="play-revision"></select>
-              </div>
-            </div>
-            <div class="field" id="play-source-file-field" hidden>
-              <label for="play-source-file">Map file in this revision</label>
-              <select id="play-source-file"></select>
-            </div>
-            <div class="field">
-              <label for="play-map-name">Name in the game <span class="hint">(what <code>+map</code> is given)</span></label>
-              <input id="play-map-name" type="text" placeholder="dm1" />
-            </div>
-            <p id="play-map-message" class="message" role="status"></p>
-            <!-- Auto-build (NEW_265): one map, one build profile, and only
-                 while this Companion is running. Never starts the game. -->
-            <section id="play-autobuild" class="autobuild" aria-labelledby="play-autobuild-title" hidden>
-              <h4 id="play-autobuild-title">Auto-build</h4>
-              <p class="muted small">
-                While the Companion is running it checks this map about every 30 seconds and
-                builds each newly saved revision with the build profile chosen here. The revision
-                current when you switch it on is not built. It never starts the game.
-              </p>
-              <div class="autobuild__controls">
-                <label class="check autobuild__switch">
-                  <input type="checkbox" id="play-autobuild-on" role="switch" />
-                  <span>Auto-build this map</span>
+                <div id="play-saved-map">
+                  <div class="row">
+                    <div class="field grow">
+                      <label for="play-map">Map</label>
+                      <select id="play-map"></select>
+                    </div>
+                    <div class="field">
+                      <label for="play-revision">Revision</label>
+                      <select id="play-revision"></select>
+                    </div>
+                  </div>
+                  <div class="field" id="play-source-file-field" hidden>
+                    <label for="play-source-file">Map file in this revision</label>
+                    <select id="play-source-file"></select>
+                  </div>
+                  <div class="field">
+                    <label for="play-map-name">Name in the game</label>
+                    <input id="play-map-name" type="text" spellcheck="false" />
+                  </div>
+                </div>
+
+                <div id="play-local-map" hidden>
+                  <div id="build-inputs" class="inputs"></div>
+                  <div class="field build-label-field">
+                    <label for="build-label">Label <span class="hint">(optional)</span></label>
+                    <input id="build-label" type="text" />
+                  </div>
+                  <p class="hint"><a href="#builds">Builds on this machine</a></p>
+                </div>
+                <div id="play-map-message" class="message" role="status"></div>
+              </section>
+
+              <section class="panel brun-block" aria-labelledby="brun-build-title">
+                <h3 id="brun-build-title">Build profile</h3>
+                <div class="field" id="play-pipeline-field">
+                  <label for="play-pipeline">Build profile</label>
+                  <select id="play-pipeline"></select>
+                  <p id="play-pipeline-state" class="choice-state"></p>
+                </div>
+                <div class="field" id="build-pipeline-field" hidden>
+                  <label for="build-pipeline">Build profile</label>
+                  <select id="build-pipeline" aria-describedby="build-pipeline-note"></select>
+                  <p id="build-pipeline-note" class="choice-state"></p>
+                </div>
+                <details class="brun-options" id="play-build-options">
+                  <summary>Build options</summary>
+                  <ol id="play-stages" class="stages" aria-label="Stages of this build profile"></ol>
+                  <ol id="build-stages" class="stages" aria-label="Stages of this build profile" hidden></ol>
+                  <label class="check" id="play-strict-field">
+                    <input type="checkbox" id="play-strict" />
+                    Fail on any error-severity warning
+                  </label>
+                  <label class="check" id="build-strict-field" hidden>
+                    <input type="checkbox" id="build-strict" />
+                    Fail on any error-severity warning
+                  </label>
+                </details>
+                <!-- Auto-build (NEW_265; NEW_363 put it here): scheduling with the
+                     SAME build profile as the form, never a second kind of build.
+                     It never starts the game. -->
+                <div id="play-autobuild" class="autobuild" hidden>
+                  <label class="check">
+                    <input type="checkbox" id="play-autobuild-on" aria-describedby="play-autobuild-help" />
+                    Automatically build new saved revisions
+                  </label>
+                  <p id="play-autobuild-help" class="hint">Checks for a new saved revision every 30 seconds while Companion is running.</p>
+                  <div id="play-autobuild-expanded" class="autobuild__expanded" hidden>
+                    <dl id="play-autobuild-status" class="summary-list autobuild__status"></dl>
+                    <div id="play-autobuild-apply" class="autobuild__apply" hidden>
+                      <p id="play-autobuild-apply-text"></p>
+                      <button type="button" id="play-autobuild-apply-button" class="secondary">Apply to automatic builds</button>
+                    </div>
+                    <div class="row-actions">
+                      <span id="play-autobuild-actions"></span>
+                      <button type="button" id="play-autobuild-stop" class="secondary">Stop automatic builds</button>
+                    </div>
+                  </div>
+                  <p id="play-autobuild-message" class="message" role="status"></p>
+                </div>
+              </section>
+
+              <section class="panel brun-block" aria-labelledby="brun-run-title">
+                <h3 id="brun-run-title">Run after build</h3>
+                <label class="check">
+                  <input type="checkbox" id="play-run-after" checked aria-describedby="play-run-after-note" />
+                  Start the game when the build finishes
                 </label>
-                <div class="field">
-                  <label for="play-autobuild-pipeline">Build profile</label>
-                  <select id="play-autobuild-pipeline"></select>
+                <p id="play-run-after-note" class="hint" hidden></p>
+                <div id="play-run-fields">
+                  <div class="field">
+                    <label for="play-engine">Engine</label>
+                    <select id="play-engine"></select>
+                    <p id="play-engine-message" class="message" role="status"></p>
+                  </div>
+                  <!-- Only when the engine genuinely offers more than one way to
+                       play a freshly built map: a small fixed set, so one row of
+                       choices, and what the chosen one means said once below it.
+                       The hidden select stays the one holder of the value. -->
+                  <fieldset class="play-actions" id="play-action-field" hidden>
+                    <legend>How to play it</legend>
+                    <div id="play-action-choices" class="segmented" role="radiogroup" aria-describedby="play-action-note"></div>
+                    <select id="play-action" hidden aria-hidden="true" tabindex="-1"></select>
+                    <p id="play-action-note" class="hint"></p>
+                  </fieldset>
+                  <!-- A hosted game can be listed in Live Games. -->
+                  <fieldset class="play-listing" id="play-listing" hidden>
+                    <legend>Live Games</legend>
+                    <label class="check"><input type="checkbox" id="play-list-it" checked /> List this game in Live Games, so others can find it and join</label>
+                    <div id="play-listing-fields">
+                      <div class="row">
+                        <div class="field grow">
+                          <label for="play-listing-title">Title in the listing</label>
+                          <input id="play-listing-title" type="text" maxlength="80" />
+                        </div>
+                        <div class="field">
+                          <label for="play-listing-visibility">Who can see it</label>
+                          <select id="play-listing-visibility">
+                            <option value="public">Everyone</option>
+                            <option value="unlisted">People with the link</option>
+                            <option value="private" selected>Only you</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div class="row">
+                        <div class="field grow">
+                          <label for="play-listing-host">Address players connect to</label>
+                          <input id="play-listing-host" type="text" spellcheck="false" />
+                        </div>
+                        <div class="field">
+                          <label for="play-listing-port">Port</label>
+                          <input id="play-listing-port" type="number" min="1" max="65535" />
+                        </div>
+                      </div>
+                      <p class="hint" id="play-listing-hint"></p>
+                      <!-- "Help to connect" (NEW_247A2), while Everyone is chosen: drawn by play.js. -->
+                      <div id="play-listing-help" hidden></div>
+                      <p class="hint listing-local" id="play-listing-local" hidden>
+                        This address is on your own network, so the game is listed for you only — it shows
+                        under <strong>My games</strong> in Live Games, here and on the Auto-Pigeon site.
+                        To list it for everyone, enter your public address and forward the port to this computer.
+                      </p>
+                    </div>
+                  </fieldset>
+                  <details class="brun-options" id="play-run-options">
+                    <summary>Run options</summary>
+                    <div class="field">
+                      <label for="play-mod">Mod folder name <span class="muted" id="play-mod-where">(created in the game folder)</span></label>
+                      <input id="play-mod" type="text" value="auto-pigeon" spellcheck="false" />
+                      <p class="hint" id="play-game-root"></p>
+                    </div>
+                  </details>
+                  <p id="play-run-message" class="message" role="status"></p>
                 </div>
-                <button type="button" id="play-autobuild-now" class="secondary">Build current revision now</button>
+              </section>
+            </div>
+
+            <section class="panel brun-block brun-review" aria-labelledby="brun-review-title">
+              <h3 id="brun-review-title">Review</h3>
+              <dl id="play-final-summary" class="summary-list"></dl>
+              <!-- What only the person can settle before this build can run: a
+                   texture the server did not send, a Quake II package's own
+                   files, a Live Games listing. Empty in the ordinary case. -->
+              <div id="play-review-attention"></div>
+              <p id="play-review-message" class="message" role="status"></p>
+              <details class="brun-technical" id="play-review-details" data-saved>
+                <summary>Technical details</summary>
+                <div id="play-review"></div>
+              </details>
+              <p id="build-message" class="message" role="status" hidden></p>
+              <details class="brun-technical" id="build-review-details" hidden>
+                <summary>Technical details</summary>
+                <div id="build-preview-out" class="preview"></div>
+              </details>
+              <div class="brun-footer">
+                <p id="play-start-message" class="message" role="status"></p>
+                <button type="button" class="primary" id="play-start">Review build</button>
+                <button type="button" class="primary" id="build-start" hidden>Review build</button>
               </div>
-              <dl id="play-autobuild-status" class="summary-list autobuild__status"></dl>
-              <div id="play-autobuild-actions" class="row-actions"></div>
-              <p id="play-autobuild-message" class="message" role="status"></p>
             </section>
-            <div class="bwiz-nav">
-              <span></span>
-              <button type="button" class="primary" data-go="2">Next: how to build</button>
-            </div>
           </div>
 
-          <div class="panel bwiz-panel" id="play-step-2" data-step="2" hidden>
-            <h3>2. How to build</h3>
-            <p class="muted">A build profile is the programs that run, in order, and the settings they are given.</p>
-            <div class="field">
-              <label for="play-pipeline">Build profile</label>
-              <select id="play-pipeline"></select>
-              <p class="hint"><a href="#profiles">Profiles / setup</a> — configure unavailable choices, then refresh.</p>
-            </div>
-            <p id="play-pipeline-note" class="muted"></p>
-            <ol id="play-stages" class="stages" aria-label="Stages of this build profile"></ol>
-            <label class="check">
-              <input type="checkbox" id="play-strict" />
-              Fail on any error-severity warning, even when the tool exits successfully
-            </label>
-            <div class="bwiz-nav">
-              <button type="button" data-go="1">Back</button>
-              <button type="button" class="primary" data-go="3">Next: how to run it</button>
-            </div>
-          </div>
+          <!-- The run started from this form, or one running now: one concise
+               card and one way to its progress. The form above stays a draft
+               for the NEXT build; it never retargets a run already going. -->
+          <section id="play-current" class="panel brun-current" aria-labelledby="play-current-title" hidden>
+            <h3 id="play-current-title" tabindex="-1"></h3>
+            <p id="play-current-detail" class="muted"></p>
+            <p id="play-current-status" class="message" role="status" aria-live="polite"></p>
+            <div id="play-current-actions" class="row-actions"></div>
+          </section>
 
-          <div class="panel bwiz-panel" id="play-step-3" data-step="3" hidden>
-            <h3>3. How to run it</h3>
-            <p class="muted">
-              The engine, and the folder it will read from. The Companion
-              installs into a folder of its own beside the base game and leaves
-              every folder the game already owns alone.
-            </p>
-            <div class="field">
-              <label for="play-engine">Engine</label>
-              <select id="play-engine"></select>
-              <p id="play-engine-message" class="message" role="status"></p>
-              <p class="hint"><a href="#profiles">Profiles / setup</a> — configure unavailable choices, then refresh.</p>
-            </div>
-            <!-- What the engine does with the map just built. Only the actions
-                 that make sense for ONE freshly built map are offered, each
-                 with a sentence saying what it means; the hidden select stays
-                 the one holder of the value. -->
-            <fieldset class="play-actions" id="play-action-fieldset">
-              <legend>How to play it</legend>
-              <div id="play-action-choices" class="choice-cards"></div>
-              <select id="play-action" hidden aria-hidden="true" tabindex="-1"></select>
-            </fieldset>
-            <!-- A hosted game can be listed in Live Games — the listing AUG's
-                 Games page shows too. The address is shown and editable here,
-                 and step 4 previews exactly what the listing will say. -->
-            <fieldset class="play-listing" id="play-listing" hidden>
-              <legend>Live Games</legend>
-              <label class="check"><input type="checkbox" id="play-list-it" checked /> List this game in Live Games, so others can find it and join</label>
-              <div id="play-listing-fields">
-                <div class="row">
-                  <div class="field grow">
-                    <label for="play-listing-title">Title in the listing</label>
-                    <input id="play-listing-title" type="text" maxlength="80" />
-                  </div>
-                  <div class="field">
-                    <label for="play-listing-visibility">Who can see it</label>
-                    <select id="play-listing-visibility">
-                      <option value="public">Everyone</option>
-                      <option value="unlisted">People with the link</option>
-                      <option value="private" selected>Only you</option>
-                    </select>
-                  </div>
-                </div>
-                <div class="row">
-                  <div class="field grow">
-                    <label for="play-listing-host">Address players connect to</label>
-                    <input id="play-listing-host" type="text" spellcheck="false" />
-                  </div>
-                  <div class="field">
-                    <label for="play-listing-port">Port</label>
-                    <input id="play-listing-port" type="number" min="1" max="65535" />
-                  </div>
-                </div>
-                <p class="hint" id="play-listing-hint"></p>
-                <!-- "Help to connect" (NEW_247A2), while Everyone is chosen: drawn by play.js. -->
-                <div id="play-listing-help" hidden></div>
-                <p class="hint listing-local" id="play-listing-local" hidden>
-                  This address is on your own network, so the game is listed for you only — it shows
-                  under <strong>My games</strong> in Live Games, here and on the Auto-Pigeon site.
-                  To list it for everyone, enter your public address and forward the port to this computer.
-                </p>
-              </div>
-            </fieldset>
-            <div class="field">
-              <label for="play-mod">Mod folder name <span class="muted" id="play-mod-where">(created in the game folder)</span></label>
-              <input id="play-mod" type="text" value="auto-pigeon" />
-              <p class="hint" id="play-game-root"></p>
-            </div>
-            <p id="play-run-message" class="message" role="status"></p>
-            <div class="bwiz-nav">
-              <button type="button" data-go="2">Back</button>
-              <button type="button" class="primary" data-go="4">Next: review</button>
-            </div>
-          </div>
-
-          <div class="panel bwiz-panel" id="play-step-4" data-step="4" hidden>
-            <h3>4. Review</h3>
-            <p class="muted">Everything that will happen, before anything happens.</p>
-            <div id="play-review"></div>
-            <p id="play-review-message" class="message" role="status"></p>
-            <div class="bwiz-nav">
-              <button type="button" data-go="3">Back</button>
-              <button type="button" class="primary" data-go="5">Next: build and run</button>
-            </div>
-          </div>
-
-          <div class="panel bwiz-panel" id="play-step-5" data-step="5" hidden>
-            <h3>5. Build &amp; Run</h3>
-            <p class="muted">
-              One button. The Companion does the rest on its own, and this tab
-              may be closed while it works — the Activity panel and the Jobs
-              page both come back to the same run.
-            </p>
-            <div id="play-final-summary" class="summary-list"></div>
-            <p id="play-start-message" class="message" role="status"></p>
-            <div class="bwiz-nav">
-              <button type="button" data-go="4">Back</button>
-              <button type="button" class="primary" id="play-start">Build &amp; Run</button>
-            </div>
-          </div>
-        </section>
-
-        <!-- Library ------------------------------------------------------ -->
-        <section id="area-library" class="area" aria-labelledby="area-heading">
-          <p class="lede">
-            The maps in your Auto-Pigeon account. Each card lists the textures
-            the map uses — a build downloads them for you, so there is nothing
-            else to fetch. Download a map to build it without a connection.
-          </p>
-
-          <div id="library-signed-out" class="panel notice" hidden>
-            <p>
-              <strong>My Maps is the one area that needs an Auto-Pigeon account.</strong>
-              Compiling a map from a file on this machine, running an engine you
-              have, reviewing profiles and reading jobs all work signed out.
-            </p>
-            <div class="row-actions">
-              <button type="button" id="library-sign-in" class="primary">Sign in</button>
-            </div>
-          </div>
-
-          <!-- Two tabs, one list each (operator, 2026-09-23). -->
-          <div class="field">
-            <label for="library-view">Show</label>
-            <select id="library-view">
-              <option value="account">Your maps</option>
-              <option value="local">On this computer</option>
-            </select>
-          </div>
-
-          <div class="panel" id="library-account-panel">
-            <div class="panel-head">
-              <h3>Your maps</h3>
-              <div class="panel-head__tools">
-                <label class="visually-hidden" for="library-search">Find a map by name</label>
-                <input id="library-search" type="search" placeholder="Find a map by name" />
-                <button type="button" id="library-refresh" class="secondary">Refresh</button>
-              </div>
-            </div>
-            <p id="library-message" class="message" role="status"></p>
-            <ul id="library-assets" class="cards map-cards" aria-label="Maps in your account"></ul>
-            <div class="row-actions">
-              <button type="button" id="library-more" class="secondary" hidden>Show more</button>
-            </div>
-          </div>
-
-          <div class="panel" id="library-local-panel" hidden>
-            <div class="panel-head">
-              <h3>Maps downloaded to this computer</h3>
-              <span class="panel-head__actions">
-                <button type="button" id="local-map-choose" class="primary">Choose a map file…</button>
-                <button type="button" id="cached-refresh" class="secondary">Refresh</button>
-              </span>
-            </div>
-            <p class="muted">
-              Everything here builds without a connection, and stays after a
-              restart. A map file of your own — one that is not in your
-              account — builds too: choose it, and Build opens on it. It is
-              copied into the build and never changed, and nothing is uploaded.
-            </p>
-            <div id="local-map-typed" class="local-map-typed" hidden></div>
-            <p id="local-map-message" class="message" role="status"></p>
-            <p id="cached-message" class="message" role="status"></p>
-            <ul id="cached-list" class="cards map-cards" aria-label="Maps downloaded to this computer"></ul>
-          </div>
-        </section>
-
-        <!-- Build -------------------------------------------------------- -->
-        <section id="area-build" class="area" aria-labelledby="area-heading" hidden>
-          <p class="lede">
-            Three steps: choose how to build, choose the map, then build — the
-            last step shows exactly what will run. Nothing starts before you
-            press Build.
-          </p>
-
-          <!-- The wizard (NEW_244D, operator: "the Build section is super
-               messy… redesign it as a wizard, in horizontal steps"). Every
-               step is a button, so a person can go back to any of them; the
-               summary under each says what was chosen there. -->
-          <nav class="bwiz" aria-label="Build steps">
-            <ol class="bwiz-steps" id="build-steps">
-              <li><button type="button" class="bwiz-step" data-step="1" id="build-step-tab-1">
-                <span class="bwiz-step__n" aria-hidden="true">1</span>
-                <span class="bwiz-step__text"><span class="bwiz-step__label">How to build</span>
-                <span class="bwiz-step__summary" id="build-step-summary-1"></span></span>
-              </button></li>
-              <li><button type="button" class="bwiz-step" data-step="2" id="build-step-tab-2">
-                <span class="bwiz-step__n" aria-hidden="true">2</span>
-                <span class="bwiz-step__text"><span class="bwiz-step__label">The map</span>
-                <span class="bwiz-step__summary" id="build-step-summary-2"></span></span>
-              </button></li>
-              <li><button type="button" class="bwiz-step" data-step="3" id="build-step-tab-3">
-                <span class="bwiz-step__n" aria-hidden="true">3</span>
-                <span class="bwiz-step__text"><span class="bwiz-step__label">Build</span>
-                <span class="bwiz-step__summary" id="build-step-summary-3"></span></span>
-              </button></li>
-            </ol>
-          </nav>
-
-          <div class="panel bwiz-panel" id="build-step-1" data-step="1">
-            <h3>1. How to build</h3>
-            <p class="muted">A pipeline is the programs a build runs, in order, and the settings it gives them.</p>
-            <div class="field">
-              <label for="build-pipeline">Pipeline</label>
-              <select id="build-pipeline"></select>
-              <p class="hint"><a href="#profiles">Profiles / setup</a> — configure unavailable choices, then refresh.</p>
-            </div>
-            <p id="build-pipeline-note" class="muted"></p>
-            <ol id="build-stages" class="stages" aria-label="Stages of this pipeline"></ol>
-            <label class="check">
-              <input type="checkbox" id="build-strict" />
-              Fail on any error-severity warning, even when the tool exits successfully
-            </label>
-            <div class="bwiz-nav">
-              <span></span>
-              <button type="button" class="primary" data-go="2">Next: the map</button>
-            </div>
-          </div>
-
-          <div class="panel bwiz-panel" id="build-step-2" data-step="2" hidden>
-            <h3>2. The map</h3>
-            <p class="muted">Choose the files this build compiles. They are copied into the build, so the originals are never changed.</p>
-            <div id="build-inputs" class="inputs"></div>
-            <div class="field build-label-field">
-              <label for="build-label">Label <span class="hint">(optional, so you can find this build later)</span></label>
-              <input id="build-label" type="text" placeholder="first pass at e1m1" />
-            </div>
-            <div class="bwiz-nav">
-              <button type="button" class="secondary" data-go="1">Back</button>
-              <button type="button" class="primary" data-go="3">Next: build</button>
-            </div>
-          </div>
-
-          <div class="panel bwiz-panel" id="build-step-3" data-step="3" hidden>
-            <h3>3. Build</h3>
-            <p class="muted">The exact command each stage will run, then Build. If something is missing, it is said under the stage that needs it.</p>
-            <p id="build-message" class="message" role="alert"></p>
-            <div id="build-preview-out" class="preview" hidden></div>
-            <div class="bwiz-nav">
-              <button type="button" class="secondary" data-go="2">Back</button>
-              <span class="bwiz-nav__end">
-                <button type="button" id="build-preview" class="secondary">Check again</button>
-                <button type="button" id="build-start" class="primary">Build</button>
-              </span>
-            </div>
-          </div>
-
-          <div class="panel bwiz-panel" id="build-step-4" data-step="4" hidden>
-            <p class="muted" id="build-current-empty">Nothing has been built in this window yet. Go through the steps above, or open a past build below.</p>
+          <!-- A build of a file on this computer: its progress, its stages and
+               the compiler's output, in the order somebody watching needs them. -->
+          <div class="panel brun-current" id="build-step-4" hidden>
             <div id="build-current-panel" hidden>
               <!-- One build, top to bottom in the order somebody watching it needs
                    it: what it is and how far it has got, what went wrong or
@@ -842,13 +686,75 @@
               </section>
             </div>
 
-            <div class="bwiz-nav">
-              <button type="button" class="secondary" data-go="2">Build another map</button>
+            <div class="row-actions">
               <button type="button" id="build-play" class="primary" hidden>Play this build</button>
-              <button type="button" class="secondary" data-go="3">Build this again</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Library ------------------------------------------------------ -->
+        <section id="area-library" class="area" aria-labelledby="area-heading">
+          <p class="lede">
+            The maps in your Auto-Pigeon account. Each card lists the textures
+            the map uses — a build downloads them for you, so there is nothing
+            else to fetch. Download a map to build it without a connection.
+          </p>
+
+          <div id="library-signed-out" class="panel notice" hidden>
+            <p>
+              <strong>My Maps is the one area that needs an Auto-Pigeon account.</strong>
+              Compiling a map from a file on this machine, running an engine you
+              have, reviewing profiles and reading jobs all work signed out.
+            </p>
+            <div class="row-actions">
+              <button type="button" id="library-sign-in" class="primary">Sign in</button>
             </div>
           </div>
 
+          <!-- Two tabs, one list each (operator, 2026-09-23). -->
+          <div class="field">
+            <label for="library-view">Show</label>
+            <select id="library-view">
+              <option value="account">Your maps</option>
+              <option value="local">On this computer</option>
+            </select>
+          </div>
+
+          <div class="panel" id="library-account-panel">
+            <div class="panel-head">
+              <h3>Your maps</h3>
+              <div class="panel-head__tools">
+                <label class="visually-hidden" for="library-search">Find a map by name</label>
+                <input id="library-search" type="search" placeholder="Find a map by name" />
+                <button type="button" id="library-refresh" class="secondary">Refresh</button>
+              </div>
+            </div>
+            <p id="library-message" class="message" role="status"></p>
+            <ul id="library-assets" class="cards map-cards" aria-label="Maps in your account"></ul>
+            <div class="row-actions">
+              <button type="button" id="library-more" class="secondary" hidden>Show more</button>
+            </div>
+          </div>
+
+          <div class="panel" id="library-local-panel" hidden>
+            <div class="panel-head">
+              <h3>Maps downloaded to this computer</h3>
+              <span class="panel-head__actions">
+                <button type="button" id="local-map-choose" class="primary">Choose a map file…</button>
+                <button type="button" id="cached-refresh" class="secondary">Refresh</button>
+              </span>
+            </div>
+            <p class="muted">
+              Everything here builds without a connection, and stays after a
+              restart. A map file of your own — one that is not in your
+              account — builds too: choose it, and Build opens on it. It is
+              copied into the build and never changed, and nothing is uploaded.
+            </p>
+            <div id="local-map-typed" class="local-map-typed" hidden></div>
+            <p id="local-map-message" class="message" role="status"></p>
+            <p id="cached-message" class="message" role="status"></p>
+            <ul id="cached-list" class="cards map-cards" aria-label="Maps downloaded to this computer"></ul>
+          </div>
         </section>
 
         <!-- Builds on this machine: its own page, reached from the side menu

@@ -6,7 +6,9 @@
 //
 // What it checks that nothing else can:
 //
-//   - the five steps are reachable and going back does not lose a choice;
+//   - one form (NEW_363): the map, the build profile, "Run after build" and the
+//     review are on one page, and its one primary says "Review build" until a
+//     review of these exact choices is on screen, then "Build & Run";
 //   - the review shows the ordered WADs, the writes and the exact command;
 //   - changing the revision CLEARS the review and says so;
 //   - Activity shows the run, recovers it after a reload, and offers Retry;
@@ -85,8 +87,14 @@
     await sleep(120);
   }
 
-  function stepButton(n) {
-    return $("play-step-tab-" + n);
+  // The review's one primary, and what it says it will do.
+  const primary = () => $("play-start");
+  async function review() {
+    await waitFor("the primary to say Review build", () => /Review build/.test(textOf(primary())) && !primary().disabled, 20000)
+      .catch((err) => { throw new Error(`${err.message}; it says "${textOf(primary())}", disabled=${primary().disabled}, ` +
+        `message=${textOf($("play-start-message"))}`); });
+    primary().click();
+    await waitFor("the review", () => textOf($("play-review")).includes("What will be downloaded"), 40000);
   }
 
   try {
@@ -127,15 +135,58 @@
     setValue($("play-map-name"), "dm1");
     await snap("map-and-exact-revision");
 
-    // --- 2. the build profile ----------------------------------------------
-    stepButton(2).click();
-    await waitFor("the build step", () => visible($("play-step-2")), 15000).catch((err) => {
-      throw new Error(`${err.message}; panel hidden=${$("play-step-2")?.hidden}, ` +
-        `area hidden=${$("area-play")?.hidden}, tabs=${document.querySelectorAll("#play-steps .bwiz-step").length}`);
-    });
+    // --- the map list's refusals (NEW_360 F2) -----------------------------
+    // One sentence and the action that fixes it, chosen by the code the
+    // Companion classified — and gone once the list is read again.
+    const fault = (body) => fetch("/journey/catalog-fault", { method: "POST", body: JSON.stringify(body) });
+    await fault({ status: 401, message: "The request requires valid record authorization token." });
+    await window.AUCOM.areas.play.refresh();
+    await waitFor("the sign-in refusal", () => /sign-in has expired/.test(textOf($("play-map-message"))));
+    record("an expired sign-in is said as one, with Sign in, and no raw HTTP line",
+      [...$("play-map-message").querySelectorAll("button")].some((b) => textOf(b) === "Sign in") &&
+        !/aub:|HTTP 401/.test(textOf($("play-map-message")).replace(textOf($("play-map-message").querySelector("details")), "")),
+      textOf($("play-map-message")).slice(0, 140));
+    await fault({ status: 403, reason: "legal_acceptance_required",
+      message: "The Terms or the notices changed. Review and accept the current version to carry on." });
+    await window.AUCOM.areas.play.refresh();
+    await waitFor("the legal refusal", () => /Terms or the notices changed/.test(textOf($("play-map-message"))));
+    record("a Terms refusal asks for a review on the site, never a sign-in",
+      ![...$("play-map-message").querySelectorAll("button")].some((b) => textOf(b) === "Sign in"),
+      textOf($("play-map-message")).slice(0, 160));
+    // A refusal asked for under one account and answered after the window has
+    // moved to another is not the new account's: it is dropped, not shown.
+    await fault({ status: 401, message: "The request requires valid record authorization token.", hold: true });
+    $("play-map-message").replaceChildren();
+    const asked = window.AUCOM.areas.play.refresh();
+    await sleep(300);
+    const signedInAs = window.AUCOM.status.email;
+    window.AUCOM.status.email = "another@example.test";
+    await fault({ release: true });
+    await asked;
+    await sleep(300);
+    record("a late refusal for the previous account does not overwrite the new account's state",
+      !textOf($("play-map-message")), `"${textOf($("play-map-message")).slice(0, 80)}"`);
+    window.AUCOM.status.email = signedInAs;
+    await fault({ status: 0 });
+    await window.AUCOM.areas.play.refresh();
+    await waitFor("the list again", () => $("play-map").options.length > 1 && !textOf($("play-map-message")));
+    record("the list read again clears the old refusal", $("play-map").value === settings.asset_id,
+      `${$("play-map").value} · "${textOf($("play-map-message"))}"`);
+
+    // --- one form: nothing behind steps ------------------------------------
+    record("Build & Run is one form, not a wizard of steps",
+      !document.querySelector("#area-play .bwiz-step") && visible($("play-pipeline")) && visible($("play-run-after")) &&
+        visible(primary()), `primary says "${textOf(primary())}"`);
+    record("a fresh form's primary says Review build, not Build & Run",
+      /Review build/.test(textOf(primary())), textOf(primary()));
+
+    // --- the build profile ---------------------------------------------------
     await waitFor("the build profiles", () => $("play-pipeline").options.length > 1);
     setValue($("play-pipeline"), settings.pipeline_id);
     await waitFor("the stages", () => $("play-stages").children.length > 0);
+    record("the chosen build profile's state is said beside it",
+      /ready/i.test(textOf($("play-pipeline-state"))) && textOf($("play-pipeline-state")).includes("Fixture toolchain"),
+      textOf($("play-pipeline-state")).slice(0, 120));
     // NEW_330 A5: the program behind the chosen build profile goes missing and
     // comes back. The choice stays, greyed out with the reason, and is ready
     // again after the repair — without a reload.
@@ -148,8 +199,18 @@
     await waitFor("the build profile needing setup", () =>
       [...$("play-pipeline").options].some((o) => o.value === settings.pipeline_id && o.disabled), 15000);
     record("a chosen build profile whose program went missing stays chosen and says why",
-      $("play-pipeline").value === settings.pipeline_id && /needs setup/.test($("play-pipeline").selectedOptions[0]?.textContent || ""),
-      `${$("play-pipeline").value} · ${($("play-pipeline").selectedOptions[0]?.textContent || "").slice(0, 120)}`);
+      $("play-pipeline").value === settings.pipeline_id && /needs setup/.test($("play-pipeline").selectedOptions[0]?.textContent || "") &&
+        $("play-pipeline-state").querySelector('a[href^="#profiles/"]') !== null,
+      `${$("play-pipeline").value} · ${textOf($("play-pipeline-state")).slice(0, 120)}`);
+    record("and nothing can be reviewed or started with it",
+      primary().disabled === true && /needs setup/.test(textOf($("play-start-message"))),
+      `disabled=${primary().disabled} · ${textOf($("play-start-message"))}`);
+    // NEW_360 F1: automatic builds use the same profile and the same readiness —
+    // switching them on is not possible while it needs setup.
+    await waitFor("the automatic-build checkbox", () => visible($("play-autobuild")));
+    record("automatic builds cannot be switched on with a profile that needs setup",
+      $("play-autobuild-on").disabled === true && !$("play-autobuild-on").checked,
+      `disabled=${$("play-autobuild-on").disabled} · ${textOf($("play-autobuild-message"))}`);
     await bindTool(settings.tool_path);
     window.location.hash = "#profiles";
     await waitFor("Profiles", () => visible($("area-profiles")));
@@ -158,16 +219,28 @@
       [...$("play-pipeline").options].some((o) => o.value === settings.pipeline_id && !o.disabled), 15000);
     record("repairing the path makes the same choice ready again without a reload",
       $("play-pipeline").value === settings.pipeline_id, $("play-pipeline").value);
-    if ($("play-step-2").hidden) stepButton(2).click();
+    await waitFor("the checkbox to follow the repair", () => $("play-autobuild-on").disabled === false, 15000);
+    record("and automatic builds can be switched on again, with no reload", true, "enabled");
+    record("the automatic-build checkbox says how often it checks, and starts unchecked",
+      /every 30 seconds/.test(textOf($("play-autobuild-help"))) && !$("play-autobuild-on").checked,
+      textOf($("play-autobuild-help")));
+    $("play-autobuild-on").click();
+    await waitFor("automatic builds on", () => visible($("play-autobuild-expanded")) && $("play-autobuild-on").checked, 15000)
+      .catch((err) => { throw new Error(`${err.message}; it said: ${textOf($("play-autobuild-message"))}`); });
+    record("switching it on shows the checks and Stop, and builds nothing yet",
+      visible($("play-autobuild-stop")) && /Checked|not yet/.test(textOf($("play-autobuild-status"))),
+      textOf($("play-autobuild-status")).replace(/\s+/g, " ").slice(0, 120));
+    $("play-autobuild-stop").click();
+    await waitFor("automatic builds off", () => !$("play-autobuild-on").checked && !visible($("play-autobuild-stop")), 15000);
+    record("Stop automatic builds switches them off", true, "off");
     record(
-      "the build step names the program that will run",
+      "the build profile names the program that will run",
       textOf($("play-stages")).includes("Fixture toolchain"),
       textOf($("play-stages")).replace(/\s+/g, " ").trim().slice(0, 90)
     );
 
-    // --- 3. the engine ------------------------------------------------------
-    stepButton(3).click();
-    await waitFor("the run step", () => visible($("play-step-3")));
+    // --- run after build: the engine -----------------------------------------
+    record("Run after build is on for Build & Run", $("play-run-after").checked === true, String($("play-run-after").checked));
     await waitFor("the engines", () => $("play-engine").options.length > 1);
     // NEW_330: an engine for another game is greyed out, says why, and gets no
     // "Set up" link — setting it up could not make it play this build.
@@ -179,12 +252,14 @@
       `${other ? other.textContent : "not listed"} · setup links ${setupLinks.join(" ") || "none"}`);
     setValue($("play-engine"), settings.engine_id);
     await waitFor("the actions", () => $("play-action").options.length > 0);
-    // A small fixed set is offered as explained choices, not as a dropdown.
-    const choices = [...document.querySelectorAll("#play-action-choices .choice-card")];
+    // A choice of how to play it only when there is one, and the chosen one
+    // explained once.
+    const choices = [...document.querySelectorAll("#play-action-choices input[type=radio]")];
     record(
-      "the engine's action is a set of explained choices, not a dropdown",
-      choices.length > 0 && choices.every((card) => card.querySelector("input[type=radio]") && textOf(card).length > 20),
-      choices.map((card) => textOf(card.querySelector(".choice-card__title"))).join(", ") || "no choices"
+      "the engine's action is offered only when there is a choice, the chosen one explained",
+      choices.length < 2 ? $("play-action-field").hidden
+        : visible($("play-action-field")) && textOf($("play-action-note")).length > 20,
+      `${choices.map((input) => input.value).join(", ") || "none"} · ${textOf($("play-action-note")).slice(0, 80)}`
     );
     record(
       "the page says where it will write and that it leaves the game alone",
@@ -194,26 +269,30 @@
     record("the mod folder label names the base folder the chosen engine declares",
       textOf($("play-mod-where")).includes("id1"), textOf($("play-mod-where")));
 
-    // --- 4. the review ------------------------------------------------------
-    stepButton(4).click();
-    await waitFor("the review", () => textOf($("play-review")).includes("Where files will be written"), 40000);
+    // --- the review -----------------------------------------------------------
+    await review();
     // The bundle is fetched and verified BY the review, so the ordered WAD set
     // it shows is the real one rather than a guess. Waited for, because it is
     // a second request after the plan.
     const wads = () => [...document.querySelectorAll("#play-review .wad-list li")].map((li) => textOf(li).replace(/\s+/g, ""));
     await waitFor("the verified WAD list", () => wads().some((text) => /^1first\.wad/.test(text)), 40000)
       .catch((err) => { throw new Error(`${err.message}; the review said: ${textOf($("play-review")).replace(/\s+/g, " ").slice(0, 300)}`); });
-    const review = textOf($("play-review"));
+    const reviewText = textOf($("play-review"));
     record(
       "the review lists the WADs in the order the map declares them",
       /^1first\.wad/.test(wads()[0] || "") && /^2second\.wad/.test(wads()[1] || ""),
-      review.replace(/\s+/g, " ").slice(0, 160)
+      reviewText.replace(/\s+/g, " ").slice(0, 160)
     );
     record(
       "the review says the game folder is never written to",
-      review.includes("id1"),
-      review.includes("id1") ? "named" : "not named"
+      reviewText.includes("id1"),
+      reviewText.includes("id1") ? "named" : "not named"
     );
+    record("the technical details are folded, and the ordinary review is a short summary",
+      $("play-review-details").open === false && textOf($("play-final-summary")).includes("auto-pigeon"),
+      textOf($("play-final-summary")).replace(/\s+/g, " ").slice(0, 130));
+    record("once reviewed, the one primary says what it does",
+      textOf(primary()) === "Build & Run" && !primary().disabled, `"${textOf(primary())}" disabled=${primary().disabled}`);
     // Shown as one terminal line, as a ```shell block reads (operator,
     // 2026-09-22); each word is quoted when the shell would need it.
     const command = textOf($("play-review").querySelector(".shell__code code") || document.createElement("i"));
@@ -222,6 +301,7 @@
       /(^| )-game auto-pigeon( |$)/.test(command) && /(^| )\+map dm1( |$)/.test(command),
       command.slice(0, 140)
     );
+    $("play-review-details").open = true;
     await snap("review");
     $("play-review").querySelector(".shell")?.scrollIntoView({ block: "center" });
     await snap("review-wads-and-argv");
@@ -231,6 +311,7 @@
       document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
       `${document.documentElement.scrollWidth}px of content in ${document.documentElement.clientWidth}px`
     );
+    $("play-review-details").open = false;
 
     // Changing the revision throws the review away AND says so.
     setValue($("play-revision"), $("play-revision").value);
@@ -238,38 +319,49 @@
     $("play-map-name").dispatchEvent(new Event("input", { bubbles: true }));
     record(
       "changing a choice says what it cleared",
-      textOf($("play-review-message")).toLowerCase().includes("you changed"),
-      textOf($("play-review-message")).slice(0, 110)
+      textOf($("play-review-message")).toLowerCase().includes("you changed") && /Review build/.test(textOf(primary())),
+      `${textOf($("play-review-message")).slice(0, 110)} · "${textOf(primary())}"`
     );
     await snap("review-invalidated");
-    // And the review comes back when the step is opened again.
-    stepButton(4).click();
-    await waitFor("the review again", () => textOf($("play-review")).includes("Where files will be written"), 40000);
-
-    // Going backward keeps compatible choices.
-    stepButton(1).click();
-    await waitFor("the map step", () => visible($("play-step-1")));
+    // Nothing starts on a change: the review comes back only when asked for.
+    await review();
     record(
-      "going back does not lose a compatible choice",
+      "a review keeps every compatible choice",
       $("play-map").value === settings.asset_id && $("play-map-name").value === "dm1",
       `${$("play-map").value} · ${$("play-map-name").value}`
     );
 
-    // --- 5. one confirmation ------------------------------------------------
-    stepButton(5).click();
-    await waitFor("the final step", () => visible($("play-step-5")));
-    record(
-      "the last step restates every choice before the one button",
-      textOf($("play-final-summary")).includes("auto-pigeon"),
-      textOf($("play-final-summary")).replace(/\s+/g, " ").slice(0, 130)
-    );
-    $("play-start").click();
+    // --- the source of the map ----------------------------------------------
+    // A file on this computer is the same form's other source, not a second
+    // wizard: switching to it and back keeps the saved map's choices.
+    $("play-source-local").click();
+    await waitFor("the file inputs", () => visible($("play-local-map")) && visible($("build-start")));
+    record("a file on this computer is built in the same form, with Run after build off",
+      !visible($("play-saved-map")) && $("play-run-after").disabled && !$("play-run-after").checked && !visible($("play-start")),
+      `run after=${$("play-run-after").checked} disabled=${$("play-run-after").disabled}`);
+    $("play-source-saved").click();
+    await waitFor("the saved map again", () => visible($("play-saved-map")) && visible(primary()));
+    record("switching back keeps the saved map, its revision and the review's choices",
+      $("play-map").value === settings.asset_id && $("play-revision").value === settings.revision_id &&
+        $("play-run-after").checked, `${$("play-map").value} · ${$("play-revision").value}`);
+    if (!/Build & Run/.test(textOf(primary()))) await review();
 
-    // Activity opens on its own, because that is where the run now lives.
-    await waitFor("Activity", () => onScreen($("activity")), 20000).catch((err) => {
+    // --- one confirmation ------------------------------------------------
+    primary().click();
+    // The run gets one concise card, and one way to its progress.
+    await waitFor("the current run's card", () => visible($("play-current")), 20000).catch((err) => {
       throw new Error(`${err.message}; the page said: ${textOf($("play-start-message"))}`);
     });
-    record("Activity opens when a run starts", true, "open");
+    const launches = [...$("play-current").querySelectorAll("button")];
+    record("the run has one concise card, with one primary and a way to its progress",
+      launches.filter((b) => b.classList.contains("primary")).length === 1 &&
+        launches.some((b) => textOf(b) === "View progress") &&
+        !launches.some((b) => /Build & Run|Run|Play/.test(textOf(b))),
+      launches.map((b) => `${textOf(b)}${b.classList.contains("primary") ? "*" : ""}`).join(", "));
+    [...$("play-current").querySelectorAll("button")].find((b) => textOf(b) === "View progress").click();
+
+    await waitFor("Activity", () => onScreen($("activity")), 20000);
+    record("View progress opens Activity", true, "open");
     record(
       "Activity keeps its padding on screen",
       $("activity").getBoundingClientRect().left >= 0,
@@ -300,6 +392,8 @@
         .every((stage) => activity.includes(stage)),
       activity.replace(/\s+/g, " ").slice(0, 200)
     );
+    await waitFor("the card to say it finished", () => /built and started/.test(textOf($("play-current-title"))), 20000);
+    record("the card says how the run ended", true, textOf($("play-current-title")));
     await snap("activity-finished-launched");
 
     // Escape closes Activity and does not stop the run.
@@ -358,57 +452,47 @@
     // Coming back to the area re-reads everything, which is what a person who
     // has just saved in the editor does.
     await window.AUCOM.areas.play.refresh();
-    stepButton(1).click();
     await waitFor("the new revision", () => $("play-revision").value !== settings.revision_id, 20000);
     setValue($("play-map-name"), "dm2");
-    stepButton(4).click();
-    // The fixture's only refusal is a WAD the server did not send, so
-    // the review offers "use your own copy" rather than a dead end; the button
-    // stays disabled until a folder holding it is confirmed.
+    await review();
+    // The fixture's only refusal is a WAD the server did not send, so the
+    // review offers "use your own copy" rather than a dead end — in the open,
+    // because only the person can answer it — and the button stays disabled
+    // until a folder holding it is confirmed.
     await waitFor(
       "the refusal",
-      () => /cannot be compiled yet|Not sent with this map/.test(textOf($("play-review"))),
+      () => /cannot be compiled yet|Not sent with this map/.test(textOf($("play-review-attention"))),
       40000
     ).catch((err) => {
       throw new Error(`${err.message}; revision=${$("play-revision").value}, ` +
         `message=${textOf($("play-review-message"))}, ` +
-        `review=${textOf($("play-review")).replace(/\s+/g, " ").slice(0, 260)}`);
+        `attention=${textOf($("play-review-attention")).replace(/\s+/g, " ").slice(0, 260)}`);
     });
     record(
       "a bundle the server could not complete names its refusals",
-      textOf($("play-review")).includes("quake101.wad"),
-      textOf($("play-review")).replace(/\s+/g, " ").slice(-200)
+      textOf($("play-review-attention")).includes("quake101.wad"),
+      textOf($("play-review-attention")).replace(/\s+/g, " ").slice(-200)
     );
-    ($("play-review").querySelector(".own-wads") || $("play-review").querySelector(".notice.error"))
+    ($("play-review-attention").querySelector(".own-wads") || $("play-review-attention").querySelector(".notice.error"))
       ?.scrollIntoView({ block: "center" });
     await snap("compiler-ready-refusal");
-    stepButton(5).click();
-    await waitFor("the final step again", () => visible($("play-step-5")));
     record(
       "and the one button is disabled rather than starting a compiler",
-      $("play-start").disabled === true,
-      String($("play-start").disabled)
+      primary().disabled === true,
+      `${textOf(primary())} disabled=${primary().disabled}`
     );
     await snap("refusal-button-disabled");
 
-    // --- a reload on the last step lands on the review ------------------------
-    // The URL remembers step 5, but not the review nor the folder confirmed in
-    // it. Found live on Windows (NEW_310A): after a reload the one button was
-    // enabled with no review at all, and would have started the old choices
-    // unseen. Coming back to the area is what a reload does to it.
+    // --- a reload lands on Review build ----------------------------------------
+    // Neither the review nor the folder confirmed in it is remembered. Found
+    // live on Windows (NEW_310A): after a reload the one button was enabled
+    // with no review at all, and would have started the old choices unseen.
+    // Coming back to the area is what a reload does to it.
     await window.AUCOM.areas.play.refresh();
     record(
-      "a reload that named the last step shows the review again",
-      visible($("play-step-4")) && !visible($("play-step-5")),
-      `step 4 ${visible($("play-step-4")) ? "shown" : "hidden"}, step 5 ${visible($("play-step-5")) ? "shown" : "hidden"}`
-    );
-    // Straight to the last step, before the review has come back.
-    stepButton(5).click();
-    await waitFor("the final step", () => visible($("play-step-5")));
-    record(
-      "and nothing can be started without that review",
-      $("play-start").disabled === true,
-      `start disabled=${$("play-start").disabled}, message=${textOf($("play-start-message"))}`
+      "after a reload nothing can be started without a review",
+      /Review build/.test(textOf(primary())) && !textOf($("play-review")),
+      `"${textOf(primary())}", review ${textOf($("play-review")) ? "still shown" : "empty"}`
     );
     // Jobs keeps the finished run.
     await go("jobs");
