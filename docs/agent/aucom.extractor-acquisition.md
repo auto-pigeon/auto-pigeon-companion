@@ -154,6 +154,11 @@ extractor or for any toolchain — is undoing an operator decision**, and has to
 say so and name it. One such decision exists: HITL 2026-10-28 (`NEW_367`,
 ADR-0010) authorised exactly the two Auto-Pigeon toolchains, through
 `internal/managedtools` and nothing here — `aucom.managed-tools` owns its rules.
+`NEW_368` (same decision, ADR-0010's amendment) added the Companion's own release
+bundle as the second kind of official target: the bundled extractor arrives only
+as part of a complete, verified Companion bundle whose bundle manifest pairs them,
+never on its own, and a developer override (`AUCOM_AUE_BINARY`) is never taken
+for the bundled one in a candidate's proving start.
 
 ### The compatibility manifest is a THIRD signed document, and it carries no digest
 

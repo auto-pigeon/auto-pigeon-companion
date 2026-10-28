@@ -53,12 +53,28 @@ const (
 	EricW ToolID = "ericw-tools"
 	// Q3Map2 is Auto-Pigeon's build of q3map2, for Quake III.
 	Q3Map2 ToolID = "q3map2"
+	// Companion is this program's own release bundle: the Companion and the
+	// extractor beside it (NEW_368). Offered like a toolchain, installed by
+	// replacing the bundle this process runs from — see self.go.
+	Companion ToolID = "companion"
+)
+
+// Kind is what an installation of a target is for.
+type Kind string
+
+const (
+	// KindToolchain is a compiler toolchain, installed into its own versioned
+	// folder and bound to profiles.
+	KindToolchain Kind = ""
+	// KindApplication is the Companion's own bundle.
+	KindApplication Kind = "application"
 )
 
 // Tool is one allowlisted toolchain and everything this program checks about
 // its releases.
 type Tool struct {
 	ID    ToolID
+	Kind  Kind
 	Title string
 	// Owner and Repo are the GitHub repository. Compiled in, never configured.
 	Owner, Repo string
@@ -116,12 +132,32 @@ var Tools = []Tool{
 	},
 }
 
-// Find is the allowlisted tool with this id.
+// Self is the Companion's own release, the second kind of official target
+// (NEW_368, ADR-0010). Kept out of [Tools], which is the list of toolchains
+// profiles are bound to; a coordinator with [Options.Self] set adds it.
+var Self = Tool{
+	ID:              Companion,
+	Kind:            KindApplication,
+	Title:           "Auto-Pigeon Companion",
+	Owner:           "auto-pigeon",
+	Repo:            "auto-pigeon-companion",
+	TagPrefix:       "v",
+	ManifestSchemas: []string{"aucom.release-manifest/1.0"},
+	ArchiveSchemas:  []string{"aucom.bundle-manifest/1.2"},
+	// The baseline is the running version, which only the coordinator
+	// knows; nothing older than it is ever offered.
+	parse: parseCompanionVersion,
+}
+
+// Find is the allowlisted target with this id.
 func Find(id ToolID) (Tool, bool) {
 	for _, tool := range Tools {
 		if tool.ID == id {
 			return tool, true
 		}
+	}
+	if id == Self.ID {
+		return Self, true
 	}
 	return Tool{}, false
 }
@@ -189,6 +225,18 @@ var ericwVersion = regexp.MustCompile(`^[0-9]{1,6}(\.[0-9]{1,9}){1,3}$`)
 func parseEricWVersion(version string) (Sequence, error) {
 	if !ericwVersion.MatchString(version) {
 		return nil, fmt.Errorf("%q is not an ericw-tools release version", version)
+	}
+	return numbers(strings.Split(version, "."))
+}
+
+var companionVersion = regexp.MustCompile(`^[0-9]{1,4}\.[0-9]{1,7}$`)
+
+// parseCompanionVersion reads "1.318": 1 and this repository's commit count.
+// "unknown" — an unstamped development build — does not parse, and so is
+// never ordered against a release.
+func parseCompanionVersion(version string) (Sequence, error) {
+	if !companionVersion.MatchString(version) {
+		return nil, fmt.Errorf("%q is not a Companion release version", version)
 	}
 	return numbers(strings.Split(version, "."))
 }

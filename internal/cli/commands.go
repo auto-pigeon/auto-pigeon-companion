@@ -18,8 +18,10 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/joinintent"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/leakintent"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/lockfile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/managedtools"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/release"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/web"
+	"net"
 )
 
 // PasswordEnv is the environment variable a password may be supplied in, for
@@ -176,6 +178,17 @@ func runVersion(env *Env, args []string) int {
 // once its last page has been closed for the grace period and nothing it
 // started is still running.
 func runServe(env *Env, args []string) int {
+	code, after := serve(env, args)
+	// After every deferred close of the serve: a Companion started by its
+	// own update must not have its token and address removed by this one's
+	// exit (NEW_368).
+	if after != nil {
+		after()
+	}
+	return code
+}
+
+func serve(env *Env, args []string) (int, func()) {
 	set := newFlagSet(env, "serve")
 	port := set.Int("port", 0, "loopback port to bind; 0 uses the configured port")
 	open := set.Bool("open", false, "open the page in the default browser")
@@ -192,20 +205,20 @@ func runServe(env *Env, args []string) int {
 	managedTools := set.String("managed-tools", "auto",
 		"install and update the official EricW and q3map2 builds: auto (interactive only), on or off")
 	if _, code, ok := parseFlags(env, set, args); !ok {
-		return code
+		return code, nil
 	}
 	if *interactive && *stayRunning {
 		fmt.Fprintln(env.Stderr, "error: --interactive and --stay-running are the two modes; choose one")
-		return 2
+		return 2, nil
 	}
 	if *closeGrace <= 0 || *startupWindow <= 0 {
 		fmt.Fprintln(env.Stderr, "error: --close-grace and --startup-window must be positive durations, such as 15s or 3m")
-		return 2
+		return 2, nil
 	}
 
 	tokenPath, err := tokenFilePath(env)
 	if err != nil {
-		return fail(env, err)
+		return fail(env, err), nil
 	}
 	configDir := filepath.Dir(tokenPath)
 
@@ -242,7 +255,7 @@ func runServe(env *Env, args []string) int {
 			// A refusal, never a second server: a start that cannot tell
 			// whether another is in progress says who holds the lock.
 			fmt.Fprintf(env.Stderr, "error: another Auto-Pigeon Companion is starting for this configuration: %v\n", err)
-			return 1
+			return 1, nil
 		}
 		startLock = lock
 		if address, version, running := runningCompanion(configDir); running {
@@ -270,8 +283,29 @@ func runServe(env *Env, args []string) int {
 					fmt.Fprintf(env.Stderr, "warning: %v\nopen %s yourself\n", err, page)
 				}
 			}
-			return 0
+			return 0, nil
 		}
+	}
+
+	// The bundle this process runs from, and how its last replacement
+	// ended: an interrupted one is rolled back here, before anything runs
+	// the extractor beside it (NEW_368).
+	self := inspectSelf(env)
+	updateLog := &selfUpdateLog{path: filepath.Join(configDir, SelfUpdateLogName)}
+	var tools *managedtools.Manager
+	var selfResults []managedtools.SelfResult
+	confirmSelf := recoverSelfAtStart(self, updateLog, func(result managedtools.SelfResult) {
+		if tools != nil {
+			if err := tools.RecordSelfResult(result); err != nil {
+				updateLog.logf("start: recording the result: %v", err)
+			}
+			return
+		}
+		selfResults = append(selfResults, result)
+	})
+	if fixtureFailServe(env.Version) {
+		fmt.Fprintf(env.Stderr, "error: fixture build %s is set to refuse to serve\n", env.Version)
+		return 1, nil
 	}
 
 	// Where the server's own lines go. Server mode: stderr, as always.
@@ -315,7 +349,7 @@ func runServe(env *Env, args []string) int {
 	// interrupted rather than reported as still going.
 	service, settings, err := openJobs(ctx, env, true, logf)
 	if err != nil {
-		return fail(env, err)
+		return fail(env, err), nil
 	}
 	defer service.Close()
 
@@ -329,7 +363,7 @@ func runServe(env *Env, args []string) int {
 
 	token, err := web.NewToken()
 	if err != nil {
-		return fail(env, err)
+		return fail(env, err), nil
 	}
 	// Asked before this run's token replaces the running one's: a second
 	// `serve` for one configuration does not run a second build-tool
@@ -337,7 +371,7 @@ func runServe(env *Env, args []string) int {
 	// build (NEW_367).
 	otherAddress, _, otherRunning := runningCompanion(configDir)
 	if err := web.WriteToken(tokenPath, token); err != nil {
-		return fail(env, err)
+		return fail(env, err), nil
 	}
 	// Removed on the way out: a token file left behind names a credential for
 	// a server that is not listening, and the next `companion job` would try
@@ -353,15 +387,15 @@ func runServe(env *Env, args []string) int {
 	// builds beside it rather than reaching into the real machine's.
 	_, profilesDir, bindingsPath, err := statePaths(env, settings)
 	if err != nil {
-		return fail(env, err)
+		return fail(env, err), nil
 	}
 	buildsPath, err := buildsDir(env, settings)
 	if err != nil {
-		return fail(env, err)
+		return fail(env, err), nil
 	}
 	assetCache, err := settings.AssetCache()
 	if err != nil {
-		return fail(env, err)
+		return fail(env, err), nil
 	}
 
 	// The address is only known after Listen; the notice needs it, so it reads
@@ -415,7 +449,7 @@ func runServe(env *Env, args []string) int {
 		},
 	})
 	if err != nil {
-		return fail(env, err)
+		return fail(env, err), nil
 	}
 	// Every build, Build & Run and hosted listing this process started stops
 	// with it; the job service's own Close (deferred above, so it runs after
@@ -433,7 +467,7 @@ func runServe(env *Env, args []string) int {
 
 	listener, err := web.Listen(chosen)
 	if err != nil {
-		return fail(env, err)
+		return fail(env, err), nil
 	}
 	// The two toolchains Auto-Pigeon maintains: installed on first launch and
 	// checked about hourly while this runs (NEW_367, ADR-0010). In the
@@ -441,16 +475,22 @@ func runServe(env *Env, args []string) int {
 	// fails to listen must not have applied an update on its way out.
 	switch on, why, err := managedToolsMode(*managedTools, *interactive, settings); {
 	case err != nil:
-		return fail(env, err)
+		return fail(env, err), nil
 	case !on:
 		logf("managed tools: off (%s)", why)
 	case otherRunning:
 		logf("managed tools: the Companion already running at %s manages the build tools for this configuration; this one does not", otherAddress)
 	default:
-		tools, err := newManagedTools(env, settings, configDir, server, why != "", logf)
+		made, err := newManagedTools(env, settings, configDir, server, &self, why != "", logf)
 		if err != nil {
 			logf("warning: build-tool setup is unavailable: %v", err)
 			break
+		}
+		tools = made
+		for _, result := range selfResults {
+			if err := tools.RecordSelfResult(result); err != nil {
+				logf("self update: recording the last update: %v", err)
+			}
 		}
 		server.SetManagedTools(tools)
 		if why != "" {
@@ -493,6 +533,8 @@ func runServe(env *Env, args []string) int {
 	defer web.RemoveURL(urlPath)
 	// Published: a launch waiting on the start lock now finds this one.
 	releaseStart()
+	// Serving: if this is the new side of an update, it is complete now.
+	confirmSelf()
 	_ = joinintent.Prune(joinintent.Path(configDir), time.Now().UTC())
 	_ = leakintent.Prune(leakintent.Path(configDir), time.Now().UTC())
 
@@ -580,7 +622,7 @@ func runServe(env *Env, args []string) int {
 	decided := lifecycle.StoppedAt()
 	logf("lifecycle: stopping, cause %s; the listener closed %s after the decision", cause, since(decided))
 	if serveErr != nil {
-		return fail(env, serveErr)
+		return fail(env, serveErr), nil
 	}
 	if *interactive {
 		// Printed after the deferred shutdown work, so "stopped" is true when
@@ -597,22 +639,55 @@ func runServe(env *Env, args []string) int {
 		for _, line := range server.ApplyToolUpdatesOnExit() {
 			logf("managed tools: %s", line)
 		}
+		after := replaceSelfAtExit(server, tools, self, configDir, cause, relaunchArguments(true, false, *debug, listenerPort(listener)), updateLog, logf)
 		fmt.Fprintln(env.Stdout, web.ExitLine(cause, *startupWindow))
 		if detailPath != "" && cause == web.ExitStartupTimeout {
 			fmt.Fprintf(env.Stdout, "Details: %s\n", detailPath)
 		}
-		return 0
+		return 0, after
 	}
 	server.Close()
 	service.Close()
 	for _, line := range server.ApplyToolUpdatesOnExit() {
 		logf("managed tools: %s", line)
 	}
-	if cause == web.ExitQuit {
+	after := replaceSelfAtExit(server, tools, self, configDir, cause, relaunchArguments(false, *stayRunning, *debug, listenerPort(listener)), updateLog, logf)
+	switch cause {
+	case web.ExitQuit:
 		fmt.Fprintln(env.Stdout, "stopped: Quit was chosen in the page")
-		return 0
+	case web.ExitUpdate:
+		fmt.Fprintln(env.Stdout, "stopped: installing the Companion's update")
+	default:
+		fmt.Fprintln(env.Stdout, "stopped")
 	}
-	fmt.Fprintln(env.Stdout, "stopped")
+	return 0, after
+}
+
+// replaceSelfAtExit puts a chosen Companion update in place as this process
+// ends: the one "Update now" stopped it for, which then starts again, or the
+// one chosen for the close, which does not (NEW_368).
+func replaceSelfAtExit(server *web.Server, tools *managedtools.Manager, self managedtools.SelfInstall, configDir string,
+	cause web.ExitCause, relaunch []string, log *selfUpdateLog, logf func(string, ...any)) func() {
+	if tools == nil {
+		return nil
+	}
+	record, ok := server.SelfRestartRecord()
+	if cause != web.ExitUpdate || !ok {
+		relaunch = nil
+		record, ok = server.SelfAtExit(false)
+	}
+	if !ok {
+		return nil
+	}
+	logf("self update: installing %s as this Companion closes (log: %s)", record.Version, log.path)
+	return replaceSelf(self, record, tools.Root(), configDir, relaunch, log, server.RecordSelfResult)
+}
+
+// listenerPort is the port a listener bound.
+func listenerPort(listener net.Listener) int {
+	if address, ok := listener.Addr().(*net.TCPAddr); ok {
+		return address.Port
+	}
 	return 0
 }
 

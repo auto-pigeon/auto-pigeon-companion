@@ -49,4 +49,9 @@ func TestTheAllowlistIsExactlyTheTwoOfficialRepositories(t *testing.T) {
 	if strings.Join(got, "|") != want {
 		t.Fatalf("allowlist %v", got)
 	}
+	// The Companion's own release is the one other official target
+	// (NEW_368), and it is not a toolchain a profile can be bound to.
+	if Self.Owner+"/"+Self.Repo+" "+Self.TagPrefix != "auto-pigeon/auto-pigeon-companion v" || Self.Kind != KindApplication || len(Self.Profiles) != 0 {
+		t.Fatalf("self target %+v", Self)
+	}
 }

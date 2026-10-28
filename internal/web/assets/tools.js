@@ -16,7 +16,7 @@
   let timer = 0;
   let wasReady = {};
   let seenNotices = null;
-  let offerShown = null; // { tool, identity }
+  let offerShown = null; // { items: [{ tool, identity }], opener }
   let hiddenWaiting = {};
 
   const PHASE_WORDS = {
@@ -87,7 +87,7 @@
     const list = $("tools-setup-list");
     list.replaceChildren();
     for (const tool of tools) {
-      if (settingUp) {
+      if (settingUp && !isSelf(tool)) {
         list.append(el("li", { className: "tools-row tools-row--" + tool.phase, children: [
           el("strong", { text: tool.title }), document.createTextNode(" — " + phaseLine(tool)),
           ...(tool.phase === "failed" || tool.phase === "unsupported"
@@ -142,40 +142,99 @@
     return a && b && a.version === b.version && a.asset_id === b.asset_id && a.sha256 === b.sha256;
   }
 
+  const isSelf = (tool) => tool.kind === "application";
+
+  // A dialog never opens over another one — a profile's review, the sign-in,
+  // Quit — or over a file picker the page opened: the offer waits, with the
+  // badge in the header, for a moment when nothing else is asking.
+  function busyElsewhere() {
+    return Boolean(document.querySelector(".auth-modal:not([hidden]):not(#tools-update-modal)") ||
+      document.querySelector("dialog[open]") || window.AUCOM.pickingFile);
+  }
+
+  function offered() {
+    return (status?.tools || []).filter((x) => x.offer && x.active);
+  }
+
   function maybeOffer() {
     const modal = $("tools-update-modal");
     const tools = status?.tools || [];
     if (offerShown) {
-      const tool = tools.find((x) => x.id === offerShown.tool);
       // Answered elsewhere — another tab, the terminal — or replaced by a
       // newer check: this dialog is about bytes no longer on offer.
-      if (!tool?.offer || !sameIdentity(identityOf(tool.offer), offerShown.identity)) closeOffer();
+      const stale = offerShown.items.some((item) => {
+        const tool = tools.find((x) => x.id === item.tool);
+        return !tool?.offer || !sameIdentity(identityOf(tool.offer), item.identity);
+      });
+      if (stale) closeOffer();
       return;
     }
-    if (!modal.hidden || document.querySelector(".auth-modal:not([hidden])")) return;
-    const tool = tools.find((x) => x.offer && x.active);
-    if (!tool) return;
-    openOffer(tool);
+    const list = offered();
+    $("tools-update-badge").hidden = list.length === 0;
+    if (!list.length || !modal.hidden) return;
+    if (busyElsewhere()) return;
+    openOffer(list);
   }
 
-  function openOffer(tool) {
-    const offer = tool.offer;
-    offerShown = { tool: tool.id, identity: identityOf(offer), opener: document.activeElement };
-    $("tools-update-heading").textContent = t("Update {tool}?", { tool: tool.title });
-    $("tools-update-intro").textContent = t("{tool} {from} is installed. Version {to} is available.", {
-      tool: tool.title, from: tool.active.version, to: offer.version });
+  // One dialog for every update on offer, the Companion's own included, so
+  // three releases on one check are one question, not three stacked dialogs.
+  function openOffer(list) {
+    offerShown = { items: list.map((tool) => ({ tool: tool.id, identity: identityOf(tool.offer) })), opener: document.activeElement };
+    $("tools-update-badge").hidden = true;
+    const one = list.length === 1 ? list[0] : null;
+    $("tools-update-heading").textContent = one ? t("Update {tool}?", { tool: one.title }) : t("Updates available");
+    const intro = (tool) => isSelf(tool)
+      ? t("Auto-Pigeon Companion {from} is running. Version {to} is available.", { from: tool.active.version, to: tool.offer.version })
+      : t("{tool} {from} is installed. Version {to} is available.", { tool: tool.title, from: tool.active.version, to: tool.offer.version });
+    $("tools-update-intro").textContent = one ? intro(one) : t("Choose what to do with these updates.");
+    const rows = $("tools-update-list");
+    rows.replaceChildren();
+    rows.hidden = Boolean(one);
+    if (!one) {
+      for (const tool of list) {
+        rows.append(el("li", { className: "tools-row", children: [
+          el("span", { text: intro(tool) + " " }),
+          el("a", { text: t("Release notes"), attrs: { href: tool.offer.notes_url, target: "_blank", rel: "noopener noreferrer" } }),
+        ] }));
+      }
+    }
     const notes = $("tools-update-notes");
-    notes.href = offer.notes_url;
-    notes.textContent = t("Release notes for {version}", { version: offer.version });
+    $("tools-update-notes-row").hidden = !one;
+    if (one) {
+      notes.href = one.offer.notes_url;
+      notes.textContent = t("Release notes for {version}", { version: one.offer.version });
+    }
+    const self = list.find(isSelf);
+    const note = $("tools-update-note");
+    note.hidden = !self;
+    if (self) {
+      note.textContent = self.self?.mode === "manual"
+        ? t("The Companion downloads and checks it; you put it in place: {why}.", { why: self.self.reason || "" })
+        : t("Update now restarts the Companion once nothing is running; builds, downloads and games are never stopped for it.");
+    }
     $("tools-update-skip").checked = false;
-    $("tools-update-skip-label").textContent = t("Don't ask again for this version ({version})", { version: offer.version });
+    $("tools-update-skip-label").textContent = one
+      ? t("Don't ask again for this version ({version})", { version: one.offer.version })
+      : t("Don't ask again for these versions");
     const details = $("tools-update-details");
-    details.replaceChildren(
-      el("dt", { text: t("Download size") }), el("dd", { text: bytes(offer.size) }),
-      el("dt", { text: t("Installed in") }), el("dd", { text: t("the Companion's own tools folder, beside {from}, which is kept", { from: tool.active.version }) }),
-      el("dt", { text: t("SHA-256") }), el("dd", { text: offer.sha256, className: "mono" }),
-      el("dt", { text: t("Qualification") }), el("dd", { text: offer.qualification || "" }),
-    );
+    details.replaceChildren();
+    for (const tool of list) {
+      if (!one) details.append(el("dt", { text: tool.title, className: "tools-details-head" }), el("dd", { text: "" }));
+      details.append(
+        el("dt", { text: t("Download size") }), el("dd", { text: bytes(tool.offer.size) }),
+        el("dt", { text: t("Installed in") }), el("dd", { text: isSelf(tool)
+          ? t("replaces this Companion's own files in {root}; your settings, profiles, maps and build history are not touched, and {from} is kept to go back to", { root: tool.active.dir, from: tool.active.version })
+          : t("the Companion's own tools folder, beside {from}, which is kept", { from: tool.active.version }) }),
+        el("dt", { text: t("SHA-256") }), el("dd", { text: tool.offer.sha256, className: "mono" }),
+        el("dt", { text: t("Qualification") }), el("dd", { text: tool.offer.qualification || "" }),
+      );
+      if (tool.offer.sidecar) {
+        details.append(el("dt", { text: t("Bundled extractor") }), el("dd", { text: tool.offer.sidecar.version + " (protocol " + tool.offer.sidecar.protocol + ")" }));
+      }
+      if (tool.failure && tool.failure.version === tool.offer.version) {
+        details.append(el("dt", { text: t("Last attempt") }), el("dd", { text: tool.failure.error }));
+      }
+    }
     setMessage("tools-update-message", "");
     $("tools-update-modal").hidden = false;
     // Nothing that downloads or switches anything has the focus.
@@ -193,25 +252,35 @@
     if (!offerShown) return;
     await withBusy(button, async () => {
       const shown = offerShown;
-      const { ok, status: code, body } = await api(`/api/v1/tools/${encodeURIComponent(shown.tool)}/decide`, {
-        method: "POST",
-        body: { decision, ...shown.identity, dont_ask: decision === "cancel" && $("tools-update-skip").checked },
-      });
-      if (!ok) {
-        setMessage("tools-update-message", code === 409 ? t("This update is no longer the one on offer.") : body.error || "", "error");
-        if (code === 409) { closeOffer(); poll(); }
-        return;
+      const dontAsk = decision === "cancel" && $("tools-update-skip").checked;
+      let last = null;
+      for (const item of shown.items) {
+        const { ok, status: code, body } = await api(`/api/v1/tools/${encodeURIComponent(item.tool)}/decide`, {
+          method: "POST",
+          body: { decision, ...item.identity, dont_ask: dontAsk },
+        });
+        if (!ok) {
+          setMessage("tools-update-message", code === 409 ? t("This update is no longer the one on offer.") : body.error || "", "error");
+          if (code === 409) { closeOffer(); poll(); }
+          return;
+        }
+        const title = (status?.tools || []).find((x) => x.id === item.tool)?.title || item.tool;
+        if (decision === "now") record(t("Updating {tool} to {version}", { tool: title, version: item.identity.version }), "", "busy");
+        if (decision === "on_exit") record(t("{tool} {version} will be installed when the Companion closes", { tool: title, version: item.identity.version }), "", "ok");
+        last = body;
       }
-      if (decision === "now") record(t("Updating {tool} to {version}", { tool: shown.tool, version: shown.identity.version }), "", "busy");
-      if (decision === "on_exit") record(t("{tool} {version} will be installed when the Companion closes", { tool: shown.tool, version: shown.identity.version }), "", "ok");
       closeOffer();
-      apply(body);
+      apply(last);
     });
   }
 
   $("tools-update-now").addEventListener("click", (event) => decide("now", event.currentTarget));
   $("tools-update-later").addEventListener("click", (event) => decide("on_exit", event.currentTarget));
   $("tools-update-cancel").addEventListener("click", (event) => decide("cancel", event.currentTarget));
+  $("tools-update-badge").addEventListener("click", () => {
+    const list = offered();
+    if (list.length && $("tools-update-modal").hidden) openOffer(list);
+  });
   // The X and Escape are Cancel WITHOUT "don't ask again", whatever the box
   // says: only Cancel confirms the box.
   const dismiss = () => {
@@ -226,6 +295,52 @@
   });
 
   // --- Settings ---------------------------------------------------------------
+
+  // The Companion's own row: how this copy is installed, what an update of
+  // it does, and how the last one ended.
+  function selfLines(tool) {
+    const self = tool.self || {};
+    const lines = [];
+    const muted = (text) => el("p", { className: "muted", text });
+    if (self.mode === "portable") lines.push(muted(t("Updated by replacing its own files in {root}; nothing else in that folder is touched.", { root: self.root })));
+    if (self.mode === "manual") lines.push(muted(t("Updates are downloaded and checked; you put them in place: {why}.", { why: self.reason })));
+    if (self.mode === "development") {
+      lines.push(muted(t("Not updated automatically: {why}.", { why: self.reason })));
+      if (self.manual) {
+        lines.push(el("p", { children: [
+          document.createTextNode(t("The newest release is {version}. To switch to it, download it yourself: ", { version: self.manual.version })),
+          el("a", { text: t("release {version}", { version: self.manual.version }), attrs: { href: self.manual.notes_url, target: "_blank", rel: "noopener noreferrer" } }),
+        ] }));
+      }
+    }
+    const last = self.last;
+    if (last) {
+      const words = {
+        updated: t("Last update: {from} → {to}, complete.", last),
+        activated: t("Last update: {from} → {to} is in place; it is confirmed when the Companion next starts.", last),
+        rolled_back: t("Last update: {from} → {to} was taken back out: {detail}", { ...last, detail: last.detail || "" }),
+        failed: t("Last update: {from} → {to} was not installed: {detail}", { ...last, detail: last.detail || "" }),
+      };
+      lines.push(el("p", { className: last.outcome === "updated" || last.outcome === "activated" ? "muted" : "message error", text: words[last.outcome] || last.outcome }));
+    }
+    return lines;
+  }
+
+  // After the page reloaded across an update restart, say how it went.
+  function reportSelfUpdate() {
+    let flagged = null;
+    try { flagged = window.sessionStorage.getItem("aucom:self-update"); } catch { return; }
+    if (!flagged) return;
+    const self = (status?.tools || []).find(isSelf);
+    const last = self?.self?.last;
+    // "activated" is the old side's word; the new side's "updated" follows
+    // within a moment of it serving. Wait for an outcome, at most a minute.
+    if ((!last || last.outcome === "activated") && Date.now() - Number(flagged) < 60000) return;
+    try { window.sessionStorage.removeItem("aucom:self-update"); } catch { /* storage refused */ }
+    if (!last || last.outcome === "activated") return;
+    if (last.outcome === "updated") record(t("Auto-Pigeon Companion updated from {from} to {to}.", last), "", "ok");
+    else record(t("The update to {to} was taken back out; Auto-Pigeon Companion {from} is running.", last), last.detail || "", "error");
+  }
 
   function renderSettings() {
     const list = $("tools-settings-list");
@@ -244,8 +359,10 @@
     for (const tool of status.tools || []) {
       skipped += (tool.skipped || []).length;
       const item = el("li", { className: "tools-row", children: [
-        el("strong", { text: tool.title }), document.createTextNode(" — " + phaseLine(tool)),
+        el("strong", { text: tool.title }), document.createTextNode(" — " + (isSelf(tool) && tool.phase === "ready"
+          ? t("Running {version}", { version: tool.version }) : phaseLine(tool))),
       ] });
+      if (isSelf(tool)) selfLines(tool).forEach((line) => item.append(line));
       if (tool.detail) item.append(el("p", { className: "muted", text: tool.detail }));
       if (tool.offer) item.append(el("p", { text: t("Version {version} is available.", { version: tool.offer.version }) }));
       // A chosen update that failed: said here, quietly, with what to do. The
@@ -269,10 +386,24 @@
           row.append(drop);
         }
         item.append(row);
+      } else if (tool.pending?.manual) {
+        item.append(el("p", { className: "message", text: t("Downloaded; replace it yourself.") + " " + tool.pending.manual }));
+      } else if (tool.pending?.restarting) {
+        item.append(el("p", { className: "muted", text: t("Restarting to install version {version}…", { version: tool.pending.version }) }));
       } else if (tool.pending && !tool.pending.waiting?.length) {
         item.append(el("p", { className: "muted", text: tool.pending.intent === "on_exit"
-          ? t("Version {version} will be installed when the Companion closes.", { version: tool.pending.version })
+          ? (tool.pending.staged
+            ? t("Version {version} is downloaded and checked; it is installed when the Companion closes.", { version: tool.pending.version })
+            : t("Version {version} will be installed when the Companion closes.", { version: tool.pending.version }))
           : t("Installing version {version}…", { version: tool.pending.version }) }));
+      }
+      if (tool.pending && !tool.failure) {
+        const drop = el("button", { text: t("Cancel the update"), className: "secondary", attrs: { type: "button" } });
+        drop.addEventListener("click", (event) => withBusy(event.currentTarget, async () => {
+          const { ok, body } = await api(`/api/v1/tools/${encodeURIComponent(tool.id)}/cancel-pending`, { method: "POST", body: {} });
+          if (ok) apply(body); else setMessage("tools-check-message", body.error || "", "error");
+        }));
+        if (!tool.pending.restarting) item.append(el("div", { className: "row", children: [drop] }));
       }
       for (const s of tool.skipped || []) item.append(el("p", { className: "muted", text: t("Not offered again: {version}", { version: s.version }) }));
       for (const profile of status.profiles?.[tool.id] || []) {
@@ -345,6 +476,7 @@
     renderSetup();
     renderSettings();
     maybeOffer();
+    reportSelfUpdate();
     if (became) {
       // Setup or an update finished: what was "needs setup" may be ready now.
       // Re-check, never start: a pending build request goes back to review.

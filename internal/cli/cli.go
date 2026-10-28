@@ -172,6 +172,11 @@ var commands = []Command{
 		Run:     runTools,
 	},
 	{
+		Name: "selfupdate", Usage: "status | prove --expect-version <v>",
+		Summary: "this Companion's own installation, how its last update ended, and a new version's proving start",
+		Run:     runSelfUpdate,
+	},
+	{
 		Name: "build", Usage: "run | preview | list | show | pipelines",
 		Summary: "build a map through a pipeline: several supervised jobs, wired, with a manifest",
 		Run:     runBuild,

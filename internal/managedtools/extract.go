@@ -72,77 +72,9 @@ func extract(archivePath, destination string, tool Tool, candidate Candidate, li
 	}
 	defer reader.Close()
 
-	if len(reader.File) > limits.MaxFiles {
-		return nil, refuse("it holds %d entries; at most %d are accepted", len(reader.File), limits.MaxFiles)
-	}
-	type entry struct {
-		file     *zip.File
-		relative string
-		dir      bool
-	}
-	var root string
-	seen := map[string]string{}
-	var entries []entry
-	var claimed int64
-	var manifestFile *zip.File
-	for _, file := range reader.File {
-		name := file.Name
-		switch {
-		case name == "" || strings.ContainsRune(name, 0):
-			return nil, refuse("an entry has an empty or NUL-carrying name")
-		case strings.ContainsRune(name, '\\'):
-			return nil, refuse("the entry %q uses a backslash", name)
-		case strings.HasPrefix(name, "/") || (len(name) > 1 && name[1] == ':') || strings.HasPrefix(name, "//"):
-			return nil, refuse("the entry %q is an absolute path", name)
-		}
-		mode := file.Mode()
-		dir := mode.IsDir() || strings.HasSuffix(name, "/")
-		if !dir && !mode.IsRegular() {
-			// A symbolic link, a device, a pipe: none belongs in a toolchain
-			// archive, and a link is how an archive writes outside itself.
-			return nil, refuse("the entry %q is not a regular file or a folder (%s)", name, mode.Type())
-		}
-		trimmed := strings.TrimSuffix(name, "/")
-		top, rest, _ := strings.Cut(trimmed, "/")
-		if root == "" {
-			root = top
-			if err := acquire.CheckRelativePath(root); err != nil {
-				return nil, refuse("its top-level folder %q %v", root, err)
-			}
-		}
-		if top != root {
-			return nil, refuse("the entry %q is outside the archive's one top-level folder %q", name, root)
-		}
-		if rest == "" {
-			if !dir {
-				return nil, refuse("the archive's top level is a file, not a folder")
-			}
-			continue
-		}
-		if err := acquire.CheckRelativePath(rest); err != nil {
-			return nil, refuse("the entry %q %v", name, err)
-		}
-		folded := strings.ToLower(rest)
-		if previous, clash := seen[folded]; clash {
-			return nil, refuse("the entries %q and %q are the same file on a disk that ignores case", previous, rest)
-		}
-		seen[folded] = rest
-		if dir {
-			entries = append(entries, entry{file: file, relative: rest, dir: true})
-			continue
-		}
-		if file.UncompressedSize64 > uint64(limits.MaxFile) {
-			return nil, refuse("%s claims %d bytes; at most %d are accepted for one file", rest, file.UncompressedSize64, limits.MaxFile)
-		}
-		claimed += int64(file.UncompressedSize64)
-		if claimed > limits.MaxTotal {
-			return nil, refuse("it unpacks to more than %d bytes", limits.MaxTotal)
-		}
-		if rest == ArchiveManifestName {
-			manifestFile = file
-			continue
-		}
-		entries = append(entries, entry{file: file, relative: rest})
+	root, entries, manifestFile, err := scanArchive(reader, limits, ArchiveManifestName)
+	if err != nil {
+		return nil, err
 	}
 	if manifestFile == nil {
 		return nil, refuse("it carries no %s, so nothing says what it should contain", ArchiveManifestName)
@@ -220,6 +152,88 @@ func extract(archivePath, destination string, tool Tool, candidate Candidate, li
 		}
 	}
 	return manifest, nil
+}
+
+// archiveEntry is one entry of an archive that passed [scanArchive].
+type archiveEntry struct {
+	file     *zip.File
+	relative string
+	dir      bool
+}
+
+// scanArchive checks every entry of an archive before anything is written:
+// one top-level folder, relative clean names, no links or devices, no two
+// names that are one file on a disk that ignores case, and the size bounds.
+// listingName is the archive's own file list, returned apart.
+func scanArchive(reader *zip.ReadCloser, limits Limits, listingName string) (string, []archiveEntry, *zip.File, error) {
+	if len(reader.File) > limits.MaxFiles {
+		return "", nil, nil, refuse("it holds %d entries; at most %d are accepted", len(reader.File), limits.MaxFiles)
+	}
+	var root string
+	seen := map[string]string{}
+	var entries []archiveEntry
+	var claimed int64
+	var manifestFile *zip.File
+	for _, file := range reader.File {
+		name := file.Name
+		switch {
+		case name == "" || strings.ContainsRune(name, 0):
+			return "", nil, nil, refuse("an entry has an empty or NUL-carrying name")
+		case strings.ContainsRune(name, '\\'):
+			return "", nil, nil, refuse("the entry %q uses a backslash", name)
+		case strings.HasPrefix(name, "/") || (len(name) > 1 && name[1] == ':') || strings.HasPrefix(name, "//"):
+			return "", nil, nil, refuse("the entry %q is an absolute path", name)
+		}
+		mode := file.Mode()
+		dir := mode.IsDir() || strings.HasSuffix(name, "/")
+		if !dir && !mode.IsRegular() {
+			// A symbolic link, a device, a pipe: none belongs in a toolchain
+			// archive, and a link is how an archive writes outside itself.
+			return "", nil, nil, refuse("the entry %q is not a regular file or a folder (%s)", name, mode.Type())
+		}
+		trimmed := strings.TrimSuffix(name, "/")
+		top, rest, _ := strings.Cut(trimmed, "/")
+		if root == "" {
+			root = top
+			if err := acquire.CheckRelativePath(root); err != nil {
+				return "", nil, nil, refuse("its top-level folder %q %v", root, err)
+			}
+		}
+		if top != root {
+			return "", nil, nil, refuse("the entry %q is outside the archive's one top-level folder %q", name, root)
+		}
+		if rest == "" {
+			if !dir {
+				return "", nil, nil, refuse("the archive's top level is a file, not a folder")
+			}
+			continue
+		}
+		if err := acquire.CheckRelativePath(rest); err != nil {
+			return "", nil, nil, refuse("the entry %q %v", name, err)
+		}
+		folded := strings.ToLower(rest)
+		if previous, clash := seen[folded]; clash {
+			return "", nil, nil, refuse("the entries %q and %q are the same file on a disk that ignores case", previous, rest)
+		}
+		seen[folded] = rest
+		if dir {
+			entries = append(entries, archiveEntry{file: file, relative: rest, dir: true})
+			continue
+		}
+		if file.UncompressedSize64 > uint64(limits.MaxFile) {
+			return "", nil, nil, refuse("%s claims %d bytes; at most %d are accepted for one file", rest, file.UncompressedSize64, limits.MaxFile)
+		}
+		claimed += int64(file.UncompressedSize64)
+		if claimed > limits.MaxTotal {
+			return "", nil, nil, refuse("it unpacks to more than %d bytes", limits.MaxTotal)
+		}
+		if rest == listingName {
+			manifestFile = file
+			continue
+		}
+		entries = append(entries, archiveEntry{file: file, relative: rest})
+	}
+	return root, entries, manifestFile, nil
 }
 
 func readArchiveManifest(file *zip.File) (*archiveManifest, error) {

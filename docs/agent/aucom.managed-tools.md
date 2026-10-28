@@ -17,12 +17,17 @@ topics:
   - first-launch
   - setup-card
   - skipped-version
+  - self-update
+  - selfupdate
 paths:
   - internal/managedtools/**
   - internal/web/managedtools.go
   - internal/web/assets/tools.js
   - internal/cli/tools_cmd.go
   - internal/cli/managedtools_*.go
+  - internal/selfupdate/**
+  - internal/web/selfupdate.go
+  - internal/cli/selfupdate_cmd.go
   - docs/adr/0010-the-companion-installs-and-updates-two-official-toolchains.md
 ---
 
@@ -90,6 +95,22 @@ update belongs to `NEW_368`, which consumes this coordinator and its verificatio
     at its start while the first was still running). Every test that starts
     a server keeps it off (`internal/cli` sets `AUCOM_MANAGED_TOOLS=off` and its own
     `XDG_DATA_HOME`): no test may reach GitHub or this machine's data folder.
+
+11. **The Companion's own update (NEW_368) is a third target on the same coordinator**, never
+    a second downloader. `managedtools.Self` is added by `Options.Self`; there is no first
+    install of oneself; the bundle is checked against both manifests and proved before it is
+    staged. Only `internal/selfupdate` writes the Companion's own folder: the folder comes from
+    `InspectSelf` (the executable), never from the journal or a request; the files are the old
+    and new bundle manifests' members only; every step is journaled in
+    `<bundle>/.companion-update/`, proved in place, rolled back on failure, at the next start
+    after an interruption, or after three unready starts. `portable` is replaced; `manual` (a
+    folder it cannot write, macOS) is downloaded and left for a person; `development` is never
+    replaced. Update now waits for `ActiveWork`, the tool gate and any toolchain install, then
+    closes the admission fence (`503 companion_updating`) and stops with `ExitUpdate`; the
+    after-serve action replaces and relaunches with fixed arguments (mode, `--debug`, the same
+    port) once every defer has run, and puts the old one back if the new one does not serve
+    within 90 s. A live fixture candidate that refuses to serve is
+    `AUCOM_FIXTURE_FAIL_SERVE=<version>` in an `aucom_fixture_releases` build only.
 
 ## Trust, said honestly
 

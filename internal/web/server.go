@@ -131,6 +131,10 @@ type Server struct {
 	tools        *managedtools.Manager
 	toolGate     toolGate
 	toolsExiting atomic.Bool
+	// admission is the fence an "Update now" of the Companion closes;
+	// selfRestart is the staged bundle it stopped for (NEW_368).
+	admission   admission
+	selfRestart atomic.Pointer[managedtools.InstallRecord]
 	// games is the Games area's process-wide state: download and launch
 	// coordination, and the reviews waiting for an approval.
 	games  *gameState
@@ -412,7 +416,7 @@ func (s *Server) routes() http.Handler {
 	// comes from [Server.api], so a route cannot be added without the guard,
 	// and the test that sweeps the surface sweeps all of it.
 	for pattern, handler := range s.api() {
-		mux.Handle(pattern, s.guard(handler))
+		mux.Handle(pattern, s.guard(s.admit(handler)))
 	}
 	// Outermost: a connection another OS account opened is refused before any
 	// route, the token-carrying page included (peer.go, NEW_348).

@@ -67,6 +67,7 @@ const (
 	ReasonDigestDisagrees     Reason = "digests_disagree"
 	ReasonRefusedIdentity     Reason = "refused_by_profile"
 	ReasonNotAccepted         Reason = "not_accepted_by_profile"
+	ReasonNoSidecar           Reason = "no_bundled_extractor"
 )
 
 // Candidate is one release this Companion could install, with every fact the
@@ -97,6 +98,20 @@ type Candidate struct {
 	Qualification string `json:"qualification"`
 	// Signed is what the release says; always false today, and shown as such.
 	Signed bool `json:"signed"`
+	// Sidecar is the extractor a Companion release bundles, as its release
+	// manifest names it; empty for a toolchain.
+	Sidecar *Sidecar `json:"sidecar,omitempty"`
+	// PlatformState is the release's own native-support state for Target
+	// (native_pass, manual_pending, build_only …), quoted, never widened.
+	PlatformState string `json:"platform_state,omitempty"`
+}
+
+// Sidecar is the extractor a Companion bundle carries.
+type Sidecar struct {
+	Version  string `json:"version"`
+	Protocol string `json:"protocol"`
+	Commit   string `json:"commit"`
+	License  string `json:"license,omitempty"`
 }
 
 // Identity is the exact bytes a candidate names: what a skipped version and
@@ -251,6 +266,9 @@ var hexDigest = regexp.MustCompile(`^[0-9a-f]{64}$`)
 // candidate reads one release's manifest and decides whether this machine
 // can install it.
 func (e evaluator) candidate(ctx context.Context, release Release, version string) (*Candidate, Reason, string) {
+	if e.tool.Kind == KindApplication {
+		return e.companionCandidate(ctx, release, version)
+	}
 	listed, ok := release.asset(ManifestAssetName)
 	if !ok {
 		return nil, ReasonNoManifest, "the release publishes no " + ManifestAssetName
@@ -410,6 +428,8 @@ func (r Reason) Describe() string {
 		return "the built-in profile refuses that release"
 	case ReasonNotAccepted:
 		return "the built-in profile does not accept that release"
+	case ReasonNoSidecar:
+		return "it ships no extractor for this computer"
 	}
 	return string(r)
 }

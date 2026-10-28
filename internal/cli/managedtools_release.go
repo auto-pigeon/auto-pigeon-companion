@@ -10,3 +10,6 @@ import "github.com/auto-pigeon/auto-pigeon-companion/internal/managedtools"
 const fixtureReleasesEnv = "AUCOM_FIXTURE_RELEASES_URL"
 
 func fixtureReleaseSource() (managedtools.Source, bool, error) { return nil, false, nil }
+
+// fixtureFailServe is the fixture build's failure injection; never here.
+func fixtureFailServe(string) bool { return false }

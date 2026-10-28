@@ -212,7 +212,7 @@ later and then less often, with a **Retry** button; a working installation keeps
 working offline.
 
 **Updates.** About once an hour while the Companion runs (and from **Settings →
-Build tools → Check for updates**), a newer eligible release is offered in a
+Updates → Check for updates**), a newer eligible release is offered in a
 dialog naming the tool, the installed and the offered version, and its release
 notes:
 
@@ -250,6 +250,52 @@ installed stays usable). `companion serve` does none of this unless started with
 `--managed-tools on`. No platform without a published, qualified build is
 offered one: EricW has no Linux ARM build, and the Companion says so and leaves
 setting one up by hand to you.
+
+### Updating the Companion itself
+
+The Companion checks its own releases in the same hourly check, and offers a
+newer one in the same dialog, with the same three choices — when two or three
+updates arrive together they are one dialog, not three. It never downloads
+itself before you choose.
+
+- **Update now** — downloads and checks the new version, then waits until no
+  build, conversion, download or game is running. It never stops them. Once
+  nothing runs it stops taking new work, restarts on the same address, and your
+  open page reloads. A request that arrives in that moment is told to try again;
+  nothing of it starts.
+- **Update when I close Companion** — downloads and checks it now; it is put in
+  place when you close the Companion (the last window, or Quit). Closing one tab
+  of several is not closing. It does not reopen the Companion: the next start uses
+  the new version.
+- **Cancel** — and **Don't ask again for this version**, exactly as for the
+  build tools, kept separately from them.
+
+What is replaced is only what the release lists: the program, the extractor
+beside it and its bundle manifest. Your settings, profiles, compiler choices,
+maps, build history and the `config.json` beside the program are not touched.
+The new version is started once, briefly, before it replaces the old one and
+again after; if it does not start, the old one is put back and the failure is
+shown in **Settings → Updates**. The replaced files are kept in
+`.companion-update/previous` beside the program until the next update.
+
+A Companion in a folder you cannot write to, and the macOS app, are not replaced
+by the Companion: the update is downloaded and checked, and Settings says where
+it is and what to replace. A development build is never updated automatically;
+Settings names the newest release for you to download.
+
+```console
+$ companion tools status
+  …
+  Auto-Pigeon Companion              ready 1.318
+      update offered: 1.318 → 1.320 (https://github.com/auto-pigeon/auto-pigeon-companion/releases/tag/v1.320)
+$ companion tools update companion --now          # or --on-close
+$ companion tools cancel-pending companion
+$ companion selfupdate status
+Auto-Pigeon Companion 1.320 (linux-amd64), /home/me/Apps/auto-pigeon-companion-1.318-linux-amd64
+  updated automatically when you choose an update: its own files are replaced, nothing else in the folder
+  bundled extractor 1.245
+  last update: 1.318 -> 1.320, verified 2026-10-28T23:10:04+01:00
+```
 
 ### Setting up the Quake 1 compiler
 
@@ -1135,6 +1181,7 @@ commands:
   job run | preview | list | show | logs | output | cancel | retry | artifacts | profiles   run a profile action as a supervised job, and inspect what ran
   autobuild list | show | on | off | pipeline | build-now | retry   rebuild a hosted map automatically when a new revision is saved (inside a running Companion)
   tools status | check | retry | update | skip | cancel-pending | reset-skipped | use-managed   the build tools the Companion installs and updates itself: EricW tools and q3map2 (inside a running Companion)
+  selfupdate status | prove --expect-version <v>   this Companion's own installation, how its last update ended, and a new version's proving start
   build run | preview | list | show | pipelines   build a map through a pipeline: several supervised jobs, wired, with a manifest
   package targets | preview | create | inspect | verify | extract | map …   build a PAK or PK3 from what a build produced, read one somebody else made, and package, install and run a Quake III or Quake II map
   toolchain validate | show | canonicalize | digest | diff | list | schema | review | grant | withdraw | homepage | args | check  read, check and compare tool, engine and pipeline toolchains, and approve one to run

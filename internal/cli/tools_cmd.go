@@ -31,7 +31,8 @@ const toolsUsage = `usage:
   companion tools reset-skipped [<tool>]               offer skipped versions again
   companion tools use-managed <profile-id>             bind a profile you set up yourself to the managed installation
 
-<tool> is ericw-tools or q3map2.
+<tool> is ericw-tools, q3map2 or companion (this program's own update; see also
+` + "`companion selfupdate status`" + `).
 `
 
 func runTools(env *Env, args []string) int {
@@ -235,6 +236,9 @@ func printToolsStatus(env *Env, answer map[string]any) {
 		return
 	}
 	fmt.Fprintf(env.Stdout, "Build tools for %s (%s channel), in %s\n", status.Target, status.Channel, status.Root)
+	if failed := failedTools(status); failed != "" {
+		fmt.Fprintln(env.Stdout, failed)
+	}
 	for _, tool := range status.Tools {
 		line := fmt.Sprintf("  %-34s %s", tool.Title, tool.Phase)
 		if tool.Version != "" {
@@ -244,7 +248,19 @@ func printToolsStatus(env *Env, answer map[string]any) {
 			line += fmt.Sprintf(" (%d%%)", tool.Done*100/tool.Total)
 		}
 		fmt.Fprintln(env.Stdout, line)
-		if tool.Active != nil {
+		switch {
+		case tool.Self != nil:
+			fmt.Fprintf(env.Stdout, "      %s, %s\n", tool.Self.Mode, tool.Self.Root)
+			if tool.Self.Reason != "" {
+				fmt.Fprintf(env.Stdout, "      %s\n", tool.Self.Reason)
+			}
+			if tool.Self.Manual != nil {
+				fmt.Fprintf(env.Stdout, "      newest release %s, to install by hand: %s\n", tool.Self.Manual.Version, tool.Self.Manual.NotesURL)
+			}
+			if last := tool.Self.Last; last != nil {
+				fmt.Fprintf(env.Stdout, "      last update %s -> %s: %s %s\n", last.From, last.To, last.Outcome, last.Detail)
+			}
+		case tool.Active != nil:
 			fmt.Fprintf(env.Stdout, "      %s, %s, sha256 %s\n      %s\n", tool.Active.Tag, tool.Active.Banner, tool.Active.ActualSHA256, tool.Active.Dir)
 		}
 		if tool.Detail != "" {
@@ -259,11 +275,17 @@ func printToolsStatus(env *Env, answer map[string]any) {
 			if tool.Pending.Staged {
 				state = "ready"
 			}
+			if tool.Pending.Restarting {
+				state = "restarting to install it"
+			}
 			fmt.Fprintf(env.Stdout, "      update %s chosen (%s), %s", tool.Pending.Version, tool.Pending.Intent, state)
 			if len(tool.Pending.Waiting) > 0 {
 				fmt.Fprintf(env.Stdout, "; waiting for: %s", strings.Join(tool.Pending.Waiting, "; "))
 			}
 			fmt.Fprintln(env.Stdout)
+			if tool.Pending.Manual != "" {
+				fmt.Fprintf(env.Stdout, "      %s\n", tool.Pending.Manual)
+			}
 		}
 		if tool.Check.LastError != "" {
 			fmt.Fprintf(env.Stdout, "      last check failed: %s\n", tool.Check.LastError)
@@ -272,6 +294,20 @@ func printToolsStatus(env *Env, answer map[string]any) {
 			fmt.Fprintf(env.Stdout, "      skipped: %s\n", skipped.Version)
 		}
 	}
+}
+
+// failedTools is a line naming a target whose last setup or update failed.
+func failedTools(status managedtools.Status) string {
+	var names []string
+	for _, tool := range status.Tools {
+		if tool.Failure != nil {
+			names = append(names, fmt.Sprintf("%s %s (%s)", tool.Title, tool.Failure.Version, tool.Failure.Error))
+		}
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	return "  last failure: " + strings.Join(names, "; ")
 }
 
 func asList(value any) []any {
@@ -312,7 +348,7 @@ func managedToolsMode(flag string, interactive bool, settings config.Config) (on
 
 // newManagedTools builds the coordinator for a server. disabled keeps its
 // status (and anything installed) while checking and installing nothing.
-func newManagedTools(env *Env, settings config.Config, configDir string, server *web.Server, disabled bool, logf func(string, ...any)) (*managedtools.Manager, error) {
+func newManagedTools(env *Env, settings config.Config, configDir string, server *web.Server, self *managedtools.SelfInstall, disabled bool, logf func(string, ...any)) (*managedtools.Manager, error) {
 	root, err := settings.Tools()
 	if err != nil {
 		return nil, err
@@ -338,6 +374,8 @@ func newManagedTools(env *Env, settings config.Config, configDir string, server 
 		Source:    source,
 		Channel:   channel,
 		Host:      server.ManagedToolsHost(),
+		Self:      self,
+		SelfHost:  server.SelfUpdateHost(),
 		Probes:    probes,
 		Disabled:  disabled,
 		Logf:      logf,

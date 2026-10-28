@@ -46,6 +46,11 @@ type Options struct {
 	// GOOS and GOARCH default to this process's.
 	GOOS, GOARCH string
 	Host         Host
+	// Self is the bundle this process runs from; with it the coordinator
+	// also checks and offers the Companion's own releases (NEW_368).
+	// SelfHost proves a staged bundle and restarts for an update.
+	Self     *SelfInstall
+	SelfHost SelfHost
 	// Probes are the built-in profiles' compatibility rules per tool: a
 	// release they would refuse is never installed.
 	Probes map[ToolID]*profile.CompatibilityProbe
@@ -234,12 +239,18 @@ func (m *Manager) Run(ctx context.Context) {
 // update somebody chose, an activation that was waiting for work to end.
 // Exported so a test can drive the schedule with its own clock.
 func (m *Manager) Step(ctx context.Context) {
-	for _, tool := range Tools {
+	for _, tool := range m.targets() {
 		if ctx.Err() != nil {
 			return
 		}
 		if _, err := m.check(ctx, tool, false); err != nil && !errors.Is(err, errNotDue) {
 			m.opts.Logf("managed tools: checking %s: %v", tool.ID, err)
+		}
+		if tool.Kind == KindApplication {
+			if err := m.advanceSelf(ctx, m.selfTool()); err != nil {
+				m.opts.Logf("self update: %v", err)
+			}
+			continue
 		}
 		if err := m.advance(ctx, tool); err != nil {
 			m.opts.Logf("managed tools: %s: %v", tool.ID, err)
@@ -308,7 +319,7 @@ type CheckOutcome struct {
 // asked to wait or a check ran within the last minute.
 func (m *Manager) CheckNow(ctx context.Context) []CheckOutcome {
 	var out []CheckOutcome
-	for _, tool := range Tools {
+	for _, tool := range m.targets() {
 		outcome, err := m.check(ctx, tool, true)
 		if err != nil && outcome.Message == "" {
 			outcome.Message = err.Error()
@@ -322,6 +333,9 @@ func (m *Manager) CheckNow(ctx context.Context) []CheckOutcome {
 // check asks GitHub about one tool when that is due (or asked for), and
 // records the answer and the next time to ask.
 func (m *Manager) check(ctx context.Context, tool Tool, manual bool) (CheckOutcome, error) {
+	if tool.Kind == KindApplication {
+		tool = m.selfTool()
+	}
 	m.checkMu.Lock()
 	defer m.checkMu.Unlock()
 	now := m.now()
@@ -454,9 +468,13 @@ func (m *Manager) noteIntegrity(ts *ToolState, now time.Time) {
 }
 
 func (m *Manager) evaluator(tool Tool) evaluator {
+	target := m.Target()
+	if tool.Kind == KindApplication {
+		target = BundlePlatform(m.opts.GOOS, m.opts.GOARCH)
+	}
 	return evaluator{
 		tool:    tool,
-		target:  m.Target(),
+		target:  target,
 		channel: m.opts.Channel,
 		probe:   m.opts.Probes[tool.ID],
 		fetch: func(ctx context.Context, release Release, name string, limit int64) ([]byte, error) {
@@ -571,9 +589,15 @@ func (m *Manager) installVerified(ctx context.Context, tool Tool, candidate Cand
 	if err != nil {
 		return InstallRecord{}, err
 	}
-	if m.opts.Host != nil {
+	verify := func(ctx context.Context, tool Tool, record InstallRecord) error {
+		if tool.Kind == KindApplication {
+			return m.opts.SelfHost.Prove(ctx, record)
+		}
+		return m.opts.Host.Verify(ctx, tool, record)
+	}
+	if (tool.Kind == KindApplication && m.opts.SelfHost != nil) || (tool.Kind != KindApplication && m.opts.Host != nil) {
 		m.setLive(tool.ID, func(l *liveState) { l.Phase = "verifying" })
-		if err := m.opts.Host.Verify(ctx, tool, record); err != nil {
+		if err := verify(ctx, tool, record); err != nil {
 			if !m.referenced(tool, record.Dir) {
 				_ = os.RemoveAll(record.Dir)
 			}
@@ -802,6 +826,12 @@ func (m *Manager) Decide(id ToolID, decision Decision, identity BytesIdentity, d
 	if _, ok := Find(id); !ok {
 		return fmt.Errorf("managedtools: %q is not a managed tool", id)
 	}
+	if id == Companion && m.opts.Self == nil {
+		return errNoSelf
+	}
+	if id == Companion && m.opts.Self.Mode == SelfDevelopment && decision != DecideCancel {
+		return fmt.Errorf("managedtools: %s; it is not updated automatically — download the release by hand", m.opts.Self.Reason)
+	}
 	now := m.now()
 	_, err := UpdateState(m.opts.StatePath, func(state *State) error {
 		ts := state.Tool(id)
@@ -854,7 +884,7 @@ func (m *Manager) CancelPending(id ToolID) error {
 // when id is empty.
 func (m *Manager) ResetSkipped(id ToolID) error {
 	_, err := UpdateState(m.opts.StatePath, func(state *State) error {
-		for _, tool := range Tools {
+		for _, tool := range m.targets() {
 			if id == "" || tool.ID == id {
 				state.Tool(tool.ID).Skipped = nil
 			}
@@ -869,7 +899,7 @@ func (m *Manager) ResetSkipped(id ToolID) error {
 func (m *Manager) Retry(id ToolID) error {
 	now := m.now()
 	_, err := UpdateState(m.opts.StatePath, func(state *State) error {
-		for _, tool := range Tools {
+		for _, tool := range m.targets() {
 			if id != "" && tool.ID != id {
 				continue
 			}

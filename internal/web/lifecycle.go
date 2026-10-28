@@ -80,6 +80,9 @@ const (
 	// ExitWorkFinished: interactive, the page had closed, and the work that
 	// kept the process alive has ended.
 	ExitWorkFinished ExitCause = "work_finished"
+	// ExitUpdate: "Update now" of the Companion found nothing running and
+	// stopped the process so its bundle can be replaced and started again.
+	ExitUpdate ExitCause = "update"
 )
 
 // ActiveWork is one thing that keeps a Companion running after its page closed,
@@ -393,6 +396,8 @@ func ExitLine(cause ExitCause, startupWindow time.Duration) string {
 			"Start it again, or run `companion --stay-running` to keep it running without a page.", startupWindow)
 	case ExitWorkFinished:
 		return "Auto-Pigeon Companion stopped: the work it kept running for has finished, and no page is open."
+	case ExitUpdate:
+		return "Auto-Pigeon Companion stopped to install its update; the new version starts next."
 	}
 	return "Auto-Pigeon Companion stopped."
 }

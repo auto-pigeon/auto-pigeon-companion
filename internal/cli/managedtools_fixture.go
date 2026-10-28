@@ -24,3 +24,14 @@ func fixtureReleaseSource() (managedtools.Source, bool, error) {
 	source, err := managedtools.NewLoopbackSource(base, nil)
 	return source, err == nil, err
 }
+
+// fixtureFailServeEnv names a version whose `serve` refuses to start, in a
+// FIXTURE BUILD only: the controlled candidate that passes its proving start
+// and then never serves, so a live task can watch the old Companion put
+// itself back (NEW_368).
+const fixtureFailServeEnv = "AUCOM_FIXTURE_FAIL_SERVE"
+
+func fixtureFailServe(version string) bool {
+	value := strings.TrimSpace(os.Getenv(fixtureFailServeEnv))
+	return value != "" && value == version
+}

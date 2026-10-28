@@ -30,6 +30,9 @@
       <div class="account">
         <!-- In the header, not floating over the page: fixed to the corner it
              sat on top of every step's primary button (246I1.1, seen live). -->
+        <!-- An update offer that waited for a safe moment (NEW_368): never a
+             dialog over a review or another dialog, so it waits here. -->
+        <button type="button" id="tools-update-badge" class="activity-open" hidden>Updates available</button>
         <button type="button" id="activity-open" class="activity-open" hidden aria-expanded="false" aria-controls="activity">
           Activity <span id="activity-count" class="pill"></span>
         </button>
@@ -262,7 +265,9 @@
             <p id="tools-update-intro"></p>
             <button type="button" id="tools-update-close" class="auth-dialog__close" aria-label="Close">×</button>
           </div>
-          <p><a id="tools-update-notes" href="#" target="_blank" rel="noopener noreferrer">Release notes</a></p>
+          <ul id="tools-update-list" class="rows tools-list" hidden></ul>
+          <p id="tools-update-note" class="muted" hidden></p>
+          <p id="tools-update-notes-row"><a id="tools-update-notes" href="#" target="_blank" rel="noopener noreferrer">Release notes</a></p>
           <details>
             <summary>Details</summary>
             <dl id="tools-update-details" class="paths"></dl>
@@ -291,7 +296,7 @@
             <h2 id="stopped-heading">Auto-Pigeon Companion has stopped</h2>
             <p id="stopped-text"></p>
           </div>
-          <p class="muted">You can close this tab. Start Auto-Pigeon Companion again to continue; everything it recorded is kept.</p>
+          <p class="muted" id="stopped-hint">You can close this tab. Start Auto-Pigeon Companion again to continue; everything it recorded is kept.</p>
         </section>
       </div>
     </div>
@@ -1258,14 +1263,16 @@
           </div>
 
           <div class="panel" id="tools-settings">
-            <h3>Build tools</h3>
+            <h3>Updates</h3>
             <p class="muted">
               The Companion installs Auto-Pigeon's own builds of EricW tools and
-              q3map2 from their GitHub releases, and checks for new ones about
-              once an hour while it runs. Updates are offered, never applied
-              unasked. A SHA-256 published in the same release shows each download
-              is intact; these builds are not signed. Programs you set up yourself
-              are left as they are.
+              q3map2 from their GitHub releases on first launch, and checks for
+              new versions of them and of itself about once an hour while it
+              runs. Updates are offered, never applied unasked; "Don't ask again"
+              skips only that version. An update waits for builds, downloads and
+              games to finish. A SHA-256 published in the same release shows each
+              download is intact; these builds are not signed. Programs you set up
+              yourself are left as they are.
             </p>
             <p id="tools-settings-state" class="muted" role="status">Checking…</p>
             <ul id="tools-settings-list" class="rows tools-list"></ul>

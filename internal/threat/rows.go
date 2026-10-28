@@ -832,6 +832,46 @@ var rows = []Row{
 		},
 	},
 	{
+		ID: "T57", Category: CatSupply,
+		Title:      "The Companion's own update puts a program in its folder that is not the release, or that cannot start",
+		Asset:      "the program that runs every build and game, the extractor beside it, and the folder the person keeps it in",
+		Vector:     "A Companion bundle whose extractor is not the one its release names, a missing or extra file, other bytes, a link or an escaping name in the archive; a staged copy changed after it was checked; a link or another user's file where a program should be; a mutable plan or journal used to make the updater write elsewhere or run something; a disk that fills mid-swap; a new version that never serves.",
+		Mitigation: "internal/managedtools checks the Companion's release manifest (schema, tag, version, bundled_release verdict, extractor version and protocol, SHA-256 and size against GitHub's listing and digest) and unpacks the archive against the bundle manifest inside it, which must pair this Companion with exactly that extractor; a proving start of the staged program must pass. internal/selfupdate writes only the running bundle's own folder, resolved from the executable and never from a file, and only the files the old and new bundle manifests list, each re-hashed; it refuses links, folders, reparse points and other users' files there, checks free space, journals every rename, proves the result in place and rolls back on any failure, rolls back an interrupted swap at the next start and a version that starts three times without serving. The journal is read only as this user's plain file and names no command; what is started afterwards is the program it put in place with a fixed argument list. A folder it cannot write, and macOS, are never replaced: the update is downloaded and verified and a person puts it in place.",
+		Evidence: []Evidence{
+			{"internal/managedtools", "TestEveryCompanionBundleThatIsNotWhatItsReleaseSaysIsRefused"},
+			{"internal/managedtools", "TestABundleThatFailsItsProvingStartIsNeverStaged"},
+			{"internal/managedtools", "TestAProtectedInstallationIsDownloadedButNeverReplacedByTheCompanion"},
+			{"internal/selfupdate", "TestEveryUnsafeReplacementIsRefusedBeforeAFileMoves"},
+			{"internal/selfupdate", "TestAFailureAtAnyStepOfTheSwapLeavesTheOldBundle"},
+			{"internal/selfupdate", "TestAnInterruptedSwapIsRolledBackAtTheNextStart"},
+			{"internal/selfupdate", "TestACandidateThatNeverBecomesReadyIsRolledBackAfterThreeStarts"},
+			{"internal/selfupdate", "TestAJournalThatIsALinkIsNotRead"},
+		},
+		Residual: &Residual{
+			What: "As T55: the digests a Companion release is checked against are published in the same release, so an attacker " +
+				"who can publish a release in auto-pigeon/auto-pigeon-companion can publish a matching bundle; and a person who can " +
+				"write the Companion's own portable folder could already replace its program without any updater.",
+			Why: "The releases are not signed (operator, 2026-10-28); every update is offered, never applied unasked, and the " +
+				"page says \"not signed\". A portable folder's write permission is the person's own.",
+			Owner:  "operator (HITL), NEW_368",
+			Review: "2027-04-28",
+		},
+	},
+	{
+		ID: "T58", Category: CatRace,
+		Title:      "The Companion replaces itself under work, or work starts while it does",
+		Asset:      "a running build, conversion, download or game, and a request that arrives during the restart",
+		Vector:     "\"Update now\" stops the Companion while a build or a toolchain install runs; a request admitted between the idle check and the stop starts a job the restart then loses; a second launch or a protocol link starts a Companion halfway through the swap.",
+		Mitigation: "The restart waits while anything in ActiveWork runs, a pipeline holds the tool gate, or a toolchain is being installed or switched. At the boundary it closes an admission fence, waits for the requests already admitted, and looks again: a request that arrives then is answered 503 companion_updating, retryable, with nothing started; Auto-build passes the same fence. The swap holds the configuration's start lock, so a launch waits for the files to be in place. Nothing running is killed for an update.",
+		Evidence: []Evidence{
+			{"internal/web", "TestTheUpdateFenceWaitsForAdmittedWorkAndRefusesNewWorkRetryably"},
+			{"internal/web", "TestWhileTheCompanionStopsForAnUpdateWorkIsRefusedAndReadsAnswer"},
+			{"internal/web", "TestRestartForUpdateStopsOnlyAnIdleServer"},
+			{"internal/managedtools", "TestUpdateNowStagesAProvedBundleAndRestartsOnlyWhenIdle"},
+			{"internal/managedtools", "TestTheCompanionRestartWaitsForAToolchainUpdateInProgress"},
+		},
+	},
+	{
 		ID: "T51", Category: CatArchive,
 		Title:      "A map package republishes somebody else's content",
 		Asset:      "other people's textures, models and sounds — and the base game — that a map was built against",

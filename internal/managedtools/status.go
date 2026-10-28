@@ -34,6 +34,7 @@ type Status struct {
 // ToolStatus is one tool.
 type ToolStatus struct {
 	ID          ToolID `json:"id"`
+	Kind        Kind   `json:"kind,omitempty"`
 	Title       string `json:"title"`
 	ReleasesURL string `json:"releases_url"`
 	Phase       Phase  `json:"phase"`
@@ -55,6 +56,9 @@ type ToolStatus struct {
 	// Integrity is a version seen with other bytes than this program knew.
 	Integrity *IntegrityEvent `json:"integrity,omitempty"`
 	Failure   *SetupFailure   `json:"failure,omitempty"`
+	// Self is the Companion's own row: how it is installed and can be
+	// updated, and its last replacement.
+	Self *SelfView `json:"self,omitempty"`
 }
 
 // Pending is a chosen update.
@@ -66,6 +70,12 @@ type Pending struct {
 	// Waiting names the work it waits for (Update now only).
 	Waiting  []string `json:"waiting,omitempty"`
 	NotesURL string   `json:"notes_url,omitempty"`
+	// Restarting is an "Update now" of the Companion that has closed
+	// admission and is stopping to be replaced.
+	Restarting bool `json:"restarting,omitempty"`
+	// Manual is what a person has to do to finish an update the Companion
+	// downloaded and verified but does not put in place itself.
+	Manual string `json:"manual,omitempty"`
 }
 
 // CheckView is the schedule, as the page says it.
@@ -85,9 +95,13 @@ func (m *Manager) Status() Status {
 		state = newState()
 	}
 	now := m.now()
-	for _, tool := range Tools {
+	for _, tool := range m.targets() {
 		ts := state.Tool(tool.ID)
 		live := m.liveOf(tool.ID)
+		if tool.Kind == KindApplication {
+			out.Tools = append(out.Tools, m.selfStatus(ts, live, now))
+			continue
+		}
 		view := ToolStatus{
 			ID: tool.ID, Title: tool.Title, ReleasesURL: tool.ReleasesURL(),
 			Previous: ts.Previous, Newer: ts.Check.Newer, Skipped: ts.Skipped,

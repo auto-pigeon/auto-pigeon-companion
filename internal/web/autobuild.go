@@ -121,6 +121,13 @@ var unsafeMapName = regexp.MustCompile(`[^a-z0-9_-]+`)
 // build-only, so the map and its textures arrive by the same authenticated,
 // verified path as any Build & Run and the build is an ordinary job.
 func (s *Server) autobuildStart(entry autobuild.Entry, revision autobuild.Revision) (string, error) {
+	// The poller is not a request, so it passes the update fence here: a
+	// Companion stopping to be replaced starts no build (NEW_368).
+	release, admitted := s.admission.enter()
+	if !admitted {
+		return "", errUpdating
+	}
+	defer release()
 	service, err := s.playService()
 	if err != nil {
 		return "", err

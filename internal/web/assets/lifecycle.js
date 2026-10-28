@@ -35,7 +35,51 @@
     interrupted: "It was stopped from the terminal or by the system.",
     startup_timeout: "No page connected to it in time.",
     work_finished: "The work it was finishing has ended and no page was open.",
+    update: "It is restarting to install its update.",
   };
+
+  // An "Update now" of the Companion (NEW_368): the process stops, its files
+  // are replaced and the new version starts on the same address. This page
+  // waits for it and reloads — the new process has a new token — and gives
+  // up after two minutes, saying where things stand.
+  const UPDATE_WAIT_MS = 120000;
+  function awaitUpdate() {
+    if (stopped) return;
+    stopped = true;
+    for (const modal of document.querySelectorAll(".auth-modal")) {
+      if (modal.id !== "stopped-modal") modal.hidden = true;
+    }
+    $("stopped-heading").textContent = t("Auto-Pigeon Companion is updating");
+    $("stopped-text").textContent = t("It is restarting to install its update. This page reloads when it is back.");
+    $("stopped-hint").hidden = true;
+    $("stopped-modal").hidden = false;
+    document.title = t("Updating — Auto-Pigeon Companion");
+    try { window.sessionStorage.setItem("aucom:self-update", String(Date.now())); } catch { /* storage refused */ }
+    const started = Date.now();
+    let gone = false;
+    const probe = async () => {
+      try {
+        const response = await fetch("/api/status", { headers: { "X-AUCOM-Token": "" }, cache: "no-store" });
+        // An answer before the old process was seen gone may be the old
+        // process itself, still closing.
+        if (response.status > 0 && (gone || Date.now() - started > 8000)) {
+          window.location.reload();
+          return;
+        }
+      } catch {
+        gone = true;
+      }
+      if (Date.now() - started > UPDATE_WAIT_MS) {
+        $("stopped-heading").textContent = t("Auto-Pigeon Companion has stopped");
+        $("stopped-text").textContent = t("It did not come back after its update. Start it again: if the new version did not start, the previous one was put back.");
+        $("stopped-hint").hidden = false;
+        document.title = t("Stopped — Auto-Pigeon Companion");
+        return;
+      }
+      window.setTimeout(probe, 1000);
+    };
+    window.setTimeout(probe, 1500);
+  }
 
   function showStopped(cause) {
     if (stopped) return;
@@ -85,6 +129,10 @@
     });
     ws.addEventListener("close", () => {
       if (socket === ws) socket = null;
+      if (stoppingCause === "update") {
+        awaitUpdate();
+        return;
+      }
       if (stoppingCause) {
         showStopped(stoppingCause);
         return;

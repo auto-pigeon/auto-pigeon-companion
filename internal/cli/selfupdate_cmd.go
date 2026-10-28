@@ -1,0 +1,351 @@
+package cli
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net"
+	"net/http"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strconv"
+	"sync"
+	"time"
+
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/lockfile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/managedtools"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/release"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/selfupdate"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/web"
+)
+
+// `companion selfupdate` — the Companion's own bundle (NEW_368). Offering,
+// choosing and staging an update are `companion tools … companion`, the same
+// coordinator as the toolchains'; this command is what is specific to
+// replacing the program that is running: what kind of installation this is,
+// how the last replacement ended, and the proving start a candidate runs
+// before it is put in place and again after.
+
+const selfUpdateUsage = `usage:
+  companion selfupdate status [--json]       this installation, and how its last update ended
+  companion selfupdate prove --expect-version <v>
+                                              the proving start a new version runs before it replaces this one
+
+Offers, "Update now", "Update when I close Companion" and Cancel are
+` + "`companion tools status|update|skip|cancel-pending companion`" + `.
+`
+
+// SelfUpdateLogName is the compact local log of every replacement.
+const SelfUpdateLogName = "self-update.log"
+
+func runSelfUpdate(env *Env, args []string) int {
+	if len(args) == 0 {
+		fmt.Fprint(env.Stderr, selfUpdateUsage)
+		return 2
+	}
+	switch args[0] {
+	case "-h", "--help", "help":
+		fmt.Fprint(env.Stdout, selfUpdateUsage)
+		return 0
+	case "status":
+		return selfUpdateStatus(env, args[1:])
+	case "prove":
+		return selfUpdateProve(env, args[1:])
+	}
+	fmt.Fprintf(env.Stderr, "error: unknown selfupdate subcommand %q\n\n%s", args[0], selfUpdateUsage)
+	return 2
+}
+
+// inspectSelf is this process's bundle.
+func inspectSelf(env *Env) managedtools.SelfInstall {
+	executable, err := os.Executable()
+	if err != nil {
+		return managedtools.SelfInstall{Version: env.Version, Mode: managedtools.SelfDevelopment, Reason: err.Error()}
+	}
+	return managedtools.InspectSelf(executable, env.Version, release.ReadBuild().Commit, runtime.GOOS, runtime.GOARCH)
+}
+
+func selfUpdateStatus(env *Env, args []string) int {
+	set := newFlagSet(env, "selfupdate status")
+	asJSON := set.Bool("json", false, "print the answer as JSON")
+	if _, code, ok := parseFlags(env, set, args); !ok {
+		return code
+	}
+	self := inspectSelf(env)
+	journal, journalErr := selfupdate.Read(self.Root)
+	if *asJSON {
+		answer := map[string]any{"installation": self, "last": journal}
+		if journalErr != nil {
+			answer["last_error"] = journalErr.Error()
+		}
+		return printJSON(env, answer)
+	}
+	fmt.Fprintf(env.Stdout, "Auto-Pigeon Companion %s (%s), %s\n", self.Version, self.Platform, self.Root)
+	switch self.Mode {
+	case managedtools.SelfPortable:
+		fmt.Fprintln(env.Stdout, "  updated automatically when you choose an update: its own files are replaced, nothing else in the folder")
+	case managedtools.SelfManual:
+		fmt.Fprintf(env.Stdout, "  updates are downloaded and verified, and you put them in place: %s\n", self.Reason)
+	default:
+		fmt.Fprintf(env.Stdout, "  not updated automatically: %s\n", self.Reason)
+	}
+	if self.ExtractorVersion != "" {
+		fmt.Fprintf(env.Stdout, "  bundled extractor %s\n", self.ExtractorVersion)
+	}
+	switch {
+	case journalErr != nil:
+		fmt.Fprintf(env.Stdout, "  last update: unreadable (%v)\n", journalErr)
+	case journal != nil:
+		fmt.Fprintf(env.Stdout, "  last update: %s -> %s, %s %s", journal.From, journal.To, journal.State, journal.Updated.Local().Format(time.RFC3339))
+		if journal.Detail != "" {
+			fmt.Fprintf(env.Stdout, " — %s", journal.Detail)
+		}
+		fmt.Fprintln(env.Stdout)
+	}
+	return 0
+}
+
+// selfUpdateProve is a candidate's proving start. It runs from the
+// candidate's own folder, so the extractor it resolves and hands a protocol
+// check is the one beside it, verified against the bundle manifest beside
+// it; it reads this user's configuration without writing it, and serves one
+// request on a loopback port of its own. It starts no job, writes no token
+// and registers nothing.
+func selfUpdateProve(env *Env, args []string) int {
+	set := newFlagSet(env, "selfupdate prove")
+	expect := set.String("expect-version", "", "the version this program must say it is")
+	if _, code, ok := parseFlags(env, set, args); !ok {
+		return code
+	}
+	result := web.ProveResult{Version: env.Version, Commit: release.ReadBuild().Commit}
+	finish := func(err error) int {
+		if err != nil {
+			result.Error = err.Error()
+		}
+		encoded, _ := json.Marshal(result)
+		fmt.Fprintln(env.Stdout, string(encoded))
+		if err != nil {
+			return 1
+		}
+		return 0
+	}
+	if *expect == "" || *expect != env.Version {
+		return finish(fmt.Errorf("this program is version %s, not %s", env.Version, *expect))
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+	runner, err := extractorResolver().Resolve(ctx)
+	if err != nil {
+		return finish(fmt.Errorf("its extractor: %w", err))
+	}
+	provenance := runner.Provenance()
+	result.ExtractorVersion, result.ExtractorVerified = provenance.Version, provenance.Verified
+	if !provenance.Verified {
+		return finish(errors.New("its extractor is not the one its bundle manifest lists"))
+	}
+	if _, err := loadSettings(env); err != nil {
+		return finish(fmt.Errorf("it cannot read this configuration: %w", err))
+	}
+	result.ConfigRead = true
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return finish(fmt.Errorf("it cannot listen on loopback: %w", err))
+	}
+	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ready"))
+	}), ReadHeaderTimeout: 5 * time.Second}
+	go func() { _ = server.Serve(listener) }()
+	defer server.Close()
+	response, err := (&http.Client{Timeout: 10 * time.Second}).Get("http://" + listener.Addr().String() + "/")
+	if err != nil {
+		return finish(fmt.Errorf("it did not answer on loopback: %w", err))
+	}
+	response.Body.Close()
+	result.Served = response.StatusCode == http.StatusOK
+	if !result.Served {
+		return finish(fmt.Errorf("it answered HTTP %d on loopback", response.StatusCode))
+	}
+	return finish(nil)
+}
+
+// selfUpdateLog is the compact log of replacements, beside config.json.
+type selfUpdateLog struct {
+	mu   sync.Mutex
+	path string
+}
+
+func (l *selfUpdateLog) logf(format string, args ...any) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+	if info, err := file.Stat(); err == nil && info.Size() > 256<<10 {
+		return
+	}
+	fmt.Fprintf(file, "%s %s\n", time.Now().Format(time.RFC3339), fmt.Sprintf(format, args...))
+}
+
+// recoverSelfAtStart looks at the last replacement as this Companion
+// starts. It returns a function to call once the process serves, which
+// confirms a replacement this process is the new side of.
+func recoverSelfAtStart(self managedtools.SelfInstall, log *selfUpdateLog, record func(managedtools.SelfResult)) func() {
+	if self.Mode == managedtools.SelfDevelopment {
+		return func() {}
+	}
+	sha, err := managedtools.FileSHA256(self.Executable)
+	if err != nil {
+		return func() {}
+	}
+	journal, outcome, err := selfupdate.Recover(self.Root, sha, log.logf)
+	if err != nil {
+		log.logf("start: the last update's journal: %v", err)
+	}
+	switch outcome {
+	case selfupdate.RolledBack:
+		record(managedtools.SelfResult{From: journal.From, To: journal.To, Outcome: "rolled_back", Detail: journal.Detail, At: time.Now().UTC()})
+		log.logf("start: %s -> %s rolled back: %s", journal.From, journal.To, journal.Detail)
+	case selfupdate.Pending:
+		return func() {
+			if confirmed, err := selfupdate.MarkVerified(self.Root, sha); err != nil {
+				log.logf("start: confirming %s: %v", self.Version, err)
+			} else {
+				log.logf("start: %s started from %s and serves; the update from %s is complete", self.Version, self.Root, confirmed.From)
+				record(managedtools.SelfResult{From: confirmed.From, To: confirmed.To, Outcome: "updated", At: time.Now().UTC()})
+			}
+		}
+	}
+	return func() {}
+}
+
+// relaunchArguments is how the new Companion is started after "Update now":
+// the launch mode this process had, its developer switch, and the port the
+// open pages are on — nothing else of this process's own arguments, and
+// never --open: the pages that are open come back by themselves.
+func relaunchArguments(interactive, stayRunning, debug bool, port int) []string {
+	args := []string{"serve", "--managed-tools", "on"}
+	switch {
+	case interactive:
+		args = append(args, "--interactive")
+	case stayRunning:
+		args = append(args, "--stay-running")
+	}
+	if debug {
+		args = append(args, "--debug")
+	}
+	if port > 0 {
+		args = append(args, "--port", strconv.Itoa(port))
+	}
+	return args
+}
+
+// relaunchWait bounds how long the old Companion waits for the new one to
+// start and serve before it puts itself back.
+const relaunchWait = 90 * time.Second
+
+// replaceSelf puts a staged bundle where this one is, as this process
+// ends. relaunch is "Update now": start the new one and, if it does not
+// serve, put the old one back and start that instead. It returns what to do
+// once every deferred close of the serve has run — starting a process
+// before then would let this one's exit remove the new one's token.
+func replaceSelf(self managedtools.SelfInstall, staged managedtools.InstallRecord, toolsRoot, configDir string,
+	relaunch []string, log *selfUpdateLog, record func(managedtools.SelfResult)) func() {
+	_, companion := managedtools.BundleLayout(self.Platform)
+	// The start lock: a protocol link clicked now waits for the files to be
+	// in place instead of starting a Companion halfway through.
+	lock, err := lockfile.Acquire(filepath.Join(configDir, StartLockName), lockfile.Options{
+		Timeout: 20 * time.Second, Program: "companion " + self.Version + " (installing its update)"})
+	if err != nil {
+		log.logf("exit: %s -> %s not installed: another Companion is starting (%v); it stays chosen", self.Version, staged.Version, err)
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	log.logf("exit: replacing %s with %s in %s (staged %s)", self.Version, staged.Version, self.Root, staged.Dir)
+	journal, err := selfupdate.Apply(ctx, selfupdate.Request{
+		Root: self.Root, Companion: companion, From: self.Version, Current: self.Members,
+		To: staged.Version, Staged: staged.Dir, StagedRoot: toolsRoot, Members: staged.Members,
+		Prove: func(ctx context.Context, exe string) error {
+			_, err := web.Prove(ctx, exe, staged.Version)
+			return err
+		},
+		Logf: log.logf,
+	})
+	_ = lock.Release()
+	if err != nil {
+		outcome := "failed"
+		if errors.Is(err, selfupdate.ErrRolledBack) {
+			outcome = "rolled_back"
+		}
+		log.logf("exit: %s -> %s %s: %v", self.Version, staged.Version, outcome, err)
+		record(managedtools.SelfResult{From: self.Version, To: staged.Version, Outcome: outcome, Detail: err.Error(), At: time.Now().UTC()})
+		if relaunch == nil {
+			return nil
+		}
+		// "Update now" that did not happen still restarts: the person asked
+		// for the Companion back, not for it to stay closed.
+		return func() { startCompanion(self.Executable, relaunch, log) }
+	}
+	record(managedtools.SelfResult{From: self.Version, To: staged.Version, Outcome: "activated",
+		Detail: "in place and proved; confirmed when it next starts", At: time.Now().UTC()})
+	log.logf("exit: %s in place (%d files); the previous files are in %s", staged.Version, len(journal.Steps),
+		filepath.Join(self.Root, selfupdate.DirName, "previous"))
+	if relaunch == nil {
+		return nil
+	}
+	exe := filepath.Join(self.Root, filepath.FromSlash(companion))
+	return func() {
+		command, err := selfupdate.Start(exe, relaunch)
+		if err != nil {
+			log.logf("restart: %s did not start (%v); putting %s back", staged.Version, err, self.Version)
+			rollbackAndRestart(self, exe, relaunch, err.Error(), log, record)
+			return
+		}
+		exited := make(chan struct{})
+		go func() { _ = command.Wait(); close(exited) }()
+		waitCtx, stop := context.WithTimeout(context.Background(), relaunchWait)
+		defer stop()
+		if selfupdate.WaitVerified(waitCtx, self.Root, exited) {
+			log.logf("restart: %s (pid %d) serves; this process ends", staged.Version, command.Process.Pid)
+			return
+		}
+		detail := fmt.Sprintf("version %s did not start and serve within %s", staged.Version, relaunchWait)
+		select {
+		case <-exited:
+			detail = fmt.Sprintf("version %s exited without serving (%v)", staged.Version, command.ProcessState)
+		default:
+			// By the handle this process holds — never a PID looked up later.
+			_ = command.Process.Kill()
+			<-exited
+		}
+		log.logf("restart: %s; putting %s back", detail, self.Version)
+		rollbackAndRestart(self, exe, relaunch, detail, log, record)
+	}
+}
+
+func rollbackAndRestart(self managedtools.SelfInstall, exe string, relaunch []string, detail string,
+	log *selfUpdateLog, record func(managedtools.SelfResult)) {
+	journal, err := selfupdate.Rollback(self.Root, detail)
+	to := ""
+	if journal != nil {
+		to = journal.To
+	}
+	if err != nil {
+		log.logf("restart: rolling back: %v", err)
+	}
+	record(managedtools.SelfResult{From: self.Version, To: to, Outcome: "rolled_back", Detail: detail, At: time.Now().UTC()})
+	startCompanion(exe, relaunch, log)
+}
+
+func startCompanion(exe string, args []string, log *selfUpdateLog) {
+	if command, err := selfupdate.Start(exe, args); err != nil {
+		log.logf("restart: %s did not start: %v", exe, err)
+	} else {
+		log.logf("restart: started %s (pid %d)", exe, command.Process.Pid)
+		_ = command.Process.Release()
+	}
+}

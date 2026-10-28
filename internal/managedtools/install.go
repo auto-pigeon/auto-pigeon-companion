@@ -59,6 +59,11 @@ type InstallRecord struct {
 	Source      string    `json:"corresponding_source"`
 	Licenses    string    `json:"licenses"`
 	CompletedAt time.Time `json:"completed_at"`
+	// Members is a Companion bundle's every file with its digest, relative
+	// to Dir: what replacing the running bundle copies and checks again.
+	Members       []BundleMember `json:"members,omitempty"`
+	Sidecar       *Sidecar       `json:"sidecar,omitempty"`
+	PlatformState string         `json:"platform_state,omitempty"`
 }
 
 // Ref is the record's index entry.
@@ -184,21 +189,42 @@ func (in installer) install(ctx context.Context, tool Tool, candidate Candidate,
 	if err := os.Mkdir(unpacked, 0o755); err != nil {
 		return InstallRecord{}, err
 	}
-	manifest, err := extract(archivePath, unpacked, tool, candidate, in.limits)
-	if err != nil {
-		return InstallRecord{}, err
-	}
 	programs := map[string]string{}
-	for _, program := range tool.Programs {
-		name := filepath.Base(program)
-		inStaging := programPath(unpacked, program, candidate.Target)
-		if err := checkProgram(inStaging, candidate.Target); err != nil {
+	var members []BundleMember
+	commit, licenses := "", filepath.Join(final, "licenses")
+	if tool.Kind == KindApplication {
+		bundle, err := unpackBundle(archivePath, unpacked, candidate, in.limits)
+		if err != nil {
 			return InstallRecord{}, err
 		}
-		if err := checkArchitecture(inStaging, candidate.Target); err != nil {
+		for name, relative := range bundle.programs {
+			inStaging := filepath.Join(unpacked, filepath.FromSlash(relative))
+			if err := checkProgram(inStaging, candidate.Target); err != nil {
+				return InstallRecord{}, err
+			}
+			if err := checkArchitecture(inStaging, candidate.Target); err != nil {
+				return InstallRecord{}, err
+			}
+			programs[name] = filepath.Join(final, filepath.FromSlash(relative))
+		}
+		members, licenses = bundle.members, ""
+	} else {
+		manifest, err := extract(archivePath, unpacked, tool, candidate, in.limits)
+		if err != nil {
 			return InstallRecord{}, err
 		}
-		programs[name] = programPath(final, program, candidate.Target)
+		commit = manifest.Commit
+		for _, program := range tool.Programs {
+			name := filepath.Base(program)
+			inStaging := programPath(unpacked, program, candidate.Target)
+			if err := checkProgram(inStaging, candidate.Target); err != nil {
+				return InstallRecord{}, err
+			}
+			if err := checkArchitecture(inStaging, candidate.Target); err != nil {
+				return InstallRecord{}, err
+			}
+			programs[name] = programPath(final, program, candidate.Target)
+		}
 	}
 	record := InstallRecord{
 		Schema:         InstallSchema,
@@ -207,7 +233,7 @@ func (in installer) install(ctx context.Context, tool Tool, candidate Candidate,
 		Tag:            candidate.Tag,
 		Version:        candidate.Version,
 		Banner:         candidate.Banner,
-		Commit:         firstNonEmpty(candidate.Commit, manifest.Commit),
+		Commit:         firstNonEmpty(candidate.Commit, commit),
 		ReleaseID:      candidate.ReleaseID,
 		NotesURL:       candidate.NotesURL,
 		Prerelease:     candidate.Prerelease,
@@ -225,8 +251,11 @@ func (in installer) install(ctx context.Context, tool Tool, candidate Candidate,
 		Dir:            final,
 		Programs:       programs,
 		Source:         "https://github.com/" + tool.Owner + "/" + tool.Repo + "/tree/" + candidate.Tag,
-		Licenses:       filepath.Join(final, "licenses"),
+		Licenses:       licenses,
 		CompletedAt:    time.Now().UTC(),
+		Members:        members,
+		Sidecar:        candidate.Sidecar,
+		PlatformState:  candidate.PlatformState,
 	}
 	encoded, err := json.MarshalIndent(record, "", "  ")
 	if err != nil {

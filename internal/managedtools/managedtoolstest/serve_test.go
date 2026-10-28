@@ -20,6 +20,7 @@ import (
 // stop.txt appears or after AUCOM_FIXTURE_RELEASES_MINUTES (default 60).
 //
 //	POST /control/publish?tool=ericw-tools&version=1.4540[&prints=1.4539]
+//	POST /control/publish-companion?version=1.901&companion=<file>&extractor=<file>&extractor_version=1.245
 //	POST /control/hold     archive downloads wait until /control/release
 //	POST /control/release
 func TestServeFixtureReleasesForALiveTask(t *testing.T) {
@@ -40,6 +41,24 @@ func TestServeFixtureReleasesForALiveTask(t *testing.T) {
 	control.HandleFunc("POST /control/publish", func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query()
 		publish(query.Get("tool"), query.Get("version"), query.Get("prints"))
+	})
+	// A Companion release built from real programs on disk (NEW_368): the
+	// archive and both manifests in the release's own formats.
+	control.HandleFunc("POST /control/publish-companion", func(w http.ResponseWriter, r *http.Request) {
+		query := r.URL.Query()
+		companion, err := os.ReadFile(query.Get("companion"))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		extractor, err := os.ReadFile(query.Get("extractor"))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		server.Publish(mt.CompanionRepo, mt.BuildCompanion(t, mt.CompanionSpec{Version: query.Get("version"), Prerelease: true,
+			Companion: companion, Extractor: extractor, ExtractorVersion: query.Get("extractor_version")}))
+		t.Logf("published companion %s (%s, %d bytes)", query.Get("version"), query.Get("companion"), len(companion))
 	})
 	var hold chan struct{}
 	control.HandleFunc("POST /control/hold", func(w http.ResponseWriter, r *http.Request) {

@@ -19,6 +19,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -405,6 +406,10 @@ func Zip(t testing.TB, root string, entries map[string][]byte, inner []byte) []b
 	for _, n := range names {
 		mode := os.FileMode(0o644)
 		if strings.HasPrefix(n, "bin/") && !strings.Contains(n, ".so") {
+			mode = 0o755
+		}
+		// A Companion bundle's two programs, as the release archives carry them.
+		if base := path.Base(n); base == "companion" || base == "companion.exe" || strings.HasPrefix(base, "auto-pigeon-extractor") {
 			mode = 0o755
 		}
 		if strings.HasPrefix(n, "@link:") {

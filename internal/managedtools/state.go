@@ -119,6 +119,8 @@ type ToolState struct {
 	Dismissed *Dismissal      `json:"dismissed,omitempty"`
 	Integrity *IntegrityEvent `json:"integrity,omitempty"`
 	Failure   *SetupFailure   `json:"failure,omitempty"`
+	// SelfLast is the Companion's last replacement of its own bundle.
+	SelfLast *SelfResult `json:"self_last,omitempty"`
 }
 
 func newState() *State { return &State{Schema: StateSchema, Tools: map[ToolID]*ToolState{}} }
