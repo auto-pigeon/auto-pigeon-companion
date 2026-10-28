@@ -597,7 +597,17 @@ func (m *Manager) installVerified(ctx context.Context, tool Tool, candidate Cand
 	}
 	if (tool.Kind == KindApplication && m.opts.SelfHost != nil) || (tool.Kind != KindApplication && m.opts.Host != nil) {
 		m.setLive(tool.ID, func(l *liveState) { l.Phase = "verifying" })
-		if err := verify(ctx, tool, record); err != nil {
+		err := verify(ctx, tool, record)
+		// A program written a moment ago can be "busy" to exec while a
+		// process this one forked meanwhile still holds the descriptor it
+		// was written through (Linux ETXTBSY; Go issue 22315). Seen in CI
+		// with parallel installs. A short wait clears it; anything else is a
+		// real failure.
+		for attempt := 0; err != nil && attempt < 5 && strings.Contains(err.Error(), "text file busy"); attempt++ {
+			time.Sleep(time.Duration(100*(attempt+1)) * time.Millisecond)
+			err = verify(ctx, tool, record)
+		}
+		if err != nil {
 			if !m.referenced(tool, record.Dir) {
 				_ = os.RemoveAll(record.Dir)
 			}
