@@ -2,6 +2,7 @@ package playrun
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -206,6 +207,9 @@ type Live struct {
 type liveRun struct {
 	cancel context.CancelFunc
 	label  string
+	// key is the request's identity (requestKey): two live runs never share
+	// one (NEW_365).
+	key string
 }
 
 // LiveRun is one run this process is executing, as the lifecycle names it.
@@ -221,6 +225,24 @@ func (l *Live) add(id, label string, cancel context.CancelFunc) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.running[id] = liveRun{cancel: cancel, label: label}
+}
+
+// claim registers a run unless one with the same request is live already, in
+// one step under the registry's lock: two presses, two tabs or a press and a
+// retry asking for the same build at once start it once. It returns the live
+// run's id when there is one.
+func (l *Live) claim(id, label, key string, cancel context.CancelFunc) (string, bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if key != "" {
+		for other, run := range l.running {
+			if run.key == key {
+				return other, false
+			}
+		}
+	}
+	l.running[id] = liveRun{cancel: cancel, label: label, key: key}
+	return id, true
 }
 
 func (l *Live) remove(id string) {
@@ -355,7 +377,15 @@ func (s *Service) start(request Request, retryOf string) (*Record, error) {
 		CreatedAt:     now,
 		RetryOf:       retryOf,
 	}
+	// Not the request's context: the sequence must survive the response.
+	ctx, cancel := context.WithCancel(context.Background())
+	if running, claimed := s.live.claim(id, "Build & Run "+request.MapName, requestKey(request), cancel); !claimed {
+		cancel()
+		return nil, &AlreadyRunningError{RunID: running}
+	}
 	if err = s.store.Save(record); err != nil {
+		s.live.remove(id)
+		cancel()
 		return nil, err
 	}
 
@@ -366,10 +396,6 @@ func (s *Service) start(request Request, retryOf string) (*Record, error) {
 	// being durable.
 	snapshot := *record
 
-	// Not the request's context: the sequence must survive the response.
-	ctx, cancel := context.WithCancel(context.Background())
-	s.live.add(id, "Build & Run "+request.MapName, cancel)
-
 	go func() {
 		defer cancel()
 		defer s.live.remove(id)
@@ -377,6 +403,32 @@ func (s *Service) start(request Request, retryOf string) (*Record, error) {
 	}()
 
 	return &snapshot, nil
+}
+
+// ErrAlreadyRunning: the same build — the same map revision, build profile,
+// options and, for Build & Run, the same engine and game folder — is running
+// in this Companion now. Server-side, so no page, tab or double press can
+// start it twice (NEW_365).
+var ErrAlreadyRunning = errors.New("playrun: this exact build is already running")
+
+// AlreadyRunningError names the run that is.
+type AlreadyRunningError struct{ RunID string }
+
+func (e *AlreadyRunningError) Error() string {
+	return ErrAlreadyRunning.Error() + " (run " + e.RunID + ")"
+}
+
+func (e *AlreadyRunningError) Unwrap() error { return ErrAlreadyRunning }
+
+// requestKey is what makes two requests the same build: everything in the
+// request but its human label and what triggered it.
+func requestKey(request Request) string {
+	request.Label, request.Trigger = "", ""
+	raw, err := json.Marshal(request)
+	if err != nil {
+		return ""
+	}
+	return string(raw)
 }
 
 // Get reads one run.

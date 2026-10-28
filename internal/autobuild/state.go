@@ -83,6 +83,10 @@ type Attempt struct {
 	FinishedAt time.Time `json:"finished_at,omitempty"`
 	State      string    `json:"state,omitempty"`
 	Error      string    `json:"error,omitempty"`
+	// Backend is the Auto-Pigeon server the revision is on, when the service
+	// was told (Deps.Backend): a hand build is a duplicate of this attempt
+	// only on the same server (NEW_365). Empty in older files.
+	Backend string `json:"backend,omitempty"`
 	// Submitter names the Service instance that wrote this attempt down, so
 	// a submission still being started is not mistaken for one a crash
 	// interrupted (NEW_265A). Empty in files written before it existed.
@@ -173,6 +177,19 @@ func (e *Entry) builtByHand(revisionID string) bool {
 		}
 	}
 	return false
+}
+
+func (e *Entry) forgetByHand(revisionID string) {
+	kept := e.ByHand[:0]
+	for _, seen := range e.ByHand {
+		if seen != revisionID {
+			kept = append(kept, seen)
+		}
+	}
+	e.ByHand = kept
+	if len(e.ByHand) == 0 {
+		e.ByHand = nil
+	}
 }
 
 func (e *Entry) rememberByHand(revisionID string) {

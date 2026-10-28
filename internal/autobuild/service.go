@@ -73,8 +73,12 @@ type Deps struct {
 	// The same readiness decision the manual Build & Run uses (NEW_363,
 	// NEW_360 F1). Optional: without it every profile is taken as ready.
 	Ready func(pipelineID string) error
-	Now   func() time.Time
-	Logf     func(format string, args ...any)
+	// Backend is the Auto-Pigeon server builds are fetched from now, recorded
+	// on an automatic attempt so a hand build is compared with it on the same
+	// server only. Optional.
+	Backend func() string
+	Now     func() time.Time
+	Logf    func(format string, args ...any)
 }
 
 // Service is the auto-build of every map on this machine. One per process:
@@ -547,7 +551,7 @@ func (s *Service) submit(assetID string, manual bool, pick func(*Entry) (Revisio
 		entry.remember(revision.Key())
 		entry.Running = &Attempt{
 			Revision: revision, Pipeline: entry.PipelineID, Manual: manual,
-			StartedAt: s.deps.Now(), Submitter: s.instance,
+			StartedAt: s.deps.Now(), Submitter: s.instance, Backend: s.backend(),
 		}
 		if entry.Pending != nil && entry.Pending.Number <= revision.Number {
 			entry.Pending = nil
@@ -593,6 +597,114 @@ func (s *Service) ready(assetID string) error {
 		return fmt.Errorf("%w: %v", ErrNotReady, why)
 	}
 	return nil
+}
+
+func (s *Service) backend() string {
+	if s.deps.Backend == nil {
+		return ""
+	}
+	return s.deps.Backend()
+}
+
+// ManualBuild is a build a person asked for by hand: Build, or Build & Run.
+type ManualBuild struct {
+	AssetID    string
+	RevisionID string
+	PipelineID string
+	Backend    string
+}
+
+// AdmitManual admits a build by hand against Auto-build in one step
+// (NEW_365). Before it, Build & Run asked whether an automatic build of the
+// revision was running, started its own, and only then wrote the revision
+// down as built by hand — so a poller pass between the question and the note
+// could start the same build, and the note's refusal was only logged.
+//
+// Now the question and the reservation are one read-change-write under the
+// state file's lock, the same lock the poller's submit writes Running under,
+// so exactly one of them wins:
+//
+//   - an automatic build of this revision with this build profile on this
+//     server already running: refused with [ErrSameRevisionRunning], and
+//     start is never called;
+//   - otherwise the revision is written down as built by hand — the poller's
+//     owedBuild then never picks it — and start is called with no lock held.
+//
+// If start fails, the reservation is released: the revision is forgotten as
+// built by hand (unless it already was) and a pending build of it is owed
+// again, so a refused or failed submission never suppresses a revision for
+// good. A map with no auto-build is not given one; start is simply called.
+func (s *Service) AdmitManual(build ManualBuild, start func() error) error {
+	if build.AssetID == "" || build.RevisionID == "" {
+		return start()
+	}
+	var hadByHand bool
+	var cleared *Revision
+	reserved := false
+	_, err := Update(s.path, func(state *State) error {
+		entry, found := state.Find(build.AssetID)
+		if !found {
+			return errUnchanged
+		}
+		if running := entry.Running; running != nil && running.Revision.ID == build.RevisionID &&
+			(running.Pipeline == "" || build.PipelineID == "" || running.Pipeline == build.PipelineID) &&
+			(running.Backend == "" || build.Backend == "" || sameBackend(running.Backend, build.Backend)) &&
+			s.stillRunning(running) {
+			return ErrSameRevisionRunning
+		}
+		hadByHand = entry.builtByHand(build.RevisionID)
+		entry.rememberByHand(build.RevisionID)
+		if entry.Pending != nil && entry.Pending.ID == build.RevisionID {
+			pending := *entry.Pending
+			cleared = &pending
+			entry.Pending = nil
+		}
+		reserved = true
+		return nil
+	})
+	if err != nil && !errors.Is(err, errUnchanged) {
+		return err
+	}
+	startErr := start()
+	if startErr == nil || !reserved {
+		return startErr
+	}
+	_, releaseErr := Update(s.path, func(state *State) error {
+		entry, found := state.Find(build.AssetID)
+		if !found {
+			return errUnchanged
+		}
+		if !hadByHand {
+			entry.forgetByHand(build.RevisionID)
+		}
+		if cleared != nil && entry.Pending == nil && !entry.submitted(cleared.Key()) {
+			entry.Pending = cleared
+		}
+		return nil
+	})
+	if releaseErr != nil && !errors.Is(releaseErr, errUnchanged) {
+		s.deps.Logf("autobuild %s: releasing the hand build of %s after it failed to start: %v",
+			build.AssetID, build.RevisionID, releaseErr)
+	}
+	return startErr
+}
+
+// stillRunning reports whether an automatic attempt is still building: one
+// being submitted has no run yet, and one whose run has ended but which the
+// poller has not finished yet is over, and duplicates nothing.
+func (s *Service) stillRunning(attempt *Attempt) bool {
+	if attempt.RunID == "" || s.deps.RunState == nil {
+		return true
+	}
+	state, _, err := s.deps.RunState(attempt.RunID)
+	if err != nil {
+		return false
+	}
+	return state != RunSucceeded && state != RunFailed && state != RunCancelled
+}
+
+func sameBackend(a, b string) bool {
+	return strings.EqualFold(strings.TrimRight(a, "/"), strings.TrimRight(b, "/"))
 }
 
 // NoteManual records that a person started a build of one exact revision by

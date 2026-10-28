@@ -32,6 +32,8 @@ const buildUsage = `usage:
   companion build preview --pipeline <id> [same flags]     resolve every stage, start nothing
   companion build list    [--limit <n>] [--json]
   companion build show    <build-id> [--json]
+  companion build latest  --map <asset-id> [--game <family>] [--backend <url>] [--id-only] [--json]
+                                                           the build "Play latest build" plays for a saved map
   companion build pipelines [--json]                       what can be built on this machine
   companion build leak-pipeline --game <game> [--pin <id> | --unpin] [--json]
                                                            which pipeline answers that game's leak test
@@ -52,6 +54,8 @@ func runBuild(env *Env, args []string) int {
 		return buildList(env, rest)
 	case "show":
 		return buildShow(env, rest)
+	case "latest":
+		return buildLatest(env, rest)
 	case "pipelines":
 		return buildPipelines(env, rest)
 	case "leak-pipeline":
@@ -291,6 +295,69 @@ func buildList(env *Env, args []string) int {
 	for _, m := range manifests {
 		fmt.Fprintf(env.Stdout, "%-26s %-10s %-32s %6dms  %s\n",
 			m.BuildID, m.State, m.Pipeline.ID, m.DurationMS, m.Label)
+	}
+	return 0
+}
+
+// buildLatest is the page's "Play latest build" choice on the command line
+// (NEW_365): the same owner, build.Latest, over the same store. It plays
+// nothing; `companion engine stage --build <id>` stages what it names.
+func buildLatest(env *Env, args []string) int {
+	set := newFlagSet(env, "build latest")
+	mapID := set.String("map", "", "the saved map's asset id")
+	family := set.String("game", "", "only builds for this game family (quake1, quake2, quake3)")
+	backend := set.String("backend", "", "the Auto-Pigeon server the map is on (default: the configured one)")
+	idOnly := set.Bool("id-only", false, "print only the build id, and fail when there is none to play")
+	asJSON := set.Bool("json", false, "print the selection as JSON")
+	if _, code, ok := parseFlags(env, set, args); !ok {
+		return code
+	}
+	if *mapID == "" {
+		fmt.Fprintln(env.Stderr, "error: build latest needs --map <asset-id>")
+		return 2
+	}
+	settings, err := loadSettings(env)
+	if err != nil {
+		return fail(env, err)
+	}
+	address := *backend
+	if address == "" {
+		if address, err = settings.AUB(); err != nil {
+			return fail(env, err)
+		}
+	}
+	dir, err := buildsDir(env, settings)
+	if err != nil {
+		return fail(env, err)
+	}
+	manifests, err := build.List(dir)
+	if err != nil {
+		return fail(env, err)
+	}
+	selection := build.Latest(manifests, build.MapIdentity{Backend: address, AssetType: "map", AssetID: *mapID}, *family, settingsLeakPipelines(settings))
+	switch {
+	case *asJSON:
+		if code := printJSON(env, selection); code != 0 {
+			return code
+		}
+	case *idOnly:
+		if selection.State == build.LatestPlayable {
+			fmt.Fprintln(env.Stdout, selection.BuildID)
+		}
+	case selection.State == build.LatestPlayable:
+		fmt.Fprintf(env.Stdout, "%s  revision %d  %s  %s  finished %s\n", selection.BuildID, selection.Revision,
+			selection.Family, selection.Pipeline, selection.FinishedAt.Format(time.RFC3339))
+		if selection.NewerLeakTest > 0 {
+			fmt.Fprintf(env.Stdout, "a leak test of revision %d is newer; it is a diagnostic and is not what plays\n", selection.NewerLeakTest)
+		}
+	default:
+		fmt.Fprintln(env.Stdout, selection.Reason)
+		if selection.BuildID != "" {
+			fmt.Fprintf(env.Stdout, "latest normal build: %s\n", selection.BuildID)
+		}
+	}
+	if selection.State != build.LatestPlayable {
+		return 1
 	}
 	return 0
 }
@@ -847,4 +914,18 @@ func buildLeakPipeline(env *Env, args []string) int {
 		fmt.Fprintf(env.Stdout, "  %s %s  %s  (runs %s)\n", mark, c.ID, c.Name, strings.Join(c.Steps, ", "))
 	}
 	return 0
+}
+
+// settingsLeakPipelines is [web.Server.isLeakPipeline] for the command line:
+// the pipelines pinned as a game's leak test on this machine. The built-in
+// ones are known to build.Diagnostic itself.
+func settingsLeakPipelines(settings config.Config) func(string) bool {
+	return func(id string) bool {
+		for _, pinned := range settings.LeakTestPipelines {
+			if pinned == id {
+				return true
+			}
+		}
+		return false
+	}
 }

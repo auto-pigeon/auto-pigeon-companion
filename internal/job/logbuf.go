@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"time"
 )
 
 // Bounded capture, and why the bound is on storage rather than on reading.
@@ -73,6 +74,10 @@ type capture struct {
 	total   int64
 	lines   int64
 	dropped int64
+	// last is when the program last wrote to this stream, under mu: what
+	// "last output N seconds ago" is read from. Output inactivity only — a
+	// program that is quiet is not thereby stuck.
+	last time.Time
 
 	// partial is the bytes since the last newline, waiting to become a line.
 	partial []byte
@@ -82,6 +87,9 @@ type capture struct {
 	mirror io.Writer
 	// onLine sees each complete line, without its terminator.
 	onLine func(stream string, number int64, line []byte)
+	// progress reads the stream for a percentage the tool printed. Nil for a
+	// capture nobody tracks.
+	progress *progressTracker
 }
 
 func newCapture(stream string, mirror io.Writer, onLine func(string, int64, []byte)) *capture {
@@ -123,9 +131,18 @@ func (c *capture) write(chunk []byte) {
 	}
 	c.mu.Lock()
 	c.total += int64(len(chunk))
+	c.last = time.Now()
 	c.store(chunk)
 	c.mu.Unlock()
 	c.split(chunk)
+	c.progress.feed(c.stream, chunk)
+}
+
+// lastWrite is when the program last wrote to this stream; zero before it did.
+func (c *capture) lastWrite() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.last
 }
 
 // readFrom copies what the program has written from an absolute stream offset,

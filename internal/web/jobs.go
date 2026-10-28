@@ -172,7 +172,13 @@ func (s *Server) handleJobGet(w http.ResponseWriter, r *http.Request) {
 		writeError(w, jobStatus(err), err)
 		return
 	}
-	writeJSON(w, http.StatusOK, found)
+	// The record, and beside it what the executor knows now and the record
+	// does not: last output, the tool's own progress and its CPU and memory
+	// (NEW_365). Every viewer of this job reads the same sampler.
+	writeJSON(w, http.StatusOK, struct {
+		*job.Job
+		Live *job.LiveView `json:"live,omitempty"`
+	}{found, service.Live(found)})
 }
 
 func (s *Server) handleJobCancel(w http.ResponseWriter, r *http.Request) {

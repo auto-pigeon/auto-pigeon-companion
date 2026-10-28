@@ -86,6 +86,8 @@
 
     const { ok, status, body } = await api("/api/v1/library/catalog?" + query.toString());
     list.replaceChildren();
+    latestCards.clear();
+    latestPending.clear();
     if (!ok) {
       // The exact cause, and the thing to do about it. A 401 here means the
       // session, not the password field the user is looking at.
@@ -161,10 +163,80 @@
     // downloads the one chosen — AUP's split button (UI-DESIGN §3).
     const split = olderRevisions(asset, revision, download, status);
 
+    // Play latest build (NEW_365): offered only when this machine has a
+    // normal, verified build of this map — never for a map that only has leak
+    // tests, which are diagnostics. build.Latest on the server decides which.
+    const built = el("p", { className: "map-card__built muted small", attrs: { "aria-live": "polite" } });
+    built.hidden = true;
+    const playLatest = el("button", { text: t("Play latest build"), attrs: { type: "button", class: "secondary" } });
+    playLatest.hidden = true;
+    latestCards.set(asset.asset_id, { built, playLatest, current: revision });
+    queueLatest(asset.asset_id);
+
     return el("li", {
       className: "card map-card",
-      children: [head, saved, textures, status, el("div", { className: "map-card__actions row-actions", children: [split, play] })],
+      children: [head, saved, textures, built, status,
+        el("div", { className: "map-card__actions row-actions", children: [split, playLatest, play] })],
     });
+  }
+
+  // --- the latest playable build of each card's map ---------------------------
+  //
+  // One question for every card drawn in the same moment, and only the latest
+  // answer is applied: a page of maps read again (another account, another
+  // server, a search) drops the cards the old answer was for, and an answer for
+  // a card that is no longer on the page touches nothing (NEW_365 J7).
+  const latestCards = new Map();
+  let latestPending = new Set();
+  let latestTimer = null;
+  let latestSequence = 0;
+  function queueLatest(assetID) {
+    latestPending.add(assetID);
+    clearTimeout(latestTimer);
+    latestTimer = setTimeout(askLatest, 50);
+  }
+  async function askLatest() {
+    const ids = [...latestPending].slice(0, 100);
+    latestPending = new Set([...latestPending].slice(100));
+    if (latestPending.size) latestTimer = setTimeout(askLatest, 50);
+    if (!ids.length) return;
+    const sequence = ++latestSequence;
+    const asked = new Map(ids.map((id) => [id, latestCards.get(id)]));
+    const query = new URLSearchParams();
+    for (const id of ids) query.append("asset_id", id);
+    const { ok, body } = await api("/api/v1/build/latest?" + query.toString());
+    if (!ok) return;
+    for (const selection of body.items || []) {
+      const card = asked.get(selection.map?.asset_id);
+      // A card drawn again since the question is not the card it was asked for.
+      if (!card || latestCards.get(selection.map.asset_id) !== card || !card.built.isConnected) continue;
+      showLatest(card, selection);
+    }
+    void sequence;
+  }
+  function showLatest(card, selection) {
+    const { built, playLatest, current } = card;
+    playLatest.hidden = selection.state !== "playable";
+    built.hidden = false;
+    if (selection.state === "playable") {
+      const behind = current && selection.revision && selection.revision < current.revision;
+      built.textContent = behind
+        ? t("Built from revision {n}; newer changes are not included.", { n: selection.revision })
+        : t("Latest build: revision {n}.", { n: selection.revision });
+      playLatest.onclick = async () => {
+        window.AUCOM.showArea("run");
+        await window.AUCOM.areas.run?.chooseBuild?.(selection.build_id, {
+          revision: selection.revision, family: selection.family, mapID: selection.map.asset_id,
+          current: current?.revision, behind: Boolean(behind),
+        });
+      };
+    } else if (selection.state === "unavailable") {
+      built.textContent = t("The latest build's level is missing or was changed. Build it again to play it.");
+    } else if (selection.leak_tests > 0) {
+      built.textContent = t("No playable build yet: only leak tests.");
+    } else {
+      built.hidden = true;
+    }
   }
 
   // The textures each card shows, asked for a few at a time: a first page is

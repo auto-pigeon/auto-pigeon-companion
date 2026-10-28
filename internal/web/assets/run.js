@@ -299,18 +299,41 @@
     return name || "level";
   }
 
+  // Every finished NORMAL build with a level, for this engine's game (NEW_365):
+  // a leak test is a diagnostic and is never offered as a map to play, and a
+  // build for another game is never offered to this engine. Starting stages it
+  // through the server, which checks the level's bytes against the build's
+  // record (build.VerifyPlayable) before anything is copied.
+  let allBuilds = [];
+  let chosenInfo = null;
+
+  function sourceRevision(manifest) {
+    const input = (manifest.inputs || []).find((item) => item.name === "source_map" && item.source) ||
+      (manifest.inputs || []).find((item) => item.source);
+    return input?.source?.revision || 0;
+  }
+
   async function refreshBuilds() {
-    const select = $("run-build");
-    const previous = select.value;
     const { ok, body } = await api("/api/v1/build/runs?limit=30");
     if (!ok) return;
-    playableBuilds = (body.items || [])
+    allBuilds = (body.items || [])
+      .filter((item) => !item.diagnostic)
       .map((item) => item.manifest)
-      .filter((manifest) => manifest.state === "succeeded" && (manifest.outputs || []).some((output) => output.name === "bsp" && output.path && !output.missing));
+      .filter((manifest) => manifest.state === "succeeded" && !manifest.leak_test &&
+        (manifest.outputs || []).some((output) => output.name === "bsp" && output.path && !output.missing));
+    drawBuilds();
+  }
+
+  function drawBuilds() {
+    const select = $("run-build");
+    const previous = select.value;
+    const family = current()?.engine_family || "";
+    playableBuilds = allBuilds.filter((manifest) => !family || !manifest.engine_family || manifest.engine_family === family);
     select.replaceChildren(el("option", { text: "None — type the map name below", attrs: { value: "" } }));
     for (const manifest of playableBuilds) {
       select.append(el("option", {
-        text: `${manifest.label || manifest.pipeline?.name || "Untitled build"} — ${mapNameFor(manifest)} · ${when(manifest.started_at)}`,
+        text: `${manifest.label || manifest.pipeline?.name || "Untitled build"} — ${mapNameFor(manifest)}` +
+          (sourceRevision(manifest) ? ` · ${t("revision {n}", { n: sourceRevision(manifest) })}` : "") + ` · ${when(manifest.finished_at || manifest.started_at)}`,
         attrs: { value: manifest.build_id },
       }));
     }
@@ -327,7 +350,19 @@
     }
     if (!$("run-mod").value.trim()) $("run-mod").value = "auto-pigeon";
     $("run-map").value = mapNameFor(manifest);
-    note.textContent = `Start copies this build's level into your game directory as ${$("run-mod").value.trim()}/maps/${$("run-map").value}.bsp first, and replaces what the Companion staged there before.`;
+    note.replaceChildren(t("Start copies this build's level into your game directory as {path} first, and replaces what the Companion staged there before. Nothing is compiled.",
+      { path: `${$("run-mod").value.trim()}/maps/${$("run-map").value}.bsp` }));
+    // From My Maps' Play latest build, for a map saved since: said once, with
+    // the way to build the newer one. Choosing it never starts a build.
+    if (chosenInfo && chosenInfo.buildID === manifest.build_id && chosenInfo.behind) {
+      // The form keeps its other choices (build profile, engine), as My Maps'
+      // Build & Run does; the map starts again at its newest revision.
+      const query = new URLSearchParams(window.location.search);
+      for (const key of ["rev", "name", "step"]) query.delete(key);
+      query.set("map", chosenInfo.mapID);
+      const latest = el("a", { text: t("Build latest"), attrs: { href: "?" + query.toString() + "#play" } });
+      note.append(el("br"), t("Built from revision {n}; newer changes are not included.", { n: chosenInfo.revision }), " ", latest);
+    }
   }
 
   async function stageChosenBuild() {
@@ -371,7 +406,10 @@
     });
   }
 
-  $("run-engine").addEventListener("change", renderEngine);
+  $("run-engine").addEventListener("change", () => {
+    renderEngine();
+    drawBuilds();
+  });
   $("run-action").addEventListener("change", () => {
     renderSessionNote();
     renderEngine();
@@ -396,7 +434,8 @@
       return refreshing;
     },
     // From Build step 4: this build, ready to play in the engine chosen here.
-    async chooseBuild(buildID) {
+    async chooseBuild(buildID, info = null) {
+      chosenInfo = info ? { buildID, ...info } : null;
       await refreshing.catch(() => {});
       await refreshBuilds();
       // An engine that can play a map on this machine, rather than whichever
@@ -408,13 +447,17 @@
       const plays = (engine) => engine && (engine.actions || []).some((action) => action.id === "play_map");
       const ready = (engine) => plays(engine) && window.AUCOM.actionReady(engine, "play_map");
       const setUp = (engine) => plays(engine) && engine.binding && Object.keys(engine.binding.executables || {}).length > 0;
-      if (!ready(current())) {
-        const candidate = engines.find(ready);
+      // Only an engine for the build's own game (NEW_365).
+      const chosen = allBuilds.find((manifest) => manifest.build_id === buildID);
+      const fits = (engine) => !chosen?.engine_family || !engine?.engine_family || engine.engine_family === chosen.engine_family;
+      if (!ready(current()) || !fits(current())) {
+        const candidate = engines.find((engine) => ready(engine) && fits(engine));
         if (candidate) {
           $("run-engine").value = candidate.id;
           renderEngine();
         }
       }
+      drawBuilds();
       $("run-build").value = buildID;
       if ([...$("run-action").options].some((option) => option.value === "play_map")) {
         $("run-action").value = "play_map";

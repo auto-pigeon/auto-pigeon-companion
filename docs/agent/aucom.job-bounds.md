@@ -128,3 +128,21 @@ a pid read out of a record: a copied store has every pid the original has.
   assert on the processes. R01 is the positive control: a change that removes
   every kill passes the copy rows and fails R01.
 
+
+## A RUNNING TOOL'S CPU AND MEMORY ARE SAMPLED BY ITS EXECUTOR, ONCE (`NEW_365`)
+
+- **One sampler per supervised tool job** (`internal/job/resources.go`), started in `Service.execute` once the
+  program has started and stopped when it has been reaped — exit, timeout, cancel or shutdown. Viewers read its
+  last reading through `Service.Live`; they never start one, so three tabs are one sampler. Engines (an action
+  with a `session_role`) are not sampled.
+- **Ownership is the executor's own:** Linux, the process group the tool leads (`Setpgid`), members found through
+  `/proc/<pid>/task/*/children` and kept only when their `pgrp` is the tool's and they started after it; the
+  tool itself by pid AND start ticks, so a reused pid ends the reading. Windows: the tool's process only (the
+  executor has no Job Object), scope `root_process`. Elsewhere: `unavailable`, never zero. No `ps`, no
+  `tasklist`, no privilege.
+- **Bounded:** one reading and one previous counter set in memory per job; the job record keeps only a
+  `resources` summary (`aucom.job/1.6`: peaks, sample count, scope) — no time series. Measured on ubuntu24:
+  one sample ≈ 150 µs of CPU, ≈ 0.015 % of one core at 1 Hz (`TestOneSampleCostsWellUnderOnePercentOfACore`).
+- **Never a verdict.** A failed sample is a timestamped `unavailable`, never stops the job, its output drains, its
+  cancellation or shutdown. Percent = CPU time / wall time × 100 per logical CPU; the first reading is
+  `measuring`. What the tool printed about progress (`progress.go`) is a separate reading, per phase.

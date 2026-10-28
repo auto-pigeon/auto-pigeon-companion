@@ -144,9 +144,15 @@ The page has these areas, in the order of a first run:
 3. **Run after build** — on, the engine starts once the map is built; off, the
    build stops there and nothing is installed or started.
 4. **Review** — what will be built, with **Technical details** (downloads,
-   programs and versions, where files go, the exact command). The button says
-   **Review build** until the review is on screen for these exact choices, then
-   **Build & Run** or **Build**. Changing any choice asks for a review again.
+   programs and versions, where files go, the exact command). The button always
+   says what it does: **Build & Run**, or **Build** when Run after build is off.
+   The Companion checks your choices by itself — **Checking setup…** beside the
+   button — and enables it once nothing stops them; when something does, that
+   one reason is beside the button with a **Set up** link. One press starts it
+   (**Starting…**). Pressing again, or the same build from another tab, follows
+   the build already running instead of starting a second. Listing a game for
+   everyone, or saying whose files a Quake II package may carry, is asked in a
+   dialog first; nothing else is.
 
 The run then has one card with **View progress** (the Activity drawer); if it
 fails, the card names the stage, says why in one sentence and offers **Try
@@ -278,6 +284,41 @@ curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
 ```
 
 Send the answer's `next` back as `offset` to read on.
+
+**While a tool runs** its page and the Activity card show one line, refreshed
+every second: the stage, the tool's own progress when it prints one (EricW's
+VIS says *Base VIS* then *Full VIS*, each with its own percentage — Full VIS can
+be quiet for a long time), its CPU and memory, and how long ago it last printed,
+for example `VIS · Full VIS 37% · CPU 285% · RAM 640 MiB · last output 4 s ago`.
+CPU counts 100% per busy logical CPU, so four busy threads read about 400%. RAM
+is the resident memory of the tool's own processes (on Windows, the tool's own
+process only; on macOS it is not measured). *Running; no output for 20 s* means
+just that — quiet, not stuck. The output view can follow the end or stay where
+you are reading (**Jump to latest**), wrap long lines, copy, and download the
+whole log.
+
+```bash
+curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
+  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/jobs/$JOB_ID" | jq .live
+# {"now": …, "supervised": true, "last_output_at": …, "progress": {"phase": "Full VIS", "percent": 37},
+#  "resources": {"state": "live", "scope": "process_group", "cpu_percent": 285.2, "rss_bytes": 671088640, …}}
+```
+
+**Playing a map's latest build.** On a **My Maps** card, **Play latest build**
+appears when this computer has a finished, normal build of that map whose level
+is still exactly as built. It opens **Run** with that build chosen; nothing is
+compiled, and nothing starts until you press **Start**. The card says which
+revision it was built from, and *Built from revision N; newer changes are not
+included.* when you have saved since — **Build latest** then builds the newer
+one. A leak test is a diagnostic, never a playable build: a map with only leak
+tests says *No playable build yet: only leak tests.*
+
+```console
+$ companion build latest --map <map id>              # the build Play latest build would play
+20261028T140035Z-698c5fa9  revision 4  quake1  Q1 normal  finished 2026-10-28T14:01:12Z
+$ companion engine stage --game-root ~/quake --mod auto-pigeon \
+    --build "$(companion build latest --map <map id> --game quake1 --id-only)"
+```
 
 **Reading a build back.** Each answer carries the build's manifest and `live` —
 whether this Companion is running it right now. Poll until `live` is `false`,

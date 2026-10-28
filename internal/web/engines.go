@@ -288,8 +288,15 @@ func (s *Server) handleEngineStageBuild(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	s.reconcileBuild(manifest)
-	level, err := build.PlayableLevel(manifest)
+	// The same check Play latest build makes: a normal build, its level the
+	// bytes it recorded. A leak test's BSP is never staged as a level (NEW_365).
+	level, err := build.VerifyPlayable(manifest)
 	if err != nil {
+		writeError(w, http.StatusConflict, err)
+		return
+	}
+	// A build for another game is never staged into this engine's game.
+	if err := engineFits(manifest.EngineFamily, entry.Profile); err != nil {
 		writeError(w, http.StatusConflict, err)
 		return
 	}

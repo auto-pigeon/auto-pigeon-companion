@@ -78,9 +78,22 @@ they bind every surface that offers a choice, says why something cannot start, o
 - **One journey, one form.** Map (saved map | file on this computer) → Build profile → Run after build → Review.
   No wizard of steps and no second build page: `#build` is the form on a file, `#autobuild` its checkbox
   (`app.js` `aliases`). Run, Live Games, My Maps, Profiles and Jobs are destinations, not builds.
-- **The primary says what it does.** **Review build** until a review of these exact choices is on screen
-  (`play.js` `reviewed()`), then **Build & Run** or **Build**; any change, a reload or a start returns it to
-  **Review build**. What stops it is one sentence beside it, not a silently disabled button.
+- **The primary says what it does, always** (HITL 2026-10-28, NEW_365 — supersedes NEW_363's two-press
+  *Review build*). It reads **Build & Run** when Run after build is on, else **Build**, and never changes label.
+  It is enabled once the server's check of these exact choices passed (`play.js` `refreshPlan`/`runCheck`,
+  `build.js` `preview`/`scheduleCheck`): the check runs by itself 250 ms after a change, one at a time, and an
+  answer for choices or a setup (pipeline readiness, engine action problems and roots, grants) that changed
+  since is dropped (`planKey`, `setupKey`). Meanwhile the sentence beside it says **Checking setup…**; when
+  blocked it says the one reason with its **Set up** link. Never a tooltip. The check starts, launches and
+  downloads nothing — the texture bundle is the run's first step, or **Check the textures now** in Technical
+  details.
+- **One press, one run.** The press says **Starting…** in the same instant and the run's card follows. A second
+  press, another tab or a retry of the same request is refused by the server (`playrun.Live.claim`,
+  `buildRuns.claim`: `409 already_running` with the run) and the page follows the running one; a hand build of
+  the revision Auto-build is building with the same profile is refused atomically (`autobuild.AdmitManual`).
+- **A decision only the person can make is a focused dialog, and only then:** listing a game for everyone, or
+  whose own files a Quake II package may carry. Its action at bottom right says the same **Build & Run** /
+  **Build**, with **Cancel** and the × (core.js `confirmModal({content, closeX})`). No recap dialog otherwise.
 - **Details fold.** What only the person can answer (a WAD not sent, a Quake II package's files, a listing) is in
   the open; downloads, programs and versions, writes and argv are under **Technical details**.
 - **A run gets one card** with its pinned identities from the run record (never the form's draft) and one
@@ -105,6 +118,22 @@ they bind every surface that offers a choice, says why something cannot start, o
   **626 → 205**, Q1 normal pipeline 267 → 98, vkQuake 451 → 150; the list's 6 Configure + 6 Homepage buttons per tab
   → 0 (row links).
 
+## Jobs, Activity and a running tool (NEW_365)
+
+- **A job row is its name (the link), one state word, when and how long, and at most one control:** Stop while it
+  runs. No Open button beside the link; a failed row adds its kind of failure.
+- **A job's page** is state, times, the live line, the error, findings, outputs, Stop / Run this again, then the
+  output; command, program, folders, digests, exit status and pid are under a closed **Technical details**.
+- **The live line is one rendering** (`core.js` `liveLine`) of one executor-owned sampler, shown by Jobs and by the
+  Activity card: `VIS · Full VIS 37% · CPU 285% · RAM 640 MiB · last output 4 s ago`. A percentage only when the
+  tool printed one, per phase; quiet is said as *running; no output for N*, never *hung* or *healthy*.
+- **Activity's run name is the link to the running stage's job;** the card's live line is redrawn as text, so a
+  focused Cancel survives the poll.
+- **Play latest build** appears on a My Maps card only for a verified normal build (`build.Latest`), says the
+  revision it was built from and, when older, *Built from revision N; newer changes are not included.*; a map
+  with only leak tests says *No playable build yet: only leak tests.* once. It opens Run on that build; nothing
+  starts until Start.
+
 ## Examples
 
 | | before | after |
@@ -119,3 +148,7 @@ they bind every surface that offers a choice, says why something cannot start, o
 `testdata/profilespage.check.mjs` and `new364_test.go` (Profiles state, fences, argument revisions),
 `testdata/setupcauses.check.mjs` (`TestWhatTheUnreadyChoicesNeedIsSaidOnce`),
 `testdata/leakrequest.check.mjs` cases 12–14, `TestAnUnreadyChoiceNamesTheToolToSetUp`.
+NEW_365: `testdata/playjourney.js` (Checking setup…, a held plan answer never enables the button, reason + link
+beside it, two fast presses → one run), `testdata/hostjourney.js` (the listing dialog: Cancel starts nothing),
+`testdata/liveline.check.mjs`, `testdata/buildreview.check.mjs`, `internal/playrun/new365_test.go`,
+`internal/autobuild/new365_test.go`, `TestAFileBuildRequestIsAdmittedOnceUntilItEnds`.

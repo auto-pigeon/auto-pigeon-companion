@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -148,6 +149,69 @@ func helperMain(args []string) int {
 		// A truncated multi-byte sequence, a lone continuation byte, and an
 		// ANSI escape that would repaint the reader's terminal.
 		os.Stdout.Write([]byte{'s', 't', 'a', 'r', 't', ' ', 0xff, 0xfe, 0x80, ' ', 0x1b, '[', '2', 'J', ' ', 'e', 'n', 'd', '\n'})
+	case "resources":
+		// `resources <MiB> <burn-ms> <workers> <quiet-ms> [child]`: touch a
+		// known block of memory, keep `workers` goroutines busy, then say
+		// nothing for `quiet-ms` and exit — the live helper of NEW_365's
+		// sampler tests. With `child`, a second copy (no child) does the same
+		// at the same time, so the tree has two members.
+		mib, _ := strconv.Atoi(rest[0])
+		burn, _ := strconv.Atoi(rest[1])
+		workers, _ := strconv.Atoi(rest[2])
+		quiet, _ := strconv.Atoi(rest[3])
+		var child *exec.Cmd
+		if len(rest) > 4 && rest[4] == "child" {
+			child = exec.Command(os.Args[0], helperFlag, "resources", rest[0], rest[1], rest[2], rest[3])
+			child.Stdout = os.Stdout
+			if err := child.Start(); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				return 1
+			}
+			fmt.Println("child", child.Process.Pid)
+		}
+		block := make([]byte, mib<<20)
+		for i := 0; i < len(block); i += 4096 {
+			block[i] = byte(i)
+		}
+		fmt.Println("allocated", mib, os.Getpid())
+		os.Stdout.Sync()
+		stop := time.Now().Add(time.Duration(burn) * time.Millisecond)
+		var group sync.WaitGroup
+		for w := 0; w < workers; w++ {
+			group.Add(1)
+			go func() {
+				defer group.Done()
+				x := 1
+				for time.Now().Before(stop) {
+					for k := 0; k < 100000; k++ {
+						x = x*31 + k
+					}
+				}
+				_ = x
+			}()
+		}
+		group.Wait()
+		fmt.Println("burned")
+		os.Stdout.Sync()
+		time.Sleep(time.Duration(quiet) * time.Millisecond)
+		fmt.Println("done", block[4096])
+		if child != nil {
+			_ = child.Wait()
+		}
+	case "cr":
+		// CR-rewritten progress with no newline, then a pause, then CRLF.
+		os.Stdout.WriteString("start\n[ 10%] a\r[ 20%] b\r[ 30%] c")
+		os.Stdout.Sync()
+		time.Sleep(1500 * time.Millisecond)
+		os.Stdout.WriteString("\r\nend\r\n")
+	case "progress":
+		// EricW's VIS, in miniature: phases, CR-rewritten percentages, a pause.
+		os.Stdout.WriteString("Calculating Base Vis:\n[  0%]  ...\r[ 50%]  ...\r[100%] time elapsed: 00:00:00\n")
+		os.Stdout.WriteString("Calculating Full Vis:\n[ 12%]  ...")
+		os.Stdout.Sync()
+		pause, _ := strconv.Atoi(rest[0])
+		time.Sleep(time.Duration(pause) * time.Millisecond)
+		os.Stdout.WriteString("\r[100%] time elapsed: 00:00:01\n")
 	case "sleep":
 		seconds, _ := strconv.Atoi(rest[0])
 		fmt.Println("sleeping")

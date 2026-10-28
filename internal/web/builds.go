@@ -53,6 +53,10 @@ import (
 type buildRuns struct {
 	mu   sync.Mutex
 	runs map[string]*buildRun
+	// starting is every build request being started or running, by its
+	// identity (buildRequestKey) and the build it became: two presses or two
+	// tabs asking for the same build start it once (NEW_365).
+	starting map[string]string
 	// observed is called after each thing a read of a build looked at — the
 	// run's own completion, the manifest on disk — with the build it was about,
 	// or "" for the whole list. Nil outside a test: it is the one place a test
@@ -68,7 +72,46 @@ func (r *buildRuns) observe(id string) {
 	}
 }
 
-func newBuildRuns() *buildRuns { return &buildRuns{runs: map[string]*buildRun{}} }
+func newBuildRuns() *buildRuns {
+	return &buildRuns{runs: map[string]*buildRun{}, starting: map[string]string{}}
+}
+
+// claim reserves a build request, or reports the build already holding it
+// ("" while that one has no id yet).
+func (r *buildRuns) claim(key string) (string, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if held, busy := r.starting[key]; busy {
+		return held, false
+	}
+	r.starting[key] = ""
+	return "", true
+}
+
+func (r *buildRuns) named(key, id string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, held := r.starting[key]; held {
+		r.starting[key] = id
+	}
+}
+
+func (r *buildRuns) release(key string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.starting, key)
+}
+
+// buildRequestKey is what makes two file-build requests the same build:
+// everything they ask for but the label.
+func buildRequestKey(request buildRequestBody) string {
+	request.Label = ""
+	raw, err := json.Marshal(request)
+	if err != nil {
+		return ""
+	}
+	return string(raw)
+}
 
 // buildRun is one build this process started.
 type buildRun struct {
@@ -278,6 +321,7 @@ func (s *Server) buildAPI() map[string]http.HandlerFunc {
 		"GET /api/v1/build/pipelines":               s.handleBuildPipelines,
 		"POST /api/v1/build/preview":                s.handleBuildPreview,
 		"GET /api/v1/build/runs":                    s.handleBuildList,
+		"GET /api/v1/build/latest":                  s.handleBuildLatest,
 		"POST /api/v1/build/runs":                   s.handleBuildStart,
 		"GET /api/v1/build/runs/{id}":               s.handleBuildGet,
 		"POST /api/v1/build/runs/{id}/cancel":       s.handleBuildCancel,
@@ -670,6 +714,30 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// One build per request at a time, whichever page or tab asked (NEW_365).
+	key := buildRequestKey(request)
+	if held, claimed := s.builds.claim(key); !claimed {
+		writeJSON(w, http.StatusConflict, map[string]any{
+			"error": "this exact build is already running", "code": "already_running", "build": held,
+		})
+		return
+	}
+	released := false
+	release := func() {
+		if !released {
+			released = true
+			s.builds.release(key)
+		}
+	}
+	// Released by the build's own goroutine once it ends; by this handler if
+	// it never got that far.
+	handedOver := false
+	defer func() {
+		if !handedOver {
+			release()
+		}
+	}()
+
 	// The inputs are resolved on the request's own context, before anything is
 	// started: fetching a map from AUB is the part that can fail for reasons
 	// the user must be told about immediately, and a build that had already
@@ -770,7 +838,9 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	failed := make(chan error, 1)
+	handedOver = true
 	go func() {
+		defer s.builds.release(key)
 		defer cancel()
 		// The run's own copy of the textures goes with the run, however it
 		// ended: finished, failed, cancelled.
@@ -810,6 +880,7 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 
 	select {
 	case id := <-identified:
+		s.builds.named(key, id)
 		w.Header().Set("Location", "/api/v1/build/runs/"+id)
 		writeJSON(w, http.StatusAccepted, map[string]any{
 			"build": id, "pipeline": request.Pipeline, "label": request.Label, "started": true,
@@ -854,7 +925,44 @@ func (s *Server) handleBuildList(w http.ResponseWriter, r *http.Request) {
 	items := make([]map[string]any, 0, len(manifests))
 	for _, manifest := range manifests {
 		answer := s.answerBuild(manifest)
-		items = append(items, map[string]any{"manifest": answer.manifest, "live": answer.live})
+		// diagnostic: a leak test, never offered as a level to play (NEW_365).
+		items = append(items, map[string]any{"manifest": answer.manifest, "live": answer.live,
+			"diagnostic": build.Diagnostic(answer.manifest, s.isLeakPipeline)})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+// handleBuildLatest answers "which build would Play latest build play" for one
+// or more saved maps of the backend this Companion is signed in to (NEW_365).
+// build.Latest is the one owner of the answer; this only reads the store.
+//
+//	GET /api/v1/build/latest?asset_id=<id>[&asset_id=<id>…][&family=quake1]
+func (s *Server) handleBuildLatest(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	ids := query["asset_id"]
+	if len(ids) == 0 || len(ids) > 100 {
+		writeError(w, http.StatusBadRequest, errors.New("name between 1 and 100 maps with asset_id"))
+		return
+	}
+	backend := s.backendAddress()
+	if backend == "" {
+		writeError(w, http.StatusConflict, errors.New("no Auto-Pigeon server is configured, so a saved map cannot be named"))
+		return
+	}
+	dir, err := s.buildsDir()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	manifests, err := build.List(dir)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	assetType := query.Get("asset_type")
+	items := make([]build.Selection, 0, len(ids))
+	for _, id := range ids {
+		items = append(items, build.Latest(manifests, build.MapIdentity{Backend: backend, AssetType: assetType, AssetID: id}, query.Get("family"), s.isLeakPipeline))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }

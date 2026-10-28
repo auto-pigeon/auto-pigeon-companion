@@ -118,6 +118,9 @@ type Service struct {
 	// it is still being written (output.go). Dropped once the job is recorded
 	// as finished, after which the stored logs are the answer.
 	live map[string]*liveCaptures
+	// samplers holds a running tool's CPU and memory sampler, one per job,
+	// whoever is watching (resources.go). Dropped with live.
+	samplers map[string]*sampler
 	// facts is what programs said about themselves in this process, by
 	// [factKey]. It is what makes an answer for a path a job overrode — which
 	// no binding holds — usable twice, and it never outlives the process.
@@ -177,6 +180,7 @@ func NewService(options Options) (*Service, error) {
 		owned:        map[string]bool{},
 		correlations: map[string]string{},
 		live:         map[string]*liveCaptures{},
+		samplers:     map[string]*sampler{},
 	}
 	if service.lookupEnv == nil {
 		service.lookupEnv = os.LookupEnv
@@ -828,7 +832,12 @@ func (s *Service) execute(id string) {
 		delete(s.mirrors, id)
 		delete(s.owned, id)
 		delete(s.live, id)
+		sampling := s.samplers[id]
+		delete(s.samplers, id)
 		s.mu.Unlock()
+		if sampling != nil {
+			sampling.Stop()
+		}
 	}()
 
 	if s.store.CancelRequested(id) {
@@ -893,7 +902,12 @@ func (s *Service) execute(id string) {
 	j.SidecarLogs = sidecarLogs(action, invocation)
 	j.CustomArgs = append([]string(nil), invocation.CustomArgs...)
 
+	progress := newProgressTracker(time.Now)
+	// A tool, not an engine: an engine is a game somebody is playing, and its
+	// CPU and memory are not a build's (NEW_365).
+	measure := action.SessionRole == ""
 	run := &execution{
+		progress:   progress,
 		id:         id,
 		layout:     l,
 		invocation: invocation,
@@ -914,15 +928,34 @@ func (s *Service) execute(id string) {
 			j.Launch = s.store.launch(id, invocation.Command.WorkingDir)
 			j.StartedAt = s.now()
 			j.TimeoutSeconds = invocation.TimeoutSeconds
-			return s.step(j, Running, fmt.Sprintf("pid %d", pid))
+			if err := s.step(j, Running, fmt.Sprintf("pid %d", pid)); err != nil {
+				return err
+			}
+			if measure {
+				sampling := startSampler(pid, j.Process.StartTicks, time.Now)
+				s.mu.Lock()
+				s.samplers[id] = sampling
+				s.mu.Unlock()
+			}
+			return nil
 		},
 		onCaptures: func(stdout, stderr *capture) {
 			s.mu.Lock()
-			s.live[id] = &liveCaptures{stdout: stdout, stderr: stderr}
+			s.live[id] = &liveCaptures{stdout: stdout, stderr: stderr, progress: progress}
 			s.mu.Unlock()
 		},
 	}
 	result := run.run(s.ctxOrBackground())
+
+	// The process tree has been reaped: its readings end here, whether it
+	// exited, timed out, was stopped or the Companion is shutting down, and the
+	// peaks are what the record keeps.
+	s.mu.Lock()
+	sampling := s.samplers[id]
+	s.mu.Unlock()
+	if sampling != nil {
+		j.Resources = sampling.Stop().summary()
+	}
 
 	if j.Command == nil {
 		j.Command = result.command

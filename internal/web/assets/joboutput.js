@@ -42,19 +42,48 @@
       busy: false,
     };
 
+    const saved = new Map();
     const status = el("span", { className: "joblog__source muted" });
     const head = el("div", { className: "joblog__head", children: [el("strong", { text: label }), status] });
     const picker = el("select", { className: "joblog__picker", attrs: { "aria-label": t("Which output to show") } });
     if (sourcePicker) {
       picker.append(el("option", { text: t("Automatic"), attrs: { value: "" } }));
       head.append(picker);
+      // Each source keeps what was read of it and its cursor: switching to
+      // stderr and back to the log continues the log where it was, rather
+      // than reading it again from its end (NEW_365).
       picker.addEventListener("change", () => {
+        if (state.source) saved.set(state.source, { text: block ? block.text.data : "", cursor: state.cursor });
         state.pinned = picker.value;
-        restart(t("Showing {what}.", { what: picker.selectedOptions[0]?.textContent || "" }));
+        const again = state.pinned ? saved.get(state.pinned) : null;
+        restart(again ? "" : t("Showing {what}.", { what: picker.selectedOptions[0]?.textContent || "" }));
+        if (again) {
+          if (!block) newBlock("");
+          block.text.data = again.text;
+          state.chars = again.text.length;
+          state.source = state.pinned;
+          state.cursor = again.cursor;
+        }
         poll();
       });
     }
     if (jobLink) head.append(jobLink);
+
+    // Reading controls (NEW_365): follow the end or stay put, jump back to the
+    // end, wrap long lines, copy what is shown, download the whole log.
+    state.follow = true;
+    const followBox = el("input", { attrs: { type: "checkbox", checked: "" } });
+    followBox.checked = true;
+    const followLabel = el("label", { className: "joblog__follow small", children: [followBox, document.createTextNode(" " + t("Follow the end"))] });
+    const wrapBox = el("input", { attrs: { type: "checkbox", checked: "" } });
+    wrapBox.checked = true;
+    const wrapLabel = el("label", { className: "joblog__wrap small", children: [wrapBox, document.createTextNode(" " + t("Wrap long lines"))] });
+    const jump = el("button", { text: t("Jump to latest"), attrs: { type: "button", class: "secondary joblog__jump" } });
+    jump.hidden = true;
+    const copy = el("button", { text: t("Copy"), attrs: { type: "button", class: "secondary" } });
+    const download = el("a", { text: t("Download the log"), className: "joblog__download", attrs: { download: "" } });
+    download.hidden = true;
+    const tools = el("div", { className: "joblog__tools row-actions", children: [followLabel, wrapLabel, jump, copy, download] });
 
     const trimmedNote = el("p", {
       className: "joblog__trimmed muted small",
@@ -67,7 +96,31 @@
     });
     const error = el("p", { className: "message error joblog__error", attrs: { role: "status" } });
     error.hidden = true;
-    const root = el("div", { className: "joblog", children: [head, trimmedNote, scroller, error] });
+    const root = el("div", { className: "joblog", children: [head, tools, trimmedNote, scroller, error] });
+    followBox.addEventListener("change", () => {
+      state.follow = followBox.checked;
+      if (state.follow) scroller.scrollTop = scroller.scrollHeight;
+      showJump();
+    });
+    wrapBox.addEventListener("change", () => scroller.classList.toggle("joblog__scroll--nowrap", !wrapBox.checked));
+    jump.addEventListener("click", () => {
+      scroller.scrollTop = scroller.scrollHeight;
+      showJump();
+    });
+    scroller.addEventListener("scroll", showJump);
+    copy.addEventListener("click", async () => {
+      const text = [...scroller.querySelectorAll("pre")].map((pre) => pre.textContent).join("\n");
+      try {
+        await navigator.clipboard.writeText(text);
+        copy.textContent = t("Copied");
+      } catch {
+        copy.textContent = t("Copy failed — select the text instead");
+      }
+      setTimeout(() => { copy.textContent = t("Copy"); }, 2000);
+    });
+    function showJump() {
+      jump.hidden = atBottom();
+    }
 
     let block = null; // the block text is being appended to
 
@@ -91,14 +144,32 @@
     // append adds text to the current block and keeps the reader where they
     // were: following the end if they were at it, still if they had scrolled
     // up to read something.
+    //
+    // A carriage return rewrites the line it is on, the way a terminal shows a
+    // progress counter: `[ 10%]\r[ 20%]` reads `[ 20%]`, not both run together.
+    // Only the current line is touched, so a selection above it survives.
     function append(text) {
       if (!text) return;
       if (!block) newBlock("");
-      const follow = atBottom();
-      block.text.appendData(text);
-      state.chars += text.length;
+      const follow = state.follow && atBottom();
+      const pieces = text.replace(/\r\n/g, "\n").split("\r");
+      pieces.forEach((piece, index) => {
+        if (index > 0) {
+          const data = block.text.data;
+          const start = data.lastIndexOf("\n") + 1;
+          if (start < data.length) {
+            state.chars -= data.length - start;
+            block.text.deleteData(start, data.length - start);
+          }
+        }
+        if (piece) {
+          block.text.appendData(piece);
+          state.chars += piece.length;
+        }
+      });
       trim();
       if (follow) scroller.scrollTop = scroller.scrollHeight;
+      showJump();
     }
 
     // trim removes the oldest characters once the view holds more than its
@@ -202,6 +273,7 @@
             if (block) block.text.data = "";
             state.chars = 0;
             note(t("now showing {what}", { what: body.source.label }));
+            window.AUCOM.announce?.(t("now showing {what}", { what: body.source.label }));
           } else if (body.reset && state.source) {
             if (block) block.text.data = "";
             state.chars = 0;
@@ -260,6 +332,8 @@
       follow(jobID, title = "", { fromStart = false } = {}) {
         if (!jobID || jobID === state.job) return false;
         state.job = jobID;
+        download.href = `/api/v1/jobs/${encodeURIComponent(jobID)}/logs?stream=stdout`;
+        download.hidden = false;
         state.source = "";
         state.cursor = fromStart ? 0 : null;
         state.complete = false;

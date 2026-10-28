@@ -331,16 +331,17 @@
     setValue(inputSource, "asset");
     setValue($("build-label"), "the browser journey");
 
-    record("the one button first offers a review", textOf($("build-start")) === "Review build", textOf($("build-start")));
-    $("build-start").click();
-    await waitFor("the command preview", () => $("build-preview-out").querySelector("pre"));
+    // NEW_365: the one button always says Build; the check of these choices
+    // runs by itself, says so beside it, and fills Technical details.
+    record("the one button says Build, never Review build", textOf($("build-start")) === "Build", textOf($("build-start")));
+    await waitFor("the command preview", () => $("build-preview-out").querySelector("pre"), 20000);
     record(
       "the exact command is shown before anything runs",
       textOf($("build-preview-out")).includes(settings.tool_path),
       textOf($("build-preview-out").querySelector("pre")).slice(0, 120)
     );
-    await waitFor("the button to say Build", () => textOf($("build-start")) === "Build" && !$("build-start").disabled);
-    record("once checked, the same button says Build", true, textOf($("build-start")));
+    await waitFor("the button to be enabled", () => textOf($("build-start")) === "Build" && !$("build-start").disabled);
+    record("once checked, the same button is enabled and its label did not change", true, textOf($("build-start")));
 
     $("build-start").click();
     await waitFor("the build panel", () => visible($("build-current-panel")), 60000)
@@ -488,18 +489,24 @@
       `${$("activity-log").children.length} entries`
     );
 
+    // NEW_365: the job's name is the one way into its page — no Open button
+    // beside it — and the command is under Technical details.
     const jobRow = $("jobs-list").children[0];
-    buttonIn(jobRow, "Open").click();
+    record("a job row has no Open button beside its name", !buttonIn(jobRow, "Open") && Boolean(jobRow.querySelector("a.job-row__title")),
+      [...jobRow.querySelectorAll("button")].map((b) => textOf(b)).join(", "));
+    jobRow.querySelector("a.job-row__title").click();
     await waitFor("the job detail", () => visible($("job-detail-panel")) &&
-      textOf($("job-detail")).includes("The command that ran"));
+      $("job-detail").querySelector("details.job-technical") && textOf($("job-detail").querySelector("details.job-technical")).includes("Command"));
+    record("the exact command is in the job's closed Technical details",
+      $("job-detail").querySelector("details.job-technical").open === false, "closed");
     // The panel offers Stop while the job is still going and Run again once it
     // has finished, so this waits for the job to reach a state where retry is
     // the question — the page keeps polling it until then.
     await waitFor("the job to finish", () => buttonIn($("job-detail"), "Run this again"), 60000);
     record(
       "retry says that it makes a new job rather than replacing this one",
-      textOf($("job-detail")).includes("makes a NEW job"),
-      textOf($("job-detail")).replace(/\s+/g, " ").slice(-160)
+      /makes a NEW job/i.test(buttonIn($("job-detail"), "Run this again").title),
+      buttonIn($("job-detail"), "Run this again").title
     );
 
     // --- 9. the whole flow completed at this window size --------------------

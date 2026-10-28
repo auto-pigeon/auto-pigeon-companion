@@ -98,6 +98,9 @@ type execution struct {
 	// onCaptures hands the two live captures to whoever serves a running job's
 	// output (output.go). Nil when nobody does.
 	onCaptures func(stdout, stderr *capture)
+	// progress reads both streams for a percentage the tool printed. Nil
+	// leaves the output unread for it.
+	progress *progressTracker
 }
 
 // outcome is what one supervised run produced.
@@ -237,6 +240,7 @@ func (e *execution) run(ctx context.Context) outcome {
 	diagnostics := &diagnosticCollector{}
 	stdout := newCapture("stdout", e.mirror, e.lineHandler(diagnostics))
 	stderr := newCapture("stderr", e.mirror, e.lineHandler(diagnostics))
+	stdout.progress, stderr.progress = e.progress, e.progress
 	if e.onCaptures != nil {
 		e.onCaptures(stdout, stderr)
 	}

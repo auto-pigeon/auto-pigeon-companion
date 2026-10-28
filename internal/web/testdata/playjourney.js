@@ -89,12 +89,19 @@
 
   // The review's one primary, and what it says it will do.
   const primary = () => $("play-start");
+  // NEW_365: nobody presses anything for the check. It runs by itself once the
+  // choices are complete, says "Checking setup…" beside the button meanwhile,
+  // and the button — which always says what it does — is enabled once it has.
   async function review() {
-    await waitFor("the primary to say Review build", () => /Review build/.test(textOf(primary())) && !primary().disabled, 20000)
+    await waitFor("the check of these choices", () => textOf($("play-review")).includes("What will be downloaded") &&
+      (!primary().disabled || textOf($("play-start-message")) !== "" && !/Checking setup/.test(textOf($("play-start-message")))), 40000)
       .catch((err) => { throw new Error(`${err.message}; it says "${textOf(primary())}", disabled=${primary().disabled}, ` +
         `message=${textOf($("play-start-message"))}`); });
-    primary().click();
-    await waitFor("the review", () => textOf($("play-review")).includes("What will be downloaded"), 40000);
+  }
+  // The texture bundle is downloaded by the run, or when a person asks.
+  async function checkTextures() {
+    const button = $("play-check-textures");
+    if (button) button.click();
   }
 
   try {
@@ -177,8 +184,8 @@
     record("Build & Run is one form, not a wizard of steps",
       !document.querySelector("#area-play .bwiz-step") && visible($("play-pipeline")) && visible($("play-run-after")) &&
         visible(primary()), `primary says "${textOf(primary())}"`);
-    record("a fresh form's primary says Review build, not Build & Run",
-      /Review build/.test(textOf(primary())), textOf(primary()));
+    record("a fresh form's primary says what it does, and nothing says Review build",
+      textOf(primary()) === "Build & Run" && !document.body.textContent.includes("Review build"), textOf(primary()));
 
     // --- the build profile ---------------------------------------------------
     await waitFor("the build profiles", () => $("play-pipeline").options.length > 1);
@@ -202,8 +209,9 @@
       $("play-pipeline").value === settings.pipeline_id && /needs setup/.test($("play-pipeline").selectedOptions[0]?.textContent || "") &&
         $("play-pipeline-state").querySelector('a[href^="#profiles/"]') !== null,
       `${$("play-pipeline").value} · ${textOf($("play-pipeline-state")).slice(0, 120)}`);
-    record("and nothing can be reviewed or started with it",
-      primary().disabled === true && /needs setup/.test(textOf($("play-start-message"))),
+    record("and nothing can be started with it; the reason and its setup link are beside the button",
+      primary().disabled === true && /needs setup/.test(textOf($("play-start-message"))) &&
+        $("play-start-message").querySelector('a[href^="#profiles/"]') !== null && textOf(primary()) === "Build & Run",
       `disabled=${primary().disabled} · ${textOf($("play-start-message"))}`);
     // NEW_360 F1: automatic builds use the same profile and the same readiness —
     // switching them on is not possible while it needs setup.
@@ -271,9 +279,10 @@
 
     // --- the review -----------------------------------------------------------
     await review();
-    // The bundle is fetched and verified BY the review, so the ordered WAD set
-    // it shows is the real one rather than a guess. Waited for, because it is
-    // a second request after the plan.
+    // The bundle is fetched and verified when the person asks for it (or by
+    // the run), never by the check itself (NEW_365); asked for here, the
+    // ordered WAD set it shows is the real one rather than a guess.
+    await checkTextures();
     const wads = () => [...document.querySelectorAll("#play-review .wad-list li")].map((li) => textOf(li).replace(/\s+/g, ""));
     await waitFor("the verified WAD list", () => wads().some((text) => /^1first\.wad/.test(text)), 40000)
       .catch((err) => { throw new Error(`${err.message}; the review said: ${textOf($("play-review")).replace(/\s+/g, " ").slice(0, 300)}`); });
@@ -319,11 +328,38 @@
     $("play-map-name").dispatchEvent(new Event("input", { bubbles: true }));
     record(
       "changing a choice says what it cleared",
-      textOf($("play-review-message")).toLowerCase().includes("you changed") && /Review build/.test(textOf(primary())),
+      textOf($("play-review-message")).toLowerCase().includes("you changed") && textOf(primary()) === "Build & Run",
       `${textOf($("play-review-message")).slice(0, 110)} · "${textOf(primary())}"`
     );
     await snap("review-invalidated");
-    // Nothing starts on a change: the review comes back only when asked for.
+
+    // NEW_365: an answer for choices that changed while it was out never
+    // enables the button for the new ones. The first check's answer is held
+    // back a second and a half; the name changes meanwhile.
+    {
+      const realFetch = window.fetch;
+      let held = 0;
+      window.fetch = async (url, options) => {
+        if (String(url).includes("/api/v1/play/plan") && held++ === 0) await sleep(1500);
+        return realFetch(url, options);
+      };
+      let wrong = false;
+      const watcher = setInterval(() => {
+        if (!primary().disabled && textOf($("play-review")).includes("stale_one")) wrong = true;
+      }, 40);
+      setValue($("play-map-name"), "stale_one");
+      await sleep(500);
+      record("while the check is out, the button is disabled and says it is checking",
+        primary().disabled && /Checking setup/.test(textOf($("play-start-message"))) && textOf(primary()) === "Build & Run",
+        `disabled=${primary().disabled} · ${textOf($("play-start-message"))}`);
+      setValue($("play-map-name"), "stale_two");
+      await waitFor("the check of the newer choices", () => !primary().disabled && textOf($("play-review")).includes("stale_two"), 20000);
+      clearInterval(watcher);
+      window.fetch = realFetch;
+      record("a late answer for older choices never enabled the button", !wrong && held >= 2, `held=${held} wrong=${wrong}`);
+      setValue($("play-map-name"), "dm1");
+    }
+    // Nothing starts on a change: the check runs again by itself.
     await review();
     record(
       "a review keeps every compatible choice",
@@ -344,10 +380,16 @@
     record("switching back keeps the saved map, its revision and the review's choices",
       $("play-map").value === settings.asset_id && $("play-revision").value === settings.revision_id &&
         $("play-run-after").checked, `${$("play-map").value} · ${$("play-revision").value}`);
-    if (!/Build & Run/.test(textOf(primary()))) await review();
+    await review();
 
-    // --- one confirmation ------------------------------------------------
+    // --- one press -------------------------------------------------------
+    // Twice, fast: one run (the server admits it once), and the press says
+    // so at once.
+    const runsBefore = (await (await fetch("/api/v1/play/runs", { headers: { "X-AUCOM-Token": settings.api_token } })).json()).items.length;
     primary().click();
+    primary().click();
+    record("one press says it is starting at once", /Starting|Started/.test(textOf($("play-start-message"))),
+      textOf($("play-start-message")));
     // The run gets one concise card, and one way to its progress.
     await waitFor("the current run's card", () => visible($("play-current")), 20000).catch((err) => {
       throw new Error(`${err.message}; the page said: ${textOf($("play-start-message"))}`);
@@ -443,6 +485,7 @@
       headers: { "X-AUCOM-Token": settings.api_token },
     })).json()).items.length;
     record("the run is durable, not a promise in this tab", before > 0, `${before} run(s) on disk`);
+    record("two fast presses started one run", before === runsBefore + 1, `${runsBefore} → ${before}`);
 
     // --- the refusal path ---------------------------------------------------
     // The backend is switched to a bundle it cannot complete, and the page must
@@ -455,6 +498,7 @@
     await waitFor("the new revision", () => $("play-revision").value !== settings.revision_id, 20000);
     setValue($("play-map-name"), "dm2");
     await review();
+    await checkTextures();
     // The fixture's only refusal is a WAD the server did not send, so the
     // review offers "use your own copy" rather than a dead end — in the open,
     // because only the person can answer it — and the button stays disabled
@@ -490,8 +534,8 @@
     // Coming back to the area is what a reload does to it.
     await window.AUCOM.areas.play.refresh();
     record(
-      "after a reload nothing can be started without a review",
-      /Review build/.test(textOf(primary())) && !textOf($("play-review")),
+      "after a reload nothing can start until the choices are checked again",
+      primary().disabled && /Checking setup/.test(textOf($("play-start-message"))) && !textOf($("play-review")),
       `"${textOf(primary())}", review ${textOf($("play-review")) ? "still shown" : "empty"}`
     );
     // Jobs keeps the finished run.

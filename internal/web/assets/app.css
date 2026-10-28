@@ -1000,6 +1000,8 @@ ol.numbered { list-style: none; padding-inline-start: 0; }
 .modal::backdrop { background: rgb(0 0 0 / 40%); }
 
 .modal h2 { margin-block-start: 0; font-size: 1.1rem; }
+.modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.modal-close { margin-inline-start: auto; }
 
 .modal-actions {
   display: flex;
@@ -1523,3 +1525,10 @@ option:disabled { color: var(--ink-faint); }
 .autobuild__apply p { margin: 0; }
 .readiness__problem { margin: 0.3rem 0; color: var(--bad); overflow-wrap: anywhere; }
 #profiles-message:empty { display: none; }
+
+/* NEW_365: the output view's reading controls and wrap toggle; the live line. */
+.joblog__tools { align-items: center; gap: 0.5rem 1rem; flex-wrap: wrap; margin-block: 0.25rem; }
+.joblog__tools label { display: inline-flex; align-items: center; gap: 0.25rem; }
+.joblog__scroll--nowrap .joblog__text { white-space: pre; overflow-wrap: normal; }
+.joblog__scroll--nowrap { overflow-x: auto; }
+.job-live, .activity-run__live { margin-block: 0.25rem; }

@@ -637,20 +637,28 @@ function terminal(state) {
 //
 // Built on <dialog>, which the operating system's own accessibility layer
 // already understands, rather than on a div pretending to be one.
-function confirmModal({ title, body, confirm = "Continue", cancel = "Cancel" }) {
+// `content` adds controls the decision is made with (a select, a field) below
+// the sentence; `closeX` puts the canonical × in the corner (NEW_365: a
+// decision a build needs before it can start). Both optional.
+function confirmModal({ title, body, confirm = "Continue", cancel = "Cancel", content = [], closeX = false }) {
   return new Promise((resolve) => {
     const opener = document.activeElement;
     const confirmButton = el("button", { text: confirm, className: "primary", attrs: { type: "button" } });
     const cancelButton = el("button", { text: cancel, attrs: { type: "button" } });
+    const close = closeX
+      ? el("button", { text: "\u00d7", className: "icon-button modal-close", attrs: { type: "button", "aria-label": AUCOM.t("Close") } })
+      : null;
     const dialog = el("dialog", {
       className: "modal",
       attrs: { "aria-labelledby": "modal-title" },
       children: [
-        el("h2", { text: title, attrs: { id: "modal-title", tabindex: "-1" } }),
+        el("div", { className: "modal-head", children: [el("h2", { text: title, attrs: { id: "modal-title", tabindex: "-1" } }), close].filter(Boolean) }),
         el("p", { text: body }),
+        ...content,
         el("div", { className: "modal-actions", children: [cancelButton, confirmButton] }),
       ],
     });
+    close?.addEventListener("click", () => finish(false));
     const finish = (answer) => {
       dialog.close();
       dialog.remove();
@@ -890,6 +898,67 @@ function profileState(item) {
   return { code, text, kind, cause: causes.find((cause) => cause.profile !== item.id) || null, causes };
 }
 
+// --- a running tool, in one line (NEW_365) ----------------------------------
+//
+// liveLine is the one rendering of a job's `live` view (GET /api/v1/jobs/{id},
+// and `current_job_live` on a Build & Run run): the stage, what the tool said
+// about its progress, its CPU and memory, and how long ago it last printed —
+// "VIS · Full VIS · CPU 285% · RAM 640 MiB · last output 4 s ago". The Jobs
+// page and the Activity drawer both call it on the same reading of the same
+// sampler, so they cannot disagree. It never says "healthy" or "hung": quiet
+// output is output inactivity, and CPU is not progress.
+function mebibytes(n) {
+  const mib = Number(n) / (1024 * 1024);
+  return mib >= 1024 ? AUCOM.t("{n} GiB", { n: (mib / 1024).toFixed(1) }) : AUCOM.t("{n} MiB", { n: Math.round(mib) });
+}
+
+function liveLine(live, { stage = "", running = true } = {}) {
+  if (!live) return { text: "", title: "" };
+  const parts = [];
+  if (stage) parts.push(stage);
+  const progress = live.progress;
+  if (running && progress?.phase) {
+    parts.push(progress.percent !== undefined && progress.percent !== null
+      ? AUCOM.t("{phase} {n}%", { phase: progress.phase, n: progress.percent }) : progress.phase);
+  } else if (running && progress?.percent !== undefined && progress?.percent !== null) {
+    parts.push(AUCOM.t("{n}%", { n: progress.percent }));
+  }
+  const now = Date.parse(live.now || "") || Date.now();
+  const r = live.resources;
+  let title = "";
+  if (r) {
+    title = AUCOM.t("CPU: 100% is one logical CPU fully busy, so four busy threads read about 400%. This machine has {n} logical CPUs. RAM is the resident memory of the tool's processes, added up.",
+      { n: r.logical_cpus || "?" });
+    const age = r.sampled_at ? Math.max(0, Math.round((now - Date.parse(r.sampled_at)) / 1000)) : 0;
+    if (r.state === "live" && running) {
+      parts.push(AUCOM.t("CPU {n}%", { n: Math.round(r.cpu_percent) }));
+      parts.push(AUCOM.t("RAM {size}", { size: mebibytes(r.rss_bytes) }));
+      if (age > 3) parts.push(AUCOM.t("reading {n} s old", { n: age }));
+    } else if (r.state === "measuring" && running) {
+      parts.push(AUCOM.t("CPU measuring…"));
+      if (r.rss_bytes !== undefined) parts.push(AUCOM.t("RAM {size}", { size: mebibytes(r.rss_bytes) }));
+    } else if (r.state === "unavailable") {
+      parts.push(AUCOM.t("CPU and RAM not available here"));
+      if (r.reason) title = r.reason;
+    } else if (r.peak_rss_bytes) {
+      parts.push(AUCOM.t("peak RAM {size}", { size: mebibytes(r.peak_rss_bytes) }));
+      if (r.peak_cpu_percent) parts.push(AUCOM.t("peak CPU {n}%", { n: Math.round(r.peak_cpu_percent) }));
+    }
+  }
+  if (running) {
+    if (!live.supervised) {
+      parts.push(AUCOM.t("recorded as running; this Companion is not supervising it"));
+    } else if (live.last_output_at) {
+      const quiet = Math.max(0, Math.round((now - Date.parse(live.last_output_at)) / 1000));
+      parts.push(quiet >= 10 ? AUCOM.t("running; no output for {time}", { time: duration(quiet * 1000) })
+        : AUCOM.t("last output {n} s ago", { n: quiet }));
+    } else {
+      parts.push(AUCOM.t("no output yet"));
+    }
+  }
+  return { text: parts.join(" · "), title };
+}
+
 // listOf joins names the way the reader's language does ("a, b and c").
 function listOf(names) {
   const language = window.AUCOM_I18N?.current?.() || "en";
@@ -902,7 +971,7 @@ function listOf(names) {
 
 Object.assign(AUCOM, {
   $, el, api, announce, actionReady, pipelineReady, executionChoices, setMessage, busy, withBusy, confirmModal,
-  setupRows, setupCauses, setupProblems, setupLink, profileState, trapFocus, listOf, duration,
+  setupRows, setupCauses, setupProblems, setupLink, profileState, trapFocus, listOf, duration, liveLine, mebibytes,
   record, renderActivity, clearActivity, pathField, downloadButton, tabsFor,
   badge, maturityBadge, maturityNote, bytes, when, terminal, programFileName, folderTitle,
   openCompatibilityReport, wireCompatibilityReport,

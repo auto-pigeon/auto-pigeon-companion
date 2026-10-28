@@ -28,6 +28,9 @@ type fixture struct {
 	startErr error
 	// notReady is why a build profile cannot build now, by id (NEW_363).
 	notReady map[string]error
+	// beforeStart, when set, runs at the top of every automatic Start with no
+	// lock held: a barrier a test of admission order holds (NEW_365).
+	beforeStart func()
 }
 
 type startCall struct {
@@ -66,6 +69,9 @@ func (f *fixture) service() *Service {
 			return revision, "Map " + asset, nil
 		},
 		Start: func(entry Entry, revision Revision) (string, error) {
+			if f.beforeStart != nil {
+				f.beforeStart()
+			}
 			f.mu.Lock()
 			defer f.mu.Unlock()
 			if f.startErr != nil {

@@ -64,6 +64,7 @@ func (s *Server) autobuildService() (*autobuild.Service, error) {
 			Start:    s.autobuildStart,
 			RunState: s.autobuildRunState,
 			Ready:    s.pipelineNotReady,
+			Backend:  s.backendAddress,
 			Logf:     s.logf,
 		})
 	})

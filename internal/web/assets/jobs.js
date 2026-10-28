@@ -89,12 +89,14 @@
       .filter(Boolean)
       .join(" · ");
 
-    const open = el("button", { text: "Open", attrs: { type: "button", class: "secondary", "data-control": "open" } });
-    open.addEventListener("click", () => {
-      window.location.hash = jobHref(job.id);
-    });
-
-    const actions = el("div", { className: "row-actions", children: [open] });
+    // The name is the link to the job's page (NEW_365: the identical Open
+    // button beside it went). A failed job says what kind of failure, a
+    // cancelled or interrupted one says so in its own word, and only a running
+    // job has a control in its row: Stop.
+    if (job.state === "failed" && (job.failure_class || job.timed_out)) {
+      detail.textContent += (detail.textContent ? " · " : "") + (job.timed_out ? t("timed out") : job.failure_class);
+    }
+    const actions = el("div", { className: "row-actions" });
     if (!terminal(job.state)) {
       const cancel = el("button", { text: "Stop", attrs: { type: "button", class: "danger", "data-control": "stop" } });
       cancel.addEventListener("click", () =>
@@ -145,12 +147,8 @@
     view.follow(id);
     detail.replaceChildren(
       el("div", { attrs: { id: "job-detail-summary" }, children: [el("p", { className: "muted", text: "Reading…" })] }),
-      view.root,
-      el("p", {
-        className: "muted",
-        text: "Credentials the Companion knows about are removed from this view. The raw bytes are kept beside the job.",
-      }),
       el("div", { attrs: { id: "job-detail-actions" } }),
+      view.root,
     );
     $("job-detail-title").setAttribute("tabindex", "-1");
     $("job-detail-title").focus();
@@ -192,55 +190,31 @@
     ]);
   }
 
+  // The job's page: what ran and how it ended in the open — state, times,
+  // the live line while it runs, what went wrong, findings and outputs — and
+  // the exact command, program, folders and raw facts in Technical details,
+  // closed until somebody opens it (NEW_365).
   function renderSummary(body) {
+    renderLive(body);
     const key = keyOf(body);
     if (key === summaryKey) return;
     summaryKey = key;
     $("job-detail-title").textContent = jobName(body);
     const summary = $("job-detail-summary");
+    const wasOpen = summary.querySelector("details.job-technical")?.open || false;
     const parts = [];
 
     const head = el("p");
     head.append(badge(body.state));
-    head.append(document.createTextNode(" " + (body.started_at ? "started " + when(body.started_at) : "")));
+    head.append(document.createTextNode(" " + [took(body), body.started_at ? t("started {when}", { when: when(body.started_at) }) : ""]
+      .filter(Boolean).join(" · ")));
     parts.push(head);
+    const live = el("p", { className: "mono job-live", attrs: { id: "job-live" } });
+    parts.push(live);
 
-    if (body.command?.shell) {
-      parts.push(el("h4", { text: "The command that ran" }));
-      parts.push(el("pre", { className: "output", text: body.command.shell }));
-    }
-    // The user's own words in that command, named, so a job that behaved
-    // differently because of a flag somebody added says which flag.
-    if ((body.custom_args || []).length) {
-      parts.push(el("p", {
-        className: "custom-args-note",
-        children: [
-          el("strong", { text: t("Your own arguments:") + " " }),
-          ...body.custom_args.map((token) => el("code", { className: "custom-arg", text: token })),
-          el("span", { className: "muted", text: " " + t("(from this program's setup in Profiles)") }),
-        ],
-      }));
-    }
     if (body.error) {
       parts.push(el("p", { className: "message error", text: body.error }));
     }
-    if (body.failure_class) {
-      parts.push(el("p", { className: "mono failure-class", text: t("Kind of failure: {kind}", { kind: body.failure_class }) }));
-    }
-    parts.push(
-      el("p", {
-        className: "mono",
-        text: [
-          body.exit_code !== undefined && body.exit_code !== null ? "exit status " + body.exit_code : "",
-          body.timed_out ? "timed out" : "",
-          took(body),
-          body.started_at ? "started " + when(body.started_at) : "",
-          body.finished_at ? "finished " + when(body.finished_at) : "",
-        ]
-          .filter(Boolean)
-          .join(" · "),
-      })
-    );
 
     if ((body.diagnostics || []).length) {
       parts.push(el("h4", { text: "Findings" }));
@@ -271,21 +245,63 @@
               artifact.name
             )
           );
-          item.append(el("span", { className: "stage-detail", text: " " + artifact.path }));
         }
         list.append(item);
       }
       parts.push(list);
     }
+
+    // Technical details: everything needed to decide what ran, exactly.
+    const facts = [];
+    const fact = (term, value) => { if (value) facts.push(el("dt", { text: term }), el("dd", { className: "mono", text: value })); };
+    fact(t("Command"), body.command?.shell);
+    if ((body.custom_args || []).length) {
+      facts.push(el("dt", { text: t("Your own arguments:") }), el("dd", { children: [
+        ...body.custom_args.map((token) => el("code", { className: "custom-arg", text: token })),
+        el("span", { className: "muted", text: " " + t("(from this program's setup in Profiles)") }),
+      ] }));
+    }
+    fact(t("Program"), body.command?.executable);
+    fact(t("Working directory"), body.command?.working_dir);
+    fact(t("Command digest"), body.command?.digest);
+    fact(t("Profile"), [body.profile_name, body.profile_id, body.profile_version, body.profile_digest].filter(Boolean).join(" · "));
+    fact(t("Exit status"), body.exit_code !== undefined && body.exit_code !== null ? String(body.exit_code) : "");
+    fact(t("Timed out"), body.timed_out ? t("yes, after {n} s", { n: body.timeout_seconds || "?" }) : "");
+    fact(t("Kind of failure"), body.failure_class);
+    fact(t("Started"), body.started_at ? when(body.started_at) : "");
+    fact(t("Finished"), body.finished_at ? when(body.finished_at) : "");
+    fact(t("Process"), body.process?.pid ? `pid ${body.process.pid}` : "");
+    fact(t("Job"), body.id);
+    for (const artifact of body.artifacts || []) fact(artifact.name, artifact.path ? `${artifact.path}${artifact.sha256 ? " · " + artifact.sha256 : ""}` : "");
+    const technical = el("details", { className: "job-technical", children: [
+      el("summary", { text: t("Technical details") }),
+      el("dl", { className: "summary-list", children: facts }),
+      el("p", { className: "muted small", text: t("Credentials the Companion knows about are removed from this view. The raw bytes are kept beside the job.") }),
+    ] });
+    technical.open = wasOpen;
+    parts.push(technical);
     summary.replaceChildren(...parts);
+    renderLive(body);
     renderActions(body);
+  }
+
+  // The live line is redrawn as text every poll, never as part of the summary,
+  // so it ticks while a focused Stop or an open Technical details stays put.
+  function renderLive(body) {
+    const node = document.getElementById("job-live");
+    if (!node) return;
+    const running = !terminal(body.state);
+    const line = window.AUCOM.liveLine(body.live, { stage: body.action_title || "", running });
+    node.textContent = line.text;
+    node.title = line.title;
+    node.hidden = !line.text;
   }
 
   async function renderActions(body) {
     const holder = $("job-detail-actions");
     const actions = el("div", { className: "row-actions" });
     if (terminal(body.state)) {
-      const retry = el("button", { text: "Run this again", attrs: { type: "button" } });
+      const retry = el("button", { text: "Run this again", attrs: { type: "button", class: "secondary" } });
       retry.addEventListener("click", () =>
         withBusy(retry, async () => {
           const { ok, body: out } = await api(`/api/v1/jobs/${encodeURIComponent(body.id)}/retry`, { method: "POST" });
@@ -311,14 +327,7 @@
           actions.append(report);
         }
       }
-      actions.append(
-        el("p", {
-          className: "muted",
-          text:
-            "Running it again makes a NEW job with the same request. This one stays exactly as it is, " +
-            "so both are in the list and neither is overwritten.",
-        })
-      );
+      retry.title = t("Makes a NEW job with the same request; this one stays as it is.");
     } else {
       const stop = el("button", { text: "Stop", attrs: { type: "button", class: "danger" } });
       stop.addEventListener("click", () =>

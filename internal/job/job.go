@@ -18,7 +18,7 @@ import (
 // this program, not by anybody else's. A record this build does not fully
 // understand is refused rather than half-read, because a job record is what
 // says whether something ran.
-const SchemaVersion = "aucom.job/1.5"
+const SchemaVersion = "aucom.job/1.6"
 
 // SupportedSchemaVersions is every job record format this build reads, oldest
 // first.
@@ -44,7 +44,10 @@ const SchemaVersion = "aucom.job/1.5"
 // build that did not record it, and recovery reads that as "ownership cannot
 // be proved": it is still listed, shown and retried, and nothing it names is
 // ever signalled.
-var SupportedSchemaVersions = []string{"aucom.job/1.0", "aucom.job/1.1", "aucom.job/1.2", "aucom.job/1.3", "aucom.job/1.4", "aucom.job/1.5"}
+// 1.6 added `resources`: the peak CPU and memory the executor's sampler saw of
+// a tool's processes, and how they were measured (NEW_365) — a summary, never
+// the per-second readings. A record without it was not measured.
+var SupportedSchemaVersions = []string{"aucom.job/1.0", "aucom.job/1.1", "aucom.job/1.2", "aucom.job/1.3", "aucom.job/1.4", "aucom.job/1.5", "aucom.job/1.6"}
 
 // SchemaSupported reports whether this build reads a job record format.
 func SchemaSupported(version string) bool {
@@ -394,6 +397,9 @@ type Job struct {
 	Launch *Launch `json:"launch,omitempty"`
 	// Recovery is what the recovery pass that ended this job decided.
 	Recovery *Recovery `json:"recovery,omitempty"`
+	// Resources is the summary of what the sampler measured of a tool's
+	// processes while it ran. Nil for an engine, and for a record from before.
+	Resources *ResourceSummary `json:"resources,omitempty"`
 	// History is every state this job has been in, with when and why.
 	History []Event `json:"history,omitempty"`
 }
@@ -467,6 +473,10 @@ func (j *Job) Clone() *Job {
 	if j.Recovery != nil {
 		recovery := *j.Recovery
 		out.Recovery = &recovery
+	}
+	if j.Resources != nil {
+		resources := *j.Resources
+		out.Resources = &resources
 	}
 	return &out
 }

@@ -86,8 +86,7 @@
       textOf($("play-game-root")).includes("aup-q2room") && textOf($("play-game-root")).includes("baseq2"),
       textOf($("play-game-root")).slice(0, 140));
 
-    await waitFor("the primary to offer a review", () => /Review build/.test(textOf($("play-start"))) && !$("play-start").disabled);
-    $("play-start").click();
+    // NEW_365: the check runs by itself; nothing is pressed for it.
     await waitFor("the review", () => textOf($("play-review")).includes("Where files will be written"), 40000);
     // The package's one question is the person's, so it is in the open.
     await waitFor("the package card", () => $("play-review-attention").querySelector("#play-grant-basis"), 10000);

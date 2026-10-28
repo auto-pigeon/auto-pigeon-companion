@@ -43,6 +43,17 @@
   // one button says ("Review build" until "ok", then "Build"). `outcome` is the
   // state of the build the progress panel is showing.
   let checked = null;
+  // reviewedSetup is the setup the last check was made against (setupKey):
+  // which build profile, at which version, with which tools and what they
+  // were ready for. A check is a statement about THAT request; once the setup
+  // under it changes — a program set up in Profiles, a tool rebound — it says
+  // nothing about the new one, and the one button goes back to "Review build"
+  // (NEW_365, HITL review finding 3).
+  let reviewedSetup = "";
+  // checkedWhy is the one sentence a refused check said; starting is true from
+  // the press until the server answered it.
+  let checkedWhy = "";
+  let starting = false;
   let outcome = null;
   // Bumped by every change to steps 1 and 2, so a check that was out while the
   // choices changed cannot mark the new choices checked.
@@ -230,6 +241,7 @@
       "Choose a ready pipeline…", true, true, undefined, { setupLabel: "pipelines" });
     renderPipeline();
     if (kept && select.value === previous) restoreInputs(kept);
+    if (checked !== null && reviewStale(reviewedSetup, currentPipeline())) forgetReview();
   }
 
   function keptInputs() {
@@ -442,19 +454,65 @@
     return (pipeline?.inputs || []).filter((input) => input.required && !body.inputs[input.name]);
   }
 
-  // The one button, said and enabled from what the choices need now.
+  // The one button and the sentence beside it (NEW_365, operator): the button
+  // always says Build, and is enabled once these exact choices, on this exact
+  // setup, have been checked and nothing stops them. Until then the sentence
+  // beside it says, visibly and once, that the setup is being checked or what
+  // stops it, with the link that fixes it — never a tooltip, and never a second
+  // press to "review". The check (POST /api/v1/build/preview) starts nothing.
+  // The sentence renderPrimary/renderSteps last wrote beside the button.
+  let buildWritten = "";
   function renderSteps() {
-    const pipeline = currentPipeline();
-    const missing = missingRequired();
-    const ready = Boolean(pipeline) && window.AUCOM.pipelineReady(pipeline);
     const button = $("build-start");
-    button.textContent = checked === "ok" ? t("Build") : t("Review build");
-    button.disabled = !ready || missing.length > 0 || chosenFiles().length === 0 || outcome === "running";
-    const why = !pipeline ? t("Choose a ready build profile first.")
-      : !ready ? t("The chosen build profile needs setup first.")
-        : missing.length || !chosenFiles().length ? t("Choose the map file first.")
-          : outcome === "running" ? t("A build is running; it can be cancelled below.") : "";
-    button.title = why;
+    button.textContent = t("Build");
+    button.setAttribute("aria-describedby", "build-start-message");
+    const blocked = buildBlocked();
+    button.disabled = Boolean(blocked) || starting;
+    const status = $("build-start-message");
+    if (!status || starting) return;
+    if (blocked?.checking) scheduleCheck();
+    // Redrawn only when what it says changes (see play.js renderPrimary).
+    const key = !blocked ? "" : blocked.checking ? "checking" : `${blocked.text}|${blocked.link?.getAttribute?.("href") || ""}`;
+    // Skipped only while the sentence on screen is still the one written here:
+    // another writer (a change clearing it) makes it drawn again.
+    if (status.dataset.shown === key && status.textContent === buildWritten) return;
+    status.dataset.shown = key;
+    if (!blocked) {
+      setMessage(status, "");
+    } else if (blocked.checking) {
+      busy(status, t("Checking setup…"));
+    } else {
+      setMessage(status, blocked.text, blocked.error ? "error" : "");
+      if (blocked.link) status.append(" ", blocked.link);
+    }
+    buildWritten = status.textContent;
+  }
+
+  // buildBlocked is what stops the button now, or null.
+  function buildBlocked() {
+    const pipeline = currentPipeline();
+    if (!pipeline) return { text: t("Choose a ready build profile first.") };
+    if (!window.AUCOM.pipelineReady(pipeline)) {
+      const cause = (window.AUCOM.setupCauses?.(pipeline) || [])[0];
+      return { text: t("The chosen build profile needs setup first."), link: cause ? window.AUCOM.setupLink(cause) : null };
+    }
+    if (missingRequired().length > 0 || chosenFiles().length === 0) return { text: t("Choose the map file first.") };
+    if (outcome === "running") return { text: t("A build is running; it can be cancelled below.") };
+    if (checked === "blocked") return { text: checkedWhy || t("This build cannot start yet; what is missing is said in Technical details."), error: true };
+    if (checked !== "ok") return { checking: true };
+    return null;
+  }
+
+  // The check runs by itself once the choices are complete and unchecked:
+  // a quarter of a second after the last change, one at a time (preview()
+  // coalesces), and a late answer for older choices never marks these checked.
+  let checkTimer = null;
+  function scheduleCheck() {
+    clearTimeout(checkTimer);
+    checkTimer = setTimeout(() => {
+      const blocked = buildBlocked();
+      if (blocked?.checking) preview($("build-start")).then(renderSteps);
+    }, 250);
   }
 
   // showStep (kept for the callers it had as a wizard: My Maps, the leak-test
@@ -474,9 +532,49 @@
     } else control?.focus?.({ preventScroll: true });
   }
 
+  // A change event that leaves the request exactly as it was checked — the
+  // `change` a text field fires when the pointer leaves it for the Build
+  // button — keeps the check: dropping it disabled the button under the click
+  // (NEW_365, seen live). Anything that did change the request drops it.
+  let checkedRequest = "";
   function choicesChanged() {
+    if (checked !== null && checkedRequest && JSON.stringify(requestBody()) === checkedRequest &&
+      !reviewStale(reviewedSetup, currentPipeline())) {
+      return;
+    }
     generation += 1;
     checked = null;
+    renderSteps();
+  }
+
+  // setupKey is what a review depends on besides the form: the build profile
+  // and version, every stage's tool, and the readiness the server decided for
+  // it. Nothing here is the form's own choices; those are `generation`.
+  function setupKey(pipeline) {
+    if (!pipeline) return "";
+    return JSON.stringify([pipeline.id, pipeline.version, pipeline.digest || "",
+      (pipeline.steps || []).map((step) => [step.id, step.provider?.id || "", step.provider?.version || "",
+        step.provider_version || "", step.provider_authorized === true, step.provider_bound === true]),
+      pipeline.readiness || null]);
+  }
+
+  // reviewStale reports whether the review on screen was made against another
+  // setup than the one chosen now.
+  function reviewStale(reviewed, pipeline) {
+    return reviewed !== "" && reviewed !== setupKey(pipeline);
+  }
+
+  // forgetReview drops a review the setup has moved out from under: the
+  // commands it showed are not what would run now, so they are not left on
+  // screen under a button that would start them.
+  function forgetReview() {
+    generation += 1;
+    checked = null;
+    reviewedSetup = "";
+    const out = $("build-preview-out");
+    out.hidden = true;
+    out.replaceChildren();
+    checkedWhy = "";
     renderSteps();
   }
 
@@ -745,23 +843,27 @@
   }
 
   async function runPreview(button, asked) {
-    await withBusy(button, async () => {
-      busy("build-message", "Resolving every stage…");
+    await (async () => {
       const { ok, body } = await api("/api/v1/build/preview", { method: "POST", body: requestBody() });
       const out = $("build-preview-out");
       out.hidden = false;
       out.replaceChildren();
       // A result for choices that have changed since is still shown — it is
       // what was asked — but it does not mark the new choices checked.
-      const verdict = (value) => (asked === generation ? value : null);
+      const verdict = (value) => {
+        if (asked !== generation) return null;
+        reviewedSetup = setupKey(currentPipeline());
+        checkedRequest = JSON.stringify(requestBody());
+        return value;
+      };
       if (!ok) {
         checked = verdict("blocked");
+        if (checked) checkedWhy = explain(body.error)?.advice || sentenceOf(body.error) || t("the check failed");
         // A refused check is about THESE choices; the last build's outcome is
         // not theirs, and left on the step's tab it read "succeeded" over a
         // refusal.
         outcome = null;
         renderSteps();
-        setMessage("build-message", explain(body.error)?.advice || sentenceOf(body.error) || "the preview failed", "error");
         out.append(problemBlock(body.error || "the preview failed"));
         // A refusal met at the check never becomes a build, so this is the only
         // record of it in Activity: its kind, and the refusal's own sentence.
@@ -774,14 +876,12 @@
       }
       const blocked = (body.steps || []).filter((step) => step.error);
       checked = verdict(blocked.length > 0 ? "blocked" : "ok");
-      renderSteps();
-      if (blocked.length > 0) {
-        setMessage("build-message",
-          "This build cannot start yet. What is missing is said under the stage that needs it; nothing has started.",
-          "error");
-      } else {
-        setMessage("build-message", "Everything is in place. This is what will run; nothing has started. Press Build.", "ok");
+      if (checked === "blocked") {
+        const first = blocked[0];
+        checkedWhy = t("{stage}: {why}", { stage: first.title || first.id,
+          why: explain(first.error, first)?.advice || sentenceOf(first.error) });
       }
+      renderSteps();
       out.append(el("h4", { text: "Commands" }));
       for (const step of body.steps || []) {
         const block = el("div");
@@ -797,15 +897,33 @@
         if (step.command?.shell) block.append(el("pre", { className: "output", text: step.command.shell }));
         out.append(block);
       }
-    });
+    })();
   }
 
   async function start(button) {
-    await withBusy(button, async () => {
-      busy("build-message", "Starting…");
+    if (starting) return;
+    starting = true;
+    button.disabled = true;
+    $("build-start-message").dataset.shown = "pressed";
+    busy("build-start-message", t("Starting…"));
+    await (async () => {
       const { ok, body } = await api("/api/v1/build/runs", { method: "POST", body: requestBody() });
+      starting = false;
+      if (!ok && body.code === "already_running" && body.build) {
+        // Another press or another tab started exactly this: follow that one.
+        currentBuild = body.build;
+        outcome = "running";
+        $("build-current-panel").hidden = false;
+        $("build-step-4").hidden = false;
+        renderSteps();
+        setMessage("build-start-message", t("This build is already running. Its progress is below."), "");
+        poll();
+        return;
+      }
       if (!ok) {
-        setMessage("build-message", explain(body.error)?.advice || sentenceOf(body.error) || "the build could not be started", "error");
+        checked = "blocked";
+        checkedWhy = explain(body.error)?.advice || sentenceOf(body.error) || t("the build could not be started");
+        renderSteps();
         // The refusal's own words, whole, in Activity — and its kind, when the
         // Companion classified it (Q3_010: an extractor refusal such as
         // `q3map_shader_unsafe` never becomes a build, so this line and the
@@ -813,8 +931,8 @@
         record("Build could not be started", (body.class ? "[" + body.class + "] " : "") + sentenceOf(body.error), "failed");
         return;
       }
-      setMessage("build-message", "The build has started.", "ok");
       outcome = "running";
+      setMessage("build-start-message", t("Started. Progress is below."), "ok");
       setMessage("build-result", "", "");
       record(`Build started: ${$("build-label").value.trim() || currentPipeline()?.name || "untitled"}`, "", "running");
       currentBuild = body.build;
@@ -825,8 +943,9 @@
       $("build-current-title").setAttribute("tabindex", "-1");
       $("build-current-title").focus();
       renderSteps();
+      setMessage("build-start-message", t("Started. Progress is below."), "ok");
       poll();
-    });
+    })();
   }
 
   // poll re-reads the manifest. It is a poll rather than a stream because the
@@ -1360,17 +1479,10 @@
     $(id).addEventListener("input", choicesChanged);
     $(id).addEventListener("change", choicesChanged);
   }
-  // One button: the check of these exact choices first ("Review build"), and
-  // Build only once that check is on screen and found everything in place.
+  // One button, one press: Build, for the choices the check was made for.
   $("build-start").addEventListener("click", async (event) => {
-    if (checked !== "ok") {
-      checked = null;
-      await preview(event.currentTarget);
-      $("build-review-details").open = checked !== "ok";
-      if (checked === "ok") window.AUCOM.announce(t("Review ready. Press Build to start."));
-    } else {
-      await start(event.currentTarget);
-    }
+    if (checked !== "ok" || buildBlocked()) return;
+    await start(event.currentTarget);
     renderSteps();
   });
   $("build-history-refresh").addEventListener("click", (event) => withBusy(event.currentTarget, refreshHistory));
@@ -1439,12 +1551,10 @@
       await refreshHistory();
       await reattach();
       renderSteps();
-      // Back from Profiles after "Set up …": the check that sent the person
-      // there is out of date, so it runs again rather than waiting for a click.
-      if (checked === "blocked") {
-        checked = null;
-        preview($("build-start"));
-      }
+      // Back from Profiles after "Set up …": a review made before is dropped
+      // by refreshPipelines when the setup under it changed. Nothing is
+      // checked on the person's behalf — a check run on arrival turned the
+      // button into "Build" for a request nobody had reviewed (NEW_365).
       if (currentBuild) poll();
     },
     showStep,

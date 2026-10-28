@@ -110,6 +110,7 @@ type OutputChunk struct {
 // liveCaptures is a running job's two streams, while it runs.
 type liveCaptures struct {
 	stdout, stderr *capture
+	progress       *progressTracker
 }
 
 // Output reads the next chunk of a job's output.
@@ -166,8 +167,18 @@ func (s *Service) Output(id string, request OutputRequest) (*OutputChunk, error)
 	// drawn twice as it grows. A line longer than the whole chunk is returned
 	// as it is, or it would never be returned at all. Once the job is over the
 	// last partial line is the final flush and is returned whole.
+	//
+	// A carriage return ends a line too, for this purpose: a progress counter
+	// rewrites its line with `\r` and sends no newline until it is done, and a
+	// view that waited for one showed the line before the counter for as long
+	// as the counter ran (NEW_365). A `\r` that is the very last byte is held
+	// back with the rest, because the `\n` of a CRLF may be the next byte.
 	if !terminal && len(raw) > 0 && raw[len(raw)-1] != '\n' {
-		if cut := bytes.LastIndexByte(raw, '\n'); cut >= 0 {
+		cut := bytes.LastIndexByte(raw, '\n')
+		if cr := bytes.LastIndexByte(raw[:len(raw)-1], '\r'); cr > cut {
+			cut = cr
+		}
+		if cut >= 0 {
 			raw = raw[:cut+1]
 		} else if len(raw) < max {
 			raw = raw[:0]

@@ -48,6 +48,10 @@
   // (refreshPlan, checkOwnWads).
   let texturesAsked = 0;
 
+  // The runs this Companion reports as active, by id, from the last poll: what
+  // tells the form that the build it started is still going (NEW_365).
+  const activeRuns = new Set();
+
   // The whole of this page's state. Exact identities, never display labels: a
   // request carrying "dm1, latest" would mean something different tomorrow.
   const state = {
@@ -231,6 +235,13 @@
   // Any change to an identity throws the plan away and SAYS SO. A review that
   // silently described the previous choice would be the worst kind of review.
   function invalidate(why) {
+    // A change event that changed nothing the check covers (a field's
+    // `change` on leaving it) keeps the check and the button under the click.
+    if (state.plan && state.planKey === planKey()) {
+      remember();
+      return;
+    }
+    delete $("play-start-message").dataset.pressed;
     setMessage("play-start-message", "");
     remember();
     if (!state.plan) {
@@ -246,11 +257,19 @@
     renderFinalSummary();
   }
 
+  // The exact request a check was made for — and, since NEW_365, the setup
+  // under it: the chosen build profile's readiness and the chosen engine's, so
+  // a program set up, rebound or unapproved in Profiles is a different key and
+  // the check is made again before the one button can start anything.
   function planKey() {
+    const pipeline = state.pipelines.find((p) => p.id === state.pipeline);
+    const engine = state.engines.find((e) => e.id === state.engine);
     return [
       state.map?.asset_id, state.revision?.revision_id, state.sourceFile, state.mapName,
       state.pipeline, String(state.strict), state.engine, state.action, state.mod, state.ownWadsDir,
-      JSON.stringify(listingBody() || null),
+      String(state.runAfter), JSON.stringify(listingBody() || null),
+      JSON.stringify(pipeline?.readiness || null),
+      JSON.stringify(state.runAfter ? [engine?.action_problems?.[state.action] || null, engine?.binding?.roots || null] : null),
     ].join("|");
   }
 
@@ -942,58 +961,91 @@
 
   // --- the review ------------------------------------------------------------------
 
+  // refreshPlan is the check: the server's plan for exactly these choices
+  // (POST /api/v1/play/plan), which starts nothing, launches nothing and
+  // downloads nothing (NEW_365). A plan for choices that changed while it was
+  // worked out is dropped, and so is a refusal: neither is about the choices
+  // on screen. The texture bundle is NOT fetched here any more — that is a
+  // download, and it belongs to the run, which fetches and verifies it first;
+  // a review only says what this machine already knows about it.
   async function refreshPlan() {
     const key = planKey();
     if (state.plan && state.planKey === key) return;
-    const review = $("play-review");
-    review.replaceChildren();
-    busyMessage("play-review-message", t("Working out what this would do…"));
-    const { ok, body } = await api("/api/v1/play/plan", { method: "POST", body: requestBody() });
-    // A plan for choices changed while it was worked out is not shown.
+    const { ok, status, body } = await api("/api/v1/play/plan", { method: "POST", body: requestBody() });
     if (key !== planKey()) return;
     if (!ok) {
       state.plan = null;
-      review.replaceChildren();
-      setMessage("play-review-message", body.error, "error");
+      state.planKey = "";
+      state.planRefusal = { key, body };
+      // A server that did not answer, or answered 5xx, is asked again in five
+      // seconds; a refusal about the choices themselves waits for a change.
+      if (!status || status >= 500) {
+        setTimeout(() => {
+          if (state.planRefusal?.key === key && key === planKey()) {
+            state.planRefusal = null;
+            renderFinalSummary();
+          }
+        }, 5000);
+      }
+      $("play-review").replaceChildren();
+      $("play-review-attention").replaceChildren();
       renderFinalSummary();
       return;
     }
+    state.planRefusal = null;
     state.plan = body;
     state.planKey = key;
     setMessage("play-review-message", "");
     renderReview(body);
     renderFinalSummary();
+  }
 
-    // The ordered WAD set is part of what the review is FOR, and the plan does
-    // not download anything — so when this machine holds no verified bundle for
-    // the revision yet, the review fetches and verifies one now. It is the same
-    // bundle the build will read, cached by its own digest, so pressing Build &
-    // Run afterwards costs nothing extra. What is never done is INVENTING the
-    // list: until this returns, the review says the textures will be fetched.
-    // A Quake II run's review does not list WADs: its texture export (account
-    // texture sources at their bound revisions) is downloaded by the run itself,
-    // and its other .wal files come from the base game folder (Q2_015A). The
-    // plan's texture message says so.
-    if (!body.packaged && body.textures && body.textures.known === false && window.AUCOM.status?.authenticated) {
-      const asked = ++texturesAsked;
-      const { ok: gotTextures, body: textures } = await api(
-        `/api/v1/play/textures?asset_id=${encodeURIComponent(state.map.asset_id)}` +
-        `&revision=${encodeURIComponent(state.revision.revision)}`
-      );
-      // A plan that changed underneath this is one whose textures are not these.
-      if (state.planKey !== key) return;
-      // Nor is an answer a later question has already replaced: this fetch
-      // verifies the bundle and can take seconds, and "Use this folder" pressed
-      // meanwhile is answered first — this one landing on top of it would put
-      // the WAD warning back over the answer the person asked for.
-      if (asked !== texturesAsked) return;
-      if (gotTextures && textures.known) {
-        state.plan.textures = textures;
-        renderReview(state.plan);
-        renderFinalSummary();
-      } else if (!gotTextures) {
-        serverFailure("play-review-message", textures);
-      }
+  // checkTextures downloads and verifies the revision's texture bundle when a
+  // person asks for it — the same bundle the build reads, cached by its
+  // digest, so the build does not fetch it twice.
+  async function checkTextures() {
+    const key = state.planKey;
+    if (!state.plan || key !== planKey()) return;
+    const asked = ++texturesAsked;
+    busyMessage("play-review-message", t("Downloading and checking this revision's textures…"));
+    const { ok, body: textures } = await api(
+      `/api/v1/play/textures?asset_id=${encodeURIComponent(state.map.asset_id)}` +
+      `&revision=${encodeURIComponent(state.revision.revision)}`
+    );
+    if (state.planKey !== key || asked !== texturesAsked) return;
+    setMessage("play-review-message", "");
+    if (ok && textures.known) {
+      state.plan.textures = textures;
+      renderReview(state.plan);
+      renderFinalSummary();
+    } else if (!ok) {
+      serverFailure("play-review-message", textures);
+    }
+  }
+
+  // The check runs by itself whenever the choices on screen are complete and
+  // have not been checked: once at a time, a quarter of a second after the
+  // last change, and again if they changed while it was out.
+  let checkTimer = null;
+  let checking = null;
+  function scheduleCheck() {
+    clearTimeout(checkTimer);
+    checkTimer = setTimeout(runCheck, 250);
+  }
+  async function runCheck() {
+    if (state.source !== "saved" || missingSentence() || reviewed()) return;
+    if (checking) {
+      checking.again = true;
+      return;
+    }
+    checking = { again: false };
+    try {
+      await refreshPlan();
+    } finally {
+      const again = checking.again;
+      checking = null;
+      renderFinalSummary();
+      if (again) scheduleCheck();
     }
   }
 
@@ -1181,6 +1233,14 @@
     if (!textures) return el("section", { className: "panel review-card", children });
     if (!textures.known) {
       children.push(el("p", { className: "muted", text: textures.message }));
+      // Downloading the bundle is the run's first step, so the check does not
+      // do it (NEW_365). Somebody who wants to see the WADs, or to know now
+      // whether the server sent them all, asks for it here.
+      if (window.AUCOM.status?.authenticated && state.map && state.revision) {
+        const check = el("button", { text: t("Check the textures now"), attrs: { type: "button", class: "secondary", id: "play-check-textures" } });
+        check.addEventListener("click", () => window.AUCOM.withBusy(check, checkTextures));
+        children.push(el("div", { className: "row-actions", children: [check] }));
+      }
       return el("section", { className: "panel review-card", children });
     }
     children.push(el("p", { className: "muted small", text: t("The texture WADs, in the order the map declares them.") }));
@@ -1464,63 +1524,186 @@
       ...(listing ? line(t("Live Games"), `${listing.title} · ${$("play-listing-visibility").selectedOptions[0]?.textContent || ""}` +
         ` · ${listing.endpoint_host}:${listing.endpoint_port}`) : []),
     );
-    const why = missingSentence();
-    const current = reviewed();
-    const texturesOk = !current || state.plan.packaged || textures?.compiler_ready !== false || Boolean(own);
-    const button = $("play-start");
-    button.textContent = !current ? t("Review build") : state.runAfter ? t("Build & Run") : t("Build");
-    button.disabled = Boolean(why) || !texturesOk;
-    // A message the button's own press wrote ("Started.") stays until the
-    // next change; otherwise this is what stops the press, or nothing.
-    if (!$("play-start-message").dataset.pressed) {
-      setMessage("play-start-message", why || (!texturesOk ? t("This map's textures are not complete enough to compile — see the review.") : ""));
-    }
+    renderPrimary();
   }
 
-  // The primary: work the review out, or — once it is on screen for exactly
-  // these choices — start. Never both in one press: what is started is what
-  // was reviewed.
-  async function primary() {
-    delete $("play-start-message").dataset.pressed;
-    if (!reviewed()) {
-      await refreshPlan();
-      if (reviewed()) {
-        announce(state.runAfter ? t("Review ready. Press Build & Run to start.") : t("Review ready. Press Build to start."));
+  // The one button and the one sentence beside it (NEW_365, operator). The
+  // button always says what it does — Build & Run, or Build when nothing runs
+  // after — and is enabled once the choices on screen have been checked and
+  // nothing stops them. Until then the sentence beside it says, visibly and
+  // once, either that the setup is being checked or what stops it, with the
+  // link that fixes it. Never a tooltip, and never a second press to "review".
+  // The sentence renderPrimary/renderSteps last wrote beside the button.
+  let primaryWritten = "";
+  function renderPrimary() {
+    if (state.source !== "saved") return;
+    const button = $("play-start");
+    button.textContent = state.runAfter ? t("Build & Run") : t("Build");
+    const status = $("play-start-message");
+    // What the press itself wrote ("Starting…", "Started.") stays until the
+    // next change of the choices.
+    const pressed = Boolean(status.dataset.pressed);
+    const blocked = primaryBlocked();
+    button.disabled = Boolean(blocked) || pressed && status.dataset.pressed === "starting";
+    button.setAttribute("aria-describedby", "play-start-message");
+    if (pressed) return;
+    if (blocked?.checking) scheduleCheck();
+    // Redrawn only when what it says changes: the poll calls this every
+    // second while a run is active, and replacing the sentence each time took
+    // the Set up link out from under a pointer or the keyboard focus.
+    const key = !blocked ? "" : blocked.checking ? "checking" : `${blocked.text}|${blocked.link?.getAttribute?.("href") || ""}`;
+    // Skipped only while the sentence on screen is still the one written here:
+    // another writer (a change clearing it) makes it drawn again.
+    if (status.dataset.shown === key && status.textContent === primaryWritten) return;
+    status.dataset.shown = key;
+    if (!blocked) {
+      setMessage(status, "");
+    } else if (blocked.checking) {
+      window.AUCOM.busy(status, t("Checking setup…"));
+    } else {
+      setMessage(status, blocked.text, blocked.error ? "error" : "");
+      if (blocked.link) status.append(" ", blocked.link);
+    }
+    primaryWritten = status.textContent;
+  }
+
+  // primaryBlocked is what stops the one button now, or null.
+  function primaryBlocked() {
+    const why = missingSentence();
+    if (why) return { text: why, link: setupLinkFor() };
+    const refusal = state.planRefusal?.key === planKey() ? state.planRefusal.body : null;
+    if (refusal) {
+      return { text: window.AUCOM.failureWords?.(refusal)?.summary || refusal.error || t("This cannot start with these choices."),
+        error: true, link: setupLinkFor() };
+    }
+    if (!reviewed()) return { checking: true };
+    const textures = state.plan.textures;
+    const own = textures?.ready_with_own_wads && textures.own_wads_dir === state.ownWadsDir;
+    if (!state.plan.packaged && textures?.compiler_ready === false && !own) {
+      return { text: t("This map's textures are not complete enough to compile — see what is missing above."), error: true };
+    }
+    if (startedHere()) return { text: t("This build is running. Its progress is below.") };
+    return null;
+  }
+
+  // The link beside a blocked button: Profiles, at the profile that needs it.
+  function setupLinkFor() {
+    const pipeline = state.pipelines.find((p) => p.id === state.pipeline);
+    if (pipeline && !window.AUCOM.pipelineReady(pipeline)) {
+      const cause = (window.AUCOM.setupCauses?.(pipeline) || [])[0];
+      if (cause) return window.AUCOM.setupLink(cause);
+    }
+    if (state.runAfter && state.engine) {
+      const engine = state.engines.find((e) => e.id === state.engine);
+      if (engine && (!state.gameRoot || !window.AUCOM.actionReady(engine, state.action))) {
+        return window.AUCOM.setupLink({ profile: engine.id, name: engine.name || engine.id });
       }
+    }
+    return null;
+  }
+
+  // startedHere: the run this form started for exactly these choices is
+  // still going, so the same press would only be refused as already running.
+  function startedHere() {
+    return Boolean(state.started) && state.started.key === planKey() && activeRuns.has(state.started.id);
+  }
+
+  // The primary: one press starts what the button says, for the choices the
+  // check was made for. A decision only the person can make — listing a game
+  // for everyone, whose own files travel in a Quake II package — is asked in a
+  // focused dialog first, with the same action at its bottom right; the
+  // ordinary case asks nothing.
+  async function primary() {
+    if (!reviewed() || primaryBlocked()) return;
+    const key = planKey();
+    // The ordinary press: no question, and "Starting…" in the same instant.
+    if (!decisionNeeded()) {
+      const status = $("play-start-message");
+      status.dataset.pressed = "starting";
+      status.dataset.shown = "pressed";
+      window.AUCOM.busy(status, t("Starting…"));
+      await start();
       return;
     }
+    if (!(await requiredDecision())) return;
+      // A decision that changed what the check covers is checked again first.
+    if (key !== planKey()) {
+      await refreshPlan();
+      if (!reviewed() || primaryBlocked()) return;
+    }
+    const status = $("play-start-message");
+    status.dataset.pressed = "starting";
+    status.dataset.shown = "pressed";
+    window.AUCOM.busy(status, t("Starting…"));
     await start();
   }
 
+  // decisionNeeded reports, without asking, whether this press needs one.
+  function decisionNeeded() {
+    return (state.runAfter && publicListing(listingBody())) || (packaged() && state.runAfter && !state.grant.basis);
+  }
+
+  // requiredDecision asks what must be decided before this start, and nothing
+  // else. Resolves false when the person cancelled.
+  async function requiredDecision() {
+    const label = state.runAfter ? t("Build & Run") : t("Build");
+    if (state.runAfter && publicListing(listingBody())) {
+      return window.AUCOM.confirmModal({
+        title: t("List this game for everyone?"),
+        body: t("Everyone in Live Games will see it and can join, and players outside your network need to reach this computer at {host}:{port}. The listing ends when the game stops.",
+          { host: state.listing.host.trim(), port: state.listing.port }),
+        confirm: label, closeX: true,
+      });
+    }
+    if (packaged() && state.runAfter && !state.grant.basis) {
+      const choice = el("select", { attrs: { id: "play-decision-basis" } });
+      for (const [value, text] of GRANT_BASES) choice.append(el("option", { text: t(text), attrs: { value } }));
+      const field = el("p", { className: "field", children: [
+        el("label", { text: t("Your own files in the package"), attrs: { for: "play-decision-basis" } }), choice] });
+      const answer = await window.AUCOM.confirmModal({
+        title: t("Whose files may travel in the package?"),
+        body: t("A Quake II package carries only files you say may be shared. Not answering stops the package at each file of yours it would carry, and names it."),
+        content: [field], confirm: label, closeX: true,
+      });
+      if (!answer) return false;
+      state.grant.basis = choice.value;
+      const select = $("play-grant-basis");
+      if (select) select.value = choice.value;
+      return true;
+    }
+    return true;
+  }
+
   async function start() {
-    setMessage("play-start-message", "");
+    const key = planKey();
     const { ok, body } = await api("/api/v1/play/runs", { method: "POST", body: requestBody() });
+    const status = $("play-start-message");
     if (!ok) {
-      setMessage("play-start-message", body.code === "auto_build_running"
+      status.dataset.pressed = "refused";
+      if (body.code === "already_running" && body.run_id) {
+        // Another press or another tab started exactly this: follow that one.
+        setMessage(status, t("This build is already running. Its progress is below."), "");
+        state.started = { id: body.run_id, key };
+        watch(body.run_id);
+        return;
+      }
+      setMessage(status, body.code === "auto_build_running"
         ? t("An automatic build of this revision is already running. Follow it with View progress.") : body.error, "error");
-      $("play-start-message").dataset.pressed = "1";
       return;
     }
     // Everyone was this launch's choice, not the next one's (NEW_247A2): the
-    // next launch starts Private. The review, asked for with the listing it
-    // previews, is worked out again before the next start.
+    // next launch starts Private.
     if (state.listing.visibility !== FRESH_VISIBILITY) {
       state.listing.visibility = FRESH_VISIBILITY;
       renderListing();
-      invalidate("The next game you host starts Private again, so the review is worked out again.");
     }
-    // The run has its card now; the form is a draft for the NEXT build, and
-    // starting another is a new decision, made after its own review — not a
-    // second press of a button that still says Build.
-    state.plan = null;
-    state.planKey = "";
-    $("play-review").replaceChildren();
-    $("play-review-attention").replaceChildren();
-    setMessage("play-review-message", "");
-    setMessage("play-start-message", t("Started."), "ok");
-    $("play-start-message").dataset.pressed = "1";
+    state.started = { id: body.id, key };
+    activeRuns.add(body.id);
+    status.dataset.pressed = "started";
+    setMessage(status, state.runAfter ? t("Started. Building, then the game starts — progress is below.") : t("Started. Progress is below."), "ok");
     announce(state.runAfter ? t("Build and run started.") : t("Build started."));
     watch(body.id);
+    $("play-current")?.scrollIntoView?.({ block: "nearest" });
   }
 
   function busyMessage(id, text) {
@@ -1602,6 +1785,17 @@
     const current = ok ? renderActivity(body.items || []) : [];
     if (ok) renderCurrent(body.items || []);
     const active = (body.items || []).some((run) => run.active);
+    if (ok) {
+      activeRuns.clear();
+      for (const run of body.items || []) if (run.active) activeRuns.add(run.id);
+      // The run this form started has ended: the press's sentence has said
+      // its part, and the button is for the next build.
+      if (state.started && !activeRuns.has(state.started.id)) {
+        state.started = null;
+        delete $("play-start-message").dataset.pressed;
+      }
+      renderPrimary();
+    }
     $("activity-open").hidden = !(body.items || []).length;
     $("activity-count").textContent = active ? "running" : "";
     // Polled rather than streamed: one small request a second while something
@@ -1703,7 +1897,7 @@
   // What a card shows, minus the clock: a key that changes only when the card
   // has something new to say.
   function cardKey(run) {
-    const { elapsed_ms: _elapsed, build_steps: steps, ...rest } = run;
+    const { elapsed_ms: _elapsed, build_steps: steps, current_job_live: _live, ...rest } = run;
     return JSON.stringify([rest, (steps || []).map((step) => [step.id, step.state, step.job_id])]);
   }
 
@@ -1748,6 +1942,7 @@
         if (held && held.key === key) {
           const clock_ = held.node.querySelector(".activity-run__elapsed");
           if (clock_) clock_.textContent = elapsed(run.elapsed_ms);
+          renderRunLive(held.node, run);
           continue;
         }
         const node = runCard(run, { current: true });
@@ -1830,9 +2025,9 @@
   function outputFor(run) {
     let entry = outputs.get(run.id);
     if (!entry) {
-      const link = el("a", { className: "activity-run__joblink", text: t("Open the full log in Jobs") });
-      link.hidden = true;
-      const view = window.AUCOM.outputView({ label: t("What the tools printed"), maxChars: 60000, jobLink: link });
+      // No link of its own: the run's name above goes to the full log.
+      const link = el("a");
+      const view = window.AUCOM.outputView({ label: t("What the tools printed"), maxChars: 60000 });
       entry = { view, link };
       outputs.set(run.id, entry);
     }
@@ -1856,7 +2051,6 @@
         if (view.job && !view.complete) await view.poll();
         view.follow(target.job, target.label, { fromStart: target.running });
         link.href = window.AUCOM.areas.jobs?.href?.(target.job) || "#jobs/" + encodeURIComponent(target.job);
-        link.hidden = false;
       }
       if (!view.complete) {
         await view.poll();
@@ -1879,17 +2073,17 @@
     const headTools = el("div", { className: "activity-run__tools", children: [
       el("span", { className: "muted activity-run__elapsed", text: elapsed(run.elapsed_ms) }),
     ] });
-    if (run.build_id) {
-      const jobs = el("button", { text: "Open in Jobs", attrs: { type: "button", class: "secondary", "data-focus-key": "jobs" } });
-      // Never a new browser tab: the Jobs page is in this window.
-      jobs.addEventListener("click", () => { window.location.hash = "#jobs"; });
-      headTools.append(jobs);
-    }
-    const head = el("div", {
-      className: "activity-run__head",
-      children: [el("strong", { text: `${run.map || run.asset_id} — ${run.title}` +
-        (run.trigger === "auto_build" ? " · " + t("Auto-build") : "") }), headTools],
-    });
+    // The run's name is the way to its full detail and output: the job of the
+    // stage running now, or of the last one that ran, on the Jobs page in this
+    // window (NEW_365 — it replaced an "Open in Jobs" button and a second
+    // "Open the full log" link that went to the same place).
+    const name = `${run.map || run.asset_id} — ${run.title}` + (run.trigger === "auto_build" ? " · " + t("Auto-build") : "");
+    const followed = jobToFollow(run);
+    const title = followed
+      ? el("a", { className: "activity-run__name", text: name, attrs: {
+        href: window.AUCOM.areas.jobs?.href?.(followed.job) || "#jobs/" + encodeURIComponent(followed.job), "data-focus-key": "name" } })
+      : el("strong", { text: name });
+    const head = el("div", { className: "activity-run__head", children: [title, headTools] });
     const stages = el("ol", {
       className: "activity-stages",
       children: (run.stages || []).map((stage) => el("li", {
@@ -1902,7 +2096,8 @@
       })),
     });
 
-    const children = [head, stages];
+    const live = el("p", { className: "mono activity-run__live" });
+    const children = [head, stages, live];
     if (run.state === "cancelled") {
       children.push(el("p", {
         className: "message",
@@ -1968,7 +2163,22 @@
     // and not in the way of whoever does not.
     children.push(details(run));
 
-    return el("section", { className: "panel activity-run", children });
+    const card = el("section", { className: "panel activity-run", children });
+    renderRunLive(card, run);
+    return card;
+  }
+
+  // The running step's live line — the same reading the Jobs page shows for
+  // that job — drawn as text, so the card is not rebuilt for it.
+  function renderRunLive(card, run) {
+    const node = card.querySelector(".activity-run__live");
+    if (!node) return;
+    const live = run.active ? run.current_job_live : null;
+    const step = (run.build_steps || []).find((candidate) => candidate.job_id === run.current_job);
+    const line = window.AUCOM.liveLine(live, { stage: step?.title || run.current_step || "", running: true });
+    node.textContent = line.text;
+    node.title = line.title;
+    node.hidden = !line.text;
   }
 
   // A run's failure in this page's language when the Companion classified it
@@ -2111,11 +2321,12 @@
     $("play-source-saved").checked = !local;
     $("play-source-local").checked = local;
     for (const id of ["play-saved-map", "play-pipeline-field", "play-stages", "play-strict-field",
-      "play-final-summary", "play-review-attention", "play-review-message", "play-review-details", "play-start"]) {
+      "play-final-summary", "play-review-attention", "play-review-message", "play-review-details", "play-start",
+      "play-start-message"]) {
       $(id).hidden = local;
     }
     for (const id of ["play-local-map", "build-pipeline-field", "build-stages", "build-strict-field",
-      "build-message", "build-review-details", "build-start"]) {
+      "build-message", "build-review-details", "build-start", "build-start-message"]) {
       $(id).hidden = !local;
     }
     $("play-signed-out").hidden = local || Boolean(window.AUCOM.status?.authenticated);

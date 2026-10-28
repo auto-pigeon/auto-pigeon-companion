@@ -865,31 +865,57 @@ func (s *Server) handlePlayStart(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, err)
 		return
 	}
-	// A build by hand of the revision Auto-build is building now is the same
-	// build twice: refused, pointing at the one running (NEW_363).
-	autobuilds, _ := s.autobuildService()
-	if request.BuildOnly && autobuilds != nil {
-		if state, stateErr := autobuilds.State(); stateErr == nil {
-			if entry, found := state.Find(request.AssetID); found && entry.Running != nil &&
-				entry.Running.Revision.ID == request.RevisionID {
-				writeJSON(w, http.StatusConflict, errorBody{Error: autobuild.ErrSameRevisionRunning.Error(),
-					Code: "auto_build_running"})
-				return
-			}
-		}
+	// A build by hand — Build, or Build & Run — of the revision Auto-build is
+	// building now with the same build profile is the same build twice:
+	// refused, pointing at the one running (NEW_363). The question and the
+	// reservation that keeps the poller from starting it are one step under
+	// Auto-build's own lock (NEW_365, autobuild.AdmitManual); a start that
+	// fails gives the revision back.
+	record, err := s.admitPlay(request, func() (*playrun.Record, error) { return service.Start(request) })
+	if s.refusedDuplicate(w, err) {
+		return
 	}
-	record, err := service.Start(request)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	// ...and once started, the poller never builds that revision again.
-	if request.BuildOnly && autobuilds != nil {
-		if noteErr := autobuilds.NoteManual(request.AssetID, request.RevisionID); noteErr != nil {
-			s.logf("play: noting the hand build of %s for Auto-build: %v", request.AssetID, noteErr)
-		}
-	}
 	writeJSON(w, http.StatusAccepted, playView(record, time.Now().UTC()))
+}
+
+// refusedDuplicate answers a start refused because the same build is already
+// going: an automatic one (auto_build_running), or this exact run, started by
+// another press or another tab (already_running, with its id so the page can
+// follow it instead).
+func (s *Server) refusedDuplicate(w http.ResponseWriter, err error) bool {
+	var running *playrun.AlreadyRunningError
+	switch {
+	case errors.Is(err, autobuild.ErrSameRevisionRunning):
+		writeJSON(w, http.StatusConflict, errorBody{Error: err.Error(), Code: "auto_build_running"})
+	case errors.As(err, &running):
+		writeJSON(w, http.StatusConflict, map[string]any{"error": err.Error(), "code": "already_running", "run_id": running.RunID})
+	default:
+		return false
+	}
+	return true
+}
+
+// admitPlay starts a hand-made run through Auto-build's admission, when this
+// Companion has an auto-build service, and directly otherwise.
+func (s *Server) admitPlay(request playrun.Request, start func() (*playrun.Record, error)) (*playrun.Record, error) {
+	autobuilds, _ := s.autobuildService()
+	if autobuilds == nil {
+		return start()
+	}
+	var record *playrun.Record
+	err := autobuilds.AdmitManual(autobuild.ManualBuild{
+		AssetID: request.AssetID, RevisionID: request.RevisionID,
+		PipelineID: request.PipelineID, Backend: s.backendAddress(),
+	}, func() error {
+		var startErr error
+		record, startErr = start()
+		return startErr
+	})
+	return record, err
 }
 
 func (s *Server) handlePlayGet(w http.ResponseWriter, r *http.Request) {
@@ -934,6 +960,14 @@ func (s *Server) handlePlayList(w http.ResponseWriter, r *http.Request) {
 				view["build_steps"] = steps
 			}
 		}
+		// The running step's live line — last output, the tool's own progress,
+		// CPU and memory — from the same sampler the Jobs page reads, so the
+		// drawer and the full log cannot disagree (NEW_365).
+		if record.State.Active() && record.CurrentJob != "" && s.jobs != nil {
+			if running, err := s.jobs.Get(record.CurrentJob); err == nil {
+				view["current_job_live"] = s.jobs.Live(running)
+			}
+		}
 		items = append(items, view)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
@@ -958,7 +992,17 @@ func (s *Server) handlePlayRetry(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, err)
 		return
 	}
-	record, err := service.Retry(r.PathValue("id"))
+	// A retry is a new hand-made run of the same request: admitted the same
+	// way as a first one, so it cannot duplicate an automatic build either.
+	previous, err := service.Get(r.PathValue("id"))
+	if err != nil {
+		writeError(w, playStatus(err), err)
+		return
+	}
+	record, err := s.admitPlay(previous.Request, func() (*playrun.Record, error) { return service.Retry(previous.ID) })
+	if s.refusedDuplicate(w, err) {
+		return
+	}
 	if err != nil {
 		writeError(w, playStatus(err), err)
 		return

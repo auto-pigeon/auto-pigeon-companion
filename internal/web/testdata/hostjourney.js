@@ -77,15 +77,39 @@
     node.dispatchEvent(new Event("input", { bubbles: true }));
     node.dispatchEvent(new Event("change", { bubbles: true }));
   };
-  // The review's one primary: "Review build" works the review out, and once it
-  // is on screen for these exact choices it says "Build & Run".
+  // NEW_365: the check runs by itself and the one primary always says
+  // "Build & Run"; it is enabled once these exact choices have been checked.
   async function reviewBuild() {
-    await waitFor("the primary to offer a review", () => /Review build/.test(textOf($("play-start"))) && !$("play-start").disabled, 20000);
-    $("play-start").click();
+    await waitFor("the check of these choices", () => textOf($("play-review")).includes("What will be downloaded"), 40000);
   }
+  // A game listed for everyone is the one decision a press asks about, in a
+  // focused dialog with the same action at its bottom right.
+  let cancelledOnce = false;
   async function buildAndRun() {
     await waitFor("the primary to say Build & Run", () => textOf($("play-start")) === "Build & Run" && !$("play-start").disabled, 40000);
     $("play-start").click();
+    await sleep(150);
+    let dialog = document.querySelector("dialog.modal[open]");
+    if (dialog && !cancelledOnce) {
+      // Cancel first: nothing starts, the dialog goes, the button is as it was.
+      cancelledOnce = true;
+      const before = (await api("/api/v1/play/runs")).items.length;
+      [...dialog.querySelectorAll(".modal-actions button")].find((b) => textOf(b) === "Cancel").click();
+      await sleep(300);
+      const after = (await api("/api/v1/play/runs")).items.length;
+      record("cancelling the listing decision starts nothing and keeps the button",
+        before === after && !document.querySelector("dialog.modal[open]") && textOf($("play-start")) === "Build & Run" && !$("play-start").disabled,
+        `${before} → ${after} runs`);
+      $("play-start").click();
+      await sleep(150);
+      dialog = document.querySelector("dialog.modal[open]");
+    }
+    if (dialog) {
+      record("listing for everyone is asked in a dialog whose action says Build & Run",
+        textOf(dialog.querySelector(".modal-actions .primary")) === "Build & Run" && Boolean(dialog.querySelector(".modal-close")),
+        textOf(dialog).replace(/\s+/g, " ").slice(0, 140));
+      dialog.querySelector(".modal-actions .primary").click();
+    }
   }
   const helpIn = (root) => (root ? root.querySelector("[data-help-to-connect]") : null);
   // The review's Live Games card, found by its heading: several cards share a
