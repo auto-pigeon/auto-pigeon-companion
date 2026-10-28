@@ -18,6 +18,7 @@ topics:
   - i18n
 paths:
   - internal/web/assets/core.js
+  - internal/web/assets/profiles.js
   - internal/web/assets/play.js
   - internal/web/assets/autobuild.js
   - internal/web/assets/leakrequest.js
@@ -91,6 +92,19 @@ they bind every surface that offers a choice, says why something cannot start, o
 - Budget: the ordinary viewport carries at most 90 authored explanatory words (measured 38 at 1440x900 with
   the compiler's name included; the five-step page carried 91 on step 1 alone).
 
+## Profiles: one row, one state, one page in task order (NEW_364)
+
+- **A row is a name, a kind and game, and ONE state** — the server's `setup_state`, said as *Ready*, *Partly ready*
+  (*Ready: Play a map only* for one startable action), *Needs setup*, *Needs approval*, *Incompatible program*,
+  *Unavailable on this platform*. The name is the row's link; no Configure button per row. A pipeline row names the
+  tool it waits for.
+- **A page answers what it is for, what to configure, whether it can be used** — Setup, Options, Approval — and keeps
+  trust, provenance, exact versions, paths, digests, commands and Remove under a closed **Details**.
+- **Nothing executes from a list:** selecting a row or opening a page starts no program (job count unchanged, live).
+- Measured at 1440x900 (authored words in the area, names included): AP 1.4535 tool with an incompatible light
+  **626 → 205**, Q1 normal pipeline 267 → 98, vkQuake 451 → 150; the list's 6 Configure + 6 Homepage buttons per tab
+  → 0 (row links).
+
 ## Examples
 
 | | before | after |
@@ -102,5 +116,6 @@ they bind every surface that offers a choice, says why something cannot start, o
 ## Tests that hold it
 
 `testdata/playjourney.js` (one form, F1/F2 refusals, late-answer fence), `new363_test.go`,
+`testdata/profilespage.check.mjs` and `new364_test.go` (Profiles state, fences, argument revisions),
 `testdata/setupcauses.check.mjs` (`TestWhatTheUnreadyChoicesNeedIsSaidOnce`),
 `testdata/leakrequest.check.mjs` cases 12–14, `TestAnUnreadyChoiceNamesTheToolToSetUp`.

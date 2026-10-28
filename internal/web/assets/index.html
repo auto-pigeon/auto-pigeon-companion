@@ -913,56 +913,45 @@
 
         <!-- Profiles ----------------------------------------------------- -->
         <section id="area-profiles" class="area" aria-labelledby="area-heading" hidden>
+          <!-- NEW_364: a list a person scans (name, kind and game, ONE state)
+               and one page per profile in task order: what it is for, Setup,
+               Options, Approval, then everything else closed under Details. -->
           <nav id="profile-breadcrumb" class="breadcrumb" aria-label="Where you are" hidden>
-            <a href="#profiles" id="profile-breadcrumb-up">Profiles</a>
-            <span aria-hidden="true"> › </span><span>Configure</span>
-            <span aria-hidden="true"> › </span><span id="profile-breadcrumb-name" aria-current="page"></span>
+            <a href="#profiles" id="profile-breadcrumb-up">‹ Back to Profiles</a>
           </nav>
           <div id="profiles-overview">
-          <p class="lede">
-            A profile describes a tool or an engine: what it is and how to start
-            it. Reading one is inert — nothing here can run until you have
-            approved it.
-          </p>
-
           <div class="panel">
-            <div class="panel-head">
-              <h3>Installed profiles</h3>
-              <button type="button" id="profiles-refresh" class="secondary">Refresh</button>
+            <div class="panel-head profiles-head">
+              <div class="panel-head__tools">
+                <label class="visually-hidden" for="profiles-search">Search profiles</label>
+                <input id="profiles-search" type="search" placeholder="Search profiles" spellcheck="false" autocomplete="off" />
+              </div>
             </div>
             <div class="field">
               <label for="profiles-kind">Kind</label>
               <select id="profiles-kind">
-                <option value="tool">Build Tools</option>
-                <option value="pipeline">Build Pipelines</option>
-                <option value="engine">Game Engines</option>
+                <option value="">All</option>
+                <option value="tool">Build tools</option>
+                <option value="pipeline">Build pipelines</option>
+                <option value="engine">Game engines</option>
               </select>
             </div>
             <p id="profiles-message" class="message" role="status"></p>
-            <ul id="profiles-list" class="cards" aria-label="Installed profiles"></ul>
+            <ul id="profiles-list" class="profile-rows" aria-label="Installed profiles"></ul>
           </div>
           </div>
 
           <div class="panel" id="profile-detail-panel" hidden>
             <div class="panel-head">
               <h3 id="profile-detail-title">Profile</h3>
-              <button type="button" id="profile-detail-close" class="secondary">Close</button>
             </div>
             <div id="profile-detail"></div>
           </div>
-
-
         </section>
 
         <!-- New profile: its own page, opened in a new browser tab from the
              Profiles area's New profile button (?view=new-profile). -->
         <section id="area-new-profile" class="area" aria-labelledby="area-heading" hidden>
-          <p class="lede">
-            Write a profile for a build pipeline, a tool or an engine — from
-            scratch, or filled in from one that has been tested. Once it is
-            installed, its review and setup open in Profiles, where you approve it
-            and say where its programs are.
-          </p>
           <!-- ONE way to write a profile (operator, 2026-10-03): the tested
                profiles and "from scratch" are the same form. "Start from" is
                From scratch by default; choosing a tested profile fills every
@@ -970,15 +959,6 @@
                scratch.js and internal/web/scratchfill.go. -->
           <div class="panel" id="creator-panel">
             <h3>Write a profile</h3>
-            <p class="muted">
-              A build tool says where programs are and what they can do. A
-              build pipeline picks tools, in order, and gives each stage its
-              parameters. An engine starts the game. Start from scratch, or
-              from a profile that has been tested and change what is different
-              about yours — every field it fills in is yours to edit. The
-              Companion composes and checks the document; nothing runs until
-              you approve it.
-            </p>
             <ol class="wizard-steps" id="wizard-steps">
               <li aria-current="step"><span class="step-number">1</span> Kind and starting point</li>
               <li><span class="step-number">2</span> Identity</li>
@@ -1010,7 +990,12 @@
                   </select>
                 </div>
               </div>
+              <p id="wizard-kind-hint" class="muted"></p>
               <p id="wizard-template-note" class="muted"></p>
+              <p id="wizard-template-error" class="message error" role="alert" hidden>
+                <span id="wizard-template-error-text"></span>
+                <button type="button" id="wizard-template-retry" class="secondary">Retry</button>
+              </p>
             </div>
 
             <div class="wizard-step" id="wizard-step-2">
@@ -1070,17 +1055,17 @@
               <details id="wizard-json-details">
                 <summary>Advanced: the document itself</summary>
                 <p class="muted">
-                  This is the whole profile, canonically encoded — the same bytes
-                  its digest covers. Edit it here, or paste one somebody sent
-                  you, then check it.
+                  The whole profile, as its digest covers it. Edit it or paste one,
+                  then check it.
                 </p>
                 <label class="visually-hidden" for="wizard-json">Profile document</label>
                 <textarea id="wizard-json" rows="18" spellcheck="false"></textarea>
                 <div class="row">
                   <button type="button" id="wizard-check-json">Check this document</button>
                   <button type="button" id="wizard-copy-json" class="secondary">Copy</button>
-                  <button type="button" id="wizard-download-json" class="secondary">Save to a file…</button>
-                  <button type="button" id="wizard-load-json" class="secondary">Load from a file…</button>
+                  <button type="button" id="wizard-download-json" class="secondary">Download as a file</button>
+                  <button type="button" id="wizard-load-json" class="secondary">Open a file…</button>
+                  <input type="file" id="wizard-load-file" accept=".json,application/json" hidden />
                 </div>
               </details>
               <div class="row">

@@ -170,11 +170,9 @@ until you pick one.
 
 The qualified compiler is ericw-tools **2.0.0-alpha11** (v0.18.1 is retired).
 Download it from its homepage (the profile's **Homepage** button), unpack it,
-then in **Profiles › Configure › ericw-tools** choose that folder — the one with
-`qbsp` directly inside it. An approved profile's page opens on what this machine
-still needs and where its programs are; the profile's long description is under
-**About this profile**. From a terminal, with the profile document from this
-repository:
+then in **Profiles** open **ericw-tools** and, under **Setup**, choose that
+folder — the one with `qbsp` directly inside it. From a terminal, with the
+profile document from this repository:
 
 ```console
 $ companion acquire resolve internal/profile/builtin/ericw-tools-q1.tool.json \
@@ -377,18 +375,47 @@ $ companion autobuild pipeline <map-id> --pipeline auto-pigeon.q1.final
 $ companion autobuild off <map-id>
 ```
 
+### Profiles
+
+**Profiles** lists every profile with its kind, its game and one state:
+**Ready**, **Partly ready** (or *Ready: Play a map only* when one action can
+start), **Needs setup**, **Needs approval**, **Incompatible program** or
+**Unavailable on this platform**. Search by name, kind or game; open a profile
+by its name. Its page reads top to bottom:
+
+1. **Setup** — what is missing, by program, and the folder or program pickers.
+   A pipeline names the tool to set up instead, with a **Set up** link to it.
+   *Using:* says the version the programs reported, which may be a compatible
+   release other than the one the profile is named for.
+2. **Options** — what the document sets for each program, and under
+   **Advanced options** each program's own extra arguments.
+3. **Approval** — for a profile that did not ship with the Companion.
+4. **Details** (closed) — description, publisher and licence, trust, each
+   program's exact path, version and digest, **Check these programs**, the
+   homepage, the exact commands, and removing a profile of your own.
+
+```bash
+# the state the Profiles list shows for one profile
+curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
+  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/profiles/auto-pigeon.q1.normal" | jq .setup_state
+# → {"state": "needs_setup"}
+```
+
 ### Pipelines and their arguments
 
 What each program is run with is set on the **stage of the pipeline that runs
-it**. Open a pipeline in **Profiles › Configure**: every stage has a list of
-extra arguments for that stage alone, each box one argument exactly as typed,
-never passed through a shell. **Reset to default** removes them, and the Build
-area shows the exact command before anything runs. An argument that repeats a
-switch the stage already passes (such as `-threads`) is refused, naming the
-parameter to set instead.
+it**. Open a pipeline in **Profiles** and its **Advanced options**: every stage
+has a list of extra arguments for that program alone, each box one argument
+exactly as typed, never passed through a shell — a path with spaces is one box.
+**Clear** empties one list on the page; nothing changes until **Save
+arguments**, which is offered only while there is something to save. An
+argument that repeats a switch the stage already passes (such as `-threads` or
+qbsp's `-nopercent`) is refused beside that program, naming the parameter to set
+instead. **Details** shows each stage's exact command, the same words the build
+runs.
 
 ```console
-$ companion toolchain args auto-pigeon.q1.normal compile --set=-nopercent
+$ companion toolchain args auto-pigeon.q1.normal compile --set=-nocolor
 $ companion toolchain args auto-pigeon.q1.normal                    # every stage and its arguments
 $ companion toolchain args auto-pigeon.q1.normal compile --reset
 $ companion toolchain args auto-pigeon.engine.darkplaces engine --set=-window   # an engine keeps its own
@@ -398,7 +425,11 @@ $ companion toolchain args auto-pigeon.engine.darkplaces engine --set=-window   
 curl -fsS -X POST -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
   -H 'Content-Type: application/json' \
   "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/profiles/auto-pigeon.q1.normal/stage-arguments" \
-  -d '{"stage":"compile","arguments":["-nopercent"]}'
+  -d '{"stage":"compile","arguments":["-nocolor"]}'
+
+# each stage's exact command as it would run on this machine
+curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
+  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/profiles/auto-pigeon.q1.normal/commands"
 ```
 
 ### Writing a profile
@@ -412,6 +443,10 @@ and a stage is never run by another tool instead. Nothing is installed until you
 press **Install this profile**, and an installed profile cannot run until you
 approve it. To make a new version of a profile of your own, keep its name,
 change the version and tick **Replace the installed profile with the same id**.
+Changing the kind clears only programs and stages; the name and game stay. The
+document itself is under **Advanced: the document itself** — **Open a file…**
+reads one you pick, **Download as a file** saves it through your browser, and
+going back to the form from a document you edited asks first.
 
 **Changing a stage's tool keeps what still fits** — inputs, outputs and
 parameters the new tool also declares — and says so. Anything the new tool

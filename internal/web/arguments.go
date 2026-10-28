@@ -96,7 +96,51 @@ func (s *Server) handleProfileCommands(w http.ResponseWriter, r *http.Request) {
 		writeError(w, jobStatus(err), err)
 		return
 	}
+	if pipeline, isPipeline := entry.Profile.(*profile.PipelineProfile); isPipeline {
+		writeJSON(w, http.StatusOK, map[string]any{"items": s.stageCommands(pipeline, local)})
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": effectiveCommands(entry.Profile, local)})
+}
+
+// stageCommands is a pipeline's commands as they would run here, one per
+// stage its installed tools can resolve: the stage's options and its own
+// arguments on the tool that runs it (NEW_364). A stage nothing installed can
+// run says so instead of a command.
+func (s *Server) stageCommands(pipeline *profile.PipelineProfile, local binding.LocalBinding) []map[string]any {
+	items := make([]map[string]any, 0, len(pipeline.Steps))
+	runner, err := s.buildRunner(nil)
+	if err != nil {
+		return items
+	}
+	set, _, err := s.bindings()
+	if err != nil {
+		return items
+	}
+	resolver := runner.Resolver()
+	for _, step := range pipeline.Steps {
+		entry, exists := resolver.EntryForStep(step)
+		_, action, provided := resolver.ProviderForStep(step)
+		if !exists || !provided {
+			items = append(items, map[string]any{"action_id": step.ID, "title": step.Title, "executable": step.Capability,
+				"error": "No installed tool runs this stage here."})
+			continue
+		}
+		toolLocal, _ := set.Find(entry.Profile.Metadata().ID)
+		command := binding.StageCommand(entry.Profile, action, toolLocal, currentPlatform(), step.Options, local.StepArguments[step.ID])
+		item := map[string]any{"action_id": step.ID, "title": step.Title, "executable": command.Executable}
+		if command.Error != "" {
+			item["error"] = command.Error
+		} else {
+			item["argv"] = command.Argv
+			item["custom_args"] = command.CustomArgs
+			if len(command.CustomArgs) > 0 {
+				item["custom_at"] = command.CustomAt
+			}
+		}
+		items = append(items, item)
+	}
+	return items
 }
 
 // effectiveCommands is [binding.EffectiveCommands] as the page reads it.

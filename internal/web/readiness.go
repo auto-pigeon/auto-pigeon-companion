@@ -152,3 +152,50 @@ func pipelineReadiness(pipeline *profile.PipelineProfile, resolver *build.Resolv
 	out.Ready = len(out.Problems) == 0
 	return out
 }
+
+// setupState is the ONE state a profile's row and page say (NEW_364):
+// ready, partly_ready (with the actions that can start), needs_setup,
+// needs_approval, incompatible or unavailable. Installed, approved, compatible
+// and ready are different facts, so a page never folds them into one green
+// badge, and it never reads them out of the English of a summary: the
+// checker's faults decide, in this order — a platform the profile has nothing
+// for, then the trust decision, then a program that is there and is the wrong
+// one, then anything still to choose.
+func (r readiness) setupState(actions []string) map[string]any {
+	has := func(faults ...engine.Fault) bool {
+		for _, problem := range r.Problems {
+			for _, fault := range faults {
+				if problem.Fault == fault {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	state := map[string]any{}
+	switch {
+	case has(engine.FaultUnsupportedPlatform):
+		state["state"] = "unavailable"
+	case has(engine.FaultNotAuthorized, engine.FaultStaleBinding):
+		state["state"] = "needs_approval"
+	case has(engine.FaultToolIncompatible, engine.FaultToolUnusable, engine.FaultToolUnverified):
+		state["state"] = "incompatible"
+	case !r.Ready:
+		state["state"] = "needs_setup"
+	default:
+		state["state"] = "ready"
+		var startable []string
+		for _, id := range actions {
+			if problems, known := r.PerAction[id]; known && len(problems) == 0 {
+				startable = append(startable, id)
+			}
+		}
+		// "Ready" promises every action; one that cannot start makes it
+		// partly ready, and the page names what can.
+		if len(startable) < len(r.PerAction) {
+			state["state"] = "partly_ready"
+			state["ready_actions"] = startable
+		}
+	}
+	return state
+}

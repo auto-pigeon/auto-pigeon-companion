@@ -28,7 +28,7 @@ function harness() {
     withBusy:async(n,fn)=>{n.disabled=true;try{return await fn();}finally{n.disabled=false;}},
     scratch:{request:()=>scratch,stageTokens:()=>tokens,render(){},clear(){},fill(value){Object.assign(scratch,value);},refresh:async()=>{}},
     showArea(){},status:{},openInstalledProfile:async id=>installs.push(id)};
-  const document={createTextNode:x=>x,querySelectorAll:()=>[],body:{classList:{remove(){}}}};
+  const document={createTextNode:x=>x,querySelectorAll:()=>[],querySelector:()=>null,getElementById:()=>null,addEventListener(){},body:{classList:{remove(){}}}};
   $('wizard-kind').value='tool';
   for(const [id,value] of Object.entries({name:'A tool',version:'1.0.0',summary:'A compiler',publisher:'Local',license:'NOASSERTION'}))$('wizard-'+id).value=value;
   runInNewContext(readFileSync(new URL('../assets/profiles.js',import.meta.url),'utf8'),{window:{AUCOM},document,console,structuredClone,URLSearchParams,Event:class{constructor(type){this.type=type;}},navigator:{}});

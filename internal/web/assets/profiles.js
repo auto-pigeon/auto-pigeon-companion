@@ -88,19 +88,81 @@
 
 
   // --- installed profiles ---------------------------------------------------
+  //
+  // NEW_364: the list answers three questions a person has — what is this
+  // for, what must I configure, can I use it now — in one row each: the name
+  // (which opens its page), the kind and game, and ONE state the server
+  // decided (`setup_state`, core.js `profileState`). Trust, provenance,
+  // versions and digests are on the profile's own page, under Details.
+
+  // Fences: an answer belongs to the request that is still current. A list
+  // asked for one kind and answered after another was chosen, a page asked
+  // for profile A and answered after B was opened, or anything asked before
+  // the account or server changed, is dropped (`aucom:status`).
+  let lastOpened = "";
+  let listSequence = 0;
+  let detailSequence = 0;
+  let viewGeneration = 0;
 
   async function refreshList() {
-    const list = $("profiles-list");
+    const sequence = ++listSequence;
+    const generation = viewGeneration;
     const kind = $("profiles-kind").value;
     const { ok, body } = await api("/api/v1/profiles" + (kind ? "?kind=" + encodeURIComponent(kind) : ""));
-    list.replaceChildren();
+    if (sequence !== listSequence || generation !== viewGeneration || kind !== $("profiles-kind").value) return;
     if (!ok) {
-      setMessage("profiles-message", body.error || "could not read the profiles", "error");
+      $("profiles-list").replaceChildren();
+      setMessage("profiles-message", body.error || t("The profiles could not be read."), "error");
       return;
     }
     installed = body.items || [];
-    setMessage("profiles-message", t("{n} profile(s) on this machine.", { n: installed.length }));
-    for (const profile of installed) list.append(profileCard(profile));
+    drawList();
+  }
+
+  const KIND_NAMES = { tool: "Build tool", pipeline: "Build pipeline", engine: "Game engine" };
+  const GAME_NAMES = { quake1: "Quake", quake2: "Quake II", quake3: "Quake III" };
+  function kindAndGame(profile) {
+    const game = GAME_NAMES[profile.engine_family] || "";
+    return t(KIND_NAMES[profile.kind] || profile.kind) + (game ? " · " + t(game) : "");
+  }
+
+  // drawList filters by the search words (name, summary, kind, game) without
+  // asking the server again: the list is a few dozen rows.
+  function drawList() {
+    const list = $("profiles-list");
+    const words = $("profiles-search").value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const shown = installed.filter((profile) => {
+      const text = [profile.name, profile.summary, kindAndGame(profile)].join(" ").toLowerCase();
+      return words.every((word) => text.includes(word));
+    });
+    list.replaceChildren(...shown.map(profileRow));
+    if (!installed.length) setMessage("profiles-message", t("No profile of this kind is installed."));
+    else if (!shown.length) setMessage("profiles-message", t("No profile matches “{query}”.", { query: $("profiles-search").value.trim() }));
+    else setMessage("profiles-message", "");
+  }
+
+  function stateBadge(profile) {
+    const state = window.AUCOM.profileState(profile);
+    return state ? badge(state.text, state.kind) : document.createTextNode("");
+  }
+
+  // One row: the name is the link to the profile's page (and the whole row
+  // is its target), so there is no Configure button per row saying the same.
+  function profileRow(profile) {
+    const state = window.AUCOM.profileState(profile);
+    const link = el("a", { className: "profile-row__name", text: profile.name,
+      attrs: { href: "#profiles/" + encodeURIComponent(profile.id), title: profile.name } });
+    const kind = el("span", { className: "profile-row__kind muted", text: kindAndGame(profile) });
+    const wip = maturityBadge(profile.maturity);
+    if (wip) kind.append(document.createTextNode(" "), wip);
+    const status = el("span", { className: "profile-row__state" });
+    if (state) {
+      status.append(badge(state.text, state.kind));
+      // A pipeline waits for a TOOL: the row names that tool, once.
+      if (state.cause) status.append(el("span", { className: "muted small", text: " " + state.cause.name }));
+    }
+    return el("li", { className: "profile-row", attrs: { "data-profile": profile.id, "data-state": state?.code || "" },
+      children: [link, kind, status] });
   }
 
   // Where a profile's programs live, said from its own file names: "the one
@@ -118,69 +180,6 @@
     return t("The folder that has {programs} directly inside it.", { programs: names.slice(0, 4).join(", ") + (names.length > 4 ? ", …" : "") });
   }
 
-  function profileCard(profile) {
-    // Fixed rows, so the text lines up across a row of cards (operator,
-    // 2026-09-22): two lines for the name, two for the tags, four for the
-    // summary. Anything longer is cut with an ellipsis, and the whole text is
-    // in the tooltip.
-    const title = el("h4", { className: "profile-card__title", text: profile.name, attrs: { title: profile.name } });
-    const marks = el("p", { className: "profile-card__tags" });
-    marks.append(badge(profile.trust));
-    marks.append(document.createTextNode(" "));
-    marks.append(badge(profile.kind, "queued"));
-    marks.append(document.createTextNode(" "));
-    marks.append(badge(profile.authorized ? "approved" : "not approved", profile.authorized ? "ok" : "failed"));
-    // Whether its programs can start here: the same decision Build & Run's
-    // engine list shows (NEW_265), so the two never disagree.
-    if (profile.readiness) {
-      marks.append(document.createTextNode(" "));
-      marks.append(badge(profile.readiness.ready ? t("ready") : t("needs setup"), profile.readiness.ready ? "ok" : "blocked"));
-    }
-    const wip = maturityBadge(profile.maturity);
-    if (wip) {
-      marks.append(document.createTextNode(" "));
-      marks.append(wip);
-    }
-
-    const summary = el("p", {
-      className: "muted profile-card__summary",
-      text: profile.summary || "",
-      attrs: { title: profile.summary || null },
-    });
-    const identity = el("p", { className: "muted profile-card__version", text: t("Version {version}", { version: profile.version }) });
-
-    // Configuring a profile and reviewing one are different user tasks, so they
-    // are different words (246I defect 2). An installed profile whose document
-    // has already been approved is a thing you CONFIGURE; "Review" is the
-    // security decision, and it stays on the card only while that decision is
-    // genuinely still outstanding. Nothing about the digest or grant checks
-    // changes here — only which of the two tasks the card offers.
-    const needsReview = !profile.authorized;
-    const open = el("button", {
-      text: needsReview ? "Review" : "Configure",
-      attrs: { type: "button" },
-    });
-    // Either task is the profile's own page, a step below Profiles.
-    open.addEventListener("click", () => configure(profile.id));
-
-    // Homepage opens another site, so it sits top right (operator,
-    // 2026-09-23); only for the programs a person installs — engines and
-    // build tools — and only when the document names one.
-    const head = el("div", { className: "profile-card__head", children: [title] });
-    if (profile.homepage && (profile.kind === "engine" || profile.kind === "tool")) {
-      head.append(el("a", {
-        className: "profile-card__homepage",
-        text: t("Homepage"),
-        attrs: { href: profile.homepage, target: "_blank", rel: "noopener noreferrer", title: profile.homepage },
-      }));
-    }
-
-    return el("li", {
-      className: "card profile-card",
-      children: [head, marks, summary, identity, el("div", { className: "row-actions", children: [open] })],
-    });
-  }
-
   // homepageSection is where a profile's homepage is read and — for a profile
   // of this machine's own — changed (operator, 2026-09-23). A built-in document
   // is part of the program, so its answer is a copy of one's own, made in New
@@ -188,7 +187,7 @@
   // it has to be approved again; the page says so before and after.
   function homepageSection(body) {
     const section = el("div", { className: "profile-homepage" });
-    section.append(el("h4", { text: t("Homepage") }));
+    section.append(el("h5", { text: t("Homepage") }));
     if (!body.editable) {
       const line = el("p", { className: "muted" });
       if (body.homepage) {
@@ -211,7 +210,9 @@
     });
     input.value = body.homepage || "";
     const status = el("p", { className: "message", attrs: { role: "status" } });
-    const save = el("button", { text: t("Save homepage"), attrs: { type: "button", class: "primary" } });
+    // Saving it changes the document, so it says so on the button: this is
+    // not an innocent Save (NEW_364).
+    const save = el("button", { text: t("Save homepage (needs approval again)"), attrs: { type: "button", class: "secondary" } });
     const refreshSave = () => { save.disabled = input.value.trim() === (body.homepage || ""); };
     input.addEventListener("input", refreshSave);
     refreshSave();
@@ -226,11 +227,9 @@
         }
         record(`Homepage of ${body.name} saved (version ${out.was_version} → ${out.version})`, input.value.trim(), "ok");
         await openProfile(body.id);
-        await refreshList();
       })
     );
     section.append(
-      el("p", { className: "muted small", text: t("Saving makes a new version of this profile, which has to be approved again before it runs.") }),
       el("div", { className: "field", children: [input] }),
       el("div", { className: "row-actions", children: [save] }),
       status,
@@ -238,12 +237,9 @@
     return section;
   }
 
-  // configure opens one profile's configuration page IN this window, under
-  // Profiles: `#profiles/<id>`, a hash that survives a reload and names the
-  // profile and nothing else. It used to open a new tab without the area
-  // navigation; the operator asked for the side panel to stay and for the page
-  // to read as a step below Profiles (2026-09-23), so it is a sub-page now —
-  // Profiles › Configure › <name> — and the installed list is not drawn above it.
+  // configure opens one profile's page IN this window, under Profiles:
+  // `#profiles/<id>`, a hash that survives a reload and names the profile and
+  // nothing else (operator, 2026-09-23: the side panel stays).
   function configure(id) {
     window.AUCOM.showArea("profiles/" + encodeURIComponent(id));
   }
@@ -253,31 +249,41 @@
     $("profiles-overview").hidden = !overview;
     $("profile-breadcrumb").hidden = overview;
     $("profile-detail-panel").hidden = overview;
+    $("profiles-new").hidden = !overview;
+  }
+
+  function section(title, id, children = []) {
+    return el("section", { className: "profile-section", attrs: { id, "aria-labelledby": id + "-title" },
+      children: [el("h4", { text: title, attrs: { id: id + "-title" } }), ...children] });
   }
 
   async function openProfile(id) {
+    const sequence = ++detailSequence;
+    const generation = viewGeneration;
     const panel = $("profile-detail-panel");
     const detail = $("profile-detail");
     panel.hidden = false;
-    detail.replaceChildren(el("p", { className: "muted", text: "Reading…" }));
+    detail.replaceChildren(el("p", { className: "muted", text: t("Reading…") }));
 
     const { ok, body } = await api("/api/v1/profiles/" + encodeURIComponent(id));
+    // A late answer for a profile that is no longer the one open (or for
+    // before the account changed) draws nothing.
+    if (sequence !== detailSequence || generation !== viewGeneration) return;
     detail.replaceChildren();
     if (!ok) {
       detail.append(el("p", { className: "message error", text: body.error }));
       return;
     }
     $("profile-detail-title").textContent = body.name;
-    $("profile-breadcrumb-name").textContent = body.name;
     $("profile-detail-title").setAttribute("tabindex", "-1");
     $("profile-detail-title").focus();
 
-    const marks = el("p");
-    marks.append(badge(body.trust));
-    marks.append(document.createTextNode(" " + (body.trust_description || "")));
-    detail.append(marks);
-    // Above the summary and above the permission review: a warning that arrives
-    // after the thing it is about is a warning read after the decision.
+    // Header: kind and game, and the one state.
+    const head = el("p", { className: "profile-meta", attrs: { id: "profile-state" } });
+    head.append(el("span", { className: "muted", text: kindAndGame(body) + " " }), stateBadge(body));
+    detail.append(head);
+    // Above everything it is about: a warning that arrives after the thing it
+    // is about is read after the decision.
     const note = maturityNote(body.maturity, () =>
       openCompatibilityReport({
         family: body.engine_family,
@@ -286,88 +292,68 @@
       })
     );
     if (note) detail.append(note);
-    detail.append(el("p", { text: body.summary || "" }));
-    // The document's own long account — a fork's release history runs to
-    // hundreds of words — is a click away, not between the person and the
-    // setup they came here for (NEW_345). Its words are unchanged.
-    if (body.description) {
-      detail.append(el("details", { className: "profile-about", children: [
-        el("summary", { text: t("About this profile") }),
-        el("p", { className: "muted", text: body.description }),
-      ] }));
+    // Purpose: one sentence from the document, no history.
+    if (body.summary) detail.append(el("p", { className: "profile-purpose", text: body.summary }));
+
+    const handoff = unsavedStages && unsavedStages.id === body.id ? unsavedStages : null;
+    unsavedStages = null;
+    const details = el("details", { className: "profile-details", attrs: { id: "profile-details" } });
+    details.append(el("summary", { text: t("Details") }));
+
+    // An unapproved profile is reviewed before it is set up: approving is its
+    // next step, and its setup cannot make it run before that.
+    const approval = approvalSection(body);
+    if (approval && !body.authorized) detail.append(approval);
+    detail.append(body.kind === "pipeline" ? pipelineSetup(body) : setupSection(body, details));
+    const options = optionsSection(body, handoff);
+    if (options) detail.append(options);
+    if (approval && body.authorized) detail.append(approval);
+
+    fillDetails(details, body);
+    detail.append(details);
+    const refused = detail.querySelector('.args-editor[data-refused="true"]');
+    if (refused) {
+      refused.closest("details").open = true;
+      refused.scrollIntoView({ block: "center" });
+      refused.querySelector("input")?.focus();
     }
-    detail.append(
-      el("p", {
-        className: "muted",
-        // The terminal's permission report is not drawn here: it names the id,
-        // and every line of it is already on this panel in a person's words.
-        text: `Version ${body.version}` + (body.publisher?.name ? ` · published by ${body.publisher.name}` : "") +
-          (body.license?.spdx ? ` · ${body.license.spdx}` : ""),
-      })
-    );
+  }
 
-    // What this machine still needs comes first when it is the person's task:
-    // an approved profile — every built-in one — is opened to be SET UP, and
-    // its readiness and paths used to sit under its action list, homepage and
-    // approval line, two screens down (NEW_345). A profile still awaiting
-    // approval keeps the review first: approving is its next step.
-    const setupPart = el("div", { className: "profile-setup-part" });
-    renderReadiness(setupPart, body);
-    renderSetup(setupPart, body);
-    const setupFirst = body.authorized === true;
-    if (setupFirst) detail.append(setupPart);
-
-    detail.append(el("h4", { text: "Actions" }));
-    const actions = el("ul");
-    for (const action of body.actions || []) {
-      actions.append(
-        el("li", {
-          text: action.title || action.id,
-        })
-      );
-    }
-    detail.append(actions);
-    if (body.kind === "engine" || body.kind === "tool") detail.append(homepageSection(body));
-
-    // The approval. It is the whole reason this panel exists, and it is
-    // deliberately not something the page can do on somebody's behalf: the
-    // digest goes back with it, and the server refuses one that is not the
-    // document on disk.
+  // The trust boundary, shown when there is one: a built-in document runs
+  // without an approval (installing the Companion was the decision), so it
+  // gets no section — the sentence saying so is under Details.
+  function approvalSection(body) {
+    if (body.authorized && body.trust === "builtin") return null;
     const status = el("p", { className: "message", attrs: { role: "status" } });
     const buttons = el("div", { className: "row-actions" });
     // `authorized` is profile.Authorize's own answer, not a guess assembled
-    // from trust and grant. Only a built-in document runs without one: a
-    // signature says who published something, never that you agreed to it.
-    if (body.authorized && body.trust === "builtin") {
-      status.textContent =
-        "This document arrived inside the Companion, so installing the program was the decision. " +
-        "There is nothing else to approve.";
-    } else if (body.authorized) {
+    // from trust and grant. A signature says who published something, never
+    // that you agreed to it.
+    if (body.authorized) {
       status.textContent = t("Approved on {when}.", { when: when(body.binding?.granted_at) });
       status.className = "message ok";
-      const withdraw = el("button", { text: "Withdraw approval", attrs: { type: "button", class: "danger" } });
+      const withdraw = el("button", { text: t("Withdraw approval"), attrs: { type: "button", class: "danger" } });
       withdraw.addEventListener("click", () =>
         withBusy(withdraw, async () => {
-          const { ok, body: out } = await api(`/api/v1/profiles/${encodeURIComponent(id)}/withdraw`, { method: "POST" });
+          const { ok, body: out } = await api(`/api/v1/profiles/${encodeURIComponent(body.id)}/withdraw`, { method: "POST" });
           if (!ok) {
             setMessage(status, out.error, "error");
             return;
           }
           record(`Withdrew approval for ${body.name || "the profile"}`, "", "cancelled");
-          await refreshList();
-          await openProfile(id);
+          await openProfile(body.id);
         })
       );
       buttons.append(withdraw);
     } else {
-      // One sentence: what it asks for is listed just above, and the raw
-      // refusal repeated that list word for word.
+      // Never done for anybody: the digest of the document as it is now goes
+      // back with it, and the server refuses one that is not on disk.
       status.textContent = t("Not approved on this machine yet. Read what it asks for above, then approve it.");
       status.className = "message error";
-      const approve = el("button", { text: "I have read this — approve it", attrs: { type: "button", class: "primary" } });
+      const approve = el("button", { text: t("I have read this — approve it"), attrs: { type: "button", class: "primary" } });
       approve.addEventListener("click", () =>
         withBusy(approve, async () => {
-          const { ok, body: out } = await api(`/api/v1/profiles/${encodeURIComponent(id)}/grant`, {
+          const { ok, body: out } = await api(`/api/v1/profiles/${encodeURIComponent(body.id)}/grant`, {
             method: "POST",
             body: { digest: body.digest },
           });
@@ -376,110 +362,412 @@
             return;
           }
           record(`Approved ${body.name || "the profile"}`, "", "ok");
-          await refreshList();
-          await openProfile(id);
+          await openProfile(body.id);
         })
       );
       buttons.append(approve);
     }
+    const what = el("ul", { className: "plain small", children: describeAsks(body) });
+    return section(t("Approval"), "profile-approval", [what, status, buttons]);
+  }
 
-
-    if (body.editable) {
-      const remove = el("button", { text: "Remove this profile", attrs: { type: "button", class: "danger" } });
-      remove.addEventListener("click", () =>
-        withBusy(remove, async () => {
-          const { ok, body: out } = await api(`/api/v1/profiles/${encodeURIComponent(id)}/remove`, { method: "POST" });
-          if (!ok) {
-            setMessage(status, out.error, "error");
-            return;
-          }
-          record(`Removed the profile ${id}`, out.was, "cancelled");
-          $("profile-detail-panel").hidden = true;
-          await refreshList();
-        })
-      );
-      buttons.append(remove);
+  // What approving lets it do, in a person's words: the programs it runs and
+  // the folders it reaches. The permission report's ids stay on the wire.
+  function describeAsks(body) {
+    const items = [];
+    if (body.kind === "pipeline") {
+      for (const stage of body.stages || []) {
+        items.push(el("li", { text: `${stage.title || stage.id}: ${stage.tool?.executable || stage.capability}` }));
+      }
+      return items;
     }
-
-    detail.append(buttons);
-    detail.append(status);
-
-    if (!setupFirst) detail.append(setupPart);
-    renderArguments(detail, body);
+    const programs = (body.executables || []).map((executable) => executable.name);
+    if (programs.length) items.push(el("li", { text: t("Runs: {programs}", { programs: window.AUCOM.listOf(programs) }) }));
+    const roles = [...new Set((body.actions || []).flatMap((action) => (action.roots || []).map((root) => root.role)))];
+    if (roles.length) items.push(el("li", { text: t("Reaches: {folders}", { folders: window.AUCOM.listOf(roles.map((role) => window.AUCOM.folderTitle(role))) }) }));
+    if ((body.actions || []).some((action) => action.network)) items.push(el("li", { text: t("Uses the network") }));
+    return items;
   }
 
-  // renderReadiness says whether this profile's programs can start here and,
-  // when they cannot, exactly what is missing — the answer Build & Run's engine
-  // list gives, from the same server-side decision.
-  function renderReadiness(detail, body) {
-    if (!body.readiness) return;
-    detail.append(readinessBox(body));
+  // --- Setup ------------------------------------------------------------------
+
+  // A tool or an engine: its state in one line, what to do about it, and the
+  // pickers. The checker's own sentences are a click away, never gone.
+  function setupSection(body, details) {
+    const part = section(t("Setup"), "profile-setup-section");
+    if (body.readiness) part.append(readinessBox(body));
+    renderSetup(part, body, details);
+    return part;
   }
 
-  function readinessBox(body) {
+  // The trust decision is the Approval section's to say; Setup says what is
+  // left to choose on this machine (one fact, one statement).
+  const APPROVAL_FAULTS = new Set(["not_authorized", "stale_binding"]);
+  function withoutApproval(body) {
+    const problems = (body.readiness?.problems || []).filter((problem) => !APPROVAL_FAULTS.has(problem.fault));
+    return { ...body, readiness: { ...body.readiness, problems } };
+  }
+
+  function readinessBox(full) {
     const box = el("div", { className: "readiness", attrs: { id: "profile-readiness" } });
-    // "Ready" is the any-action rule: SOMETHING here can start. An action that
-    // still needs setup is named, with what it needs, rather than hidden under
-    // "everything its programs need is on this machine" while Build & Run says
-    // that action needs setup (NEW_330, seen live on a fresh vkQuake).
+    const state = window.AUCOM.profileState(full);
+    const body = withoutApproval(full);
+    // "Ready" is every action; one that cannot start yet is named with what
+    // it needs (NEW_330), never hidden under "everything is here".
     const blocked = Object.entries(body.action_problems || {}).filter(([, problems]) => (problems || []).length);
-    if (body.readiness.ready && !blocked.length) {
+    if (state?.code === "ready") {
       box.append(el("p", { className: "message ok", text: t("Ready: everything its programs need is on this machine.") }));
-    } else if (body.readiness.ready) {
+    } else if (state?.code === "partly_ready") {
       const title = (id) => (body.actions || []).find((action) => action.id === id)?.title || id;
       box.append(el("p", { className: "message warning", text: t("Partly ready: some of what it does can start here, and these cannot yet:") }));
       box.append(el("ul", {
         className: "plain",
         children: blocked.map(([id, problems]) => el("li", {
-          text: `${t(title(id))}: ${[...new Set(problems.map((problem) => problem.summary))].join(" ")}`,
+          text: `${t(title(id))}: ${shortCauses({ ...body, readiness: { problems }, action_problems: {} })}`,
         })),
       }));
     } else if (nothingChosenYet(body)) {
       // A program nobody has pointed at yet is not an error, and one sentence
-      // names them all (NEW_345). It used to be said three times: an "Error:"
-      // about the first program, a "no path yet" row per program, and the
-      // setup section's own badge below.
+      // names them all (NEW_345).
       const programs = body.compatibility.map((row) => row.executable);
       box.append(el("p", { className: "readiness__state", children: [
-        badge(t("needs setup"), "blocked"), document.createTextNode(" "),
         document.createTextNode(t("{programs}: no path yet. Choose where they are below.", { programs: window.AUCOM.listOf(programs) })),
       ] }));
-      // The checker's own words, with the command-line way to do the same,
-      // one click away rather than gone.
+    } else if (body.readiness.problems.length) {
+      // What is wrong, by program, and the next thing to do: the pickers
+      // below for something not chosen yet, the checker's own fix for a
+      // program that is there and is the wrong one.
+      const fixes = state?.code === "needs_setup" || state?.code === "needs_approval" ? [t("Choose where below.")]
+        : [...new Set((body.readiness.problems || []).map((problem) => problem.fix).filter(Boolean))].slice(0, 1);
+      box.append(el("p", { className: "readiness__problem", text: [shortCauses(body), ...fixes].join(" ") }));
+    }
+    const exact = (body.readiness.problems?.length ? body.readiness.problems : blocked.flatMap(([, problems]) => problems))
+      .filter((problem) => !APPROVAL_FAULTS.has(problem.fault));
+    if (exact.length) {
       box.append(el("details", { className: "profile-about", children: [
-        el("summary", { text: t("Details") }),
-        el("ul", { className: "plain", children: (body.readiness.problems || []).map((problem) =>
+        el("summary", { text: t("What the checker said") }),
+        el("ul", { className: "plain small", children: exact.map((problem) =>
           el("li", { text: [problem.summary, problem.fix].filter(Boolean).join(" ") })) }),
       ] }));
-      return box;
-    } else {
-      box.append(el("p", { className: "message error", text: t("Not ready to start yet:") }));
-      box.append(el("ul", {
-        className: "plain",
-        children: (body.readiness.problems || []).map((problem) => el("li", { text: problem.summary })),
-      }));
     }
-    if ((body.compatibility || []).length) box.append(compatibilityBox(body, box));
+    // What runs, by what it said it is: "Using …" when the programs answered.
+    // Said only when every program that has a path answered as one this
+    // profile accepts: a half-right "Using" would read as all right.
+    const bound = (body.compatibility || []).filter((row) => row.state !== "not_bound");
+    const using = bound.filter((row) => row.state === "compatible" && row.identity);
+    if (using.length && using.length === bound.length) {
+      const identities = [...new Set(using.map((row) => row.identity))];
+      box.append(el("p", { className: "muted small profile-using", text: identities.length === 1
+        ? t("Using: {version}", { version: identities[0] })
+        : t("Using: {version}", { version: using.map((row) => `${row.executable} ${row.identity}`).join(", ") }) }));
+    }
     return box;
   }
 
+  // shortCauses: what is wrong, grouped by program and fault (core.js
+  // setupCauses), without the profile's own name in front of it — this page
+  // is that profile.
+  function shortCauses(body) {
+    return window.AUCOM.setupCauses(body).map((cause) =>
+      cause.profile === body.id && cause.text.startsWith(cause.name + ": ") ? cause.text.slice(cause.name.length + 2) : cause.text).join(" ");
+  }
+
   // nothingChosenYet: nothing on this machine names a program or a folder for
-  // it, and nothing else is wrong — every tool on a fresh install. A folder
-  // that was chosen and holds the wrong thing is NOT this (it is said in the
-  // checker's own words below), however unbound its programs look.
+  // it, and nothing else is wrong — every tool on a fresh install.
   function nothingChosenYet(body) {
     const rows = body.compatibility || [];
     const recorded = Object.values(body.binding?.executables || {}).some(Boolean) ||
       Object.values(body.binding?.roots || {}).some(Boolean);
     return !recorded && rows.length > 0 && rows.every((row) => row.state === "not_bound") &&
-      (body.readiness?.problems || []).every((problem) => problem.fault === "missing_engine");
+      (body.readiness?.problems || []).every((problem) => problem.fault === "missing_engine" || APPROVAL_FAULTS.has(problem.fault));
+  }
+
+  // A pipeline starts nothing of its own: its setup is its stages' tools.
+  // What waits is said once per TOOL that has to be set up, with the link to
+  // that tool's page (NEW_345 `problemOrigin`) — a missing light names the
+  // tool that owns light, not three copies of a folder instruction.
+  function pipelineSetup(body) {
+    const part = section(t("Setup"), "profile-setup-section");
+    const box = el("div", { className: "readiness", attrs: { id: "profile-readiness" } });
+    const state = window.AUCOM.profileState(body);
+    if (state?.code === "ready") {
+      box.append(el("p", { className: "message ok", text: t("Ready: every stage's tool is set up.") }));
+    } else {
+      // The state is in the header; here is what to do, once per tool.
+      box.append(el("ul", { className: "plain", children: window.AUCOM.setupCauses(body).map((cause) =>
+        el("li", { attrs: { "data-cause": cause.profile }, children: [document.createTextNode(cause.text + " "), window.AUCOM.setupLink(cause)] })) }));
+    }
+    part.append(box);
+    const stages = el("ul", { className: "plain profile-stages" });
+    for (const stage of body.stages || []) {
+      const tool = stage.tool;
+      stages.append(el("li", { children: [
+        el("strong", { text: tool?.executable || stage.capability }), document.createTextNode(" — " + (stage.title || stage.id) + " · "),
+        el("span", { className: "muted", text: tool ? tool.profile_name
+          : stage.named_tool ? t("needs the tool {tool}, which is not installed", { tool: stage.named_tool })
+            : t("no installed tool provides {capability}", { capability: stage.capability }) }),
+      ] }));
+    }
+    part.append(stages);
+    return part;
+  }
+
+  // --- Options ----------------------------------------------------------------
+  //
+  // Normal options are what the document sets; a program's own extra words
+  // are under "Advanced options", one list per program of a pipeline's stage
+  // (operator, 2026-10-03: "in pipelines you pick a tool and add the
+  // parameters") or per program of an engine. A build tool takes no new ones;
+  // ones recorded on it before stage arguments existed can only be removed.
+  // Each box is one argument exactly as typed — nothing is split, quoted or
+  // passed through a shell, which is why a path with spaces is one box.
+  function optionsSection(body, handoff) {
+    const editors = [];
+    const normal = [];
+    if (body.kind === "pipeline") {
+      for (const stage of body.stages || []) {
+        const program = stage.tool?.executable || stage.id;
+        const set = Object.entries(stage.options || {});
+        if (set.length) normal.push(el("li", { children: [el("strong", { text: program }), document.createTextNode(` (${stage.title || stage.id}): ` + set.map(([name, value]) => `${name} = ${value}`).join(", "))] }));
+        const notes = [];
+        if ((stage.tool_arguments || []).length > 0) {
+          notes.push(el("p", { className: "message small", text: t("{tool} also has arguments of its own recorded earlier, which reach this stage first: {tokens}. Remove them on the tool's page to keep everything here.", { tool: stage.tool?.profile_name || "", tokens: stage.tool_arguments.join(" ") }) }));
+        }
+        const unsaved = handoff?.unsaved?.find((item) => item.stage === stage.id);
+        const refused = handoff?.problem?.stage === stage.id ? handoff.problem.message : "";
+        editors.push(argumentsEditor({
+          profile: body, legend: `${program} — ${stage.title || stage.id}`, name: stage.id, program,
+          saved: stage.arguments || [], tokens: unsaved ? unsaved.arguments : stage.arguments || [],
+          route: "stage-arguments", key: "stage", notes, stage: true,
+          read: (out) => (out.stages || []).find((item) => item.id === stage.id)?.arguments || [],
+          initial: refused
+            ? { text: t("Installed, but these arguments were not saved: {reason} Correct them and press Save arguments.", { reason: refused }), kind: "error" }
+            : null,
+        }));
+      }
+    } else {
+      const saved = body.binding?.arguments || {};
+      const tool = body.kind === "tool";
+      for (const executable of executableNames(body)) {
+        if (tool && !(saved[executable.name] || []).length) continue;
+        editors.push(argumentsEditor({
+          profile: body, legend: `${executable.name} — ${executable.title || executable.name}`, name: executable.name, program: executable.name,
+          saved: saved[executable.name] || [], tokens: saved[executable.name] || [], route: "arguments", key: "executable",
+          read: (out) => out.binding?.arguments?.[executable.name] || [], removeOnly: tool,
+        }));
+      }
+    }
+    if (!editors.length && !normal.length) return null;
+    const part = section(t("Options"), "profile-options");
+    if (normal.length) part.append(el("ul", { className: "plain small profile-normal-options", children: normal }));
+    if (editors.length) {
+      const advanced = el("details", { className: "advanced-options", attrs: { id: "profile-advanced-options" } });
+      advanced.open = editors.some((editor) => editor.dataset.hasTokens === "true");
+      advanced.append(el("summary", { text: t("Advanced options") }));
+      advanced.append(el("p", { className: "muted small", text: body.kind === "tool"
+        ? t("Arguments recorded on this tool earlier still reach every pipeline that runs it. They can be removed here; new ones go on a pipeline's stage.")
+        : t("Extra arguments for one program, one per box, added before its input files. Example: -nocolor") }));
+      advanced.append(...editors);
+      part.append(advanced);
+    }
+    return part;
+  }
+
+  // One program's list of argument tokens. Add and Clear change only this
+  // list and only on the page — visibly not saved — until Save arguments is
+  // pressed; Save is enabled only while there is something to save. An
+  // answer is applied to the revision it was for: an edit made while a save
+  // was on its way is kept and stays "not saved" (NEW_364).
+  function argumentsEditor({ profile: body, legend, name, program, saved, tokens, route, key, read, notes = [], removeOnly = false, stage = false, initial = null }) {
+    const id = (stage ? "profile-stage-args-" : "profile-args-") + name;
+    const fieldset = el("fieldset", { className: "args-editor", attrs: { id, "data-program": program } });
+    fieldset.append(el("legend", { text: legend }));
+    for (const note of notes) fieldset.append(note);
+    const list = el("ol", { className: "args-editor__list", attrs: { "aria-label": t("Arguments for {program}", { program }) } });
+    const status = el("p", { className: "message", attrs: { role: "status", id: id + "-status" } });
+    let baseline = [...saved];
+    let refusedFor = null;
+    let savedNote = false;
+
+    const values = () => [...list.querySelectorAll("input")].map((input) => input.value);
+    const same = (a, b) => a.length === b.length && a.every((value, index) => value === b[index]);
+    const markInvalid = (on) => {
+      for (const input of list.querySelectorAll("input")) {
+        if (on) input.setAttribute("aria-invalid", "true"); else input.removeAttribute("aria-invalid");
+      }
+    };
+    // `controlsOnly` updates the buttons and leaves the message a save's
+    // answer just wrote; an edit (any other call) says what is unsaved.
+    const refresh = (controlsOnly = false) => {
+      const dirty = !same(values(), baseline);
+      save.disabled = !dirty;
+      fieldset.dataset.dirty = String(dirty);
+      clear.disabled = list.children.length === 0;
+      if (controlsOnly === true) return;
+      if (refusedFor && !same(values(), refusedFor)) { refusedFor = null; markInvalid(false); }
+      if (dirty && !refusedFor) { savedNote = false; setMessage(status, t("Not saved yet.")); }
+      else if (!dirty && !savedNote && !refusedFor) setMessage(status, "");
+    };
+
+    const addRow = (value = "") => {
+      const input = el("input", {
+        attrs: { type: "text", spellcheck: "false", autocomplete: "off", "aria-label": t("Argument for {program}", { program }),
+          "aria-describedby": status.id, "data-args-for": name },
+      });
+      input.value = value;
+      if (removeOnly) input.readOnly = true;
+      input.addEventListener("input", refresh);
+      const remove = el("button", { text: t("Remove"), attrs: { type: "button", class: "secondary", "aria-label": t("Remove this argument for {program}", { program }) } });
+      const row = el("li", { className: "args-editor__row", children: removeOnly ? [input] : [input, remove] });
+      remove.addEventListener("click", () => {
+        const next = row.nextElementSibling?.querySelector("input") || row.previousElementSibling?.querySelector("input");
+        row.remove();
+        refresh();
+        (next || add).focus();
+      });
+      list.append(row);
+      return input;
+    };
+    for (const token of tokens) addRow(token);
+    fieldset.dataset.hasTokens = String(tokens.length > 0 || Boolean(initial));
+
+    const add = el("button", { text: t("Add argument"), attrs: { type: "button", class: "secondary" } });
+    add.addEventListener("click", () => { addRow("").focus(); refresh(); });
+    const save = el("button", { text: t("Save arguments"), attrs: { type: "button", class: "primary" } });
+    const clear = el("button", { text: removeOnly ? t("Remove these arguments") : t("Clear"), attrs: { type: "button", class: "secondary" } });
+
+    // Only the newest save's answer decides what the page says; an older one
+    // that arrives after it changes nothing on the page.
+    let saveSequence = 0;
+    const send = async (sent, payload) => {
+      const sequence = ++saveSequence;
+      await withBusy(removeOnly ? clear : save, async () => {
+        const { ok, body: out } = await api(`/api/v1/profiles/${encodeURIComponent(body.id)}/${route}`, {
+          method: "POST", body: { [key]: name, ...payload },
+        });
+        if (sequence !== saveSequence) return;
+        const current = same(values(), sent);
+        if (!ok) {
+          // The server's own words, beside this program's boxes; the boxes
+          // keep what was typed so it can be corrected, never resent as is.
+          if (current) { refusedFor = sent; markInvalid(true); }
+          setMessage(status, out.error || t("The arguments could not be saved."), "error");
+          if (current) list.querySelector("input")?.focus();
+          return;
+        }
+        baseline = read(out);
+        if (current) {
+          list.replaceChildren();
+          for (const token of baseline) addRow(token);
+          markInvalid(false);
+          savedNote = true;
+          refresh(true);
+          setMessage(status, baseline.length ? t("Saved.") : t("Saved. {program} runs with the profile's own arguments only.", { program }), "ok");
+        } else {
+          refresh(true);
+          setMessage(status, t("Saved what was there when you pressed Save; your later changes are not saved yet."));
+        }
+        record(`${program}: ${baseline.length ? baseline.join(" ") : "no arguments of your own"}`, body.name, "ok");
+        const previews = document.querySelector("#profile-details .profile-arguments__previews");
+        if (previews && document.getElementById(id) === fieldset) {
+          if (out.commands) renderPreviewItems(previews, out.commands); else refreshPreviews(body.id, previews);
+        }
+      });
+      // withBusy puts the button back as it was before the press; whether
+      // there is anything left to save is this list's own answer.
+      if (sequence === saveSequence) refresh(true);
+    };
+
+    save.addEventListener("click", () => { const sent = values(); send(sent, { arguments: sent }); });
+    clear.addEventListener("click", () => {
+      if (removeOnly) { send([], { reset: true }); return; }
+      list.replaceChildren();
+      refresh();
+      add.focus();
+    });
+
+    fieldset.append(list, el("div", { className: "row-actions", children: removeOnly ? [clear] : [add, clear, save] }), status);
+    refresh();
+    if (initial) {
+      setMessage(status, initial.text, initial.kind);
+      if (initial.kind === "error") { refusedFor = values(); markInvalid(true); fieldset.dataset.refused = "true"; }
+    }
+    return fieldset;
+  }
+
+  // --- Details ----------------------------------------------------------------
+  //
+  // Closed by default: the document's own account, who published it and
+  // under which licence, trust, the exact programs (version, path, digest)
+  // with Check these programs, the homepage, the exact commands and, for a
+  // profile of this machine's own, removing it.
+  function fillDetails(details, body) {
+    if (body.description) details.append(el("p", { className: "muted", text: body.description }));
+    details.append(el("p", { className: "muted", text: t("Version {version}", { version: body.version }) +
+      (body.publisher?.name ? " · " + t("published by {name}", { name: body.publisher.name }) : "") +
+      (body.license?.spdx ? ` · ${body.license.spdx}` : "") }));
+    const trust = el("p");
+    trust.append(badge(body.trust), document.createTextNode(" " + (body.trust_description || "")));
+    if (body.authorized && body.trust === "builtin") {
+      trust.append(document.createTextNode(" " + t("This document arrived inside the Companion, so installing the program was the decision. There is nothing else to approve.")));
+    }
+    details.append(trust);
+    if (body.kind !== "pipeline") details.append(provenanceLine(body));
+    if ((body.compatibility || []).length) details.append(compatibilityBox(body));
+    if (body.kind !== "pipeline" && (body.actions || []).length) {
+      details.append(el("h5", { text: t("What it does") }),
+        el("ul", { className: "plain small", children: body.actions.map((action) => el("li", { text: t(action.title || action.id) })) }));
+    }
+    if (body.kind === "engine" || body.kind === "tool") details.append(homepageSection(body));
+    // The exact commands, from the same planning a job uses; a stage's own
+    // arguments are marked.
+    if (body.kind !== "pipeline" || (body.stages || []).length) {
+      const previews = el("div", { className: "profile-arguments__previews" });
+      details.append(el("h5", { text: t("The commands, as they will run") }),
+        el("p", { className: "muted small", text: t("Your own arguments are highlighted. Parts in angle brackets are filled in when a job runs — its folder, its input files, the map.") }),
+        previews);
+      refreshPreviews(body.id, previews);
+    }
+    if (body.editable) details.append(removeControl(body));
+  }
+
+  // Removing a profile is said as removing, in Details, never behind a Close.
+  // The server keeps its own safeguards (a profile something still names).
+  function removeControl(body) {
+    const status = el("p", { className: "message", attrs: { role: "status" } });
+    const remove = el("button", { text: t("Remove this profile"), attrs: { type: "button", class: "danger" } });
+    remove.addEventListener("click", () =>
+      withBusy(remove, async () => {
+        const { ok, body: out } = await api(`/api/v1/profiles/${encodeURIComponent(body.id)}/remove`, { method: "POST" });
+        if (!ok) {
+          setMessage(status, out.error, "error");
+          return;
+        }
+        record(`Removed the profile ${body.id}`, out.was, "cancelled");
+        window.AUCOM.showArea("profiles");
+      })
+    );
+    return el("div", { className: "profile-remove", children: [el("div", { className: "row-actions", children: [remove] }), status] });
+  }
+
+  // Provenance, in words. A program somebody named is not a verified download,
+  // and the builtin badge must not read as if it were (NEW_244D).
+  function provenanceLine(body) {
+    const provenance = el("p", { className: "provenance small", attrs: { id: "profile-provenance" } });
+    const named = Object.values(body.binding?.executables || {}).filter(Boolean).length;
+    if (named > 0) {
+      provenance.append(badge("local binding", "local"),
+        document.createTextNode(" " + t("Programs you named on this machine. The Companion runs what you pointed at and downloads nothing.") +
+          (body.trust === "builtin" ? " " + t("The profile's builtin badge is about the document, not about these bytes.") : "")));
+    }
+    return provenance;
   }
 
   // compatibilityBox is what each program said it is when the Companion asked
-  // it (NEW_323D): one row per program the profile holds to a version, with
-  // the answer the SERVER recorded. Nothing is decided here. "Check these
-  // programs" asks again — after a compiler was replaced where it stood — and
-  // changes no path and no approval.
+  // it (NEW_323D): one row per program with the answer the SERVER recorded,
+  // its path and digest. "Check these programs" asks again — after a compiler
+  // was replaced where it stood — and changes no path and no approval. It is
+  // never asked on a poll.
   const COMPATIBILITY_STATES = {
     compatible: ["matches this profile", "ok"],
     incompatible: ["not the version this profile was written for", "blocked"],
@@ -492,18 +780,19 @@
     not_checked: ["not checked since it changed", "queued"],
     not_bound: ["no path yet", "queued"],
   };
-  function compatibilityBox(body, box) {
+  function compatibilityBox(body) {
     const section = el("div", { className: "compatibility", attrs: { id: "profile-compatibility" } });
-    section.append(el("p", { className: "muted", text: t("What each program said it is when the Companion asked it:") }));
+    section.append(el("h5", { text: t("What each program said it is when the Companion asked it:") }));
     section.append(el("ul", {
-      className: "plain",
+      className: "plain small",
       children: body.compatibility.map((row) => {
         const [label, kind] = COMPATIBILITY_STATES[row.state] || [row.state, "blocked"];
         const item = el("li", { attrs: { "data-executable": row.executable, "data-state": row.state } });
         item.append(el("strong", { text: row.executable }), document.createTextNode(" — "));
         item.append(document.createTextNode(row.identity ? t("version {version}", { version: row.identity }) + " " : ""));
         item.append(badge(t(label), kind));
-        if (row.path) item.append(el("span", { className: "muted", text: " " + row.path }));
+        if (row.path) item.append(el("span", { className: "muted profile-path", text: " " + row.path }));
+        if (row.sha256) item.append(el("span", { className: "muted profile-path", text: " " + row.sha256 }));
         return item;
       }),
     }));
@@ -520,7 +809,7 @@
           record(t("Checked what {name}'s programs are", { name: body.name }),
             (out.compatibility || []).map((row) => `${row.executable}: ${row.identity || row.state}`).join(", "),
             out.readiness?.ready ? "ok" : "error");
-          if (document.getElementById("profile-readiness") === box) box.replaceWith(readinessBox(out));
+          await refreshReadiness(body.id);
         })
       );
       section.append(el("div", { className: "row-actions", children: [check] }), status);
@@ -529,211 +818,20 @@
   }
 
   // refreshReadiness asks the server again after a binding was recorded and
-  // replaces the box in place. Without it the page went on saying "Nothing on
-  // this machine says where qbsp is" right under "Found all 3 programs"
-  // (NEW_310, live on Windows) until the profile was reopened. The same
-  // server-side decision as Build & Run's lists — nothing is worked out here.
+  // replaces the state, the readiness box, the exact programs and the
+  // commands in place — the same server-side decision as Build & Run's lists
+  // (NEW_310, Q2_008). Nothing is worked out here.
   async function refreshReadiness(id) {
     const current = document.getElementById("profile-readiness");
     if (!current) return;
+    const sequence = detailSequence;
     const { ok, body } = await api("/api/v1/profiles/" + encodeURIComponent(id));
-    if (!ok || !body.readiness || document.getElementById("profile-readiness") !== current) return;
+    if (!ok || !body.readiness || sequence !== detailSequence || document.getElementById("profile-readiness") !== current) return;
     current.replaceWith(readinessBox(body));
-    // The commands below are answered from the same binding, so they are
-    // asked again too (Q2_008, found live): after Save these paths the page
-    // said "ready" above and, below, still refused the folder just replaced.
-    const previews = document.querySelector("#profile-arguments .profile-arguments__previews");
+    $("profile-state")?.lastChild?.replaceWith(stateBadge(body));
+    document.getElementById("profile-compatibility")?.replaceWith(compatibilityBox(body));
+    const previews = document.querySelector("#profile-details .profile-arguments__previews");
     if (previews) await refreshPreviews(id, previews);
-  }
-
-  // --- your own arguments -----------------------------------------------------
-  //
-  // Parameters belong to a PIPELINE's stages (operator, 2026-10-03): "in build
-  // tools you set up the paths and metadata of tools, in pipelines you pick a
-  // tool and add the parameters". So:
-  //
-  //   - a pipeline shows every stage with the tool that runs it here and one
-  //     list of argv tokens for that stage alone — the same tool twice in one
-  //     pipeline gets two lists;
-  //   - a build tool shows its commands and takes no tokens. Ones recorded on
-  //     it before this still apply, are shown, and can only be removed;
-  //   - an engine is not a stage of anything and keeps its own (NEW_265).
-  //
-  // Each box is one argument exactly as typed. Nothing is split, quoted or
-  // passed through a shell, which is why a Windows path with spaces is one box.
-  // The profile document is not changed; the tokens live with this machine's
-  // setup and survive a restart, a re-import and an update of the profile.
-  function renderArguments(detail, body) {
-    if (body.kind === "pipeline") { renderStageArguments(detail, body); return; }
-    const executables = executableNames(body);
-    if (executables.length === 0) return;
-    const tool = body.kind === "tool";
-    const saved = body.binding?.arguments || {};
-    const section = el("div", { className: "profile-arguments", attrs: { id: "profile-arguments" } });
-    const previews = el("div", { className: "profile-arguments__previews" });
-    if (tool) {
-      section.append(el("h4", { text: t("Parameters are set in pipelines") }));
-      section.append(el("p", {
-        className: "muted",
-        text: t("A build tool says where its programs are and what they can do. What each one is run with is set on the stage of the pipeline that runs it: open a pipeline in Profiles and add the arguments to its stage, or write a pipeline of your own with New profile."),
-      }));
-      const older = executables.filter((executable) => (saved[executable.name] || []).length > 0);
-      if (older.length > 0) {
-        section.append(el("p", {
-          className: "message",
-          text: t("Arguments recorded on this tool earlier still reach every pipeline that runs it. They can be removed here; new ones go on a pipeline's stage."),
-        }));
-        for (const executable of older) {
-          section.append(argumentsEditor({
-            profile: body, legend: `${executable.title || executable.name} (${executable.name})`, name: executable.name,
-            tokens: saved[executable.name], route: "arguments", key: "executable",
-            read: (out) => out.binding?.arguments?.[executable.name] || [], removeOnly: true, previews,
-          }));
-        }
-      }
-    } else {
-      section.append(el("h4", { text: t("Your own arguments") }));
-      section.append(el("p", {
-        className: "muted",
-        text: t("Extra words added to every command that runs one program, before its input files — for a flag this profile does not offer as an option. Each box is one argument exactly as you type it; nothing splits or quotes it. Only that program gets them."),
-      }));
-      for (const executable of executables) {
-        section.append(argumentsEditor({
-          profile: body, legend: `${executable.title || executable.name} (${executable.name})`, name: executable.name,
-          tokens: saved[executable.name] || [], route: "arguments", key: "executable",
-          read: (out) => out.binding?.arguments?.[executable.name] || [], previews,
-        }));
-      }
-    }
-    section.append(el("h5", { text: t("The commands, as they will run") }));
-    section.append(el("p", {
-      className: "muted small",
-      text: tool
-        ? t("Each program as this tool declares it. A pipeline's stage adds its own arguments before the input files. Parts in angle brackets are filled in when a job runs — its folder, its input files, the map.")
-        : t("Your own arguments are highlighted. Parts in angle brackets are filled in when a job runs — its folder, its input files, the map."),
-    }));
-    section.append(previews);
-    detail.append(section);
-    refreshPreviews(body.id, previews);
-  }
-
-  // A pipeline's stages: which tool runs each one here, and that stage's own
-  // arguments.
-  function renderStageArguments(detail, body) {
-    const stages = body.stages || [];
-    if (stages.length === 0) return;
-    const section = el("div", { className: "profile-arguments", attrs: { id: "profile-arguments" } });
-    section.append(el("h4", { text: t("Stages and their parameters") }));
-    section.append(el("p", {
-      className: "muted",
-      text: t("Each stage is run by one tool. Add arguments for a stage here — a flag the tool does not offer as an option. Each box is one argument exactly as you type it; nothing splits or quotes it. They belong to this stage of this pipeline only: another pipeline using the same tool does not get them, and the same tool twice in one pipeline gets two lists. The Build area's last step shows the exact command before anything runs."),
-    }));
-    const handoff = unsavedStages && unsavedStages.id === body.id ? unsavedStages : null;
-    unsavedStages = null;
-    let focusOn = null;
-    for (const stage of stages) {
-      const tool = stage.tool;
-      const legend = `${stage.title || stage.id} (${stage.id})`;
-      const notes = [el("p", {
-        className: "muted small",
-        text: tool
-          ? t("Run by {tool}: {action} — the program {program}.", { tool: tool.profile_name, action: tool.action_title || tool.action_id, program: tool.executable })
-          : stage.named_tool
-            ? t("This stage names the tool {tool}, which is not installed, so it cannot run here. Its arguments can still be set.", { tool: stage.named_tool })
-            : t("No installed tool provides {capability} yet, so this stage cannot run here. Its arguments can still be set.", { capability: stage.capability }),
-      })];
-      const set = Object.entries(stage.options || {});
-      if (set.length > 0) {
-        notes.push(el("p", { className: "muted small", text: t("The pipeline itself sets: {options}.", { options: set.map(([name, value]) => `${name} = ${value}`).join(", ") }) }));
-      }
-      if ((stage.tool_arguments || []).length > 0) {
-        notes.push(el("p", {
-          className: "message",
-          text: t("{tool} also has arguments of its own recorded earlier, which reach this stage first: {tokens}. Remove them on the tool's page to keep everything here.", { tool: tool?.profile_name || "", tokens: stage.tool_arguments.join(" ") }),
-        }));
-      }
-      const unsaved = handoff?.unsaved?.find((item) => item.stage === stage.id);
-      const refused = handoff?.problem?.stage === stage.id ? handoff.problem.message : "";
-      const editor = argumentsEditor({
-        profile: body, legend, name: stage.id, tokens: unsaved ? unsaved.arguments : stage.arguments || [], route: "stage-arguments", key: "stage",
-        read: (out) => (out.stages || []).find((item) => item.id === stage.id)?.arguments || [], notes, stage: true,
-        initial: refused
-          ? { text: t("Installed, but these arguments were not saved: {reason} Correct them and press Save arguments.", { reason: refused }), kind: "error" }
-          : unsaved ? { text: t("Not saved yet: press Save arguments to keep these."), kind: "" } : null,
-      });
-      if (refused) focusOn = editor;
-      section.append(editor);
-    }
-    detail.append(section);
-    if (focusOn) {
-      focusOn.scrollIntoView({ block: "center" });
-      focusOn.querySelector("input")?.focus();
-    }
-  }
-
-  // One list of argument tokens with Add, Save and Reset. `route` and `key`
-  // say whose they are (a program of a profile, or a stage of a pipeline);
-  // `removeOnly` is a build tool's older tokens, which can only be taken away.
-  function argumentsEditor({ profile: body, legend, name, tokens, route, key, read, previews, notes = [], removeOnly = false, stage = false, initial = null }) {
-    const id = (stage ? "profile-stage-args-" : "profile-args-") + name;
-    const fieldset = el("fieldset", { className: "args-editor", attrs: { id } });
-    fieldset.append(el("legend", { text: legend }));
-    for (const note of notes) fieldset.append(note);
-    const list = el("ol", { className: "args-editor__list", attrs: { "aria-label": t("Arguments for {program}", { program: name }) } });
-    const status = el("p", { className: "message", attrs: { role: "status" } });
-
-    const addRow = (value = "") => {
-      const input = el("input", {
-        attrs: { type: "text", spellcheck: "false", autocomplete: "off", "aria-label": t("Argument"), "data-args-for": name },
-      });
-      input.value = value;
-      if (removeOnly) input.readOnly = true;
-      const remove = el("button", { text: t("Remove"), attrs: { type: "button", class: "secondary" } });
-      const row = el("li", { className: "args-editor__row", children: removeOnly ? [input] : [input, remove] });
-      remove.addEventListener("click", () => {
-        const next = row.nextElementSibling?.querySelector("input") || row.previousElementSibling?.querySelector("input");
-        row.remove();
-        (next || add).focus();
-      });
-      list.append(row);
-      return input;
-    };
-    for (const token of tokens) addRow(token);
-
-    const add = el("button", { text: t("Add argument"), attrs: { type: "button", class: "secondary" } });
-    add.addEventListener("click", () => addRow("").focus());
-    const save = el("button", { text: t("Save arguments"), attrs: { type: "button", class: "primary" } });
-    const reset = el("button", { text: removeOnly ? t("Remove these arguments") : t("Reset to default"), attrs: { type: "button" } });
-
-    const send = (payload, done) =>
-      withBusy(removeOnly ? reset : save, async () => {
-        const { ok, body: out } = await api(`/api/v1/profiles/${encodeURIComponent(body.id)}/${route}`, {
-          method: "POST", body: { [key]: name, ...payload },
-        });
-        if (!ok) {
-          setMessage(status, out.error || t("The arguments could not be saved."), "error");
-          return;
-        }
-        const now = read(out);
-        list.replaceChildren();
-        for (const token of now) addRow(token);
-        setMessage(status, done(now), "ok");
-        record(`${name}: ${now.length ? now.join(" ") : "no arguments of your own"}`, body.name, "ok");
-        if (previews) renderPreviewItems(previews, out.commands || []);
-      });
-
-    save.addEventListener("click", () => {
-      const values = [...list.querySelectorAll("input")].map((input) => input.value);
-      send({ arguments: values }, (now) => now.length
-        ? t("Saved. {program} now gets {n} argument(s) of your own; it survives a restart.", { program: name, n: now.length })
-        : t("Saved. {program} gets only the profile's own arguments.", { program: name }));
-    });
-    reset.addEventListener("click", () => send({ reset: true }, () =>
-      t("Reset. {program} runs with the profile's own arguments only.", { program: name })));
-
-    fieldset.append(list, el("div", { className: "row-actions", children: removeOnly ? [reset] : [add, reset, save] }), status);
-    if (initial) setMessage(status, initial.text, initial.kind);
-    return fieldset;
   }
 
   async function refreshPreviews(id, previews) {
@@ -781,52 +879,21 @@
   }
 
   // renderSetup is the local half: where the programs this profile declares
-  // actually are on this machine.
-  //
-  // It is here and not only in the Run area because a hand-installed compiler
-  // needs exactly what a hand-installed engine needs — somebody to say where it
-  // is. Without it the Build area has a tool it can see, describe and approve,
-  // and cannot start.
+  // actually are on this machine. Recorded separately from the profile and
+  // never part of one that is exported. The heading keeps its words: the
+  // checker's fixes send people "under Where these programs are on this
+  // machine".
   function renderSetup(detail, body) {
     const executables = executableNames(body);
     if (executables.length === 0) return;
 
-    detail.append(el("h4", { text: "Where these programs are on this machine", attrs: { id: "profile-setup" } }));
-    detail.append(
-      el("p", {
-        className: "muted",
-        text:
-          "This is recorded separately from the profile and is never part of a profile you export. " +
-          "Choose the folder you unpacked the programs into, or name each program below.",
-      })
-    );
-
-    // Provenance, in words. A program somebody named is not a verified download,
-    // and the page must not let the builtin badge above read as if it were
-    // (NEW_244D).
-    const provenance = el("p", { className: "provenance", attrs: { id: "profile-provenance" } });
-    const describeProvenance = (binding) => {
-      const acquisition = binding?.acquisition || "";
-      const named = Object.values(binding?.executables || {}).filter(Boolean).length;
-      provenance.replaceChildren();
-      if (named > 0) {
-        provenance.append(badge("local binding", "local"),
-          document.createTextNode(" " + t("Programs you named on this machine. The Companion runs what you pointed at and downloads nothing.") +
-            (body.trust === "builtin" ? " " + t("The profile's builtin badge is about the document, not about these bytes.") : "")));
-      } else if (!nothingChosenYet(body)) {
-        // Said here only when the readiness line above does not already say
-        // it with the programs' names (NEW_345: it was said twice).
-        provenance.append(badge("not set up", "blocked"),
-          document.createTextNode(" Nothing is recorded yet, so a build that needs these programs cannot start."));
-      }
-    };
-    describeProvenance(body.binding);
-    detail.append(provenance);
+    detail.append(el("h5", { text: t("Where these programs are on this machine"), attrs: { id: "profile-setup" } }));
 
     // The Companion downloads no program (operator, 2026-09-23): the way to a
-    // program nobody has installed yet is its own homepage.
-    if (body.homepage) {
-      const get = el("p", { className: "muted" });
+    // program nobody has installed yet is its own homepage — said only while
+    // nothing is chosen.
+    if (body.homepage && nothingChosenYet(body)) {
+      const get = el("p", { className: "muted small" });
       get.append(document.createTextNode(t("Don't have it yet? Get it from its homepage, install or unpack it, then choose its folder below:") + " "));
       get.append(el("a", { text: body.homepage, attrs: { href: body.homepage, target: "_blank", rel: "noopener noreferrer" } }));
       detail.append(get);
@@ -838,23 +905,28 @@
       label: t("The folder that holds {name}", { name: body.name }),
       hint: folderHint(body.executables || []),
     });
-    detail.append(folder.container);
-    const useFolder = el("button", { text: "Use this folder", attrs: { type: "button", class: "primary", id: "profile-use-folder" } });
+    const useFolder = el("button", { text: t("Use this folder"), attrs: { type: "button", class: "secondary", id: "profile-use-folder" } });
     const folderStatus = el("p", { className: "message", attrs: { role: "status" } });
-    detail.append(el("div", { className: "row-actions", children: [useFolder] }), folderStatus);
+    detail.append(folder.container, el("div", { className: "row-actions", children: [useFolder] }), folderStatus);
 
+    // Each program on its own, under a disclosure when a folder can find them
+    // all; open when one of them is already named, so what is recorded shows.
+    const each = el("details", { className: "profile-programs", attrs: { id: "profile-programs" } });
+    each.open = Object.values(body.binding?.executables || {}).some(Boolean) || executables.length === 1;
+    each.append(el("summary", { text: t("Or choose each program") }));
     const fields = new Map();
     for (const executable of executables) {
       const field = window.AUCOM.pathField({
         id: "profile-exe-" + executable.name,
         kind: "open-file",
-        label: `${executable.title || executable.name}`,
+        label: `${executable.title || executable.name} (${executable.name})`,
         value: (body.binding?.executables || {})[executable.name] || "",
         hint: t("The profile looks for a file named {file}.", { file: window.AUCOM.programFileName(executable.file) }),
       });
       fields.set(executable.name, field);
-      detail.append(field.container);
+      each.append(field.container);
     }
+    detail.append(each);
     // Folders the actions use besides their job folder — a texture folder, a
     // game directory. The document names the role; this machine says where.
     const roots = new Map();
@@ -872,7 +944,7 @@
       const field = window.AUCOM.pathField({
         id: "profile-root-" + role,
         kind: "directory",
-        label: `${window.AUCOM.folderTitle(role)}${purposes.optional ? " (optional)" : ""}`,
+        label: `${window.AUCOM.folderTitle(role)}${purposes.optional ? " " + t("(optional)") : ""}`,
         value: (body.binding?.roots || {})[role] || "",
         hint: purposes.length ? `Used to ${purposes.join("; ")}.` : "",
       });
@@ -880,9 +952,12 @@
       detail.append(field.container);
     }
 
+    const save = el("button", { text: t("Save these paths"), attrs: { type: "button", class: "primary" } });
+    const saveStatus = el("p", { className: "message", attrs: { role: "status" } });
+
     // "Look for installed games" fills the game folder in from the usual
-    // places — moved here from Run, because setup happens in Profiles only
-    // (operator, 2026-09-23). A candidate only fills the field; Save records it.
+    // places (operator, 2026-09-23). A candidate only fills the field; Save
+    // records it.
     if (rootFields.has("game_root")) {
       const look = el("button", { text: t("Look for installed games"), attrs: { type: "button", class: "secondary" } });
       const found = el("ul", { className: "rows", attrs: { "aria-label": t("Installed games found") } });
@@ -915,8 +990,6 @@
       detail.append(el("div", { className: "row-actions", children: [look] }), found);
     }
 
-    const save = el("button", { text: "Save these paths", attrs: { type: "button", class: "primary" } });
-    const saveStatus = el("p", { className: "message", attrs: { role: "status" } });
     save.addEventListener("click", () =>
       withBusy(save, async () => {
         const paths = {};
@@ -928,12 +1001,11 @@
           body: { executables: paths, roots: rootFields.size ? rootPaths : undefined },
         });
         if (!ok) {
-          setMessage(saveStatus, out.error || "could not record these paths", "error");
+          setMessage(saveStatus, out.error || t("could not record these paths"), "error");
           return;
         }
         // What was RECORDED, which is not always what was typed: an engine's
-        // project folder left empty is the Companion's own (NEW_330), and the
-        // field shows it so it can be changed.
+        // project folder left empty is the Companion's own (NEW_330).
         const recorded = out.binding?.roots || {};
         const filled = rootFields.has("content_root") && !rootPaths.content_root && recorded.content_root;
         for (const [role, field] of rootFields) field.input.value = recorded[role] || "";
@@ -941,7 +1013,6 @@
           ? t("Recorded. The project folder is the Companion's own, where it keeps the maps and textures it downloads; change it above if you want another. It survives a restart.")
           : t("Recorded. It survives a restart."), "ok");
         record(`Recorded where ${body.name} is`, Object.values(paths).filter(Boolean).join(", "), "ok");
-        describeProvenance(out.binding);
         await refreshReadiness(body.id);
       })
     );
@@ -949,7 +1020,8 @@
       withBusy(useFolder, async () => {
         const chosen = folder.input.value.trim();
         if (!chosen) {
-          setMessage(folderStatus, "Choose the folder first, with Browse… or by typing it.", "error");
+          setMessage(folderStatus, t("Choose the folder first, with Browse… or by typing it."), "error");
+          folder.input.focus();
           return;
         }
         const { ok, body: out } = await api(`/api/v1/profiles/${encodeURIComponent(body.id)}/bind`, {
@@ -957,18 +1029,16 @@
           body: { folder: chosen },
         });
         if (!ok) {
-          setMessage(folderStatus, out.error || "could not use this folder", "error");
+          setMessage(folderStatus, out.error || t("could not use this folder"), "error");
           return;
         }
         for (const [name, field] of fields) field.input.value = (out.binding?.executables || {})[name] || "";
-        describeProvenance(out.binding);
-        setMessage(folderStatus, `Found all ${fields.size} programs. Recorded as a local binding; it survives a restart.`, "ok");
+        setMessage(folderStatus, t("Found all {n} programs. Recorded; it survives a restart.", { n: fields.size }), "ok");
         record(`Recorded where ${body.name} is`, chosen, "ok");
         await refreshReadiness(body.id);
       })
     );
-    detail.append(el("div", { className: "row-actions", children: [save] }));
-    detail.append(saveStatus);
+    detail.append(el("div", { className: "row-actions", children: [save] }), saveStatus);
   }
 
   // executableNames reads the declared programs off whichever shape the
@@ -996,6 +1066,7 @@
     $("wizard-engine-fields").hidden = kind !== "engine";
     $("wizard-tool-fields").hidden = kind !== "tool";
     $("wizard-homepage-field").hidden = kind === "pipeline";
+    $("wizard-kind-hint").textContent = t(KIND_HINTS[kind] || "");
     $("wizard-step-3-title").textContent = kind === "pipeline" ? "Stages and their parameters" : "Programs and actions";
     $("wizard-step-3-note").textContent = kind === "pipeline"
       ? "A pipeline is where parameters are set. Add as many stages as you need, in the order they run; each one picks a tool, says where its inputs come from and carries its own parameters and arguments. The same tool may be a stage more than once."
@@ -1004,6 +1075,13 @@
         : "The engine's programs, and what each action starts.";
     if (step === 3) window.AUCOM.scratch.render();
   }
+
+  // One short line per kind, on the selection screen only.
+  const KIND_HINTS = {
+    tool: "A build tool: where compiler programs are and what each can do.",
+    pipeline: "A build pipeline: the stages a build runs, in order, each with a tool and its options.",
+    engine: "A game engine: the program that plays the map, and the game folder it reads.",
+  };
 
   // pinnedTemplate is the template a `#new-profile/<id>` link asked for.
   let pinnedTemplate = "";
@@ -1017,15 +1095,19 @@
     const requestID = ++templateRequest;
     const { ok, body } = await api("/api/v1/profiles/templates?kind=" + encodeURIComponent(kind));
     if (requestID !== templateRequest || kind !== $("wizard-kind").value) return;
+    if (!ok) {
+      // One truthful message and Retry; the draft and the list as they were
+      // are kept, and Next waits, rather than a blank list that looks empty.
+      $("wizard-template-error-text").textContent = t("The tested profiles could not be read: {reason}", { reason: body.error || t("no answer") }) + " ";
+      $("wizard-template-error").hidden = false;
+      $("wizard-next").disabled = true;
+      return;
+    }
+    $("wizard-template-error").hidden = true;
     const select = $("wizard-template");
     select.replaceChildren();
     select.append(el("option", { text: "From scratch", attrs: { value: "" } }));
-    if (!ok) {
-      setMessage("wizard-message", body.error, "error");
-      templates = [];
-    } else {
-      templates = body.items || [];
-    }
+    templates = body.items || [];
     for (const template of templates) {
       // One written on this computer says so and says which version: nobody
       // tested it but whoever wrote it.
@@ -1153,6 +1235,7 @@
     validatedKey = key;
     validatedStageTokens = tokens;
     $("wizard-json").value = JSON.stringify(body.document, null, 2);
+    if (!fromDocument) formDocument = $("wizard-json").value;
     renderReview(body);
     setMessage("wizard-message", "");
     return body;
@@ -1268,17 +1351,42 @@
   $("scratch-body").addEventListener("click", (event) => {
     if (event.target.closest("button")) invalidateDraft();
   });
-  $("wizard-json").addEventListener("input", () => $("wizard-import").disabled = true);
+  // handEdited: the text of a document the person changed or opened by hand,
+  // kept until it is checked, installed, or explicitly discarded.
+  let handEdited = null;
+  let formDocument = "";
+  function documentEdited() {
+    return handEdited !== null || ($("wizard-json").value !== "" && $("wizard-json").value !== formDocument);
+  }
+  $("wizard-json").addEventListener("input", () => { $("wizard-import").disabled = true; handEdited = $("wizard-json").value; });
   $("wizard-kind").addEventListener("change", async () => {
     invalidateDraft();
+    // Only what depends on the kind is cleared: programs, actions and
+    // stages. The name, the game and the other identity fields are kept.
     for (const kind of ["tool", "engine", "pipeline"]) window.AUCOM.scratch.clear(kind);
-    $("scratch-game").value = "";
     await refreshTemplates();
-    setMessage("wizard-message", "Kind changed: programs and stages from the previous kind were cleared. Your identity fields are kept.");
+    setMessage("wizard-message", t("Kind changed: programs and stages from the previous kind were cleared. Your name, game and other details are kept."));
     setStep(1);
   });
   $("wizard-template").addEventListener("change", () => { invalidateDraft(); applyTemplate(); });
-  $("wizard-back").addEventListener("click", () => { if (!installing) setStep(step - 1); });
+  $("wizard-template-retry").addEventListener("click", (event) => withBusy(event.currentTarget, refreshTemplates));
+  // Going back to the form from a document edited by hand: the form cannot
+  // show every field such a document may have, and composing from the form
+  // again would replace it. So it is asked, never done silently.
+  $("wizard-back").addEventListener("click", async () => {
+    if (installing) return;
+    if (step === 4 && documentEdited()) {
+      const discard = await window.AUCOM.confirmModal({
+        title: t("Leave the edited document?"),
+        body: t("Going back builds the document from the form again, and your edits to the document itself are dropped."),
+        confirm: t("Discard document edits"), cancel: t("Keep editing"),
+      });
+      if (!discard) { $("wizard-json").focus(); return; }
+      handEdited = null;
+      $("wizard-json").value = formDocument;
+    }
+    setStep(step - 1);
+  });
   $("wizard-next").addEventListener("click", async (event) => {
     if (installing || !templateReady || !validateStep()) return;
     const currentStep = step;
@@ -1324,39 +1432,46 @@
     }
   });
 
-  $("wizard-download-json").addEventListener("click", (event) =>
-    withBusy(event.currentTarget, async () => {
-      const { ok, body } = await api("/api/v1/paths/pick", {
-        method: "POST",
-        body: { kind: "save-file", title: "Save this profile" },
-      });
-      if (ok && body.cancelled) return;
-      if (!ok) {
-        setMessage("wizard-message", body.error || "no file chooser is available; copy the text instead", "error");
-        return;
-      }
-      // The Companion writes the file, not the browser: a download would land
-      // wherever the browser puts downloads, which is not where the user just
-      // said.
-      setMessage("wizard-message", `Chosen ${body.path}. Use Copy and save it there — the Companion does not write outside its own directories.`, "");
-    })
-  );
+  // Download: the browser saves the document where it saves downloads, under
+  // the profile's own name. The Companion writes nothing outside its folders.
+  $("wizard-download-json").addEventListener("click", () => {
+    const text = $("wizard-json").value;
+    if (!text.trim()) {
+      setMessage("wizard-message", t("There is no document yet: complete the form first."), "error");
+      return;
+    }
+    let name = "profile";
+    try { name = JSON.parse(text).id || name; } catch { /* the text is saved as it is */ }
+    const file = `${name}.json`;
+    const link = el("a", { attrs: { href: URL.createObjectURL(new Blob([text], { type: "application/json" })), download: file } });
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+    setMessage("wizard-message", t("Your browser saves it as “{file}” where it keeps downloads.", { file }), "ok");
+  });
 
-  $("wizard-load-json").addEventListener("click", (event) =>
-    withBusy(event.currentTarget, async () => {
-      const { ok, body } = await api("/api/v1/paths/pick", {
-        method: "POST",
-        body: { kind: "open-file", title: "Open a profile document", filters: [{ name: "Profile documents", extensions: ["json"] }] },
-      });
-      if (ok && body.cancelled) return;
-      if (!ok) {
-        setMessage("wizard-message", body.error || "no file chooser is available; paste the document instead", "error");
-        return;
-      }
-      setMessage("wizard-message", `Chosen ${body.path}. Paste its contents below — the page is not given access to your files.`, "");
-      $("wizard-json").focus();
-    })
-  );
+  // Open: the person picks the file in the browser's own chooser and the page
+  // reads that one file's text. Cancelling changes nothing and says so.
+  $("wizard-load-json").addEventListener("click", () => $("wizard-load-file").click());
+  $("wizard-load-file").addEventListener("cancel", () => {
+    setMessage("wizard-message", t("No file was chosen; the document is unchanged."));
+    $("wizard-load-json").focus();
+  });
+  $("wizard-load-file").addEventListener("change", async () => {
+    const input = $("wizard-load-file");
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file) {
+      setMessage("wizard-message", t("No file was chosen; the document is unchanged."));
+      return;
+    }
+    const text = await file.text();
+    $("wizard-json").value = text;
+    handEdited = text;
+    $("wizard-import").disabled = true;
+    $("wizard-json-details").open = true;
+    setMessage("wizard-message", t("Opened “{file}”. Press Check this document before installing it.", { file: file.name }));
+    $("wizard-check-json").focus();
+  });
 
   $("wizard-import").addEventListener("click", async (event) => {
     if (installing || (!pendingInstallation && (!composed?.valid || validatedKey !== draftKey() ||
@@ -1411,9 +1526,25 @@
     }
   });
 
-  $("profiles-refresh").addEventListener("click", (event) => withBusy(event.currentTarget, refreshList));
   $("profiles-kind").addEventListener("change", refreshList);
-  $("profile-detail-close").addEventListener("click", () => window.AUCOM.showArea("profiles"));
+  $("profiles-search").addEventListener("input", drawList);
+  // Another account or another server: anything asked before it answers for
+  // the old one, so it is dropped and the current view asked again (NEW_364
+  // P7). Profiles are this machine's, so the answer is usually the same — the
+  // fence is what makes "usually" irrelevant.
+  let accountKey = null;
+  document.addEventListener("aucom:status", () => {
+    const status = window.AUCOM.status || {};
+    const key = `${status.aub_base_url || ""}|${status.email || ""}|${Boolean(status.authenticated)}`;
+    if (accountKey !== null && key !== accountKey) {
+      viewGeneration += 1;
+      if (!$("area-profiles").hidden) {
+        const match = window.location.hash.match(/^#profiles\/(.+)$/);
+        if (match) openProfile(decodeURIComponent(match[1])); else refreshList();
+      }
+    }
+    accountKey = key;
+  });
   $("profile-breadcrumb-up").addEventListener("click", (event) => {
     event.preventDefault();
     window.AUCOM.showArea("profiles");
@@ -1427,18 +1558,6 @@
   window.AUCOM.openInstalledProfile = async (id, handoff = null) => {
     unsavedStages = handoff ? { id, ...handoff } : null;
     document.body.classList.remove("single-view");
-    window.AUCOM.showArea("profiles");
-    await refreshList();
-    const found = installed.find((item) => item.id === id);
-    if (!found) {
-      // The installed list is one kind at a time; show the kind it is.
-      for (const candidate of ["tool", "engine", "pipeline"]) {
-        $("profiles-kind").value = candidate;
-        await refreshList();
-        if (installed.some((item) => item.id === id)) break;
-      }
-      $("profiles-kind").dispatchEvent(new Event("change", { bubbles: true }));
-    }
     configure(id);
   };
 
@@ -1485,11 +1604,18 @@
       // already established.
       showOverview(!argument);
       if (argument) {
-        await openProfile(decodeURIComponent(argument));
+        lastOpened = decodeURIComponent(argument);
+        await openProfile(lastOpened);
         window.scrollTo({ top: 0 });
         return;
       }
+      detailSequence += 1;
       await refreshList();
+      // Back from a profile's page, focus returns to its row.
+      if (lastOpened) {
+        document.querySelector(`#profiles-list [data-profile="${CSS.escape(lastOpened)}"] a`)?.focus();
+        lastOpened = "";
+      }
     },
   };
 })();

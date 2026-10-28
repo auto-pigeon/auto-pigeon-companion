@@ -25,6 +25,10 @@ paths:
   - internal/web/assets/scratch.js
   - internal/web/assets/stageswitch.js
   - internal/web/testdata/stageswitch.check.mjs
+  - internal/web/assets/profiles.js
+  - internal/web/readiness.go
+  - internal/binding/commands.go
+  - internal/web/testdata/profilespage.check.mjs
 prerequisites:
 ---
 
@@ -107,6 +111,34 @@ ones recorded on a tool before stage arguments existed still reach every pipelin
 shown on each such stage, and can be removed on the tool's page or with
 `companion toolchain args <tool> <program> --reset`. An engine is not a stage and keeps its own. A
 token repeating a switch the stage already passes is refused (`aucom.compiler-compatibility`).
+
+## The Profiles page: one state, task sections (`NEW_364`)
+
+- **One state per profile, decided by the server.** `readiness.setupState` (`internal/web/readiness.go`) turns the
+  checker's faults into `setup_state` on every profile description: `unavailable` (unsupported_platform) before
+  `needs_approval` (not_authorized, stale_binding) before `incompatible` (tool_incompatible/unusable/unverified)
+  before `needs_setup`; otherwise `ready`, or `partly_ready` with `ready_actions` when some action cannot start.
+  A pipeline's state is its stages' tools (its own approval is shown beside it, as before). The page words it
+  through `core.js` `profileState` and never reads a summary's English. `nameProgramsOf` attaches the program to a
+  tool's or engine's own program problems from the document's action, as `problemOrigin` does for stages.
+- **Page order:** kind · game + state → purpose (the summary) → **Approval** first while unapproved → **Setup**
+  (what is missing by program; a pipeline names the tool to set up, once, with its link) → **Options** (what the
+  document sets, then **Advanced options** with one argument list per program) → **Approval** (approved, not
+  built-in) → **Details**, closed (description, publisher/licence, trust, exact path/version/digest with
+  *Check these programs*, homepage, exact commands, Remove). The approval faults are said in Approval only.
+- **An argument list owns the revision it saved.** Add/Clear change the page only (*Not saved yet.*); **Save
+  arguments** is enabled only while something differs; an answer applies to the values it was sent for — an
+  edit made while it was on its way stays unsaved — and only the newest save's answer is drawn. A refusal marks
+  that program's boxes `aria-invalid`, keeps them, and focuses the first.
+- **A pipeline's exact commands** are `GET /api/v1/profiles/<pipeline>/commands`: `binding.StageCommand`, the same
+  planner as a tool's preview, with the stage's options and the tool's older tokens then the stage's own — the
+  executor's order. Build & Run's review adds only what a build brings (its map, its `-wadpath`).
+- **Answers belong to the view that asked:** list (`listSequence`), page (`detailSequence`) and anything asked
+  before an account or server change (`viewGeneration`, on `aucom:status`) are dropped when late.
+- **New profile:** one line per kind on step 1; an unreadable template list is one message with **Retry** and Next
+  waits; changing the kind clears programs and stages only; **Open a file…** reads the picked file in the browser
+  and **Download as a file** saves through the browser (the Companion writes nothing outside its folders); Back
+  from a hand-edited document asks (`confirmModal`). A cancelled native picker keeps the value and focus.
 
 ## An engine plays the game its document declares (`NEW_330`)
 

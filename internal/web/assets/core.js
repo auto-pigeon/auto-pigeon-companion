@@ -330,8 +330,10 @@ function pathField(options) {
         body: { kind, title: label, start_dir: input.value || undefined },
       });
       if (ok && body.cancelled) {
-        // Nothing went wrong: somebody was asked a question and said no.
+        // Nothing went wrong: somebody was asked a question and said no. What
+        // was typed stays, and so does the place they were working (NEW_364).
         setMessage(status, "");
+        input.focus();
         return;
       }
       if (ok) {
@@ -815,6 +817,12 @@ const PROGRAM_FAULTS = {
   tool_unverified: "{programs} did not say what they are",
   tool_unusable: "{programs} cannot be run here",
 };
+// A profile's own trust decision is said in words too (NEW_364): the
+// checker's sentence for it carries the profile's id, which nobody reads.
+const PROFILE_FAULTS = {
+  not_authorized: "not approved on this machine yet",
+  stale_binding: "changed since it was approved; approve it again",
+};
 function setupCauses(item, setup = {}) {
   const own = setup.setupProfile?.(item) || { id: item.id, name: item.name || item.id };
   const problemsOf = setup.setupProblems || setupProblems;
@@ -828,7 +836,10 @@ function setupCauses(item, setup = {}) {
     const id = problem.profile || own.id;
     if (!groups.has(id)) groups.set(id, { profile: id, name: problem.profile_name || (id === own.id ? own.name : id), programs: new Map(), other: new Map(), sentences: new Set() });
     const group = groups.get(id);
-    if (PROGRAM_FAULTS[problem.fault] && problem.executable) {
+    if (PROFILE_FAULTS[problem.fault]) {
+      group.other.set(problem.fault, AUCOM.t("{name}: {what}.", { name: group.name, what: AUCOM.t(PROFILE_FAULTS[problem.fault]) }));
+      group.sentences.add(problem.fault);
+    } else if (PROGRAM_FAULTS[problem.fault] && problem.executable) {
       if (!group.programs.has(problem.fault)) group.programs.set(problem.fault, []);
       const names = group.programs.get(problem.fault);
       if (!names.includes(problem.executable)) names.push(problem.executable);
@@ -850,6 +861,35 @@ function setupCauses(item, setup = {}) {
   });
 }
 
+// profileState is the ONE state a profile's row and page show (NEW_364), from
+// the server's own `setup_state` (readiness.go `setupState`): installed,
+// approved, compatible and ready are different facts and are never one green
+// badge. Partly ready names what CAN start when that is one action, rather
+// than promising every action works. `cause` is the first profile that has to
+// be set up and what it needs, from the structured problem origin — for a
+// pipeline whose light stage waits, the tool that owns light.
+const PROFILE_STATES = {
+  ready: ["Ready", "ok"],
+  partly_ready: ["Partly ready", "warning"],
+  needs_setup: ["Needs setup", "blocked"],
+  needs_approval: ["Needs approval", "warning"],
+  incompatible: ["Incompatible program", "blocked"],
+  unavailable: ["Unavailable on this platform", "cancelled"],
+};
+function profileState(item) {
+  const code = item?.setup_state?.state || (item?.readiness ? (item.readiness.ready ? "ready" : "needs_setup") : "");
+  if (!code) return null;
+  const [label, kind] = PROFILE_STATES[code] || [code, "blocked"];
+  let text = AUCOM.t(label);
+  const startable = item.setup_state?.ready_actions || [];
+  if (code === "partly_ready" && startable.length === 1) {
+    const action = (item.actions || []).find((candidate) => candidate.id === startable[0]);
+    text = AUCOM.t("Ready: {action} only", { action: AUCOM.t(action?.title || startable[0]) });
+  }
+  const causes = code === "ready" || code === "partly_ready" ? [] : setupCauses(item);
+  return { code, text, kind, cause: causes.find((cause) => cause.profile !== item.id) || null, causes };
+}
+
 // listOf joins names the way the reader's language does ("a, b and c").
 function listOf(names) {
   const language = window.AUCOM_I18N?.current?.() || "en";
@@ -862,7 +902,7 @@ function listOf(names) {
 
 Object.assign(AUCOM, {
   $, el, api, announce, actionReady, pipelineReady, executionChoices, setMessage, busy, withBusy, confirmModal,
-  setupRows, setupCauses, setupProblems, setupLink, trapFocus, listOf, duration,
+  setupRows, setupCauses, setupProblems, setupLink, profileState, trapFocus, listOf, duration,
   record, renderActivity, clearActivity, pathField, downloadButton, tabsFor,
   badge, maturityBadge, maturityNote, bytes, when, terminal, programFileName, folderTitle,
   openCompatibilityReport, wireCompatibilityReport,

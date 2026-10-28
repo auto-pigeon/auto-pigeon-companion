@@ -186,14 +186,20 @@ func (s *Server) describeCatalogEntryWith(entry job.CatalogEntry, local binding.
 	// its own and has no answer to give.
 	if pipeline, isPipeline := entry.Profile.(*profile.PipelineProfile); !isPipeline {
 		state := installReadiness(entry, local)
-		body["readiness"] = state.view()
+		view := state.view()
+		problems, _ := view["problems"].([]map[string]any)
+		nameProgramsOf(problems, state.Problems, state.PerAction, entry.Profile.ActionList())
+		body["readiness"] = view
+		body["setup_state"] = state.setupState(actionIDs(entry.Profile))
 		// Per action, as an engine's are: a tool whose qbsp can start and whose
 		// vis cannot is "ready" by the any-action rule above, and the pipeline
 		// that needs vis is not. Both are true, and a page shown only the
 		// first would call Profiles and Build & Run inconsistent (NEW_323D).
 		perAction := make(map[string]any, len(state.PerAction))
 		for id, problems := range state.PerAction {
-			perAction[id] = describeProblems(problems)
+			described := describeProblems(problems)
+			nameProgramsOf(described, problems, state.PerAction, entry.Profile.ActionList())
+			perAction[id] = described
 		}
 		body["action_problems"] = perAction
 		if rows := describeCompatibility(entry, local); rows != nil {
@@ -204,17 +210,46 @@ func (s *Server) describeCatalogEntryWith(entry job.CatalogEntry, local binding.
 		// machine adds to it: a pipeline is where parameters are set.
 		if shared != nil && shared.resolver != nil && shared.set != nil {
 			body["stages"] = s.describeStagesFrom(pipeline, local, shared.entries, shared.set)
-			body["readiness"] = pipelineReadiness(pipeline, shared.resolver, shared.set).view()
+			state := pipelineReadiness(pipeline, shared.resolver, shared.set)
+			body["readiness"] = state.view()
+			body["setup_state"] = state.setupState(nil)
 		} else {
 			body["stages"] = s.describeStages(pipeline, local)
 			if runner, err := s.buildRunner(nil); err == nil {
 				if set, _, err := s.bindings(); err == nil {
-					body["readiness"] = pipelineReadiness(pipeline, runner.Resolver(), set).view()
+					state := pipelineReadiness(pipeline, runner.Resolver(), set)
+					body["readiness"] = state.view()
+					body["setup_state"] = state.setupState(nil)
 				}
 			}
 		}
 	}
 	return body
+}
+
+// nameProgramsOf attaches, to each described problem about a program, the
+// program it is about — the action's own executable, from the document — so
+// a page says "light: not the version this profile was written for" from
+// structured fields and never reads a program name out of a sentence
+// (NEW_364, as `problemOrigin` does for a pipeline's stages).
+func nameProgramsOf(described []map[string]any, problems engine.Problems, perAction map[string]engine.Problems, actions []profile.Action) {
+	for index, problem := range problems {
+		if index >= len(described) {
+			return
+		}
+		switch problem.Fault {
+		case engine.FaultMissingEngine, engine.FaultToolIncompatible, engine.FaultToolUnusable, engine.FaultToolUnverified:
+		default:
+			continue
+		}
+		for _, action := range actions {
+			for _, candidate := range perAction[action.ID] {
+				if candidate.Fault == problem.Fault && candidate.Summary == problem.Summary && action.Executable != "" {
+					described[index]["executable"] = action.Executable
+				}
+			}
+		}
+	}
 }
 
 // profilesPrefix is the directory a document has to be under to be one this

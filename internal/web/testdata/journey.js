@@ -63,6 +63,15 @@
     return null;
   }
 
+  // rowNamed finds a profile row by its name, as a person reads it — a
+  // pipeline row also names the tool it waits for (NEW_364).
+  function rowNamed(container, text) {
+    for (const row of container.children) {
+      if (row.querySelector(".profile-row__name")?.textContent === text) return row;
+    }
+    return null;
+  }
+
   function rowContaining(container, text) {
     for (const row of container.children) {
       if (row.textContent.includes(text)) return row;
@@ -237,15 +246,17 @@
     // --- 5. the toolchain has to be reviewed and approved -------------------
     await go("profiles");
     const toolCard = await waitFor("the toolchain in the profile list", () =>
-      rowContaining($("profiles-list"), "Fixture toolchain")
+      rowNamed($("profiles-list"), "Fixture toolchain")
     );
+    // NEW_364: one row per profile with ONE state, decided by the server;
+    // the name is the link to its page.
     record(
-      "a profile nobody vouched for is marked local and not approved",
-      textOf(toolCard).includes("local") && textOf(toolCard).includes("not approved"),
+      "a profile nobody approved says Needs approval in its row",
+      toolCard.dataset.state === "needs_approval" && textOf(toolCard).includes("Needs approval"),
       textOf(toolCard).replace(/\s+/g, " ").trim().slice(0, 110)
     );
 
-    buttonIn(toolCard, "Review").click();
+    toolCard.querySelector("a.profile-row__name").click();
     await waitFor("the review panel", () => visible($("profile-detail-panel")) &&
       textOf($("profile-detail")).includes("Not approved on this machine yet"));
     record(
@@ -267,10 +278,11 @@
     );
     record("approving a local profile", true, "recorded against its digest");
     // The digest is what the approval is recorded against, and it stays on the
-    // wire: neither it nor the profile's id is something a person reads.
-    const profilesText = textOf($("area-profiles"));
+    // wire: neither it nor the profile's id is something a person reads in the
+    // ordinary page — exact identities are under the closed Details (NEW_364).
+    const profilesText = $("area-profiles").innerText;
     record(
-      "Profiles shows no profile id and no digest",
+      "Profiles shows no profile id and no digest outside Details",
       !profilesText.includes("aucom.fixture.toolchain") && !/sha256|[0-9a-f]{12}/.test(profilesText),
       (profilesText.match(/.{0,80}(aucom\.fixture\.toolchain|sha256\S*|[0-9a-f]{12}\S*).{0,40}/) || ["none shown"])[0]
     );
@@ -383,8 +395,8 @@
     // Configuration selectors and the Profiles navigation remain actionable.
     await go("profiles");
     setValue($("profiles-kind"), "engine");
-    const engineCard = await waitFor("the engine in Profiles", () => rowContaining($("profiles-list"), "Fixture Q1 engine"));
-    buttonIn(engineCard, "Review").click();
+    const engineCard = await waitFor("the engine in Profiles", () => rowNamed($("profiles-list"), "Fixture Q1 engine"));
+    engineCard.querySelector("a.profile-row__name").click();
     await waitFor("the engine's page in Profiles", () =>
       visible($("area-profiles")) && visible($("profile-detail-panel")) && $("profile-exe-engine"));
     record(
