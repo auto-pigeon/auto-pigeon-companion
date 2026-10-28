@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/managedtools"
 	mt "github.com/auto-pigeon/auto-pigeon-companion/internal/managedtools/managedtoolstest"
@@ -112,7 +113,19 @@ func TestEveryArchiveThatIsNotWhatItsReleaseSaysIsRefused(t *testing.T) {
 			m.Step(context.Background())
 			before := tool(m.Status(), managedtools.EricW).Active
 			if before == nil {
-				t.Fatal("no first installation")
+				// Fifteen parallel installs each write programs and then run
+				// them; on a loaded Linux runner a fork elsewhere can hold the
+				// just-written file open for a moment ("text file busy"). The
+				// product's answer is the failure's one-minute backoff and a
+				// second attempt, which is what this does — once.
+				view := tool(m.Status(), managedtools.EricW)
+				t.Logf("first install attempt failed (%+v); trying again after its backoff", view.Failure)
+				r.clock.Advance(2 * time.Minute)
+				m.Step(context.Background())
+				before = tool(m.Status(), managedtools.EricW).Active
+			}
+			if before == nil {
+				t.Fatalf("no first installation: %+v", tool(m.Status(), managedtools.EricW).Failure)
 			}
 			verified := r.host.verified
 

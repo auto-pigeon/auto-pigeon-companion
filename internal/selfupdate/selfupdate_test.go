@@ -160,7 +160,8 @@ func TestAValidBundleReplacesOnlyItsOwnFilesAndIsConfirmedByTheNewCompanion(t *t
 	if raw, _ := os.ReadFile(filepath.Join(r.root, DirName, "previous", companion)); string(raw) != "old companion 1.318" {
 		t.Fatalf("the previous Companion is not kept: %q", raw)
 	}
-	if info, err := os.Stat(journalPath(r.root)); err != nil || info.Mode().Perm() != 0o600 {
+	// POSIX permissions: Windows reports its own mode bits for any file.
+	if info, err := os.Stat(journalPath(r.root)); err != nil || (runtime.GOOS != "windows" && info.Mode().Perm() != 0o600) {
 		t.Fatalf("journal %v %v", info, err)
 	}
 	if runtime.GOOS != "windows" {
