@@ -390,11 +390,13 @@
                   <label for="play-pipeline">Build profile</label>
                   <select id="play-pipeline"></select>
                   <p id="play-pipeline-state" class="choice-state"></p>
+                  <div data-setup-slot></div>
                 </div>
                 <div class="field" id="build-pipeline-field" hidden>
                   <label for="build-pipeline">Build profile</label>
                   <select id="build-pipeline" aria-describedby="build-pipeline-note"></select>
                   <p id="build-pipeline-note" class="choice-state"></p>
+                  <div data-setup-slot></div>
                 </div>
                 <details class="brun-options" id="play-build-options">
                   <summary>Build options</summary>
@@ -445,6 +447,7 @@
                     <label for="play-engine">Engine</label>
                     <select id="play-engine"></select>
                     <p id="play-engine-message" class="message" role="status"></p>
+                    <div data-setup-slot></div>
                   </div>
                   <!-- Only when the engine genuinely offers more than one way to
                        play a freshly built map: a small fixed set, so one row of

@@ -18,6 +18,8 @@ topics:
   - i18n
 paths:
   - internal/web/assets/core.js
+  - internal/web/assets/play.js
+  - internal/web/assets/autobuild.js
   - internal/web/assets/leakrequest.js
   - internal/web/assets/index.html
   - internal/web/assets/app.css
@@ -70,6 +72,25 @@ they bind every surface that offers a choice, says why something cannot start, o
   Italian phrase avoids agreement it cannot know ("qbsp, vis e light ancora da configurare").
   Leak test is *test delle perdite*, as in AUP.
 
+## Build & Run is one form with one primary (NEW_363)
+
+- **One journey, one form.** Map (saved map | file on this computer) → Build profile → Run after build → Review.
+  No wizard of steps and no second build page: `#build` is the form on a file, `#autobuild` its checkbox
+  (`app.js` `aliases`). Run, Live Games, My Maps, Profiles and Jobs are destinations, not builds.
+- **The primary says what it does.** **Review build** until a review of these exact choices is on screen
+  (`play.js` `reviewed()`), then **Build & Run** or **Build**; any change, a reload or a start returns it to
+  **Review build**. What stops it is one sentence beside it, not a silently disabled button.
+- **Details fold.** What only the person can answer (a WAD not sent, a Quake II package's files, a listing) is in
+  the open; downloads, programs and versions, writes and argv are under **Technical details**.
+- **A run gets one card** with its pinned identities from the run record (never the form's draft) and one
+  primary: **Try again** when it failed and can be retried, else **View progress**.
+- **Automatic builds are a checkbox under the build profile,** using that same profile and the same readiness
+  (`pipelineReady`); a different profile applies only through **Apply to automatic builds**.
+- **A server failure is said by its code** (`internal/web/failurewords.go`: status + AUB reason, never the
+  English), each with its own action; the server's words fold under *What the server answered*.
+- Budget: the ordinary viewport carries at most 90 authored explanatory words (measured 38 at 1440x900 with
+  the compiler's name included; the five-step page carried 91 on step 1 alone).
+
 ## Examples
 
 | | before | after |
@@ -80,5 +101,6 @@ they bind every surface that offers a choice, says why something cannot start, o
 
 ## Tests that hold it
 
+`testdata/playjourney.js` (one form, F1/F2 refusals, late-answer fence), `new363_test.go`,
 `testdata/setupcauses.check.mjs` (`TestWhatTheUnreadyChoicesNeedIsSaidOnce`),
 `testdata/leakrequest.check.mjs` cases 12–14, `TestAnUnreadyChoiceNamesTheToolToSetUp`.

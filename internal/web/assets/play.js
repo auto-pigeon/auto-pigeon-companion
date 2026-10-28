@@ -316,8 +316,12 @@
       const site = window.AUCOM.officialSite?.(window.AUCOM.status || {});
       if (site) {
         box.append(el("a", { text: t("Review them on {site}", { site: site.host }),
-          attrs: { href: site.url, target: "_blank", rel: "noopener noreferrer" } }));
+          attrs: { href: site.url, target: "_blank", rel: "noopener noreferrer" } }), document.createTextNode(" "));
       }
+      // Once they are accepted there, the list is asked for again here.
+      const again = el("button", { text: t("Try again"), attrs: { type: "button" } });
+      again.addEventListener("click", () => window.AUCOM.withBusy(again, loadMaps));
+      box.append(again);
     } else {
       box.append(document.createTextNode(t("The Auto-Pigeon server refused to list your maps.") + " "));
       const retry = el("button", { text: t("Try again"), attrs: { type: "button" } });
@@ -332,7 +336,7 @@
   function technicalDetails(text) {
     if (!text) return document.createTextNode("");
     return el("details", { className: "message-details", children: [
-      el("summary", { text: t("Technical details") }),
+      el("summary", { text: t("What the server answered") }),
       el("pre", { className: "activity-raw", text }),
     ] });
   }
@@ -1505,6 +1509,14 @@
       renderListing();
       invalidate("The next game you host starts Private again, so the review is worked out again.");
     }
+    // The run has its card now; the form is a draft for the NEXT build, and
+    // starting another is a new decision, made after its own review — not a
+    // second press of a button that still says Build.
+    state.plan = null;
+    state.planKey = "";
+    $("play-review").replaceChildren();
+    $("play-review-attention").replaceChildren();
+    setMessage("play-review-message", "");
     setMessage("play-start-message", t("Started."), "ok");
     $("play-start-message").dataset.pressed = "1";
     announce(state.runAfter ? t("Build and run started.") : t("Build started."));
@@ -1613,8 +1625,13 @@
   // NEXT build — and one way to its progress, the Activity drawer. An automatic
   // build is shown by Auto-build, under the build profile.
   let currentCardKey = "";
+  // A run this window saw running without starting it (another tab): followed
+  // to its end, so its result is said here too rather than the card vanishing.
+  let observed = "";
   function renderCurrent(runs) {
-    const run = runs.find((r) => r.id === watching) || runs.find((r) => r.active && r.trigger !== "auto_build");
+    const run = runs.find((r) => r.id === watching) || runs.find((r) => r.id === observed) ||
+      runs.find((r) => r.active && r.trigger !== "auto_build");
+    if (run && run.active && run.id !== watching) observed = run.id;
     const card = $("play-current");
     if (!run) {
       card.hidden = true;
@@ -1622,7 +1639,8 @@
       return;
     }
     const stage = run.active ? (run.stages || []).at(-1)?.title || run.title : "";
-    const key = JSON.stringify([run.id, run.state, stage, run.failure_code, run.error_summary, run.can_retry]);
+    const key = JSON.stringify([run.id, run.state, stage, run.failure_code, run.error_summary, run.can_retry,
+      nameOfPipeline(run.pipeline), nameOfEngine(run.engine)]);
     card.hidden = false;
     // Redrawn only when the run moved on, so a focused button is not replaced
     // under the keyboard, and the polite status line speaks once per stage.

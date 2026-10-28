@@ -1481,6 +1481,7 @@ option:disabled { color: var(--ink-faint); }
 }
 #area-play .brun-block > .field, #area-play .brun-block .row { margin-top: 0.5rem; }
 #area-play .brun-block .field { min-width: 0; }
+#play-run-fields { margin-top: 0.6rem; }
 
 /* The source of the map: two fixed choices, one row (UI-DESIGN §4). A radio
    group, so arrow keys move between them and the choice is announced. */
@@ -1514,5 +1515,6 @@ option:disabled { color: var(--ink-faint); }
 .message-details > summary { cursor: pointer; }
 
 .autobuild__expanded { margin-top: 0.4rem; }
+.autobuild .message:empty { min-height: 0; margin: 0; }
 .autobuild__apply { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.75rem; margin: 0.4rem 0; }
 .autobuild__apply p { margin: 0; }

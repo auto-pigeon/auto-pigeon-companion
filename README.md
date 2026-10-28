@@ -122,17 +122,44 @@ $ grep -E 'lifecycle|shutdown' ~/.config/auto-pigeon-companion/companion.log
 
 ## Using it
 
-The page has seven areas, in the order of a first run:
+The page has these areas, in the order of a first run:
 
 | Area | What it is for |
 | --- | --- |
-| **Build & Run** | Sign in, choose a map revision, a build profile and an engine, review, and press one button. |
+| **Build & Run** | One form: a saved map or a file on this computer, a build profile, whether to start the game after the build, a review, and one button. |
 | **My Maps** | Your maps in your Auto-Pigeon account, and the revisions this computer has downloaded and verified. |
-| **Build** | Compiling a map: the pipeline, the map, the exact command per stage, then the output. |
-| **Run** | Starting a game: which engine, where it is, which map, and the exact command. |
+| **Run** | Starting an engine on its own: joining a server, a mod, a map you already built. |
 | **Profiles** | What a tool or engine asks to be allowed to do, approving it, and writing your own. |
 | **Jobs** | Everything that has run, with its command, exit status, how long it took and its output. |
 | **Settings** | Which Auto-Pigeon you use, and where the Companion keeps things. |
+
+### Build & Run
+
+1. **Map** — **Saved map** (a map and one exact revision from your account) or
+   **File on this computer** (a `.map` file and, when it needs one, the folder
+   holding its WADs).
+2. **Build profile** — the programs that run, and whether they are ready. A
+   profile that needs setup says what is missing, with a **Set up** link to the
+   tool in Profiles. **Build options** holds the stages and *strict* mode.
+3. **Run after build** — on, the engine starts once the map is built; off, the
+   build stops there and nothing is installed or started.
+4. **Review** — what will be built, with **Technical details** (downloads,
+   programs and versions, where files go, the exact command). The button says
+   **Review build** until the review is on screen for these exact choices, then
+   **Build & Run** or **Build**. Changing any choice asks for a review again.
+
+The run then has one card with **View progress** (the Activity drawer); if it
+fails, the card names the stage, says why in one sentence and offers **Try
+again**, which builds the same revision again. Old `#build` links open the form
+on **File on this computer**.
+
+```bash
+# Build only (Run after build off): the same request, with no engine
+api="$(cat ~/.config/auto-pigeon-companion/api-url)"; token="$(cat ~/.config/auto-pigeon-companion/api-token)"
+curl -fsS -H "X-AUCOM-Token: $token" -H 'Content-Type: application/json' "$api/api/v1/play/runs" -d '{
+  "asset_id": "<map id>", "revision_id": "<revision id>", "revision_number": 4,
+  "pipeline": "auto-pigeon.q1.normal", "map": "mymap", "build_only": true}'
+```
 
 **Signing in.** **Settings** and the **Sign in** dialog offer the two official
 deployments by name — **Auto-Pigeon** (`https://auto-pigeon.com`) and
@@ -271,7 +298,7 @@ $ companion job show <job id> --json | jq .recovery    # what start-up decided a
 ```
 
 **A map file of your own.** **My Maps › On this computer › Choose a map file…**
-opens Build on that file. Nothing is uploaded and the file is only read.
+opens Build & Run on that file. Nothing is uploaded and the file is only read.
 
 **The map's texture WADs.** Build & Run downloads the map's texture bundle and
 checks every file against the SHA-256 its manifest declares before a compiler
@@ -325,15 +352,23 @@ recorded for auto-pigeon.engine.vkquake:
   game_root      /home/you/Games/Quake
 ```
 
-**When the server does not answer.** Build & Run says which server address did not
-answer and offers **Try again**; a map file on this computer still builds under
-**Build** meanwhile.
+**When the server refuses or does not answer.** Build & Run says which it was,
+in one sentence, with what fixes it: **Sign in** when your sign-in expired; a
+review of the changed Terms or notices on the Auto-Pigeon site (the Companion
+never accepts them for you), then **Try again**; **Try again** when the server
+is away. A texture download the server could not serve is said as exactly
+that, and nothing is compiled. The server's own answer is one click away. A map
+file on this computer still builds meanwhile.
 
-**Auto-build.** Under the map in **Build & Run**, **Auto-build this map** checks
-it about every 30 seconds while the Companion runs and builds each newly saved
-revision once, with the chosen build profile. It never starts the game. The
-revision current when you switch it on is not built; **Build current revision
-now** does that. A failed build waits for **Retry**.
+**Automatic builds.** Under the build profile, **Automatically build new saved
+revisions** checks the saved map every 30 seconds while the Companion runs and
+builds each newly saved revision once, with the build profile chosen above. It
+never starts the game, and the revision saved when you switch it on is not
+built. It can be switched on only with a ready profile; if that profile later
+needs setup, automatic builds wait and say what to repair. Choosing another
+profile while it is on asks **Apply to automatic builds**. Unchecking it, or
+**Stop automatic builds**, stops what comes next, never a build already running.
+A revision you built by hand is not built again automatically.
 
 ```console
 $ companion autobuild on <map-id> --pipeline auto-pigeon.q1.normal
@@ -787,8 +822,8 @@ or `NOT_OBSERVED` (it said neither within `--wait`, and is left running).
 exit status.
 
 **On the page** the same three steps are the *Package and run this map* panel
-under a finished Quake III build in **Build**. Build & Run does not run a Quake
-III map. Tested only on Linux x86-64 with Q3Map2 2.5.17n and ioquake3 1.36,
+under a finished Quake III build of a file on this computer in **Build & Run**.
+Build & Run does not run a Quake III map itself. Tested only on Linux x86-64 with Q3Map2 2.5.17n and ioquake3 1.36,
 without id Software's data.
 
 ## Quake II maps (work in progress)

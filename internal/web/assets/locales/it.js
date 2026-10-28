@@ -908,5 +908,6 @@ window.AUCOM_LOCALES.it = {
   "You changed the Live Games listing.": "Hai cambiato l’annuncio in Live Games.",
   "You changed the folder this installs into.": "Hai cambiato la cartella in cui si installa.",
   "The game starts after the build now, so the review is worked out again.": "Ora il gioco si avvia dopo la compilazione, quindi il riepilogo viene rifatto.",
-  "Nothing starts after the build now, so the review is worked out again.": "Ora dopo la compilazione non si avvia nulla, quindi il riepilogo viene rifatto."
+  "Nothing starts after the build now, so the review is worked out again.": "Ora dopo la compilazione non si avvia nulla, quindi il riepilogo viene rifatto.",
+  "What the server answered": "Cosa ha risposto il server"
 };
