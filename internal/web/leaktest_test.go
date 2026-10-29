@@ -217,6 +217,10 @@ func TestAnOpenPageSeesANewLeakRequestAndDismissesOnlyTheOneItNamed(t *testing.T
 	if got := m.leakStatusesSoon(t, 1); len(got) != 1 || got[0] != older.RequestID+" received" {
 		t.Fatalf("the editor was told %v, want one `received`", got)
 	}
+	// … and which Companion received it, once for this delivery (NEW_368).
+	if got := m.handoffAcksSoon(1); len(got) != 1 {
+		t.Fatalf("the first sighting was acknowledged %d time(s)", len(got))
+	}
 	served := m.backend.count()
 	for range 5 {
 		watch()

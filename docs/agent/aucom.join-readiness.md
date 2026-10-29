@@ -106,6 +106,21 @@ the leak relay's — and never blocking the local flow. Tests: `internal/aub/bui
 `internal/buildintent`, `internal/cli/buildrequest_open_test.go`,
 `internal/web/buildrequest_test.go`, `testdata/buildrequest.check.mjs`.
 
+**The serving Companion says which Companion it is (`NEW_368`).** Neither link may gain a query
+parameter (released parsers refuse one) and AUB's build status body is strict, so the answer is a
+separate AUB resource: `POST …/handoff-acks/{id}` (`aucom.handoff-ack/1.0`, `internal/aub/handoffack.go`),
+posted by `internal/web/handoffack.go` from the SERVER that resolves the request — build: once AUB's
+read of it succeeds, whatever the checks then decide; leak: when the page's watch first sees it —
+once per link delivery (keyed by the intent's `received_at`), whatever number of polls or tabs. It
+carries this server's version, `HandoffProtocol` (1), capabilities `build`, `build_run`,
+`leak_test`, a per-process instance id, and `launched_by_version` — written into the intent file
+by `game open` (`ReceiveFrom`), an optional field an older Companion reads and rewrites without —
+when the program the link started is not the one serving it. Nothing without a session; an AUB
+404/4xx is settled (one post per delivery), a network failure is retried at the next poll; the
+relay never waits for it. It authorizes nothing. Tests: `internal/web/handoffack_test.go`,
+`internal/buildintent` (`TestTheLaunchersVersionIsKeptBesideTheRequest`),
+`internal/cli/buildrequest_open_test.go`.
+
 **The handler is registered once, at first interactive use (moved from README.md, 2026-10-17).**
 The first no-subcommand start (a double-click) registers `autopigeon://` and records that it did
 in `config.json` as `uri_handler`, so it happens once: a later start leaves alone a handler the

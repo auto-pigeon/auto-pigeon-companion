@@ -143,3 +143,27 @@ func TestABuildRequestAndALeakTestAreDifferentFiles(t *testing.T) {
 		t.Fatalf("a build request was read as a leak test: %+v %v", got, err)
 	}
 }
+
+// NEW_368: the version of the program the link started is kept beside the
+// request — "" when a launcher that predates this delivered it — and a file
+// carrying it still reads as the same schema.
+func TestTheLaunchersVersionIsKeptBesideTheRequest(t *testing.T) {
+	path := filepath.Join(t.TempDir(), FileName)
+	now := time.Now().UTC()
+	if err := ReceiveFrom(path, first, "1.400", now); err != nil {
+		t.Fatal(err)
+	}
+	received, by, err := Receipt(path, now)
+	if err != nil || by != "1.400" || !received.Equal(now) {
+		t.Fatalf("receipt: %v %q %v", received, by, err)
+	}
+	if request, _, err := Read(path, now); err != nil || request == nil || request.RequestID != first.RequestID {
+		t.Fatalf("the request beside it: %v %v", request, err)
+	}
+	if err := Receive(path, second, now.Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if _, by, _ := Receipt(path, now.Add(time.Second)); by != "" {
+		t.Fatalf("a delivery that named no launcher kept the previous one's: %q", by)
+	}
+}

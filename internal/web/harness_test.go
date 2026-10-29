@@ -241,6 +241,12 @@ func (a fixtureAsset) manifestDigest() string {
 }
 
 type fixtureBackend struct {
+	// handoffAcks is every handoff acknowledgement posted (NEW_368);
+	// handoffAcksAbsent answers the route 404, as an AUB from before it.
+	handoffAcks       []map[string]any
+	handoffAckPosts   int
+	handoffAcksAbsent bool
+
 	server *httptest.Server
 	asset  fixtureAsset
 	token  string
@@ -527,6 +533,27 @@ func (b *fixtureBackend) serve(w http.ResponseWriter, r *http.Request) {
 	asset := b.asset
 
 	switch {
+	case strings.HasPrefix(rest, "/handoff-acks/") && r.Method == http.MethodPost:
+		b.mu.Lock()
+		b.handoffAckPosts++
+		absent := b.handoffAcksAbsent
+		b.mu.Unlock()
+		if absent {
+			http.NotFound(w, r)
+			return
+		}
+		var ack map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&ack); err != nil || ack["schema_version"] != aub.HandoffAckSchema {
+			http.Error(w, "bad ack", http.StatusBadRequest)
+			return
+		}
+		ack["request_id"] = strings.TrimPrefix(rest, "/handoff-acks/")
+		b.mu.Lock()
+		b.handoffAcks = append(b.handoffAcks, ack)
+		sequence := len(b.handoffAcks)
+		b.mu.Unlock()
+		write(map[string]any{"sequence": sequence})
+		return
 	case strings.HasPrefix(rest, "/build-requests/"):
 		b.serveBuildRequest(w, r, strings.TrimPrefix(rest, "/build-requests/"))
 		return

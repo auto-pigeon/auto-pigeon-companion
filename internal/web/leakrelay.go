@@ -138,6 +138,9 @@ func (s *Server) handleLeakTestRequest(w http.ResponseWriter, _ *http.Request) {
 	}
 	s.leaks.nothingPending(request.RequestID)
 	s.reportLeakStatus(*request, leakReceived, "", "")
+	if _, by, err := leakintent.Receipt(leakintent.Path(dir), time.Now().UTC()); err == nil {
+		s.acknowledgeHandoff(aub.HandoffLeakTest, request.RequestID, request.AssetID, request.Revision, request.ContentSHA256, received, by)
+	}
 	// `relay` is whether the editor has been told: a request this machine
 	// holds and the editor has not heard about are different facts.
 	writeJSON(w, http.StatusOK, map[string]any{

@@ -44,6 +44,11 @@ func TestGameOpenRecordsABuildRequestAndAsksNobody(t *testing.T) {
 	if err != nil || request == nil || *request != (aub.BuildRequestLink{RequestID: id, Intent: aub.BuildIntentBuildRun}) {
 		t.Fatalf("the request was not recorded: %+v (%v)", request, err)
 	}
+	// The program the link started names itself, for the acknowledgement of
+	// whichever Companion serves it (NEW_368).
+	if _, by, err := buildintent.Receipt(buildintent.Path(dir), time.Now().UTC()); err != nil || by != env.Version {
+		t.Errorf("the launcher recorded version %q, want %q (%v)", by, env.Version, err)
+	}
 	for _, other := range []string{leakintent.Path(dir), joinintent.Path(dir)} {
 		if _, err := os.Stat(other); !os.IsNotExist(err) {
 			t.Errorf("a build-request link wrote %s: %v", filepath.Base(other), err)

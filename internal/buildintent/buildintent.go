@@ -49,6 +49,12 @@ type Intent struct {
 	Request       *aub.BuildRequestLink `json:"request,omitempty"`
 	ReceivedAt    time.Time             `json:"received_at,omitempty"`
 	ExpiresAt     time.Time             `json:"expires_at,omitempty"`
+	// LaunchedByVersion is the version of the program the link started
+	// (NEW_368). When a Companion was already running, that program handed the
+	// link to it, and the running one is what serves it: the two are told
+	// apart in the editor. Optional, so an older Companion reads and rewrites
+	// this file as before (and drops it).
+	LaunchedByVersion string `json:"launched_by_version,omitempty"`
 }
 
 // Path is the intent file for a configuration directory.
@@ -61,6 +67,12 @@ func options() lockfile.Options {
 // Receive records a link the operating system delivered. A newer link replaces
 // an older one: the editor asks about the map it has open now.
 func Receive(path string, link aub.BuildRequestLink, now time.Time) error {
+	return ReceiveFrom(path, link, "", now)
+}
+
+// ReceiveFrom is Receive, recording the version of the program that received
+// the link from the operating system.
+func ReceiveFrom(path string, link aub.BuildRequestLink, launchedBy string, now time.Time) error {
 	if _, err := aub.ParseBuildRequestLink(link.Link()); err != nil {
 		return fmt.Errorf("buildintent: %w", err)
 	}
@@ -68,6 +80,7 @@ func Receive(path string, link aub.BuildRequestLink, now time.Time) error {
 	return update(path, now, func(intent *Intent) {
 		request := link
 		intent.Request, intent.ReceivedAt, intent.ExpiresAt = &request, now, now.Add(Lifetime)
+		intent.LaunchedByVersion = launchedBy
 	})
 }
 
@@ -200,4 +213,20 @@ func save(path string, intent Intent) error {
 	}
 
 	return nil
+}
+
+// Receipt is when the pending request arrived and the version of the program
+// that received it — "" when that was not recorded. Zero time when nothing is
+// pending.
+func Receipt(path string, now time.Time) (time.Time, string, error) {
+	var (
+		received time.Time
+		by       string
+	)
+	err := update(path, now, func(intent *Intent) {
+		if intent.Request != nil {
+			received, by = intent.ReceivedAt, intent.LaunchedByVersion
+		}
+	})
+	return received, by, err
 }

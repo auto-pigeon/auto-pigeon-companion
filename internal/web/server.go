@@ -110,11 +110,13 @@ type Server struct {
 	autobuildErr  error
 	runner        aue.Runner
 	// board is the background checks the page shows (NEW_368).
-	board   checkBoard
-	paths   Paths
-	picker  *pathpick.Picker
-	scanner engine.Scanner
-	builds  *buildRuns
+	board checkBoard
+	// handoffs acknowledges editor requests this server serves (NEW_368).
+	handoffs handoffAcker
+	paths    Paths
+	picker   *pathpick.Picker
+	scanner  engine.Scanner
+	builds   *buildRuns
 	// q3runs is the Quake III package runs this process is waiting on or has
 	// waited on. See q3package.go.
 	q3runs *q3Runs

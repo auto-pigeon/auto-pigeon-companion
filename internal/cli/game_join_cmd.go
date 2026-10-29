@@ -330,14 +330,18 @@ func gameOpen(env *Env, args []string) int {
 			return fail(env, err)
 		}
 		area, what = "play", "this build request"
-		record = func(dir string) error { return buildintent.Receive(buildintent.Path(dir), link, time.Now().UTC()) }
+		record = func(dir string) error {
+			return buildintent.ReceiveFrom(buildintent.Path(dir), link, env.Version, time.Now().UTC())
+		}
 	case aub.IsLeakTestLink(rest[0]):
 		link, err := aub.ParseLeakTestLink(rest[0])
 		if err != nil {
 			return fail(env, err)
 		}
 		area, what = "build", "this leak test"
-		record = func(dir string) error { return leakintent.Receive(leakintent.Path(dir), link, time.Now().UTC()) }
+		record = func(dir string) error {
+			return leakintent.ReceiveFrom(leakintent.Path(dir), link, env.Version, time.Now().UTC())
+		}
 	default:
 		ticketID, err := aub.ParseJoinLink(rest[0])
 		if err != nil {

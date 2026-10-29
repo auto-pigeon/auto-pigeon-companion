@@ -741,6 +741,16 @@ the editor is not told about it. A request for another account or server, or an
 expired one, says the Companion cannot find it; sign in to the account the
 editor uses and press **Retry**. Quake III maps are not built this way yet.
 
+The Companion that picks the request up also tells the editor **which Companion
+it is**: its version, the editor-handoff protocol it speaks, what it can do
+(build, Build & Run, leak test) and, when the link started a newer copy that
+handed the request to one already running, that copy's version too. The editor
+uses it to say "received by Companion 1.330", to tell you when the Companion that
+answered cannot do what was asked, and — when nothing answers — that nothing did.
+Nothing is sent before you are signed in, and it never starts a build. Leak tests
+(below) are acknowledged the same way. An older Companion sends none; the editor
+then says the version is unknown.
+
 ```bash
 # the pending request, from this machine only
 curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \

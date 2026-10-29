@@ -143,6 +143,13 @@ func (s *Server) resolveBuildRequest(ctx context.Context, link aub.BuildRequestL
 		}
 		return failed(err)
 	}
+	// This server has the request: it says so, and what it is, whatever it
+	// then makes of it (NEW_368).
+	if dir, err := s.configDir(); err == nil {
+		if received, by, err := buildintent.Receipt(buildintent.Path(dir), time.Now().UTC()); err == nil {
+			s.acknowledgeHandoff(aub.HandoffBuild, link.RequestID, request.MapID, request.Revision, request.ContentSHA256, received, by)
+		}
+	}
 	if request.Intent != link.Intent {
 		return blocked(buildStageIntentMismatch, fmt.Errorf(
 			"the link asked for %q and the account server holds %q for this request; ask the editor again", link.Intent, request.Intent))
