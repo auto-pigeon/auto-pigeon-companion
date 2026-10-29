@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"testing"
 
@@ -35,6 +36,10 @@ func bundle(t *testing.T, dir string, files map[string]string) []managedtools.Bu
 		members = append(members, managedtools.BundleMember{Path: name, SHA256: digest([]byte(body)), Size: int64(len(body)),
 			Executable: !strings.HasSuffix(name, ".json") && name != "SHA256SUMS"})
 	}
+	// In path order, as a bundle manifest lists them: a map's order is
+	// random, and the order is the order rollback walks (backwards). A test
+	// that blocks one member's restore depends on which come after it.
+	sort.Slice(members, func(i, j int) bool { return members[i].Path < members[j].Path })
 	return members
 }
 
