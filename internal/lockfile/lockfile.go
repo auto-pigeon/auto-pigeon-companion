@@ -93,6 +93,10 @@ const (
 	DefaultPoll    = 20 * time.Millisecond
 )
 
+// ProcessGone reports that no process with pid exists on this machine. A pid
+// that exists, whoever it now is, is not gone.
+func ProcessGone(pid int) bool { return pid > 0 && processGone(pid) }
+
 // ErrBusy reports that another holder has the lock and did not release it
 // within the timeout. It is a refusal: nothing was read and nothing was
 // written.

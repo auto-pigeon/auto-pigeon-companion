@@ -173,9 +173,15 @@ func TestAPipelineKeepsTheProgramsItStartedWith(t *testing.T) {
 	if manifest["state"] != "succeeded" {
 		t.Fatalf("the held build: %v %v", manifest["state"], manifest["error"])
 	}
-	text := string(mustJSON(t, manifest))
-	if strings.Contains(text, elsewhere) || !strings.Contains(text, old.Programs["vis"]) {
-		t.Fatalf("a later stage did not run the program the build started with (old vis %s)", old.Programs["vis"])
+	ran := map[string]string{}
+	for _, item := range manifest["steps"].([]any) {
+		step := item.(map[string]any)
+		if command, ok := step["command"].(map[string]any); ok {
+			ran[step["id"].(string)], _ = command["executable"].(string)
+		}
+	}
+	if !samePath(ran["vis"], old.Programs["vis"]) || !samePath(ran["light"], old.Programs["light"]) {
+		t.Fatalf("a later stage did not run the program the build started with: ran %v, started with vis %s", ran, old.Programs["vis"])
 	}
 
 	// The same, with the frozen program itself changed under the build.
@@ -223,4 +229,10 @@ func (m *toolsMachine) waitForStep(t *testing.T, id, state string) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("build %s never had a %s first step", id, state)
+}
+
+func samePath(a, b string) bool {
+	ia, errA := os.Stat(a)
+	ib, errB := os.Stat(b)
+	return errA == nil && errB == nil && os.SameFile(ia, ib)
 }

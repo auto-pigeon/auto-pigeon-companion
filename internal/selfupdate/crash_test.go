@@ -202,7 +202,7 @@ func TestAKillAtAnyBoundaryOfTheSwapIsRecoveredByAFreshProcess(t *testing.T) {
 					}
 					kept := filepath.Join(r.root, DirName, "previous", companion)
 					root, err := RecoveryRoot(kept, companion)
-					if err != nil || root != r.root {
+					if err != nil || !sameDir(root, r.root) {
 						t.Fatalf("the kept copy's recovery root is %q %v", root, err)
 					}
 					recoverFrom = root
@@ -570,4 +570,12 @@ func legacyApply(t *testing.T, r *rig, activated bool) {
 		t.Fatal(err)
 	}
 	_ = managedtools.BundleMember{}
+}
+
+// sameDir compares folders as the file system does: macOS resolves /var to
+// /private/var and Windows expands 8.3 names, so the spellings differ.
+func sameDir(a, b string) bool {
+	ia, errA := os.Stat(a)
+	ib, errB := os.Stat(b)
+	return errA == nil && errB == nil && os.SameFile(ia, ib)
 }

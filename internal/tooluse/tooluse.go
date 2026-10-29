@@ -59,6 +59,7 @@ import (
 	"time"
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/lockfile"
 )
 
 // DirName is the coordination folder inside a tools folder.
@@ -514,6 +515,12 @@ func (r *Registry) live(record Record, modTime time.Time) bool {
 		}
 		if running, known := job.ProcessRunning(job.ProcessIdentity{PID: record.PID, StartTicks: record.StartTicks}); known {
 			return running
+		}
+		// No start time here (macOS, Windows): a pid that no longer exists
+		// is certainly over; one that exists may be reused, and is left to
+		// the heartbeat.
+		if lockfile.ProcessGone(record.PID) {
+			return false
 		}
 	}
 	return time.Since(modTime) < staleAfter
