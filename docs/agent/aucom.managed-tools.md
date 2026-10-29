@@ -86,6 +86,18 @@ update belongs to `NEW_368`, which consumes this coordinator and its verificatio
      30 s (server) / 2 min (CLI) and are refused retryably (`503 tools_updating`, Auto-build
      `autobuild.ErrNotNow`: not consumed) — the switch is not starved; the gate is dropped when
      the intent ends;
+   - **a gate's pathname is not its owner (NEW_368 gate ownership).** Publishing a gate, judging
+     it abandoned and removing it, refreshing its heartbeat and releasing it all happen holding
+     the folder's **guard** — the OS lock (flock / `LockFileEx`) on `.in-use/guard.lock`, a file
+     never removed, which the kernel lets go of when its holder dies — so what is removed is what
+     was judged. It is held for a few file operations, never through a build, download or wait
+     (bounded at 10 s; a lease needs it only to reclaim an abandoned gate). Each gate carries an
+     immutable `id`; its holder refreshes or releases it only while the record at the path carries
+     that id, and `Manager.switchGate` re-checks `Gate.Held` before trusting a gate it kept, so a
+     holder whose gate was reclaimed (no heartbeat for a stale period, as across a sleep) neither
+     touches the replacement nor activates under it. A gate that cannot be read is held until it
+     has gone a stale period unrefreshed. Companions from before the guard (≤ v1.325) do not take
+     it: the race stays possible only between one of them and a new one;
    - liveness is pid + start time against the kernel (`job.ProcessRunning`), a heartbeat where
      that is unknown. Switching does not wait for a dead lease. Removal does, while a job its
      writer launched (read from the job store the lease names) still runs as the same process, or

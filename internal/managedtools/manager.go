@@ -577,7 +577,13 @@ func (m *Manager) switchGate(tool Tool) (*tooluse.Gate, error) {
 	gate := m.gates[tool.ID]
 	m.mu.Unlock()
 	if gate != nil {
-		return gate, nil
+		if gate.Held() {
+			return gate, nil
+		}
+		// Reclaimed by another process while this one did not heartbeat (a
+		// machine that slept): it protects nothing now, and is taken again
+		// like anyone's.
+		m.releaseGate(tool.ID)
 	}
 	gate, err := m.opts.Uses.Switch(string(tool.ID), "the Companion updating "+tool.Title)
 	if err != nil {

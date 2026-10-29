@@ -115,15 +115,6 @@ func (h *helper) finish(t *testing.T) {
 	_ = h.command.Wait()
 }
 
-func open(t *testing.T, root string) *Registry {
-	t.Helper()
-	registry, err := Open(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return registry
-}
-
 // Another process's lease holds a switch; its release frees it; while the
 // switch waits, a new lease is refused retryably and leaves nothing behind.
 func TestAnotherProcessesLeaseHoldsASwitchAndTheSwitchHoldsNewLeasesOut(t *testing.T) {
@@ -271,6 +262,37 @@ func TestOneToolsFolderIsOneProtectionWhateverItIsCalled(t *testing.T) {
 	defer other.Release()
 	if len(other.Users()) != 0 {
 		t.Fatal("an unrelated tools folder sees this one's lease")
+	}
+
+	// The guard is the folder's too: held through one spelling, a
+	// reclamation through the other waits for it; an unrelated folder's
+	// switch and another toolchain's lease do not.
+	deadGate(t, a, "ericw-tools")
+	unlock, err := b.guard()
+	if err != nil {
+		t.Fatal(err)
+	}
+	contended := watchGuard(t)
+	result := switchIn(a, "ericw-tools", "config A's update")
+	if s, done := awaitOrContend(result, contended); done {
+		unlock()
+		t.Fatalf("the guard taken through another spelling did not hold a reclamation: %v", s.err)
+	}
+	q3, err := a.Use([]string{"q3map2"}, "a q3map2 build", 0)
+	if err != nil {
+		t.Fatalf("another toolchain's lease waited: %v", err)
+	}
+	q3.Release()
+	q3Unrelated, err := unrelated.Switch("q3map2", "an unrelated folder's q3map2 update")
+	if err != nil {
+		t.Fatalf("an unrelated folder's switch waited for this folder's guard: %v", err)
+	}
+	q3Unrelated.Release()
+	unlock()
+	if s := <-result; s.err != nil {
+		t.Fatal(s.err)
+	} else {
+		s.gate.Release()
 	}
 }
 

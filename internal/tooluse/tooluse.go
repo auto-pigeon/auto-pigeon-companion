@@ -30,6 +30,30 @@
 //     work that existed when the switch was asked for has ended, the switch
 //     happens, however much new work is asked for meanwhile.
 //
+// # Who owns a gate
+//
+// A gate's pathname is not its owner. Two processes may both judge one gate
+// dead; between the first one's removal and the second one's, a third may
+// publish a live gate at the same path. So every change to a gate —
+// publishing it, judging it dead and removing it, refreshing its heartbeat,
+// releasing it — is made holding the tools folder's GUARD: the operating
+// system's lock on `<tools>/.in-use/guard.lock` (flock; LockFileEx on
+// Windows), a file that is never removed. The kernel lets go of it when its
+// holder dies, so a dead holder of the guard never needs recovering. It is
+// held for a few file operations, never through a build, a download or a
+// wait for work; nothing waits for it longer than [guardWait].
+//
+// A gate carries the identity it was published with ([Record.ID]). Its
+// holder refreshes and releases it only while the record at the path still
+// carries that identity, checked with the guard held; a holder whose gate was
+// reclaimed (it stopped heartbeating) finds another identity there, or none,
+// and touches nothing. A gate that cannot be read is held — it may be one
+// that is being written — until it has gone a whole stale period without a
+// heartbeat.
+//
+// Leases need none of this: each has a path of its own, minted fresh, that
+// nobody else ever writes.
+//
 // # Liveness, and a surviving child
 //
 // A record names its writer by pid AND start time. On this machine that is
@@ -58,6 +82,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/fsshare"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/lockfile"
 )
@@ -79,14 +104,25 @@ const (
 	abandonAfter = 48 * time.Hour
 	// poll is how often a waiting lease looks again.
 	poll = 100 * time.Millisecond
+	// guardWait bounds every wait for the guard; guardPoll is how often it
+	// is tried meanwhile.
+	guardWait = 10 * time.Second
+	guardPoll = 2 * time.Millisecond
 )
+
+// guardName is the file whose operating-system lock is the guard. It is
+// never removed: a lock on a file that can be replaced is no lock.
+const guardName = "guard.lock"
 
 // Record is a lease or a gate, as written.
 type Record struct {
-	Schema string   `json:"schema"`
-	Kind   string   `json:"kind"` // "use" or "switch"
-	Tools  []string `json:"tools"`
-	Dirs   []string `json:"dirs,omitempty"`
+	Schema string `json:"schema"`
+	// ID is a gate's identity, minted when it is published and never
+	// rewritten: what its holder checks before refreshing or releasing it.
+	ID    string   `json:"id,omitempty"`
+	Kind  string   `json:"kind"` // "use" or "switch"
+	Tools []string `json:"tools"`
+	Dirs  []string `json:"dirs,omitempty"`
 	// Stores are the job stores the pipeline submits its stages to.
 	Stores     []string  `json:"stores,omitempty"`
 	Program    string    `json:"program,omitempty"`
@@ -160,10 +196,13 @@ func (e *SwitchingError) Is(target error) bool { return target == ErrSwitching }
 var ErrSwitchBusy = errors.New("tooluse: another Companion is switching this toolchain")
 
 // Test seams: a deterministic barrier between writing one's own record and
-// reading the other side's.
+// reading the other side's; between judging a gate abandoned and removing it;
+// and a report that an acquisition of the guard has to wait.
 var (
 	afterLeaseWritten func()
 	afterGateWritten  func()
+	beforeReclaim     func(tool string)
+	guardContended    func()
 )
 
 func (r *Registry) gatePath(tool string) string { return filepath.Join(r.dir, "switch-"+tool+".json") }
@@ -285,37 +324,55 @@ type Gate struct {
 	r    *Registry
 	tool string
 	path string
+	id   string
 
-	once sync.Once
-	stop chan struct{}
+	mu       sync.Mutex
+	released bool
+	stop     chan struct{}
 }
 
 // Switch takes the switch gate of tool. Another live switcher of the same
-// toolchain is [ErrSwitchBusy]; a dead one's gate is broken.
+// toolchain is [ErrSwitchBusy]; an abandoned gate is reclaimed. Judging the
+// gate there and replacing it is one step under the guard, so what is
+// removed is what was judged.
 func (r *Registry) Switch(tool, program string) (*Gate, error) {
-	path := r.gatePath(tool)
-	record := Record{Schema: Schema, Kind: "switch", Tools: []string{tool}, Program: program, Host: r.host,
-		PID: r.self.PID, StartTicks: r.self.StartTicks, Since: time.Now().UTC()}
-	for attempt := 0; attempt < 2; attempt++ {
-		err := writeRecord(path, record, true)
-		if err == nil {
-			if afterGateWritten != nil {
-				afterGateWritten()
-			}
-			gate := &Gate{r: r, tool: tool, path: path, stop: make(chan struct{})}
-			go gate.refresh()
-			return gate, nil
-		}
-		if !errors.Is(err, fs.ErrExist) {
-			return nil, err
-		}
-		current, info, readErr := readRecord(path)
-		if readErr == nil && r.live(current, info.ModTime()) {
-			return nil, fmt.Errorf("%w: %s", ErrSwitchBusy, current.describe())
-		}
-		r.breakRecord(path)
+	id, err := newNonce()
+	if err != nil {
+		return nil, err
 	}
-	return nil, fmt.Errorf("%w: its gate could not be taken", ErrSwitchBusy)
+	gate := &Gate{r: r, tool: tool, path: r.gatePath(tool), id: id, stop: make(chan struct{})}
+	record := Record{Schema: Schema, ID: id, Kind: "switch", Tools: []string{tool}, Program: program, Host: r.host,
+		PID: r.self.PID, StartTicks: r.self.StartTicks, Since: time.Now().UTC()}
+	unlock, err := r.guard()
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrSwitchBusy, err)
+	}
+	current, state := r.inspect(tool)
+	if state == gateAbandoned {
+		if err := r.removeLocked(tool); err != nil {
+			unlock()
+			return nil, fmt.Errorf("%w: an abandoned gate could not be removed: %v", ErrSwitchBusy, err)
+		}
+		state = gateAbsent
+	}
+	if state == gateHeld {
+		unlock()
+		return nil, fmt.Errorf("%w: %s", ErrSwitchBusy, current.describe())
+	}
+	// Exclusive even so: a Companion from before the guard does not take it.
+	err = writeRecord(gate.path, record, true)
+	unlock()
+	if errors.Is(err, fs.ErrExist) {
+		return nil, fmt.Errorf("%w: a Companion published it a moment ago", ErrSwitchBusy)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if afterGateWritten != nil {
+		afterGateWritten()
+	}
+	go gate.refresh()
+	return gate, nil
 }
 
 // Use is one live lease a switch waits for.
@@ -338,13 +395,32 @@ func (g *Gate) Users() []Use {
 	return out
 }
 
-// Release gives the gate up. Repeating it does nothing.
+// Release gives the gate up: it removes the record at the gate's path only
+// if that is still this gate. Repeating it does nothing. Should the guard
+// not come free in [guardWait], it goes on trying in the background.
 func (g *Gate) Release() {
-	g.once.Do(func() {
-		close(g.stop)
-		_ = os.Remove(g.path)
-	})
+	g.mu.Lock()
+	if g.released {
+		g.mu.Unlock()
+		return
+	}
+	g.released = true
+	close(g.stop)
+	g.mu.Unlock()
+	remove := func() { _ = fsshare.Remove(g.path) }
+	if err := g.whileOwned(remove); errors.Is(err, errGuardBusy) {
+		go func() {
+			for errors.Is(g.whileOwned(remove), errGuardBusy) {
+			}
+		}()
+	}
 }
+
+// Held reports whether the record at the gate's path is still this gate.
+// It is not, once the gate was judged abandoned — its holder stopped
+// heartbeating for a stale period, as across a machine's sleep — and
+// another process reclaimed it.
+func (g *Gate) Held() bool { return g.whileOwned(func() {}) == nil }
 
 func (g *Gate) refresh() {
 	ticker := time.NewTicker(heartbeat)
@@ -354,10 +430,40 @@ func (g *Gate) refresh() {
 		case <-g.stop:
 			return
 		case <-ticker.C:
-			now := time.Now()
-			_ = os.Chtimes(g.path, now, now)
+			if !g.beat() {
+				return
+			}
 		}
 	}
+}
+
+// beat refreshes the gate's heartbeat if the gate is still this one. It is
+// false once it is not: another holder's gate is never kept fresh.
+func (g *Gate) beat() bool {
+	err := g.whileOwned(func() {
+		now := time.Now()
+		_ = os.Chtimes(g.path, now, now)
+	})
+	return !errors.Is(err, errGateLost)
+}
+
+// errGateLost: the record at a gate's path is another gate, or none.
+var errGateLost = errors.New("tooluse: the gate is no longer this holder's")
+
+// whileOwned runs fn holding the guard, if the record at the gate's path
+// carries this gate's identity — never on the strength of the name alone.
+func (g *Gate) whileOwned(fn func()) error {
+	unlock, err := g.r.guard()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	record, _, err := readRecord(g.path)
+	if err != nil || record.ID != g.id {
+		return errGateLost
+	}
+	fn()
+	return nil
 }
 
 // --- removal ------------------------------------------------------------------
@@ -486,24 +592,112 @@ func (r *Registry) Switching(tools []string) error {
 	return nil
 }
 
-// switching reports a live gate on one of tools, breaking dead ones.
+// switching reports a gate held on one of tools, reclaiming abandoned ones.
+// It reads without the guard — a gate is published whole, so a reader sees
+// all of it or none — and takes the guard only to reclaim.
 func (r *Registry) switching(tools []string) (Record, bool) {
 	for _, tool := range tools {
-		path := r.gatePath(tool)
-		record, info, err := readRecord(path)
-		if errors.Is(err, fs.ErrNotExist) {
-			continue
+		record, state := r.inspect(tool)
+		if state == gateAbandoned {
+			record, state = r.reclaim(tool)
 		}
-		if err != nil {
-			// A gate being written, or unreadable: held, to be safe.
-			return Record{Tools: []string{tool}, Program: "a Companion"}, true
-		}
-		if r.live(record, info.ModTime()) {
+		if state == gateHeld {
 			return record, true
 		}
-		r.breakRecord(path)
 	}
 	return Record{}, false
+}
+
+type gateState int
+
+const (
+	gateAbsent gateState = iota
+	gateHeld
+	gateAbandoned
+)
+
+// inspect judges the gate at tool's path. One that cannot be read may be
+// one being written: it is held until it has gone a stale period without a
+// heartbeat, and only then abandoned.
+func (r *Registry) inspect(tool string) (Record, gateState) {
+	record, info, err := readRecord(r.gatePath(tool))
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return Record{}, gateAbsent
+	case err != nil:
+		unknown := Record{Tools: []string{tool}, Program: "a Companion"}
+		if info != nil && time.Since(info.ModTime()) >= staleAfter {
+			return unknown, gateAbandoned
+		}
+		return unknown, gateHeld
+	case r.live(record, info.ModTime()):
+		return record, gateHeld
+	}
+	return record, gateAbandoned
+}
+
+// reclaim judges tool's gate again holding the guard, and removes it if it
+// is still abandoned. Without the guard it is held: a build refused
+// retryably is the safe mistake.
+func (r *Registry) reclaim(tool string) (Record, gateState) {
+	unlock, err := r.guard()
+	if err != nil {
+		return Record{Tools: []string{tool}, Program: "a Companion"}, gateHeld
+	}
+	defer unlock()
+	record, state := r.inspect(tool)
+	if state != gateAbandoned {
+		return record, state
+	}
+	if err := r.removeLocked(tool); err != nil {
+		return record, gateHeld
+	}
+	return Record{}, gateAbsent
+}
+
+// removeLocked removes tool's gate, just judged abandoned. The guard is held,
+// so it is the gate that was judged.
+func (r *Registry) removeLocked(tool string) error {
+	if beforeReclaim != nil {
+		beforeReclaim(tool)
+	}
+	if err := fsshare.Remove(r.gatePath(tool)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+// errGuardBusy: the guard did not come free in [guardWait].
+var errGuardBusy = errors.New("tooluse: the tools folder's coordination lock stayed taken")
+
+// guard takes the tools folder's coordination lock and returns its release.
+func (r *Registry) guard() (func(), error) {
+	file, err := os.OpenFile(filepath.Join(r.dir, guardName), os.O_RDWR|os.O_CREATE, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	deadline := time.Now().Add(guardWait)
+	for waited := false; ; waited = true {
+		locked, err := tryLock(file)
+		if err != nil {
+			file.Close()
+			return nil, err
+		}
+		if locked {
+			return func() {
+				_ = unlockFile(file)
+				file.Close()
+			}, nil
+		}
+		if !waited && guardContended != nil {
+			guardContended()
+		}
+		if !time.Now().Before(deadline) {
+			file.Close()
+			return nil, errGuardBusy
+		}
+		time.Sleep(guardPoll)
+	}
 }
 
 // live reports whether a record's writer is still running: by its process
@@ -526,34 +720,26 @@ func (r *Registry) live(record Record, modTime time.Time) bool {
 	return time.Since(modTime) < staleAfter
 }
 
-// breakRecord moves a dead record away first, so of two processes that both
-// judged it dead exactly one removes it.
-func (r *Registry) breakRecord(path string) {
-	nonce, err := newNonce()
-	if err != nil {
-		return
-	}
-	aside := path + ".dead-" + nonce
-	if os.Rename(path, aside) == nil {
-		_ = os.Remove(aside)
-	}
-}
-
+// readRecord reads a record. A file that is there but is not one is an
+// error that still carries its information: how long ago it was touched.
 func readRecord(path string) (Record, os.FileInfo, error) {
 	info, err := os.Lstat(path)
 	if err != nil {
 		return Record{}, nil, err
 	}
 	if !info.Mode().IsRegular() || info.Size() > 1<<20 {
-		return Record{}, nil, fmt.Errorf("tooluse: %s is not a record", path)
+		return Record{}, info, fmt.Errorf("tooluse: %s is not a record", path)
 	}
-	raw, err := os.ReadFile(path)
+	raw, err := fsshare.ReadFile(path)
 	if err != nil {
-		return Record{}, nil, err
+		if errors.Is(err, fs.ErrNotExist) {
+			return Record{}, nil, err
+		}
+		return Record{}, info, err
 	}
 	var record Record
 	if err := json.Unmarshal(raw, &record); err != nil || record.Schema != Schema {
-		return Record{}, nil, fmt.Errorf("tooluse: %s is not a record", path)
+		return Record{}, info, fmt.Errorf("tooluse: %s is not a record", path)
 	}
 	return record, info, nil
 }
@@ -597,7 +783,7 @@ func writeRecord(path string, record Record, exclusive bool) error {
 		}
 		return nil
 	}
-	return os.Rename(name, path)
+	return fsshare.Replace(name, path)
 }
 
 func newNonce() (string, error) {
