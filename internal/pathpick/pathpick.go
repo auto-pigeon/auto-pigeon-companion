@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/noconsole"
 )
 
 // Request is one thing to ask the user for.
@@ -287,6 +289,8 @@ func defaultTitle(kind Kind) string {
 // bound is the helper's own — none of these print anything else.
 func execRunner(ctx context.Context, name string, args []string) ([]byte, []byte, int, error) {
 	command := exec.CommandContext(ctx, name, args...)
+	// The dialog is the helper's own window; its console is not (NEW_368).
+	noconsole.Apply(command)
 	var stdout, stderr strings.Builder
 	command.Stdout = &stdout
 	command.Stderr = &stderr

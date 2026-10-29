@@ -43,6 +43,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/fsshare"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/noconsole"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -155,7 +156,10 @@ func (r *Registrar) run(name string, args ...string) ([]byte, error) {
 	if r.Run != nil {
 		return r.Run(name, args...)
 	}
-	return exec.Command(name, args...).CombinedOutput()
+	command := exec.Command(name, args...)
+	// reg.exe is asked at every start: background, no console window (NEW_368).
+	noconsole.Apply(command)
+	return command.CombinedOutput()
 }
 
 // executable resolves and checks the binary a handler would name.

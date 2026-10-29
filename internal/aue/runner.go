@@ -13,6 +13,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/noconsole"
 )
 
 // EnvBinaryOverride names an on-disk extractor to use instead of the bundled
@@ -200,6 +202,8 @@ func (r *ProcessRunner) Run(ctx context.Context, subcommand string, args ...stri
 	command := exec.CommandContext(ctx, r.path, append([]string{subcommand}, args...)...)
 	command.Dir = jobDir
 	command.Env = r.environment(timeout)
+	// Background work: no console window on Windows (NEW_368).
+	noconsole.Apply(command)
 
 	// The extractor's published cancellation contract, honoured rather than
 	// assumed: SIGTERM, then a grace period, then whatever the runtime does to

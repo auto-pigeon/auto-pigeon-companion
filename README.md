@@ -105,7 +105,11 @@ installs Auto-Pigeon's own builds of the map compilers — **EricW tools** (Quak
 and Quake II) and **q3map2** (Quake III) — from their official GitHub releases, in
 the background. A **Setting up build tools** card shows each one downloading,
 verifying and ready; the page works meanwhile, and nothing builds or starts on
-its own when it finishes. While it runs, the Companion checks those two releases
+its own when it finishes. The same card says when the Companion is **checking build
+tools** (asking each bound program what it is, at start-up or after *Check these
+programs*) or **checking the converter**, and if a check fails it says why, with
+**Retry** and the full message under Details. On Windows none of this opens a
+console window. While it runs, the Companion checks those two releases
 about once an hour and **offers** a newer version — it never updates unasked (see
 [Build tools: setup and updates](#build-tools-setup-and-updates)).
 
@@ -250,6 +254,8 @@ $ companion tools skip ericw-tools --dont-ask-again
 $ companion tools reset-skipped
 $ companion tools use-managed auto-pigeon.ericw-tools.q1
 $ curl -fsS -H "X-AUCOM-Token: $token" "$api/api/v1/tools" | jq '.tools[] | {id, phase, version, offer: .offer.version}'
+$ curl -fsS -H "X-AUCOM-Token: $token" "$api/api/v1/tools" | jq '{checks, check_failures}'   # checks running / failed
+$ curl -fsS -X POST -H "X-AUCOM-Token: $token" "$api/api/v1/checks/retry" | jq '.checks'   # Retry the program check
 ```
 
 The official releases are prereleases today, so the Companion follows the

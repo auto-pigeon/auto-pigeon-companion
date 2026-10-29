@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"syscall"
+
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/noconsole"
 )
 
 // Killing a process *tree*, on Windows.
@@ -54,6 +56,7 @@ func signalTree(command *exec.Cmd, graceful bool) error {
 	}
 	kill := exec.Command(taskkillPath(), args...)
 	kill.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	noconsole.Apply(kill)
 	// taskkill exits nonzero when the process has already gone, which is the
 	// outcome the caller wanted; its status is deliberately not an error here.
 	_ = kill.Run()

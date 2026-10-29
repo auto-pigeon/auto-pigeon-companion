@@ -241,6 +241,7 @@ func (s *Server) toolsAPI() map[string]http.HandlerFunc {
 		"POST /api/v1/tools/{tool}/decide":         s.handleToolsDecide,
 		"POST /api/v1/tools/{tool}/cancel-pending": s.handleToolsCancelPending,
 		"POST /api/v1/tools/skipped/reset":         s.handleToolsResetSkipped,
+		"POST /api/v1/checks/retry":                s.handleChecksRetry,
 		"POST /api/v1/profiles/{id}/use-managed":   s.handleProfileUseManaged,
 	}
 }
@@ -261,10 +262,15 @@ type toolsBody struct {
 	managedtools.Status
 	Available bool                                     `json:"available"`
 	Profiles  map[managedtools.ToolID][]toolProfileRow `json:"profiles"`
+	// Checks is the background checks running now, and CheckFailures
+	// the last failure of each (NEW_368) — with or without managed tools.
+	Checks        []checkRow     `json:"checks,omitempty"`
+	CheckFailures []checkFailure `json:"check_failures,omitempty"`
 }
 
 func (s *Server) toolsStatus() toolsBody {
 	body := toolsBody{Profiles: map[managedtools.ToolID][]toolProfileRow{}}
+	body.Checks, body.CheckFailures = s.checks()
 	if s.tools == nil {
 		return body
 	}

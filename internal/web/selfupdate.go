@@ -15,6 +15,7 @@ import (
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/aue"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/managedtools"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/noconsole"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/tooluse"
 )
 
@@ -163,6 +164,8 @@ func Prove(ctx context.Context, executable, version string) (ProveResult, error)
 			command.Env = append(command.Env, entry)
 		}
 	}
+	// Background work: no console window on Windows (NEW_368).
+	noconsole.Apply(command)
 	var stdout, stderr bytes.Buffer
 	command.Stdout, command.Stderr = &stdout, &stderr
 	runErr := command.Run()

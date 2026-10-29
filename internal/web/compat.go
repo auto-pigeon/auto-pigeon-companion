@@ -3,6 +3,7 @@ package web
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/compat"
@@ -62,7 +63,14 @@ func (s *Server) handleProfileCheck(w http.ResponseWriter, r *http.Request) {
 			entry.Profile.Metadata().Name+" requires nothing of its programs, so there is nothing to check"))
 		return
 	}
-	if err := s.checkPrograms(id, true); err != nil {
+	key := checkingPrograms + "/" + id
+	if !s.board.begin(key, checkingPrograms, entry.Profile.Metadata().Name) {
+		writeError(w, http.StatusConflict, errors.New("these programs are being checked already; the page shows the answer when it comes"))
+		return
+	}
+	err = s.checkPrograms(id, true)
+	s.board.end(key, err, false)
+	if err != nil {
 		writeError(w, jobStatus(err), err)
 		return
 	}
@@ -120,18 +128,47 @@ func describeCompatibility(entry job.CatalogEntry, local binding.LocalBinding) [
 // answers no longer describe its programs. Called once when the Companion
 // starts, in the background: it is what makes a binding recorded by an older
 // build, or a compiler replaced while the Companion was closed, read as what
-// it is rather than as "not checked" until somebody opens Profiles.
+// it is rather than as "not checked" until somebody opens Profiles. The page
+// shows it while it runs, and its failure with Retry (NEW_368); a second
+// call while one runs does nothing.
 func (s *Server) RefreshCompatibility() {
+	if s.board.begin(checkingPrograms, checkingPrograms, "") {
+		s.refreshPrograms()
+	}
+}
+
+// startRefresh is RefreshCompatibility in the background, recorded as begun
+// before it returns.
+func (s *Server) startRefresh() {
+	if s.board.begin(checkingPrograms, checkingPrograms, "") {
+		go s.refreshPrograms()
+	}
+}
+
+func (s *Server) refreshPrograms() {
+	var failures []string
+	defer func() {
+		var err error
+		if len(failures) > 0 {
+			err = errors.New(strings.Join(failures, "; "))
+		}
+		s.board.end(checkingPrograms, err, true)
+	}()
 	catalog, err := s.catalog()
 	if err != nil {
+		failures = append(failures, err.Error())
 		return
 	}
 	entries, err := catalog.List()
 	if err != nil {
+		failures = append(failures, err.Error())
 		return
 	}
 	set, _, err := s.bindings()
 	if err != nil || set == nil {
+		if err != nil {
+			failures = append(failures, err.Error())
+		}
 		return
 	}
 	for _, entry := range entries {
@@ -147,8 +184,10 @@ func (s *Server) RefreshCompatibility() {
 		if !stale {
 			continue
 		}
+		s.board.detail(checkingPrograms, entry.Profile.Metadata().Name)
 		if err := s.checkPrograms(id, false); err != nil {
 			s.logf("compatibility: checking %s: %v", id, err)
+			failures = append(failures, entry.Profile.Metadata().Name+": "+err.Error())
 		}
 	}
 }

@@ -3,6 +3,7 @@ package aue
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 )
 
 // LazyRunner resolves an extractor the first time one is actually needed.
@@ -21,16 +22,23 @@ import (
 type LazyRunner struct {
 	Resolver *Resolver
 
-	once   sync.Once
-	runner *ProcessRunner
-	err    error
+	once      sync.Once
+	runner    *ProcessRunner
+	err       error
+	resolving atomic.Bool
+	done      atomic.Bool
 }
 
 // NewLazyRunner wraps a resolver.
 func NewLazyRunner(resolver *Resolver) *LazyRunner { return &LazyRunner{Resolver: resolver} }
 
 func (l *LazyRunner) resolve(ctx context.Context) (*ProcessRunner, error) {
-	l.once.Do(func() { l.runner, l.err = l.Resolver.Resolve(ctx) })
+	l.once.Do(func() {
+		l.resolving.Store(true)
+		defer l.resolving.Store(false)
+		l.runner, l.err = l.Resolver.Resolve(ctx)
+		l.done.Store(true)
+	})
 
 	return l.runner, l.err
 }
@@ -62,3 +70,16 @@ func (l *LazyRunner) Status() Status { return l.Resolver.Status() }
 // Available reports whether this Companion has an extractor it could run,
 // without resolving one.
 func (l *LazyRunner) Available() bool { return l.Resolver.Status().Available }
+
+// Resolving reports that the first check — hashing the extractor and its
+// protocol handshake — is running now.
+func (l *LazyRunner) Resolving() bool { return l.resolving.Load() }
+
+// ResolveErr is why the first check failed, once it has; nil before it ran
+// and after it succeeded.
+func (l *LazyRunner) ResolveErr() error {
+	if !l.done.Load() {
+		return nil
+	}
+	return l.err
+}

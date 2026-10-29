@@ -146,3 +146,24 @@ a pid read out of a record: a copied store has every pid the original has.
 - **Never a verdict.** A failed sample is a timestamped `unavailable`, never stops the job, its output drains, its
   cancellation or shutdown. Percent = CPU time / wall time × 100 per logical CPU; the first reading is
   `measuring`. What the tool printed about progress (`progress.go`) is a separate reading, per phase.
+
+## A BACKGROUND CHILD OPENS NO CONSOLE WINDOW ON WINDOWS (`NEW_368`)
+
+- **`internal/noconsole` is the one policy.** A Companion started from Explorer, a protocol link or its own
+  update has no console to share, so Windows gave every console program it started — a version probe, the
+  converter's handshake, `taskkill`, `reg.exe`, `cmd /c start` — a blank window of its own. `noconsole.Apply`
+  adds `CREATE_NO_WINDOW` to whatever creation flags a launch already has (the job's
+  `CREATE_NEW_PROCESS_GROUP` is kept); output still goes to the caller's pipes, the exit status and the
+  taskkill tree stop are unchanged. Never `HideWindow`/`SW_HIDE` as the mechanism (it can still flash), never a
+  `cmd /c` or PowerShell wrapper.
+- **Who is background:** a tool job (`job.configureLaunch`: no `session_role`), the AUE runner (handshake and
+  conversions), the self-update proving start, `taskkill`, `reg.exe` (urischeme), the browser opener and the
+  file-picker helper (its dialog is its own GUI window; only the console goes). **Not background:** a session
+  job (client, listen or dedicated server — a person plays or watches it), `game join`'s engine, and anything
+  started `DETACHED_PROCESS` (the self-update relaunch, `game open`), with which Windows does not allow the
+  flag — `noconsole.Flags` leaves those as they are.
+- **Not covered:** the console of `companion.exe` itself. It is a console-subsystem program so the CLI keeps
+  its terminal, stdout and exit codes; a protocol-link launch that forwards to a running Companion therefore
+  still gets a console for its own short life. Whether that is visible, and the GUI-subsystem launcher it
+  would take, is a native-Windows observation (prompt 02), not something cross-compilation shows.
+

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/failure"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/noconsole"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
 
@@ -167,6 +168,21 @@ func checkExecutable(path string) error {
 }
 
 // run starts the process and supervises it to the end.
+// configureLaunch is how one job's process is started: in a process group of
+// its own, and — a tool, not a game — with no console window on Windows
+// (NEW_368). A compiler, a version probe or a conversion is background work
+// whose output the pipes carry; an engine a person is about to play keeps its
+// windows.
+func configureLaunch(process *exec.Cmd, action profile.Action) {
+	configureProcessGroup(process)
+	if background(action) {
+		noconsole.Apply(process)
+	}
+}
+
+// background: a tool job, not a session (a client, or a server people join).
+func background(action profile.Action) bool { return action.SessionRole == "" }
+
 func (e *execution) run(ctx context.Context) outcome {
 	command := preview(e.invocation, e.layout, e.action, e.lookupEnv, e.redactor)
 	result := outcome{command: command}
@@ -192,7 +208,7 @@ func (e *execution) run(ctx context.Context) outcome {
 	// end-of-file rather than a terminal, so it fails instead of waiting for a
 	// person who is not there.
 	process.Stdin = nil
-	configureProcessGroup(process)
+	configureLaunch(process, e.action)
 
 	stdoutRead, stdoutWrite, err := os.Pipe()
 	if err != nil {

@@ -5,6 +5,8 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/noconsole"
 )
 
 // OpenBrowser asks the OS to open url in the user's default browser.
@@ -30,6 +32,9 @@ func OpenBrowser(url string) error {
 	}
 
 	command := exec.Command(name, args...)
+	// On Windows that is `cmd /c start`: cmd itself gets no console window
+	// (NEW_368); the browser it starts opens as it always does.
+	noconsole.Apply(command)
 	if err := command.Start(); err != nil {
 		return fmt.Errorf("web: opening %s with %s: %w", url, name, err)
 	}

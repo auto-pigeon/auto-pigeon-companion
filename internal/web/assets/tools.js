@@ -30,6 +30,17 @@
     unsupported: "Not available for this computer",
   };
 
+  // Background checks the server runs (NEW_368): words for each kind, while it
+  // runs and when it failed. One server, so every tab shows the same rows.
+  const CHECK_WORDS = {
+    checking_programs: "Checking build tools…",
+    checking_converter: "Checking the converter…",
+  };
+  const CHECK_FAILED = {
+    checking_programs: "Checking build tools did not finish: {error}",
+    checking_converter: "The converter could not be checked: {error}",
+  };
+
   function phaseLine(tool) {
     let text = t(PHASE_WORDS[tool.phase] || tool.phase);
     if (tool.version && tool.phase !== "failed") text += " " + tool.version;
@@ -81,11 +92,32 @@
     const tools = status?.tools || [];
     const waiting = tools.filter((tool) => tool.pending?.staged && tool.pending.waiting?.length && !hiddenWaiting[tool.id + tool.pending.version]);
     const settingUp = Boolean(status?.available && status.setting_up);
-    card.hidden = !settingUp && waiting.length === 0;
+    const checks = status?.checks || [];
+    const checkFailures = status?.check_failures || [];
+    card.hidden = !settingUp && waiting.length === 0 && checks.length === 0 && checkFailures.length === 0;
     if (card.hidden) return;
-    $("tools-setup-title").textContent = settingUp ? t("Setting up build tools") : t("Build tools update ready");
+    $("tools-setup-title").textContent = settingUp ? t("Setting up build tools")
+      : waiting.length ? t("Build tools update ready")
+        : checks.length ? t(CHECK_WORDS[checks[0].kind] || "Checking build tools…")
+          : t("A check did not finish");
     const list = $("tools-setup-list");
     list.replaceChildren();
+    for (const row of checks) {
+      // No percentage exists for these: the row says what runs, and the
+      // card's own class shows it as ongoing.
+      list.append(el("li", { className: "tools-row tools-row--checking", children: [
+        el("span", { className: "spinner", attrs: { "aria-hidden": "true" } }),
+        el("strong", { text: t(CHECK_WORDS[row.kind] || row.kind) }),
+        ...(row.detail ? [document.createTextNode(" — " + row.detail)] : []),
+      ] }));
+    }
+    for (const failure of checkFailures) {
+      list.append(el("li", { className: "tools-row tools-row--failed", children: [
+        el("p", { text: t(CHECK_FAILED[failure.kind] || "{error}", { error: failure.error }) }),
+        ...(failure.kind === "checking_programs"
+          ? [el("a", { text: t("See each profile's programs"), attrs: { href: "#profiles" } })] : []),
+      ] }));
+    }
     for (const tool of tools) {
       if (settingUp && !isSelf(tool)) {
         list.append(el("li", { className: "tools-row tools-row--" + tool.phase, children: [
@@ -113,16 +145,26 @@
       list.append(row);
     }
     const failed = tools.some((tool) => tool.phase === "failed");
-    $("tools-setup-retry").hidden = !(settingUp && failed);
+    const retryChecks = checkFailures.some((failure) => failure.retry) && checks.length === 0;
+    $("tools-setup-retry").hidden = !((settingUp && failed) || retryChecks);
     const details = $("tools-setup-details");
     details.replaceChildren();
     for (const tool of tools) {
       details.append(el("dt", { text: tool.title, className: "tools-details-head" }), el("dd", { text: "" }), ...detailsList(tool));
     }
+    for (const failure of checkFailures) {
+      details.append(el("dt", { text: t(CHECK_WORDS[failure.kind] || failure.kind) }),
+        el("dd", { text: failure.error, className: "mono" }));
+    }
   }
 
   $("tools-setup-retry").addEventListener("click", (event) => withBusy(event.currentTarget, async () => {
     setMessage("tools-setup-message", "");
+    if ((status?.check_failures || []).some((failure) => failure.retry)) {
+      const { ok, body } = await api("/api/v1/checks/retry", { method: "POST", body: {} });
+      if (!ok) { setMessage("tools-setup-message", body.error || "", "error"); return; }
+      apply(body);
+    }
     for (const tool of status?.tools || []) {
       if (tool.phase !== "failed") continue;
       const { ok, body } = await api(`/api/v1/tools/${encodeURIComponent(tool.id)}/retry`, { method: "POST", body: {} });
@@ -457,7 +499,8 @@
 
   function needsFast() {
     return (status?.tools || []).some((tool) => ["checking", "downloading", "verifying"].includes(tool.phase) ||
-      (tool.pending && (!tool.pending.staged || tool.pending.waiting?.length))) || status?.setting_up;
+      (tool.pending && (!tool.pending.staged || tool.pending.waiting?.length))) || status?.setting_up ||
+      (status?.checks || []).length > 0;
   }
 
   function apply(body) {
