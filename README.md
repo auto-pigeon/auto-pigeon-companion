@@ -1404,7 +1404,8 @@ A development build (from source) reads all of these:
 
 Delete the unpacked folder. To remove what the Companion kept on this computer —
 settings, session, approvals, job history, caches — and the `autopigeon://`
-handler, look first, then confirm:
+handler when it opens this copy (a handler that opens another Companion is left
+alone, and the command says so), look first, then confirm:
 
 ```console
 $ ./companion uninstall

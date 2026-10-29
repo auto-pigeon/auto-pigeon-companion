@@ -59,7 +59,7 @@ func runURI(env *Env, args []string) int {
 		return 0
 	case "unregister":
 		state, err := registrar.Unregister()
-		if errors.Is(err, urischeme.ErrNotPerformable) {
+		if errors.Is(err, urischeme.ErrNotPerformable) || errors.Is(err, urischeme.ErrHandledByAnotherProgram) {
 			printURIState(env, state)
 			return 0
 		}

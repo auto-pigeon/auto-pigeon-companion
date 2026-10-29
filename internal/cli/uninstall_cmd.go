@@ -100,7 +100,7 @@ func runUninstall(env *Env, args []string) int {
 	registrar := env.uriRegistrar()
 	state, err := registrar.Unregister()
 	switch {
-	case errors.Is(err, urischeme.ErrNotPerformable):
+	case errors.Is(err, urischeme.ErrNotPerformable), errors.Is(err, urischeme.ErrHandledByAnotherProgram):
 		fmt.Fprintf(env.Stdout, "\n%s\n", state.Detail)
 	case err != nil:
 		fmt.Fprintf(env.Stderr, "\nwarning: the %s:// handler could not be removed: %v\n", urischeme.Scheme, err)

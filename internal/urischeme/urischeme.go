@@ -89,6 +89,10 @@ const (
 // declaration belongs somewhere else, and [State.Detail] says where.
 var ErrNotPerformable = errors.New("urischeme: this platform's handler is declared by the application bundle")
 
+// ErrHandledByAnotherProgram reports that the handler in place runs a different
+// program, so this one left it where it is rather than remove it (NEW_368).
+var ErrHandledByAnotherProgram = errors.New("urischeme: the handler in place runs another program")
+
 // ErrNoExecutable reports that the binary a handler would point at is not
 // there.
 var ErrNoExecutable = errors.New("urischeme: the executable a handler would point at is not there")
@@ -627,6 +631,19 @@ func (r *Registrar) windowsRegister() (State, error) {
 }
 
 func (r *Registrar) windowsUnregister() (State, error) {
+	// The key is per user, not per installation. A handler that runs another
+	// program is that program's: a second portable copy, or the acceptance
+	// kit's purge lane running a task copy, removed the operator's handler on a
+	// real machine this way (NEW_368). It is left where it is, and said so.
+	current, err := r.windowsStatus()
+	if err != nil {
+		return State{}, err
+	}
+	if !current.Registered && current.Handler != "" {
+		current.Detail = Scheme + ":// is handled by " + current.Handler +
+			", not by this Companion; it was left in place"
+		return current, ErrHandledByAnotherProgram
+	}
 	// One delete, of the one key this program creates, under HKCU. It takes its
 	// own subkeys with it and touches nothing else.
 	if out, err := r.run("reg", "delete", WindowsKey, "/f"); err != nil {

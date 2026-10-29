@@ -314,10 +314,16 @@ func TestWindowsUnregisteringDeletesOnlyThisSchemesKey(t *testing.T) {
 	if _, err := registrar.Unregister(); err != nil {
 		t.Fatal(err)
 	}
-	if len(runner.calls) != 1 {
-		t.Fatalf("unregistering made %d calls, want one: %v", len(runner.calls), runner.calls)
+	var deletes [][]string
+	for _, call := range runner.calls {
+		if len(call) > 1 && call[1] == "delete" {
+			deletes = append(deletes, call)
+		}
 	}
-	call := strings.Join(runner.calls[0], " ")
+	if len(deletes) != 1 {
+		t.Fatalf("unregistering made %d deletes, want one: %v", len(deletes), runner.calls)
+	}
+	call := strings.Join(deletes[0], " ")
 	if !strings.Contains(call, "delete "+WindowsKey+" /f") {
 		t.Errorf("unregister ran %q", call)
 	}
@@ -487,5 +493,30 @@ func TestALinuxEntryThatRunsAnotherCompanionIsNotThisOneRegistered(t *testing.T)
 	}
 	if state, err = registrar.Status(); err != nil || state.Registered {
 		t.Fatalf("the older program still says it is registered: %+v %v", state, err)
+	}
+}
+
+// Unregistering is for THIS program's handler. On Windows the key is per user,
+// not per installation, and a Companion that is not the one registered — a
+// second portable copy, or the acceptance kit's purge lane running a task copy
+// (NEW_368: it removed the operator's v1.325 handler on a real machine) — must
+// leave another program's handler alone rather than delete it.
+func TestWindowsUnregisteringLeavesAnotherProgramsHandler(t *testing.T) {
+	self := fakeBinary(t, "companion.exe")
+	runner := &recordingRunner{reply: map[string]string{
+		"query " + windowsCommandKey + " /ve": "\r\n" + windowsCommandKey +
+			"\r\n    (Default)    REG_SZ    \"C:\\Users\\someone\\Desktop\\old companion\\companion.exe\" game open \"%1\"\r\n",
+	}}
+	state, err := (&Registrar{GOOS: "windows", Executable: self, Run: runner.run}).Unregister()
+	if !errors.Is(err, ErrHandledByAnotherProgram) {
+		t.Fatalf("unregistering another program's handler returned %v, want ErrHandledByAnotherProgram", err)
+	}
+	for _, call := range runner.calls {
+		if len(call) > 1 && call[1] == "delete" {
+			t.Fatalf("another program's handler was deleted: %v", call)
+		}
+	}
+	if !strings.Contains(state.Detail, `old companion\companion.exe`) {
+		t.Errorf("the refusal does not name the program that handles the links: %q", state.Detail)
 	}
 }
