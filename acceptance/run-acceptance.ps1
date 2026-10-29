@@ -137,13 +137,14 @@ if ($checksums -eq "fail") {
 $hostArch = $env:PROCESSOR_ARCHITEW6432
 if ([string]::IsNullOrWhiteSpace($hostArch)) { $hostArch = $env:PROCESSOR_ARCHITECTURE }
 if ([string]::IsNullOrWhiteSpace($hostArch)) { $hostArch = "unknown" }
-$shellId = "PowerShell $($PSVersionTable.PSVersion)"
+# Not $shellId: PowerShell names are case-insensitive, and $ShellId is a constant.
+$shellName = "PowerShell $($PSVersionTable.PSVersion)"
 
 $arguments = @(
     "acceptance", "run",
     "--out", $Out,
     "--entry-point", "powershell",
-    "--shell", $shellId,
+    "--shell", $shellName,
     "--host-arch", $hostArch,
     "--checksums", $checksums,
     "--checksum-detail", $checksumDetail
