@@ -85,6 +85,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/fsshare"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/lockfile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/oslock"
 )
 
 // DirName is the coordination folder inside a tools folder.
@@ -678,14 +679,14 @@ func (r *Registry) guard() (func(), error) {
 	}
 	deadline := time.Now().Add(guardWait)
 	for waited := false; ; waited = true {
-		locked, err := tryLock(file)
+		locked, err := oslock.TryLock(file)
 		if err != nil {
 			file.Close()
 			return nil, err
 		}
 		if locked {
 			return func() {
-				_ = unlockFile(file)
+				_ = oslock.Unlock(file)
 				file.Close()
 			}, nil
 		}

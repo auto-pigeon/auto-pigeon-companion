@@ -1,6 +1,6 @@
 //go:build windows
 
-package tooluse
+package oslock
 
 import (
 	"os"
@@ -21,9 +21,9 @@ const (
 	errorLockViolation      = syscall.Errno(33)
 )
 
-// tryLock takes the operating system's exclusive lock on file without
+// TryLock takes the operating system's exclusive lock on file without
 // waiting. Windows lets go of it when the holder's process ends.
-func tryLock(file *os.File) (bool, error) {
+func TryLock(file *os.File) (bool, error) {
 	var overlapped syscall.Overlapped
 	ok, _, err := procLockFileEx.Call(file.Fd(), lockfileExclusiveLock|lockfileFailImmediately, 0, 1, 0,
 		uintptr(unsafe.Pointer(&overlapped)))
@@ -36,7 +36,7 @@ func tryLock(file *os.File) (bool, error) {
 	return false, err
 }
 
-func unlockFile(file *os.File) error {
+func Unlock(file *os.File) error {
 	var overlapped syscall.Overlapped
 	ok, _, err := procUnlockFileEx.Call(file.Fd(), 0, 1, 0, uintptr(unsafe.Pointer(&overlapped)))
 	if ok == 0 {

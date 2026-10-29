@@ -16,36 +16,62 @@
 // that costs a setting. On `catalog-state.json` it costs a revocation, which is
 // the file's whole reason to exist.
 //
-// # Why a lock FILE and not the operating system's lock
+// # A lock file, changed only under the operating system's lock
 //
-// `syscall.Flock` is not on Windows and `LockFileEx` is not in the standard
-// library's `syscall` for the platforms that do have it, so a real advisory
-// lock across all six supported targets means either cgo or a dependency. This
-// program has neither — `go.mod` declares no requirements at all — and adding
-// one to take a lock on a file in the user's own config directory would be a
-// poor trade.
+// The lock is a RECORD file created with `O_CREATE|O_EXCL`: exactly one caller
+// creates it, it names its holder, and every Companion — released ones
+// included — reads it the same way. What a record cannot do is let go when its
+// holder dies, so an abandoned one has to be judged and broken. And a judgement
+// about a pathname goes stale the moment it is made: two processes that both
+// judged a lock abandoned used to each remove whatever then occupied the path —
+// the second removing the live lock the first had just created — and an old
+// holder's release or heartbeat could likewise remove or refresh its
+// replacement (NEW_368, post-push review; reproduced with barriers before this
+// was changed). Renaming before removing, or reading again before removing,
+// narrows that window and never closes it.
 //
-// `O_CREATE|O_EXCL` is the one primitive every target has with the same
-// meaning: exactly one caller creates the file. What that costs is that the
-// lock is not released by the kernel when a holder dies, so this package has to
-// decide when a lock is abandoned, and that decision is made explicitly below
-// rather than guessed at each call site.
+// So every change to the record — creating it, judging and breaking an
+// abandoned one, refreshing it, releasing it — is made holding the GUARD: the
+// operating system's exclusive lock ([oslock]: flock, or LockFileEx on
+// Windows) on a sibling file, `<lock>.guard`, that is never removed. The kernel
+// lets go of the guard when its holder dies, so the guard itself never needs
+// breaking. It is held for a few file operations and never through the
+// caller's work; nothing waits for it longer than its own deadline.
 //
-// # The four decisions
+// # The decisions
 //
 //  1. **The holder is recorded, in the lock file.** A person who is told
 //     "somebody else is writing this" can be told who, since when, and on which
 //     machine. A lock that only says "busy" is one people delete.
 //  2. **A stale lock is refreshed, not re-written.** The holder bumps the lock
-//     file's modification time with [os.Chtimes] every [Options.Stale] quarter.
-//     Nothing rewrites the bytes, so a reader never sees half a record.
-//  3. **Breaking a stale lock goes through a rename.** Two processes that both
-//     judge a lock abandoned must not both then create it. Renaming it away
-//     first means exactly one of them succeeds and proceeds; the other gets
-//     ENOENT and simply retries, which is the correct thing for it to do.
-//  4. **Release checks the nonce it wrote.** A process whose own lock was
-//     broken while it was descheduled must not delete the lock the next holder
-//     is now holding. It reports that it lost the lock instead.
+//     file's modification time every [Options.Stale] quarter — with the guard,
+//     and only while the record there is still its own, so an old heartbeat
+//     never keeps a replacement looking alive. Nothing rewrites the bytes.
+//  3. **An abandoned lock is broken with the guard held**, judged and removed
+//     in one step, so no other Companion can publish a lock in between.
+//  4. **Release checks the nonce it wrote, with the guard held.** A process
+//     whose own lock was broken while it was descheduled reports that it lost
+//     the lock, and deletes nothing.
+//  5. **Work whose lock was lost is not reported as protected.** [With] returns
+//     [ErrLost] when the body succeeded but the release found another holder.
+//     That cannot undo what the body wrote; it says so.
+//
+// # What is assumed, and where it stops
+//
+// The guard is per host and advisory: the Companion's configuration, catalog
+// and update folders are on a local file system of this machine. Across
+// machines, or on a network file system where flock may be emulated or
+// ignored, nothing here promises exclusion. A platform with no operating-system
+// lock wired up (none of the six release targets) refuses to take a lock.
+//
+// Companions released before this (v1.332 and earlier) do not take the guard.
+// They still read and respect a live record, and a new Companion still reads
+// and respects theirs, but between an old and a new process the old one's
+// break is not excluded. The supported upgrade does not depend on it: the
+// self-update starts the new Companion after the old one has finished its own
+// locked steps, and a manual upgrade closes the old Companion (and any
+// `companion` command from it) first. Exclusion is promised only among
+// Companions that take the guard.
 //
 // # What it is not
 //
@@ -62,12 +88,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/auto-pigeon/auto-pigeon-companion/internal/fsshare"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/fsshare"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/oslock"
 )
 
 // SchemaVersion versions the holder record inside the lock file.
@@ -92,6 +120,34 @@ const (
 	DefaultStale   = time.Minute
 	DefaultPoll    = 20 * time.Millisecond
 )
+
+// The guard: how long a release waits for it, how long a heartbeat does
+// before skipping a beat, and how often a wait looks again. A guard is held
+// for a few file operations, so a wait of seconds is another process stuck,
+// not another process working.
+const (
+	guardWait     = 10 * time.Second
+	heartbeatWait = time.Second
+	guardPoll     = 2 * time.Millisecond
+)
+
+// GuardSuffix is appended to a lock file's name to make its guard's name.
+const GuardSuffix = ".guard"
+
+// Hooks are deterministic barriers for tests — in this package, and in the
+// packages built on it whose own exclusion is this lock (the self-update's
+// concurrent start). Nil in production.
+var Hooks struct {
+	// BeforeBreak runs after a lock was judged abandoned, before it is broken.
+	BeforeBreak func(path string)
+	// BeforeReleaseRemove runs after a release found its own record, before
+	// it removes it.
+	BeforeReleaseRemove func(path string)
+	// BeforeRefresh runs when a heartbeat is due, before it touches the lock.
+	BeforeRefresh func(path string)
+	// GuardContended reports that taking the lock's guard has to wait.
+	GuardContended func(path string)
+}
 
 // ProcessGone reports that no process with pid exists on this machine. A pid
 // that exists, whoever it now is, is not gone.
@@ -240,59 +296,153 @@ func Acquire(guarded string, options Options) (*Lock, error) {
 	deadline := time.Now().Add(options.timeout())
 	var broke *Holder
 	for {
-		file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-		if err == nil {
-			if _, err := file.Write(encoded); err != nil {
-				file.Close()
-				os.Remove(path)
-				return nil, fmt.Errorf("lockfile: writing %s: %w", path, err)
+		unlock, err := guard(path, deadline)
+		if errors.Is(err, errGuardBusy) {
+			// Another Companion has been changing this lock for the whole
+			// wait. Say who holds it, if a record says.
+			if current, _, readErr := inspect(path, options.now()); readErr == nil && current.PID > 0 {
+				return nil, fmt.Errorf("%w: %s holds %s. Wait for it to finish, or stop it", ErrBusy, current.Describe(), path)
 			}
-			if err := file.Close(); err != nil {
-				os.Remove(path)
-				return nil, fmt.Errorf("lockfile: closing %s: %w", path, err)
-			}
+			return nil, fmt.Errorf("%w: %s is in use. Wait for it to finish, or stop it", ErrBusy, path)
+		}
+		if err != nil {
+			return nil, err
+		}
+		taken, current, err := acquireGuarded(path, encoded, host, options)
+		unlock()
+		if err != nil {
+			return nil, err
+		}
+		if taken.broke != nil {
+			broke = taken.broke
+		}
+		if taken.held {
 			lock := &Lock{path: path, holder: holder, broke: broke,
 				stop: make(chan struct{}), done: make(chan struct{})}
 			go lock.refresh(options.stale() / 4)
 			return lock, nil
 		}
-		// On Windows a lock file somebody else is reading, or is deleting,
-		// answers "in use" rather than "exists". Either way it is held: wait.
-		busy := fsshare.IsBusy(err)
-		if !errors.Is(err, fs.ErrExist) && !busy {
-			return nil, fmt.Errorf("lockfile: creating %s: %w", path, err)
-		}
-
-		current, age, readErr := inspect(path, options.now())
-		switch {
-		case readErr == nil:
-		case errors.Is(readErr, fs.ErrNotExist):
-			continue // The holder released it between the create and the read.
-		case fsshare.IsBusy(readErr) || busy:
-			if time.Now().After(deadline) {
+		if time.Now().After(deadline) {
+			if current == nil {
 				return nil, fmt.Errorf("%w: %s is in use. Wait for it to finish, or stop it", ErrBusy, path)
 			}
-			time.Sleep(options.poll())
-			continue
-		default:
-			return nil, readErr
-		}
-		dead := options.BreakDeadHolder && current.PID > 0 && current.PID != os.Getpid() &&
-			current.Host != "" && current.Host == host && processGone(current.PID)
-		if limit := options.stale(); dead || (limit > 0 && age > limit) {
-			// Rename first, so that of two processes which both judged this
-			// lock abandoned exactly one goes on to create it.
-			if broken := breakStale(path); broken {
-				broke = &current
-			}
-			continue
-		}
-		if time.Now().After(deadline) {
 			return nil, fmt.Errorf("%w: %s holds %s. Wait for it to finish, or stop it",
 				ErrBusy, current.Describe(), path)
 		}
 		time.Sleep(options.poll())
 	}
+}
+
+type attempt struct {
+	held  bool
+	broke *Holder
+}
+
+// acquireGuarded makes one attempt at the lock, the guard held: publish this
+// holder's record, or judge the one there and, when it is abandoned, remove
+// it and publish. It reports who holds the lock when it is not this caller
+// (nil when that cannot be read: still held).
+func acquireGuarded(path string, encoded []byte, host string, options Options) (attempt, *Holder, error) {
+	var result attempt
+	// A record removed by a Companion that does not take the guard (one
+	// released before it) between the create and the read is tried again —
+	// a few times, and then left to the next poll.
+	for try := 0; try < 3; try++ {
+		file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		if err == nil {
+			if _, err := file.Write(encoded); err != nil {
+				file.Close()
+				os.Remove(path)
+				return result, nil, fmt.Errorf("lockfile: writing %s: %w", path, err)
+			}
+			if err := file.Close(); err != nil {
+				os.Remove(path)
+				return result, nil, fmt.Errorf("lockfile: closing %s: %w", path, err)
+			}
+			result.held = true
+			return result, nil, nil
+		}
+		// On Windows a lock file somebody else is reading, or is deleting,
+		// answers "in use" rather than "exists". Either way it is held.
+		if fsshare.IsBusy(err) {
+			return result, nil, nil
+		}
+		if !errors.Is(err, fs.ErrExist) {
+			return result, nil, fmt.Errorf("lockfile: creating %s: %w", path, err)
+		}
+		current, age, readErr := inspect(path, options.now())
+		switch {
+		case readErr == nil:
+		case errors.Is(readErr, fs.ErrNotExist):
+			continue
+		case fsshare.IsBusy(readErr):
+			return result, nil, nil
+		default:
+			return result, nil, readErr
+		}
+		dead := options.BreakDeadHolder && current.PID > 0 && current.PID != os.Getpid() &&
+			current.Host != "" && current.Host == host && processGone(current.PID)
+		if limit := options.stale(); !dead && (limit <= 0 || age <= limit) {
+			return result, &current, nil
+		}
+		if Hooks.BeforeBreak != nil {
+			Hooks.BeforeBreak(path)
+		}
+		// Judged and removed with the guard held: no Companion that takes
+		// the guard can have published a lock in between.
+		if err := fsshare.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return result, nil, fmt.Errorf("lockfile: breaking the abandoned %s: %w", path, err)
+		}
+		result.broke = &current
+	}
+	return result, nil, nil
+}
+
+// guardPath is the file whose operating-system lock serializes every change
+// of the lock at path. It is never removed.
+func guardPath(path string) string { return path + GuardSuffix }
+
+// errGuardBusy: the guard did not come free before the deadline.
+var errGuardBusy = errors.New("lockfile: the lock's guard stayed taken")
+
+// guard takes the guard of the lock at path, waiting until deadline, and
+// returns its release.
+func guard(path string, deadline time.Time) (func(), error) {
+	file, err := os.OpenFile(guardPath(path), os.O_RDWR|os.O_CREATE, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("lockfile: opening the guard of %s: %w", path, err)
+	}
+	for waited := false; ; waited = true {
+		locked, err := oslock.TryLock(file)
+		if err != nil {
+			file.Close()
+			return nil, fmt.Errorf("lockfile: locking the guard of %s: %w", path, err)
+		}
+		if locked {
+			return func() {
+				_ = oslock.Unlock(file)
+				file.Close()
+			}, nil
+		}
+		if !waited && Hooks.GuardContended != nil {
+			Hooks.GuardContended(path)
+		}
+		if !time.Now().Before(deadline) {
+			file.Close()
+			return nil, errGuardBusy
+		}
+		time.Sleep(guardPoll)
+	}
+}
+
+// ownedBy reports whether the record at path is the holder's with nonce.
+func ownedBy(path, nonce string) (bool, error) {
+	raw, err := fsshare.ReadFile(path)
+	if err != nil {
+		return false, err
+	}
+	var current Holder
+	return json.Unmarshal(raw, &current) == nil && current.Nonce == nonce, nil
 }
 
 // inspect reads the holder record and how long ago the lock was refreshed.
@@ -318,21 +468,6 @@ func inspect(path string, now time.Time) (Holder, time.Duration, error) {
 	return holder, age, nil
 }
 
-// breakStale moves an abandoned lock out of the way and deletes it. It reports
-// whether this caller is the one that did it.
-func breakStale(path string) bool {
-	nonce, err := newNonce()
-	if err != nil {
-		return false
-	}
-	aside := path + ".stale-" + nonce
-	if err := os.Rename(path, aside); err != nil {
-		return false // Somebody else got there first, or the holder released it.
-	}
-	os.Remove(aside)
-	return true
-}
-
 // refresh keeps the lock's modification time current while it is held.
 func (l *Lock) refresh(every time.Duration) {
 	defer close(l.done)
@@ -346,13 +481,38 @@ func (l *Lock) refresh(every time.Duration) {
 		case <-l.stop:
 			return
 		case <-ticker.C:
-			now := time.Now()
-			// Best effort. A failure here means the lock will eventually be
-			// judged abandoned, which is the safe direction: Release still
-			// checks the nonce before deleting anything.
-			_ = os.Chtimes(l.path, now, now)
+			if Hooks.BeforeRefresh != nil {
+				Hooks.BeforeRefresh(l.path)
+			}
+			if !l.touch() {
+				// Another holder's record is at the path: this lock was
+				// broken. Nothing of theirs is refreshed; Release says so.
+				return
+			}
 		}
 	}
+}
+
+// touch refreshes the lock's modification time, with the guard held and only
+// while the record there is this holder's. False when it is somebody else's,
+// or gone. A guard that does not come free within a beat, or a touch that
+// fails, skips the beat: the lock may then be judged abandoned, which is the
+// safe direction.
+func (l *Lock) touch() bool {
+	unlock, err := guard(l.path, time.Now().Add(heartbeatWait))
+	if err != nil {
+		return true
+	}
+	defer unlock()
+	mine, err := ownedBy(l.path, l.holder.Nonce)
+	if errors.Is(err, fs.ErrNotExist) || (err == nil && !mine) {
+		return false
+	}
+	if err == nil {
+		now := time.Now()
+		_ = os.Chtimes(l.path, now, now)
+	}
+	return true
 }
 
 // Holder is who this lock says holds it.
@@ -387,16 +547,25 @@ func (l *Lock) Release() error {
 	close(l.stop)
 	<-l.done
 
-	raw, err := fsshare.ReadFile(l.path)
+	// The check and the removal are one step under the guard: the record
+	// removed is the one just found to be this holder's.
+	unlock, err := guard(l.path, time.Now().Add(guardWait))
+	if err != nil {
+		return fmt.Errorf("lockfile: releasing %s: %w", l.path, err)
+	}
+	defer unlock()
+	mine, err := ownedBy(l.path, l.holder.Nonce)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return fmt.Errorf("%w: %s is gone", ErrLost, l.path)
 		}
 		return fmt.Errorf("lockfile: reading %s: %w", l.path, err)
 	}
-	var current Holder
-	if err := json.Unmarshal(raw, &current); err != nil || current.Nonce != l.holder.Nonce {
+	if !mine {
 		return fmt.Errorf("%w: %s is now held by somebody else", ErrLost, l.path)
+	}
+	if Hooks.BeforeReleaseRemove != nil {
+		Hooks.BeforeReleaseRemove(l.path)
 	}
 	if err := fsshare.Remove(l.path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("lockfile: removing %s: %w", l.path, err)
@@ -410,13 +579,23 @@ func (l *Lock) Release() error {
 // This is the shape every caller should use. A caller that acquires and
 // releases by hand has two places to get an early return wrong, and the one it
 // gets wrong leaves a lock held for a minute.
+//
+// fn's error is returned as it is. When fn succeeded but the release found
+// that the lock had been broken meanwhile, that is returned instead
+// ([ErrLost]): the work happened, and was not protected all the way through.
+// Nothing here can undo what fn wrote; the caller is told rather than left to
+// believe it was exclusive. A release that fails otherwise leaves a lock to
+// age out, and does not turn finished work into a failure.
 func With(guarded string, options Options, fn func() error) error {
 	lock, err := Acquire(guarded, options)
 	if err != nil {
 		return err
 	}
-	defer lock.Release()
-	return fn()
+	err = fn()
+	if released := lock.Release(); err == nil && errors.Is(released, ErrLost) {
+		return fmt.Errorf("%w; the work itself finished, and what it wrote may have raced with that holder", released)
+	}
+	return err
 }
 
 func newNonce() (string, error) {

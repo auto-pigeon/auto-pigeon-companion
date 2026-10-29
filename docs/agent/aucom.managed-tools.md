@@ -150,7 +150,12 @@ update belongs to `NEW_368`, which consumes this coordinator and its verificatio
     `previous/` can run it when a Windows rename-aside left no program at the path. A 1.323
     (`/1`) journal is read, confirmed in its own schema (1.323's updater waits for it), and an
     interrupted one is undone by file location. The update lock breaks a dead holder at once
-    (`lockfile.Options.BreakDeadHolder`). Abrupt process death is PROVEN (children killed at every
+    (`lockfile.Options.BreakDeadHolder`), judged and broken under the lock's OS guard, so two
+    Companions starting an update at that moment never both activate
+    (`TestTwoUpdatesThatFindADeadHoldersLockNeverBothActivate`, NEW_368 post-push review). A
+    Companion from before the guard (≤ v1.332) still running beside a new one is not excluded by
+    it: the self-update starts the new one after the old one's locked steps, and a manual upgrade
+    closes the old Companion first. Abrupt process death is PROVEN (children killed at every
     boundary, `internal/selfupdate/crash_test.go`); power loss is argued from fsync ordering, not
     tested. An "Update now" or a close also takes the `companion` switch gate and waits for other
     processes' leases.

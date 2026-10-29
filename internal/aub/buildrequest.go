@@ -106,6 +106,12 @@ func (c *Client) BuildRequest(ctx context.Context, requestID string) (BuildReque
 	return out, nil
 }
 
+// BuildStageBuildingElsewhere is the stage AUB gives a delivery id — one
+// press of the editor's Open — read after a build of its request started
+// under another one (AUB `handoff-attempts`, NEW_368). The state is blocked:
+// a Companion offers no second build of one request.
+const BuildStageBuildingElsewhere = "another_link_is_building"
+
 // validate refuses an answer that is not about the request asked for, or that
 // carries anything but the documented shape. Nothing here is a path, an argv
 // or an address, and nothing that looks like one is let through.

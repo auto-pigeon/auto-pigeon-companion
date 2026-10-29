@@ -50,10 +50,15 @@ delete the entry to make it pass, and never soften a `Mitigation` string instead
 of fixing code. A model that lists only what is fixed is a model nobody learns
 from, and `TestTheMatrixStillSaysWhatIsNotSolved` fails an emptied register.
 
-**Every mutable local file has one writer.** `internal/lockfile` is O_EXCL rather
-than flock because `syscall.Flock` is not on Windows and a dependency taken to
-lock a file in the user's own config directory would cost the empty module graph
-that T45 is about. Use `config.Update(path, mutate)` for a read-modify-write —
+**Every mutable local file has one writer.** `internal/lockfile` keeps an O_EXCL
+lock RECORD (holder diagnostics, read alike by released Companions) and makes every
+change of it — create, judge-and-break, refresh, release — under the operating
+system's lock on a never-removed `<lock>.guard` file (`internal/oslock`: flock, or
+`LockFileEx` from kernel32 — no dependency, so T45's empty module graph stands).
+Breaking "whatever is at the path" after judging what was there, even through a
+rename, let two stale breakers remove a live replacement (NEW_368, T36). Exclusion
+is per host and local file system, and only among Companions that take the guard
+(after v1.332). Use `config.Update(path, mutate)` for a read-modify-write —
 never Load, change, Save, which is the lost update this replaced. The web
 server's persist hook is a MUTATION, not a value, for the same reason; a handler
 declares the fields it owns. `AUCOM/AUT 228` extended the same rule to

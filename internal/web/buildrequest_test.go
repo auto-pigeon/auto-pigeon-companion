@@ -222,6 +222,29 @@ func TestABuildRequestThatDoesNotMatchIsBlocked(t *testing.T) {
 	}
 }
 
+// NEW_368 (post-push review): the editor opened its request again, and a
+// build of it started from an earlier link meanwhile. AUB answers this
+// delivery as blocked; nothing is offered, nothing is posted, and the reason
+// is the real one. The acknowledgement still names this Companion: it did
+// receive this press.
+func TestADeliveryReadAfterABuildStartedElsewhereOffersNoSecondBuild(t *testing.T) {
+	m := newMachine(t)
+	m.backend.savedAPMap("quake1")
+	m.signIn()
+	link := m.editorBuildRequest(aub.BuildIntentBuildRun, "quake1", func(r map[string]any) {
+		r["state"], r["stage"], r["sequence"] = "blocked", aub.BuildStageBuildingElsewhere, 7
+	})
+	status, body := m.call(http.MethodGet, "/api/v1/build-request/pending", nil)
+	if status != http.StatusConflict || body["code"] != "building_elsewhere" || !strings.Contains(fmt.Sprint(body["error"]), "earlier link") {
+		t.Fatalf("pending: %d %v", status, body)
+	}
+	for _, line := range m.buildStatusesSettled() {
+		if strings.HasPrefix(line, link.RequestID) {
+			t.Fatalf("a status was posted for a delivery that is building elsewhere: %v", line)
+		}
+	}
+}
+
 // A game Build & Run does not build is said once, plainly, and never built as
 // Quake 1.
 func TestABuildRequestForAnUnsupportedGameIsAnsweredNotGuessed(t *testing.T) {

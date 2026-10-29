@@ -154,6 +154,13 @@ func (s *Server) resolveBuildRequest(ctx context.Context, link aub.BuildRequestL
 		return blocked(buildStageIntentMismatch, fmt.Errorf(
 			"the link asked for %q and the account server holds %q for this request; ask the editor again", link.Intent, request.Intent))
 	}
+	if request.State == aub.BuildRequestBlocked && request.Stage == aub.BuildStageBuildingElsewhere {
+		// The editor opened this request again (a new delivery id) and a
+		// build of it started from an earlier link meanwhile (AUB NEW_368):
+		// one request is one build, so nothing is offered here.
+		return buildResolution{Status: http.StatusConflict, Code: "building_elsewhere",
+			Err: errors.New("this request is already being built from an earlier link the editor opened; nothing was started here")}
+	}
 	if aub.BuildRequestTerminal(request.State) || request.State == aub.BuildRequestBlocked {
 		// Nothing is posted: AUB stores nothing after an ending.
 		return buildResolution{Status: http.StatusConflict, Code: "closed",

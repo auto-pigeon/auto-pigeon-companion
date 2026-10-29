@@ -1351,6 +1351,21 @@ it holds your Auto-Pigeon session:
 
 Job records and downloaded map revisions live in the matching cache directory.
 
+Two Companions — the app and a `companion` command in a terminal, say — never
+overwrite each other's change to the same file: each write takes a lock first.
+The lock is a small `.<file>.lock` record naming who holds it, and every change
+to it is made under the operating system's lock on a `.<file>.lock.guard` beside
+it, which stays there and is released by the system if a Companion is killed. A
+Companion that is waiting tells you which process holds the file. This works
+between Companions on this computer's own disk; when you upgrade by hand, close
+the old Companion (and any `companion` command it started) before starting the
+new one, because Companions up to 1.332 do not take the guard.
+
+```console
+$ ls -A ~/.config/auto-pigeon-companion | grep lock
+.config.json.lock.guard
+```
+
 By default the Companion uses the server you choose in Settings: **Auto-Pigeon**
 or **Auto-Pigeon beta**. A **released** Companion uses any other server — a
 local development stack, say — only when the `config.json` beside the executable
