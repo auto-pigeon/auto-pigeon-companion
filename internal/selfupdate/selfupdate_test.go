@@ -83,6 +83,7 @@ func newRig(t *testing.T) *rig {
 		"dependencies/auto-pigeon-extractor": "new extractor 1.246",
 		"dependencies/bundle-manifest.json":  `{"version":"1.320"}`,
 		"SHA256SUMS":                         "new sums",
+		"dependencies/new-only.dat":          "a file only 1.320 ships",
 	})
 	r.request = Request{
 		Root: r.root, Companion: companion, From: "1.318", Current: current,
@@ -116,6 +117,9 @@ func (r *rig) assertOld(t *testing.T) {
 		if got := r.read(t, name); got != want {
 			t.Fatalf("%s is %q, want the old %q", name, got, want)
 		}
+	}
+	if _, err := os.Lstat(filepath.Join(r.root, "dependencies", "new-only.dat")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("a file only the new bundle has is still in place after a rollback")
 	}
 	r.assertUserFiles(t)
 }

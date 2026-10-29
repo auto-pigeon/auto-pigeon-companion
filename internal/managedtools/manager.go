@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/tooluse"
 )
 
 // Host is what the Companion around this package provides: the executor's
@@ -68,6 +69,11 @@ type Options struct {
 	Limits   Limits
 	// FreeSpace overrides the disk-space probe, for tests.
 	FreeSpace func(string) int64
+	// Uses is the tools folder's cross-process coordination: an activation
+	// or a removal takes its switch gate and waits for the leases of every
+	// Companion process sharing the folder (01_NEW_368 §2). Nil: this
+	// process's Host.Busy only.
+	Uses *tooluse.Registry
 }
 
 // Schedule defaults.
@@ -106,8 +112,11 @@ type Manager struct {
 	checkMu sync.Mutex // one release check at a time
 	workMu  sync.Mutex // one install or activation at a time
 
-	mu     sync.Mutex
-	live   map[ToolID]*liveState
+	mu   sync.Mutex
+	live map[ToolID]*liveState
+	// gates are the switch gates an "Update now" holds while it waits for
+	// work to end, so new work waits for it rather than starving it.
+	gates  map[ToolID]*tooluse.Gate
 	notice []Notice
 	wake   chan struct{}
 }
@@ -183,8 +192,9 @@ func New(opts Options) (*Manager, error) {
 		session: hex.EncodeToString(session),
 		installer: installer{root: opts.ToolsRoot, source: opts.Source, limits: opts.Limits,
 			channel: opts.Channel, freeSpace: opts.FreeSpace},
-		live: map[ToolID]*liveState{},
-		wake: make(chan struct{}, 1),
+		live:  map[ToolID]*liveState{},
+		gates: map[ToolID]*tooluse.Gate{},
+		wake:  make(chan struct{}, 1),
 	}, nil
 }
 
@@ -217,6 +227,7 @@ func (m *Manager) Run(ctx context.Context) {
 	if m.opts.Disabled {
 		return
 	}
+	defer m.releaseGates()
 	for {
 		m.Step(ctx)
 		wait := m.opts.Tick
@@ -523,12 +534,14 @@ func (m *Manager) advance(ctx context.Context, tool Tool) error {
 	}
 
 	if ts.Intent == IntentNone || ts.IntentFor == nil {
+		m.releaseGate(tool.ID)
 		m.setLive(tool.ID, func(l *liveState) { l.Waiting = nil })
 		return m.prune(tool)
 	}
 	// An intent for bytes the release no longer offers, or for a version no
 	// newer than what is active, is over.
 	if best == nil || best.Identity() != *ts.IntentFor || !m.newer(tool, best.Version, ts.Active.Version) {
+		m.releaseGate(tool.ID)
 		_, err := UpdateState(m.opts.StatePath, func(state *State) error {
 			current := state.Tool(tool.ID)
 			current.Intent, current.IntentFor = IntentNone, nil
@@ -548,20 +561,96 @@ func (m *Manager) advance(ctx context.Context, tool Tool) error {
 		staged = record.Ref()
 	}
 	if ts.Intent != IntentNow {
+		m.releaseGate(tool.ID)
 		return nil
 	}
 	return m.activateWhenIdle(tool, staged, ts.Active)
 }
 
+// switchGate is tool's switch gate, held by this coordinator from now until
+// the switch is done or no longer wanted. Nil, nil without a registry.
+func (m *Manager) switchGate(tool Tool) (*tooluse.Gate, error) {
+	if m.opts.Uses == nil {
+		return nil, nil
+	}
+	m.mu.Lock()
+	gate := m.gates[tool.ID]
+	m.mu.Unlock()
+	if gate != nil {
+		return gate, nil
+	}
+	gate, err := m.opts.Uses.Switch(string(tool.ID), "the Companion updating "+tool.Title)
+	if err != nil {
+		return nil, err
+	}
+	m.mu.Lock()
+	m.gates[tool.ID] = gate
+	m.mu.Unlock()
+	return gate, nil
+}
+
+func (m *Manager) releaseGate(id ToolID) {
+	m.mu.Lock()
+	gate := m.gates[id]
+	delete(m.gates, id)
+	m.mu.Unlock()
+	if gate != nil {
+		gate.Release()
+	}
+}
+
+// Close gives up every switch gate this coordinator holds: an update that
+// was waiting no longer keeps new work out. [Manager.Run] does it as it
+// returns.
+func (m *Manager) Close() { m.releaseGates() }
+
+func (m *Manager) releaseGates() {
+	for _, tool := range Tools {
+		m.releaseGate(tool.ID)
+	}
+	m.releaseGate(Companion)
+}
+
+// waitingFor is the work a switch of tool waits for: this process's, from
+// Host, and every process's lease on the tools folder, read after the gate
+// is held.
+func (m *Manager) waitingFor(tool Tool, gate *tooluse.Gate, dirs []string) []string {
+	var out []string
+	if m.opts.Host != nil {
+		out = m.opts.Host.Busy(tool, dirs)
+	}
+	if gate != nil {
+		here := false
+		for _, use := range gate.Users() {
+			if use.Here {
+				here = true
+				continue
+			}
+			out = append(out, use.Label)
+		}
+		if here && len(out) == 0 {
+			out = append(out, "a build in this Companion")
+		}
+	}
+	return out
+}
+
 // activateWhenIdle activates a staged update unless work uses the
 // installation it replaces.
 func (m *Manager) activateWhenIdle(tool Tool, staged InstallRef, active *InstallRef) error {
-	if m.opts.Host != nil {
-		if busy := m.opts.Host.Busy(tool, []string{active.Dir}); len(busy) > 0 {
-			m.setLive(tool.ID, func(l *liveState) { l.Waiting = busy; l.Version = staged.Version })
-			return nil
-		}
+	gate, err := m.switchGate(tool)
+	if err != nil {
+		m.setLive(tool.ID, func(l *liveState) { l.Waiting = []string{err.Error()}; l.Version = staged.Version })
+		return nil
 	}
+	// The gate stays held while this waits: work asked for from now on waits
+	// for the switch, so the switch happens once the work that was running
+	// when it was asked for has ended.
+	if busy := m.waitingFor(tool, gate, []string{active.Dir}); len(busy) > 0 {
+		m.setLive(tool.ID, func(l *liveState) { l.Waiting = busy; l.Version = staged.Version })
+		return nil
+	}
+	defer m.releaseGate(tool.ID)
 	record, err := ReadInstall(staged.Dir)
 	if err != nil {
 		return m.recordFailure(tool, staged.Version, err)
@@ -596,7 +685,10 @@ func (m *Manager) installVerified(ctx context.Context, tool Tool, candidate Cand
 		return m.opts.Host.Verify(ctx, tool, record)
 	}
 	if (tool.Kind == KindApplication && m.opts.SelfHost != nil) || (tool.Kind != KindApplication && m.opts.Host != nil) {
-		m.setLive(tool.ID, func(l *liveState) { l.Phase = "verifying" })
+		// The transfer is over: its counters go with it, so nothing goes on
+		// saying "Downloading n of m" while the programs are asked what they
+		// are (01_NEW_368 §4).
+		m.setLive(tool.ID, func(l *liveState) { l.Phase, l.Done, l.Total = "verifying", 0, 0 })
 		err := verify(ctx, tool, record)
 		// A program written a moment ago can be "busy" to exec while a
 		// process this one forked meanwhile still holds the descriptor it
@@ -780,6 +872,21 @@ func (m *Manager) prune(tool Tool) error {
 		return nil
 	}
 	sort.Slice(removable, func(i, j int) bool { return removable[i].CompletedAt.Before(removable[j].CompletedAt) })
+	// Removal takes the switch gate too, and asks every process sharing the
+	// tools folder — a pipeline elsewhere may have pinned an installation
+	// this state no longer names (01_NEW_368 §2).
+	held := false
+	if m.opts.Uses != nil {
+		m.mu.Lock()
+		held = m.gates[tool.ID] != nil
+		m.mu.Unlock()
+		if !held {
+			if _, err := m.switchGate(tool); err != nil {
+				return nil // another Companion is switching it; prune next time
+			}
+			defer m.releaseGate(tool.ID)
+		}
+	}
 	toolDir := m.installer.toolDir(tool)
 	var removed []string
 	for _, installed := range removable {
@@ -788,6 +895,12 @@ func (m *Manager) prune(tool Tool) error {
 		}
 		if m.opts.Host != nil && len(m.opts.Host.Busy(tool, []string{installed.Dir})) > 0 {
 			continue
+		}
+		if m.opts.Uses != nil {
+			if refs := m.opts.Uses.References(string(tool.ID), installed.Dir); len(refs) > 0 {
+				m.opts.Logf("managed tools: keeping %s: %s", installed.Dir, strings.Join(refs, "; "))
+				continue
+			}
 		}
 		if err := os.RemoveAll(installed.Dir); err != nil {
 			m.opts.Logf("managed tools: removing %s: %v", installed.Dir, err)
@@ -965,16 +1078,21 @@ func (m *Manager) applyChosen(intent Intent) []string {
 			out = append(out, fmt.Sprintf("%s %s is not downloaded yet; it will be applied later", tool.Title, ts.IntentFor.Version))
 			continue
 		}
-		if m.opts.Host != nil {
-			if busy := m.opts.Host.Busy(tool, []string{ts.Active.Dir}); len(busy) > 0 {
-				out = append(out, fmt.Sprintf("%s %s waits: %s", tool.Title, staged.Version, strings.Join(busy, "; ")))
-				continue
-			}
+		gate, err := m.switchGate(tool)
+		if err != nil {
+			out = append(out, fmt.Sprintf("%s %s waits: %v", tool.Title, staged.Version, err))
+			continue
+		}
+		if busy := m.waitingFor(tool, gate, []string{ts.Active.Dir}); len(busy) > 0 {
+			m.releaseGate(tool.ID)
+			out = append(out, fmt.Sprintf("%s %s waits: %s", tool.Title, staged.Version, strings.Join(busy, "; ")))
+			continue
 		}
 		record, err := ReadInstall(staged.Dir)
 		if err == nil {
 			err = m.activate(tool, record, true)
 		}
+		m.releaseGate(tool.ID)
 		if err != nil {
 			_ = m.recordFailure(tool, staged.Version, err)
 			out = append(out, fmt.Sprintf("%s %s was not applied: %v", tool.Title, staged.Version, err))

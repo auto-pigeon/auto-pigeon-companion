@@ -17,6 +17,8 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/leakadapter"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/maturity"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/tooluse"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/web"
 )
 
 // `companion build` — run a pipeline, and read what a build did afterwards.
@@ -133,13 +135,29 @@ func openRunner(env *Env, service *job.Service, settings config.Config) (*build.
 	if err != nil {
 		return nil, err
 	}
+	toolsRoot, err := settings.Tools()
+	if err != nil {
+		return nil, err
+	}
+	registry, err := tooluse.Open(toolsRoot)
+	if err != nil {
+		return nil, err
+	}
+	// The same cross-process lease the server's builds take (01_NEW_368 §2):
+	// a toolchain update in a running Companion waits for this build, and
+	// this build waits — at most cliLeaseWait — for one already switching.
 	return build.New(build.Options{
 		Service:   service,
 		Dir:       dir,
 		Bindings:  binding.Lookup(bindingsPath),
 		Companion: env.Version,
+		Lease:     web.ToolLeaser(registry, "companion build run", cliLeaseWait),
 	})
 }
+
+// cliLeaseWait is how long `companion build run` waits for a toolchain that
+// is switching version before it refuses, retryably.
+const cliLeaseWait = 2 * time.Minute
 
 func buildRun(env *Env, args []string, previewOnly bool) int {
 	name := "build run"
@@ -334,7 +352,7 @@ func buildLatest(env *Env, args []string) int {
 	if err != nil {
 		return fail(env, err)
 	}
-	selection := build.Latest(manifests, build.MapIdentity{Backend: address, AssetType: "map", AssetID: *mapID}, *family, settingsLeakPipelines(settings))
+	selection := build.Latest(manifests, build.MapIdentity{Backend: address, AssetType: "map", AssetID: *mapID}, *family)
 	switch {
 	case *asJSON:
 		if code := printJSON(env, selection); code != 0 {
@@ -914,18 +932,4 @@ func buildLeakPipeline(env *Env, args []string) int {
 		fmt.Fprintf(env.Stdout, "  %s %s  %s  (runs %s)\n", mark, c.ID, c.Name, strings.Join(c.Steps, ", "))
 	}
 	return 0
-}
-
-// settingsLeakPipelines is [web.Server.isLeakPipeline] for the command line:
-// the pipelines pinned as a game's leak test on this machine. The built-in
-// ones are known to build.Diagnostic itself.
-func settingsLeakPipelines(settings config.Config) func(string) bool {
-	return func(id string) bool {
-		for _, pinned := range settings.LeakTestPipelines {
-			if pinned == id {
-				return true
-			}
-		}
-		return false
-	}
 }

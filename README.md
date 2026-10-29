@@ -227,7 +227,16 @@ notes:
   one is still offered, and **Settings → Offer skipped versions again** undoes it.
 
 The previous version is kept for rollback; a version that fails its check is
-never switched on. The same from a terminal, against the running Companion:
+never switched on. **Every Companion on this computer that uses the same tools
+folder waits for the others:** a `companion build run` in a terminal holds an
+update chosen in the window exactly as a build in the window does, and each
+stage of a build runs the version the build started with. While an update is
+waiting to switch, a new build is refused with *"the EricW toolchain is
+switching to its new version…"* and nothing of it starts — press it again once
+the update is in, or cancel the update; Auto-build simply tries again later. An
+older version is never removed while a compiler started from it is still
+running, even one whose Companion has since been closed. The same from a
+terminal, against the running Companion:
 
 ```console
 $ companion tools status
@@ -277,6 +286,23 @@ The new version is started once, briefly, before it replaces the old one and
 again after; if it does not start, the old one is put back and the failure is
 shown in **Settings → Updates**. The replaced files are kept in
 `.companion-update/previous` beside the program until the next update.
+
+**If an update is interrupted** — the computer loses power, or the Companion is
+killed while it swaps its files — the next start puts the previous version back
+before anything runs, and never starts a mix of the two versions' files. If that
+cannot finish (a file is in use, or the folder became read-only), the Companion
+does not start and says so; fix the cause and run the recovery yourself. It
+works from the program, or — if the interruption left no program in the folder,
+which can happen on Windows — from the copy kept in `.companion-update/previous`:
+
+```console
+$ ./auto-pigeon-companion selfupdate recover
+The update 1.323 -> 1.324 was undone; 1.323 is complete again in /home/me/Apps/auto-pigeon-companion-1.323-linux-amd64.
+$ .companion-update/previous/auto-pigeon-companion selfupdate recover --json | jq .outcome
+```
+
+No further update is installed, and nothing kept for recovery is removed, until
+the last one is finished.
 
 A Companion in a folder you cannot write to, and the macOS app, are not replaced
 by the Companion: the update is downloaded and checked, and Settings says where
@@ -441,7 +467,10 @@ compiled, and nothing starts until you press **Start**. The card says which
 revision it was built from, and *Built from revision N; newer changes are not
 included.* when you have saved since — **Build latest** then builds the newer
 one. A leak test is a diagnostic, never a playable build: a map with only leak
-tests says *No playable build yet: only leak tests.*
+tests says *No playable build yet: only leak tests.* What counts is how each
+build was made — an editor's leak request, or a built-in leak-test pipeline —
+never which pipeline is pinned for leak tests today: pinning your normal pipeline for leak tests does not hide its
+normal builds, before or after.
 
 ```console
 $ companion build latest --map <map id>              # the build Play latest build would play
@@ -1181,7 +1210,7 @@ commands:
   job run | preview | list | show | logs | output | cancel | retry | artifacts | profiles   run a profile action as a supervised job, and inspect what ran
   autobuild list | show | on | off | pipeline | build-now | retry   rebuild a hosted map automatically when a new revision is saved (inside a running Companion)
   tools status | check | retry | update | skip | cancel-pending | reset-skipped | use-managed   the build tools the Companion installs and updates itself: EricW tools and q3map2 (inside a running Companion)
-  selfupdate status | prove --expect-version <v>   this Companion's own installation, how its last update ended, and a new version's proving start
+  selfupdate status | prove --expect-version <v> | recover   this Companion's own installation, how its last update ended, a new version's proving start, and finishing an interrupted update
   build run | preview | list | show | pipelines   build a map through a pipeline: several supervised jobs, wired, with a manifest
   package targets | preview | create | inspect | verify | extract | map …   build a PAK or PK3 from what a build produced, read one somebody else made, and package, install and run a Quake III or Quake II map
   toolchain validate | show | canonicalize | digest | diff | list | schema | review | grant | withdraw | homepage | args | check  read, check and compare tool, engine and pipeline toolchains, and approve one to run

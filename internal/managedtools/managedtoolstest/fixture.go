@@ -498,6 +498,16 @@ func main() {
 			}
 			time.Sleep(time.Duration(seconds) * time.Second)
 		}
+		// "// AUCOM_HOLD_UNTIL <file>": compile once that file exists (at
+		// most 300 s), so a test holds a pipeline between two real stages.
+		if _, rest, found := strings.Cut(string(source), "AUCOM_HOLD_UNTIL "); found {
+			gate := strings.TrimSpace(strings.SplitN(rest, "\n", 2)[0])
+			for deadline := time.Now().Add(300 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+				if _, err := os.Stat(gate); err == nil {
+					break
+				}
+			}
+		}
 		_ = os.WriteFile(bspFile, append([]byte("BSP29 built by "+self+"\n"), source...), 0o644)
 		_ = os.WriteFile(strings.TrimSuffix(bspFile, ".bsp")+".prt", []byte("PRT1\n"), 0o644)
 	}

@@ -320,3 +320,43 @@ func TestTheCoordinatorStopsWithItsContextAndDoesNotSpin(t *testing.T) {
 		t.Fatalf("%d requests in half a second while failing; the backoff did not hold", n)
 	}
 }
+
+// 01_NEW_368 §4: once the archive is in, the row says what is actually being
+// waited for — the version check, then the work an update waits for — and
+// never goes on showing a transfer, with or without its byte counts. After
+// the wait it resumes: ready, nothing pending.
+func TestTheStatusSaysWhatAnUpdateIsWaitingForNotADownload(t *testing.T) {
+	r, m, offer := offered(t)
+	hold := make(chan struct{})
+	r.host.mu.Lock()
+	r.host.verifyHold, r.host.busy = hold, []string{"Compile the map — auto-pigeon.ericw-tools.q1"}
+	r.host.mu.Unlock()
+	if err := m.Decide(managedtools.EricW, managedtools.DecideNow, offer.Identity(), false); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() { m.Step(context.Background()); close(done) }()
+	waitFor(t, func() bool { return tool(m.Status(), managedtools.EricW).Phase == managedtools.PhaseVerifying })
+	view := tool(m.Status(), managedtools.EricW)
+	if view.Done != 0 || view.Total != 0 || view.Version != "1.4540" {
+		t.Fatalf("while the programs are checked: %+v", view)
+	}
+	close(hold)
+	<-done
+	m.Step(context.Background())
+	view = tool(m.Status(), managedtools.EricW)
+	if view.Phase != managedtools.PhaseReady || view.Version != "1.4536" || view.Done != 0 || view.Total != 0 {
+		t.Fatalf("while the update waits for work: %+v", view)
+	}
+	if view.Pending == nil || !view.Pending.Staged || len(view.Pending.Waiting) != 1 {
+		t.Fatalf("the wait is not said: %+v", view.Pending)
+	}
+	r.host.mu.Lock()
+	r.host.busy = nil
+	r.host.mu.Unlock()
+	m.Step(context.Background())
+	view = tool(m.Status(), managedtools.EricW)
+	if view.Phase != managedtools.PhaseReady || view.Version != "1.4540" || view.Pending != nil {
+		t.Fatalf("after the work ended: %+v", view)
+	}
+}

@@ -294,7 +294,7 @@ func serve(env *Env, args []string) (int, func()) {
 	updateLog := &selfUpdateLog{path: filepath.Join(configDir, SelfUpdateLogName)}
 	var tools *managedtools.Manager
 	var selfResults []managedtools.SelfResult
-	confirmSelf := recoverSelfAtStart(self, updateLog, func(result managedtools.SelfResult) {
+	confirmSelf, selfBlocked := recoverSelfAtStart(self, updateLog, func(result managedtools.SelfResult) {
 		if tools != nil {
 			if err := tools.RecordSelfResult(result); err != nil {
 				updateLog.logf("start: recording the result: %v", err)
@@ -303,6 +303,10 @@ func serve(env *Env, args []string) (int, func()) {
 		}
 		selfResults = append(selfResults, result)
 	})
+	if selfBlocked != nil {
+		fmt.Fprintf(env.Stderr, "error: %v\n", selfBlocked)
+		return 1, nil
+	}
 	if fixtureFailServe(env.Version) {
 		fmt.Fprintf(env.Stderr, "error: fixture build %s is set to refuse to serve\n", env.Version)
 		return 1, nil
@@ -678,6 +682,31 @@ func replaceSelfAtExit(server *web.Server, tools *managedtools.Manager, self man
 	}
 	if !ok {
 		return nil
+	}
+	// The bundle's switch gate: "Update now" took it at its last check; a
+	// close takes it here. A build another Companion process is running from
+	// this bundle keeps the update chosen for the next close (01_NEW_368 §2).
+	gate := server.SelfGate()
+	if gate == nil {
+		if registry, err := server.ToolRegistry(); err == nil {
+			gate, err = registry.Switch(web.BundleTool, "the Companion replacing itself with "+record.Version)
+			if err != nil {
+				log.logf("exit: %s not installed: %v; it stays chosen", record.Version, err)
+				return nil
+			}
+			var busy []string
+			for _, use := range gate.Users() {
+				busy = append(busy, use.Label)
+			}
+			if len(busy) > 0 {
+				gate.Release()
+				log.logf("exit: %s not installed: it waits for %s; it stays chosen", record.Version, strings.Join(busy, "; "))
+				return nil
+			}
+		}
+	}
+	if gate != nil {
+		defer gate.Release()
 	}
 	logf("self update: installing %s as this Companion closes (log: %s)", record.Version, log.path)
 	return replaceSelf(self, record, tools.Root(), configDir, relaunch, log, server.RecordSelfResult)

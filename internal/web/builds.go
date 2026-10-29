@@ -343,6 +343,10 @@ func (s *Server) buildRunner(announce func(*build.Manifest)) (*build.Runner, err
 	if err != nil {
 		return nil, err
 	}
+	registry, err := s.toolRegistry()
+	if err != nil {
+		return nil, err
+	}
 	return build.New(build.Options{
 		Service:   service,
 		Dir:       dir,
@@ -350,6 +354,7 @@ func (s *Server) buildRunner(announce func(*build.Manifest)) (*build.Runner, err
 		Companion: s.version,
 		Announce:  announce,
 		Hold:      s.toolGate.hold,
+		Lease:     ToolLeaser(registry, "companion serve "+s.version, leaseWait),
 	})
 }
 
@@ -703,6 +708,9 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, errors.New("a build needs a pipeline id"))
 		return
 	}
+	if s.refuseIfSwitching(w, request.Pipeline) {
+		return
+	}
 	// The readiness the pipeline selectors show is the one enforced here: a
 	// crafted or stale request for a pipeline whose setup is incomplete starts
 	// nothing and leaves no failed build behind (NEW_310).
@@ -928,7 +936,7 @@ func (s *Server) handleBuildList(w http.ResponseWriter, r *http.Request) {
 		answer := s.answerBuild(manifest)
 		// diagnostic: a leak test, never offered as a level to play (NEW_365).
 		items = append(items, map[string]any{"manifest": answer.manifest, "live": answer.live,
-			"diagnostic": build.Diagnostic(answer.manifest, s.isLeakPipeline)})
+			"diagnostic": build.Diagnostic(answer.manifest)})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
@@ -963,7 +971,7 @@ func (s *Server) handleBuildLatest(w http.ResponseWriter, r *http.Request) {
 	assetType := query.Get("asset_type")
 	items := make([]build.Selection, 0, len(ids))
 	for _, id := range ids {
-		items = append(items, build.Latest(manifests, build.MapIdentity{Backend: backend, AssetType: assetType, AssetID: id}, query.Get("family"), s.isLeakPipeline))
+		items = append(items, build.Latest(manifests, build.MapIdentity{Backend: backend, AssetType: assetType, AssetID: id}, query.Get("family")))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }

@@ -124,7 +124,7 @@ func (m *Manager) Status() Status {
 		case live.Phase == "downloading" || live.Phase == "installed":
 			view.Phase, view.Version, view.Done, view.Total = PhaseDownloading, live.Version, live.Done, live.Total
 		case live.Phase == "verifying":
-			view.Phase, view.Version, view.Done, view.Total = PhaseVerifying, live.Version, live.Done, live.Total
+			view.Phase, view.Version = PhaseVerifying, live.Version
 		case view.Active != nil:
 			view.Phase, view.Version = PhaseReady, view.Active.Version
 		case live.Phase == "checking":

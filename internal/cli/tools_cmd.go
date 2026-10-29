@@ -14,6 +14,7 @@ import (
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/config"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/managedtools"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/tooluse"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/web"
 )
 
@@ -368,7 +369,12 @@ func newManagedTools(env *Env, settings config.Config, configDir string, server 
 		logf("managed tools: TASK FIXTURE release source in use (%s); not GitHub", os.Getenv(fixtureReleasesEnv))
 		source = fixture
 	}
+	uses, err := tooluse.Open(root)
+	if err != nil {
+		return nil, err
+	}
 	return managedtools.New(managedtools.Options{
+		Uses:      uses,
 		ToolsRoot: root,
 		StatePath: filepath.Join(configDir, managedtools.StateFileName),
 		Source:    source,

@@ -35,3 +35,25 @@ func fixtureFailServe(version string) bool {
 	value := strings.TrimSpace(os.Getenv(fixtureFailServeEnv))
 	return value != "" && value == version
 }
+
+// fixtureKillAtEnv names a self-update transaction point ("aside:<path>",
+// "placed:<path>", "swapped", "restore:<path>", …) at which a FIXTURE BUILD
+// kills itself, abruptly, in the middle of replacing itself — so a live task
+// can watch the next start, or `selfupdate recover`, put the folder back from
+// a real interrupted swap of real bundles (01_NEW_368 §1).
+const fixtureKillAtEnv = "AUCOM_FIXTURE_KILL_AT"
+
+func fixtureSelfUpdateFault() func(string) error {
+	point := strings.TrimSpace(os.Getenv(fixtureKillAtEnv))
+	if point == "" {
+		return nil
+	}
+	return func(at string) error {
+		if at == point {
+			self, _ := os.FindProcess(os.Getpid())
+			_ = self.Kill()
+			select {}
+		}
+		return nil
+	}
+}

@@ -859,6 +859,9 @@ func (s *Server) handlePlayStart(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &body) {
 		return
 	}
+	if s.refuseIfSwitching(w, body.Pipeline) {
+		return
+	}
 	if body.BuildRequestID != "" {
 		s.startForBuildRequest(w, r, body)
 		return

@@ -144,27 +144,33 @@ func (id MapIdentity) Same(other MapIdentity) bool {
 var ErrLeakTest = errors.New("a leak test is a diagnostic, not a playable build: its BSP never went through a normal VIS and LIGHT")
 
 // Diagnostic reports a build that answered a leak test rather than built a
-// level: one an editor's request bound to its leak adapter (`leak_test`), or
-// any build of a leak-test pipeline — the built-in ones by their adapter, a
-// pinned one when isLeak says so — however it was started. A leak pipeline's
-// BSP is QBSP's alone; it never went through VIS and LIGHT as a level.
-func Diagnostic(m *Manifest, isLeak func(pipelineID string) bool) bool {
+// level, from what the build itself recorded — never from what is pinned
+// today (01_NEW_368 §3): pinning a normal pipeline as a game's leak test
+// does not turn its normal builds, before or after, into diagnostics, and
+// unpinning it does not make an editor's leak test playable.
+//
+// A build is a diagnostic when an editor's leak request started it —
+// `leak_test` on the manifest (manifest 1.4, NEW_310A: the change that also
+// introduced the per-game pin, so no pinned leak test was ever recorded
+// without it) — or when its pipeline is a built-in leak test, however it was
+// started. Any other build is what its pipeline made: a person's own
+// compile-only pipeline, run from the Build page, is their build of it, as it
+// was before (01_NEW_368 §3 changes only what the pin can do).
+func Diagnostic(m *Manifest) bool {
 	if m == nil {
 		return false
 	}
 	if m.LeakTest != nil {
 		return true
 	}
-	if _, builtin := leakadapter.ForPipeline(m.Pipeline.ID); builtin {
-		return true
-	}
-	return isLeak != nil && isLeak(m.Pipeline.ID)
+	_, builtin := leakadapter.ForPipeline(m.Pipeline.ID)
+	return builtin
 }
 
 // VerifyPlayable is [PlayableLevel] for a build somebody is about to play: a
 // normal build, whose level is still the bytes the build recorded.
 func VerifyPlayable(m *Manifest) (Playable, error) {
-	if Diagnostic(m, nil) {
+	if Diagnostic(m) {
 		return Playable{}, fmt.Errorf("%w: %w", ErrLeakTest, ErrNotPlayable)
 	}
 	level, err := PlayableLevel(m)
@@ -191,9 +197,8 @@ func VerifyPlayable(m *Manifest) (Playable, error) {
 }
 
 // Latest chooses the build to play for one map. family is the engine's game
-// family; empty accepts any known family. isLeak names the pipelines pinned as
-// a game's leak test on this machine (nil: the built-in ones only).
-func Latest(manifests []*Manifest, want MapIdentity, family string, isLeak func(string) bool) Selection {
+// family; empty accepts any known family.
+func Latest(manifests []*Manifest, want MapIdentity, family string) Selection {
 	want = want.normal()
 	out := Selection{State: LatestNone, Map: want}
 	var candidates []*Manifest
@@ -205,7 +210,7 @@ func Latest(manifests []*Manifest, want MapIdentity, family string, isLeak func(
 			continue
 		}
 		switch {
-		case Diagnostic(m, isLeak):
+		case Diagnostic(m):
 			leaks = append(leaks, m)
 		case !m.Succeeded():
 		case m.EngineFamily == "":

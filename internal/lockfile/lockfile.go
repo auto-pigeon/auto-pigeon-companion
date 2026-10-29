@@ -143,6 +143,13 @@ type Options struct {
 	Poll time.Duration
 	// Program labels this holder in the lock file.
 	Program string
+	// BreakDeadHolder breaks a lock at once when its holder is a process on
+	// this machine that no longer exists, instead of waiting for it to go
+	// stale. For a lock a crash is expected to leave behind — the
+	// Companion's self-update, whose next start must recover without a
+	// minute's wait (01_NEW_368). A pid that exists, whoever it now is,
+	// still waits for staleness.
+	BreakDeadHolder bool
 	// Now supplies the clock, for tests.
 	Now func() time.Time
 }
@@ -266,7 +273,9 @@ func Acquire(guarded string, options Options) (*Lock, error) {
 		default:
 			return nil, readErr
 		}
-		if limit := options.stale(); limit > 0 && age > limit {
+		dead := options.BreakDeadHolder && current.PID > 0 && current.PID != os.Getpid() &&
+			current.Host != "" && current.Host == host && processGone(current.PID)
+		if limit := options.stale(); dead || (limit > 0 && age > limit) {
 			// Rename first, so that of two processes which both judged this
 			// lock abandoned exactly one goes on to create it.
 			if broken := breakStale(path); broken {

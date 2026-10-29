@@ -32,6 +32,9 @@ const selfUpdateUsage = `usage:
   companion selfupdate status [--json]       this installation, and how its last update ended
   companion selfupdate prove --expect-version <v>
                                               the proving start a new version runs before it replaces this one
+  companion selfupdate recover [--json]      finish an interrupted update: put back one complete bundle
+                                              (runs from the program, or from the copy kept in
+                                              .companion-update/previous/ when none is left at its path)
 
 Offers, "Update now", "Update when I close Companion" and Cancel are
 ` + "`companion tools status|update|skip|cancel-pending companion`" + `.
@@ -53,6 +56,8 @@ func runSelfUpdate(env *Env, args []string) int {
 		return selfUpdateStatus(env, args[1:])
 	case "prove":
 		return selfUpdateProve(env, args[1:])
+	case "recover":
+		return selfUpdateRecover(env, args[1:])
 	}
 	fmt.Fprintf(env.Stderr, "error: unknown selfupdate subcommand %q\n\n%s", args[0], selfUpdateUsage)
 	return 2
@@ -170,6 +175,69 @@ func selfUpdateProve(env *Env, args []string) int {
 	return finish(nil)
 }
 
+// selfUpdateRecover is the recovery entry point. It works on the bundle the
+// program it runs as belongs to — found from where that program is, never
+// from an argument — so the copy an update kept in previous/ can run it when
+// an interruption left no program at the Companion's own path (01_NEW_368
+// §1.7). It finishes an unfinished replacement by putting the previous files
+// back; a proved, activated one is a complete bundle and is left for its
+// first start to confirm. It removes nothing.
+func selfUpdateRecover(env *Env, args []string) int {
+	set := newFlagSet(env, "selfupdate recover")
+	asJSON := set.Bool("json", false, "print the answer as JSON")
+	if _, code, ok := parseFlags(env, set, args); !ok {
+		return code
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		return fail(env, err)
+	}
+	_, companion := managedtools.BundleLayout(managedtools.BundlePlatform(runtime.GOOS, runtime.GOARCH))
+	root, err := selfupdate.RecoveryRoot(executable, companion)
+	if err != nil {
+		return fail(env, err)
+	}
+	journal, outcome, err := selfupdate.Recover(root, "", func(format string, args ...any) {
+		fmt.Fprintf(env.Stderr, format+"\n", args...)
+	})
+	if *asJSON {
+		answer := map[string]any{"root": root, "outcome": outcome, "last": journal}
+		if err != nil {
+			answer["error"] = err.Error()
+		}
+		printJSON(env, answer)
+	} else {
+		switch {
+		case err != nil:
+			fmt.Fprintf(env.Stdout, "The Companion's folder %s still needs recovery: %v\n", root, err)
+		case outcome == selfupdate.RolledBack:
+			fmt.Fprintf(env.Stdout, "The update %s -> %s was undone; %s is complete again in %s.\n", journal.From, journal.To, journal.From, root)
+		case journal == nil:
+			fmt.Fprintf(env.Stdout, "No update has been made in %s; nothing to recover.\n", root)
+		default:
+			fmt.Fprintf(env.Stdout, "Nothing to recover in %s: the last update %s -> %s is %s.\n", root, journal.From, journal.To, journal.State)
+		}
+	}
+	if err != nil {
+		return 1
+	}
+	return 0
+}
+
+// bundleCoherent reads back every file the running bundle's manifest lists.
+func bundleCoherent(self managedtools.SelfInstall) error {
+	for _, member := range self.Members {
+		actual, err := managedtools.FileSHA256(filepath.Join(self.Root, filepath.FromSlash(member.Path)))
+		if err != nil {
+			return fmt.Errorf("%s: %w", member.Path, err)
+		}
+		if actual != member.SHA256 {
+			return fmt.Errorf("%s is not the file the bundle manifest lists", member.Path)
+		}
+	}
+	return nil
+}
+
 // selfUpdateLog is the compact log of replacements, beside config.json.
 type selfUpdateLog struct {
 	mu   sync.Mutex
@@ -192,23 +260,50 @@ func (l *selfUpdateLog) logf(format string, args ...any) {
 
 // recoverSelfAtStart looks at the last replacement as this Companion
 // starts. It returns a function to call once the process serves, which
-// confirms a replacement this process is the new side of.
-func recoverSelfAtStart(self managedtools.SelfInstall, log *selfUpdateLog, record func(managedtools.SelfResult)) func() {
+// confirms a replacement this process is the new side of — or an error when
+// the folder may hold parts of two bundles, which this process must then not
+// serve (01_NEW_368 §1.1): a mixed Companion/extractor/manifest bundle is
+// never started as either.
+func recoverSelfAtStart(self managedtools.SelfInstall, log *selfUpdateLog, record func(managedtools.SelfResult)) (func(), error) {
 	if self.Mode == managedtools.SelfDevelopment {
-		return func() {}
+		return func() {}, nil
 	}
 	sha, err := managedtools.FileSHA256(self.Executable)
 	if err != nil {
-		return func() {}
+		return func() {}, nil
 	}
 	journal, outcome, err := selfupdate.Recover(self.Root, sha, log.logf)
 	if err != nil {
 		log.logf("start: the last update's journal: %v", err)
 	}
 	switch outcome {
+	case selfupdate.NeedsRecovery:
+		if journal == nil {
+			// The journal itself cannot be read. Whether the folder is whole
+			// is then read from the files.
+			if coherent := bundleCoherent(self); coherent == nil {
+				log.logf("start: the last update's journal cannot be used (%v), but every file of %s is its own; serving, and refusing updates until it is recovered", err, self.Version)
+				return func() {}, nil
+			} else {
+				err = fmt.Errorf("%v; and the bundle is not whole: %v", err, coherent)
+			}
+		}
+		to := ""
+		if journal != nil {
+			to = journal.To
+		}
+		record(managedtools.SelfResult{From: self.Version, To: to, Outcome: "recovery_needed", Detail: err.Error(), At: time.Now().UTC()})
+		return nil, fmt.Errorf("the Companion's folder %s is part way through an update and could not be put back (%v); run `%s %s`",
+			self.Root, err, filepath.Base(self.Executable), selfupdate.RecoverCommand)
 	case selfupdate.RolledBack:
 		record(managedtools.SelfResult{From: journal.From, To: journal.To, Outcome: "rolled_back", Detail: journal.Detail, At: time.Now().UTC()})
 		log.logf("start: %s -> %s rolled back: %s", journal.From, journal.To, journal.Detail)
+		if sha != journal.FromSHA256 {
+			// This process is the new program that was just taken out: what
+			// is in the folder now is the previous one, which it is not.
+			return nil, fmt.Errorf("version %s was taken back out after %d starts that never became ready; start the Companion again to run %s",
+				self.Version, journal.Starts, journal.From)
+		}
 	case selfupdate.Pending:
 		return func() {
 			if confirmed, err := selfupdate.MarkVerified(self.Root, sha); err != nil {
@@ -217,9 +312,9 @@ func recoverSelfAtStart(self managedtools.SelfInstall, log *selfUpdateLog, recor
 				log.logf("start: %s started from %s and serves; the update from %s is complete", self.Version, self.Root, confirmed.From)
 				record(managedtools.SelfResult{From: confirmed.From, To: confirmed.To, Outcome: "updated", At: time.Now().UTC()})
 			}
-		}
+		}, nil
 	}
-	return func() {}
+	return func() {}, nil
 }
 
 // relaunchArguments is how the new Companion is started after "Update now":
@@ -273,16 +368,26 @@ func replaceSelf(self managedtools.SelfInstall, staged managedtools.InstallRecor
 			_, err := web.Prove(ctx, exe, staged.Version)
 			return err
 		},
-		Logf: log.logf,
+		Logf:  log.logf,
+		Fault: fixtureSelfUpdateFault(),
 	})
 	_ = lock.Release()
 	if err != nil {
 		outcome := "failed"
-		if errors.Is(err, selfupdate.ErrRolledBack) {
+		switch {
+		case errors.Is(err, selfupdate.ErrRecoveryNeeded):
+			outcome = "recovery_needed"
+		case errors.Is(err, selfupdate.ErrRolledBack):
 			outcome = "rolled_back"
 		}
 		log.logf("exit: %s -> %s %s: %v", self.Version, staged.Version, outcome, err)
 		record(managedtools.SelfResult{From: self.Version, To: staged.Version, Outcome: outcome, Detail: err.Error(), At: time.Now().UTC()})
+		if outcome == "recovery_needed" {
+			// Neither bundle is known to be whole: nothing is started from
+			// the folder, the old program included (01_NEW_368 §1.3).
+			log.logf("exit: nothing is restarted; run `%s %s`", filepath.Base(self.Executable), selfupdate.RecoverCommand)
+			return nil
+		}
 		if relaunch == nil {
 			return nil
 		}
@@ -292,7 +397,7 @@ func replaceSelf(self managedtools.SelfInstall, staged managedtools.InstallRecor
 	}
 	record(managedtools.SelfResult{From: self.Version, To: staged.Version, Outcome: "activated",
 		Detail: "in place and proved; confirmed when it next starts", At: time.Now().UTC()})
-	log.logf("exit: %s in place (%d files); the previous files are in %s", staged.Version, len(journal.Steps),
+	log.logf("exit: %s in place (%d files); the previous files are in %s", staged.Version, len(journal.Members),
 		filepath.Join(self.Root, selfupdate.DirName, "previous"))
 	if relaunch == nil {
 		return nil
@@ -335,7 +440,11 @@ func rollbackAndRestart(self managedtools.SelfInstall, exe string, relaunch []st
 		to = journal.To
 	}
 	if err != nil {
-		log.logf("restart: rolling back: %v", err)
+		// Not put back: the old program is not started as if it were
+		// (01_NEW_368 §1.3), and the result says what is needed.
+		log.logf("restart: rolling back: %v; nothing is restarted — run `%s %s`", err, filepath.Base(self.Executable), selfupdate.RecoverCommand)
+		record(managedtools.SelfResult{From: self.Version, To: to, Outcome: "recovery_needed", Detail: detail + "; " + err.Error(), At: time.Now().UTC()})
+		return
 	}
 	record(managedtools.SelfResult{From: self.Version, To: to, Outcome: "rolled_back", Detail: detail, At: time.Now().UTC()})
 	startCompanion(exe, relaunch, log)

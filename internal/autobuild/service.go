@@ -48,6 +48,11 @@ var (
 	ErrMissing = errors.New("autobuild: the map is not on AUB")
 	// ErrBusy: a build of this map is already running.
 	ErrBusy = errors.New("autobuild: a build of this map is already running; wait for it, or stop it in Activity")
+	// ErrNotNow is a start the Companion refused for the moment — it is
+	// replacing itself, or a toolchain the build needs is switching version
+	// — having started nothing. The revision is not consumed: it is still
+	// owed, and the next poll offers it again (01_NEW_368 §2).
+	ErrNotNow = errors.New("autobuild: not now")
 )
 
 // Terminal run states, as the Build & Run coordinator records them.
@@ -522,6 +527,8 @@ func (s *Service) submit(assetID string, manual bool, pick func(*Entry) (Revisio
 	}
 	var snapshot Entry
 	var revision Revision
+	var wasSubmitted bool
+	var previousPending *Revision
 	s.mu.Lock()
 	s.starting[assetID]++
 	s.mu.Unlock()
@@ -548,6 +555,7 @@ func (s *Service) submit(assetID string, manual bool, pick func(*Entry) (Revisio
 			return errors.New("autobuild: choose a build profile first")
 		}
 		revision = picked
+		wasSubmitted, previousPending = entry.submitted(revision.Key()), entry.Pending
 		entry.remember(revision.Key())
 		entry.Running = &Attempt{
 			Revision: revision, Pipeline: entry.PipelineID, Manual: manual,
@@ -566,6 +574,19 @@ func (s *Service) submit(assetID string, manual bool, pick func(*Entry) (Revisio
 	_, err = Update(s.path, func(state *State) error {
 		entry, found := state.Find(assetID)
 		if !found || entry.Running == nil || entry.Running.RunID != "" || entry.Running.Revision.Key() != revision.Key() {
+			return nil
+		}
+		if errors.Is(startErr, ErrNotNow) {
+			entry.Running, entry.Pending = nil, previousPending
+			if !wasSubmitted {
+				kept := entry.Submitted[:0]
+				for _, key := range entry.Submitted {
+					if key != revision.Key() {
+						kept = append(kept, key)
+					}
+				}
+				entry.Submitted = kept
+			}
 			return nil
 		}
 		if startErr != nil {

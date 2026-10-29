@@ -60,6 +60,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/managedtools"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/pathpick"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/playrun"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/tooluse"
 )
 
 // DrainTimeout is how long a shutdown waits for in-flight requests.
@@ -131,6 +132,13 @@ type Server struct {
 	tools        *managedtools.Manager
 	toolGate     toolGate
 	toolsExiting atomic.Bool
+	// toolUse is the tools folder's cross-process coordination (01_NEW_368).
+	toolUseOnce sync.Once
+	toolUse     *tooluse.Registry
+	toolUseErr  error
+	// selfGate is the bundle's switch gate an "Update now" holds from its
+	// last check until the replacement is done.
+	selfGate atomic.Pointer[tooluse.Gate]
 	// admission is the fence an "Update now" of the Companion closes;
 	// selfRestart is the staged bundle it stopped for (NEW_368).
 	admission   admission

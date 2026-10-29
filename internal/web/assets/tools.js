@@ -320,6 +320,7 @@
         activated: t("Last update: {from} → {to} is in place; it is confirmed when the Companion next starts.", last),
         rolled_back: t("Last update: {from} → {to} was taken back out: {detail}", { ...last, detail: last.detail || "" }),
         failed: t("Last update: {from} → {to} was not installed: {detail}", { ...last, detail: last.detail || "" }),
+        recovery_needed: t("Last update: {from} → {to} was interrupted and the folder needs recovery: {detail}", { ...last, detail: last.detail || "" }),
       };
       lines.push(el("p", { className: last.outcome === "updated" || last.outcome === "activated" ? "muted" : "message error", text: words[last.outcome] || last.outcome }));
     }
@@ -390,7 +391,13 @@
         item.append(el("p", { className: "message", text: t("Downloaded; replace it yourself.") + " " + tool.pending.manual }));
       } else if (tool.pending?.restarting) {
         item.append(el("p", { className: "muted", text: t("Restarting to install version {version}…", { version: tool.pending.version }) }));
-      } else if (tool.pending && !tool.pending.waiting?.length) {
+      } else if (tool.pending?.waiting?.length) {
+        // What it waits for, as the coordinator last saw it — no transfer,
+        // no progress: the download is over (01_NEW_368 §4).
+        item.append(el("p", { className: "muted", text: tool.pending.staged
+          ? t("Version {version} is downloaded and checked; it is installed once this ends: {work}.", { version: tool.pending.version, work: tool.pending.waiting.join("; ") })
+          : t("Version {version} waits: {work}.", { version: tool.pending.version, work: tool.pending.waiting.join("; ") }) }));
+      } else if (tool.pending) {
         item.append(el("p", { className: "muted", text: tool.pending.intent === "on_exit"
           ? (tool.pending.staged
             ? t("Version {version} is downloaded and checked; it is installed when the Companion closes.", { version: tool.pending.version })

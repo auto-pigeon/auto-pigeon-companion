@@ -172,8 +172,8 @@ var commands = []Command{
 		Run:     runTools,
 	},
 	{
-		Name: "selfupdate", Usage: "status | prove --expect-version <v>",
-		Summary: "this Companion's own installation, how its last update ended, and a new version's proving start",
+		Name: "selfupdate", Usage: "status | prove --expect-version <v> | recover",
+		Summary: "this Companion's own installation, how its last update ended, a new version's proving start, and finishing an interrupted update",
 		Run:     runSelfUpdate,
 	},
 	{

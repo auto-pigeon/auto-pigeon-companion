@@ -59,6 +59,28 @@ type Options struct {
 	// GUI server) does so only while no Run holds this (NEW_367). Nil holds
 	// nothing.
 	Hold func() (release func())
+	// Lease takes the cross-process hold on the toolchains of the given tool
+	// profiles (internal/tooluse, 01_NEW_368 §2), before any of their
+	// programs is resolved, and keeps it until Run returns — after every
+	// stage's process has ended. It may refuse, retryably, while one of them
+	// is switching version. Nil takes none.
+	Lease func(profileIDs []string) (ToolLease, error)
+}
+
+// ToolLease is a pipeline's hold on its toolchains across processes.
+type ToolLease interface {
+	// Pin records the managed installation folders the pipeline froze, and
+	// AddStore the job store its stages are submitted to.
+	Pin(dirs []string) error
+	AddStore(store string) error
+	Release()
+}
+
+// pinnedTool is one tool profile's programs as the pipeline froze them: the
+// paths every stage of this build runs, and their digests then.
+type pinnedTool struct {
+	executables map[string]string
+	digests     map[string]string
 }
 
 // Runner runs pipelines.
@@ -168,9 +190,6 @@ type Request struct {
 // things a manifest is most useful for, and returning only an error would throw
 // away the record of the two stages that did work.
 func (r *Runner) Run(ctx context.Context, request Request) (*Manifest, error) {
-	if r.options.Hold != nil {
-		defer r.options.Hold()()
-	}
 	pipeline, entry, err := r.pipeline(request.PipelineID)
 	if err != nil {
 		return nil, err
@@ -178,6 +197,18 @@ func (r *Runner) Run(ctx context.Context, request Request) (*Manifest, error) {
 	steps, err := r.resolveSteps(pipeline)
 	if err != nil {
 		return nil, err
+	}
+	// The toolchains are held, and their programs frozen, before any of them
+	// is asked anything: every stage of this build runs the version that was
+	// active now, even if an update switches the toolchain between QBSP and
+	// VIS (01_NEW_368 §2).
+	pins, release, err := r.pinTools(steps)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	if r.options.Hold != nil {
+		defer r.options.Hold()()
 	}
 
 	// Before a directory is created or a byte is downloaded: a build that
@@ -294,7 +325,7 @@ func (r *Runner) Run(ctx context.Context, request Request) (*Manifest, error) {
 			_ = manifest.Save(dir)
 			r.options.Announce(manifest)
 		}
-		step, err := r.runStep(ctx, request, layout, resolved, wires, manifest, started)
+		step, err := r.runStep(ctx, request, layout, resolved, wires, manifest, pins, started)
 		manifest.Steps[i] = step
 		if saveErr := manifest.Save(dir); saveErr != nil {
 			return r.unrecorded(manifest, saveErr)
@@ -717,6 +748,86 @@ func (r *Runner) tools(steps []profile.ResolvedStep) []ToolRecord {
 	return records
 }
 
+// pinTools takes the pipeline's toolchain lease and freezes the programs of
+// every tool profile its steps use.
+func (r *Runner) pinTools(steps []profile.ResolvedStep) (map[string]pinnedTool, func(), error) {
+	var ids []string
+	seen := map[string]bool{}
+	for _, resolved := range steps {
+		if id := resolved.Profile.Meta.ID; !seen[id] {
+			seen[id] = true
+			ids = append(ids, id)
+		}
+	}
+	var lease ToolLease
+	if r.options.Lease != nil {
+		var err error
+		if lease, err = r.options.Lease(ids); err != nil {
+			return nil, nil, err
+		}
+	}
+	release := func() {
+		if lease != nil {
+			lease.Release()
+		}
+	}
+	pins := map[string]pinnedTool{}
+	var dirs []string
+	for _, id := range ids {
+		local, bound := r.binding(id)
+		if !bound || len(local.Executables) == 0 {
+			continue
+		}
+		pin := pinnedTool{executables: map[string]string{}, digests: map[string]string{}}
+		for name, path := range local.Executables {
+			pin.executables[name] = path
+			if digest, _, err := digestFile(path); err == nil {
+				pin.digests[name] = digest
+			}
+		}
+		if local.Managed != nil && local.Managed.Dir != "" {
+			dirs = append(dirs, local.Managed.Dir)
+		}
+		pins[id] = pin
+	}
+	if lease != nil {
+		err := lease.Pin(dirs)
+		if err == nil {
+			err = lease.AddStore(r.options.Service.Store().Root())
+		}
+		if err != nil {
+			release()
+			return nil, nil, fmt.Errorf("build: recording the toolchains this build uses: %w", err)
+		}
+	}
+	return pins, release, nil
+}
+
+// apply makes a stage run the frozen programs, and refuses it when one of
+// them is no longer the file that was frozen.
+func (p pinnedTool) apply(request *job.Request) error {
+	if p.executables == nil {
+		return nil
+	}
+	if request.Executables == nil {
+		request.Executables = map[string]string{}
+	}
+	for name, path := range p.executables {
+		if _, overridden := request.Executables[name]; !overridden {
+			request.Executables[name] = path
+		}
+		want, known := p.digests[name]
+		if !known || request.Executables[name] != path {
+			continue
+		}
+		if got, _, err := digestFile(path); err != nil || got != want {
+			return failure.As(failure.ToolUnverified, fmt.Errorf(
+				"%s (%s) is not the program this build started with: it changed or was removed while the build ran", name, path))
+		}
+	}
+	return nil
+}
+
 func (r *Runner) binding(profileID string) (binding.LocalBinding, bool) {
 	if r.options.Bindings == nil {
 		return binding.LocalBinding{}, false
@@ -799,7 +910,7 @@ func (r *Runner) stageArguments(pipelineID, stepID string) []string {
 }
 
 // runStep submits one step and waits for it.
-func (r *Runner) runStep(ctx context.Context, request Request, layout layout, resolved profile.ResolvedStep, wires map[string]wire, manifest *Manifest, started func(Step)) (Step, error) {
+func (r *Runner) runStep(ctx context.Context, request Request, layout layout, resolved profile.ResolvedStep, wires map[string]wire, manifest *Manifest, pins map[string]pinnedTool, started func(Step)) (Step, error) {
 	step := Step{
 		ID:         resolved.Step.ID,
 		Title:      resolved.Step.Title,
@@ -813,6 +924,9 @@ func (r *Runner) runStep(ctx context.Context, request Request, layout layout, re
 
 	jobRequest, options, inputs, err := r.stepRequest(request, layout, resolved, wires)
 	step.Options, step.Inputs = options, inputs
+	if err == nil {
+		err = pins[jobRequest.ProfileID].apply(&jobRequest)
+	}
 	if err != nil {
 		step.Error, step.FailureClass = err.Error(), failure.Of(err)
 		return step, err

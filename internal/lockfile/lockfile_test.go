@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sync"
@@ -269,4 +270,43 @@ func contains(haystack, needle string) bool {
 			}
 			return false
 		}()
+}
+
+// 01_NEW_368: a lock a killed process left is broken at once when its holder
+// is gone and the caller asked for that — and only then. A live holder, and
+// a dead one without the option, still hold it.
+func TestALockWhoseHolderIsGoneIsBrokenOnlyWhenAsked(t *testing.T) {
+	path := guarded(t)
+	host, _ := os.Hostname()
+	dead := exec.Command(os.Args[0], "-test.run=^$")
+	if err := dead.Run(); err != nil {
+		t.Fatal(err)
+	}
+	record, _ := json.Marshal(Holder{SchemaVersion: SchemaVersion, PID: dead.Process.Pid, Host: host, Nonce: "gone", Since: time.Now()})
+	if err := os.WriteFile(PathFor(path), record, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Acquire(path, Options{Timeout: 100 * time.Millisecond}); !errors.Is(err, ErrBusy) {
+		t.Fatalf("without the option the lock was not held: %v", err)
+	}
+	lock, err := Acquire(path, Options{Timeout: time.Second, BreakDeadHolder: true})
+	if err != nil {
+		t.Fatalf("a gone holder's lock was not broken: %v", err)
+	}
+	if broken, ok := lock.BrokeStale(); !ok || broken.Nonce != "gone" {
+		t.Fatalf("the takeover was not reported: %+v %v", broken, ok)
+	}
+	_ = lock.Release()
+	// This process is alive: its lock is never broken for being "dead".
+	held, err := Acquire(path, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Release()
+	live, _ := json.Marshal(Holder{SchemaVersion: SchemaVersion, PID: os.Getppid(), Host: host, Nonce: "live", Since: time.Now()})
+	_ = held.Release()
+	_ = os.WriteFile(PathFor(path), live, 0o600)
+	if _, err := Acquire(path, Options{Timeout: 100 * time.Millisecond, BreakDeadHolder: true}); !errors.Is(err, ErrBusy) {
+		t.Fatalf("a live holder's lock was broken: %v", err)
+	}
 }

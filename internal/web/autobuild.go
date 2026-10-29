@@ -125,9 +125,12 @@ func (s *Server) autobuildStart(entry autobuild.Entry, revision autobuild.Revisi
 	// Companion stopping to be replaced starts no build (NEW_368).
 	release, admitted := s.admission.enter()
 	if !admitted {
-		return "", errUpdating
+		return "", fmt.Errorf("%w: %w", autobuild.ErrNotNow, errUpdating)
 	}
 	defer release()
+	if err := s.toolsSwitching(entry.PipelineID); err != nil {
+		return "", fmt.Errorf("%w: %w", autobuild.ErrNotNow, err)
+	}
 	service, err := s.playService()
 	if err != nil {
 		return "", err

@@ -27,6 +27,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/pathpick"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/q2fixture"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/texturebundle"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/tooluse"
 )
 
 // A whole fixture machine: a backend with one map on it, a toolchain, an
@@ -60,9 +61,20 @@ func TestMain(m *testing.M) {
 			os.Exit(enginefixture.Main(os.Args[2:]))
 		case leakQbspFlag:
 			os.Exit(leakQbspMain(os.Args[2:]))
+		case leaseHelperFlag:
+			os.Exit(leaseHelperMain(os.Args[2:]))
 		}
 	}
-	os.Exit(m.Run())
+	// A build takes a lease in the tools folder (01_NEW_368): never the
+	// person's own one, whatever a test's configuration says.
+	tools, err := os.MkdirTemp("", "aucom-web-tools-")
+	if err != nil {
+		panic(err)
+	}
+	os.Setenv(config.EnvToolsDir, tools)
+	code := m.Run()
+	os.RemoveAll(tools)
+	os.Exit(code)
 }
 
 // buildHelperMain is the fixture compiler: it reads a `.map` and writes a
@@ -981,6 +993,11 @@ func newMachine(t *testing.T) *machine {
 	}
 	t.Cleanup(server.Close)
 	m.server = server
+	registry, err := tooluse.Open(filepath.Join(dir, "tools"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server.SetToolRegistry(registry)
 	return m
 }
 
@@ -1280,6 +1297,9 @@ func (m *machine) restart() *machine {
 
 	next := *m
 	next.server = server
+	if registry, err := m.server.toolRegistry(); err == nil {
+		server.SetToolRegistry(registry)
+	}
 	return &next
 }
 

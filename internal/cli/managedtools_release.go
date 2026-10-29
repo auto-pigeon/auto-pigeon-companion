@@ -13,3 +13,6 @@ func fixtureReleaseSource() (managedtools.Source, bool, error) { return nil, fal
 
 // fixtureFailServe is the fixture build's failure injection; never here.
 func fixtureFailServe(string) bool { return false }
+
+// fixtureSelfUpdateFault is the fixture build's kill injection; never here.
+func fixtureSelfUpdateFault() func(string) error { return nil }

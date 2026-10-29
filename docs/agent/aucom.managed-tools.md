@@ -72,11 +72,26 @@ update belongs to `NEW_368`, which consumes this coordinator and its verificatio
    without it is not shown again in this process, nor for a day. A version seen with other bytes is
    an `IntegrityEvent`, never an install. Suppression is per tool and never shared with the
    Companion's own update.
-7. **Never switch under work.** Each version is its own folder, never changed after its rename.
-   Activation waits until no job's pinned program is in the old folder and no pipeline holds
-   `Server.toolGate` (held by every `build.Runner.Run`), and writes bindings under the gate's
-   exclusive side. The previous version is kept; `prune` removes only what nothing uses, keeping at
-   most three.
+7. **Never switch under work — in ANY process sharing the tools folder (01_NEW_368).** Each
+   version is its own folder, never changed after its rename. `internal/tooluse` is the one owner
+   of the cross-process protocol, in `<tools>/.in-use/` (the folder's canonical path, so two
+   configurations sharing it share it, and two folders never block each other):
+   - every `build.Runner.Run` — server and `companion build run` alike — takes a **use lease**
+     (`build.Options.Lease`, keys `companion` + each managed toolchain of its stages) *before* it
+     asks any program anything, freezes every tool profile's `Executables` with their digests,
+     runs every stage with those paths (`job.Request.Executables`) and refuses a stage whose frozen
+     program changed; the lease is held until `Run` returns;
+   - activation and pruning take the toolchain's **switch gate** and then read the leases; an
+     "Update now" KEEPS the gate while it waits (`Manager.gates`), so new leases wait at most
+     30 s (server) / 2 min (CLI) and are refused retryably (`503 tools_updating`, Auto-build
+     `autobuild.ErrNotNow`: not consumed) — the switch is not starved; the gate is dropped when
+     the intent ends;
+   - liveness is pid + start time against the kernel (`job.ProcessRunning`), a heartbeat where
+     that is unknown. Switching does not wait for a dead lease. Removal does, while a job its
+     writer launched (read from the job store the lease names) still runs as the same process, or
+     cannot be verified, for up to 48 h. Nothing here ever signals a process.
+   The in-process `Server.toolGate`/`Host.Busy` stay as the in-process half. The previous version is
+   kept; `prune` removes only what nothing references, keeping at most three.
 8. **Schedule.** About hourly with jitter, claimed in the state file so a second Companion does not
    check too; a restart does not reset it; failures back off 1, 2, 4 … 60 minutes; `Retry-After` and
    an exhausted rate limit are honoured and shown; a 304 is a successful check (but a list whose
@@ -111,6 +126,22 @@ update belongs to `NEW_368`, which consumes this coordinator and its verificatio
     port) once every defer has run, and puts the old one back if the new one does not serve
     within 90 s. A live fixture candidate that refuses to serve is
     `AUCOM_FIXTURE_FAIL_SERVE=<version>` in an `aucom_fixture_releases` build only.
+
+12. **The self-update transaction is write-ahead and reconciled by bytes (01_NEW_368).** The
+    journal (`aucom.self-update-journal/2`) is written once, before anything moves, with every
+    owned path's old and new SHA-256; nothing during the swap is recorded as done. Forward and
+    reverse passes are idempotent and decide from the files at the path, in `previous/` and
+    `incoming/`; a file that is neither bundle's is never moved (`recovery_needed`).
+    `rolled_back` is written only after every member is read back; otherwise `recovery_needed`
+    (non-terminal): a start then refuses to serve, no new update starts, and nothing kept is
+    removed. `selfupdate recover` finds its bundle from where the program is, so the copy in
+    `previous/` can run it when a Windows rename-aside left no program at the path. A 1.323
+    (`/1`) journal is read, confirmed in its own schema (1.323's updater waits for it), and an
+    interrupted one is undone by file location. The update lock breaks a dead holder at once
+    (`lockfile.Options.BreakDeadHolder`). Abrupt process death is PROVEN (children killed at every
+    boundary, `internal/selfupdate/crash_test.go`); power loss is argued from fsync ordering, not
+    tested. An "Update now" or a close also takes the `companion` switch gate and waits for other
+    processes' leases.
 
 ## Trust, said honestly
 

@@ -30,13 +30,18 @@ type testHost struct {
 	failBind  error
 	verifyErr error
 	verified  int
+	// verifyHold, when set, keeps every version check waiting until closed.
+	verifyHold chan struct{}
 }
 
 func (h *testHost) Verify(ctx context.Context, tool managedtools.Tool, record managedtools.InstallRecord) error {
 	h.mu.Lock()
-	forced := h.verifyErr
+	forced, hold := h.verifyErr, h.verifyHold
 	h.verified++
 	h.mu.Unlock()
+	if hold != nil {
+		<-hold
+	}
 	if forced != nil {
 		return forced
 	}

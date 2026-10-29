@@ -205,6 +205,12 @@ func InspectSelf(executable, version, commit, goos, goarch string) SelfInstall {
 		self.Reason = fmt.Sprintf("this is a development build (version %q), not a release", version)
 		return self
 	}
+	if filepath.Base(filepath.Dir(self.Root)) == ".companion-update" {
+		// The copy an update kept for rollback (internal/selfupdate): it may
+		// run the recovery, and is never itself an installation to update.
+		self.Reason = "this is the copy of the Companion an update kept for rollback, not an installation"
+		return self
+	}
 	if filepath.Clean(filepath.Join(self.Root, filepath.FromSlash(companion))) != filepath.Clean(executable) {
 		self.Reason = "this program is not where a release bundle keeps its Companion"
 		return self
@@ -742,6 +748,12 @@ func (m *Manager) RecordSelfResult(result SelfResult) error {
 		ts := state.Tool(Companion)
 		copied := result
 		ts.SelfLast = &copied
+		if result.Outcome == "recovery_needed" {
+			// The folder is not finished: the choice stays, and the next
+			// attempt first finishes the recovery or refuses (01_NEW_368).
+			ts.Failure = &SetupFailure{Version: result.To, Error: result.Detail, At: result.At, Attempts: 1, NextAttempt: result.At}
+			return nil
+		}
 		ts.Intent, ts.IntentFor = IntentNone, nil
 		if result.Outcome == "updated" {
 			ts.Failure, ts.Dismissed = nil, nil

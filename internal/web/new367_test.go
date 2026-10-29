@@ -53,7 +53,12 @@ func newToolsMachine(t *testing.T) *toolsMachine {
 		t.Fatal(err)
 	}
 	clock := &toolsClock{now: time.Date(2026, 10, 28, 20, 0, 0, 0, time.UTC)}
+	uses, err := m.server.ToolRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	tools, err := managedtools.New(managedtools.Options{
+		Uses:      uses,
 		ToolsRoot: filepath.Join(m.dir, "tools"),
 		StatePath: filepath.Join(m.dir, "config", managedtools.StateFileName),
 		Source:    releases.Source(t),
@@ -67,6 +72,7 @@ func newToolsMachine(t *testing.T) *toolsMachine {
 		t.Fatal(err)
 	}
 	m.server.SetManagedTools(tools)
+	t.Cleanup(tools.Close)
 	return &toolsMachine{machine: m, releases: releases, tools: tools, clock: clock}
 }
 
