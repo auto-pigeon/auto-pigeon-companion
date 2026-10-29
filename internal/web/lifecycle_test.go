@@ -161,6 +161,42 @@ func TestRunningWorkKeepsItAliveSaysSoOnceAndStopsWhenItEnds(t *testing.T) {
 	}
 }
 
+// NEW_368: a program asked what it is, automatically, while the last window
+// closes is waited for — and the Companion still stopped because its window
+// closed, said once, never "the work it kept running for". Mixed with work a
+// person started, it is that work's wait as before.
+func TestAnAutomaticCheckIsDrainedWithoutBecomingTheReasonItStayed(t *testing.T) {
+	var notices []string
+	l, clock := newClockedLifecycle(true, func(summary string) { notices = append(notices, summary) })
+	release, _ := l.acquire("test page", func(ExitCause) {})
+	release("test")
+	clock.Advance(20 * time.Second)
+	work := []ActiveWork{{Kind: "job", ID: "p1", Label: "Check what vis is", State: "running", Automatic: true}}
+	busy := func() []ActiveWork { return work }
+	if _, stop := l.decide(busy); stop {
+		t.Fatal("stopped while a program check was running")
+	}
+	work = nil
+	if cause, stop := l.decide(busy); !stop || cause != ExitUIClosed {
+		t.Fatalf("after the check: stop=%v cause=%q, want ui_closed", stop, cause)
+	}
+	if len(notices) != 0 {
+		t.Fatalf("an automatic check was announced as what it kept running for: %q", notices)
+	}
+
+	l, clock = newClockedLifecycle(true, func(summary string) { notices = append(notices, summary) })
+	release, _ = l.acquire("test page", func(ExitCause) {})
+	release("test")
+	clock.Advance(20 * time.Second)
+	work = []ActiveWork{{Kind: "job", ID: "p1", Label: "Check what vis is", Automatic: true},
+		{Kind: "job", ID: "j1", Label: "Compile — qbsp", State: "running"}}
+	l.decide(busy)
+	work = nil
+	if cause, stop := l.decide(busy); !stop || cause != ExitWorkFinished {
+		t.Fatalf("with a compile as well: stop=%v cause=%q, want work_finished", stop, cause)
+	}
+}
+
 func TestAPageThatComesBackWhileWorkRunsCancelsTheWait(t *testing.T) {
 	l, clock := newClockedLifecycle(true, nil)
 	release, _ := l.acquire("test page", func(ExitCause) {})

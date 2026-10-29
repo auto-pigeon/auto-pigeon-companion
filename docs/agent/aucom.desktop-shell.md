@@ -114,6 +114,12 @@ What binds a task here:
   interactive (`serve --open --interactive`); `companion serve` and
   `--stay-running` never stop because no page is attached. Scripts, harnesses
   and `auto-pigeon-tools` start `serve` and must not start exiting on their own.
+- **Work keeps it running; an automatic check only delays it (`NEW_368`).** After the grace,
+  `ActiveWork` that a person started (a job, build, Build & Run, game, join download) keeps the
+  process up and ends as `work_finished`. A compatibility probe (`ActiveWork.Automatic`, action
+  `compatibility-probe.*`, seconds long, started by setup or start-up) is waited for — cut off, it would
+  be recorded as a failed check — but alone it is never announced and the exit stays `ui_closed`:
+  release acceptance's *interactive close* on a first launch caught the old behaviour.
 - **The lease is the only authority.** One WebSocket per page at
   `GET /api/lifecycle/lease` (`internal/web/lease.go`), counted by
   `internal/web/lifecycle.go`. Never `beforeunload`/`sendBeacon`, and never

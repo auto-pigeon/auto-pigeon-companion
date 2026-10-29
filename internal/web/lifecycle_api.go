@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
@@ -116,7 +117,8 @@ func (s *Server) ActiveWork() []ActiveWork {
 			if j.ProfileID != "" {
 				label += " — " + j.ProfileID
 			}
-			work = append(work, ActiveWork{Kind: kind, ID: j.ID, Label: label, State: string(j.State)})
+			work = append(work, ActiveWork{Kind: kind, ID: j.ID, Label: label, State: string(j.State),
+				Automatic: strings.HasPrefix(j.ActionID, profile.CompatibilityProbeActionPrefix)})
 		}
 	}
 	for _, run := range s.builds.active() {

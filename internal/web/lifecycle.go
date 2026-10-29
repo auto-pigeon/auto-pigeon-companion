@@ -93,6 +93,12 @@ type ActiveWork struct {
 	ID    string `json:"id"`
 	Label string `json:"label"`
 	State string `json:"state,omitempty"`
+	// Automatic is work nobody started: a program asked what it is, at start-up
+	// or after a toolchain install, bounded to seconds. It is waited for — a
+	// check cut off would be recorded as failed — but it is not work the
+	// Companion "kept running for": a window closed during one is still the
+	// window closing (NEW_368).
+	Automatic bool `json:"automatic,omitempty"`
 }
 
 // LifecycleOptions configures a [Lifecycle].
@@ -343,6 +349,15 @@ func (l *Lifecycle) decide(busy func() []ActiveWork) (ExitCause, bool) {
 	var work []ActiveWork
 	if busy != nil {
 		work = busy()
+	}
+	automatic := true
+	for _, item := range work {
+		automatic = automatic && item.Automatic
+	}
+	if len(work) > 0 && automatic {
+		// A few seconds' drain, said nowhere: when it ends, the cause is still
+		// the last window closing.
+		return "", false
 	}
 	if len(work) > 0 {
 		summary := describeWork(work)
