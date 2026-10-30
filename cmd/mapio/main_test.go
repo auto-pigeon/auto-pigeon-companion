@@ -95,7 +95,7 @@ func TestAConversionWritesItsOutputAndReportsIt(t *testing.T) {
 		t.Fatalf("output: %q, %v", written, err)
 	}
 	entries, err := os.ReadDir(out)
-	if err != nil || len(entries) != 1 {
+	if err != nil || len(entries) != 2 || entries[0].Name() != commitLock || entries[1].Name() != "cube.map" {
 		t.Fatalf("the output directory holds %v (%v); a temporary file was left", entries, err)
 	}
 }
@@ -166,22 +166,5 @@ func TestAnUnreadableInputIsNamed(t *testing.T) {
 	code, _, stderr := invoke(t, context.Background(), "convert", "--apmap-to-q1map", "--input", directory, "--output", filepath.Join(directory, "out"))
 	if code != exitFailed || !strings.Contains(stderr, `"reason":"io_error"`) || !strings.Contains(stderr, "not a regular file") {
 		t.Fatalf("exit %d: %s", code, stderr)
-	}
-}
-
-func TestWriteAllLeavesNothingWhenAWriteFails(t *testing.T) {
-	directory := t.TempDir()
-	blocked := filepath.Join(directory, "blocked")
-	if err := os.Mkdir(blocked, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	// A directory where a file must land makes the rename fail after the first file could have gone.
-	err := writeAll(directory, map[string][]byte{blocked: []byte("x")})
-	if err == nil {
-		t.Fatal("writing over a directory succeeded")
-	}
-	entries, err := os.ReadDir(directory)
-	if err != nil || len(entries) != 1 {
-		t.Fatalf("left behind: %v (%v)", entries, err)
 	}
 }

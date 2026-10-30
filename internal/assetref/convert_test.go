@@ -114,7 +114,7 @@ func TestAQuake3APMapIsConvertedByTheQuake3Direction(t *testing.T) {
 	if err := os.WriteFile(apmap, []byte(document), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	runner := &fakeConverter{}
+	runner := &manifestConverter{}
 	sources := map[string]build.SourceRef{"source_map": {AssetType: "map", AssetID: "q3"}}
 	resolved, sources, err := ConvertAPMapInputs(context.Background(), runner, map[string]string{"source_map": apmap}, sources)
 	if err != nil {

@@ -9,9 +9,10 @@
 //	auto-pigeon-mapio protocol --json
 //	auto-pigeon-mapio convert --<direction> --input <file> --output <dir> [--json]
 //
-// Exit 0 is a conversion that wrote its output, 1 a conversion that did not, and 2 an invocation that
-// was wrong. A failed conversion's last stderr line is a terminal record, which is how a supervisor reads
-// the reason without parsing prose.
+// Exit 0 is a conversion that published its whole result, 1 a conversion that did not, and 2 an
+// invocation that was wrong. commit.go says exactly what each of those leaves in the output directory. A
+// failed conversion's last stderr line is a terminal record, which is how a supervisor reads the reason
+// without parsing prose.
 package main
 
 import (
@@ -255,13 +256,16 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	}
 
 	outputPath := filepath.Join(*output, result.OutputName)
-	files := map[string][]byte{outputPath: converted}
+	files := []resultFile{{Name: result.OutputName, Data: converted}}
 	manifestPath := ""
 	if result.ManifestName != "" {
 		manifestPath = filepath.Join(*output, result.ManifestName)
-		files[manifestPath] = result.ManifestBytes
+		files = append(files, resultFile{Name: result.ManifestName, Data: result.ManifestBytes})
 	}
-	if err := writeAll(*output, files); err != nil {
+	if err := commitResult(ctx, *output, files); err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return terminal(stderr, string(mapio.RefusalOf(err).Code), "the conversion was stopped before its output was published", err.Error())
+		}
 		return terminal(stderr, "io_error", "the output could not be written", err.Error())
 	}
 
@@ -299,40 +303,6 @@ func readInput(path string) ([]byte, error) {
 		return nil, fmt.Errorf("%s is %d bytes; this converter reads up to %d", path, info.Size(), int64(maxInputBytes))
 	}
 	return os.ReadFile(path)
-}
-
-// writeAll writes every file or none. Each is written to a temporary name in the output directory and
-// renamed only when all are complete, so a run stopped part-way leaves no `.map` a compiler could read
-// and no manifest describing bytes that were never written.
-func writeAll(directory string, files map[string][]byte) error {
-	if err := os.MkdirAll(directory, 0o755); err != nil {
-		return err
-	}
-	temporary := make(map[string]string, len(files))
-	defer func() {
-		for _, path := range temporary {
-			_ = os.Remove(path)
-		}
-	}()
-	for target, data := range files {
-		file, err := os.CreateTemp(directory, ".mapio-*")
-		if err != nil {
-			return err
-		}
-		temporary[target] = file.Name()
-		_, writeErr := file.Write(data)
-		closeErr := file.Close()
-		if err := errors.Join(writeErr, closeErr, os.Chmod(file.Name(), 0o644)); err != nil {
-			return err
-		}
-	}
-	for target, path := range temporary {
-		if err := os.Rename(path, target); err != nil {
-			return err
-		}
-		delete(temporary, target)
-	}
-	return nil
 }
 
 // terminal writes the record a supervisor reads, as the last stderr line, and fails the run.

@@ -61,8 +61,30 @@ is exactly the assumption a rebuilt or forked converter breaks.
 `cmd/mapio`'s contract is its protocol document: `version`, `protocol --json` and
 `convert --<direction> --input <file> --output <dir> [--json]`. Exit 0 wrote the output, 1 did not, 2 was
 a wrong invocation. A failed conversion's last stderr line is `MAPIO-TERMINAL/1.0 {reason, message, detail}`,
-and its reasons are `go/mapio`'s refusal codes plus `io_error`. It validates always, writes every file or
-none, and takes no flag that turns validation off.
+and its reasons are `go/mapio`'s refusal codes plus `io_error`. It validates always and takes no flag that
+turns validation off.
+
+**A result is published as one, and what that means is exact (`NEW_371A`, `cmd/mapio/commit.go`).** A
+Quake III result is two files, and renaming each atomically does not make the pair atomic: at `1229f08`,
+158 of 200 refused commits left a `.map` published with no manifest. Now:
+
+- **exit 0**: every file is at its path, read back and matching; a manifest describes the bytes beside it.
+- **a returned I/O error or a cancellation at any boundary**: what stood at those paths stands there again,
+  byte for byte, and unrelated files in `--output` are untouched. A rollback that cannot finish says so and
+  names the `.mapio-commit-*` folder holding the previous files.
+- **process death**: there is NO cross-file atomicity, and none is claimed. The write-ahead journal in
+  `.mapio-commit-*` is what the next conversion into that directory undoes, before anything else; until
+  then the manifest is published last and names the `.map` by digest, so a reader refuses the state
+  (`assetref.conversionManifest`, and a Quake III `.map` with no manifest is refused outright). Killed at
+  every boundary in `TestAProcessKilledAtAnyStepIsUndoneByTheNextRun`.
+- **power loss** is not promised: the flush order is an argument, not a test, and Windows cannot flush a
+  directory.
+
+The commit point is one step, removing the journal, and a cancellation that arrives after it changes
+nothing because the result is whole. `.mapio-commit.lock` stays in the output directory on purpose: it
+serialises conversions sharing a directory (bounded wait, then refused), and removing a lock file is how
+two processes end up holding two locks (`internal/oslock`). A directory whose file system has no lock is
+refused. `--output` itself is never replaced or emptied.
 
 ### Offline is a different authority, never a weaker check
 

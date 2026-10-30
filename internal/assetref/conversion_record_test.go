@@ -17,14 +17,20 @@ import (
 // manifestConverter is the extractor's Quake III direction: a `.map`, and
 // beside it a conversion manifest naming the digest of what it read and of
 // what it wrote. `wrong` makes the manifest describe other bytes.
-type manifestConverter struct{ wrong bool }
+type manifestConverter struct {
+	wrong bool
+	// noManifest writes the `.map` and stops, as a process killed between the two would have.
+	noManifest bool
+	args       []string
+}
 
 func digestOf(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
 }
 
-func (m *manifestConverter) Run(_ context.Context, _ string, args ...string) ([]byte, error) {
+func (m *manifestConverter) Run(_ context.Context, subcommand string, args ...string) ([]byte, error) {
+	m.args = append([]string{subcommand}, args...)
 	var input, output string
 	for i := 0; i+1 < len(args); i++ {
 		switch args[i] {
@@ -42,6 +48,9 @@ func (m *manifestConverter) Run(_ context.Context, _ string, args ...string) ([]
 	written := []byte("{\n\"classname\" \"worldspawn\"\n}\n")
 	if err := os.WriteFile(filepath.Join(output, stem+".map"), written, 0o600); err != nil {
 		return nil, err
+	}
+	if m.noManifest {
+		return []byte(`{}`), nil
 	}
 	sourceDigest := digestOf(source)
 	if m.wrong {
@@ -117,6 +126,21 @@ func TestAConversionManifestAboutOtherBytesIsRefused(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "describes an APMap with digest") {
 		t.Errorf("the refusal does not say what disagreed: %v", err)
+	}
+}
+
+// A Quake III `.map` with no manifest beside it is half a result: the manifest is published last, so
+// its absence is what an interrupted publication looks like, and no exit code makes it whole.
+func TestAQuake3MapWithNoManifestIsRefused(t *testing.T) {
+	stage := t.TempDir()
+	apmap := filepath.Join(stage, "room.apmap")
+	if err := os.WriteFile(apmap, []byte(`{"game":"quake3"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, _, _, err := ConvertAPMapInputsRecorded(context.Background(), &manifestConverter{noManifest: true},
+		map[string]string{"source_map": apmap}, nil)
+	if err == nil || failure.Of(err) != failure.ConversionRefused || !strings.Contains(err.Error(), "no manifest") {
+		t.Fatalf("err = %v (class %q)", err, failure.Of(err))
 	}
 }
 

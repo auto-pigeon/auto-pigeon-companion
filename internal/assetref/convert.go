@@ -159,6 +159,12 @@ func convertAPMapInputs(ctx context.Context, runner converter.Runner, resolved m
 		if err != nil {
 			return nil, nil, nil, failure.As(failure.ConversionRefused, fmt.Errorf("the input %q: %w", name, err))
 		}
+		// The Quake III direction always writes one, and publishes it last, so a `.map` without it
+		// is half a result, however the run ended.
+		if recorded == nil && header.Game == "quake3" {
+			return nil, nil, nil, failure.As(failure.ConversionRefused, fmt.Errorf(
+				"the input %q: the conversion wrote %s and no manifest describing it", name, filepath.Base(target)))
+		}
 		conversion.Manifest = recorded
 		conversions[name] = conversion
 		if sources != nil {
@@ -203,7 +209,7 @@ const conversionManifestSuffix = ".q3map-manifest.json"
 // wrote. Both are compared with the files this program holds: a manifest left
 // over from another conversion in the same directory, describing other bytes,
 // would be a record of the wrong map, and that is refused rather than kept.
-// A direction that writes no manifest (Quake 1, Quake II) returns nil.
+// A file that is not there returns nil, and [convertAPMapInputs] decides whether the direction owed one.
 func conversionManifest(path, sourceDigest, outputDigest string) (*build.ConversionManifest, error) {
 	raw, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {

@@ -1452,7 +1452,7 @@ $ AUCOM_MAPIO_BINARY=$PWD/auto-pigeon-mapio ./companion converter convert room.a
 Quake `.map`, Worldcraft `.rmf` and APMap, using the
 [`go/mapio`](https://github.com/auto-pigeon/auto-pigeon-libraries/tree/main/go/mapio) library, whose README
 has the full conversion matrix and its known limitations. It validates every APMap it reads or writes, and it
-writes all of its output or none:
+publishes a result whole:
 
 ```console
 $ auto-pigeon-mapio version
@@ -1471,8 +1471,14 @@ out/e1m1.apmap
 $ auto-pigeon-mapio protocol --json     # what it is, its licences, the directions and APMap versions it speaks
 ```
 
-It exits 0 when it wrote its output, 1 when a conversion was refused and 2 for a wrong command line. A
-refusal's last line on stderr is a `MAPIO-TERMINAL/1.0` record naming the reason, for a program to read.
+It exits 0 when it published its whole result, 1 when it did not and 2 for a wrong command line. A failure's
+last line on stderr is a `MAPIO-TERMINAL/1.0` record naming the reason, for a program to read.
+
+Exit 1 leaves whatever was in `--output` as it was: a failed or cancelled run puts an earlier `.map` and its
+manifest back, and it never touches your other files. If the program is killed part-way, a `.mapio-commit-*`
+folder is left in the output directory, and the `.map` beside it may not match its manifest until you run any
+conversion into that directory, which undoes the interrupted one first. Conversions into one directory take
+turns; `.mapio-commit.lock` is how, and it stays there.
 
 To work on `go/mapio` and this repository together, use a `go.work` you do not commit:
 
