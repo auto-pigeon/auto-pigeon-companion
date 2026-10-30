@@ -15,9 +15,53 @@ import (
 
 // NEW_365: the sampler against real processes the executor started. Bounds,
 // not exact figures — a CI machine's scheduler decides how busy "busy" is —
-// and one comparison with an independent reading of the same pids.
+// and comparisons with independent readings of the same pids.
 
 const mib = int64(1) << 20
+
+// cpuWindow is each process's CPU time at the start and end of the busy window, read from
+// /proc/<pid>/stat by the test and not by the sampler.
+type cpuWindow struct {
+	firstAt, lastAt time.Time
+	first, last     map[int]time.Duration
+}
+
+func (w *cpuWindow) read(t *testing.T, pids []int) {
+	t.Helper()
+	now := map[int]time.Duration{}
+	for _, pid := range pids {
+		raw, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+		if err != nil {
+			return
+		}
+		usage, err := parseUsageStat(string(raw), int64(os.Getpagesize()))
+		if err != nil {
+			t.Fatalf("reading /proc/%d/stat: %v", pid, err)
+		}
+		now[pid] = usage.cpu
+	}
+	if w.first == nil {
+		w.first, w.firstAt = now, time.Now()
+		return
+	}
+	w.last, w.lastAt = now, time.Now()
+}
+
+// busiestProcess is the percentage of one CPU the busier of the two used over the window.
+func (w *cpuWindow) busiestProcess(t *testing.T) float64 {
+	t.Helper()
+	elapsed := w.lastAt.Sub(w.firstAt)
+	if w.last == nil || elapsed < 500*time.Millisecond {
+		t.Fatalf("the independent CPU window is %s long, too short to mean anything", elapsed)
+	}
+	var busiest float64
+	for pid, end := range w.last {
+		used := float64(end-w.first[pid]) / float64(elapsed) * 100
+		t.Logf("process %d used %.0f%% over %s", pid, used, elapsed.Round(time.Millisecond))
+		busiest = max(busiest, used)
+	}
+	return busiest
+}
 
 func liveOf(t *testing.T, h *harness, id string) *LiveView {
 	t.Helper()
@@ -65,6 +109,7 @@ func TestTheSamplerMeasuresTheToolsOwnTreeBusyThenQuiet(t *testing.T) {
 
 	var busiest, quietest float64 = 0, 1e9
 	var busyRSS int64
+	window := &cpuWindow{}
 	var lastOutputDuringQuiet []time.Time
 	var sampledDuringQuiet []time.Time
 	compared := false
@@ -83,6 +128,9 @@ func TestTheSamplerMeasuresTheToolsOwnTreeBusyThenQuiet(t *testing.T) {
 		}
 		stdout := h.mustLogLive(tree.ID)
 		quiet := strings.Contains(stdout, "burned")
+		if pids := pidsOf(stdout); !quiet && len(pids) == 2 {
+			window.read(t, pids)
+		}
 		if r.State == ResourcesLive && r.CPUPercent != nil {
 			if !quiet && *r.CPUPercent > busiest {
 				busiest = *r.CPUPercent
@@ -118,14 +166,13 @@ func TestTheSamplerMeasuresTheToolsOwnTreeBusyThenQuiet(t *testing.T) {
 	h.waitFor(single.ID)
 
 	t.Logf("busiest %.0f%%, quietest %.0f%%, busy RSS %d MiB", busiest, quietest, busyRSS/mib)
-	// More than ONE of the two processes can use (workers × 100%) proves the
-	// reading sums the tree. The old bound, 60% of both processes' ideal
-	// (240%), failed twice on 4-vCPU hosted runners where the other job of
-	// this test competes for the same cores (211% and 220%, NEW_368 CI runs
-	// 40781568388 and 40781568422) while still showing both processes counted.
-	want := float64(workers)*100 + 5
-	if busiest < want {
-		t.Errorf("busiest reading %.0f%%, want more than %.0f%% — what one process with %d busy goroutines can use — for the two processes summed", busiest, want, workers)
+	// More than EITHER process used by itself proves the reading sums the tree, however busy the machine
+	// is. A fixed number of cores could not: on a 4-vCPU hosted runner with every package under test the
+	// two processes shared two cores (201% and 202%, NEW_371A release run 41132624992), so what they
+	// could use said nothing about what the sampler counted.
+	alone := window.busiestProcess(t)
+	if busiest < alone*1.25 {
+		t.Errorf("busiest reading %.0f%%, and one of the two processes used %.0f%% alone: the reading did not sum them", busiest, alone)
 	}
 	if quietest > 25 {
 		t.Errorf("quietest reading %.0f%% while both processes slept", quietest)
