@@ -392,3 +392,70 @@ func TestAnConverterBesideTheCompanionIsNotLookedFor(t *testing.T) {
 		t.Fatalf("status = %+v; want unavailable, naming %s", status, filepath.Join(converter.DependenciesDir, "auto-pigeon-mapio"))
 	}
 }
+
+// An older updater writes a migration bridge's converter as a plain file, because its schema names only
+// the extractor as a program. The bridge's own manifest vouches for the bytes, so the Companion puts the
+// bit back; nothing else ever gets that treatment.
+func TestABridgesConverterGetsItsExecuteBitBackAndNothingElseDoes(t *testing.T) {
+	write := func(t *testing.T, b *bundle, schema, kind, digest string) {
+		t.Helper()
+		document := map[string]any{"schema_version": schema, "members": []map[string]string{
+			{"path": converter.DependenciesDir + "/auto-pigeon-mapio", "product": "auto-pigeon-mapio", "sha256": digest}}}
+		if kind != "" {
+			document["migration_bridge"] = map[string]string{"kind": kind}
+		}
+		data, err := json.Marshal(document)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(b.deps(), converter.BundleManifestName), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(b.path(), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	digestOf := func(t *testing.T, b *bundle) string {
+		t.Helper()
+		digest, err := converter.FileDigest(b.path())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return digest
+	}
+
+	t.Run("a bridge", func(t *testing.T) {
+		b := newBundle(t, protocolAnswer("1.0"), "")
+		write(t, b, "aucom.bundle-manifest/1.2", converter.BridgeKind, digestOf(t, b))
+		resolver := &converter.Resolver{Dir: b.dir}
+		runner, err := resolver.Resolve(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !runner.Provenance().Verified {
+			t.Fatalf("provenance: %+v", runner.Provenance())
+		}
+	})
+	for name, refused := range map[string]struct{ schema, kind, digest string }{
+		"an ordinary bundle":     {"aucom.bundle-manifest/2.0", "", ""},
+		"another bridge kind":    {"aucom.bundle-manifest/1.2", "something/else", ""},
+		"bytes it does not list": {"aucom.bundle-manifest/1.2", converter.BridgeKind, "sha256:" + strings.Repeat("0", 64)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			b := newBundle(t, protocolAnswer("1.0"), "")
+			digest := refused.digest
+			if digest == "" {
+				digest = digestOf(t, b)
+			}
+			write(t, b, refused.schema, refused.kind, digest)
+			resolver := &converter.Resolver{Dir: b.dir}
+			if _, err := resolver.Resolve(context.Background()); err == nil {
+				t.Fatal("a file that is not executable was run")
+			}
+			info, err := os.Stat(b.path())
+			if err != nil || info.Mode().Perm() != 0o644 {
+				t.Fatalf("its mode changed: %v %v", info.Mode(), err)
+			}
+		})
+	}
+}

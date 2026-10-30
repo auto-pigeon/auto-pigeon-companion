@@ -181,6 +181,7 @@ func (r *Resolver) Resolve(ctx context.Context) (*ProcessRunner, error) {
 	if err != nil {
 		return nil, err
 	}
+	r.restoreBridgeMode(path)
 	if err := checkExecutable(path); err != nil {
 		return nil, fmt.Errorf("%w (%s)", ErrNoConverter, lookedFor(path, err))
 	}
@@ -206,6 +207,32 @@ func (r *Resolver) Resolve(ctx context.Context) (*ProcessRunner, error) {
 	return runner, nil
 }
 
+// restoreBridgeMode gives a migration bridge's converter back its execute bit. An older updater marks
+// executable only the programs its own schema names, so it writes this one as a plain file, and nothing
+// else will ever put the bit back. Only after the bytes are the ones the bridge's manifest lists; any
+// failure leaves the file as it is, for checkExecutable to report.
+func (r *Resolver) restoreBridgeMode(path string) {
+	if runtime.GOOS == "windows" {
+		return
+	}
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Mode()&0o111 != 0 {
+		return
+	}
+	manifestPath, _ := bundleManifestFor(path)
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return
+	}
+	var manifest bundleManifest
+	if json.Unmarshal(data, &manifest) != nil || manifest.Bridge == nil || manifest.Bridge.Kind != BridgeKind {
+		return
+	}
+	if digest, listed, err := r.listedDigest(path); err == nil && listed != "" && digest == listed {
+		_ = os.Chmod(path, 0o755)
+	}
+}
+
 // lookedFor says where the bundled converter was expected, and — when a file is
 // there but cannot be run — why it was not used.
 func lookedFor(path string, err error) string {
@@ -221,8 +248,14 @@ func mismatch(path, listed, digest string) string {
 		"converter this release shipped, and it is not run", path, digest, listed)
 }
 
+// BridgeKind names a migration bridge's manifest (ADR-0011).
+const BridgeKind = "aucom.migration-bridge/1"
+
 // bundleManifest is the part of build/bundle-manifest.py's document read here.
 type bundleManifest struct {
+	Bridge *struct {
+		Kind string `json:"kind"`
+	} `json:"migration_bridge"`
 	Members []struct {
 		Path    string `json:"path"`
 		Product string `json:"product"`

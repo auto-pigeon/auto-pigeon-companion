@@ -1,0 +1,27 @@
+{
+  "schema": "aucom.migration-bridge-pins/1",
+  "comment": "The published release a migration bridge takes its historical extractor from (build/migration-bridge.py, ADR-0011). v1.336 is the newest release an older updater can be running. Every value is read from that release's immutable assets. macOS is absent because a macOS application is replaced by hand.",
+  "legacy": {
+    "version": "1.336",
+    "tag": "v1.336",
+    "commit": "3dc58ebea7b6c828793085f6eef2f32727d16dcf",
+    "release_manifest_sha256": "sha256:61774a384401b89ec2f50948985efca7ccbd20fd97e69d525eb89351c3146d9e",
+    "targets": {
+      "linux-amd64": {
+        "archive": "auto-pigeon-companion-1.336-linux-amd64.zip",
+        "sha256": "sha256:1dd17f5769e7f424ccfecb1f89d81584c803b89c62d0b47c23a60af13ef35428",
+        "extractor_sha256": "sha256:f375eb7d485047a189b22262ba53be659bcbbdceb0087247651e4ebe32be1a72"
+      },
+      "linux-arm64": {
+        "archive": "auto-pigeon-companion-1.336-linux-arm64.zip",
+        "sha256": "sha256:69048c649f92de529ed9307f83642dd1d295edc87909ac1d4f5298de1943c0ed",
+        "extractor_sha256": "sha256:2ff8ab8aea822d02e8830505aafd760f48f75b7f7d8bcb7ca4b5fd0de9edd679"
+      },
+      "windows-amd64": {
+        "archive": "auto-pigeon-companion-1.336-windows-amd64.zip",
+        "sha256": "sha256:b213e8533fdcc1c23e600edddcf4f4a7f632877f9e2d03f489bdaebea3f58cc9",
+        "extractor_sha256": "sha256:e5436e2b4cc6a6f6fdb8c26b5b9cf9dbfe9674348ee6c8f7e54d2a9cf21a866f"
+      }
+    }
+  }
+}

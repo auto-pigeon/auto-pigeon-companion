@@ -67,6 +67,16 @@ type SelfInstall struct {
 	// to Root, plus the manifest itself: the only files an update replaces.
 	Members          []BundleMember `json:"-"`
 	ConverterVersion string         `json:"converter_version,omitempty"`
+	// Bridge is set when this is a migration bridge: the extractor its manifest lists only so that an
+	// older updater would take the bundle. Nothing runs it.
+	Bridge *BridgeExtractor `json:"bridge,omitempty"`
+}
+
+// BridgeExtractor is the historical extractor a migration bridge carries.
+type BridgeExtractor struct {
+	Path    string `json:"path"`
+	SHA256  string `json:"sha256"`
+	Version string `json:"version"`
 }
 
 // BundleMember is one file of a release bundle.
@@ -126,22 +136,97 @@ func parseBundleManifest(raw []byte, version, platform string) (*bundleManifest,
 	if err := json.Unmarshal(raw, &manifest); err != nil {
 		return nil, nil, fmt.Errorf("its %s is not JSON: %v", BundleManifestName, err)
 	}
+	if !contains(Self.ArchiveSchemas, manifest.Schema) {
+		return nil, nil, fmt.Errorf("its %s is %q, which this Companion cannot read", BundleManifestName, manifest.Schema)
+	}
+	members, err := checkBundle(&manifest, version, platform)
+	if err != nil {
+		return nil, nil, err
+	}
+	return &manifest, members, nil
+}
+
+// A migration bridge (ADR-0011) carries this Companion in a bundle an older updater can still read. That
+// reader wants schema 1.2 and an extractor, so a bridge has both, truthfully: the extractor is the
+// historical executable, listed under its own name, and the converter this Companion actually runs is
+// listed beside it. It is read in its own shape and only about the bundle this process runs from: a
+// download of this shape is refused like any schema this build does not take, so nothing updates TO a
+// bridge from here, and plain 1.2 bundles, which are other Companions' own, are not read at all.
+const (
+	bridgeBundleSchema = "aucom.bundle-manifest/1.2"
+	bridgeKind         = "aucom.migration-bridge/1"
+)
+
+type bridgeManifest struct {
+	bundleManifest
+	Extractor *bundleConverter `json:"extractor"`
+	Bridge    *struct {
+		Kind string `json:"kind"`
+	} `json:"migration_bridge"`
+}
+
+// parseBridgeManifest is [parseBundleManifest] for a migration bridge's own shape.
+func parseBridgeManifest(raw []byte, version, platform string) (*bundleManifest, []BundleMember, *BridgeExtractor, error) {
+	var manifest bridgeManifest
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		return nil, nil, nil, fmt.Errorf("its %s is not JSON: %v", BundleManifestName, err)
+	}
+	switch {
+	case manifest.Schema != bridgeBundleSchema:
+		return nil, nil, nil, fmt.Errorf("its %s is %q, which is not a migration bridge", BundleManifestName, manifest.Schema)
+	case manifest.Bridge == nil || manifest.Bridge.Kind != bridgeKind:
+		return nil, nil, nil, fmt.Errorf("its %s is an older release's, and not a migration bridge", BundleManifestName)
+	case manifest.Extractor == nil || manifest.Extractor.File == "":
+		return nil, nil, nil, fmt.Errorf("its %s is a migration bridge that names no extractor", BundleManifestName)
+	}
+	members, err := checkBundle(&manifest.bundleManifest, version, platform)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	for _, member := range manifest.Members {
+		if member.Path != manifest.Extractor.File {
+			continue
+		}
+		if member.Product != "auto-pigeon-extractor" || member.Version != manifest.Extractor.Version {
+			break
+		}
+		digest, _ := strings.CutPrefix(member.SHA256, "sha256:")
+		for index := range members {
+			members[index].Executable = members[index].Executable || members[index].Path == member.Path
+		}
+		return &manifest.bundleManifest, members, &BridgeExtractor{Path: member.Path, SHA256: digest, Version: member.Version}, nil
+	}
+	return nil, nil, nil, fmt.Errorf("its %s does not list the extractor %s %s", BundleManifestName, manifest.Extractor.File, manifest.Extractor.Version)
+}
+
+// parseOwnBundle reads the manifest beside the running program, in whichever shape it is.
+func parseOwnBundle(raw []byte, version, platform string) (*bundleManifest, []BundleMember, *BridgeExtractor, error) {
+	var head struct {
+		Schema string `json:"schema_version"`
+	}
+	if err := json.Unmarshal(raw, &head); err == nil && head.Schema == bridgeBundleSchema {
+		return parseBridgeManifest(raw, version, platform)
+	}
+	manifest, members, err := parseBundleManifest(raw, version, platform)
+	return manifest, members, nil, err
+}
+
+// checkBundle is what every bundle manifest must be, whichever shape it came in.
+func checkBundle(manifest *bundleManifest, version, platform string) ([]BundleMember, error) {
 	manifestPath, companion := BundleLayout(platform)
 	switch {
-	case !contains(Self.ArchiveSchemas, manifest.Schema):
-		return nil, nil, fmt.Errorf("its %s is %q, which this Companion cannot read", BundleManifestName, manifest.Schema)
 	case manifest.Product != companionProduct:
-		return nil, nil, fmt.Errorf("its %s describes %q", BundleManifestName, manifest.Product)
+		return nil, fmt.Errorf("its %s describes %q", BundleManifestName, manifest.Product)
 	case manifest.Version != version:
-		return nil, nil, fmt.Errorf("its %s describes version %s, not %s", BundleManifestName, manifest.Version, version)
+		return nil, fmt.Errorf("its %s describes version %s, not %s", BundleManifestName, manifest.Version, version)
 	case manifest.Platform != platform:
-		return nil, nil, fmt.Errorf("it is a %s bundle and this computer needs %s", manifest.Platform, platform)
+		return nil, fmt.Errorf("it is a %s bundle and this computer needs %s", manifest.Platform, platform)
 	case manifest.Companion != companion:
-		return nil, nil, fmt.Errorf("its %s names %q as the Companion; a %s bundle has it at %q", BundleManifestName, manifest.Companion, platform, companion)
+		return nil, fmt.Errorf("its %s names %q as the Companion; a %s bundle has it at %q", BundleManifestName, manifest.Companion, platform, companion)
 	case len(manifest.Members) == 0:
-		return nil, nil, fmt.Errorf("its %s lists no files", BundleManifestName)
+		return nil, fmt.Errorf("its %s lists no files", BundleManifestName)
 	case manifest.Converter == nil || manifest.Converter.File == "":
-		return nil, nil, fmt.Errorf("its %s names no converter: a Companion without one cannot convert a map", BundleManifestName)
+		return nil, fmt.Errorf("its %s names no converter: a Companion without one cannot convert a map", BundleManifestName)
 	}
 	var members []BundleMember
 	seen := map[string]bool{}
@@ -149,13 +234,13 @@ func parseBundleManifest(raw []byte, version, platform string) (*bundleManifest,
 		digest, _ := strings.CutPrefix(member.SHA256, "sha256:")
 		switch {
 		case acquire.CheckRelativePath(member.Path) != nil:
-			return nil, nil, fmt.Errorf("its %s names %q", BundleManifestName, member.Path)
+			return nil, fmt.Errorf("its %s names %q", BundleManifestName, member.Path)
 		case member.Path == manifestPath:
-			return nil, nil, fmt.Errorf("its %s lists itself", BundleManifestName)
+			return nil, fmt.Errorf("its %s lists itself", BundleManifestName)
 		case seen[strings.ToLower(member.Path)]:
-			return nil, nil, fmt.Errorf("its %s names %s twice", BundleManifestName, member.Path)
+			return nil, fmt.Errorf("its %s names %s twice", BundleManifestName, member.Path)
 		case !hexDigest.MatchString(digest) || member.Size < 0:
-			return nil, nil, fmt.Errorf("its %s gives no SHA-256 or size for %s", BundleManifestName, member.Path)
+			return nil, fmt.Errorf("its %s gives no SHA-256 or size for %s", BundleManifestName, member.Path)
 		}
 		seen[strings.ToLower(member.Path)] = true
 		executable := member.Path == companion || member.Path == manifest.Converter.File ||
@@ -172,12 +257,12 @@ func parseBundleManifest(raw []byte, version, platform string) (*bundleManifest,
 		}
 	}
 	if !companionListed {
-		return nil, nil, fmt.Errorf("its %s does not list the Companion %s", BundleManifestName, companion)
+		return nil, fmt.Errorf("its %s does not list the Companion %s", BundleManifestName, companion)
 	}
 	if !converterListed {
-		return nil, nil, fmt.Errorf("its %s does not list the converter %s %s", BundleManifestName, manifest.Converter.File, manifest.Converter.Version)
+		return nil, fmt.Errorf("its %s does not list the converter %s %s", BundleManifestName, manifest.Converter.File, manifest.Converter.Version)
 	}
-	return &manifest, members, nil
+	return members, nil
 }
 
 // InspectSelf decides what kind of installation this process runs from. It
@@ -219,11 +304,12 @@ func InspectSelf(executable, version, commit, goos, goarch string) SelfInstall {
 		self.Reason = "there is no readable " + BundleManifestName + " beside this program: " + err.Error()
 		return self
 	}
-	manifest, members, err := parseBundleManifest(raw, version, platform)
+	manifest, members, bridge, err := parseOwnBundle(raw, version, platform)
 	if err != nil {
 		self.Reason = "the bundle beside this program is not a release bundle: " + err.Error()
 		return self
 	}
+	self.Bridge = bridge
 	for _, member := range members {
 		if member.Path != companion {
 			continue

@@ -505,3 +505,111 @@ func TestTheCompanionRestartWaitsForAToolchainUpdateInProgress(t *testing.T) {
 		t.Fatalf("restarts %d after EricW was switched", len(host.restarts()))
 	}
 }
+
+// bridgeBundle is a migration bridge on disk, in the shape build/migration-bridge.py writes.
+func bridgeBundle(t *testing.T, change func(manifest map[string]any)) (root, exe string) {
+	t.Helper()
+	platform := mt.ThisBundlePlatform()
+	suffix := ""
+	if strings.HasPrefix(platform, "windows-") {
+		suffix = ".exe"
+	}
+	extractor := "dependencies/auto-pigeon-extractor" + suffix
+	entries := mt.CompanionEntries(t, mt.CompanionSpec{Version: "1.341", ConverterVersion: "1.341",
+		Bundle: func(manifest map[string]any) {
+			manifest["schema_version"] = "aucom.bundle-manifest/1.2"
+			manifest["extractor"] = map[string]any{"product": "auto-pigeon-extractor", "version": "1.245",
+				"platform": platform, "file": extractor, "source_commit": strings.Repeat("e", 40)}
+			manifest["migration_bridge"] = map[string]any{"kind": "aucom.migration-bridge/1", "runs_extractor": false}
+			manifest["members"] = append(manifest["members"].([]any), map[string]any{"path": extractor,
+				"product": "auto-pigeon-extractor", "version": "1.245", "platform": platform, "size": 4,
+				"sha256": "sha256:" + strings.Repeat("a", 64)})
+			if change != nil {
+				change(manifest)
+			}
+		}})
+	root = filepath.Join(t.TempDir(), "auto-pigeon-companion-1.341-"+platform)
+	for name, body := range entries {
+		path := filepath.Join(root, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, body, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, companion := managedtools.BundleLayout(platform)
+	return root, filepath.Join(root, filepath.FromSlash(companion))
+}
+
+func inspectHere(exe, version string) managedtools.SelfInstall {
+	goos, goarch, _ := strings.Cut(mt.ThisBundlePlatform(), "-")
+	return managedtools.InspectSelf(exe, version, "", goos, goarch)
+}
+
+// A running bridge is a release bundle it can read itself: without that its first start would not
+// confirm the update, and it could never take the next ordinary one.
+func TestABridgeRunningFromItsOwnFolderIsARelease(t *testing.T) {
+	if strings.HasPrefix(mt.ThisBundlePlatform(), "darwin-") {
+		t.Skip("a macOS application is replaced by hand, so it has no bridge")
+	}
+	_, exe := bridgeBundle(t, nil)
+	self := inspectHere(exe, "1.341")
+	if self.Mode != managedtools.SelfPortable || self.ConverterVersion != "1.341" || self.Bridge == nil ||
+		self.Bridge.Version != "1.245" || self.Bridge.SHA256 != strings.Repeat("a", 64) {
+		t.Fatalf("a bridge: %+v", self)
+	}
+	listed := false
+	for _, member := range self.Members {
+		if strings.HasPrefix(member.Path, "dependencies/auto-pigeon-extractor") {
+			listed = member.Executable
+		}
+	}
+	if !listed {
+		t.Fatalf("the extractor is not a member an update replaces: %+v", self.Members)
+	}
+}
+
+// The older shape is read for one thing, and only when it says what it is.
+func TestOnlyATrueBridgeIsReadInTheOlderShape(t *testing.T) {
+	if strings.HasPrefix(mt.ThisBundlePlatform(), "darwin-") {
+		t.Skip("a macOS application is replaced by hand, so it has no bridge")
+	}
+	for name, change := range map[string]func(map[string]any){
+		"an older release's own manifest": func(manifest map[string]any) { delete(manifest, "migration_bridge") },
+		"another kind": func(manifest map[string]any) {
+			manifest["migration_bridge"] = map[string]any{"kind": "something/else"}
+		},
+		"no extractor": func(manifest map[string]any) { delete(manifest, "extractor") },
+		"the converter listed as the extractor": func(manifest map[string]any) {
+			manifest["extractor"].(map[string]any)["file"] = "dependencies/auto-pigeon-mapio"
+		},
+		"no converter":    func(manifest map[string]any) { delete(manifest, "converter") },
+		"another version": func(manifest map[string]any) { manifest["version"] = "1.340" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, exe := bridgeBundle(t, change)
+			if self := inspectHere(exe, "1.341"); self.Mode != managedtools.SelfDevelopment || self.Bridge != nil {
+				t.Fatalf("%+v", self)
+			}
+		})
+	}
+}
+
+// Nothing updates TO a bridge: a Companion that reads the current manifests refuses one, by schema.
+func TestABridgeIsNeverADownload(t *testing.T) {
+	r, _, make := selfRig(t, "1.340", managedtools.SelfPortable)
+	r.publishCompanion(mt.CompanionSpec{Version: "1.341", Prerelease: true, Schema: "aucom.release-manifest/1.0"})
+	m := make()
+	m.Step(context.Background())
+	view := tool(m.Status(), managedtools.Companion)
+	if view.Offer != nil || view.Pending != nil {
+		t.Fatalf("a bridge was offered: %+v", view)
+	}
+	for _, verdict := range view.Newer {
+		if verdict.Version == "1.341" && verdict.Reason == managedtools.ReasonManifestUnsupported {
+			return
+		}
+	}
+	t.Fatalf("the verdicts do not say why: %+v", view.Newer)
+}

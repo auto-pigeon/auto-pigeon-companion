@@ -146,6 +146,10 @@ type ProveResult struct {
 	Commit            string `json:"commit,omitempty"`
 	ConverterVersion  string `json:"converter_version"`
 	ConverterVerified bool   `json:"converter_verified"`
+	// A migration bridge alone also answers what the updater it is replacing asks: that the extractor
+	// its manifest lists is there, with those bytes. Nothing here has run it.
+	ExtractorVersion  string `json:"extractor_version,omitempty"`
+	ExtractorVerified bool   `json:"extractor_verified,omitempty"`
 	ConfigRead        bool   `json:"config_read"`
 	Served            bool   `json:"served"`
 	Error             string `json:"error,omitempty"`

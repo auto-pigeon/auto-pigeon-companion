@@ -150,6 +150,13 @@ func selfUpdateProve(env *Env, args []string) int {
 	if !provenance.Verified {
 		return finish(errors.New("its converter is not the one its bundle manifest lists"))
 	}
+	if self := inspectSelf(env); self.Bridge != nil {
+		actual, err := managedtools.FileSHA256(filepath.Join(self.Root, filepath.FromSlash(self.Bridge.Path)))
+		if err != nil || actual != self.Bridge.SHA256 {
+			return finish(errors.New("the extractor this migration bridge lists is not the one beside it"))
+		}
+		result.ExtractorVersion, result.ExtractorVerified = self.Bridge.Version, true
+	}
 	if _, err := loadSettings(env); err != nil {
 		return finish(fmt.Errorf("it cannot read this configuration: %w", err))
 	}
