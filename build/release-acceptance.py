@@ -503,7 +503,7 @@ def main():
     listed = {member["path"]: member["sha256"] for member in manifest["members"]}
     digest = releaselib.digest_of(converter)[1]
     run.check("converter digest", listed.get(where["converter"]) == digest,
-              f"{digest} (manifest lists {listed.get(where['extractor'])})")
+              f"{digest} (manifest lists {listed.get(where['converter'])})")
 
     # 4b. Its licences travel with it, and no extractor came along.
     notices_path = os.path.join(bundle, where["notices"])

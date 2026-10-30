@@ -3,8 +3,11 @@ package web
 import (
 	"context"
 	"errors"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/assetref"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/playrun"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -364,5 +367,18 @@ func TestAPageFromAnEarlierRunIsToldToReload(t *testing.T) {
 	response, body = send(t, server, r)
 	if response.StatusCode != http.StatusForbidden || body["code"] != nil {
 		t.Errorf("a host refusal is not a stale page: status = %d, body = %v", response.StatusCode, body)
+	}
+}
+
+// Build & Run's conversion is the same function a build calls: a `.map` passes through with nothing
+// started, and an APMap with no converter is a refusal rather than a fallback.
+func TestPlayConvertSharesTheBuildsConversionPath(t *testing.T) {
+	s := &Server{runner: nil}
+	result, err := s.playConvert(context.Background(), playrun.Request{}, "room.map")
+	if err != nil || result.Path != "room.map" || result.Converter != nil {
+		t.Fatalf("a .map: %+v, %v", result, err)
+	}
+	if _, err := s.playConvert(context.Background(), playrun.Request{}, filepath.Join(t.TempDir(), "room.apmap")); !errors.Is(err, assetref.ErrNoConverter) {
+		t.Fatalf("an APMap with no converter: %v", err)
 	}
 }
