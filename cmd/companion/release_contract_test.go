@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -264,100 +265,138 @@ const testVersion = "1.500"
 
 var testCommit = strings.Repeat("ab", 20)
 
-// realConverters builds cmd/mapio once per test binary, for the release's stand-in targets. They are
-// the real thing because the release reads what the toolchain recorded about them and runs the host's
-// to ask what it speaks; a fake would prove nothing about either.
-var realConverters = sync.OnceValues(func() (string, error) {
-	dir, err := os.MkdirTemp("", "aucom-converters-")
-	if err != nil {
-		return "", err
+// realConverter builds cmd/mapio once per test binary for each platform a stand-in release holds. They
+// are the real thing because the release reads what the toolchain recorded about them and runs the
+// host's to ask what it speaks; a fake would prove nothing about either.
+func realConverter(platform string) (string, error) {
+	realConverters.Lock()
+	defer realConverters.Unlock()
+	if path, built := realConverters.built[platform]; built {
+		return path, nil
 	}
-	for _, platform := range standInPlatforms() {
-		goos, goarch, _ := strings.Cut(platform, "-")
-		name := "auto-pigeon-mapio"
-		if goos == "windows" {
-			name += ".exe"
+	if realConverters.built == nil {
+		dir, err := os.MkdirTemp("", "aucom-converters-")
+		if err != nil {
+			return "", err
 		}
-		command := exec.Command("go", "build", "-trimpath", "-o", filepath.Join(dir, platform, name), "./cmd/mapio")
-		command.Dir = filepath.Join("..", "..")
-		command.Env = append(os.Environ(), "GOOS="+goos, "GOARCH="+goarch, "CGO_ENABLED=0")
-		if output, err := command.CombinedOutput(); err != nil {
-			return "", fmt.Errorf("building the converter for %s: %v\n%s", platform, err, output)
-		}
+		realConverters.dir, realConverters.built = dir, map[string]string{}
 	}
-	return dir, nil
-})
-
-// standInPlatforms are the targets a stand-in release holds, and the machine this test runs on: the
-// release asks the one converter it can execute what it speaks.
-func standInPlatforms() []string {
-	platforms := []string{"linux-amd64", "darwin-arm64", "windows-arm64"}
-	host := runtime.GOOS + "-" + runtime.GOARCH
-	for _, platform := range platforms {
-		if platform == host {
-			return platforms
-		}
+	goos, goarch, _ := strings.Cut(platform, "-")
+	path := filepath.Join(realConverters.dir, platform, converterName(platform))
+	command := exec.Command("go", "build", "-trimpath", "-o", path, "./cmd/mapio")
+	command.Dir = filepath.Join("..", "..")
+	command.Env = append(os.Environ(), "GOOS="+goos, "GOARCH="+goarch, "CGO_ENABLED=0")
+	if output, err := command.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("building the converter for %s: %v\n%s", platform, err, output)
 	}
-	return append(platforms, host)
+	realConverters.built[platform] = path
+	return path, nil
 }
 
-// world is a fake AUCOM dist with real converters beside it, for three targets: linux-amd64 and
-// darwin-arm64 released, windows-arm64 build-only.
+var realConverters struct {
+	sync.Mutex
+	dir   string
+	built map[string]string
+}
+
+func converterName(platform string) string {
+	if strings.HasPrefix(platform, "windows-") {
+		return "auto-pigeon-mapio.exe"
+	}
+	return "auto-pigeon-mapio"
+}
+
+// standInPlatforms are the targets every stand-in release holds.
+func standInPlatforms() []string {
+	return []string{"linux-amd64", "darwin-arm64", "windows-arm64"}
+}
+
+// world is a fake AUCOM dist with real converters beside it, for three targets, linux-amd64 and
+// darwin-arm64 released and windows-arm64 build-only, plus any more it was asked for. released lists
+// the platforms whose archives the release publishes.
 type world struct {
 	dir, dist, matrix, inputs, bundles, release string
+	released                                    []string
 }
 
+// newWorld holds the machine running this test as well, because the release asks the one converter it
+// can execute what it speaks, so that machine has to be a target.
 func newWorld(t *testing.T) world {
 	t.Helper()
-	w := world{dir: t.TempDir()}
+	host := runtime.GOOS + "-" + runtime.GOARCH
+	if slices.Contains(standInPlatforms(), host) {
+		return worldHolding(t)
+	}
+	return worldHolding(t, host)
+}
+
+// stageCompanion puts a stand-in Companion where build/releaselib.py's layout says a bundle for that
+// platform holds it, so this fixture keeps no second copy of the rule that names the file.
+func stageCompanion(t *testing.T, stage, platform string) {
+	t.Helper()
+	script := `import os, sys
+sys.path.insert(0, sys.argv[1])
+import releaselib
+stage, platform = sys.argv[2], sys.argv[3]
+if platform.startswith("darwin-"):
+    os.makedirs(os.path.join(stage, releaselib.APP_NAME))
+print(releaselib.layout(stage, platform)["companion"])
+`
+	if err := os.MkdirAll(stage, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	output, err := exec.Command(python(t), "-B", "-c", script, filepath.Join(repoRoot(t), "build"), stage, platform).CombinedOutput()
+	if err != nil {
+		t.Fatalf("the layout for %s: %v\n%s", platform, err, output)
+	}
+	writeFakeExecutable(t, filepath.Join(stage, filepath.FromSlash(strings.TrimSpace(string(output)))), platform, "aucom")
+}
+
+// packCompanion is the archive build/release.sh leaves for a platform: a tar.gz on Linux and a zip on
+// the others.
+func packCompanion(t *testing.T, w world, platform string) {
+	t.Helper()
+	name := filepath.Join(w.dist, "auto-pigeon-companion-"+testVersion+"-"+platform)
+	if strings.HasPrefix(platform, "linux-") {
+		writeTarGz(t, name+".tar.gz", map[string][]byte{"companion": fakeExecutable(platform, "aucom")})
+		return
+	}
+	stage := filepath.Join(w.dir, "stage", platform)
+	stageCompanion(t, stage, platform)
+	zipDir(t, stage, name+".zip", "")
+}
+
+func worldHolding(t *testing.T, extra ...string) world {
+	t.Helper()
+	w := world{dir: t.TempDir(), released: []string{"linux-amd64", "darwin-arm64"}}
 	w.dist = filepath.Join(w.dir, "dist")
 	w.matrix, w.inputs = filepath.Join(w.dir, "matrix.json"), filepath.Join(w.dir, "converter-inputs.json")
 	w.bundles, w.release = filepath.Join(w.dir, "bundles"), filepath.Join(w.dir, "release")
 
-	// The Companion's archives, the shapes build/release.sh makes.
-	writeTarGz(t, filepath.Join(w.dist, "auto-pigeon-companion-"+testVersion+"-linux-amd64.tar.gz"), map[string][]byte{
-		"companion": fakeExecutable("linux-amd64", "aucom"),
-	})
-	for _, platform := range []string{"darwin-arm64", "windows-arm64"} {
-		stage := filepath.Join(w.dir, "stage", platform)
-		if platform == "darwin-arm64" {
-			writeFakeExecutable(t, filepath.Join(stage, "Auto-Pigeon Companion.app", "Contents", "MacOS", "companion"), platform, "aucom")
-		} else {
-			writeFakeExecutable(t, filepath.Join(stage, "companion.exe"), platform, "aucom")
-		}
-		zipDir(t, stage, filepath.Join(w.dist, "auto-pigeon-companion-"+testVersion+"-"+platform+".zip"), "")
-	}
 	rows := []map[string]any{
 		{"target": "linux/amd64", "built": true, "state": "native_pass"},
 		{"target": "darwin/arm64", "built": true, "state": "build_only"},
 		{"target": "windows/arm64", "built": true, "state": "build_only"},
 		{"target": "freebsd/amd64", "built": false, "state": "unsupported"},
 	}
+	for _, platform := range extra {
+		rows = append(rows, map[string]any{"target": strings.Replace(platform, "-", "/", 1), "built": true, "state": "build_only"})
+		w.released = append(w.released, platform)
+	}
+	platforms := append(standInPlatforms(), extra...)
 
-	// What build/release.sh leaves: the converters and their notices.
-	built, err := realConverters()
-	if err != nil {
-		t.Fatal(err)
-	}
-	host := runtime.GOOS + "-" + runtime.GOARCH
-	platforms := standInPlatforms()
-	if slash := strings.Replace(host, "-", "/", 1); host != "linux-amd64" && host != "darwin-arm64" && host != "windows-arm64" {
-		// The machine running this test has to be a target, or nothing can answer the handshake.
-		rows = append(rows, map[string]any{"target": slash, "built": true, "state": "build_only"})
-		stage := filepath.Join(w.dir, "stage", host)
-		writeFakeExecutable(t, filepath.Join(stage, "companion"), host, "aucom")
-		zipDir(t, stage, filepath.Join(w.dist, "auto-pigeon-companion-"+testVersion+"-"+host+".zip"), "")
-	}
+	// The Companion's archives and the converters and notices build/release.sh leaves beside them.
 	for _, platform := range platforms {
-		name := "auto-pigeon-mapio"
-		if strings.HasPrefix(platform, "windows") {
-			name += ".exe"
-		}
-		body, err := os.ReadFile(filepath.Join(built, platform, name))
+		packCompanion(t, w, platform)
+		built, err := realConverter(platform)
 		if err != nil {
 			t.Fatal(err)
 		}
-		target := filepath.Join(w.dist, "converter", platform, name)
+		body, err := os.ReadFile(built)
+		if err != nil {
+			t.Fatal(err)
+		}
+		target := filepath.Join(w.dist, "converter", platform, converterName(platform))
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -440,13 +479,11 @@ func verifyArgs(w world, archive, platform string) []string {
 func TestAReleaseIsTheBundledArchivesAndNothingElse(t *testing.T) {
 	w := newWorld(t)
 	list := strings.Fields(w.releaseIt(t))
-	want := []string{
-		"SHA256SUMS",
-		"auto-pigeon-companion-" + testVersion + "-all.zip",
-		"auto-pigeon-companion-" + testVersion + "-darwin-arm64.zip",
-		"auto-pigeon-companion-" + testVersion + "-linux-amd64.zip",
-		"release-manifest.json",
+	want := []string{"SHA256SUMS", "auto-pigeon-companion-" + testVersion + "-all.zip", "release-manifest.json"}
+	for _, platform := range w.released {
+		want = append(want, "auto-pigeon-companion-"+testVersion+"-"+platform+".zip")
 	}
+	sort.Strings(want)
 	if strings.Join(list, ",") != strings.Join(want, ",") {
 		t.Fatalf("the upload list is %v, want %v", list, want)
 	}
@@ -510,7 +547,7 @@ func TestAReleaseIsTheBundledArchivesAndNothingElse(t *testing.T) {
 	}
 
 	// The macOS archive puts the converter where a Companion in a .app looks.
-	for _, platform := range []string{"linux-amd64", "darwin-arm64"} {
+	for _, platform := range w.released {
 		archive := filepath.Join(w.release, "auto-pigeon-companion-"+testVersion+"-"+platform+".zip")
 		mustPlan(t, verifyArgs(w, archive, platform)...)
 	}
@@ -568,6 +605,31 @@ func TestAReleaseIsTheBundledArchivesAndNothingElse(t *testing.T) {
 // What the release says about the converter is read from the built program and its build file, and
 // the checks fail on the ways that could be wrong: no notices, a notice about another revision, and a
 // converter that links anything but the one pinned module.
+// A target joins a stand-in release in its real layout whichever machine runs the test: Windows amd64
+// CI once found `companion` where the bundle wants `companion.exe`, in a branch no other machine took.
+func TestEveryExtraTargetIsAFixtureInItsOwnPlatformsLayout(t *testing.T) {
+	w := worldHolding(t, "windows-amd64", "darwin-amd64", "linux-arm64")
+	w.releaseIt(t)
+	for _, platform := range w.released {
+		archive := filepath.Join(w.release, "auto-pigeon-companion-"+testVersion+"-"+platform+".zip")
+		mustPlan(t, verifyArgs(w, archive, platform)...)
+	}
+	unpacked := filepath.Join(t.TempDir(), "windows")
+	unzipDir(t, filepath.Join(w.release, "auto-pigeon-companion-"+testVersion+"-windows-amd64.zip"), unpacked)
+	root := filepath.Join(unpacked, "auto-pigeon-companion-"+testVersion+"-windows-amd64")
+	if _, err := os.Stat(filepath.Join(root, "companion.exe")); err != nil {
+		t.Errorf("the windows-amd64 archive has no companion.exe: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "companion")); err == nil {
+		t.Error("the windows-amd64 archive holds an extensionless companion")
+	}
+	stage := filepath.Join(t.TempDir(), "mac")
+	stageCompanion(t, stage, "darwin-amd64")
+	if _, err := os.Stat(filepath.Join(stage, "Auto-Pigeon Companion.app", "Contents", "MacOS", "companion")); err != nil {
+		t.Errorf("a stand-in macOS Companion is not inside the app: %v", err)
+	}
+}
+
 func TestTheConverterChecksRefuseWhatTheReleaseCouldNotStandBehind(t *testing.T) {
 	w := newWorld(t)
 	check := func() (string, error) {
