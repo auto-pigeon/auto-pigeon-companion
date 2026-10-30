@@ -215,7 +215,7 @@ func (r *Resolver) restoreBridgeMode(path string) {
 	if runtime.GOOS == "windows" {
 		return
 	}
-	info, err := os.Stat(path)
+	info, err := os.Lstat(path)
 	if err != nil || !info.Mode().IsRegular() || info.Mode()&0o111 != 0 {
 		return
 	}

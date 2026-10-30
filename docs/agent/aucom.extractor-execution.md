@@ -68,7 +68,8 @@ turns validation off.
 Quake III result is two files, and renaming each atomically does not make the pair atomic: at `1229f08`,
 158 of 200 refused commits left a `.map` published with no manifest. Now:
 
-- **exit 0**: every file is at its path, read back and matching; a manifest describes the bytes beside it.
+- **exit 0**: every file is at its path, read back and matching; a manifest describes the bytes beside it. A
+  `.map` of another game replacing a Quake III one retires the old manifest in the same transaction.
 - **a returned I/O error or a cancellation at any boundary**: what stood at those paths stands there again,
   byte for byte, and unrelated files in `--output` are untouched. A rollback that cannot finish says so and
   names the `.mapio-commit-*` folder holding the previous files.
@@ -80,8 +81,9 @@ Quake III result is two files, and renaming each atomically does not make the pa
 - **power loss** is not promised: the flush order is an argument, not a test, and Windows cannot flush a
   directory.
 
-The commit point is one step, removing the journal, and a cancellation that arrives after it changes
-nothing because the result is whole. `.mapio-commit.lock` stays in the output directory on purpose: it
+Each target is looked at again just before it moves: the lock excludes other conversions and nothing else,
+so what appeared meanwhile is refused and left alone. The commit point is one step, removing the journal, and
+a cancellation that arrives after it changes nothing because the result is whole. `.mapio-commit.lock` stays in the output directory on purpose: it
 serialises conversions sharing a directory (bounded wait, then refused), and removing a lock file is how
 two processes end up holding two locks (`internal/oslock`). A directory whose file system has no lock is
 refused. `--output` itself is never replaced or emptied.

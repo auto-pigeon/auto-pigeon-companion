@@ -22,7 +22,8 @@ import (
 // directory, and what it promises is exact:
 //
 //   - exit 0: every file of the result is at its path, read back and matching, and a manifest describes
-//     the bytes beside it. An earlier result of the same name has been replaced.
+//     the bytes beside it. An earlier result of the same name has been replaced, and a manifest it left
+//     that would now describe another map is gone.
 //   - a returned error or a cancellation: whatever stood at those paths before stands there again, byte
 //     for byte. Nothing else in the directory is touched, and nothing of this run is left behind. If the
 //     rollback itself is stopped, the error says so and names the folder holding the previous files.
@@ -46,10 +47,12 @@ const (
 // lockWait bounds how long a conversion waits for another one publishing into the same directory.
 var lockWait = 30 * time.Second
 
-// resultFile is one file of a result, by its name inside the output directory.
+// resultFile is one file of a result, by its name inside the output directory. Retire says the file
+// must not be there afterwards: it is what an earlier result left that this one makes false.
 type resultFile struct {
-	Name string
-	Data []byte
+	Name   string
+	Data   []byte
+	Retire bool
 }
 
 // journal is written once, before anything moves. While it exists the commit has not happened, and
@@ -63,6 +66,7 @@ type journalFile struct {
 	Name     string `json:"name"`
 	SHA256   string `json:"sha256"`
 	Previous bool   `json:"previous"`
+	Retired  bool   `json:"retired,omitempty"`
 }
 
 func stagedName(index int) string { return "new-" + strconv.Itoa(index) }
@@ -150,18 +154,23 @@ func safeResultName(name string) bool {
 // no target. Anything that could refuse early does so here, while nothing has moved.
 func stage(ctx context.Context, directory, staging string, files []resultFile) (journal, error) {
 	record := journal{Schema: journalSchema}
-	for index, file := range files {
-		digest, err := writeDurable(filepath.Join(staging, stagedName(index)), file.Data)
-		if err != nil {
-			return journal{}, err
-		}
+	for _, file := range files {
 		info, err := os.Lstat(filepath.Join(directory, file.Name))
 		switch {
+		case file.Retire:
+			if err == nil && info.Mode().IsRegular() {
+				record.Files = append(record.Files, journalFile{Name: file.Name, Previous: true, Retired: true})
+			}
+			continue
 		case errors.Is(err, os.ErrNotExist):
 		case err != nil:
 			return journal{}, err
 		case !info.Mode().IsRegular():
 			return journal{}, fmt.Errorf("%s is in the way: it is not a regular file, and it is left alone", file.Name)
+		}
+		digest, writeErr := writeDurable(filepath.Join(staging, stagedName(len(record.Files))), file.Data)
+		if writeErr != nil {
+			return journal{}, writeErr
 		}
 		record.Files = append(record.Files, journalFile{Name: file.Name, SHA256: digest, Previous: err == nil})
 	}
@@ -180,10 +189,16 @@ func publish(ctx context.Context, directory, staging string, record journal) err
 		if err := checkpoint(ctx, "publish:"+file.Name); err != nil {
 			return err
 		}
+		if err := checkTarget(target, file); err != nil {
+			return err
+		}
 		if file.Previous {
 			if err := os.Rename(target, filepath.Join(staging, keptName(index))); err != nil {
 				return err
 			}
+		}
+		if file.Retired {
+			continue
 		}
 		if err := checkpoint(ctx, "place:"+file.Name); err != nil {
 			return err
@@ -194,6 +209,9 @@ func publish(ctx context.Context, directory, staging string, record journal) err
 		syncDirectory(directory)
 	}
 	for _, file := range record.Files {
+		if file.Retired {
+			continue
+		}
 		digest, err := digestAt(filepath.Join(directory, file.Name))
 		if err != nil {
 			return err
@@ -203,6 +221,23 @@ func publish(ctx context.Context, directory, staging string, record journal) err
 		}
 	}
 	return checkpoint(ctx, "commit")
+}
+
+// checkTarget looks again, just before a file moves, at what stage saw there. The lock excludes other
+// conversions and nothing else, and a rename would replace whatever arrived meanwhile without a word.
+func checkTarget(target string, file journalFile) error {
+	info, err := os.Lstat(target)
+	switch {
+	case errors.Is(err, os.ErrNotExist) && !file.Previous:
+		return nil
+	case err != nil:
+		return err
+	case !file.Previous:
+		return fmt.Errorf("%s appeared during the conversion, and it is left alone", file.Name)
+	case !info.Mode().IsRegular():
+		return fmt.Errorf("%s is in the way: it is not a regular file, and it is left alone", file.Name)
+	}
+	return nil
 }
 
 func checkpoint(ctx context.Context, step string) error {
@@ -249,8 +284,9 @@ func rollBack(directory, staging string, record journal) error {
 }
 
 // recoverCommits finishes what a dead process left in directory, and runs under the lock, so every
-// commit folder it finds is abandoned. One with a journal is undone. One without either never reached
-// it or is past the commit, and holds nothing anybody needs.
+// commit folder it finds is abandoned. One with a journal is undone, whatever else has landed in it. One
+// without either never reached it or is past the commit, and holds nothing anybody needs, unless it
+// holds something a commit does not write: then it only has the name, and it is left.
 func recoverCommits(directory string) error {
 	entries, err := os.ReadDir(directory)
 	if err != nil {
@@ -263,8 +299,10 @@ func recoverCommits(directory string) error {
 		staging := filepath.Join(directory, entry.Name())
 		record, err := readJournal(staging)
 		if errors.Is(err, os.ErrNotExist) {
-			if err := os.RemoveAll(staging); err != nil {
-				return err
+			if commitFolder(staging) {
+				if err := os.RemoveAll(staging); err != nil {
+					return err
+				}
 			}
 			continue
 		}
@@ -279,6 +317,22 @@ func recoverCommits(directory string) error {
 		}
 	}
 	return nil
+}
+
+// commitFolder reports whether a folder holds only what a commit puts in one. The name alone is not
+// enough to remove somebody's folder over.
+func commitFolder(staging string) bool {
+	entries, err := os.ReadDir(staging)
+	if err != nil {
+		return false
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !(name == commitJournal || name == "journal.tmp" || strings.HasPrefix(name, "new-") || strings.HasPrefix(name, "old-")) {
+			return false
+		}
+	}
+	return true
 }
 
 func writeJournal(staging string, record journal) error {

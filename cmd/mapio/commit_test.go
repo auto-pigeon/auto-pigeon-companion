@@ -411,6 +411,21 @@ func TestAProcessKilledAtAnyStepIsUndoneByTheNextRun(t *testing.T) {
 			assertPair(t, out, newer)
 		})
 	}
+	// A system's own file landing in the folder a person was sent to look at changes nothing.
+	t.Run("replacing/a stray file beside the journal", func(t *testing.T) {
+		out := existingResult(t, first)
+		die(t, "place:"+roomManifest, second, out)
+		folders, err := filepath.Glob(filepath.Join(out, commitPrefix+"*"))
+		if err != nil || len(folders) != 1 {
+			t.Fatalf("commit folders: %v, %v", folders, err)
+		}
+		if err := os.WriteFile(filepath.Join(folders[0], ".DS_Store"), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		recoverWith(t, out)
+		assertPair(t, out, older)
+		assertHolds(t, out, "cube.apmap", "notes.txt", roomManifest, roomMap)
+	})
 	// Past the commit the new pair stands, and only the empty folder is left to clear.
 	t.Run("replacing/committed", func(t *testing.T) {
 		out := existingResult(t, first)
@@ -479,6 +494,122 @@ func TestAJournalNobodyCanReadIsRefusedAndTouchesNothing(t *testing.T) {
 			}
 			assertPair(t, out, older)
 		})
+	}
+}
+
+// What appears at a target while a conversion runs is not the conversion's to replace or to remove.
+func TestSomethingThatArrivedDuringTheConversionIsLeftAlone(t *testing.T) {
+	first, second, older, _ := fixtureResults(t)
+	t.Run("a file where nothing was", func(t *testing.T) {
+		out := t.TempDir()
+		arrived := filepath.Join(out, roomManifest)
+		withBoundary(t, func(reached string) error {
+			if reached == "publish:"+roomManifest {
+				return os.WriteFile(arrived, []byte("arrived"), 0o644)
+			}
+			return nil
+		})
+		if code, stderr := convertQ3(t, context.Background(), first, out); code != exitFailed || !strings.Contains(stderr, "appeared") {
+			t.Fatalf("exit %d: %s", code, stderr)
+		}
+		if got, err := os.ReadFile(arrived); err != nil || string(got) != "arrived" {
+			t.Fatalf("what arrived: %q, %v", got, err)
+		}
+		assertHolds(t, out, roomManifest)
+	})
+	t.Run("a directory where a file was", func(t *testing.T) {
+		out := existingResult(t, first)
+		manifest := filepath.Join(out, roomManifest)
+		withBoundary(t, func(reached string) error {
+			if reached != "publish:"+roomManifest {
+				return nil
+			}
+			if err := os.Remove(manifest); err != nil {
+				return err
+			}
+			return os.MkdirAll(filepath.Join(manifest, "arrived"), 0o755)
+		})
+		if code, stderr := convertQ3(t, context.Background(), second, out); code != exitFailed || !strings.Contains(stderr, "in the way") {
+			t.Fatalf("exit %d: %s", code, stderr)
+		}
+		if _, err := os.Stat(filepath.Join(manifest, "arrived")); err != nil {
+			t.Fatalf("the directory that arrived: %v", err)
+		}
+		if got, err := os.ReadFile(filepath.Join(out, roomMap)); err != nil || !bytes.Equal(got, older.mapText) {
+			t.Fatalf("the map was not put back: %v", err)
+		}
+	})
+}
+
+// A `.map` of another game replacing a Quake III one: the earlier manifest would describe bytes that are
+// gone, so it goes in the same transaction, and comes back if that transaction fails.
+func TestAnotherGamesMapRetiresTheManifestItMakesFalse(t *testing.T) {
+	first, _, older, _ := fixtureResults(t)
+	source := filepath.Join(t.TempDir(), "room.apmap")
+	data, err := os.ReadFile(apmapOf(t, t.TempDir()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(source, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	quake1 := func(t *testing.T, out string) (int, string) {
+		t.Helper()
+		code, _, stderr := invoke(t, context.Background(), "convert", "--apmap-to-q1map", "--input", source, "--output", out)
+		return code, stderr
+	}
+	t.Run("the commit", func(t *testing.T) {
+		out := existingResult(t, first)
+		if code, stderr := quake1(t, out); code != exitOK {
+			t.Fatalf("exit %d: %s", code, stderr)
+		}
+		assertHolds(t, out, "notes.txt", roomMap)
+	})
+	t.Run("a failed commit", func(t *testing.T) {
+		out := existingResult(t, first)
+		withBoundary(t, func(reached string) error {
+			if reached == "commit" {
+				return errors.New("injected")
+			}
+			return nil
+		})
+		if code, stderr := quake1(t, out); code != exitFailed {
+			t.Fatalf("exit %d: %s", code, stderr)
+		}
+		assertPair(t, out, older)
+		assertHolds(t, out, "notes.txt", roomManifest, roomMap)
+	})
+	t.Run("a directory of that name is not a manifest", func(t *testing.T) {
+		out := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(out, roomManifest, "mine"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if code, stderr := quake1(t, out); code != exitOK {
+			t.Fatalf("exit %d: %s", code, stderr)
+		}
+		if _, err := os.Stat(filepath.Join(out, roomManifest, "mine")); err != nil {
+			t.Fatalf("the directory: %v", err)
+		}
+	})
+}
+
+// A folder with a commit's name and somebody else's contents is somebody else's.
+func TestAFolderThatOnlyHasACommitsNameIsLeftAlone(t *testing.T) {
+	first, _, older, _ := fixtureResults(t)
+	out := t.TempDir()
+	theirs := filepath.Join(out, commitPrefix+"mine", "keep.txt")
+	if err := os.MkdirAll(filepath.Dir(theirs), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(theirs, []byte("mine"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, stderr := convertQ3(t, context.Background(), first, out); code != exitOK {
+		t.Fatalf("exit %d: %s", code, stderr)
+	}
+	assertPair(t, out, older)
+	if kept, err := os.ReadFile(theirs); err != nil || string(kept) != "mine" {
+		t.Fatalf("their folder: %q, %v", kept, err)
 	}
 }
 

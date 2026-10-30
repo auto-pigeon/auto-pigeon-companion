@@ -55,6 +55,9 @@ const Source = "https://github.com/auto-pigeon/auto-pigeon-companion (cmd/mapio,
 // TerminalMarker begins the last stderr line of a failed conversion.
 const TerminalMarker = "MAPIO-TERMINAL/1.0 "
 
+// manifestSuffix is what go/mapio names a Quake III conversion's manifest after the `.map`'s stem.
+const manifestSuffix = ".q3map-manifest.json"
+
 // DeadlineEnv is the whole-run deadline a supervisor may set, in seconds, so a run ends itself with a
 // named reason rather than being killed with none.
 const DeadlineEnv = "AUTO_PIGEON_JOB_DEADLINE_SECONDS"
@@ -261,6 +264,10 @@ func runConvert(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	if result.ManifestName != "" {
 		manifestPath = filepath.Join(*output, result.ManifestName)
 		files = append(files, resultFile{Name: result.ManifestName, Data: result.ManifestBytes})
+	} else if stem, isMap := strings.CutSuffix(result.OutputName, ".map"); isMap {
+		// A `.map` of another game replacing a Quake III one: its manifest would describe bytes that
+		// are no longer there.
+		files = append(files, resultFile{Name: stem + manifestSuffix, Retire: true})
 	}
 	if err := commitResult(ctx, *output, files); err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
