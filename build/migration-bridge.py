@@ -30,7 +30,8 @@ bundle there.
       --library-commit <sha> --legacy-archive <zip> --legacy-manifest <json> --out <dir>
   migration-bridge.py plan --version <v> --releases <json>
 
-`--companion` and `--converter` are programs stamped with `--version`:
+`build` once per platform, into one `--out`: a release has one manifest, and each
+platform joins it. `--companion` and `--converter` are programs stamped with `--version`:
 
   CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=<v>" -o <out> ./cmd/companion
 
@@ -266,6 +267,18 @@ def release_manifest(args, legacy, archive):
     }
 
 
+def with_earlier_targets(document, earlier):
+    """One release has one manifest, so a second platform joins the first one's, and it has to be the
+    same bridge."""
+    for key in ("tag", "commit", "aue"):
+        if earlier.get(key) != document[key]:
+            raise Refusal(f"{key} differs from the bridge already in this folder: {earlier.get(key)!r}")
+    built = document["targets"][0]["target"]
+    document["targets"] = sorted((row for row in earlier["targets"] if row["target"] != built),
+                                 key=lambda row: row["target"]) + document["targets"]
+    return document
+
+
 def verify_bundle(args, root, members):
     """Read the finished folder the way the older reader will, and refuse early."""
     present = set()
@@ -311,7 +324,10 @@ def cmd_build(args):
         archive = os.path.join(args.out, top + ".zip")
         releaselib.write_zip(root, archive)
         document = release_manifest(args, legacy, archive)
-        write_json(os.path.join(args.out, "release-manifest.json"), document)
+        path = os.path.join(args.out, "release-manifest.json")
+        if os.path.isfile(path):
+            document = with_earlier_targets(document, load_json(path))
+        write_json(path, document)
         names = sorted(name for name in os.listdir(args.out) if name != "SHA256SUMS")
         with open(os.path.join(args.out, "SHA256SUMS"), "w", encoding="utf-8") as handle:
             for name in names:

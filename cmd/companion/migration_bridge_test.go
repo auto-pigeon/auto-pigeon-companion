@@ -20,6 +20,8 @@ const (
 	bridgeVersion  = "1.341"
 	legacyVersion  = "1.336"
 	bridgePlatform = "linux-amd64"
+	// secondBridgePlatform is a second platform joining the same bridge.
+	secondBridgePlatform = "linux-arm64"
 )
 
 func runBridge(t *testing.T, args ...string) (string, error) {
@@ -53,19 +55,24 @@ func newBridgeInputs(t *testing.T) bridgeInputs {
 	t.Helper()
 	i := bridgeInputs{dir: t.TempDir()}
 	i.out = filepath.Join(i.dir, "out")
-	legacy := filepath.Join(i.dir, "legacy", "auto-pigeon-companion-"+legacyVersion+"-"+bridgePlatform)
-	extractor := filepath.Join(legacy, "dependencies", "auto-pigeon-extractor")
-	writeFakeExecutable(t, extractor, bridgePlatform, "the historical extractor")
-	body := fakeExecutable(bridgePlatform, "the historical extractor")
-	file := map[string]any{"product": "auto-pigeon-extractor", "version": "1.245", "platform": bridgePlatform,
-		"file": "dependencies/auto-pigeon-extractor", "license": "LicenseRef-Auto-Pigeon-Proprietary",
-		"source_commit": strings.Repeat("e", 40)}
-	writeJSON(t, filepath.Join(legacy, "dependencies", "bundle-manifest.json"), map[string]any{
-		"schema_version": "aucom.bundle-manifest/1.2", "extractor": file,
-		"members": []map[string]any{{"path": "dependencies/auto-pigeon-extractor", "product": "auto-pigeon-extractor",
-			"version": "1.245", "platform": bridgePlatform, "size": len(body), "sha256": sha(body)}}})
-	i.archive = filepath.Join(i.dir, "auto-pigeon-companion-"+legacyVersion+"-"+bridgePlatform+".zip")
-	zipDir(t, filepath.Join(i.dir, "legacy"), i.archive, "")
+	targets := map[string]any{}
+	for _, platform := range []string{secondBridgePlatform, bridgePlatform} {
+		legacy := filepath.Join(i.dir, "legacy", platform, "auto-pigeon-companion-"+legacyVersion+"-"+platform)
+		extractor := filepath.Join(legacy, "dependencies", "auto-pigeon-extractor")
+		writeFakeExecutable(t, extractor, platform, "the historical extractor")
+		body := fakeExecutable(platform, "the historical extractor")
+		file := map[string]any{"product": "auto-pigeon-extractor", "version": "1.245", "platform": platform,
+			"file": "dependencies/auto-pigeon-extractor", "license": "LicenseRef-Auto-Pigeon-Proprietary",
+			"source_commit": strings.Repeat("e", 40)}
+		writeJSON(t, filepath.Join(legacy, "dependencies", "bundle-manifest.json"), map[string]any{
+			"schema_version": "aucom.bundle-manifest/1.2", "extractor": file,
+			"members": []map[string]any{{"path": "dependencies/auto-pigeon-extractor", "product": "auto-pigeon-extractor",
+				"version": "1.245", "platform": platform, "size": len(body), "sha256": sha(body)}}})
+		i.archive = filepath.Join(i.dir, "auto-pigeon-companion-"+legacyVersion+"-"+platform+".zip")
+		zipDir(t, filepath.Dir(legacy), i.archive, "")
+		targets[platform] = map[string]any{"archive": filepath.Base(i.archive),
+			"sha256": sha([]byte(readText(t, i.archive))), "extractor_sha256": sha(body)}
+	}
 	i.manifest = filepath.Join(i.dir, "release-manifest.json")
 	writeJSON(t, i.manifest, map[string]any{"schema": "aucom.release-manifest/1.0", "tag": "v" + legacyVersion,
 		"commit": testCommit, "aue": map[string]any{"version": "1.245", "protocol": "1.0",
@@ -73,9 +80,7 @@ func newBridgeInputs(t *testing.T) bridgeInputs {
 	i.pins = filepath.Join(i.dir, "pins.json")
 	writeJSON(t, i.pins, map[string]any{"schema": "aucom.migration-bridge-pins/1", "legacy": map[string]any{
 		"version": legacyVersion, "tag": "v" + legacyVersion, "commit": testCommit,
-		"release_manifest_sha256": sha([]byte(readText(t, i.manifest))),
-		"targets": map[string]any{bridgePlatform: map[string]any{"archive": filepath.Base(i.archive),
-			"sha256": sha([]byte(readText(t, i.archive))), "extractor_sha256": sha(body)}}}})
+		"release_manifest_sha256": sha([]byte(readText(t, i.manifest))), "targets": targets}})
 	i.companion, i.converter = filepath.Join(i.dir, "companion"), filepath.Join(i.dir, "auto-pigeon-mapio")
 	writeFakeExecutable(t, i.companion, bridgePlatform, "aucom")
 	writeFakeExecutable(t, i.converter, bridgePlatform, "mapio")
@@ -157,6 +162,41 @@ func TestABridgeSaysWhatItIsInBothManifests(t *testing.T) {
 	}
 }
 
+// One release has one manifest, so every platform of a bridge is in it. An older Companion that finds
+// its own platform missing goes on to the next release, and that bridge would reach nobody on it.
+func TestEveryPlatformOfABridgeJoinsOneManifest(t *testing.T) {
+	i := newBridgeInputs(t)
+	if output, err := runBridge(t, i.args(nil)...); err != nil {
+		t.Fatalf("%v\n%s", err, output)
+	}
+	second := map[string]string{"--platform": secondBridgePlatform,
+		"--legacy-archive": filepath.Join(i.dir, "auto-pigeon-companion-"+legacyVersion+"-"+secondBridgePlatform+".zip"),
+		"--companion":      filepath.Join(i.dir, "companion-arm64"), "--converter": filepath.Join(i.dir, "mapio-arm64")}
+	writeFakeExecutable(t, second["--companion"], secondBridgePlatform, "aucom")
+	writeFakeExecutable(t, second["--converter"], secondBridgePlatform, "mapio")
+	if output, err := runBridge(t, i.args(second)...); err != nil {
+		t.Fatalf("%v\n%s", err, output)
+	}
+	var document struct {
+		Targets []struct {
+			Target string `json:"target"`
+		} `json:"targets"`
+	}
+	if err := json.Unmarshal([]byte(readText(t, filepath.Join(i.out, "release-manifest.json"))), &document); err != nil {
+		t.Fatal(err)
+	}
+	if len(document.Targets) != 2 || document.Targets[0].Target != "linux/amd64" || document.Targets[1].Target != "linux/arm64" {
+		t.Fatalf("targets: %+v", document.Targets)
+	}
+	sums := readText(t, filepath.Join(i.out, "SHA256SUMS"))
+	mustContain(t, "SHA256SUMS", sums, "-linux-amd64.zip", "-linux-arm64.zip", "release-manifest.json")
+
+	other := map[string]string{"--commit": strings.Repeat("ef", 20)}
+	if output, err := runBridge(t, i.args(other)...); err == nil || !strings.Contains(output, "differs from the bridge") {
+		t.Fatalf("a different bridge joined this one: %v\n%s", err, output)
+	}
+}
+
 func TestABridgeRefusesWhatItCannotStandBehind(t *testing.T) {
 	i := newBridgeInputs(t)
 	other := filepath.Join(i.dir, "other", filepath.Base(i.archive))
@@ -178,7 +218,7 @@ func TestABridgeRefusesWhatItCannotStandBehind(t *testing.T) {
 		"a historical manifest with other bytes": {map[string]string{"--legacy-manifest": wrongManifest}, "is not the release manifest"},
 		"a version an older Companion is not on": {map[string]string{"--version": legacyVersion}, "not newer"},
 		"macOS, which is replaced by hand":       {map[string]string{"--platform": "darwin-arm64"}, "replaced by hand"},
-		"a platform nothing is pinned for":       {map[string]string{"--platform": "linux-arm64"}, "pins no archive"},
+		"a platform nothing is pinned for":       {map[string]string{"--platform": "windows-amd64"}, "pins no archive"},
 		"notices about another library revision": {map[string]string{"--notices": badNotices}, "does not name"},
 		"a converter for another machine":        {map[string]string{"--converter": wrongMachine}, "not built for"},
 		"a short commit":                         {map[string]string{"--commit": "abc123"}, "full commit"},

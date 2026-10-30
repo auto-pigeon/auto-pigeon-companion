@@ -573,8 +573,9 @@ def release_notes(document):
         "checks its digest against `bundle-manifest.json` before running it.",
         "",
         "**Updating from an older Companion:** a Companion that bundled the Auto-Pigeon Extractor does not "
-        "recognise this release's manifest, and says so. Download this archive once by hand; updates work "
-        "in place from then on.",
+        "recognise this release's manifest, and says so. Download this archive once by hand, into a new "
+        "folder beside the old one; your settings and maps are not in that folder, and updates work in place "
+        "from then on.",
     ]
     return "\n".join(lines) + "\n"
 

@@ -160,6 +160,30 @@ update belongs to `NEW_368`, which consumes this coordinator and its verificatio
     tested. An "Update now" or a close also takes the `companion` switch gate and waits for other
     processes' leases.
 
+13. **A migration bridge is the only way an older updater crosses to a MapIO-only release, and it is not a
+    release (`NEW_371A`, ADR-0011).** Self-update exists in v1.323, 1.325, 1.332, 1.334 and 1.336; every older
+    release can only be replaced by hand. Those five read `aucom.release-manifest/1.0` and
+    `aucom.bundle-manifest/1.2` and nothing else, and changing a reader here does not reach them.
+    `build/migration-bridge.py` makes a bundle in that shape: this Companion and its converter, plus the
+    historical extractor pinned by digest in `build/migration-bridge.json`, each listed under its own name
+    and licence. What the older program does decides the rest, all read from its source and observed on the
+    released binary:
+    - its `Prove` needs `extractor_verified`, so a bridge's `selfupdate prove` checks the listed extractor's
+      digest and says so. It never runs it. An ordinary bundle omits both fields;
+    - it marks executable only the programs its schema names, so it installs the converter as a plain file,
+      and `converter.Resolver` restores the bit, only when the file's digest is the one a bridge's manifest
+      lists;
+    - it reads `maxManifestsPerCheck` (6) manifests, newest version first, skipping what it cannot read, so a
+      bridge stops being reachable once six releases have a higher version. A version is `N.M` and nothing
+      else parses, so it must also be a number no release used, below the releases it should update to:
+      `migration-bridge.py plan` answers both from the release list.
+
+    `parseOwnBundle` reads the older shape only about the bundle this process runs from, and only when it
+    carries `migration_bridge`. `Self.ArchiveSchemas` keeps refusing it as a download, so nothing updates TO a
+    bridge. The next ordinary update removes the extractor: it is a member of the old bundle and not of the
+    new one. macOS is `manual` and has no bridge. No workflow runs the tool, it reads local files, and
+    publishing one is a reviewed decision, never a step of a release.
+
 ## Trust, said honestly
 
 The digests are published in the same release as the archive: they show integrity, not who

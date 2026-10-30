@@ -330,6 +330,35 @@ Auto-Pigeon Companion 1.320 (linux-amd64), /home/me/Apps/auto-pigeon-companion-1
   last update: 1.318 -> 1.320, verified 2026-10-28T23:10:04+01:00
 ```
 
+**Moving from version 1.336 or earlier.** Those versions bundled the Auto-Pigeon Extractor, cannot read a
+release from 1.342 on, and say so in **Settings → Updates**. Nothing in them can learn to, so move across once
+by hand. Your settings, compiler choices, sessions, tools, build history and maps are in your own folders (see
+[Configuration](#configuration)), not in the program's, so nothing is copied:
+
+1. Close the Companion, and any `companion` command it started.
+2. Download the archive for your computer from the
+   [releases page](https://github.com/auto-pigeon/auto-pigeon-companion/releases), and check it against the
+   `SHA256SUMS` published beside it.
+3. Unpack it into a **new** folder beside the old one. On macOS, move the old app aside instead of replacing it.
+4. Start the new `companion`. If you use `autopigeon://` links, run `companion uri register` from the new one.
+5. When a build has worked, delete the old folder.
+
+To go back, close the new Companion and start the old one: nothing above changed your data. Run its
+`companion uri register` too if you registered the new one.
+
+```console
+$ sha256sum -c --ignore-missing SHA256SUMS
+auto-pigeon-companion-1.342-linux-amd64.zip: OK
+$ unzip auto-pigeon-companion-1.342-linux-amd64.zip -d ~/Apps
+$ ~/Apps/auto-pigeon-companion-1.342-linux-amd64/companion uri register
+$ ~/Apps/auto-pigeon-companion-1.342-linux-amd64/companion
+```
+
+A release marked **migration bridge** is a way across without the download: an older Companion offers it as an
+ordinary update and it then updates normally. It holds the historical extractor as well as the converter, because
+an older Companion will not take a bundle without one; the Companion does not run it, and the next update removes
+it. `NOTICES-migration-bridge.txt` beside the program says the same.
+
 ### Setting up the Quake 1 compiler
 
 Normally there is nothing to do: the Companion installs the Auto-Pigeon build

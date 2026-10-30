@@ -31,6 +31,26 @@ a proprietary program of about 29 MB, and a public repository needed a private c
 - The bundle carries one notices file. The 2026-09-25 rule against licence files in an archive is narrowed
   for it, because Apache-2.0 requires the text to travel with the library in binary form.
 - Manifests move to `aucom.release-manifest/2.0` and `aucom.bundle-manifest/2.0`. A Companion that bundled the
-  extractor refuses them and its user downloads one archive by hand. Accepting them would have needed a
-  manifest calling the converter the extractor, and that record would have been false.
+  extractor refuses them. Accepting them would have needed a manifest calling the converter the extractor, and
+  that record would have been false. See the amendment below.
 - Old release assets, and old build and Play records that say `extractor`, are history and stay as they are.
+
+## Amendment: the way across (`NEW_371A`, 2026-10-30)
+
+"Its user downloads one archive by hand" was a material tradeoff recorded as if it were a compatibility result.
+The evidence is now: no change to a reader can reach an installed program; the released v1.336 refuses a 2.0
+release (`manifest_schema_unsupported`); it would take a bundle in its own shape whose version it can reach.
+
+So a **migration bridge** exists as a prepared artifact, classified separately from a release. It carries the
+Companion and converter with the authentic historical extractor pinned by digest, under true names and licences,
+in the older manifests, with a `migration_bridge` member saying what it is. The unmodified v1.336 took one and the
+next ordinary update removed the extractor, on a local transport with the real bytes. The operator may instead
+keep the manual route (`README.md`), which is tested too and is what users have until a bridge is published.
+
+- A bridge never becomes a normal dependency: no workflow builds one, the release plan refuses one, and normal CI
+  stays free of the extractor.
+- Its reachability is bounded and has to be planned: an older Companion reads six manifests, so once six releases
+  have a higher version it finds nothing. `build/migration-bridge.py plan` answers this for a given release list,
+  and a later bridge needs a fresh version in a gap between releases.
+- The carried extractor is proprietary, so publishing one is a licensing act as well as a release act. It stays the
+  operator's decision. `aucom.managed-tools` rule 13 holds the rules.

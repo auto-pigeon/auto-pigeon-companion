@@ -140,11 +140,13 @@ against a revision another's manifest does not name.
 `windows/arm64` stays `build_only` until a native job has run it. A target that compiles is not a target
 that has been executed, and the release manifest keeps those two facts apart.
 
-**A Companion that bundled the extractor does not update itself to this shape.** The manifest schemas
-are `aucom.release-manifest/2.0` and `aucom.bundle-manifest/2.0`; an older Companion refuses them and
-says a newer Companion may, so its user downloads the archive once by hand, and the release notes say so.
-That is deliberate: making an old updater accept a new bundle would need a manifest that calls the
-converter the extractor. Old release manifests and assets are never rewritten.
+**A Companion that bundled the extractor does not update itself to this shape, and a release is never
+changed to make it.** The manifest schemas are `aucom.release-manifest/2.0` and `aucom.bundle-manifest/2.0`;
+an older Companion refuses them, and no change here reaches a program already installed. What can carry one
+across is a **migration bridge**, which is not a release: `aucom.managed-tools` rule 13 and ADR-0011 own it.
+Until one is reviewed and published, its user follows the manual steps in `README.md`, and the release notes
+say so. Making an ordinary release readable by an old updater would need a manifest that calls the converter
+the extractor, or an extractor in every bundle. Old release manifests and assets are never rewritten.
 
 **Acceptance converts every fixture, not one.** `build/release-fixtures/` holds
 the APMap 1.3 slab kept as backward-compatibility evidence and a Quake 1 APMap
