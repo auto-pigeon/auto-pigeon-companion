@@ -1,6 +1,7 @@
 package managedtools
 
 import (
+	"context"
 	"errors"
 	"net/url"
 	"strings"
@@ -53,5 +54,20 @@ func TestTheAllowlistIsExactlyTheTwoOfficialRepositories(t *testing.T) {
 	// (NEW_368), and it is not a toolchain a profile can be bound to.
 	if Self.Owner+"/"+Self.Repo+" "+Self.TagPrefix != "auto-pigeon/auto-pigeon-companion v" || Self.Kind != KindApplication || len(Self.Profiles) != 0 {
 		t.Fatalf("self target %+v", Self)
+	}
+}
+
+// What follows a release manifest is not a harmless suffix: the digest covers it and no reader looks at
+// it, so a document with anything after it is not the document it appears to be.
+func TestAReleaseManifestWithAnythingAfterItIsUnreadable(t *testing.T) {
+	manifest := `{"schema":"aucom.release-manifest/2.0","product":"auto-pigeon-companion","version":"1.400","tag":"v1.400"}`
+	for name, tail := range map[string]string{"a second document": " {}", "a stray brace": "}", "garbage": " x"} {
+		e := evaluator{tool: Self, target: "linux-amd64", fetch: func(context.Context, Release, string, int64) ([]byte, error) {
+			return []byte(manifest + tail), nil
+		}}
+		release := Release{Tag: "v1.400", Assets: []Asset{{Name: ManifestAssetName, Size: int64(len(manifest) + len(tail))}}}
+		if _, reason, detail := e.companionCandidate(context.Background(), release, "1.400"); reason != ReasonManifestUnreadable {
+			t.Errorf("%s: reason %q (%s)", name, reason, detail)
+		}
 	}
 }

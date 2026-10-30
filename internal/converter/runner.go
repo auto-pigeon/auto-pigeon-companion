@@ -259,8 +259,13 @@ func (r *ProcessRunner) RunJSON(ctx context.Context, target any, subcommand stri
 	if err := decoder.Decode(target); err != nil {
 		return fmt.Errorf("%w: %s: %v", ErrOutputNotJSON, subcommand, err)
 	}
-	if decoder.More() {
+	// A second decode, not decoder.More(): More answers "is there another element in this array or
+	// object", and at the top level it lets a stray `]` or `}` through.
+	var extra json.RawMessage
+	if err := decoder.Decode(&extra); err == nil {
 		return fmt.Errorf("%w: %s wrote more than one document", ErrOutputNotJSON, subcommand)
+	} else if !errors.Is(err, io.EOF) {
+		return fmt.Errorf("%w: %s wrote something after its document: %v", ErrOutputNotJSON, subcommand, err)
 	}
 
 	return nil

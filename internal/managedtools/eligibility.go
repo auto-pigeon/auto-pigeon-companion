@@ -1,7 +1,6 @@
 package managedtools
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -286,8 +285,7 @@ func (e evaluator) candidate(ctx context.Context, release Release, version strin
 		return nil, ReasonDigestDisagrees, "the release manifest's bytes are not the ones GitHub lists"
 	}
 	var manifest releaseManifest
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	if err := decoder.Decode(&manifest); err != nil {
+	if err := json.Unmarshal(raw, &manifest); err != nil {
 		return nil, ReasonManifestUnreadable, "the release manifest is not JSON: " + err.Error()
 	}
 	if !contains(e.tool.ManifestSchemas, manifest.Schema) {

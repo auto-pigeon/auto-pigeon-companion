@@ -166,6 +166,9 @@ func TestRunJSONRefusesAnythingThatIsNotOneDocument(t *testing.T) {
 		"two documents":                 "echo '{\"a\":1} {\"a\":2}'\n",
 		"nothing at all":                "exit 0\n",
 		"truncated":                     "echo '{\"a\":'\n",
+		"garbage after it":              "echo '{\"a\":1} done'\n",
+		"a stray closing brace":         "echo '{\"a\":1}}'\n",
+		"a stray closing bracket":       "echo '{\"a\":1}]'\n",
 	} {
 		runner := fakeConverter(t, body)
 		var into map[string]any
@@ -174,10 +177,10 @@ func TestRunJSONRefusesAnythingThatIsNotOneDocument(t *testing.T) {
 		}
 	}
 
-	runner := fakeConverter(t, "echo '{\"a\":1}'\n")
+	runner := fakeConverter(t, "printf '  {\"a\":1}  \\n\\n'\n")
 	var into map[string]any
 	if err := runner.RunJSON(context.Background(), &into, "summarize"); err != nil {
-		t.Fatalf("a single document was refused: %v", err)
+		t.Fatalf("a single document with whitespace around it was refused: %v", err)
 	}
 	if into["a"] != float64(1) {
 		t.Errorf("decoded = %v", into)
