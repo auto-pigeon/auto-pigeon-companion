@@ -20,7 +20,7 @@
 // The Companion used to download toolchains and the extractor itself, against
 // a signed catalogue. It does not any more (operator, 2026-09-23): every
 // program it runs is one the person installed, or — for Auto-Pigeon Extractor —
-// the one shipped beside it in the release (internal/aue). A document that
+// the one shipped beside it in the release (internal/converter). A document that
 // still lists a `managed_download` route is read, and that route is never
 // offered: see [profile.AcquireManagedDownload].
 package acquire

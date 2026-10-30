@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/auto-pigeon/auto-pigeon-companion/internal/aue"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/converter"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/failure"
 )
 
@@ -54,8 +54,8 @@ func (m *manifestConverter) Run(_ context.Context, _ string, args ...string) ([]
 	return []byte(`{}`), os.WriteFile(filepath.Join(output, stem+".q3map-manifest.json"), []byte(manifest), 0o600)
 }
 
-func (m *manifestConverter) Provenance() aue.Provenance {
-	return aue.Provenance{Mode: aue.ModeDeveloperOverride}
+func (m *manifestConverter) Provenance() converter.Provenance {
+	return converter.Provenance{Mode: converter.ModeDeveloperOverride}
 }
 
 // Q3_010: a build records WHICH document a converted `.map` came from. A local
@@ -89,7 +89,7 @@ func TestAConvertedInputRecordsTheDocumentItCameFrom(t *testing.T) {
 	if c.SourceSHA256 != "sha256:"+digestOf([]byte(document)) || c.SourceBytes != int64(len(document)) || c.SourceName != "room.apmap" {
 		t.Errorf("source = %s %d %s", c.SourceName, c.SourceBytes, c.SourceSHA256)
 	}
-	if c.ConvertedBy != aue.ModeDeveloperOverride || c.ConverterVerified {
+	if c.ConvertedBy != converter.ModeDeveloperOverride || c.ConverterVerified {
 		t.Errorf("converter = %s verified=%t", c.ConvertedBy, c.ConverterVerified)
 	}
 	m := c.Manifest
@@ -159,7 +159,7 @@ func TestNoConverterAndAnUnknownGameAreClassed(t *testing.T) {
 type terminalRefuser struct{ fakeConverter }
 
 func (r *terminalRefuser) Run(context.Context, string, ...string) ([]byte, error) {
-	return nil, &aue.ExitError{Subcommand: "convert", ExitCode: 1, Stderr: "auto-pigeon-extractor version 0.1.0-dev\n" +
+	return nil, &converter.ExitError{Subcommand: "convert", ExitCode: 1, Stderr: "auto-pigeon-extractor version 0.1.0-dev\n" +
 		`AUE-TERMINAL/1.0 {"outcome":"failed","reason":"schema_invalid","message":"The input document failed schema validation.",` +
 		`"detail":"apmap-to-q3map refused [q3map_shader_unsafe]: fac_1 (entities[0].content[2].faces[0]): shader \"textures/a/../../evil\" is not a safe Quake III shader path"}` +
 		"\n" + `{"event":"incident.raised"}`}
@@ -169,7 +169,7 @@ func (r *terminalRefuser) Run(context.Context, string, ...string) ([]byte, error
 // page". It was in the text, after an exit code and a version banner, inside a
 // JSON record. The refusal now LEADS with the extractor's own reason, and
 // keeps everything the extractor printed underneath.
-func TestAnExtractorRefusalLeadsWithTheExtractorsOwnReason(t *testing.T) {
+func TestAConverterRefusalLeadsWithTheConvertersOwnReason(t *testing.T) {
 	stage := t.TempDir()
 	apmap := filepath.Join(stage, "room.apmap")
 	if err := os.WriteFile(apmap, []byte(`{"game":"quake3"}`), 0o600); err != nil {

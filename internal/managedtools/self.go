@@ -24,7 +24,7 @@ import (
 // It is checked by the same coordinator, through the same release source and
 // bounds, and offered with the same three choices, but an "installation" of it
 // is a verified copy of a complete release bundle — the Companion and the
-// extractor beside it, with the bundle manifest that pairs them — staged in
+// converter beside it, with the bundle manifest that pairs them — staged in
 // the tools folder. Putting that bundle where the running one is, is not done
 // here: internal/selfupdate does it, at a boundary where nothing is running,
 // from the staged copy this file verified. This file decides only WHETHER and
@@ -33,7 +33,7 @@ import (
 // MacAppName is the application folder a macOS bundle carries.
 const MacAppName = "Auto-Pigeon Companion.app"
 
-// BundleManifestName is the file that pairs a Companion with its extractor.
+// BundleManifestName is the file that pairs a Companion with its converter.
 const BundleManifestName = "bundle-manifest.json"
 
 // SelfMode is how this Companion can be updated.
@@ -67,7 +67,7 @@ type SelfInstall struct {
 	// Members are the files the running bundle's manifest lists, relative
 	// to Root, plus the manifest itself: the only files an update replaces.
 	Members          []BundleMember `json:"-"`
-	ExtractorVersion string         `json:"extractor_version,omitempty"`
+	ConverterVersion string         `json:"converter_version,omitempty"`
 }
 
 // BundleMember is one file of a release bundle.
@@ -98,7 +98,7 @@ type bundleManifest struct {
 	Platform  string           `json:"platform"`
 	Companion string           `json:"companion"`
 	Members   []bundleMember   `json:"members"`
-	Extractor *bundleExtractor `json:"extractor"`
+	Converter *bundleConverter `json:"converter"`
 }
 
 type bundleMember struct {
@@ -110,7 +110,7 @@ type bundleMember struct {
 	SHA256   string `json:"sha256"`
 }
 
-type bundleExtractor struct {
+type bundleConverter struct {
 	Product      string `json:"product"`
 	Version      string `json:"version"`
 	Platform     string `json:"platform"`
@@ -141,8 +141,8 @@ func parseBundleManifest(raw []byte, version, platform string) (*bundleManifest,
 		return nil, nil, fmt.Errorf("its %s names %q as the Companion; a %s bundle has it at %q", BundleManifestName, manifest.Companion, platform, companion)
 	case len(manifest.Members) == 0:
 		return nil, nil, fmt.Errorf("its %s lists no files", BundleManifestName)
-	case manifest.Extractor == nil || manifest.Extractor.File == "":
-		return nil, nil, fmt.Errorf("its %s names no extractor: a Companion without one cannot convert a map", BundleManifestName)
+	case manifest.Converter == nil || manifest.Converter.File == "":
+		return nil, nil, fmt.Errorf("its %s names no converter: a Companion without one cannot convert a map", BundleManifestName)
 	}
 	var members []BundleMember
 	seen := map[string]bool{}
@@ -159,24 +159,24 @@ func parseBundleManifest(raw []byte, version, platform string) (*bundleManifest,
 			return nil, nil, fmt.Errorf("its %s gives no SHA-256 or size for %s", BundleManifestName, member.Path)
 		}
 		seen[strings.ToLower(member.Path)] = true
-		executable := member.Path == companion || member.Path == manifest.Extractor.File ||
+		executable := member.Path == companion || member.Path == manifest.Converter.File ||
 			strings.Contains(member.Path, "/Contents/MacOS/")
 		members = append(members, BundleMember{Path: member.Path, SHA256: digest, Size: member.Size, Executable: executable})
 	}
-	var companionListed, extractorListed bool
+	var companionListed, converterListed bool
 	for _, member := range manifest.Members {
 		switch member.Path {
 		case companion:
 			companionListed = member.Product == companionProduct
-		case manifest.Extractor.File:
-			extractorListed = member.Product == "auto-pigeon-extractor" && member.Version == manifest.Extractor.Version
+		case manifest.Converter.File:
+			converterListed = member.Product == "auto-pigeon-mapio" && member.Version == manifest.Converter.Version
 		}
 	}
 	if !companionListed {
 		return nil, nil, fmt.Errorf("its %s does not list the Companion %s", BundleManifestName, companion)
 	}
-	if !extractorListed {
-		return nil, nil, fmt.Errorf("its %s does not list the extractor %s %s", BundleManifestName, manifest.Extractor.File, manifest.Extractor.Version)
+	if !converterListed {
+		return nil, nil, fmt.Errorf("its %s does not list the converter %s %s", BundleManifestName, manifest.Converter.File, manifest.Converter.Version)
 	}
 	return &manifest, members, nil
 }
@@ -237,7 +237,7 @@ func InspectSelf(executable, version, commit, goos, goarch string) SelfInstall {
 	}
 	sum := sha256.Sum256(raw)
 	self.Members = append(members, BundleMember{Path: manifestPath, SHA256: hex.EncodeToString(sum[:]), Size: int64(len(raw))})
-	self.ExtractorVersion = manifest.Extractor.Version
+	self.ConverterVersion = manifest.Converter.Version
 	switch {
 	case goos == "darwin":
 		self.Mode = SelfManual
@@ -303,12 +303,12 @@ type companionReleaseManifest struct {
 	Commit     string `json:"commit"`
 	Prerelease *bool  `json:"prerelease"`
 	Signed     bool   `json:"signed"`
-	AUE        *struct {
+	Converter  *struct {
 		Version  string `json:"version"`
 		Protocol string `json:"protocol"`
 		Commit   string `json:"commit"`
 		License  string `json:"license"`
-	} `json:"aue"`
+	} `json:"converter"`
 	Targets []struct {
 		Target     string `json:"target"`
 		Verdict    string `json:"verdict"`
@@ -357,10 +357,10 @@ func (e evaluator) companionCandidate(ctx context.Context, release Release, vers
 		return nil, ReasonManifestMismatch, fmt.Sprintf("the manifest names the version %q, the tag says %q", manifest.Version, version)
 	case manifest.Prerelease != nil && *manifest.Prerelease != release.Prerelease:
 		return nil, ReasonManifestMismatch, "the manifest and GitHub disagree about whether this is a prerelease"
-	case manifest.AUE == nil || manifest.AUE.Version == "":
-		return nil, ReasonNoSidecar, "the release names no bundled extractor"
-	case !strings.HasPrefix(manifest.AUE.Protocol, "1."):
-		return nil, ReasonManifestUnsupported, fmt.Sprintf("its extractor speaks protocol %q, which this Companion does not know", manifest.AUE.Protocol)
+	case manifest.Converter == nil || manifest.Converter.Version == "":
+		return nil, ReasonNoSidecar, "the release names no bundled converter"
+	case !strings.HasPrefix(manifest.Converter.Protocol, "1."):
+		return nil, ReasonManifestUnsupported, fmt.Sprintf("its converter speaks protocol %q, which this Companion does not know", manifest.Converter.Protocol)
 	}
 	slash := strings.Replace(e.target, "-", "/", 1)
 	for _, target := range manifest.Targets {
@@ -405,11 +405,11 @@ func (e evaluator) companionCandidate(ctx context.Context, release Release, vers
 			Size:           target.Size,
 			SHA256:         digest,
 			ManifestSHA256: manifestDigest,
-			Qualification: fmt.Sprintf("the release bundles its %s Companion with extractor %s; native acceptance %s; "+
-				"this platform's support state in that release: %s", slash, manifest.AUE.Version, ci, target.State),
+			Qualification: fmt.Sprintf("the release bundles its %s Companion with converter %s; native acceptance %s; "+
+				"this platform's support state in that release: %s", slash, manifest.Converter.Version, ci, target.State),
 			Signed: manifest.Signed,
-			Sidecar: &Sidecar{Version: manifest.AUE.Version, Protocol: manifest.AUE.Protocol,
-				Commit: manifest.AUE.Commit, License: manifest.AUE.License},
+			Sidecar: &Sidecar{Version: manifest.Converter.Version, Protocol: manifest.Converter.Protocol,
+				Commit: manifest.Converter.Commit, License: manifest.Converter.License},
 			PlatformState: target.State,
 		}
 		if hasDigest {
@@ -430,7 +430,7 @@ type unpackedBundle struct {
 
 // unpackBundle unpacks a verified Companion archive into destination and
 // checks every file against the bundle manifest inside it, and that manifest
-// against the release's: the right Companion, the extractor the release
+// against the release's: the right Companion, the converter the release
 // names, and nothing the manifest does not list.
 func unpackBundle(archivePath, destination string, candidate Candidate, limits Limits) (*unpackedBundle, error) {
 	reader, err := zip.OpenReader(archivePath)
@@ -444,7 +444,7 @@ func unpackBundle(archivePath, destination string, candidate Candidate, limits L
 		return nil, err
 	}
 	if manifestFile == nil {
-		return nil, refuse("it carries no %s, so nothing pairs the Companion with its extractor", manifestPath)
+		return nil, refuse("it carries no %s, so nothing pairs the Companion with its converter", manifestPath)
 	}
 	if manifestFile.UncompressedSize64 > maxManifestBytes {
 		return nil, refuse("its %s is larger than %d bytes", BundleManifestName, maxManifestBytes)
@@ -464,10 +464,10 @@ func unpackBundle(archivePath, destination string, candidate Candidate, limits L
 	}
 	if sidecar := candidate.Sidecar; sidecar != nil {
 		switch {
-		case manifest.Extractor.Version != sidecar.Version:
-			return nil, refuse("it bundles extractor %s and its release names %s", manifest.Extractor.Version, sidecar.Version)
-		case sidecar.Commit != "" && manifest.Extractor.SourceCommit != "" && manifest.Extractor.SourceCommit != sidecar.Commit:
-			return nil, refuse("its extractor was built from %s and its release names %s", manifest.Extractor.SourceCommit, sidecar.Commit)
+		case manifest.Converter.Version != sidecar.Version:
+			return nil, refuse("it bundles converter %s and its release names %s", manifest.Converter.Version, sidecar.Version)
+		case sidecar.Commit != "" && manifest.Converter.SourceCommit != "" && manifest.Converter.SourceCommit != sidecar.Commit:
+			return nil, refuse("its converter was built from %s and its release names %s", manifest.Converter.SourceCommit, sidecar.Commit)
 		}
 	}
 	listed := map[string]BundleMember{}
@@ -522,7 +522,7 @@ func unpackBundle(archivePath, destination string, candidate Candidate, limits L
 	sum := sha256.Sum256(raw)
 	members = append(members, BundleMember{Path: manifestPath, SHA256: hex.EncodeToString(sum[:]), Size: int64(len(raw))})
 	return &unpackedBundle{
-		programs: map[string]string{"companion": companion, "auto-pigeon-extractor": manifest.Extractor.File},
+		programs: map[string]string{"companion": companion, "auto-pigeon-mapio": manifest.Converter.File},
 		members:  members,
 	}, nil
 }
@@ -533,7 +533,7 @@ func unpackBundle(archivePath, destination string, candidate Candidate, limits L
 // update: prove a staged bundle, say what is running, and begin a restart.
 type SelfHost interface {
 	// Prove runs the staged Companion's proving start: its version, its own
-	// extractor's handshake, this configuration read, a loopback listener.
+	// converter's handshake, this configuration read, a loopback listener.
 	// Bounded, and it changes nothing.
 	Prove(ctx context.Context, record InstallRecord) error
 	// SelfBusy names everything running that replacing the bundle could

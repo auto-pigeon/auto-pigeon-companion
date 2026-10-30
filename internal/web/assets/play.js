@@ -1200,7 +1200,7 @@
       programs.push(line(step.title || step.id,
         `${step.provider?.name || step.capability} ${step.provider?.version || ""}`.trim()));
     }
-    programs.push(line(t("Extractor"), t("Auto-Pigeon Extractor, when the map needs converting")));
+    programs.push(line(t("Map converter"), t("auto-pigeon-mapio, when the map needs converting")));
     if (!plan.build_only) programs.push(line(t("Engine"), `${nameOfEngine(state.engine)} · ${actionTitle(state.action)}`));
     review.append(section(t("Which programs will run"), programs));
 
@@ -1382,7 +1382,7 @@
         }),
         el("p", {
           className: "muted",
-          text: t("The Companion will not start the extractor or a compiler, and will not quietly use a similarly named WAD from a folder on this computer."),
+          text: t("The Companion will not start the converter or a compiler, and will not quietly use a similarly named WAD from a folder on this computer."),
         }),
       ],
     });
@@ -2167,7 +2167,7 @@
           (run.installed_nothing ? " Nothing was installed." : ""),
       }));
     } else if (run.error) {
-      // One sentence here; the extractor's or compiler's whole output is in
+      // One sentence here; the converter's or compiler's whole output is in
       // Technical details, not painted across the card.
       children.push(el("p", {
         className: "message error",
@@ -2290,6 +2290,11 @@
       rows.push(...line(t("Third-party notices"),
         `${run.notices.map((n) => n.path).join(", ")} — ${run.notices_dir}`));
     }
+    if (run.converter) {
+      rows.push(...line("Map converter",
+        `${run.converter.version}${run.converter.verified ? ", verified" : ", a local override and NOT verified"}`));
+    }
+    // A run recorded before the converter replaced it, shown as what it was.
     if (run.extractor) {
       rows.push(...line("Extractor",
         `${run.extractor.version}${run.extractor.verified ? ", verified" : ", a local override and NOT verified"}`));

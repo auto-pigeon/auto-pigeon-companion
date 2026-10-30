@@ -18,7 +18,7 @@ import (
 //
 // They arrive as functions rather than as concrete types for two reasons. The
 // first is the boundary: this package must not learn how to talk to AUB, how to
-// verify an extractor or how to start a process, because each of those has a
+// verify a converter or how to start a process, because each of those has a
 // package whose whole job that is. The second is that a coordinator is exactly
 // the thing worth testing without a network, a compiler or a game installed.
 type Deps struct {
@@ -31,9 +31,9 @@ type Deps struct {
 	// reusable with no session and no network.
 	FetchBundle func(ctx context.Context, request Request) (BundleResult, error)
 
-	// Convert turns an APMap file into a Quake `.map` by running the extractor
+	// Convert turns an APMap file into a Quake `.map` by running the converter
 	// as a separate process. It returns the original path unchanged, and a nil
-	// extractor, when the file is already a `.map`.
+	// converter, when the file is already a `.map`.
 	Convert func(ctx context.Context, request Request, mapFile string) (ConvertResult, error)
 
 	// BoundPackages returns the packages a saved Quake III map is bound to,
@@ -130,8 +130,8 @@ type ConvertResult struct {
 	// Path is the `.map` the build will compile. It is the input unchanged
 	// when no conversion was needed.
 	Path string
-	// Extractor identifies the program that ran, or is nil when none did.
-	Extractor *ExtractorRef
+	// Converter identifies the program that ran, or is nil when none did.
+	Converter *ConverterRef
 	// Conversion is what the `.map` was converted from, for the build manifest.
 	// Nil when nothing was converted.
 	Conversion *build.Conversion
@@ -190,7 +190,7 @@ type RemedyError struct {
 func (e *RemedyError) Error() string { return e.Err.Error() }
 func (e *RemedyError) Unwrap() error { return e.Err }
 
-// ErrNotCompilerReady stops a run before the extractor or a compiler starts.
+// ErrNotCompilerReady stops a run before the converter or a compiler starts.
 //
 // Its own error because it is not a failure of this program: AUB has said which
 // texture sources it did not send, and the answer is a list of named refusals

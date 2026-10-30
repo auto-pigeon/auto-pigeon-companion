@@ -156,7 +156,7 @@ a pid read out of a record: a copied store has every pid the original has.
   `CREATE_NEW_PROCESS_GROUP` is kept); output still goes to the caller's pipes, the exit status and the
   taskkill tree stop are unchanged. Never `HideWindow`/`SW_HIDE` as the mechanism (it can still flash), never a
   `cmd /c` or PowerShell wrapper.
-- **Who is background:** a tool job (`job.configureLaunch`: no `session_role`), the AUE runner (handshake and
+- **Who is background:** a tool job (`job.configureLaunch`: no `session_role`), the converter runner (handshake and
   conversions), the self-update proving start, `taskkill`, `reg.exe` (urischeme), the browser opener and the
   file-picker helper (its dialog is its own GUI window; only the console goes). **Not background:** a session
   job (client, listen or dedicated server — a person plays or watches it), `game join`'s engine, and anything

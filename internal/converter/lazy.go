@@ -1,4 +1,4 @@
-package aue
+package converter
 
 import (
 	"context"
@@ -6,17 +6,17 @@ import (
 	"sync/atomic"
 )
 
-// LazyRunner resolves an extractor the first time one is actually needed.
+// LazyRunner resolves an converter the first time one is actually needed.
 //
 // # Why the server does not resolve at startup
 //
 // Resolving hashes the bundled executable and runs it once for the protocol
 // handshake. A server that did that before it would listen would pay it for a
 // feature the user may never touch in that session. So the server holds one of
-// these, answers "is there an extractor" from [Resolver.Status] — which runs
+// these, answers "is there an converter" from [Resolver.Status] — which runs
 // nothing — and resolves on the first real invocation.
 //
-// The resolution is memoised, including its failure. A server whose extractor
+// The resolution is memoised, including its failure. A server whose converter
 // could not be resolved must not try again on every request: the failure is a
 // property of this installation, not of the request.
 type LazyRunner struct {
@@ -67,11 +67,11 @@ func (l *LazyRunner) Provenance() Provenance {
 // Status is the answer that runs nothing.
 func (l *LazyRunner) Status() Status { return l.Resolver.Status() }
 
-// Available reports whether this Companion has an extractor it could run,
+// Available reports whether this Companion has an converter it could run,
 // without resolving one.
 func (l *LazyRunner) Available() bool { return l.Resolver.Status().Available }
 
-// Resolving reports that the first check — hashing the extractor and its
+// Resolving reports that the first check — hashing the converter and its
 // protocol handshake — is running now.
 func (l *LazyRunner) Resolving() bool { return l.resolving.Load() }
 

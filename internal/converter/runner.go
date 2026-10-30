@@ -1,4 +1,4 @@
-package aue
+package converter
 
 import (
 	"bytes"
@@ -17,24 +17,22 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/noconsole"
 )
 
-// EnvBinaryOverride names an on-disk extractor to use instead of the bundled
-// one.
+// EnvBinaryOverride names an on-disk converter to use instead of the bundled one.
 //
-// It exists for development — building the extractor from a checkout and
-// driving it from here — and for a support case where somebody must be moved
-// onto a patched build before a release. It is LOCAL: nothing produced with it
-// is uploaded, and every surface that describes an extractor says the override
-// is unverified.
-const EnvBinaryOverride = "AUCOM_AUE_BINARY"
+// It exists for development — building cmd/mapio from a checkout and driving it from here. It is
+// LOCAL: nothing produced with it is uploaded, and every surface that describes a converter says the
+// override is unverified.
+const EnvBinaryOverride = "AUCOM_MAPIO_BINARY"
 
-// LegacyEnvBinaryOverride is the first Companion bootstrap's spelling, still
-// read so an existing development setup keeps working.
-const LegacyEnvBinaryOverride = "AUC_AUE_BINARY"
+// RetiredEnvBinaryOverrides named a full Auto-Pigeon Extractor when the Companion ran one. They are
+// never read as a path: a program under another licence, with another contract, is not a converter
+// this Companion may run. Setting one earns a message saying so (RetiredOverrideNote).
+var RetiredEnvBinaryOverrides = []string{"AUCOM_AUE_BINARY", "AUC_AUE_BINARY"}
 
 // DefaultTimeout bounds one invocation.
 //
-// Ten minutes: an extraction over a whole corpus is minutes of real work, and
-// an invocation that has been silent for ten is one that is not coming back. It
+// Ten minutes: a conversion of the largest real map takes seconds, and an
+// invocation that has been silent for ten is one that is not coming back. It
 // bounds the WHOLE run rather than a read, because the failure and the hang
 // look the same from here — a process producing one line every nine minutes
 // keeps a per-read deadline satisfied for ever.
@@ -42,10 +40,10 @@ const DefaultTimeout = 10 * time.Minute
 
 // DefaultGrace is how long a cancelled run has after SIGTERM.
 //
-// The extractor's published contract says a supervised run ends deliberately on
-// SIGTERM and writes a terminal record saying why. Five seconds is long enough
-// for that and short enough that a build which ignores the signal does not hold
-// a user's Ctrl-C indefinitely.
+// The converter's protocol says a supervised run ends deliberately on SIGTERM and
+// writes a terminal record saying why. Five seconds is long enough for that and
+// short enough that a build which ignores the signal does not hold a user's
+// Ctrl-C indefinitely.
 const DefaultGrace = 5 * time.Second
 
 // maxOutputBytes bounds what one invocation may return.
@@ -56,17 +54,17 @@ const DefaultGrace = 5 * time.Second
 // finite.
 const maxOutputBytes = 64 << 20
 
-// ErrNoExtractor reports that this Companion has no extractor it may run.
-var ErrNoExtractor = errors.New("aue: no extractor was shipped beside this Companion and " + EnvBinaryOverride + " is not set")
+// ErrNoConverter reports that this Companion has no converter it may run.
+var ErrNoConverter = errors.New("converter: no converter was shipped beside this Companion and " + EnvBinaryOverride + " is not set")
 
 // ErrOutputNotJSON reports a subcommand that was asked for JSON and produced
 // something else.
-var ErrOutputNotJSON = errors.New("aue: the extractor's output is not the single JSON document this call expects")
+var ErrOutputNotJSON = errors.New("converter: the converter's output is not the single JSON document this call expects")
 
 // ErrOutputTooLarge reports output over the cap.
-var ErrOutputTooLarge = errors.New("aue: the extractor produced more output than this Companion will read")
+var ErrOutputTooLarge = errors.New("converter: the converter produced more output than this Companion will read")
 
-// Runner invokes one extractor subcommand and returns its stdout.
+// Runner invokes one converter subcommand and returns its stdout.
 //
 // Implementations must be safe for concurrent use: the local HTTP server
 // handles requests on many goroutines.
@@ -74,7 +72,7 @@ type Runner interface {
 	Run(ctx context.Context, subcommand string, args ...string) ([]byte, error)
 	// Provenance says where this runner's executable came from and whether
 	// anything verified it. On the interface rather than on the concrete type
-	// because every surface that shows an extractor has to show it, and a
+	// because every surface that shows an converter has to show it, and a
 	// caller holding a Runner must not have to type-assert to find out whether
 	// it is about to run something unverified.
 	Provenance() Provenance
@@ -82,10 +80,9 @@ type Runner interface {
 
 // ExitError describes an invocation that ran and failed.
 //
-// The extractor's exit codes are meaningful and its own `protocol` document
-// publishes the table: 1 is the operation failing, which is usually the input,
-// and 2 is the invocation being wrong, which is a bug in whatever composed the
-// argument vector. Collapsing them loses the one distinction that decides who
+// The converter's exit codes are meaningful and its `protocol` document publishes
+// the table: 1 is the conversion failing, which is usually the input, and 2 is the
+// invocation being wrong, which is a bug in whatever composed the argument vector. Collapsing them loses the one distinction that decides who
 // needs to be told.
 type ExitError struct {
 	Subcommand string
@@ -94,7 +91,7 @@ type ExitError struct {
 }
 
 func (err *ExitError) Error() string {
-	message := fmt.Sprintf("auto-pigeon-extractor %s failed with exit code %d", err.Subcommand, err.ExitCode)
+	message := fmt.Sprintf(ExecutableBase+" %s failed with exit code %d", err.Subcommand, err.ExitCode)
 	if err.Stderr != "" {
 		message += ": " + err.Stderr
 	}
@@ -109,11 +106,11 @@ type TimeoutError struct {
 }
 
 func (err *TimeoutError) Error() string {
-	return fmt.Sprintf("auto-pigeon-extractor %s did not finish within %s and was stopped",
+	return fmt.Sprintf(ExecutableBase+" %s did not finish within %s and was stopped",
 		err.Subcommand, err.After)
 }
 
-// ProcessRunner execs one extractor executable.
+// ProcessRunner execs one converter executable.
 //
 // The zero value is not usable; a Runner comes from [Resolver.Resolve] or from
 // [NewOverrideRunner], and those are the only two ways there are.
@@ -140,12 +137,9 @@ type ProcessRunner struct {
 	// Environment is what the child process is given. Nil means this process's
 	// own environment plus the deadline variable.
 	//
-	// NOT scrubbed by default, deliberately: the extractor's own configuration
-	// is environment-driven — where its APMap contract is, where the mapper
-	// root is — and a runner that cleared the environment would break every
-	// deployment that configured one. What is ADDED is the deadline, so the
-	// process can end itself with a named reason instead of being killed with
-	// none.
+	// What is ADDED is the deadline, so the process can end itself with a named
+	// reason instead of being killed with none. The converter reads no other
+	// configuration.
 	Environment []string
 
 	once sync.Once
@@ -179,7 +173,7 @@ func (r *ProcessRunner) grace() time.Duration {
 // nicety:
 //
 //   - **a timeout**, bounding the whole run;
-//   - **cancellation that the extractor can honour** — SIGTERM first, because
+//   - **cancellation that the converter can honour** — SIGTERM first, because
 //     its published contract says a supervised run ends deliberately on one and
 //     writes a terminal record saying why. SIGKILL is what happens if it does
 //     not, after a grace period, and it is the answer that loses the reason;
@@ -193,9 +187,9 @@ func (r *ProcessRunner) Run(ctx context.Context, subcommand string, args ...stri
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	jobDir, err := os.MkdirTemp(r.WorkRoot, "aucom-aue-job-")
+	jobDir, err := os.MkdirTemp(r.WorkRoot, "aucom-mapio-job-")
 	if err != nil {
-		return nil, fmt.Errorf("aue: creating a job directory: %w", err)
+		return nil, fmt.Errorf("converter: creating a job directory: %w", err)
 	}
 	defer os.RemoveAll(jobDir)
 
@@ -205,9 +199,9 @@ func (r *ProcessRunner) Run(ctx context.Context, subcommand string, args ...stri
 	// Background work: no console window on Windows (NEW_368).
 	noconsole.Apply(command)
 
-	// The extractor's published cancellation contract, honoured rather than
-	// assumed: SIGTERM, then a grace period, then whatever the runtime does to
-	// a process that ignored it.
+	// The converter's cancellation contract, honoured rather than assumed:
+	// SIGTERM, then a grace period, then whatever the runtime does to a process
+	// that ignored it.
 	command.Cancel = func() error { return command.Process.Signal(syscall.SIGTERM) }
 	command.WaitDelay = r.grace()
 
@@ -239,7 +233,7 @@ func (r *ProcessRunner) Run(ctx context.Context, subcommand string, args ...stri
 				Stderr:     trimmed(stderr.String()),
 			}
 		}
-		return nil, fmt.Errorf("aue: running auto-pigeon-extractor %s: %w", subcommand, runErr)
+		return nil, fmt.Errorf("converter: running auto-pigeon-mapio %s: %w", subcommand, runErr)
 	}
 
 	return stdout.Bytes(), nil
@@ -277,9 +271,8 @@ func (r *ProcessRunner) environment(timeout time.Duration) []string {
 	if base == nil {
 		base = os.Environ()
 	}
-	// The extractor's own deadline variable, so it can end itself with a named
-	// reason before this Companion has to signal it. Its published protocol
-	// document names this variable; it is not guessed at here.
+	// The converter's own deadline variable, so it can end itself with a named
+	// reason before this Companion has to signal it (cmd/mapio.DeadlineEnv).
 	seconds := int64(timeout / time.Second)
 
 	return append(append([]string{}, base...),
@@ -303,15 +296,22 @@ func NewOverrideRunner(path string) *ProcessRunner {
 }
 
 // OverridePath returns the configured developer override, if any.
-func OverridePath() string {
-	if path := os.Getenv(EnvBinaryOverride); path != "" {
-		return path
-	}
+func OverridePath() string { return os.Getenv(EnvBinaryOverride) }
 
-	return os.Getenv(LegacyEnvBinaryOverride)
+// RetiredOverrideNote is the migration message for a setting that named the old extractor, or "" when
+// none is set. It says what happened and what to do, and it changes nothing about what runs.
+func RetiredOverrideNote() string {
+	for _, name := range RetiredEnvBinaryOverrides {
+		if os.Getenv(name) != "" {
+			return name + " is set and no longer has any effect: the Companion does not run the Auto-Pigeon " +
+				"Extractor. Map conversion uses the auto-pigeon-mapio converter shipped with it; a development " +
+				"build can name one with " + EnvBinaryOverride + "."
+		}
+	}
+	return ""
 }
 
-// Available reports whether a runner can run an extractor at all.
+// Available reports whether a runner can run an converter at all.
 //
 // A free function rather than a method because availability is interesting to a
 // caller holding any Runner — including a nil one, which is what an
@@ -330,7 +330,7 @@ func Available(runner Runner) bool {
 }
 
 // errOutputTooLarge is what limitedWriter returns past its cap.
-var errOutputTooLarge = errors.New("aue: output cap reached")
+var errOutputTooLarge = errors.New("converter: output cap reached")
 
 // limitedWriter refuses past a byte cap instead of growing without bound.
 type limitedWriter struct {

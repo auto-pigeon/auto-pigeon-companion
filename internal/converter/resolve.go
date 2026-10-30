@@ -1,4 +1,4 @@
-package aue
+package converter
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -19,34 +20,41 @@ import (
 )
 
 // RequiredProtocol is the invocation protocol this build drives: the bundled
-// extractor must speak the same major and at least this minor.
+// converter must speak the same major and at least this minor.
 const RequiredProtocol = "1.0"
+
+// ExecutableBase is the converter's program name, and what it must call itself in the handshake.
+const ExecutableBase = "auto-pigeon-mapio"
+
+// RequiredDirections are the conversions a build runs. A converter that does not offer all of them is
+// refused in the handshake, before a map is ever handed to it.
+var RequiredDirections = []string{"apmap-to-q1map", "apmap-to-q2map", "apmap-to-q3map"}
 
 // BundleManifestName is the file a release bundle lists its members in, with
 // each one's SHA-256 (build/bundle-manifest.py).
 const BundleManifestName = "bundle-manifest.json"
 
 // DependenciesDir is the folder beside the Companion's executable that a
-// Linux or Windows release bundle puts the extractor and its bundle manifest
+// Linux or Windows release bundle puts the converter and its bundle manifest
 // in, so the archive root holds only the program a person starts (operator
 // decision, 2026-09-25). A Companion inside a macOS .app looks beside itself in
 // Contents/MacOS, as before. There is no fallback between the two: the
 // Companion runs beside the layout its own release built.
 const DependenciesDir = "dependencies"
 
-// ExecutableName is the bundled extractor's file name on a platform.
+// ExecutableName is the bundled converter's file name on a platform.
 func ExecutableName(platform profile.Platform) string {
-	return "auto-pigeon-extractor" + platform.ExeSuffix()
+	return ExecutableBase + platform.ExeSuffix()
 }
 
-// Resolver finds the extractor this Companion may run.
+// Resolver finds the converter this Companion may run.
 type Resolver struct {
 	// Override is the developer override path. Empty means none; when it is
 	// set, Resolve returns an override runner and looks nowhere else.
 	Override string
 
 	// Dir is the directory the Companion's executable is in; the bundled
-	// extractor is looked for in its DependenciesDir, or beside it inside a
+	// converter is looked for in its DependenciesDir, or beside it inside a
 	// macOS .app. Empty means this program's own directory.
 	Dir string
 
@@ -68,7 +76,7 @@ func (r *Resolver) dir() (string, error) {
 	}
 	self, err := os.Executable()
 	if err != nil {
-		return "", fmt.Errorf("aue: finding this program's own directory: %w", err)
+		return "", fmt.Errorf("converter: finding this program's own directory: %w", err)
 	}
 	if resolved, err := filepath.EvalSymlinks(self); err == nil {
 		self = resolved
@@ -77,7 +85,7 @@ func (r *Resolver) dir() (string, error) {
 	return filepath.Dir(self), nil
 }
 
-// BundledPath is where a bundled extractor would be.
+// BundledPath is where a bundled converter would be.
 func (r *Resolver) BundledPath() (string, error) {
 	dir, err := r.dir()
 	if err != nil {
@@ -99,7 +107,7 @@ func inMacApp(dir string) bool {
 		strings.HasSuffix(strings.ToLower(filepath.Dir(contents)), ".app")
 }
 
-// Status is what this Companion can say about its extractor without running it.
+// Status is what this Companion can say about its converter without running it.
 type Status struct {
 	Mode      string `json:"mode"`
 	Available bool   `json:"available"`
@@ -127,7 +135,7 @@ func (r *Resolver) Status() Status {
 		err = checkExecutable(path)
 	}
 	if err != nil {
-		status.Reason = fmt.Sprintf("no extractor was shipped beside this Companion (%s); a development build "+
+		status.Reason = fmt.Sprintf("no converter was shipped beside this Companion (%s); a development build "+
 			"can name one with %s", lookedFor(path, err), EnvBinaryOverride)
 
 		return status
@@ -156,7 +164,7 @@ func (r *Resolver) Status() Status {
 // taken only because the user set an environment variable, and never as a
 // consequence of something else failing.
 //
-// Otherwise the extractor is the one shipped beside this program. When the
+// Otherwise the converter is the one shipped beside this program. When the
 // release's bundle manifest lists it, its bytes must hash to the listed digest;
 // and whether listed or not, it is asked what protocol it speaks before it is
 // handed to anybody. Nothing is downloaded, ever (operator, 2026-09-23).
@@ -174,7 +182,7 @@ func (r *Resolver) Resolve(ctx context.Context) (*ProcessRunner, error) {
 		return nil, err
 	}
 	if err := checkExecutable(path); err != nil {
-		return nil, fmt.Errorf("%w (%s)", ErrNoExtractor, lookedFor(path, err))
+		return nil, fmt.Errorf("%w (%s)", ErrNoConverter, lookedFor(path, err))
 	}
 	digest, listed, err := r.listedDigest(path)
 	if err != nil {
@@ -198,7 +206,7 @@ func (r *Resolver) Resolve(ctx context.Context) (*ProcessRunner, error) {
 	return runner, nil
 }
 
-// lookedFor says where the bundled extractor was expected, and — when a file is
+// lookedFor says where the bundled converter was expected, and — when a file is
 // there but cannot be run — why it was not used.
 func lookedFor(path string, err error) string {
 	if _, statErr := os.Lstat(path); errors.Is(statErr, fs.ErrNotExist) {
@@ -209,8 +217,8 @@ func lookedFor(path string, err error) string {
 }
 
 func mismatch(path, listed, digest string) string {
-	return fmt.Sprintf("aue: %s hashes to %s and this release's bundle manifest lists %s; it is not the "+
-		"extractor this release shipped, and it is not run", path, digest, listed)
+	return fmt.Sprintf("converter: %s hashes to %s and this release's bundle manifest lists %s; it is not the "+
+		"converter this release shipped, and it is not run", path, digest, listed)
 }
 
 // bundleManifest is the part of build/bundle-manifest.py's document read here.
@@ -222,12 +230,12 @@ type bundleManifest struct {
 	} `json:"members"`
 }
 
-// bundleManifestFor says where a release's bundle manifest is for an extractor
-// at path, and the member path it lists the extractor under.
+// bundleManifestFor says where a release's bundle manifest is for an converter
+// at path, and the member path it lists the converter under.
 //
-// Beside the extractor, in DependenciesDir, on Linux and Windows; the member
+// Beside the converter, in DependenciesDir, on Linux and Windows; the member
 // path is relative to the archive root, so it is `dependencies/<name>`. On macOS the Companion runs from
-// `<Name>.app/Contents/MacOS/`, so that is where its extractor is too, and the
+// `<Name>.app/Contents/MacOS/`, so that is where its converter is too, and the
 // manifest — whose member paths are relative to the archive root — is in
 // `<Name>.app/Contents/Resources/`, inside the app so that dragging the app to
 // /Applications keeps it verifiable (NEW_247A: before this, a macOS bundle put
@@ -255,11 +263,11 @@ func (r *Resolver) listedDigest(path string) (digest, listed string, err error) 
 		return "", "", nil
 	}
 	if err != nil {
-		return "", "", fmt.Errorf("aue: reading the bundle manifest: %w", err)
+		return "", "", fmt.Errorf("converter: reading the bundle manifest: %w", err)
 	}
 	var manifest bundleManifest
 	if err := json.Unmarshal(data, &manifest); err != nil {
-		return "", "", fmt.Errorf("aue: the bundle manifest beside this Companion is not readable: %w", err)
+		return "", "", fmt.Errorf("converter: the bundle manifest beside this Companion is not readable: %w", err)
 	}
 	for _, member := range manifest.Members {
 		if member.Path == name {
@@ -290,21 +298,28 @@ func FileDigest(path string) (string, error) {
 	return "sha256:" + hex.EncodeToString(hash.Sum(nil)), nil
 }
 
-// protocolDocument is the part of the extractor's `protocol --json` this
-// Companion reads.
+// protocolDocument is the part of the converter's `protocol --json` this Companion reads.
 //
-// A transcription, because the extractor is a separate module and neither
-// imports the other. Unknown members are IGNORED rather than refused: a minor
-// protocol bump may add a field, and refusing one would make every additive
-// change breaking, which is exactly what the major/minor split exists to avoid.
+// Unknown members are IGNORED rather than refused: a minor protocol bump may add a field, and refusing
+// one would make every additive change breaking, which is exactly what the major/minor split exists to
+// avoid.
 type protocolDocument struct {
 	SchemaVersion string `json:"schema_version"`
+	Program       string `json:"program"`
 	Protocol      string `json:"protocol"`
 	Version       string `json:"version"`
 	License       struct {
-		SPDX                string `json:"spdx"`
-		CorrespondingSource string `json:"corresponding_source"`
+		SPDX   string `json:"spdx"`
+		Source string `json:"source"`
 	} `json:"license"`
+	Library struct {
+		Version string `json:"version"`
+	} `json:"library"`
+	Capabilities struct {
+		Directions    []string `json:"directions"`
+		APMapCurrent  string   `json:"apmap_current"`
+		APMapReadable []string `json:"apmap_readable"`
+	} `json:"capabilities"`
 }
 
 // handshake asks the executable what contract it speaks and refuses it if this
@@ -312,19 +327,36 @@ type protocolDocument struct {
 func handshake(ctx context.Context, runner *ProcessRunner, minProtocol string) error {
 	var document protocolDocument
 	if err := runner.RunJSON(ctx, &document, "protocol", "--json"); err != nil {
-		return fmt.Errorf("aue: asking %s which invocation protocol it speaks: %w", ProgramName, err)
+		return fmt.Errorf("converter: asking %s which invocation protocol it speaks: %w", ProgramName, err)
+	}
+	// Who answered, before what it says it speaks: another program's protocol number means nothing.
+	if document.Program != ExecutableBase {
+		return fmt.Errorf("converter: the program at %s calls itself %q, not %s, and it is not run",
+			runner.path, document.Program, ExecutableBase)
 	}
 	if strings.TrimSpace(document.Protocol) == "" {
-		return fmt.Errorf("aue: %s declares no invocation protocol, so nothing can tell whether this "+
+		return fmt.Errorf("converter: %s declares no invocation protocol, so nothing can tell whether this "+
 			"Companion may drive it", ProgramName)
 	}
 	if err := ProtocolSatisfies(document.Protocol, minProtocol); err != nil {
-		return fmt.Errorf("aue: %s %s: %w", ProgramName, document.Version, err)
+		return fmt.Errorf("converter: %s %s: %w", ProgramName, document.Version, err)
 	}
+	for _, required := range RequiredDirections {
+		if !slices.Contains(document.Capabilities.Directions, required) {
+			return fmt.Errorf("converter: %s %s offers no %s, which a build needs", ProgramName, document.Version, required)
+		}
+	}
+	if document.Capabilities.APMapCurrent == "" || len(document.Capabilities.APMapReadable) == 0 {
+		return fmt.Errorf("converter: %s %s names no APMap version it reads or writes", ProgramName, document.Version)
+	}
+	runner.provenance.Program = document.Program
 	runner.provenance.Protocol = document.Protocol
 	runner.provenance.Version = document.Version
 	runner.provenance.License = document.License.SPDX
-	runner.provenance.Source = document.License.CorrespondingSource
+	runner.provenance.Source = document.License.Source
+	runner.provenance.Library = document.Library.Version
+	runner.provenance.APMapCurrent = document.Capabilities.APMapCurrent
+	runner.provenance.APMapReadable = document.Capabilities.APMapReadable
 
 	return nil
 }
@@ -392,16 +424,16 @@ func checkExecutable(path string) error {
 	info, err := os.Lstat(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return fmt.Errorf("aue: %s is not there", path)
+			return fmt.Errorf("converter: %s is not there", path)
 		}
 
-		return fmt.Errorf("aue: checking %s: %w", path, err)
+		return fmt.Errorf("converter: checking %s: %w", path, err)
 	}
 	if !info.Mode().IsRegular() {
-		return fmt.Errorf("aue: %s is not a regular file", path)
+		return fmt.Errorf("converter: %s is not a regular file", path)
 	}
 	if runtime.GOOS != "windows" && info.Mode().Perm()&0o111 == 0 {
-		return fmt.Errorf("aue: %s is not executable", path)
+		return fmt.Errorf("converter: %s is not executable", path)
 	}
 
 	return nil

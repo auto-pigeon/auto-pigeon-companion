@@ -68,11 +68,11 @@ func newRig(t *testing.T) *rig {
 		},
 	}
 	current := bundle(t, r.root, map[string]string{
-		companion:                            "old companion 1.318",
-		"dependencies/auto-pigeon-extractor": "old extractor 1.245",
-		"dependencies/bundle-manifest.json":  `{"version":"1.318"}`,
-		"SHA256SUMS":                         "old sums",
-		"dependencies/old-only.dat":          "a file only 1.318 shipped",
+		companion:                           "old companion 1.318",
+		"dependencies/auto-pigeon-mapio":    "old converter 1.245",
+		"dependencies/bundle-manifest.json": `{"version":"1.318"}`,
+		"SHA256SUMS":                        "old sums",
+		"dependencies/old-only.dat":         "a file only 1.318 shipped",
 	})
 	for name, body := range r.userFiles {
 		path := filepath.Join(r.root, filepath.FromSlash(name))
@@ -84,11 +84,11 @@ func newRig(t *testing.T) *rig {
 		}
 	}
 	members := bundle(t, r.staged, map[string]string{
-		companion:                            "new companion 1.320",
-		"dependencies/auto-pigeon-extractor": "new extractor 1.246",
-		"dependencies/bundle-manifest.json":  `{"version":"1.320"}`,
-		"SHA256SUMS":                         "new sums",
-		"dependencies/new-only.dat":          "a file only 1.320 ships",
+		companion:                           "new companion 1.320",
+		"dependencies/auto-pigeon-mapio":    "new converter 1.246",
+		"dependencies/bundle-manifest.json": `{"version":"1.320"}`,
+		"SHA256SUMS":                        "new sums",
+		"dependencies/new-only.dat":         "a file only 1.320 ships",
 	})
 	r.request = Request{
 		Root: r.root, Companion: companion, From: "1.318", Current: current,
@@ -113,11 +113,11 @@ func (r *rig) read(t *testing.T, name string) string {
 func (r *rig) assertOld(t *testing.T) {
 	t.Helper()
 	for name, want := range map[string]string{
-		companion:                            "old companion 1.318",
-		"dependencies/auto-pigeon-extractor": "old extractor 1.245",
-		"dependencies/bundle-manifest.json":  `{"version":"1.318"}`,
-		"SHA256SUMS":                         "old sums",
-		"dependencies/old-only.dat":          "a file only 1.318 shipped",
+		companion:                           "old companion 1.318",
+		"dependencies/auto-pigeon-mapio":    "old converter 1.245",
+		"dependencies/bundle-manifest.json": `{"version":"1.318"}`,
+		"SHA256SUMS":                        "old sums",
+		"dependencies/old-only.dat":         "a file only 1.318 shipped",
 	} {
 		if got := r.read(t, name); got != want {
 			t.Fatalf("%s is %q, want the old %q", name, got, want)
@@ -153,10 +153,10 @@ func TestAValidBundleReplacesOnlyItsOwnFilesAndIsConfirmedByTheNewCompanion(t *t
 		t.Fatalf("state %s, proved %q", journal.State, proved)
 	}
 	for name, want := range map[string]string{
-		companion:                            "new companion 1.320",
-		"dependencies/auto-pigeon-extractor": "new extractor 1.246",
-		"dependencies/bundle-manifest.json":  `{"version":"1.320"}`,
-		"SHA256SUMS":                         "new sums",
+		companion:                           "new companion 1.320",
+		"dependencies/auto-pigeon-mapio":    "new converter 1.246",
+		"dependencies/bundle-manifest.json": `{"version":"1.320"}`,
+		"SHA256SUMS":                        "new sums",
 	} {
 		if got := r.read(t, name); got != want {
 			t.Fatalf("%s is %q, want %q", name, got, want)
@@ -211,7 +211,7 @@ func TestACandidateThatDoesNotProveIsRolledBack(t *testing.T) {
 // after each is put in place — leaves the old bundle exactly as it was.
 func TestAFailureAtAnyStepOfTheSwapLeavesTheOldBundle(t *testing.T) {
 	points := []string{"prepared"}
-	for _, name := range []string{"dependencies/auto-pigeon-extractor", "dependencies/bundle-manifest.json", "SHA256SUMS", companion} {
+	for _, name := range []string{"dependencies/auto-pigeon-mapio", "dependencies/bundle-manifest.json", "SHA256SUMS", companion} {
 		points = append(points, "aside:"+name, "placed:"+name)
 	}
 	points = append(points, "aside:dependencies/old-only.dat")
@@ -295,7 +295,7 @@ func TestEveryUnsafeReplacementIsRefusedBeforeAFileMoves(t *testing.T) {
 			_ = os.WriteFile(filepath.Join(r.staged, companion), []byte("new companion 1.32X"), 0o755)
 		},
 		"a link in the bundle": func(t *testing.T, r *rig) {
-			target := filepath.Join(r.root, "dependencies", "auto-pigeon-extractor")
+			target := filepath.Join(r.root, "dependencies", "auto-pigeon-mapio")
 			_ = os.Remove(target)
 			if err := os.Symlink("/bin/sh", target); err != nil {
 				t.Skip("no symlinks here")

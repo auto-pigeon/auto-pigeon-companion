@@ -8,24 +8,20 @@ touches: what it depends on, what it runs, and what it redistributes. Those are
 three different relationships with three different obligations, and they are
 kept apart here on purpose.
 
-**A release archive is not under one licence.** One that carries the extractor
-holds three kinds of thing, and each keeps its own terms:
+**A release archive is not under one licence.** It holds three kinds of thing, and each keeps its own
+terms:
 
 - **Auto-Pigeon Companion's own code — MIT** (`LICENSE` in this repository).
 - **Contract files from `auto-pigeon-libraries` (AULIBS) compiled into the
   Companion — Apache-2.0**, unmodified. See below.
-- **Auto-Pigeon Extractor (AUE), shipped beside the Companion — proprietary**
-  (`LicenseRef-Auto-Pigeon-Proprietary`, the Auto-Pigeon Proprietary Software
-  License, Copyright (c) 2026 Andrea D'Intino, all rights reserved), under its
-  own licence, whose text is `LICENSE` in the extractor's repository. The MIT
-  licence does not cover it. See below.
+- **The `auto-pigeon-mapio` map converter, shipped beside the Companion — Apache-2.0 AND MIT**: the
+  `go/mapio` library and this repository's small wrapper, compiled into one executable. See below.
 
-**No licence or notice file ships inside a release archive** (operator
-decision, 2026-09-25): an archive carries the Companion, the extractor, their
-`bundle-manifest.json` and a `SHA256SUMS`, and nothing else. The licence texts
-and this file are in the repositories; each archive's `bundle-manifest.json`
-names the licence of every file in it, and the release notes say where the
-texts are.
+**One notices file ships inside a release archive**, `NOTICES-auto-pigeon-mapio.txt`, beside the converter
+it belongs to. Otherwise an archive carries the Companion, the converter, their `bundle-manifest.json` and
+a `SHA256SUMS`, and nothing else (operator decision, 2026-09-25, narrowed by `NEW_371`). The other licence
+texts and this file are in the repositories; each archive's `bundle-manifest.json` names the licence of
+every file in it, and the release notes say where the texts are.
 
 Third-party programs the Companion runs — compilers, engines, games — are
 installed by the user and stay under their own licences.
@@ -40,7 +36,7 @@ installed by the user and stay under their own licences.
 | `@auto-pigeon/operational-notice-contract` 1.0.0 (`src/index.mjs`, two schema files), from auto-pigeon-libraries | Apache-2.0 | vendored byte for byte into the embedded page (`internal/web/assets/vendor/operational-notice-contract/`) | yes, inside the binary |
 | `@auto-pigeon/incident-contract` data (`incident-codes.json`, `redaction-rules.json`), from auto-pigeon-libraries | Apache-2.0 | embedded byte for byte (`internal/incident/contract/`) | yes, inside the binary |
 | `@auto-pigeon/incident-contract` 1.4.0 (`src/*.mjs`, `schema/*.json`), from auto-pigeon-libraries | Apache-2.0 | vendored byte for byte into the embedded page (`internal/web/assets/vendor/incident-contract/`) | yes, inside the binary |
-| auto-pigeon-extractor (AUE) | **LicenseRef-Auto-Pigeon-Proprietary** (Auto-Pigeon Proprietary Software License; all rights reserved) | separate process, shipped as its own file (`auto-pigeon-extractor[.exe]`) beside the Companion in a release bundle | named in the bundle manifest; the text is in the extractor's repository |
+| auto-pigeon-mapio (`go/mapio` from auto-pigeon-libraries, and `cmd/mapio`) | **Apache-2.0 AND MIT** | separate process, shipped as its own file (`auto-pigeon-mapio[.exe]`) beside the Companion in a release bundle | yes: `NOTICES-auto-pigeon-mapio.txt` beside it |
 | ericw-tools 2.0.0-alpha11 (qbsp, vis, light, bspinfo, bsputil; the Quake 1 line) | **GPL-3.0-or-later** as distributed (GPL-2.0-or-later source) | separate process, **obtained by the user** from its homepage; nothing is downloaded | no |
 | ericw-tools 2.0.0-alpha7 (the Quake II line) | **GPL-3.0-or-later** as distributed (GPL-2.0-or-later source) | separate process, **obtained by the user** from its homepage; nothing is downloaded | no |
 | Q3Map2 2.5.17n (NetRadiant-custom `20260114`) | **GPL-2.0-or-later** | separate process, **found by the user**; nothing is downloaded | no |
@@ -49,10 +45,10 @@ installed by the user and stay under their own licences.
 
 ## Go dependencies
 
-None. The module has no third-party Go dependencies: `go.mod` lists only the Go
-version, and there is no `go.sum` because there is nothing to check sums for.
-Everything is the standard library, which is BSD-3-Clause and whose notice
-travels with every Go binary.
+The Companion has none: its binary links only the standard library, which is BSD-3-Clause and whose
+notice travels with every Go binary. `go.mod` requires exactly one module,
+`github.com/auto-pigeon/auto-pigeon-libraries`, and only `cmd/mapio` imports it, so it reaches the converter
+beside the Companion and not the Companion itself.
 
 If a dependency is ever added, its licence goes in this document, and it must be
 compatible with redistributing the Companion under MIT.
@@ -71,7 +67,7 @@ Go module dependencies: none.
 ```
 
 A release publishes it as a CycloneDX SBOM
-(`companion release sbom`), listing this module, its empty module graph, and
+(`companion release sbom`), listing this module, its empty linked-module graph, and
 every external program the Companion runs or ships beside itself — each with
 the relationship it has to the artifact, because a component shipped beside the
 binary, or installed separately and run by it, is not a component nobody should
@@ -97,138 +93,53 @@ licence does not relicense them; `companion security audit` and
 `companion release sbom` list them as Apache-2.0 components in the artifact, and
 a bundle manifest's `licenses` list names them separately from the Companion.
 Apache-2.0 is compatible with redistributing them inside an MIT program; its
-text is at https://www.apache.org/licenses/LICENSE-2.0. AULIBS ships no `NOTICE`
-file, so there is no NOTICE text to reproduce.
+text is at https://www.apache.org/licenses/LICENSE-2.0, and the AULIBS `NOTICE`
+travels with the converter in `NOTICES-auto-pigeon-mapio.txt`.
 
-## auto-pigeon-extractor (AUE) — proprietary, shipped beside the Companion and never inside it
+## auto-pigeon-mapio — Apache-2.0 AND MIT, shipped beside the Companion and never inside it
 
-AUE is a **separate, proprietary program**: `LicenseRef-Auto-Pigeon-Proprietary`,
-the **Auto-Pigeon Proprietary Software License**, Copyright (c) 2026 Andrea
-D'Intino, all rights reserved. It is not part of this codebase, this
-repository's MIT licence does not apply to it, does not relicense it, and
-cannot. The Auto-Pigeon project's policy since `NEW_247G` (2026-09-24) is that
-AUE is proprietary and private; before that it was published under
-AGPL-3.0-only (see "Earlier AGPL-3.0 builds" below).
+`auto-pigeon-mapio` is the map converter a release ships. One executable, built in this repository's
+release from two parts, each under its own licence:
 
-**Using the bundled extractor requires the copyright owner's authorization.**
-Its licence grants no licence or other right to use it except through a
-separate written authorization or agreement issued by the copyright owner.
-Nothing in this repository, in the Companion's MIT licence, or in the fact that
-a release archive carries the extractor grants that authorization. For
-licensing inquiries or written authorization, contact the copyright owner.
+| part | source | licence |
+| --- | --- | --- |
+| `go/mapio`, the format library | `auto-pigeon-libraries`, at the exact revision `go.mod` pins | Apache-2.0 |
+| `cmd/mapio`, the small wrapper around it | this repository | MIT |
 
-**A release carries it as its own file, beside the Companion — never inside the
-Companion's executable, and never downloaded.** The operator settled that on
-2026-09-23: *"AUE binary should be (will be) built in github CI of AUCOM,
-inserted in AUCOM and this will appear in the github releases ... So all the
-download mechanisms should disappear."* See
-[ADR-0008](docs/adr/0008-the-companion-downloads-no-program.md).
+The SPDX expression for the executable is `Apache-2.0 AND MIT`. Neither licence relicenses the other part,
+and the archive holding it is never "an MIT archive".
 
-A bundle assembled without one has `"extractor": null` and an
-`extractor_absent` entry in its `bundle-manifest.json`.
+**Its notices travel with it.** Beside the executable, in `dependencies/` (in `Contents/Resources/` inside
+a macOS `.app`), is `NOTICES-auto-pigeon-mapio.txt`: this repository's MIT text, the library's `NOTICE`, and
+the library's Apache License 2.0 text, assembled by `build/release.sh` from this commit and from the module
+revision that was compiled in. It is the one licence file a release archive carries. The rule since
+2026-09-25 is that no licence or notice file ships inside an archive; this file is the narrow exception,
+because the library is redistributed in binary form and Apache-2.0 §4 requires its licence and NOTICE to
+go with it. The bundle manifest's `licenses` list names it.
 
-### The identifier is quoted from the extractor, never restated
+**It is a separate program.** The Companion finds it in `dependencies/` beside its own executable (in
+`Contents/MacOS/` inside a macOS `.app`), checks its digest when the bundle manifest lists it, asks it
+`protocol --json`, and invokes it as a **separate operating-system process**. The Companion's own binary
+links no part of it, which is why `companion security audit` reports no module dependencies: see
+[`internal/converter`](internal/converter/doc.go).
 
-The extractor declares its licence ITSELF — run `auto-pigeon-extractor protocol`
-— and so does its release manifest (`license.spdx`). A release quotes that
-answer: `build/release-plan.py` reads it from the pinned build's release
-manifest, and the bundle manifest, the release manifest and the release notes
-carry the same identifier. That is deliberate: a program under a different
-licence must not be the thing that says what this one is licensed as. It ships
-a copy of the claim, the copy goes stale, and the stale copy is the one a user
-reads. So **the identifier the pinned build declares is the authority for the
-extractor build in that archive**, and its text is the pinned commit's
-`LICENSE` in the extractor's repository.
+A bundle assembled without one has `"converter": null` and a `converter_absent` entry in its
+`bundle-manifest.json`.
 
-The one identifier a release refuses for the extractor is MIT — it never was,
-and an archive listing it so would read as entirely MIT.
+### What it replaced
 
-### How it is used
-
-A release bundle places a **prebuilt** extractor beside the Companion as
-`auto-pigeon-extractor` (`auto-pigeon-extractor.exe` on Windows), and
-`bundle-manifest.json` lists it with its SHA-256, its version, its licence and
-the commit it was built from — see [`build/bundle-sidecar.sh`](build/bundle-sidecar.sh)
-and [`build/bundle-manifest.py`](build/bundle-manifest.py). The Companion finds
-it in `dependencies/` beside its own executable (in `Contents/MacOS/` inside a
-macOS `.app`), checks the digest when the manifest
-lists it, asks it `protocol --json`, and then invokes it as a **separate
-operating-system process** through `os/exec` and reads its stdout. See
-[`internal/aue`](internal/aue/doc.go).
-
-Communication is process-level only: subcommand, arguments, environment, working
-directory, standard output, exit status. AUE's own packages all live under
-`internal/`, so Go's internal-package rule makes importing them impossible even
-by accident, and AUE never appears in `go.mod`.
-
-### What that means for distribution, precisely
-
-**Shipping it beside the Companion is a redistribution of AUE**, which its
-owner, Andrea D'Intino, makes. It is **not** a combined work — two programs in
-one archive, one running the other as a separate process, share no address
-space and link nothing — so the Companion stays MIT and AUE stays proprietary.
-
-Three things are enforced here rather than assumed:
-
-1. **A bundle cannot carry it without its licence identifier and provenance.**
-   `build/bundle-manifest.py` refuses `--extractor` without
-   `--extractor-version`, `--extractor-source` and the full
-   `--extractor-commit`, writes the declared identifier into the manifest's
-   `extractor` entry and `licenses` list, and refuses an extractor declared
-   MIT.
-2. **The release's component list names it.** `companion release sbom` and
-   `companion security audit` list `auto-pigeon-extractor` with
-   `distribution: shipped-beside-in-the-release` and
-   `LicenseRef-Auto-Pigeon-Proprietary`, with no corresponding-source link —
-   that is a copyleft obligation, and the extractor is not copyleft.
-   `release.TestTheExtractorIsListedAsProprietaryNeverMITOrCopyleft` fails if it
-   is listed as MIT or copyleft, and
-   `release.TestEveryShippedCopyleftComponentOffersItsSource` still fails any
-   copyleft component shipped with no source offer.
-3. **This file names it.** `TestNoticesCoverEveryRedistributedComponent` fails
-   if this document stops naming `auto-pigeon-extractor`, its licence, or the
-   authorization its use requires.
-
-### Earlier AGPL-3.0 builds
-
-Extractor builds published before `NEW_247G` declared `AGPL-3.0-only`, and
-**copies distributed under that licence keep the rights it granted** — the
-change of licence does not reach back. The Companion still accepts such a
-build: its handshake records whatever licence a build reports, and a copyleft
-build carries its corresponding-source link. A release archive whose pinned
-extractor build declares `AGPL-3.0-only` carries that build's AGPL licence file
-and says so in its release notes.
-
-### What was wrong with embedding it, since the code for that existed
-
-`internal/aue/embed.go` used to copy the platform-matching AUE binary into the
-Companion executable with `//go:embed`, and a release built that way would have
-put a separately licensed program (AGPL-3.0-only at the time) inside the
-Companion's binary. It was never
-released — `internal/aue/embedded/` only ever contained `.gitkeep` — and the
-mechanism is gone, along with the build steps that staged it. CI fails if it
-comes back: see the `no-embedded-extractor` job.
-
-Embedding would not have made a combined work either — the bytes were written
-to a temporary file and run as their own process. What was wrong with it is that
-the extractor's bytes sat inside another program's artifact, under that
-program's licence, with nothing checking them and nothing carrying the
-extractor's own licence (then AGPL-3.0, with its notice and source offer). A
-separate file listed in a manifest, with its own licence file, fixes all three.
-
-### It is not downloaded any more, either
-
-Between those two arrangements the Companion fetched the extractor at run time
-against a signed, revocable catalogue, at the version a signed compatibility
-manifest named. That mechanism is removed with every other download mechanism
-(`internal/catalog`, `companion extractor install`, `companion catalog …`).
-There is no route by which the Companion puts an extractor on a machine.
+Releases up to `NEW_371` shipped the separately licensed **Auto-Pigeon Extractor** (AUE) in this position.
+AUE is proprietary (`LicenseRef-Auto-Pigeon-Proprietary`, Copyright (c) 2026 Andrea D'Intino, all rights
+reserved), and builds distributed earlier under AGPL-3.0-only keep that licence. A release built now
+carries none of it: no AUE executable, no build dependency on its repository, and no use of a token to
+read it. The map-format code it used to hold was published by its owner as `go/mapio` under Apache-2.0;
+that covers what moved and nothing else, and the rest of AUE stays proprietary. Earlier release archives
+are not changed by any of this, and each keeps the terms it was distributed under.
 
 ### The developer override redistributes nothing
 
-`AUCOM_AUE_BINARY` points at a build the developer already has. It is local, it
-is labelled UNVERIFIED everywhere it appears, and nothing produced with it is
-uploaded or published.
+`AUCOM_MAPIO_BINARY` names a converter somebody built themselves. Nothing is copied or shipped, and it is
+labelled unverified everywhere it appears. It is a development setting, not a distribution.
 
 ## External map-building tools (GPL)
 
@@ -521,8 +432,8 @@ installer, or package**. The two Auto-Pigeon toolchains the Companion installs
 are fetched from their own official releases, which carry their licence texts
 and corresponding source (see *How they are used*); no other GPL material is
 fetched, and none is redistributed in the Companion's own release. The one program a release carries besides the
-Companion is the proprietary extractor, above, whose own licence file travels
-with it and whose licence the bundle manifest names.
+Companion is the `auto-pigeon-mapio` converter, above, whose notices travel
+with it and whose licences the bundle manifest names.
 
 **If that changes for a GPL tool** — if its prebuilt binary is ever bundled
 inside a release archive, installer, `.deb`/`.rpm`, or `.app` bundle — then that
@@ -532,7 +443,7 @@ release becomes a redistribution of GPL software, and it must carry:
 - a written offer of, or accompanying, corresponding source, per GPL-3.0
   section 6 for the ericw-tools builds above.
 
-The extractor's path through [`build/bundle-manifest.py`](build/bundle-manifest.py)
+The converter's path through [`build/bundle-manifest.py`](build/bundle-manifest.py)
 is the model for it. **This is flagged as a decision to make, not one made
 here.**
 

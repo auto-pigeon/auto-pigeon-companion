@@ -409,7 +409,7 @@ func Zip(t testing.TB, root string, entries map[string][]byte, inner []byte) []b
 			mode = 0o755
 		}
 		// A Companion bundle's two programs, as the release archives carry them.
-		if base := path.Base(n); base == "companion" || base == "companion.exe" || strings.HasPrefix(base, "auto-pigeon-extractor") {
+		if base := path.Base(n); base == "companion" || base == "companion.exe" || strings.HasPrefix(base, "auto-pigeon-mapio") {
 			mode = 0o755
 		}
 		if strings.HasPrefix(n, "@link:") {

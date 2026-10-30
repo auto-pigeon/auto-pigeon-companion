@@ -142,8 +142,8 @@ var Self = Tool{
 	Owner:           "auto-pigeon",
 	Repo:            "auto-pigeon-companion",
 	TagPrefix:       "v",
-	ManifestSchemas: []string{"aucom.release-manifest/1.0"},
-	ArchiveSchemas:  []string{"aucom.bundle-manifest/1.2"},
+	ManifestSchemas: []string{"aucom.release-manifest/2.0"},
+	ArchiveSchemas:  []string{"aucom.bundle-manifest/2.0"},
 	// The baseline is the running version, which only the coordinator
 	// knows; nothing older than it is ever offered.
 	parse: parseCompanionVersion,

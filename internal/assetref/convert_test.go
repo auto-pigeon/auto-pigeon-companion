@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/auto-pigeon/auto-pigeon-companion/internal/aue"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/converter"
 )
 
 // fakeConverter writes the .map the real extractor would, and records its argv.
@@ -33,8 +33,8 @@ func (f *fakeConverter) Run(_ context.Context, subcommand string, args ...string
 	return []byte(`{}`), os.WriteFile(filepath.Join(output, stem+".map"), []byte("{ \"classname\" \"worldspawn\" }\n"), 0o600)
 }
 
-func (f *fakeConverter) Provenance() aue.Provenance {
-	return aue.Provenance{Mode: aue.ModeDeveloperOverride, Verified: f.verified}
+func (f *fakeConverter) Provenance() converter.Provenance {
+	return converter.Provenance{Mode: converter.ModeDeveloperOverride, Verified: f.verified}
 }
 
 // The Companion reads an APMap's `game` and nothing else: which APMap versions can be converted is
@@ -72,7 +72,7 @@ func convertsAnAccountMap(t *testing.T, version string) {
 	}
 	ref := sources["source_map"]
 	if ref.ConvertedTo != "map" || !strings.HasPrefix(ref.ConvertedSHA256, "sha256:") ||
-		ref.ConvertedBy != aue.ModeDeveloperOverride || ref.ConverterVerified {
+		ref.ConvertedBy != converter.ModeDeveloperOverride || ref.ConverterVerified {
 		t.Errorf("the manifest record does not say how the map was converted: %+v", ref)
 	}
 	if _, err := os.Stat(apmap); err != nil {
@@ -149,6 +149,6 @@ func (r *refusingConverter) Run(context.Context, string, ...string) ([]byte, err
 	return nil, r.err
 }
 
-func (r *refusingConverter) Provenance() aue.Provenance {
-	return aue.Provenance{Mode: aue.ModeDeveloperOverride}
+func (r *refusingConverter) Provenance() converter.Provenance {
+	return converter.Provenance{Mode: converter.ModeDeveloperOverride}
 }

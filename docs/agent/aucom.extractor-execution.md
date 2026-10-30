@@ -2,7 +2,7 @@
 id: aucom.extractor-execution
 schema: aut-agent-module/1
 repository: auto-pigeon-companion
-title: Running the extractor — the handshake, bounded invocation, and what was retired with the downloads
+title: Running the map converter — the handshake, bounded invocation, and what was retired with the downloads
 authority:
   - aucom-extractor-handshake
   - aucom-offline-authority
@@ -11,6 +11,8 @@ authority:
   - aucom-publishing-executable
 topics:
   - extractor
+  - converter
+  - mapio
   - aue
   - handshake
   - protocol
@@ -21,91 +23,99 @@ topics:
   - verification
   - execution
 paths:
-  - internal/aue/**
+  - internal/converter/**
   - internal/job/**
+  - cmd/mapio/**
 prerequisites:
   - aucom.extractor-acquisition
 ---
 
-# Running the extractor — the handshake, bounded invocation, and what was retired with the downloads
+# Running the map converter — the handshake, bounded invocation, and what was retired with the downloads
 
 <!-- Moved verbatim from AGENTS.md by NEW_246G_AUT_AUG_AUCOM_AUTEL_AULIBS_Remaining-Repository-Documentation-Modularization: line(s) 115-177 of the AGENTS.md at sha256 dc16c6c72b64a661. This module is the ONE authoritative home for the rules below; the repository-root AGENTS.md routes to it and keeps no second copy. -->
 
+<!-- Rewritten 2026-10-30 by NEW_371: the guarantees stand, adapted to the converter's identity. Heading lines are kept verbatim so `sections` still resolves them. -->
+
 ### The protocol handshake, before the executable is used for anything
 
-A verified executable is not automatically one this build can talk to. **Majors
-equal, minor at least the required one** — never `>= major`, because a later
-major is defined as breaking. The rule lives in one function on each side of the
-boundary (`aue.ProtocolSatisfies` here, `protocol.Satisfies` there) and a
-second call site implementing a laxer version of it is the failure mode.
+A verified executable is not automatically one this build can talk to. Three questions, in this order,
+and a wrong answer to any is a refusal:
 
-The required protocol is `aue.RequiredProtocol` (`"1.0"`), compiled in. The
-bundled extractor is asked `protocol --json` before it is handed to anybody —
-whether or not the bundle manifest listed its digest — and refused if the
-answer does not satisfy it. A `AUCOM_AUE_BINARY` developer override gets no
-handshake; that is part of why it is labelled UNVERIFIED.
+1. **Who is this?** `protocol --json` must say `"program": "auto-pigeon-mapio"`. Protocol numbers alone
+   prove nothing: the extractor also speaks a protocol 1.x, and a full extractor placed at this path must
+   not pass for a converter.
+2. **Do I speak its contract?** **Majors equal, minor at least the required one** — never `>= major`,
+   because a later major is defined as breaking. The rule lives in one function on each side of the
+   boundary (`converter.ProtocolSatisfies` here, `protocol_satisfies` in `build/release-plan.py`) and a
+   third call site implementing a laxer version of it is the failure mode.
+3. **Can it do what a build needs?** Its capabilities must list every direction in
+   `converter.RequiredDirections` and name the APMap versions it reads and writes.
 
-Without a required protocol the Companion would be trusting a version NUMBER to
-imply a contract, which is exactly the assumption a rebuilt or forked extractor
-breaks.
+The required protocol is `converter.RequiredProtocol` (`"1.0"`), compiled in. The bundled converter is
+asked before it is handed to anybody — whether or not the bundle manifest listed its digest. A
+`AUCOM_MAPIO_BINARY` developer override gets no handshake; that is part of why it is labelled UNVERIFIED.
+
+Without a required protocol the Companion would be trusting a version NUMBER to imply a contract, which
+is exactly the assumption a rebuilt or forked converter breaks.
+
+`cmd/mapio`'s contract is its protocol document: `version`, `protocol --json` and
+`convert --<direction> --input <file> --output <dir> [--json]`. Exit 0 wrote the output, 1 did not, 2 was
+a wrong invocation. A failed conversion's last stderr line is `MAPIO-TERMINAL/1.0 {reason, message, detail}`,
+and its reasons are `go/mapio`'s refusal codes plus `io_error`. It validates always, writes every file or
+none, and takes no flag that turns validation off.
 
 ### Offline is a different authority, never a weaker check
 
-**Retired 2026-09-23 with the downloads.** There is no offline mode because
-there is no online one: nothing is fetched, so there is nothing to fall back
-from. `extractor-pin.json` and the catalogue state are gone; the requirement is
-`aue.RequiredProtocol` and the digest is the release's `bundle-manifest.json`.
-What survives is the rule underneath: **a check that failed, or could not run,
-is a refusal** — an unreadable bundle manifest refuses rather than reading as
-"no manifest" (threat row T08), and never becomes "use it anyway".
+**Retired 2026-09-23 with the downloads.** There is no offline mode because there is no online one:
+nothing is fetched, so there is nothing to fall back from. The requirement is
+`converter.RequiredProtocol` and the digest is the release's `bundle-manifest.json`. What survives is the
+rule underneath: **a check that failed, or could not run, is a refusal** — an unreadable bundle manifest
+refuses rather than reading as "no manifest" (threat row T08), and never becomes "use it anyway".
 
 ### Every invocation is bounded, and the bounds are not decoration
 
-A timeout on the WHOLE run, because a process printing one line every nine
-minutes keeps a per-read deadline satisfied for ever. **SIGTERM first**, because
-the extractor's published contract says a supervised run ends deliberately on
-one and writes a record saying why; the grace period is a field, so the default
-is the patient production answer and a test can shorten it. A fresh working
-directory per invocation, removed afterwards. A bounded read, because a
-subprocess is not a trusted producer of unbounded output — and the cap is
-reported as the cap, not as whatever the child died of when the pipe closed.
+A timeout on the WHOLE run, because a process printing one line every nine minutes keeps a per-read
+deadline satisfied for ever. **SIGTERM first**, because `cmd/mapio` turns it into a cancelled context and
+ends with a record saying why; the grace period is a field, so the default is the patient production
+answer and a test can shorten it. On Windows, where a process cannot be sent SIGTERM, the signal fails and
+the child is killed when the grace period ends. A fresh working directory per invocation, removed
+afterwards. A bounded read, because a subprocess is not a trusted producer of unbounded output — and the
+cap is reported as the cap, not as whatever the child died of when the pipe closed.
 
-`RunJSON` refuses an empty body and trailing content. A subprocess can exit 0
-having printed a warning, half a document, or a document with something
-appended, and each of those decodes into a partially-filled struct a caller then
-acts on.
+`RunJSON` refuses an empty body and trailing content. A subprocess can exit 0 having printed a warning,
+half a document, or a document with something appended, and each of those decodes into a partially-filled
+struct a caller then acts on.
+
+The converter is resolved lazily (`converter.LazyRunner`), so a server that never converts a map never
+hashes or starts it.
 
 ### Authorization is not verification
 
-**Retired 2026-09-23.** `acquire.Options.Authorize`, the `Downloader` and
-`catalog.RedactURL` were deleted with the download path, and so was AUB's
-AUE download grant (`internal/aub/aue.go`). The distinction still binds the
-downloads that remain — maps, textures/WADs and join content from AUB
-(`internal/assetsync`): **who let you fetch the bytes and whether the bytes are
-the right bytes are different questions with different answers.** A backend
-authorizing a fetch never makes this program run what it fetched, and no
-download path may be added that ends in an executable (threat row T05).
+**Retired 2026-09-23.** `acquire.Options.Authorize`, the `Downloader` and `catalog.RedactURL` were deleted
+with the download path, and so was AUB's extractor download grant (`internal/aub/aue.go`). The distinction
+still binds the downloads that remain — maps, textures/WADs and join content from AUB
+(`internal/assetsync`): **who let you fetch the bytes and whether the bytes are the right bytes are
+different questions with different answers.** A backend authorizing a fetch never makes this program run
+what it fetched, and no download path may be added that ends in an executable (threat row T05).
 
 ### Publishing is executable, and holds no key here
 
-**Retired 2026-09-23.** `companion catalog release` and `companion catalog sign`
-are gone with the catalogue; there is nothing for this program to publish or
-sign about the extractor. Publishing the extractor is now an act of the RELEASE:
-`build/bundle-sidecar.sh --extractor …` puts a prebuilt file beside the
-Companion and `build/bundle-manifest.py` lists its digest, its licence (quoted
-from the build) and the commit it came from. **CI still reads no secrets**, and that is exactly why the
-release workflow does not build AUE yet: the AUE repository is private, and
-reading it would need a token — deferred until the repositories move to the
-`auto-pigeon` organisation.
+**Retired 2026-09-23.** `companion catalog release` and `companion catalog sign` are gone with the
+catalogue. Publishing the converter is an act of the RELEASE: `build/bundle-sidecar.sh --converter …` puts
+a built file beside the Companion and `build/bundle-manifest.py` lists its digest, its licences and the
+commits it came from. **CI reads no secrets** for any of it: everything a release builds from is this
+repository and a public module, and `AUE_CHECKOUT_TOKEN` is no longer read by any workflow. The repository
+secret itself is the operator's to delete.
 
 ### How a build converts an APMap (moved from README.md, 2026-10-17)
 
-A map in the account is an APMap and a compiler reads a `.map`, so a build converts through the
-extractor first, choosing its direction by the APMap's `game`: `quake1` → `--apmap-to-q1map`,
-`quake2` → `--apmap-to-q2map`, `quake3` → `--apmap-to-q3map` (an extractor with that direction,
-`Q3_004`). The Quake III direction also writes `<name>.q3map-manifest.json` beside the `.map` in the
-same `converted-<name>/` directory — the source document's identity, every shader, model and sound
-the map names, and every conversion warning. An extractor refusal (an older extractor, a patch or
-shader it will not write) is reported in its own words and nothing is built. A local `.apmap` given
-to `build run` is copied into the build's temporary stage first, so nothing is written beside the
-user's file; `companion extractor convert` runs the same path by hand.
+A map in the account is an APMap and a compiler reads a `.map`, so a build converts first, choosing its
+direction by the APMap's `game`: `quake1` → `--apmap-to-q1map`, `quake2` → `--apmap-to-q2map`, `quake3` →
+`--apmap-to-q3map`. The Quake III direction also writes `<name>.q3map-manifest.json` beside the `.map` in
+the same `converted-<name>/` directory — the source document's identity, every shader, model and sound the
+map names, and every conversion warning — and that manifest is refused if its digests are not those of the
+two files in hand. A converter refusal (a patch or shader it will not write) is reported in its own words
+and nothing is built. A local `.apmap` given to `build run` is copied into the build's temporary stage
+first, so nothing is written beside the user's file; `companion converter convert` runs the same path by
+hand. Build & Run and ordinary builds share this one path, `assetref.ConvertAPMapInputs`, and a build's
+record names the converter, its version and the go/mapio revision.

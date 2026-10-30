@@ -11,10 +11,10 @@ import (
 	"testing"
 )
 
-// The extractor in the bundle, and the ways it must refuse.
+// The converter in the bundle, and the ways it must refuse.
 //
 // The release puts the two SEPARATELY BUILT programs in one archive: the
-// extractor as its own file beside the Companion, never inside it, and nothing
+// converter as its own file beside the Companion, never inside it, and nothing
 // downloads it. These drive `build/bundle-manifest.py` the way the release
 // workflow drives it, because the rules are in that script and a test that
 // restated them in Go would be a second copy that could disagree.
@@ -109,16 +109,23 @@ func writeFakeExecutable(t *testing.T, path, platform, tag string) {
 	}
 }
 
-// extractorArgs are the arguments that place a fake linux-amd64 extractor.
-func extractorArgs(t *testing.T, platform string) []string {
+// converterArgs are the arguments that place a fake converter for platform.
+func converterArgs(t *testing.T, platform string) []string {
 	t.Helper()
 	dir := t.TempDir()
-	extractor := filepath.Join(dir, "auto-pigeon-extractor-0.9.0-"+platform)
-	writeFakeExecutable(t, extractor, platform, "this is the extractor")
+	converter := filepath.Join(dir, "auto-pigeon-mapio-0.9.0-"+platform)
+	writeFakeExecutable(t, converter, platform, "this is the converter")
+	notices := filepath.Join(dir, "notices.txt")
+	if err := os.WriteFile(notices, []byte("MIT License\nApache License\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
-	return []string{"--extractor", extractor, "--extractor-version", "0.9.0",
-		"--extractor-commit", strings.Repeat("ab", 20),
-		"--extractor-source", "https://example.test/aue/tree/" + strings.Repeat("ab", 20)}
+	return []string{"--converter", converter, "--converter-version", "0.9.0",
+		"--converter-commit", strings.Repeat("ab", 20),
+		"--converter-source", "https://example.test/aucom/tree/" + strings.Repeat("ab", 20),
+		"--converter-notices", notices,
+		"--library-version", "v0.0.0-20261030000000-abababababab",
+		"--library-commit", strings.Repeat("ab", 20)}
 }
 
 func readManifest(t *testing.T, bundle string) map[string]any {
@@ -136,30 +143,29 @@ func readManifest(t *testing.T, bundle string) map[string]any {
 	return manifest
 }
 
-// Without an extractor the bundle is complete and says what is missing — and
+// Without a converter the bundle is complete and says what is missing — and
 // that nothing downloads it.
-func TestABundleWithoutAnExtractorSaysSo(t *testing.T) {
+func TestABundleWithoutAConverterSaysSo(t *testing.T) {
 	bundle := newBundle(t)
 	if output, err := runBundleManifest(t, bundle); err != nil {
 		t.Fatalf("%v\n%s", err, output)
 	}
 	manifest := readManifest(t, bundle)
-	if manifest["extractor"] != nil {
-		t.Errorf("extractor = %v, want none", manifest["extractor"])
+	if manifest["converter"] != nil {
+		t.Errorf("converter = %v, want none", manifest["converter"])
 	}
-	absent, _ := manifest["extractor_absent"].(map[string]any)
+	absent, _ := manifest["converter_absent"].(map[string]any)
 	consequence, _ := absent["consequence"].(string)
 	if !strings.Contains(consequence, "downloads no program") {
-		t.Errorf("extractor_absent = %v", absent)
+		t.Errorf("converter_absent = %v", absent)
 	}
 }
 
-// An extractor without its version, its source or the full
-// commit it was built from is refused: the bundle must say which build it
-// carries, where it came from and whose terms it is under.
-func TestAnExtractorWithoutVersionSourceLicenceOrCommitIsRefused(t *testing.T) {
+// A converter without its version, its source, its notices, its library revision or the full commit
+// it was built from is refused: the bundle must say which build it carries and where it came from.
+func TestAConverterWithoutItsProvenanceOrNoticesIsRefused(t *testing.T) {
 	without := func(flag string) []string {
-		args := extractorArgs(t, "linux-amd64")
+		args := converterArgs(t, "linux-amd64")
 		for index := range args {
 			if args[index] == flag {
 				return append(append([]string{}, args[:index]...), args[index+2:]...)
@@ -168,17 +174,20 @@ func TestAnExtractorWithoutVersionSourceLicenceOrCommitIsRefused(t *testing.T) {
 		t.Fatalf("no %s", flag)
 		return nil
 	}
-	shortCommit := extractorArgs(t, "linux-amd64")
+	shortCommit := converterArgs(t, "linux-amd64")
 	for index := range shortCommit {
-		if shortCommit[index] == "--extractor-commit" {
+		if shortCommit[index] == "--converter-commit" {
 			shortCommit[index+1] = "86ac34d"
 		}
 	}
 	for name, extra := range map[string][]string{
-		"no version":   without("--extractor-version"),
-		"no source":    without("--extractor-source"),
-		"no commit":    without("--extractor-commit"),
-		"short commit": shortCommit,
+		"no version":         without("--converter-version"),
+		"no source":          without("--converter-source"),
+		"no commit":          without("--converter-commit"),
+		"no notices":         without("--converter-notices"),
+		"no library version": without("--library-version"),
+		"no library commit":  without("--library-commit"),
+		"short commit":       shortCommit,
 	} {
 		if output, err := runBundleManifest(t, newBundle(t), extra...); err == nil {
 			t.Errorf("%s: accepted\n%s", name, output)
@@ -186,42 +195,37 @@ func TestAnExtractorWithoutVersionSourceLicenceOrCommitIsRefused(t *testing.T) {
 	}
 }
 
-// The extractor is never MIT (NEW_247G): an archive listing it so would read as
-// entirely MIT. The proprietary identifier is accepted, and so is the AGPL one
-// an earlier extractor build declares — its copies keep that licence.
-func TestAnExtractorDeclaredMITIsRefusedAndItsOwnLicenceIsKept(t *testing.T) {
-	for _, spdx := range []string{"MIT", "mit", "MIT-0"} {
-		output, err := runBundleManifest(t, newBundle(t), append(extractorArgs(t, "linux-amd64"),
-			"--extractor-spdx", spdx)...)
-		if err == nil || !strings.Contains(output, "the extractor is not MIT") {
-			t.Errorf("an extractor declared %s: err = %v\n%s", spdx, err, output)
+// The converter links an Apache-2.0 library: MIT alone would describe an archive carrying it as
+// entirely MIT, and a licence without Apache-2.0 would drop the library's terms.
+func TestAConverterMustBeListedUnderItsLibrarysLicence(t *testing.T) {
+	for _, spdx := range []string{"MIT", "mit", "MIT-0", "MIT AND Apache-2.0", "LicenseRef-Auto-Pigeon-Proprietary"} {
+		output, err := runBundleManifest(t, newBundle(t), append(converterArgs(t, "linux-amd64"),
+			"--converter-spdx", spdx)...)
+		if err == nil || !strings.Contains(output, "the converter is Apache-2.0 AND MIT") {
+			t.Errorf("a converter declared %s: err = %v\n%s", spdx, err, output)
 		}
 	}
-	for _, spdx := range []string{"LicenseRef-Auto-Pigeon-Proprietary", "AGPL-3.0-only"} {
-		bundle := newBundle(t)
-		if output, err := runBundleManifest(t, bundle, append(extractorArgs(t, "linux-amd64"),
-			"--extractor-spdx", spdx)...); err != nil {
-			t.Errorf("an extractor declared %s was refused: %v\n%s", spdx, err, output)
-			continue
-		}
-		sidecar, _ := readManifest(t, bundle)["extractor"].(map[string]any)
-		if sidecar["license"] != spdx {
-			t.Errorf("an extractor declared %s is recorded as %v", spdx, sidecar["license"])
-		}
+	bundle := newBundle(t)
+	if output, err := runBundleManifest(t, bundle, converterArgs(t, "linux-amd64")...); err != nil {
+		t.Fatalf("%v\n%s", err, output)
+	}
+	sidecar, _ := readManifest(t, bundle)["converter"].(map[string]any)
+	if sidecar["license"] != "Apache-2.0 AND MIT" {
+		t.Errorf("the converter is recorded as %v", sidecar["license"])
 	}
 }
 
-// A bundle pairs the two programs for ONE machine. An extractor built for
-// another platform — or a file whose header says nothing — is refused, and so
-// is a Companion built for another platform than the bundle's (NEW_247A).
-func TestAWrongPlatformExtractorIsRefused(t *testing.T) {
+// A bundle pairs the two programs for ONE machine. A converter built for another platform — or a file
+// whose header says nothing — is refused, and so is a Companion built for another platform than the
+// bundle's (NEW_247A).
+func TestAWrongPlatformConverterIsRefused(t *testing.T) {
 	for _, platform := range []string{"linux-arm64", "windows-amd64", "darwin-amd64"} {
-		output, err := runBundleManifest(t, newBundle(t), extractorArgs(t, platform)...)
+		output, err := runBundleManifest(t, newBundle(t), converterArgs(t, platform)...)
 		if err == nil || !strings.Contains(output, "built for "+platform) {
-			t.Errorf("a %s extractor in a linux-amd64 bundle: err = %v\n%s", platform, err, output)
+			t.Errorf("a %s converter in a linux-amd64 bundle: err = %v\n%s", platform, err, output)
 		}
 	}
-	notAProgram := extractorArgs(t, "linux-amd64")
+	notAProgram := converterArgs(t, "linux-amd64")
 	if err := os.WriteFile(notAProgram[1], []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -230,42 +234,43 @@ func TestAWrongPlatformExtractorIsRefused(t *testing.T) {
 	}
 	bundle := newBundle(t)
 	writeFakeExecutable(t, filepath.Join(bundle, "companion"), "linux-arm64", "companion")
-	if output, err := runBundleManifest(t, bundle, extractorArgs(t, "linux-amd64")...); err == nil {
+	if output, err := runBundleManifest(t, bundle, converterArgs(t, "linux-amd64")...); err == nil {
 		t.Errorf("a linux-arm64 Companion was bundled as linux-amd64:\n%s", output)
 	}
 }
 
-// A given extractor is bundled as a SEPARATE FILE, with its licence named,
+// A given converter is bundled as a SEPARATE FILE, with its licences named and its notices beside it,
 // under the name the Companion looks for beside itself.
-func TestAnExtractorIsBundledBesideTheCompanion(t *testing.T) {
+func TestAConverterIsBundledBesideTheCompanionWithItsNotices(t *testing.T) {
 	bundle := newBundle(t)
-	if output, err := runBundleManifest(t, bundle, append(extractorArgs(t, "linux-amd64"),
-		"--extractor-spdx", "LicenseRef-test")...); err != nil {
+	if output, err := runBundleManifest(t, bundle, converterArgs(t, "linux-amd64")...); err != nil {
 		t.Fatalf("%v\n%s", err, output)
 	}
 	manifest := readManifest(t, bundle)
-	sidecar, _ := manifest["extractor"].(map[string]any)
-	if sidecar == nil || sidecar["version"] != "0.9.0" || sidecar["file"] != "dependencies/auto-pigeon-extractor" ||
-		sidecar["license"] != "LicenseRef-test" || sidecar["source_commit"] != strings.Repeat("ab", 20) {
-		t.Fatalf("extractor = %v", sidecar)
+	sidecar, _ := manifest["converter"].(map[string]any)
+	if sidecar == nil || sidecar["version"] != "0.9.0" || sidecar["file"] != "dependencies/auto-pigeon-mapio" ||
+		sidecar["notices"] != "dependencies/NOTICES-auto-pigeon-mapio.txt" ||
+		sidecar["source_commit"] != strings.Repeat("ab", 20) {
+		t.Fatalf("converter = %v", sidecar)
 	}
-	// The licence is named in the manifest; no licence file ships in the
-	// bundle (operator decision, 2026-09-25).
-	if _, err := os.Stat(filepath.Join(bundle, "LICENSE-auto-pigeon-extractor.txt")); err == nil {
-		t.Error("the bundle carries a licence file again")
+	library, _ := sidecar["library"].(map[string]any)
+	if library["module"] != "github.com/auto-pigeon/auto-pigeon-libraries" || library["license"] != "Apache-2.0" {
+		t.Fatalf("library = %v", library)
+	}
+	if _, err := os.Stat(filepath.Join(bundle, "dependencies", "NOTICES-auto-pigeon-mapio.txt")); err != nil {
+		t.Errorf("the converter's notices are not in the bundle: %v", err)
 	}
 	// Windows has no executable bit to observe; the release composes its
 	// bundles on Linux, where this is checked.
-	if info, err := os.Stat(filepath.Join(bundle, "dependencies", "auto-pigeon-extractor")); err != nil ||
+	if info, err := os.Stat(filepath.Join(bundle, "dependencies", "auto-pigeon-mapio")); err != nil ||
 		(info.Mode().Perm()&0o111 == 0 && runtime.GOOS != "windows") {
-		t.Errorf("the extractor is not an executable file in the bundle: %v", err)
+		t.Errorf("the converter is not an executable file in the bundle: %v", err)
 	}
-	// Three licences for three kinds of thing: the Companion's own code (MIT),
-	// the AULIBS contract files compiled into it (Apache-2.0), and the
-	// extractor beside it (whatever it declares — never MIT).
+	// Three licences for three kinds of thing: the Companion's own code (MIT), the AULIBS contract
+	// files compiled into it (Apache-2.0), and the converter beside it (both).
 	licences, _ := manifest["licenses"].([]any)
 	if len(licences) != 3 {
-		t.Errorf("the bundle declares %d licence(s); want the Companion's, AULIBS' and the extractor's", len(licences))
+		t.Errorf("the bundle declares %d licence(s); want the Companion's, AULIBS' and the converter's", len(licences))
 	}
 	byProduct := map[string]string{}
 	for _, raw := range licences {
@@ -274,22 +279,22 @@ func TestAnExtractorIsBundledBesideTheCompanion(t *testing.T) {
 		spdx, _ := entry["spdx"].(string)
 		byProduct[product] = spdx
 	}
-	if byProduct["auto-pigeon-companion"] != "MIT" || byProduct["auto-pigeon-extractor"] != "LicenseRef-test" ||
+	if byProduct["auto-pigeon-companion"] != "MIT" || byProduct["auto-pigeon-mapio"] != "Apache-2.0 AND MIT" ||
 		byProduct["auto-pigeon-libraries contract files compiled into the Companion"] != "Apache-2.0" {
 		t.Errorf("the bundle's licences are %v", byProduct)
 	}
-	found := false
+	found := 0
 	for _, entry := range manifest["members"].([]any) {
 		member, _ := entry.(map[string]any)
-		if member["path"] == "dependencies/auto-pigeon-extractor" {
-			found = true
-			if member["product"] != "auto-pigeon-extractor" || member["version"] != "0.9.0" ||
+		if member["path"] == "dependencies/auto-pigeon-mapio" || member["path"] == "dependencies/NOTICES-auto-pigeon-mapio.txt" {
+			found++
+			if member["product"] != "auto-pigeon-mapio" || member["version"] != "0.9.0" ||
 				!strings.HasPrefix(member["sha256"].(string), "sha256:") {
-				t.Errorf("the extractor member is recorded as %v", member)
+				t.Errorf("a converter member is recorded as %v", member)
 			}
 		}
 	}
-	if !found {
-		t.Error("the extractor is not in the member list, so the Companion could not check its digest")
+	if found != 2 {
+		t.Error("the converter and its notices are not both in the member list")
 	}
 }

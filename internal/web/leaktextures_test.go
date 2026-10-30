@@ -18,8 +18,8 @@ import (
 	"time"
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
-	"github.com/auto-pigeon/auto-pigeon-companion/internal/aue"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/converter"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/playrun"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/texturebundle"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/texturebundle/fixturewad"
@@ -221,8 +221,8 @@ func (c *fixtureConverter) Run(_ context.Context, _ string, args ...string) ([]b
 	return []byte("{}"), os.WriteFile(filepath.Join(output, stem+".map"), []byte(document.Map), 0o600)
 }
 
-func (c *fixtureConverter) Provenance() aue.Provenance {
-	return aue.Provenance{Mode: aue.ModeBundled, Verified: true}
+func (c *fixtureConverter) Provenance() converter.Provenance {
+	return converter.Provenance{Mode: converter.ModeBundled, Verified: true}
 }
 
 // q1Room is a tiny Quake 1 room: worldspawn names its WADs, and each `// uses`

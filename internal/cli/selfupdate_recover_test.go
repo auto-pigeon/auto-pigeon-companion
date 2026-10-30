@@ -48,12 +48,12 @@ func TestAStartAfterAnUnfinishedRollbackRefusesToServeUntilRecovered(t *testing.
 	root := filepath.Join(base, "auto-pigeon-companion-1.900-linux-amd64")
 	staged := filepath.Join(base, "data", "tools", "companion", "1.901")
 	current := writeMembers(t, root, map[string]string{
-		"auto-pigeon-companion":              "old",
-		"dependencies/auto-pigeon-extractor": "old aue",
+		"auto-pigeon-companion":          "old",
+		"dependencies/auto-pigeon-mapio": "old aue",
 	})
 	members := writeMembers(t, staged, map[string]string{
-		"auto-pigeon-companion":              "new",
-		"dependencies/auto-pigeon-extractor": "new aue",
+		"auto-pigeon-companion":          "new",
+		"dependencies/auto-pigeon-mapio": "new aue",
 	})
 	dependencies := filepath.Join(root, "dependencies")
 	defer os.Chmod(dependencies, 0o755)
@@ -63,7 +63,7 @@ func TestAStartAfterAnUnfinishedRollbackRefusesToServeUntilRecovered(t *testing.
 		Prove:     func(context.Context, string) error { return errors.New("did not serve") },
 		FreeSpace: func(string) int64 { return 1 << 40 },
 		Fault: func(at string) error {
-			if at == "restore:dependencies/auto-pigeon-extractor" {
+			if at == "restore:dependencies/auto-pigeon-mapio" {
 				return os.Chmod(dependencies, 0o555)
 			}
 			return nil
@@ -94,7 +94,7 @@ func TestAStartAfterAnUnfinishedRollbackRefusesToServeUntilRecovered(t *testing.
 	if results[len(results)-1].Outcome != "rolled_back" {
 		t.Fatalf("results %+v", results)
 	}
-	for name, want := range map[string]string{"auto-pigeon-companion": "old", "dependencies/auto-pigeon-extractor": "old aue"} {
+	for name, want := range map[string]string{"auto-pigeon-companion": "old", "dependencies/auto-pigeon-mapio": "old aue"} {
 		if raw, _ := os.ReadFile(filepath.Join(root, filepath.FromSlash(name))); string(raw) != want {
 			t.Fatalf("%s is %q", name, raw)
 		}

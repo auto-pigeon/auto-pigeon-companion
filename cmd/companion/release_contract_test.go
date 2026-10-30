@@ -7,22 +7,25 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 
-	"github.com/auto-pigeon/auto-pigeon-companion/internal/aue"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/converter"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/release"
 )
 
-// The per-push bundled release (NEW_247A), held to the failures the prompt
-// named: a movable pin, drifting target lists, an archive missing a program or
-// a licence, a wrong-platform extractor, disagreeing versions, a download path,
-// write permission on the wrong job, a build-only candidate published as a
+// The per-push bundled release (NEW_247A, NEW_371), held to the failures that
+// matter: a movable revision, drifting target lists, an archive missing a program
+// or its notices, a wrong-platform converter, disagreeing versions, a download
+// path, write permission on the wrong job, a build-only candidate published as a
 // download, and a rerun that replaces bytes silently.
 //
 // The decisions live in build/release-plan.py and the bundle rules in
@@ -77,49 +80,56 @@ func sha(body []byte) string {
 }
 
 // ---------------------------------------------------------------------------
-// The pin
+// What the converter is built from
 
-// The extractor a release bundles is the head of AUE's main branch when the
-// release runs (operator, 2026-10-02): a commit written here is how v1.192
-// shipped an extractor that could not read the maps the editor was saving. The
-// branch is resolved to one commit by `aue-checkout`, so what is refused here
-// is a commit, a tag or a ref path standing where the branch name goes.
-func TestTheExtractorIsTheHeadOfItsBranchAndThisBuildsProtocol(t *testing.T) {
-	var pin struct {
-		Ref              string `json:"ref"`
-		Repository       string `json:"repository"`
+// The converter's source is this repository plus one exact revision of a public module, and go.mod is
+// the one place that revision is written, so one commit of this repository names one converter.
+func TestTheConverterIsBuiltFromTheRevisionGoModPins(t *testing.T) {
+	var build struct {
+		Module           string `json:"library_module"`
 		RequiredProtocol string `json:"required_protocol"`
+		License          string `json:"license"`
 	}
-	if err := json.Unmarshal([]byte(repoFile(t, "build", "aue-pin.json")), &pin); err != nil {
+	if err := json.Unmarshal([]byte(repoFile(t, "build", "converter.json")), &build); err != nil {
 		t.Fatal(err)
 	}
-	if pin.Ref != "main" {
-		t.Errorf("build/aue-pin.json follows %q; a release bundles the head of main", pin.Ref)
+	if build.RequiredProtocol != converter.RequiredProtocol {
+		t.Errorf("the build requires protocol %s and this Companion drives %s", build.RequiredProtocol, converter.RequiredProtocol)
 	}
-	if pin.RequiredProtocol != aue.RequiredProtocol {
-		t.Errorf("the pin requires protocol %s and this Companion drives %s", pin.RequiredProtocol, aue.RequiredProtocol)
+	if build.License != release.ConverterSPDX {
+		t.Errorf("the build says %q and the component list says %q", build.License, release.ConverterSPDX)
 	}
-	mustPlan(t, "pin")
+	if build.Module != release.ConverterLibraryModule {
+		t.Errorf("the build names %s and the component list %s", build.Module, release.ConverterLibraryModule)
+	}
+	output := mustPlan(t, "pin")
+	mustContain(t, "release-plan.py pin", output, "library_version="+release.ConverterLibraryVersion)
 
 	for name, change := range map[string]func(map[string]any){
-		"no branch":            func(d map[string]any) { delete(d, "ref") },
-		"a commit as the ref":  func(d map[string]any) { d["ref"] = strings.Repeat("ab", 20) },
-		"a ref path":           func(d map[string]any) { d["ref"] = "refs/heads/main" },
-		"a ref with a space":   func(d map[string]any) { d["ref"] = "main; rm" },
-		"a parent directory":   func(d map[string]any) { d["ref"] = "../main" },
-		"a commit kept beside": func(d map[string]any) { d["commit"] = strings.Repeat("ab", 20) },
-		"a version kept":       func(d map[string]any) { d["version"] = "1.214" },
+		"a commit written here":  func(d map[string]any) { d["commit"] = strings.Repeat("ab", 20) },
+		"a version written here": func(d map[string]any) { d["version"] = "1.214" },
+		"a branch to follow":     func(d map[string]any) { d["ref"] = "main" },
+		"MIT alone":              func(d map[string]any) { d["license"] = "MIT" },
+		"another protocol shape": func(d map[string]any) { d["required_protocol"] = "1" },
+		"no repository":          func(d map[string]any) { delete(d, "library_repository") },
 	} {
 		document := map[string]any{}
-		if err := json.Unmarshal([]byte(repoFile(t, "build", "aue-pin.json")), &document); err != nil {
+		if err := json.Unmarshal([]byte(repoFile(t, "build", "converter.json")), &document); err != nil {
 			t.Fatal(err)
 		}
 		change(document)
-		path := filepath.Join(t.TempDir(), "pin.json")
+		path := filepath.Join(t.TempDir(), "converter.json")
 		writeJSON(t, path, document)
-		if output, err := runPlan(t, "pin", "--pin", path); err == nil {
+		if output, err := runPlan(t, "pin", "--build", path); err == nil {
 			t.Errorf("%s was accepted:\n%s", name, output)
 		}
+	}
+
+	// A sibling checkout standing in for the revision is what a clean checkout could not build.
+	goMod := filepath.Join(t.TempDir(), "go.mod")
+	writeFile(t, goMod, repoFile(t, "go.mod")+"\nreplace "+build.Module+" => ../auto-pigeon-libraries\n")
+	if output, err := runPlan(t, "pin", "--go-mod", goMod); err == nil || !strings.Contains(output, "replaces") {
+		t.Errorf("a replace directive was accepted: %v\n%s", err, output)
 	}
 }
 
@@ -136,7 +146,7 @@ func TestTheReleaseWorkflowCarriesNoTargetListOfItsOwn(t *testing.T) {
 		for _, spelling := range []string{target, strings.ReplaceAll(target, "/", "-")} {
 			if strings.Contains(workflow, spelling) {
 				t.Errorf("release.yml names %q; its targets come from native-support.json and "+
-					"`aue-release targets`, through build/release-plan.py", spelling)
+					"build/converter.json, through build/release-plan.py", spelling)
 			}
 		}
 	}
@@ -173,25 +183,6 @@ func TestTheReleaseWorkflowCarriesNoTargetListOfItsOwn(t *testing.T) {
 	}
 }
 
-// aueTargets writes what `aue-release targets` prints, today's shape unless
-// told otherwise.
-func aueTargets(t *testing.T, published, candidates, unsupported []string) string {
-	t.Helper()
-	dir := t.TempDir()
-	lines := func(entries []string, suffix string) string {
-		var out strings.Builder
-		for _, entry := range entries {
-			out.WriteString(strings.Replace(entry, "/", " ", 1) + suffix + "\n")
-		}
-		return out.String()
-	}
-	writeFile(t, filepath.Join(dir, "published.txt"), lines(published, ""))
-	writeFile(t, filepath.Join(dir, "candidates.txt"), lines(candidates, " build_only No native machine has run it."))
-	writeFile(t, filepath.Join(dir, "unsupported.txt"), lines(unsupported, " It is refused, for a reason."))
-
-	return dir
-}
-
 func supportJSON(t *testing.T) string {
 	t.Helper()
 	rows, err := release.Rows()
@@ -215,12 +206,8 @@ type matrixDocument struct {
 
 func TestTheTargetJoinGivesEveryTargetAVerdict(t *testing.T) {
 	support := supportJSON(t)
-	today := aueTargets(t,
-		[]string{"linux/amd64", "linux/arm64", "darwin/amd64", "darwin/arm64", "windows/amd64"},
-		[]string{"windows/arm64"},
-		[]string{"windows/arm64", "linux/386", "linux/arm"})
 	out := filepath.Join(t.TempDir(), "matrix.json")
-	mustPlan(t, "matrix", "--aucom-support", support, "--aue-targets", today, "--out", out)
+	mustPlan(t, "matrix", "--aucom-support", support, "--out", out)
 	var matrix matrixDocument
 	if err := json.Unmarshal([]byte(readText(t, out)), &matrix); err != nil {
 		t.Fatal(err)
@@ -232,8 +219,7 @@ func TestTheTargetJoinGivesEveryTargetAVerdict(t *testing.T) {
 	for _, entry := range matrix.Targets {
 		want := "bundled_release"
 		if entry.Target == "windows/arm64" {
-			// Until a native Windows-arm64 job runs the extractor and AUE's own
-			// release authority promotes it (AUCOM/AUE/AUT 246I1).
+			// Until a native Windows-arm64 job has run the converter.
 			want = "build_only"
 		}
 		if entry.Verdict != want {
@@ -247,23 +233,17 @@ func TestTheTargetJoinGivesEveryTargetAVerdict(t *testing.T) {
 		}
 	}
 
-	// AUE refusing a target refuses it here; AUE saying NOTHING about one is a
-	// failure, never a silent drop.
-	refused := aueTargets(t, []string{"linux/amd64", "linux/arm64", "darwin/amd64", "darwin/arm64"},
-		nil, []string{"windows/amd64", "windows/arm64"})
-	mustPlan(t, "matrix", "--aucom-support", support, "--aue-targets", refused, "--out", out)
-	if err := json.Unmarshal([]byte(readText(t, out)), &matrix); err != nil {
+	// A build-only entry naming a target nobody declares is a typo, not a verdict.
+	document := map[string]any{}
+	if err := json.Unmarshal([]byte(repoFile(t, "build", "converter.json")), &document); err != nil {
 		t.Fatal(err)
 	}
-	for _, entry := range matrix.Targets {
-		if strings.HasPrefix(entry.Target, "windows/") && (entry.Verdict != "refused" || !strings.Contains(entry.Reason, "refused, for a reason")) {
-			t.Errorf("%s: %s (%s), want refused with AUE's reason", entry.Target, entry.Verdict, entry.Reason)
-		}
-	}
-	silent := aueTargets(t, []string{"linux/amd64"}, nil, nil)
-	if output, err := runPlan(t, "matrix", "--aucom-support", support, "--aue-targets", silent, "--out", out); err == nil ||
-		!strings.Contains(output, "never dropped silently") {
-		t.Errorf("a target AUE says nothing about was accepted: %v\n%s", err, output)
+	document["build_only"].(map[string]any)["plan9/amd64"] = "a typo"
+	path := filepath.Join(t.TempDir(), "converter.json")
+	writeJSON(t, path, document)
+	if output, err := runPlan(t, "matrix", "--build", path, "--aucom-support", support, "--out", out); err == nil ||
+		!strings.Contains(output, "does not declare") {
+		t.Errorf("an unknown build-only target was accepted: %v\n%s", err, output)
 	}
 }
 
@@ -280,24 +260,58 @@ func readText(t *testing.T, path string) string {
 // ---------------------------------------------------------------------------
 // A whole release, end to end, with stand-in programs
 
-const (
-	testVersion    = "1.500"
-	testAUEVersion = "1.207"
-)
+const testVersion = "1.500"
 
-var testAUECommit = strings.Repeat("ab", 20)
+var testCommit = strings.Repeat("ab", 20)
 
-// world is a fake AUCOM dist and a fake staged AUE release for three
-// targets: linux-amd64 and darwin-arm64 released, windows-arm64 build-only.
+// realConverters builds cmd/mapio once per test binary, for the release's stand-in targets. They are
+// the real thing because the release reads what the toolchain recorded about them and runs the host's
+// to ask what it speaks; a fake would prove nothing about either.
+var realConverters = sync.OnceValues(func() (string, error) {
+	dir, err := os.MkdirTemp("", "aucom-converters-")
+	if err != nil {
+		return "", err
+	}
+	for _, platform := range standInPlatforms() {
+		goos, goarch, _ := strings.Cut(platform, "-")
+		name := "auto-pigeon-mapio"
+		if goos == "windows" {
+			name += ".exe"
+		}
+		command := exec.Command("go", "build", "-trimpath", "-o", filepath.Join(dir, platform, name), "./cmd/mapio")
+		command.Dir = filepath.Join("..", "..")
+		command.Env = append(os.Environ(), "GOOS="+goos, "GOARCH="+goarch, "CGO_ENABLED=0")
+		if output, err := command.CombinedOutput(); err != nil {
+			return "", fmt.Errorf("building the converter for %s: %v\n%s", platform, err, output)
+		}
+	}
+	return dir, nil
+})
+
+// standInPlatforms are the targets a stand-in release holds, and the machine this test runs on: the
+// release asks the one converter it can execute what it speaks.
+func standInPlatforms() []string {
+	platforms := []string{"linux-amd64", "darwin-arm64", "windows-arm64"}
+	host := runtime.GOOS + "-" + runtime.GOARCH
+	for _, platform := range platforms {
+		if platform == host {
+			return platforms
+		}
+	}
+	return append(platforms, host)
+}
+
+// world is a fake AUCOM dist with real converters beside it, for three targets: linux-amd64 and
+// darwin-arm64 released, windows-arm64 build-only.
 type world struct {
-	dir, dist, aue, matrix, inputs, bundles, release string
+	dir, dist, matrix, inputs, bundles, release string
 }
 
 func newWorld(t *testing.T) world {
 	t.Helper()
 	w := world{dir: t.TempDir()}
-	w.dist, w.aue = filepath.Join(w.dir, "dist"), filepath.Join(w.dir, "aue-release")
-	w.matrix, w.inputs = filepath.Join(w.dir, "matrix.json"), filepath.Join(w.dir, "aue-inputs.json")
+	w.dist = filepath.Join(w.dir, "dist")
+	w.matrix, w.inputs = filepath.Join(w.dir, "matrix.json"), filepath.Join(w.dir, "converter-inputs.json")
 	w.bundles, w.release = filepath.Join(w.dir, "bundles"), filepath.Join(w.dir, "release")
 
 	// The Companion's archives, the shapes build/release.sh makes.
@@ -313,51 +327,52 @@ func newWorld(t *testing.T) world {
 		}
 		zipDir(t, stage, filepath.Join(w.dist, "auto-pigeon-companion-"+testVersion+"-"+platform+".zip"), "")
 	}
-	writeJSON(t, filepath.Join(w.dir, "support.json"), map[string]any{"platforms": []map[string]any{
+	rows := []map[string]any{
 		{"target": "linux/amd64", "built": true, "state": "native_pass"},
 		{"target": "darwin/arm64", "built": true, "state": "build_only"},
 		{"target": "windows/arm64", "built": true, "state": "build_only"},
 		{"target": "freebsd/amd64", "built": false, "state": "unsupported"},
-	}})
-
-	// The extractor's staged release, as its build-release.sh + stage leave it.
-	artifact := func(platform, dir string, status string) map[string]any {
-		goos, goarch, _ := strings.Cut(platform, "-")
-		name := "auto-pigeon-extractor-" + testAUEVersion + "-" + platform
-		if goos == "windows" {
-			name += ".exe"
-		}
-		file := name
-		if dir != "" {
-			file = dir + "/" + name
-		}
-		body := fakeExecutable(platform, "aue")
-		writeFile(t, filepath.Join(w.aue, file), string(body))
-		return map[string]any{"platform": map[string]string{"os": goos, "arch": goarch}, "file": file,
-			"kind": "file", "size": len(body), "sha256": sha(body), "status": status}
 	}
-	writeJSON(t, filepath.Join(w.aue, "release-manifest.json"), map[string]any{
-		"schema_version": "aue-release-manifest/1.0", "version": testAUEVersion, "protocol": "1.0",
-		"license":    map[string]string{"spdx": "LicenseRef-test"},
-		"source":     map[string]string{"repository": "https://example.test/aue", "commit": testAUECommit},
-		"toolchain":  map[string]any{"go": "go1.26.8", "cgo_enabled": false},
-		"artifacts":  []any{artifact("linux-amd64", "", "published"), artifact("darwin-arm64", "", "published")},
-		"candidates": []any{artifact("windows-arm64", "candidates", "build_only")},
-	})
-	writeFile(t, filepath.Join(w.aue, "LICENSE"), "the extractor's licence\n")
-	targets := aueTargets(t, []string{"linux/amd64", "darwin/arm64"}, []string{"windows/arm64"},
-		[]string{"windows/arm64", "freebsd/amd64"})
 
-	pin := map[string]any{}
-	if err := json.Unmarshal([]byte(repoFile(t, "build", "aue-pin.json")), &pin); err != nil {
+	// What build/release.sh leaves: the converters and their notices.
+	built, err := realConverters()
+	if err != nil {
 		t.Fatal(err)
 	}
-	writeJSON(t, filepath.Join(w.dir, "pin.json"), pin)
+	host := runtime.GOOS + "-" + runtime.GOARCH
+	platforms := standInPlatforms()
+	if slash := strings.Replace(host, "-", "/", 1); host != "linux-amd64" && host != "darwin-arm64" && host != "windows-arm64" {
+		// The machine running this test has to be a target, or nothing can answer the handshake.
+		rows = append(rows, map[string]any{"target": slash, "built": true, "state": "build_only"})
+		stage := filepath.Join(w.dir, "stage", host)
+		writeFakeExecutable(t, filepath.Join(stage, "companion"), host, "aucom")
+		zipDir(t, stage, filepath.Join(w.dist, "auto-pigeon-companion-"+testVersion+"-"+host+".zip"), "")
+	}
+	for _, platform := range platforms {
+		name := "auto-pigeon-mapio"
+		if strings.HasPrefix(platform, "windows") {
+			name += ".exe"
+		}
+		body, err := os.ReadFile(filepath.Join(built, platform, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		target := filepath.Join(w.dist, "converter", platform, name)
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(target, body, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeFile(t, filepath.Join(w.dist, "converter", "NOTICES-auto-pigeon-mapio.txt"),
+		"auto-pigeon-mapio\ngo/mapio "+release.ConverterLibraryVersion+"\nMIT License\nApache License\n")
+	writeJSON(t, filepath.Join(w.dir, "support.json"), map[string]any{"platforms": rows})
 
-	mustPlan(t, "matrix", "--aucom-support", filepath.Join(w.dir, "support.json"), "--aue-targets", targets, "--out", w.matrix)
-	mustPlan(t, "check-aue", "--pin", filepath.Join(w.dir, "pin.json"), "--matrix", w.matrix,
-		"--aue-release", w.aue, "--aue-version", testAUEVersion, "--aue-commit", testAUECommit, "--out", w.inputs)
-	mustPlan(t, "bundle", "--matrix", w.matrix, "--aue-inputs", w.inputs, "--aucom-dist", w.dist,
+	mustPlan(t, "matrix", "--aucom-support", filepath.Join(w.dir, "support.json"), "--out", w.matrix)
+	mustPlan(t, "check-converter", "--matrix", w.matrix, "--aucom-dist", w.dist, "--version", testVersion,
+		"--commit", testCommit, "--go", "go", "--out", w.inputs)
+	mustPlan(t, "bundle", "--matrix", w.matrix, "--converter-inputs", w.inputs, "--aucom-dist", w.dist,
 		"--version", testVersion, "--out", w.bundles)
 
 	return w
@@ -365,7 +380,7 @@ func newWorld(t *testing.T) world {
 
 func (w world) releaseIt(t *testing.T) string {
 	t.Helper()
-	return mustPlan(t, "release", "--matrix", w.matrix, "--aue-inputs", w.inputs, "--bundles", w.bundles,
+	return mustPlan(t, "release", "--matrix", w.matrix, "--converter-inputs", w.inputs, "--bundles", w.bundles,
 		"--version", testVersion, "--commit", strings.Repeat("cd", 20), "--out", w.release,
 		"--notes", filepath.Join(w.dir, "NOTES.md"))
 }
@@ -417,9 +432,9 @@ func unzipDir(t *testing.T, archive, dir string) {
 	}
 }
 
-func verifyArgs(archive, platform string) []string {
+func verifyArgs(w world, archive, platform string) []string {
 	return []string{"verify-archive", archive, "--platform", platform, "--version", testVersion,
-		"--aue-version", testAUEVersion, "--aue-commit", testAUECommit}
+		"--converter-inputs", w.inputs}
 }
 
 func TestAReleaseIsTheBundledArchivesAndNothingElse(t *testing.T) {
@@ -437,21 +452,35 @@ func TestAReleaseIsTheBundledArchivesAndNothingElse(t *testing.T) {
 	}
 
 	var document struct {
-		Version string `json:"version"`
-		Tag     string `json:"tag"`
-		Signed  bool   `json:"signed"`
-		AUE     struct {
+		Version   string `json:"version"`
+		Tag       string `json:"tag"`
+		Signed    bool   `json:"signed"`
+		Schema    string `json:"schema"`
+		Converter struct {
+			Program string `json:"program"`
 			Commit  string `json:"commit"`
 			Version string `json:"version"`
-		} `json:"aue"`
+			License string `json:"license"`
+			Library struct {
+				Version string `json:"version"`
+				Commit  string `json:"commit"`
+			} `json:"library"`
+		} `json:"converter"`
 		Targets []map[string]any `json:"targets"`
 	}
 	if err := json.Unmarshal([]byte(readText(t, filepath.Join(w.release, "release-manifest.json"))), &document); err != nil {
 		t.Fatal(err)
 	}
 	if document.Version != testVersion || document.Tag != "v"+testVersion || document.Signed ||
-		document.AUE.Commit != testAUECommit || document.AUE.Version != testAUEVersion {
+		document.Schema != "aucom.release-manifest/2.0" ||
+		document.Converter.Program != "auto-pigeon-mapio" || document.Converter.Commit != testCommit ||
+		document.Converter.Version != testVersion || document.Converter.License != release.ConverterSPDX ||
+		document.Converter.Library.Version != release.ConverterLibraryVersion ||
+		!strings.HasSuffix(release.ConverterLibraryVersion, document.Converter.Library.Commit[:12]) {
 		t.Errorf("release manifest = %+v", document)
+	}
+	if strings.Contains(readText(t, filepath.Join(w.release, "release-manifest.json")), `"aue"`) {
+		t.Error("the release manifest still has an aue member")
 	}
 	verdicts := map[string]string{}
 	for _, row := range document.Targets {
@@ -472,29 +501,30 @@ func TestAReleaseIsTheBundledArchivesAndNothingElse(t *testing.T) {
 	}
 
 	notes := readText(t, filepath.Join(w.dir, "NOTES.md"))
-	mustContain(t, "the release notes", notes, testAUECommit, "Auto-Pigeon Extractor "+testAUEVersion,
+	mustContain(t, "the release notes", notes, release.ConverterLibraryVersion, "auto-pigeon-mapio "+testVersion,
 		"windows/arm64 | build_only", "Nothing here is signed", "it is not a signature", "not supported downloads",
-		"`LICENSE` in the Companion's repository", "MIT", "not under one licence", "Apache-2.0", "declared `LicenseRef-test`")
+		"`LICENSE` in the Companion's repository", "MIT", "not under one licence", "`Apache-2.0 AND MIT`",
+		"NOTICES-auto-pigeon-mapio.txt", "no extractor is in these archives", "Download this archive once by hand")
 	if strings.Contains(notes, "Auto-Pigeon Companion is MIT (") || strings.Contains(notes, "MIT-licensed archive") {
 		t.Errorf("the release notes describe the archive as MIT:\n%s", notes)
 	}
 
-	// The macOS archive puts the extractor where a Companion in a .app looks.
+	// The macOS archive puts the converter where a Companion in a .app looks.
 	for _, platform := range []string{"linux-amd64", "darwin-arm64"} {
 		archive := filepath.Join(w.release, "auto-pigeon-companion-"+testVersion+"-"+platform+".zip")
-		mustPlan(t, verifyArgs(archive, platform)...)
+		mustPlan(t, verifyArgs(w, archive, platform)...)
 	}
 	mac := filepath.Join(t.TempDir(), "mac")
 	unzipDir(t, filepath.Join(w.release, "auto-pigeon-companion-"+testVersion+"-darwin-arm64.zip"), mac)
 	app := filepath.Join(mac, "auto-pigeon-companion-"+testVersion+"-darwin-arm64", "Auto-Pigeon Companion.app", "Contents")
-	for _, path := range []string{"MacOS/auto-pigeon-extractor", "Resources/bundle-manifest.json"} {
+	for _, path := range []string{"MacOS/auto-pigeon-mapio", "Resources/bundle-manifest.json", "Resources/NOTICES-auto-pigeon-mapio.txt"} {
 		if _, err := os.Stat(filepath.Join(app, path)); err != nil {
 			t.Errorf("the macOS bundle has no Contents/%s: %v", path, err)
 		}
 	}
 
-	// An archive is what runs the Companion and nothing else (operator
-	// decision, 2026-09-25): no licence or notice file, no acceptance kit.
+	// An archive is what runs the Companion and nothing else (operator decision, 2026-09-25): no
+	// licence or notice file but the converter's own (NEW_371), no acceptance kit, and no extractor.
 	for _, platform := range []string{"linux-amd64", "darwin-arm64"} {
 		unpacked := filepath.Join(t.TempDir(), platform)
 		unzipDir(t, filepath.Join(w.release, "auto-pigeon-companion-"+testVersion+"-"+platform+".zip"), unpacked)
@@ -504,7 +534,8 @@ func TestAReleaseIsTheBundledArchivesAndNothingElse(t *testing.T) {
 			}
 			name := entry.Name()
 			if strings.HasPrefix(name, "LICENSE") || name == "THIRD_PARTY_NOTICES.md" ||
-				strings.HasPrefix(name, "run-acceptance") || name == "kit-options.json" {
+				strings.HasPrefix(name, "run-acceptance") || name == "kit-options.json" ||
+				strings.Contains(name, "auto-pigeon-extractor") {
 				t.Errorf("the %s archive carries %s", platform, strings.TrimPrefix(path, unpacked))
 			}
 			return nil
@@ -512,7 +543,7 @@ func TestAReleaseIsTheBundledArchivesAndNothingElse(t *testing.T) {
 	}
 
 	// The root of a Linux or Windows archive is the program a person starts;
-	// the extractor and the manifest are in dependencies/.
+	// the converter, its notices and the manifest are in dependencies/.
 	linux := filepath.Join(t.TempDir(), "linux-root")
 	unzipDir(t, filepath.Join(w.release, "auto-pigeon-companion-"+testVersion+"-linux-amd64.zip"), linux)
 	root := filepath.Join(linux, "auto-pigeon-companion-"+testVersion+"-linux-amd64")
@@ -527,65 +558,63 @@ func TestAReleaseIsTheBundledArchivesAndNothingElse(t *testing.T) {
 			t.Errorf("the linux-amd64 archive root carries %s", entry.Name())
 		}
 	}
-	for _, name := range []string{"auto-pigeon-extractor", "bundle-manifest.json"} {
+	for _, name := range []string{"auto-pigeon-mapio", "NOTICES-auto-pigeon-mapio.txt", "bundle-manifest.json"} {
 		if _, err := os.Stat(filepath.Join(root, "dependencies", name)); err != nil {
 			t.Errorf("the linux-amd64 archive has no dependencies/%s: %v", name, err)
 		}
 	}
 }
 
-// The extractor's licence is quoted from its own release manifest (NEW_247G):
-// MIT is refused — an archive listing the extractor so would read as entirely
-// MIT — and the proprietary identifier reaches the release manifest and the
-// notes as declared, with the sentence that using it needs the owner's written
-// authorization.
-func TestTheExtractorsDeclaredLicenceIsQuotedAndNeverMIT(t *testing.T) {
+// What the release says about the converter is read from the built program and its build file, and
+// the checks fail on the ways that could be wrong: no notices, a notice about another revision, and a
+// converter that links anything but the one pinned module.
+func TestTheConverterChecksRefuseWhatTheReleaseCouldNotStandBehind(t *testing.T) {
 	w := newWorld(t)
-	manifestPath := filepath.Join(w.aue, "release-manifest.json")
-	declare := func(spdx string) {
-		document := map[string]any{}
-		if err := json.Unmarshal([]byte(readText(t, manifestPath)), &document); err != nil {
-			t.Fatal(err)
-		}
-		document["license"] = map[string]string{"spdx": spdx}
-		writeJSON(t, manifestPath, document)
+	check := func() (string, error) {
+		return runPlan(t, "check-converter", "--matrix", w.matrix, "--aucom-dist", w.dist, "--version", testVersion,
+			"--commit", testCommit, "--go", "go", "--out", w.inputs)
 	}
-	checkAUE := func() (string, error) {
-		return runPlan(t, "check-aue", "--pin", filepath.Join(w.dir, "pin.json"), "--matrix", w.matrix,
-			"--aue-release", w.aue, "--aue-version", testAUEVersion, "--aue-commit", testAUECommit, "--out", w.inputs)
-	}
+	notices := filepath.Join(w.dist, "converter", "NOTICES-auto-pigeon-mapio.txt")
+	body := readText(t, notices)
 
-	declare("MIT")
-	if output, err := checkAUE(); err == nil || !strings.Contains(output, "the extractor is not MIT") {
-		t.Errorf("an extractor declaring MIT: err = %v\n%s", err, output)
+	writeFile(t, notices, "MIT License\nApache License\n")
+	if output, err := check(); err == nil || !strings.Contains(output, release.ConverterLibraryVersion) {
+		t.Errorf("notices about no revision were accepted: %v\n%s", err, output)
 	}
-
-	declare("LicenseRef-Auto-Pigeon-Proprietary")
-	if output, err := checkAUE(); err != nil {
-		t.Fatalf("a proprietary extractor with no source offer was refused: %v\n%s", err, output)
-	}
-	if err := os.RemoveAll(w.bundles); err != nil {
+	if err := os.Remove(notices); err != nil {
 		t.Fatal(err)
 	}
-	mustPlan(t, "bundle", "--matrix", w.matrix, "--aue-inputs", w.inputs, "--aucom-dist", w.dist,
-		"--version", testVersion, "--out", w.bundles)
-	w.releaseIt(t)
-
-	var document struct {
-		AUE struct {
-			License string `json:"license"`
-		} `json:"aue"`
+	if output, err := check(); err == nil || !strings.Contains(output, "is not there") {
+		t.Errorf("a release with no notices was accepted: %v\n%s", err, output)
 	}
-	if err := json.Unmarshal([]byte(readText(t, filepath.Join(w.release, "release-manifest.json"))), &document); err != nil {
+	writeFile(t, notices, body)
+
+	// A file that is not what the toolchain built: another program for the same machine.
+	target := filepath.Join(w.dist, "converter", "linux-amd64", "auto-pigeon-mapio")
+	good, err := os.ReadFile(target)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if document.AUE.License != "LicenseRef-Auto-Pigeon-Proprietary" {
-		t.Errorf("the release manifest lists the extractor as %q", document.AUE.License)
+	command := exec.Command("go", "build", "-trimpath", "-o", target, "./cmd/companion")
+	command.Dir = repoRoot(t)
+	command.Env = append(os.Environ(), "GOOS=linux", "GOARCH=amd64", "CGO_ENABLED=0")
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("%v\n%s", err, output)
 	}
-	notes := readText(t, filepath.Join(w.dir, "NOTES.md"))
-	mustContain(t, "the release notes", notes, "declared `LicenseRef-Auto-Pigeon-Proprietary`",
-		"Auto-Pigeon Extractor is proprietary", "Andrea D'Intino", "written authorization",
-		"does not cover it")
+	if output, err := check(); err == nil || !strings.Contains(output, "links") {
+		t.Errorf("a program that does not link the library was accepted as the converter: %v\n%s", err, output)
+	}
+	if err := os.WriteFile(target, good, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if output, err := runPlan(t, "check-converter", "--matrix", w.matrix, "--aucom-dist", w.dist, "--version", testVersion,
+		"--commit", "abc123", "--go", "go", "--out", w.inputs); err == nil {
+		t.Errorf("a short commit was accepted:\n%s", output)
+	}
+	if output, err := check(); err != nil {
+		t.Fatalf("the intact release was refused: %v\n%s", err, output)
+	}
 }
 
 // Two builds of one commit are one set of bytes, or a rerun could never show
@@ -600,7 +629,7 @@ func TestTheReleaseIsTheSameBytesTwice(t *testing.T) {
 	if err := os.RemoveAll(w.bundles); err != nil {
 		t.Fatal(err)
 	}
-	mustPlan(t, "bundle", "--matrix", w.matrix, "--aue-inputs", w.inputs, "--aucom-dist", w.dist,
+	mustPlan(t, "bundle", "--matrix", w.matrix, "--converter-inputs", w.inputs, "--aucom-dist", w.dist,
 		"--version", testVersion, "--out", w.bundles)
 	w.releaseIt(t)
 	if second := readText(t, filepath.Join(w.release, "SHA256SUMS")); second != first {
@@ -608,8 +637,8 @@ func TestTheReleaseIsTheSameBytesTwice(t *testing.T) {
 	}
 }
 
-// An eligible archive that lacks the extractor, either licence, or whose
-// versions disagree, is refused by the check the release runs on it.
+// An eligible archive that lacks the converter or its notices, carries an extractor, or whose versions
+// disagree, is refused by the check the release runs on it.
 func TestAnIncompleteOrInconsistentArchiveIsRefused(t *testing.T) {
 	w := newWorld(t)
 	w.releaseIt(t)
@@ -647,41 +676,63 @@ func TestAnIncompleteOrInconsistentArchiveIsRefused(t *testing.T) {
 		archive string
 		want    string
 	}{
-		"no extractor": {mutate("no-extractor", remove("dependencies/auto-pigeon-extractor"), true),
-			"carries no auto-pigeon-extractor"},
-		"a replaced extractor": {mutate("replaced", func(bundle string) {
-			writeFakeExecutable(t, filepath.Join(bundle, "dependencies", "auto-pigeon-extractor"), "linux-amd64", "something else")
+		"no converter": {mutate("no-converter", remove("dependencies/auto-pigeon-mapio"), true),
+			"carries no auto-pigeon-mapio"},
+		"no notices": {mutate("no-notices", remove("dependencies/NOTICES-auto-pigeon-mapio.txt"), false),
+			"the bundle manifest lists"},
+		"an extractor beside it": {mutate("extractor", func(bundle string) {
+			writeFakeExecutable(t, filepath.Join(bundle, "dependencies", "auto-pigeon-extractor"), "linux-amd64", "aue")
+		}, false), "not in its bundle manifest"},
+		"a replaced converter": {mutate("replaced", func(bundle string) {
+			writeFakeExecutable(t, filepath.Join(bundle, "dependencies", "auto-pigeon-mapio"), "linux-amd64", "something else")
 		}, false), "does not match its bundle manifest"},
 		"an unlisted file": {mutate("unlisted", func(bundle string) {
 			writeFile(t, filepath.Join(bundle, "extra.txt"), "surprise\n")
 		}, false), "not in its bundle manifest"},
 	}
 	for name, c := range cases {
-		output, err := runPlan(t, verifyArgs(c.archive, "linux-amd64")...)
+		output, err := runPlan(t, verifyArgs(w, c.archive, "linux-amd64")...)
 		if err == nil || !strings.Contains(output, c.want) {
 			t.Errorf("%s: err = %v, want a refusal naming %q:\n%s", name, err, c.want, output)
 		}
 	}
 
-	// The same bytes, checked as another version or another platform.
-	for name, args := range map[string][]string{
-		"another Companion version": {"verify-archive", archive, "--platform", "linux-amd64", "--version", "1.501",
-			"--aue-version", testAUEVersion, "--aue-commit", testAUECommit},
-		"another extractor version": {"verify-archive", archive, "--platform", "linux-amd64", "--version", testVersion,
-			"--aue-version", "1.208", "--aue-commit", testAUECommit},
-		"another extractor commit": {"verify-archive", archive, "--platform", "linux-amd64", "--version", testVersion,
-			"--aue-version", testAUEVersion, "--aue-commit", strings.Repeat("ef", 20)},
-		"another platform": {"verify-archive", archive, "--platform", "linux-arm64", "--version", testVersion,
-			"--aue-version", testAUEVersion, "--aue-commit", testAUECommit},
+	// The same bytes, checked against another release's facts.
+	inputs := func(change func(map[string]any)) string {
+		document := map[string]any{}
+		if err := json.Unmarshal([]byte(readText(t, w.inputs)), &document); err != nil {
+			t.Fatal(err)
+		}
+		change(document)
+		path := filepath.Join(t.TempDir(), "inputs.json")
+		writeJSON(t, path, document)
+		return path
+	}
+	verify := func(version, platform, inputsPath string) (string, error) {
+		return runPlan(t, "verify-archive", archive, "--platform", platform, "--version", version, "--converter-inputs", inputsPath)
+	}
+	if output, err := verify("1.501", "linux-amd64", w.inputs); err == nil {
+		t.Errorf("another Companion version: accepted:\n%s", output)
+	}
+	if output, err := verify(testVersion, "linux-arm64", w.inputs); err == nil {
+		t.Errorf("another platform: accepted:\n%s", output)
+	}
+	for name, change := range map[string]func(map[string]any){
+		"another converter version": func(d map[string]any) { d["version"] = "1.208" },
+		"another converter commit":  func(d map[string]any) { d["commit"] = strings.Repeat("ef", 20) },
+		"another library revision": func(d map[string]any) {
+			d["library"].(map[string]any)["version"] = "v0.0.0-20200101000000-000000000000"
+		},
+		"another licence": func(d map[string]any) { d["license"] = "MIT" },
 	} {
-		if output, err := runPlan(t, args...); err == nil {
+		if output, err := verify(testVersion, "linux-amd64", inputs(change)); err == nil {
 			t.Errorf("%s: accepted:\n%s", name, output)
 		}
 	}
 	renamed := filepath.Join(t.TempDir(), "auto-pigeon-companion-1.501-linux-amd64.zip")
 	writeFile(t, renamed, readText(t, archive))
 	if output, err := runPlan(t, "verify-archive", renamed, "--platform", "linux-amd64", "--version", "1.501",
-		"--aue-version", testAUEVersion, "--aue-commit", testAUECommit); err == nil {
+		"--converter-inputs", w.inputs); err == nil {
 		t.Errorf("an archive renamed to another version was accepted:\n%s", output)
 	}
 }
@@ -820,14 +871,13 @@ func TestOnlyThePublishJobCanWrite(t *testing.T) {
 		if writes != (name == "publish") {
 			t.Errorf("job %s: write permission = %v; only `publish` may write", name, writes)
 		}
-		if strings.Contains(body, "secrets.") && name != "aue" {
-			t.Errorf("job %s reads a secret; only `aue` reads one, to check out the extractor", name)
+		if strings.Contains(body, "secrets.") {
+			t.Errorf("job %s reads a secret; a release builds from public source and needs none", name)
 		}
 	}
 	if _, ok := jobs["publish"]; !ok {
 		t.Fatal("release.yml has no publish job")
 	}
-	mustContain(t, "the aue job", jobs["aue"], "persist-credentials: false", "AUE_CHECKOUT_TOKEN is not set")
 	mustContain(t, "the publish job", jobs["publish"], "needs: [plan, bundle, acceptance]",
 		"needs.acceptance.result == 'success'", "--prerelease", "release-plan.py reconcile",
 		"release-plan.py upload-list")
@@ -844,68 +894,37 @@ func TestOnlyThePublishJobCanWrite(t *testing.T) {
 	}
 }
 
-// The extractor's gates run against the AULIBS commit its own data names,
-// checked out where its tests look for it: beside the extractor, as
-// auto-pigeon-libraries (run 36031053076 checked it out as `aulibs`, and the
-// extractor's contract tests could not see it).
-func TestTheExtractorsGatesRunAgainstItsOwnAULIBSBesideIt(t *testing.T) {
-	_, jobs := jobBlocks(t, repoFile(t, ".github", "workflows", "release.yml"))
-	job := jobs["aue"]
-	checkout := regexp.MustCompile(`(?s)- uses: actions/checkout@[0-9a-f]{40}[^\n]*\n        with:\n((?:          [^\n]*\n)+)`)
-	var aue, aulibs string
-	for _, match := range checkout.FindAllStringSubmatch(job, -1) {
-		switch {
-		case strings.Contains(match[1], "needs.plan.outputs.aulibs_repository"):
-			aulibs = match[1]
-		case strings.Contains(match[1], "needs.plan.outputs.aue_repository"):
-			aue = match[1]
+// A release builds from this repository and a public module, so a fork or a clean machine can build all
+// of it: no other repository's checkout, no token, and nothing naming the proprietary extractor as an
+// input (NEW_371).
+func TestTheReleaseNeedsNoOtherRepositoryAndNoCredential(t *testing.T) {
+	workflow := repoFile(t, ".github", "workflows", "release.yml")
+	_, jobs := jobBlocks(t, workflow)
+	if _, ok := jobs["aue"]; ok {
+		t.Error("release.yml still has an aue job")
+	}
+	for _, forbidden := range []string{"AUE_CHECKOUT_TOKEN", "repository: ${{", "auto-pigeon-extractor", "aue-release", "aue-pin", "token:"} {
+		if strings.Contains(workflow, forbidden) {
+			t.Errorf("release.yml names %q", forbidden)
 		}
 	}
-	if aue == "" || aulibs == "" {
-		t.Fatalf("the aue job does not check out both the extractor and AULIBS:\n%s", job)
-	}
-	if !strings.Contains(aue, "          path: aue\n") {
-		t.Errorf("the extractor is not checked out at `aue`:\n%s", aue)
-	}
-	// The sibling the extractor's tests resolve, and the only one.
-	if !strings.Contains(aulibs, "          path: auto-pigeon-libraries\n") {
-		t.Errorf("AULIBS is not checked out beside the extractor as auto-pigeon-libraries:\n%s", aulibs)
-	}
-	// The exact commit the pinned extractor names; never a branch, tag or latest.
-	if !strings.Contains(aulibs, "          ref: ${{ steps.aue.outputs.aulibs_commit }}\n") {
-		t.Errorf("AULIBS is not checked out at the commit the pinned extractor names:\n%s", aulibs)
-	}
-	if regexp.MustCompile(`ref: *(main|master|latest|refs/|v[0-9])`).MatchString(aulibs) {
-		t.Errorf("AULIBS is checked out at a movable ref:\n%s", aulibs)
-	}
-	// Every AULIBS_DIR names that same checkout.
-	dirs := regexp.MustCompile(`AULIBS_DIR: *([^\n]+)`).FindAllStringSubmatch(job, -1)
-	if len(dirs) == 0 {
-		t.Fatal("no step of the aue job names AULIBS_DIR")
-	}
-	for _, dir := range dirs {
-		if dir[1] != "${{ github.workspace }}/auto-pigeon-libraries" {
-			t.Errorf("AULIBS_DIR is %s; want the checkout beside the extractor", dir[1])
+	for _, file := range [][]string{{"build", "release.sh"}, {"build", "bundle-sidecar.sh"}, {"build", "converter.json"}} {
+		if body := repoFile(t, file...); strings.Contains(body, "../auto-pigeon-extractor") || strings.Contains(body, "AUE_CHECKOUT_TOKEN") {
+			t.Errorf("%s depends on the extractor", filepath.Join(file...))
 		}
 	}
-	// The extractor's own fast gate runs, unconditionally, in its checkout.
-	gates := regexp.MustCompile(`(?s)- name: The extractor's own gates\n(.*?)\n      - `).FindStringSubmatch(job)
-	if gates == nil {
-		t.Fatal("the aue job has no step running the extractor's own gates")
+	if _, err := os.Stat(filepath.Join(repoRoot(t), "build", "aue-pin.json")); err == nil {
+		t.Error("build/aue-pin.json came back")
 	}
-	mustContain(t, "the extractor's gates", gates[1], "working-directory: aue", "./scripts/test-fast.sh")
-	for _, weakened := range []string{"if:", "continue-on-error", "|| true", "-skip", "AUE_UPDATE_FROZEN"} {
-		if strings.Contains(gates[1], weakened) {
-			t.Errorf("the extractor's gates are weakened with %q", weakened)
-		}
+	if strings.Contains(repoFile(t, "go.mod"), "auto-pigeon-extractor") {
+		t.Error("go.mod names the extractor")
 	}
-	// And the pinned extractor's AULIBS is the repository the plan named.
-	mustContain(t, "the aue job", job, "release-plan.py aue-checkout --pin aucom/build/aue-pin.json --aue-dir aue")
+	mustContain(t, "the bundle job", jobs["bundle"], "needs: [plan, aucom]", "release-plan.py check-converter")
 }
 
 // Nothing in a workflow or in the release tools fetches a program. The
 // Companion downloads no executable (operator, 2026-09-23), and neither does
-// the release that builds it: the extractor is BUILT from a pinned checkout.
+// the release that builds it: the converter is BUILT from this commit.
 func TestNoWorkflowOrReleaseToolRegainsADownloadPath(t *testing.T) {
 	forbidden := regexp.MustCompile(`(?i)\bcurl\b|\bwget\b|invoke-webrequest|\biwr\b|start-bitstransfer|` +
 		`/releases/download/|/releases/latest|@latest\b|urllib\.request|\brequests\.get|http\.client`)
@@ -934,10 +953,8 @@ func TestNoWorkflowOrReleaseToolRegainsADownloadPath(t *testing.T) {
 			}
 		}
 	}
-	// The extractor is checked out — never downloaded — at the branch the plan
-	// names, and built from the one commit that checkout resolved to.
-	mustContain(t, "release.yml", repoFile(t, ".github", "workflows", "release.yml"),
-		"ref: ${{ needs.plan.outputs.aue_ref }}", "COMMIT: ${{ steps.aue.outputs.commit }}", "./scripts/build-release.sh")
+	// The converter is built, never downloaded, and go.mod's checksum is what vouches for its library.
+	mustContain(t, "release.yml", repoFile(t, ".github", "workflows", "release.yml"), "./build/release.sh", "go mod verify")
 }
 
 // A native acceptance run refuses a platform the machine is not.
@@ -947,7 +964,7 @@ func TestAcceptanceRefusesAnotherMachinesPlatform(t *testing.T) {
 		other = "linux-arm64"
 	}
 	command := exec.Command(python(t), filepath.Join(repoRoot(t), "build", "release-acceptance.py"),
-		"--archive", "none.zip", "--platform", other, "--version", testVersion, "--aue-version", testAUEVersion,
+		"--archive", "none.zip", "--platform", other, "--version", testVersion,
 		"--fixture", filepath.Join(repoRoot(t), "build", "release-fixtures", "release-acceptance.apmap"))
 	output, err := command.CombinedOutput()
 	if exit, ok := err.(*exec.ExitError); !ok || exit.ExitCode() != 2 || !strings.Contains(string(output), "never on another") {

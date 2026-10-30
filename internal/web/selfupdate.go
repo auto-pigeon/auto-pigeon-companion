@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/auto-pigeon/auto-pigeon-companion/internal/aue"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/converter"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/managedtools"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/noconsole"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/tooluse"
@@ -144,8 +144,8 @@ const proveTimeout = 60 * time.Second
 type ProveResult struct {
 	Version           string `json:"version"`
 	Commit            string `json:"commit,omitempty"`
-	ExtractorVersion  string `json:"extractor_version"`
-	ExtractorVerified bool   `json:"extractor_verified"`
+	ConverterVersion  string `json:"converter_version"`
+	ConverterVerified bool   `json:"converter_verified"`
 	ConfigRead        bool   `json:"config_read"`
 	Served            bool   `json:"served"`
 	Error             string `json:"error,omitempty"`
@@ -157,10 +157,10 @@ func Prove(ctx context.Context, executable, version string) (ProveResult, error)
 	ctx, cancel := context.WithTimeout(ctx, proveTimeout)
 	defer cancel()
 	command := exec.CommandContext(ctx, executable, "selfupdate", "prove", "--expect-version", version)
-	// The candidate's OWN extractor, beside it: a developer override in this
+	// The candidate's OWN converter, beside it: a developer override in this
 	// environment must not stand in for the one its bundle manifest lists.
 	for _, entry := range os.Environ() {
-		if !strings.HasPrefix(entry, aue.EnvBinaryOverride+"=") {
+		if !strings.HasPrefix(entry, converter.EnvBinaryOverride+"=") {
 			command.Env = append(command.Env, entry)
 		}
 	}
@@ -186,7 +186,7 @@ func Prove(ctx context.Context, executable, version string) (ProveResult, error)
 		return result, runErr
 	case result.Version != version:
 		return result, fmt.Errorf("it says it is %s, not %s", result.Version, version)
-	case !result.ExtractorVerified || !result.ConfigRead || !result.Served:
+	case !result.ConverterVerified || !result.ConfigRead || !result.Served:
 		return result, fmt.Errorf("its proving start was incomplete: %+v", result)
 	}
 	return result, nil
@@ -199,7 +199,7 @@ func (h selfHost) Prove(ctx context.Context, record managedtools.InstallRecord) 
 	}
 	result, err := Prove(ctx, program, record.Version)
 	if err == nil {
-		h.s.logf("self update: staged %s proved: extractor %s verified, configuration read, served on loopback", result.Version, result.ExtractorVersion)
+		h.s.logf("self update: staged %s proved: converter %s verified, configuration read, served on loopback", result.Version, result.ConverterVersion)
 	}
 	return err
 }

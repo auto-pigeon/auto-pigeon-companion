@@ -89,12 +89,12 @@ icns="$(cd "${app_dir}/Contents/Resources" && pwd)/AppIcon.icns"
 # The executable name must match CFBundleExecutable in the template.
 install -m 0755 "$BINARY" "${app_dir}/Contents/MacOS/${EXECUTABLE}"
 
-# Licensing: no licence or notice file ships inside the bundle (operator
+# Licensing: this script puts no licence or notice file in the bundle (operator
 # decision, 2026-09-25); LICENSE and THIRD_PARTY_NOTICES.md are in the
-# repository. A release bundle later adds the proprietary Auto-Pigeon Extractor
-# inside this .app (Contents/MacOS, build/bundle-manifest.py), so the copyright
-# line below must not call the whole .app MIT.
-copyright="Copyright © 2026 Andrea D'Intino. Auto-Pigeon Companion's own code is MIT licensed. A bundled Auto-Pigeon Extractor is proprietary, under its own licence, and third-party components keep their own licences — see THIRD_PARTY_NOTICES.md in the Companion's repository."
+# repository. A release bundle later adds the auto-pigeon-mapio converter and its
+# notices inside this .app (build/bundle-manifest.py), so the copyright line below
+# must not call the whole .app MIT.
+copyright="Copyright © 2026 Andrea D'Intino. Auto-Pigeon Companion's own code is MIT licensed. The auto-pigeon-mapio converter is Apache-2.0 and MIT, with its notices beside it in Contents/Resources, and third-party components keep their own licences — see THIRD_PARTY_NOTICES.md in the Companion's repository."
 sed -e "s|@BUNDLE_ID@|${BUNDLE_ID}|g" \
     -e "s|@VERSION@|${VERSION}|g" \
     -e "s|@ARCH@|${ARCH}|g" \

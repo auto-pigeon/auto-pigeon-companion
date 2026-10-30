@@ -289,7 +289,7 @@ func serve(env *Env, args []string) (int, func()) {
 
 	// The bundle this process runs from, and how its last replacement
 	// ended: an interrupted one is rolled back here, before anything runs
-	// the extractor beside it (NEW_368).
+	// the converter beside it (NEW_368).
 	self := inspectSelf(env)
 	updateLog := &selfUpdateLog{path: filepath.Join(configDir, SelfUpdateLogName)}
 	var tools *managedtools.Manager
@@ -340,10 +340,10 @@ func serve(env *Env, args []string) (int, func()) {
 		env.incidentState.detail = detail
 	}
 
-	// The extractor runner is built here and resolves LAZILY, so a process that
-	// never touches the extractor never hashes or runs it — and a server does
-	// not have to before it can listen. See internal/aue.LazyRunner.
-	runner := extractorRunner(env, logf)
+	// The converter runner is built here and resolves LAZILY, so a process that
+	// never touches the converter never hashes or runs it — and a server does
+	// not have to before it can listen. See internal/converter.LazyRunner.
+	runner := converterRunner(env, logf)
 
 	ctx, stop := signalContext()
 	defer stop()
@@ -421,7 +421,7 @@ func serve(env *Env, args []string) (int, func()) {
 		Version:   env.Version,
 		Debug:     *debug,
 		Config:    settings,
-		AUE:       runner,
+		Converter: runner,
 		Jobs:      service,
 		Token:     token,
 		Lifecycle: lifecycle,

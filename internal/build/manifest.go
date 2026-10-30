@@ -25,7 +25,7 @@ import (
 // what somebody else reads to find out what produced it, and may be read by a
 // build of the Companion older or newer than the one that wrote it. So it is
 // versioned by name and refused rather than half-read.
-const SchemaVersion = "aucom.build-manifest/1.4"
+const SchemaVersion = "aucom.build-manifest/1.5"
 
 // readableSchemas is every version this build can read.
 //
@@ -51,6 +51,7 @@ var readableSchemas = map[string]bool{
 	"aucom.build-manifest/1.2": true,
 	"aucom.build-manifest/1.3": true,
 	"aucom.build-manifest/1.4": true,
+	"aucom.build-manifest/1.5": true,
 }
 
 // ManifestFileName is what the manifest is called inside a build directory.
@@ -89,14 +90,14 @@ type FileRecord struct {
 	// has none.
 	Source *SourceRef `json:"source,omitempty"`
 
-	// Conversion is set when this file was written by the extractor from an
+	// Conversion is set when this file was written by the converter from an
 	// APMap: which document it was, the digest of the APMap that was read, and
-	// the extractor's own conversion manifest. Added by
+	// the converter's own conversion manifest. Added by
 	// `aucom.build-manifest/1.3`.
 	Conversion *Conversion `json:"conversion,omitempty"`
 }
 
-// Conversion records that an input is a `.map` the extractor wrote from an
+// Conversion records that an input is a `.map` the converter wrote from an
 // APMap, and exactly which APMap.
 //
 // # Why it is not left to SourceRef
@@ -111,7 +112,7 @@ type Conversion struct {
 	// From and To are the formats: `apmap` and `map`.
 	From string `json:"from"`
 	To   string `json:"to"`
-	// Direction is the extractor's own name for what it did, `apmap-to-q3map`.
+	// Direction is the converter's own name for what it did, `apmap-to-q3map`.
 	Direction string `json:"direction"`
 
 	// SourceName, SourceSHA256 and SourceBytes identify the APMap bytes read.
@@ -126,19 +127,28 @@ type Conversion struct {
 	APMapVersion     string `json:"apmap_version,omitempty"`
 	Game             string `json:"game,omitempty"`
 
-	// ConvertedBy and ConverterVerified say which extractor did it and whether
-	// anything verified that extractor.
+	// ConvertedBy and ConverterVerified say how the converter was resolved
+	// (bundled or a developer override) and whether anything verified it.
 	ConvertedBy       string `json:"converted_by,omitempty"`
 	ConverterVerified bool   `json:"converter_verified"`
 
-	// Manifest is the extractor's conversion manifest, when it writes one (the
+	// Converter, ConverterVersion and ConverterLibrary name the program, as it
+	// named itself in the handshake: auto-pigeon-mapio, its version, and the
+	// go/mapio module version compiled into it. A manifest written before NEW_371
+	// has none of the three: its conversion was the converter's, and a reader
+	// must not assume otherwise from their absence or presence.
+	Converter        string `json:"converter,omitempty"`
+	ConverterVersion string `json:"converter_version,omitempty"`
+	ConverterLibrary string `json:"converter_library,omitempty"`
+
+	// Manifest is the converter's conversion manifest, when it writes one (the
 	// Quake III direction does): kept in the build beside the `.map`, with its
 	// digest, so every shader, model and warning the conversion named is still
 	// there to read after the build.
 	Manifest *ConversionManifest `json:"manifest,omitempty"`
 }
 
-// ConversionManifest points at the extractor's own record of a conversion.
+// ConversionManifest points at the converter's own record of a conversion.
 type ConversionManifest struct {
 	Name string `json:"name"`
 	// Path is where the build kept it. Diagnostic, like every path here.
@@ -193,9 +203,9 @@ type SourceRef struct {
 	FetchedAt string `json:"fetched_at,omitempty"`
 
 	// ConvertedTo is set when the fetched file was an APMap and the build read
-	// the `.map` the extractor wrote for it; ConvertedSHA256 names those bytes
-	// and ConvertedBy / ConverterVerified say which extractor did it and
-	// whether anything verified that extractor. See assetref.ConvertAPMapInputs.
+	// the `.map` the converter wrote for it; ConvertedSHA256 names those bytes
+	// and ConvertedBy / ConverterVerified say which converter did it and
+	// whether anything verified that converter. See assetref.ConvertAPMapInputs.
 	ConvertedTo       string `json:"converted_to,omitempty"`
 	ConvertedSHA256   string `json:"converted_sha256,omitempty"`
 	ConvertedBy       string `json:"converted_by,omitempty"`

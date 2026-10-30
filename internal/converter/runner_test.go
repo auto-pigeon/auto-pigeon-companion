@@ -1,4 +1,4 @@
-package aue_test
+package converter_test
 
 import (
 	"context"
@@ -10,31 +10,31 @@ import (
 	"testing"
 	"time"
 
-	"github.com/auto-pigeon/auto-pigeon-companion/internal/aue"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/converter"
 )
 
-// fakeExtractor writes a shell script and returns an override runner for it.
+// fakeConverter writes a shell script and returns an override runner for it.
 // The runner-level properties — timeout, cancellation, isolation, the output
 // cap — are about the process and not about where the executable came from, so
 // they are tested through the cheapest path to one.
-func fakeExtractor(t *testing.T, body string) *aue.ProcessRunner {
+func fakeConverter(t *testing.T, body string) *converter.ProcessRunner {
 	t.Helper()
 	if runtime.GOOS == "windows" {
-		t.Skip("the fake extractor is a shell script")
+		t.Skip("the fake converter is a shell script")
 	}
 	path := filepath.Join(t.TempDir(), "fake-aue")
 	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+body), 0o700); err != nil {
 		t.Fatal(err)
 	}
 
-	return aue.NewOverrideRunner(path)
+	return converter.NewOverrideRunner(path)
 }
 
 // An invocation that never returns is stopped, and the error says so rather
 // than looking like a crash. The bound is on the WHOLE run: a process printing
 // one line every nine minutes keeps a per-read deadline satisfied for ever.
 func TestAnInvocationThatHangsIsStoppedAndSaysSo(t *testing.T) {
-	runner := fakeExtractor(t, "sleep 30\n")
+	runner := fakeConverter(t, "sleep 30\n")
 	runner.Timeout = 150 * time.Millisecond
 	// A shell waiting on a foreground child defers SIGTERM until that child
 	// exits, so this fixture is exactly the "ignored the signal" case the grace
@@ -46,9 +46,9 @@ func TestAnInvocationThatHangsIsStoppedAndSaysSo(t *testing.T) {
 	_, err := runner.Run(context.Background(), "summarize")
 	elapsed := time.Since(started)
 
-	var timeout *aue.TimeoutError
+	var timeout *converter.TimeoutError
 	if !errors.As(err, &timeout) {
-		t.Fatalf("err = %T %v, want *aue.TimeoutError", err, err)
+		t.Fatalf("err = %T %v, want *converter.TimeoutError", err, err)
 	}
 	if timeout.Subcommand != "summarize" {
 		t.Errorf("timeout = %+v", timeout)
@@ -61,7 +61,7 @@ func TestAnInvocationThatHangsIsStoppedAndSaysSo(t *testing.T) {
 // A cancelled context stops the run promptly, which is what a user pressing
 // Ctrl-C and a closed browser tab both look like from here.
 func TestACancelledContextStopsTheRun(t *testing.T) {
-	runner := fakeExtractor(t, "sleep 30\n")
+	runner := fakeConverter(t, "sleep 30\n")
 	runner.Grace = 200 * time.Millisecond
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -80,11 +80,11 @@ func TestACancelledContextStopsTheRun(t *testing.T) {
 	}
 }
 
-// The extractor's published contract says a supervised run ends deliberately on
+// The converter's published contract says a supervised run ends deliberately on
 // SIGTERM. This Companion sends one, so a build that installed a handler gets
 // to write its terminal record instead of being killed with no reason.
 func TestCancellationSendsSIGTERMBeforeAnythingHarsher(t *testing.T) {
-	runner := fakeExtractor(t, `
+	runner := fakeConverter(t, `
 trap 'echo terminated; exit 0' TERM
 sleep 30 &
 wait
@@ -104,7 +104,7 @@ wait
 // cannot see each other's scratch and a relative path in an argument cannot
 // reach the Companion's own directory.
 func TestEveryInvocationGetsItsOwnWorkingDirectory(t *testing.T) {
-	runner := fakeExtractor(t, "pwd\n")
+	runner := fakeConverter(t, "pwd\n")
 
 	first, err := runner.Run(context.Background(), "summarize")
 	if err != nil {
@@ -123,7 +123,7 @@ func TestEveryInvocationGetsItsOwnWorkingDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	if strings.TrimSpace(string(first)) == here {
-		t.Errorf("the extractor ran in this program's own directory: %q", first)
+		t.Errorf("the converter ran in this program's own directory: %q", first)
 	}
 	// And it is gone afterwards: a job directory that outlived its job would
 	// accumulate one per invocation for the life of the process.
@@ -132,10 +132,10 @@ func TestEveryInvocationGetsItsOwnWorkingDirectory(t *testing.T) {
 	}
 }
 
-// The deadline the extractor's own contract names is passed in, so the process
+// The deadline the converter's own contract names is passed in, so the process
 // can end itself with a named reason rather than being signalled.
 func TestTheChildIsToldItsDeadline(t *testing.T) {
-	runner := fakeExtractor(t, "echo \"$AUTO_PIGEON_JOB_DEADLINE_SECONDS\"\n")
+	runner := fakeConverter(t, "echo \"$AUTO_PIGEON_JOB_DEADLINE_SECONDS\"\n")
 	runner.Timeout = 90 * time.Second
 
 	stdout, err := runner.Run(context.Background(), "summarize")
@@ -149,12 +149,12 @@ func TestTheChildIsToldItsDeadline(t *testing.T) {
 
 // A subprocess is not a trusted producer of unbounded output.
 func TestOutputPastTheCapIsRefusedRatherThanBuffered(t *testing.T) {
-	runner := fakeExtractor(t, "yes 0123456789012345678901234567890123456789012345678901234567890123\n")
+	runner := fakeConverter(t, "yes 0123456789012345678901234567890123456789012345678901234567890123\n")
 	runner.Timeout = 30 * time.Second
 
 	_, err := runner.Run(context.Background(), "summarize")
-	if !errors.Is(err, aue.ErrOutputTooLarge) {
-		t.Fatalf("err = %v, want aue.ErrOutputTooLarge", err)
+	if !errors.Is(err, converter.ErrOutputTooLarge) {
+		t.Fatalf("err = %v, want converter.ErrOutputTooLarge", err)
 	}
 }
 
@@ -167,14 +167,14 @@ func TestRunJSONRefusesAnythingThatIsNotOneDocument(t *testing.T) {
 		"nothing at all":                "exit 0\n",
 		"truncated":                     "echo '{\"a\":'\n",
 	} {
-		runner := fakeExtractor(t, body)
+		runner := fakeConverter(t, body)
 		var into map[string]any
-		if err := runner.RunJSON(context.Background(), &into, "summarize"); !errors.Is(err, aue.ErrOutputNotJSON) {
-			t.Errorf("%s: err = %v, want aue.ErrOutputNotJSON", name, err)
+		if err := runner.RunJSON(context.Background(), &into, "summarize"); !errors.Is(err, converter.ErrOutputNotJSON) {
+			t.Errorf("%s: err = %v, want converter.ErrOutputNotJSON", name, err)
 		}
 	}
 
-	runner := fakeExtractor(t, "echo '{\"a\":1}'\n")
+	runner := fakeConverter(t, "echo '{\"a\":1}'\n")
 	var into map[string]any
 	if err := runner.RunJSON(context.Background(), &into, "summarize"); err != nil {
 		t.Fatalf("a single document was refused: %v", err)
@@ -201,7 +201,7 @@ func TestAnOverrideThatIsNotExecutableIsRefusedWithASentence(t *testing.T) {
 		"not executable": notExecutable,
 		"a directory":    dir,
 	} {
-		resolver := &aue.Resolver{Dir: t.TempDir(), Override: path}
+		resolver := &converter.Resolver{Dir: t.TempDir(), Override: path}
 		if _, err := resolver.Resolve(context.Background()); err == nil {
 			t.Errorf("%s: accepted", name)
 		}

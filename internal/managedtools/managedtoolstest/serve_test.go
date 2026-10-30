@@ -20,7 +20,7 @@ import (
 // stop.txt appears or after AUCOM_FIXTURE_RELEASES_MINUTES (default 60).
 //
 //	POST /control/publish?tool=ericw-tools&version=1.4540[&prints=1.4539]
-//	POST /control/publish-companion?version=1.901&companion=<file>&extractor=<file>&extractor_version=1.245
+//	POST /control/publish-companion?version=1.901&companion=<file>&converter=<file>&converter_version=1.245
 //	POST /control/hold     archive downloads wait until /control/release
 //	POST /control/release
 func TestServeFixtureReleasesForALiveTask(t *testing.T) {
@@ -51,13 +51,13 @@ func TestServeFixtureReleasesForALiveTask(t *testing.T) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		extractor, err := os.ReadFile(query.Get("extractor"))
+		converter, err := os.ReadFile(query.Get("converter"))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		server.Publish(mt.CompanionRepo, mt.BuildCompanion(t, mt.CompanionSpec{Version: query.Get("version"), Prerelease: true,
-			Companion: companion, Extractor: extractor, ExtractorVersion: query.Get("extractor_version")}))
+			Companion: companion, Converter: converter, ConverterVersion: query.Get("converter_version")}))
 		t.Logf("published companion %s (%s, %d bytes)", query.Get("version"), query.Get("companion"), len(companion))
 	})
 	var hold chan struct{}

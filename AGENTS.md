@@ -41,7 +41,7 @@ like the cause of whatever you are investigating, say so and stop.
 This repository is **Auto-Pigeon Companion**, abbreviated **AUCOM**. Its expected location is
 `mapper-code/auto-pigeon-companion/`. It is the program that runs on a user's own machine: it
 finds and runs the toolchains a map needs (it downloads only the two toolchains Auto-Pigeon maintains,
-through one owner — `aucom.managed-tools`; every other program the user installs, and the extractor
+through one owner — `aucom.managed-tools`; every other program the user installs, and the map converter
 ships beside it in the release), holds the profiles and approvals that say what may run,
 publishes and installs portable profiles, and joins a hosted game with verified content.
 
@@ -168,9 +168,9 @@ the router resolves those for you rather than making you read the table.
 
 | module | the authority on | topics |
 | --- | --- | --- |
-| `aucom.extractor-acquisition` | The extractor ships beside the Companion — never embedded, never downloaded | extractor, aue, acquisition, bundle, bundled, release, manifest, download, licence |
+| `aucom.extractor-acquisition` | The map converter ships beside the Companion — never embedded, never downloaded | extractor, converter, mapio, aue, acquisition, bundle, bundled, release, manifest, download, licence |
 | `aucom.managed-tools` | Two official toolchains are installed and updated by one owner, and nothing else is downloaded | managed-tools, ericw-tools, q3map2, install, update, github-release, first-launch, skipped-version |
-| `aucom.extractor-execution` | Running it — the handshake, bounded invocation, and what was retired with the downloads | extractor, handshake, protocol, offline, bounds, timeout, authorization, verification |
+| `aucom.extractor-execution` | Running it — the handshake, bounded invocation, and what was retired with the downloads | extractor, converter, mapio, handshake, protocol, offline, bounds, timeout, authorization, verification |
 | `aucom.job-bounds` | A bound is not a measurement, and the bound comes from here | job, bounds, retention, logbuf, memory, disk, stress, limits, recovery, ownership |
 | `aucom.compiler-compatibility` | A program is asked what it is, and a profile decides only for itself | compatibility, compiler, probe, version, ericw, vis, logfile, readiness, rebind |
 
@@ -235,3 +235,45 @@ to `AGENTS.md` or `CLAUDE.md` to "link" a module: `@` is EAGER, so it would put 
 text back in the startup set, and the gate fails it. `auto-pigeon-tools/docs/agent/README.md` is
 the authority on the module schema and the route shape; `docs/agent/README.md` here says what is
 specific to this repository.
+
+<!-- trail:start -->
+## Trail — repo context graph
+
+This repo is indexed in `.trail/cache/`: small linked markdown nodes that explain each
+system and carry exact file:line spans, kept in sync with the code through git.
+
+For ANY task here — understanding how something works, finding where code lives,
+or scoping a change — get context from the graph before grepping or opening
+source files. Re-ask freely (it's cheap) and reuse literal identifiers you
+already have (symbol, error string, file name) as the query. New to this repo?
+Run `trail map` first — a token-budgeted orientation (dir clusters, hubs,
+hotspots), no LLM, no key.
+
+- Run `trail ask "<your question>" --source` → ranked nodes with the relevant
+  code spans inlined (each hit's ≤8-line crux by default; `--full` for whole
+  definitions when the crux isn't enough). Match the tool to the task shape:
+  for understanding or editing, the top node IS the answer — cite its
+  `covers:` file:line spans and edit straight from `--source`. For
+  exhaustive tasks ("every occurrence / every caller of this pattern"), ranked
+  results are top-N, not complete — run `trail grep "<literal>"` instead
+  (exhaustive over indexed files, grouped by enclosing symbol), falling back
+  to raw `grep -rn` only for unindexed files.
+- `trail skeleton <file>` → every definition's signature + span, ~10× cheaper
+  than reading the file; use it to skim an API surface.
+- `trail callers <symbol>` gives precomputed, exact edges — who calls this.
+  Add `--direction out` for what it calls, or `--depth N` to walk
+  transitively for the full blast radius. For structural questions, skip
+  ranking and use this directly.
+- Or browse: `.trail/cache/INDEX.md` lists every node; follow the links.
+- Monorepos and folders of multiple repos rank fairly across sub-projects —
+  hits carry `[scope/]` labels naming which one they're from. Narrow with
+  `trail ask "<task>" --in <scope>/` once you know where you're working.
+
+If a returned span is truncated ("+N more lines"), open the file at that exact
+range before finalizing. Only open source files when a node genuinely lacks a
+needed detail, and then at the exact file:line the node points to — never
+re-read whole files.
+
+After big code changes, refresh the graph with `trail build` (deterministic,
+no API key, $0).
+<!-- trail:end -->

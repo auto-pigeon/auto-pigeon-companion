@@ -70,7 +70,8 @@ description of the day it was written, which is the same reason the manifest hol
   nothing downloads it) is `aucom.extractor-acquisition`, and its execution half (the handshake,
   the invocation bounds, and the retired offline/authorization/publishing rules) is
   `aucom.extractor-execution`, which declares the first a prerequisite because a question about
-  running an extractor is half answered without knowing how it got here.
+  running a converter is half answered without knowing how it got here. Both keep their ids from when
+  that program was the extractor; since `NEW_371` they describe the `auto-pigeon-mapio` converter.
 - **The work-in-progress truth for Quake II and Quake III is preserved exactly**, in two modules
   rather than one, because `246G`'s prompt asked for it and because the pre-split file already made
   the point that the second is not the first renumbered. Both sentences remain pinned by SHA-256

@@ -32,7 +32,7 @@ func TestADevEnvFileSuppliesOnlyTheBackendAddress(t *testing.T) {
 	path := writeEnvFile(t, `# a local stack
 export AUCOM_AUB_BASE_URL="http://localhost:9190"
 AUCOM_CATALOG_ANCHORS=/tmp/evil-anchors.json
-AUCOM_AUE_BINARY=/tmp/evil
+AUCOM_MAPIO_BINARY=/tmp/evil
 AUCOM_JOBS_DIR=/tmp/elsewhere
 SOMEBODY_ELSES_KEY=1
 `)
@@ -44,7 +44,7 @@ SOMEBODY_ELSES_KEY=1
 	if env[EnvAUBBaseURL] != "http://localhost:9190" {
 		t.Errorf("AUB address = %q", env[EnvAUBBaseURL])
 	}
-	for _, key := range []string{"AUCOM_CATALOG_ANCHORS", "AUCOM_AUE_BINARY", "AUCOM_JOBS_DIR"} {
+	for _, key := range []string{"AUCOM_CATALOG_ANCHORS", "AUCOM_MAPIO_BINARY", "AUCOM_JOBS_DIR"} {
 		if _, set := env[key]; set {
 			t.Errorf("a .env file set %s", key)
 		}

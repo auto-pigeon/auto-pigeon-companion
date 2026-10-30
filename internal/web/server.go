@@ -50,9 +50,9 @@ import (
 	"time"
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
-	"github.com/auto-pigeon/auto-pigeon-companion/internal/aue"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/autobuild"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/config"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/converter"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/engine"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/failure"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/incident"
@@ -108,7 +108,7 @@ type Server struct {
 	autobuild     *autobuild.Service
 	autobuildOnce sync.Once
 	autobuildErr  error
-	runner        aue.Runner
+	runner        converter.Runner
 	// board is the background checks the page shows (NEW_368).
 	board checkBoard
 	// handoffs acknowledges editor requests this server serves (NEW_368).
@@ -200,10 +200,10 @@ type Options struct {
 	// Jobs is the process runtime. A server without one still serves the page
 	// and the account routes; the job routes report that this build has none.
 	Jobs *job.Service
-	// AUE runs extractor subcommands. Injected so tests, and a future
+	// Converter runs the map converter. Injected so tests, and a future
 	// HTTP-backed runner, need no change here.
-	AUE    aue.Runner
-	Config config.Config
+	Converter converter.Runner
+	Config    config.Config
 	// UpdateConfig applies one change to the config file, under the lock that
 	// makes this program a single writer of it. Nil means the user's own
 	// config.json through [config.Update].
@@ -322,7 +322,7 @@ func NewServer(options Options) (*Server, error) {
 		version:             options.Version,
 		debug:               options.Debug,
 		jobs:                options.Jobs,
-		runner:              options.AUE,
+		runner:              options.Converter,
 		paths:               options.Paths,
 		picker:              picker,
 		scanner:             options.Scanner,
@@ -444,11 +444,11 @@ func (s *Server) api() map[string]http.HandlerFunc {
 		"GET /api/status":       s.handleStatus,
 		"POST /api/auth/login":  s.handleLogin,
 		"POST /api/auth/logout": s.handleLogout,
-		// Deliberately not a general "run any AUE subcommand" escape hatch:
-		// each extractor operation gets its own route with its own validated
+		// Deliberately not a general "run any subcommand" escape hatch:
+		// each converter operation gets its own route with its own validated
 		// inputs as features land. This one proves the subprocess path end to
 		// end.
-		"GET /api/aue/version": s.handleAUEVersion,
+		"GET /api/converter/version": s.handleConverterVersion,
 	}
 	for _, table := range []map[string]http.HandlerFunc{
 		s.jobAPI(), s.profileAPI(), s.libraryAPI(),
@@ -608,7 +608,7 @@ const codeTokenRefused = "token_refused"
 
 func writeError(w http.ResponseWriter, status int, err error) {
 	// The class travels beside the sentence when the error carries one
-	// (internal/failure): a build that could not START — the extractor refused
+	// (internal/failure): a build that could not START — the converter refused
 	// the map, a bound package is not held — has no manifest to carry it.
 	writeJSON(w, status, errorBody{Error: err.Error(), Class: failure.Of(err)})
 }
@@ -651,20 +651,20 @@ type statusBody struct {
 	// SessionExpired says a session is stored and its token has expired, so
 	// the page asks for a sign-in instead of showing "signed in" on a session
 	// every AUB call would refuse.
-	SessionExpired bool   `json:"session_expired,omitempty"`
-	Email          string `json:"email,omitempty"`
-	Platform       string `json:"platform"`
-	JobsDir        string `json:"jobs_dir"`
-	AUEAvailable   bool   `json:"aue_available"`
-	// AUEVerified says whether the extractor this build would run was checked
+	SessionExpired     bool   `json:"session_expired,omitempty"`
+	Email              string `json:"email,omitempty"`
+	Platform           string `json:"platform"`
+	JobsDir            string `json:"jobs_dir"`
+	ConverterAvailable bool   `json:"converter_available"`
+	// ConverterVerified says whether the converter this build would run was checked
 	// against the release's bundle manifest, or is an unverified one — a
 	// developer override, or a copy no manifest lists. It
-	// is a separate field from AUEAvailable because "there is one" and "it is
+	// is a separate field from ConverterAvailable because "there is one" and "it is
 	// the one we vouch for" are different facts, and a page that showed only
 	// the first would show a development override exactly as it shows a
 	// production install.
-	AUEVerified   bool   `json:"aue_verified"`
-	AUEProvenance string `json:"aue_provenance,omitempty"`
+	ConverterVerified   bool   `json:"converter_verified"`
+	ConverterProvenance string `json:"converter_provenance,omitempty"`
 	// Debug says the developer controls are unlocked (`--debug`).
 	Debug bool `json:"debug"`
 	// Backends are the official deployments a person may choose, and
@@ -695,7 +695,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	verified, provenance := false, ""
-	if aue.Available(s.runner) {
+	if converter.Available(s.runner) {
 		record := s.runner.Provenance()
 		verified, provenance = record.Verified, record.Mode
 	}
@@ -708,9 +708,9 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		Email:               settings.Session.Email,
 		Platform:            runtime.GOOS + "/" + runtime.GOARCH,
 		JobsDir:             jobs,
-		AUEAvailable:        aue.Available(s.runner),
-		AUEVerified:         verified,
-		AUEProvenance:       provenance,
+		ConverterAvailable:  converter.Available(s.runner),
+		ConverterVerified:   verified,
+		ConverterProvenance: provenance,
 		Debug:               s.debug,
 		Backends:            config.OfficialBackends,
 		BackendLabel:        backendLabel(baseURL),
@@ -790,13 +790,13 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"authenticated": false})
 }
 
-func (s *Server) handleAUEVersion(w http.ResponseWriter, r *http.Request) {
-	// "this build has no extractor" is a property of the installation, not a
+func (s *Server) handleConverterVersion(w http.ResponseWriter, r *http.Request) {
+	// "this build has no converter" is a property of the installation, not a
 	// failure of the request, so it is 503 with the message that names the
 	// override — the same thing the page says next to its disabled button.
-	// Only an extractor that exists and then fails is 502.
-	if !aue.Available(s.runner) {
-		writeError(w, http.StatusServiceUnavailable, aue.ErrNoExtractor)
+	// Only a converter that exists and then fails is 502.
+	if !converter.Available(s.runner) {
+		writeError(w, http.StatusServiceUnavailable, converter.ErrNoConverter)
 		return
 	}
 	stdout, err := s.runner.Run(r.Context(), "version")

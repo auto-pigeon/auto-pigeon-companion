@@ -4,7 +4,7 @@
 //
 // One press of **Build & Run** is eight things: download the exact map
 // revision, download that revision's texture bundle, check the bundle is
-// compiler-ready, convert APMap to `.map` through the extractor, compile,
+// compiler-ready, convert APMap to `.map` through the converter, compile,
 // install the level and its WADs into the owned mod directory, verify what was
 // installed, and start the engine. Each of those already has an implementation
 // in this program. This package is the ORDER, the RECORD and the CANCELLATION —
@@ -22,7 +22,7 @@
 // # Why the identities are exact
 //
 // A run records the map asset id and the exact revision, the texture-export
-// manifest's digest, the extractor's identity, the build manifest id, every
+// manifest's digest, the converter's identity, the build manifest id, every
 // staged file with its digest, the engine profile and action, and the exact
 // argv. A record that said "dm1, latest" would be a record that means something
 // different tomorrow.
@@ -55,7 +55,7 @@ const (
 	DownloadingMap State = "downloading_map"
 	// DownloadingTextures: fetching and verifying that revision's texture bundle.
 	DownloadingTextures State = "downloading_textures"
-	// Converting: the extractor is turning APMap into a Quake `.map`, out of
+	// Converting: the converter is turning APMap into a Quake `.map`, out of
 	// process.
 	Converting State = "converting"
 	// Compiling: the build pipeline is running. [Record.BuildID] and
@@ -190,7 +190,7 @@ type Request struct {
 	// BuildOnly stops the run once the map is compiled: nothing is installed
 	// into a game folder and no engine starts. It is how Auto-build (NEW_265)
 	// builds a newly saved revision through this same coordinator — the same
-	// verified map and texture downloads, the same extractor, the same build —
+	// verified map and texture downloads, the same converter, the same build —
 	// without launching anything nobody asked to play.
 	BuildOnly bool `json:"build_only,omitempty"`
 	// Trigger says what started the run: empty for a person, "auto_build" for
@@ -433,12 +433,16 @@ type Record struct {
 	// Quake II package carries it beside the account textures it describes.
 	BundleLicenses string `json:"bundle_licenses,omitempty"`
 
-	// Extractor identifies the AUE that ran, and whether it was verified.
-	Extractor *ExtractorRef `json:"extractor,omitempty"`
-	// ConvertedMap is the `.map` the extractor produced, when one was needed.
+	// Converter identifies the converter that ran, and whether it was verified.
+	Converter *ConverterRef `json:"converter,omitempty"`
+	// Extractor is what a run recorded before NEW_371 says ran. It is read so that
+	// history stays what it was, and nothing writes it: such a run was the
+	// Auto-Pigeon Extractor, and relabelling it would be false.
+	Extractor *ConverterRef `json:"extractor,omitempty"`
+	// ConvertedMap is the `.map` the converter produced, when one was needed.
 	ConvertedMap string `json:"converted_map,omitempty"`
 	// Conversion is what ConvertedMap was converted from: the APMap's digest
-	// and identity, and the extractor's conversion manifest. The build is
+	// and identity, and the converter's conversion manifest. The build is
 	// handed it, so the build manifest carries it (Q3_010).
 	Conversion *build.Conversion `json:"conversion,omitempty"`
 
@@ -473,17 +477,21 @@ type Record struct {
 	RetryOf string `json:"retry_of,omitempty"`
 }
 
-// ExtractorRef is which extractor ran.
-type ExtractorRef struct {
+// ConverterRef is which converter ran.
+type ConverterRef struct {
+	// Program is what it called itself; empty in a record from before NEW_371.
+	Program  string `json:"program,omitempty"`
 	Version  string `json:"version"`
 	Protocol string `json:"protocol,omitempty"`
 	Path     string `json:"path,omitempty"`
 	SHA256   string `json:"sha256,omitempty"`
-	// Verified is internal/aue's one recording of managed-versus-override. It
+	// Verified is internal/converter's one recording of managed-versus-override. It
 	// travels here rather than being recomputed, because a caller that derived
 	// "was this verified" from four other fields is a caller that will one day
 	// derive it wrong.
 	Verified bool `json:"verified"`
+	// Library is the go/mapio module version compiled into it.
+	Library string `json:"library,omitempty"`
 }
 
 // LaunchRecord is the engine that was started.

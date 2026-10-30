@@ -2,7 +2,7 @@
 
 The Auto-Pigeon program that runs on your own computer. It signs in to your
 Auto-Pigeon account, builds Quake maps with map-building tools you install
-yourself, inspects maps through the Auto-Pigeon Extractor that ships beside it,
+yourself, converts maps with the small converter that ships beside it,
 and starts games — including joining a game somebody else is hosting.
 
 It is one executable with no installer. Started with no arguments it opens its
@@ -50,19 +50,20 @@ There is no Apple Developer ID and no Authenticode certificate for this project,
 so macOS shows a Gatekeeper warning and Windows shows SmartScreen the first time
 you run it.
 
-An archive holds the program and the extractor it runs to read maps:
+An archive holds the program and the converter it runs to turn your maps into what a compiler reads:
 
 ```text
 auto-pigeon-companion-1.159-linux-amd64/
   companion                       the Companion (companion.exe on Windows)
   SHA256SUMS                      digests for `sha256sum -c` (not in the macOS archive)
   dependencies/
-    auto-pigeon-extractor         the Auto-Pigeon Extractor, a separate program the Companion runs to read maps
-    bundle-manifest.json          the SHA-256 of every file; the Companion checks the extractor against it
+    auto-pigeon-mapio             the map converter, a separate program the Companion runs (.exe on Windows)
+    NOTICES-auto-pigeon-mapio.txt the converter's licence texts
+    bundle-manifest.json          the SHA-256 of every file; the Companion checks the converter against it
 ```
 
 On macOS the archive holds `Auto-Pigeon Companion.app`, with both programs in
-`Contents/MacOS/` and the manifest in `Contents/Resources/`.
+`Contents/MacOS/` and the manifest and notices in `Contents/Resources/`.
 
 Unpack it anywhere and start it:
 
@@ -88,7 +89,7 @@ Auto-Pigeon Companion 1.213 is already open at http://127.0.0.1:8789/
 This launch (1.214) started nothing; quit the running one first to use this build.
 ```
 
-Check what you are running, and that the extractor beside it is the one the
+Check what you are running, and that the converter beside it is the one the
 release shipped:
 
 ```console
@@ -96,8 +97,8 @@ $ ./companion version
 1.158
 commit 6ab65f3c4c071df866ac6150a4b6dc956e001527 (clean)
 built with go1.26.8 for linux/amd64, CGO_ENABLED=0
-$ ./companion extractor status
-extractor: shipped with this Companion, checked against its bundle manifest
+$ ./companion converter status
+converter: shipped with this Companion, checked against its bundle manifest
 ```
 
 **Build tools are set up for you.** The first time the Companion starts, it
@@ -285,7 +286,7 @@ itself before you choose.
 - **Cancel** — and **Don't ask again for this version**, exactly as for the
   build tools, kept separately from them.
 
-What is replaced is only what the release lists: the program, the extractor
+What is replaced is only what the release lists: the program, the converter
 beside it and its bundle manifest. Your settings, profiles, compiler choices,
 maps, build history and the `config.json` beside the program are not touched.
 The new version is started once, briefly, before it replaces the old one and
@@ -325,7 +326,7 @@ $ companion tools cancel-pending companion
 $ companion selfupdate status
 Auto-Pigeon Companion 1.320 (linux-amd64), /home/me/Apps/auto-pigeon-companion-1.318-linux-amd64
   updated automatically when you choose an update: its own files are replaced, nothing else in the folder
-  bundled extractor 1.245
+  bundled converter 1.320
   last update: 1.318 -> 1.320, verified 2026-10-28T23:10:04+01:00
 ```
 
@@ -1035,7 +1036,7 @@ each job, and `class` in an HTTP refusal:
 | `fs_game_invalid`, `fs_game_not_found` | the mod directory is not a name, or no folder has it |
 | `leak`, `model_missing`, `model_unreadable`, `shader_image_missing`, `map_file_missing` | the compiler's own findings |
 | `input_invalid`, `output_invalid`, `output_missing` | a stage's file is not what its role says, or is not there |
-| `conversion_refused`, `converter_unavailable` | the extractor would not, or was not there to, write a `.map` |
+| `conversion_refused`, `converter_unavailable` | the converter would not, or was not there to, write a `.map` |
 | `tool_failed`, `timed_out`, `cancelled` | the program's own failure status, its time bound, or you |
 
 **Game data.** `pak0.pk3` is id Software's and is yours to supply; ioquake3
@@ -1234,7 +1235,8 @@ commands:
   engine list | show | detect | bind | check | preview | run | stage | unstage   set up a Quake engine you already have, and start it as a supervised job
   game list | show | link | join | preview | host | stop   find a game somebody is hosting and join it, or advertise one of your own
   launch (retired)   retired: it read a placeholder launch config; use `engine run <profile> --action play_map`
-  extractor status | version | convert <file.apmap>   the separately licensed auto-pigeon-extractor (AUE) shipped beside this program
+  converter status | version | convert <file.apmap>   the auto-pigeon-mapio map converter shipped beside this program
+  extractor status | version | convert <file.apmap>   former name of `converter`, kept as an alias; it runs the same converter
   feedback compatibility --game <family> --summary <text> [--share <what>]   report that a work-in-progress game did not do what you expected — nothing is attached unless you say so
   uri status | register | unregister   see, set or remove this machine's handler for autopigeon:// links
   security matrix | residual | audit   the threat model, the risks accepted with it, and what this build is made of
@@ -1263,7 +1265,7 @@ $ companion engine bind auto-pigeon.engine.ioquake3 --executable engine=/opt/ioq
 $ companion package map preview --build <build id>   # what a Quake III map's PK3, or a Quake II map's PAK, would hold, and why
 $ companion game list                                # games being hosted now
 $ companion game join <link>                         # shows the exact command; --approve launches
-$ companion extractor convert map.apmap
+$ companion converter convert map.apmap
 $ companion security matrix                          # the threat model
 $ companion security residual                        # the risks accepted with it
 $ companion security audit                           # what this build is made of
@@ -1397,7 +1399,8 @@ A development build (from source) reads all of these:
 | `AUCOM_JOBS_DIR`, `AUCOM_PROFILES_DIR`, `AUCOM_ASSET_CACHE_DIR` | where jobs, imported profiles and synced assets live |
 | `AUCOM_TOOLS_DIR` | where the Companion installs its build tools (also `managed_tools_dir` in `config.json`) |
 | `AUCOM_MANAGED_TOOLS` | `off` keeps the Companion from setting up or checking its build tools at all |
-| `AUCOM_AUE_BINARY` | a development build's extractor instead of the bundled one; shown as **unverified** everywhere |
+| `AUCOM_MAPIO_BINARY` | a development build of the converter instead of the bundled one; shown as **unverified** everywhere |
+| `AUCOM_AUE_BINARY`, `AUC_AUE_BINARY` | retired: never read as a path. The Companion does not run the Auto-Pigeon Extractor, and says so if one of these is set |
 | `AUCOM_ENV_FILE` | a `.env` to read instead of `./.env` (development only) |
 
 ## Removing it
@@ -1433,13 +1436,49 @@ $ GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o companion.exe ./cmd/compan
 $ GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -o companion ./cmd/companion
 ```
 
-A source build has no extractor beside it, so map inspection and conversion are
-unavailable until you point it at one you built from the extractor's repository:
+A source build has no converter beside it, so map conversion is unavailable until you build one and point
+at it. It needs nothing but this repository and the public module `go.mod` pins:
 
 ```console
-$ AUCOM_AUE_BINARY=../auto-pigeon-extractor/bin/auto-pigeon-extractor ./companion extractor status
-extractor: UNVERIFIED developer override
-$ AUCOM_AUE_BINARY=../auto-pigeon-extractor/bin/auto-pigeon-extractor ./companion extractor convert room.apmap
+$ go build -o auto-pigeon-mapio ./cmd/mapio
+$ AUCOM_MAPIO_BINARY=$PWD/auto-pigeon-mapio ./companion converter status
+converter: UNVERIFIED developer override
+$ AUCOM_MAPIO_BINARY=$PWD/auto-pigeon-mapio ./companion converter convert room.apmap
+```
+
+### Map conversion
+
+`auto-pigeon-mapio` is a small program of its own, and it works without the Companion. It converts between
+Quake `.map`, Worldcraft `.rmf` and APMap, using the
+[`go/mapio`](https://github.com/auto-pigeon/auto-pigeon-libraries/tree/main/go/mapio) library, whose README
+has the full conversion matrix and its known limitations. It validates every APMap it reads or writes, and it
+writes all of its output or none:
+
+```console
+$ auto-pigeon-mapio version
+auto-pigeon-mapio 1.320 (go/mapio v0.0.0-20261030192305-2f8248100896, APMap 1.5, protocol 1.0, Apache-2.0 AND MIT)
+$ auto-pigeon-mapio convert --apmap-to-q3map --input room.apmap --output out --json
+{
+  "direction": "apmap-to-q3map",
+  "input": "room.apmap",
+  "output": "out/room.map",
+  "manifest": "out/room.q3map-manifest.json",
+  "validated": true,
+  "warnings": []
+}
+$ auto-pigeon-mapio convert --q1map-to-apmap --input e1m1.map --output out
+out/e1m1.apmap
+$ auto-pigeon-mapio protocol --json     # what it is, its licences, the directions and APMap versions it speaks
+```
+
+It exits 0 when it wrote its output, 1 when a conversion was refused and 2 for a wrong command line. A
+refusal's last line on stderr is a `MAPIO-TERMINAL/1.0` record naming the reason, for a program to read.
+
+To work on `go/mapio` and this repository together, use a `go.work` you do not commit:
+
+```console
+$ go work init . ../auto-pigeon-libraries
+$ go build -o auto-pigeon-mapio ./cmd/mapio
 ```
 
 There is no desktop window beyond your browser.
@@ -1454,11 +1493,11 @@ keeps its own terms:
 | --- | --- |
 | Auto-Pigeon Companion's own code | MIT |
 | Contract files from auto-pigeon-libraries compiled into it | Apache-2.0 |
-| Auto-Pigeon Extractor, shipped beside it | proprietary (`LicenseRef-Auto-Pigeon-Proprietary`), all rights reserved; using it needs the copyright owner's written authorization |
+| The `auto-pigeon-mapio` converter, shipped beside it | Apache-2.0 AND MIT: the `go/mapio` library and a small wrapper |
 | Map-building tools, engines and games you install | their own |
 
-No licence file ships inside an archive; each archive's `bundle-manifest.json`
-names the licence of every file, and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
+The converter's licence texts ship beside it as `NOTICES-auto-pigeon-mapio.txt`; no other licence file ships
+inside an archive. Each archive's `bundle-manifest.json` names the licence of every file, and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
 sets out the details.
 
 The Auto-Pigeon mark — the page's logo and the executables' icon — is the

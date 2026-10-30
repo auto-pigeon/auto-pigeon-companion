@@ -138,11 +138,11 @@ func (r *rig) child(t *testing.T, spec childSpec) (result childResult, killed bo
 func (r *rig) assertNew(t *testing.T) {
 	t.Helper()
 	for name, want := range map[string]string{
-		companion:                            "new companion 1.320",
-		"dependencies/auto-pigeon-extractor": "new extractor 1.246",
-		"dependencies/bundle-manifest.json":  `{"version":"1.320"}`,
-		"SHA256SUMS":                         "new sums",
-		"dependencies/new-only.dat":          "a file only 1.320 ships",
+		companion:                           "new companion 1.320",
+		"dependencies/auto-pigeon-mapio":    "new converter 1.246",
+		"dependencies/bundle-manifest.json": `{"version":"1.320"}`,
+		"SHA256SUMS":                        "new sums",
+		"dependencies/new-only.dat":         "a file only 1.320 ships",
 	} {
 		if got := r.read(t, name); got != want {
 			t.Fatalf("%s is %q, want the new %q", name, got, want)
@@ -166,7 +166,7 @@ func (r *rig) journalState(t *testing.T) State {
 // forwardPoints are every boundary of a forward pass, in order.
 func forwardPoints() []string {
 	points := []string{"intent", "prepared"}
-	for _, name := range []string{"dependencies/auto-pigeon-extractor", "dependencies/bundle-manifest.json", "SHA256SUMS"} {
+	for _, name := range []string{"dependencies/auto-pigeon-mapio", "dependencies/bundle-manifest.json", "SHA256SUMS"} {
 		points = append(points, "aside:"+name, "placed:"+name)
 	}
 	points = append(points, "placed:dependencies/new-only.dat", "aside:dependencies/old-only.dat",
@@ -235,7 +235,7 @@ func TestAKillAtAnyBoundaryOfTheSwapIsRecoveredByAFreshProcess(t *testing.T) {
 // failed — is finished by the next process.
 func TestAKillDuringRollbackIsFinishedByAFreshProcess(t *testing.T) {
 	members := []string{companion, "dependencies/old-only.dat", "dependencies/new-only.dat", "SHA256SUMS",
-		"dependencies/bundle-manifest.json", "dependencies/auto-pigeon-extractor"}
+		"dependencies/bundle-manifest.json", "dependencies/auto-pigeon-mapio"}
 	for mode, link := range asideModes() {
 		if link && runtime.GOOS == "windows" {
 			continue
@@ -369,7 +369,7 @@ func TestABlockedRestoreIsRecoveryNeededAndBlocksTheNextUpdateUntilFinished(t *t
 		t.Fatalf("on disk: %s", got)
 	}
 	// The old files it could not put back are kept.
-	for _, name := range []string{"dependencies/auto-pigeon-extractor", "dependencies/bundle-manifest.json"} {
+	for _, name := range []string{"dependencies/auto-pigeon-mapio", "dependencies/bundle-manifest.json"} {
 		raw, err := os.ReadFile(filepath.Join(r.root, DirName, "previous", filepath.FromSlash(name)))
 		if err != nil || !strings.Contains(string(raw), "1.2") && !strings.Contains(string(raw), "1.318") {
 			t.Fatalf("previous/%s: %q %v", name, raw, err)
@@ -384,7 +384,7 @@ func TestABlockedRestoreIsRecoveryNeededAndBlocksTheNextUpdateUntilFinished(t *t
 	if _, err := Apply(context.Background(), r.request); !errors.Is(err, ErrRecoveryNeeded) {
 		t.Fatalf("the next update: %v", err)
 	}
-	if _, err := os.Lstat(filepath.Join(r.root, DirName, "previous", "dependencies", "auto-pigeon-extractor")); err != nil {
+	if _, err := os.Lstat(filepath.Join(r.root, DirName, "previous", "dependencies", "auto-pigeon-mapio")); err != nil {
 		t.Fatalf("a kept file was removed: %v", err)
 	}
 	// Unblocked, the next pass finishes, and a new update then works.
@@ -503,11 +503,11 @@ func TestALegacyJournalWithStaleFlagsIsRecoveredFromWhereTheFilesAre(t *testing.
 		t.Fatalf("recover: %s %v", outcome, err)
 	}
 	for name, want := range map[string]string{
-		companion:                            "old companion 1.318",
-		"dependencies/auto-pigeon-extractor": "old extractor 1.245",
-		"dependencies/bundle-manifest.json":  `{"version":"1.318"}`,
-		"SHA256SUMS":                         "old sums",
-		"dependencies/old-only.dat":          "a file only 1.318 shipped",
+		companion:                           "old companion 1.318",
+		"dependencies/auto-pigeon-mapio":    "old converter 1.245",
+		"dependencies/bundle-manifest.json": `{"version":"1.318"}`,
+		"SHA256SUMS":                        "old sums",
+		"dependencies/old-only.dat":         "a file only 1.318 shipped",
 	} {
 		if got := r.read(t, name); got != want {
 			t.Fatalf("%s is %q, want %q", name, got, want)

@@ -96,8 +96,8 @@ func selfUpdateStatus(env *Env, args []string) int {
 	default:
 		fmt.Fprintf(env.Stdout, "  not updated automatically: %s\n", self.Reason)
 	}
-	if self.ExtractorVersion != "" {
-		fmt.Fprintf(env.Stdout, "  bundled extractor %s\n", self.ExtractorVersion)
+	if self.ConverterVersion != "" {
+		fmt.Fprintf(env.Stdout, "  bundled converter %s\n", self.ConverterVersion)
 	}
 	switch {
 	case journalErr != nil:
@@ -113,7 +113,7 @@ func selfUpdateStatus(env *Env, args []string) int {
 }
 
 // selfUpdateProve is a candidate's proving start. It runs from the
-// candidate's own folder, so the extractor it resolves and hands a protocol
+// candidate's own folder, so the converter it resolves and hands a protocol
 // check is the one beside it, verified against the bundle manifest beside
 // it; it reads this user's configuration without writing it, and serves one
 // request on a loopback port of its own. It starts no job, writes no token
@@ -141,14 +141,14 @@ func selfUpdateProve(env *Env, args []string) int {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
-	runner, err := extractorResolver().Resolve(ctx)
+	runner, err := converterResolver().Resolve(ctx)
 	if err != nil {
-		return finish(fmt.Errorf("its extractor: %w", err))
+		return finish(fmt.Errorf("its converter: %w", err))
 	}
 	provenance := runner.Provenance()
-	result.ExtractorVersion, result.ExtractorVerified = provenance.Version, provenance.Verified
+	result.ConverterVersion, result.ConverterVerified = provenance.Version, provenance.Verified
 	if !provenance.Verified {
-		return finish(errors.New("its extractor is not the one its bundle manifest lists"))
+		return finish(errors.New("its converter is not the one its bundle manifest lists"))
 	}
 	if _, err := loadSettings(env); err != nil {
 		return finish(fmt.Errorf("it cannot read this configuration: %w", err))
@@ -262,7 +262,7 @@ func (l *selfUpdateLog) logf(format string, args ...any) {
 // starts. It returns a function to call once the process serves, which
 // confirms a replacement this process is the new side of — or an error when
 // the folder may hold parts of two bundles, which this process must then not
-// serve (01_NEW_368 §1.1): a mixed Companion/extractor/manifest bundle is
+// serve (01_NEW_368 §1.1): a mixed Companion/converter/manifest bundle is
 // never started as either.
 func recoverSelfAtStart(self managedtools.SelfInstall, log *selfUpdateLog, record func(managedtools.SelfResult)) (func(), error) {
 	if self.Mode == managedtools.SelfDevelopment {

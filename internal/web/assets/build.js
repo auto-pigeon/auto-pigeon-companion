@@ -766,8 +766,8 @@
   }
 
   // sentenceOf is the line a person reads: a refusal's first line. A refusal
-  // from the extractor leads with its own reason and keeps everything the
-  // extractor printed underneath (its terminal record, an incident envelope);
+  // from the converter leads with its own reason and keeps everything the
+  // converter printed underneath (its terminal record, an incident envelope);
   // run together they were one paragraph nobody could read, shown twice
   // (Q3_010, headed run: `[q3map_shader_unsafe]` was on the page and lost in
   // it). The rest goes behind "Technical details", never away.
@@ -867,7 +867,7 @@
         out.append(problemBlock(body.error || "the preview failed"));
         // A refusal met at the check never becomes a build, so this is the only
         // record of it in Activity: its kind, and the refusal's own sentence.
-        // Keyed on the sentence, not the whole text: the extractor's raw output
+        // Keyed on the sentence, not the whole text: the converter's raw output
         // carries a fresh incident id each time, so the same refusal re-read
         // on a return to this area looked new.
         recordOnce("check:" + sentenceOf(body.error), "Build check refused",
@@ -925,7 +925,7 @@
         checkedWhy = explain(body.error)?.advice || sentenceOf(body.error) || t("the build could not be started");
         renderSteps();
         // The refusal's own words, whole, in Activity — and its kind, when the
-        // Companion classified it (Q3_010: an extractor refusal such as
+        // Companion classified it (Q3_010: a converter refusal such as
         // `q3map_shader_unsafe` never becomes a build, so this line and the
         // message above are the only places it can be read).
         record("Build could not be started", (body.class ? "[" + body.class + "] " : "") + sentenceOf(body.error), "failed");
@@ -1353,7 +1353,7 @@
       if (!c) continue;
       lines.push(t("{name}: converted from the map document {document} (revision {revision}), {digest}", {
         name: input.name, document: c.document_id || c.source_name, revision: c.document_revision, digest: c.source_sha256 }));
-      // The bytes the compiler was handed: the `.map` the extractor wrote.
+      // The bytes the compiler was handed: the `.map` the converter wrote.
       if (input.sha256) lines.push(t("{name}: the .map this build compiled — {digest}", { name: input.name, digest: input.sha256 }));
       if (c.manifest) {
         lines.push(t("Conversion record: {shaders} shader(s), {models} model(s), {warnings} warning(s) — {digest}", {

@@ -86,55 +86,31 @@ func TestTheArtifactHoldsOnlyTheCompanionAndItsAULIBSContracts(t *testing.T) {
 	}
 }
 
-// The extractor is proprietary (NEW_247G). The component list, the SBOM and
-// the audit must never call it MIT — that would describe an archive carrying it
-// as entirely MIT — nor copyleft, which it no longer is, and they must not
-// pretend to offer a source it does not have.
-func TestTheExtractorIsListedAsProprietaryNeverMITOrCopyleft(t *testing.T) {
-	if Extractor.SPDX != "LicenseRef-Auto-Pigeon-Proprietary" ||
-		Extractor.LicenseName != "Auto-Pigeon Proprietary Software License" {
-		t.Errorf("the extractor is listed as %q / %q", Extractor.SPDX, Extractor.LicenseName)
+// The converter is two licences in one executable (NEW_371). The component list, the SBOM and the
+// audit must say both: MIT alone would describe an archive carrying it as entirely MIT, and it must
+// never read as the proprietary extractor it replaced.
+func TestTheConverterIsListedUnderBothOfItsLicences(t *testing.T) {
+	if Converter.SPDX != "Apache-2.0 AND MIT" {
+		t.Errorf("the converter is listed as %q", Converter.SPDX)
 	}
-	if Extractor.CorrespondingSource != "" {
-		t.Errorf("the extractor offers corresponding source %q; it is proprietary and offers none",
-			Extractor.CorrespondingSource)
+	if Converter.Distribution != ShippedBeside {
+		t.Errorf("the converter's distribution is %q", Converter.Distribution)
 	}
-	for _, forbidden := range []string{"MIT", "AGPL", "GPL", "Apache"} {
-		if strings.Contains(Extractor.SPDX, forbidden) || strings.Contains(Extractor.LicenseName, forbidden) {
-			t.Errorf("the extractor's licence mentions %s: %q / %q", forbidden, Extractor.SPDX, Extractor.LicenseName)
+	for _, forbidden := range []string{"Proprietary", "GPL"} {
+		if strings.Contains(Converter.SPDX, forbidden) || strings.Contains(Converter.LicenseName, forbidden) {
+			t.Errorf("the converter's licence mentions %s: %q / %q", forbidden, Converter.SPDX, Converter.LicenseName)
 		}
 	}
-	if !strings.Contains(Extractor.Notice, "Andrea D'Intino") || !strings.Contains(Extractor.Notice, "authorization") {
-		t.Errorf("the extractor's notice does not name its owner and the authorization it needs: %q", Extractor.Notice)
-	}
+}
 
-	document, err := BuildSBOM("1.2.3", time.Time{})
+func TestTheConverterNamesTheLibraryRevisionGoModPins(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "go.mod"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	found := false
-	for _, entry := range document.Components {
-		if entry.Name != "auto-pigeon-extractor" {
-			continue
-		}
-		found = true
-		if len(entry.Licenses) != 1 || entry.Licenses[0].Expression != "LicenseRef-Auto-Pigeon-Proprietary" ||
-			entry.Licenses[0].License != nil {
-			t.Errorf("the SBOM lists the extractor's licence as %+v", entry.Licenses)
-		}
-		for _, property := range entry.Properties {
-			if property.Name == "aucom:corresponding-source" {
-				t.Errorf("the SBOM offers the proprietary extractor's source: %s", property.Value)
-			}
-		}
-	}
-	if !found {
-		t.Error("the SBOM does not list the extractor")
-	}
-	for _, license := range document.Metadata.Component.Licenses {
-		if license.License == nil || license.License.ID != "MIT" {
-			t.Errorf("the SBOM's own component is licensed %+v, want MIT", license)
-		}
+	want := "require " + ConverterLibraryModule + " " + ConverterLibraryVersion
+	if !strings.Contains(string(raw), want) {
+		t.Fatalf("go.mod does not say %q:\n%s", want, raw)
 	}
 }
 

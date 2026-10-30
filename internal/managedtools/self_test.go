@@ -103,7 +103,7 @@ func TestTheCompanionIsOfferedOnlyANewerQualifiedReleaseAndNothingIsDownloadedUn
 		t.Fatalf("the Companion's row: %+v", view)
 	}
 	if view.Offer == nil || view.Offer.Version != "1.320" || view.Offer.Sidecar == nil || view.Offer.Sidecar.Version != "1.245" {
-		t.Fatalf("offer %+v; want 1.320 with its extractor", view.Offer)
+		t.Fatalf("offer %+v; want 1.320 with its converter", view.Offer)
 	}
 	var unqualified bool
 	for _, verdict := range view.Newer {
@@ -336,11 +336,11 @@ func TestEveryCompanionBundleThatIsNotWhatItsReleaseSaysIsRefused(t *testing.T) 
 		spec mt.CompanionSpec
 		want string
 	}{
-		{"wrong extractor for this Companion", mt.CompanionSpec{ReleaseExtractorVersion: "1.246"}, "bundles extractor 1.245 and its release names 1.246"},
+		{"wrong converter for this Companion", mt.CompanionSpec{ReleaseConverterVersion: "1.246"}, "bundles converter 1.245 and its release names 1.246"},
 		{"no bundle manifest", mt.CompanionSpec{Archive: func(e map[string][]byte) map[string][]byte { delete(e, manifest); return e }}, "carries no"},
-		{"missing extractor", mt.CompanionSpec{Archive: func(e map[string][]byte) map[string][]byte {
+		{"missing converter", mt.CompanionSpec{Archive: func(e map[string][]byte) map[string][]byte {
 			for name := range e {
-				if strings.Contains(name, "auto-pigeon-extractor") {
+				if strings.Contains(name, "auto-pigeon-mapio") {
 					delete(e, name)
 				}
 			}
@@ -360,7 +360,7 @@ func TestEveryCompanionBundleThatIsNotWhatItsReleaseSaysIsRefused(t *testing.T) 
 		{"names that collide without case", mt.CompanionSpec{Archive: func(e map[string][]byte) map[string][]byte { e["sha256sums"] = []byte("x"); return e }}, "ignores case"},
 		{"an entry outside the folder", mt.CompanionSpec{Archive: func(e map[string][]byte) map[string][]byte { e["!../escape"] = []byte("x"); return e }}, "outside"},
 		{"a bundle for another platform", mt.CompanionSpec{Bundle: func(m map[string]any) { m["platform"] = "windows-arm64" }}, "bundle and this computer needs"},
-		{"a manifest that does not pair an extractor", mt.CompanionSpec{Bundle: func(m map[string]any) { delete(m, "extractor") }}, "names no extractor"},
+		{"a manifest that does not pair an converter", mt.CompanionSpec{Bundle: func(m map[string]any) { delete(m, "converter") }}, "names no converter"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -396,14 +396,14 @@ func TestEveryCompanionBundleThatIsNotWhatItsReleaseSaysIsRefused(t *testing.T) 
 			}
 		})
 	}
-	// A release that names no extractor is not an update at all.
+	// A release that names no converter is not an update at all.
 	r, _, make := selfRig(t, "1.318", managedtools.SelfPortable)
-	r.publishCompanion(mt.CompanionSpec{Version: "1.320", Prerelease: true, NoAUE: true})
+	r.publishCompanion(mt.CompanionSpec{Version: "1.320", Prerelease: true, NoConverter: true})
 	m := make()
 	m.Step(context.Background())
 	view := tool(m.Status(), managedtools.Companion)
 	if view.Offer != nil || len(view.Newer) == 0 || view.Newer[0].Reason != managedtools.ReasonNoSidecar {
-		t.Fatalf("a release without an extractor: offer %+v newer %+v", view.Offer, view.Newer)
+		t.Fatalf("a release without an converter: offer %+v newer %+v", view.Offer, view.Newer)
 	}
 }
 
@@ -412,7 +412,7 @@ func TestEveryCompanionBundleThatIsNotWhatItsReleaseSaysIsRefused(t *testing.T) 
 func TestABundleThatFailsItsProvingStartIsNeverStaged(t *testing.T) {
 	r, host, make := selfRig(t, "1.318", managedtools.SelfPortable)
 	r.publishCompanion(mt.CompanionSpec{Version: "1.320", Prerelease: true})
-	host.proveErr = errors.New("its extractor is not the one its bundle manifest lists")
+	host.proveErr = errors.New("its converter is not the one its bundle manifest lists")
 	m := make()
 	m.Step(context.Background())
 	offer := tool(m.Status(), managedtools.Companion).Offer
@@ -451,7 +451,7 @@ func TestInspectSelfTellsAReleaseBundleFromEverythingElse(t *testing.T) {
 	manifestPath, companion := managedtools.BundleLayout(platform)
 	exe := filepath.Join(root, filepath.FromSlash(companion))
 	self := managedtools.InspectSelf(exe, "1.318", "abc", strings.Split(platform, "-")[0], strings.Split(platform, "-")[1])
-	if self.Mode != managedtools.SelfPortable || self.ExtractorVersion != "1.245" || len(self.Members) != 4 {
+	if self.Mode != managedtools.SelfPortable || self.ConverterVersion != "1.245" || len(self.Members) != 4 {
 		t.Fatalf("a release bundle: %+v", self)
 	}
 	if dev := managedtools.InspectSelf(exe, "unknown", "", strings.Split(platform, "-")[0], strings.Split(platform, "-")[1]); dev.Mode != managedtools.SelfDevelopment {

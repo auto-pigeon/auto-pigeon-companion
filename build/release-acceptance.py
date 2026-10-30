@@ -6,7 +6,7 @@ family, against the exact archive the release will attach, and runnable by
 hand on any machine with Python 3:
 
   build/release-acceptance.py --archive auto-pigeon-companion-1.150-linux-amd64.zip \\
-      --platform linux-amd64 --version 1.150 --aue-version 1.207 \\
+      --platform linux-amd64 --version 1.150 \\
       --fixture build/release-fixtures/release-acceptance.apmap --report report.json
 
 It refuses to run a platform the machine is not: a native claim made on
@@ -17,16 +17,17 @@ release as a user receives it.
 
   1. unpack the archive
   2. `companion version` is the release version
-  3. `extractor status` says verified; `extractor version` runs the bundled one
-  4. the extractor's bytes are the digest the bundle manifest lists
-  5. `extractor convert` turns EVERY fixture APMap beside the one named into a
+  3. `converter status` says verified; `converter version` runs the bundled one,
+     and the converter's own notices are beside it
+  4. the converter's bytes are the digest the bundle manifest lists
+  5. `converter convert` turns EVERY fixture APMap beside the one named into a
      .map through the real subprocess path, each holding the entities and
      brushes `expectations.json` lists — the APMap 1.3 slab, a Quake 1
      APMap 1.5 document with authorship and nested groups, and a Quake II
      APMap 1.5 room whose face tails must come back exactly — and a version
      nobody defined is refused
-  6. a TAMPERED extractor is refused before it runs
-  7. a MISSING extractor is named by its path, and nothing fetches one
+  6. a TAMPERED converter is refused before it runs
+  7. a MISSING converter is named by its path, and nothing fetches one
   8. INTERACTIVE CLOSE (NEW_247B): the unpacked Companion in application mode
      holds one page's lease; closing that page stops the process after its
      grace period, with the causal line, no listener left and no token file
@@ -57,9 +58,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.dont_write_bytecode = True
 import releaselib  # noqa: E402
 
-REFUSED_TAMPERED = "not the extractor this release shipped"
-REFUSED_MISSING = "no extractor was shipped beside this Companion"
-SCRUBBED = ("AUCOM_AUE_BINARY", "AUC_AUE_BINARY", "APMAP_SCHEMA_DIR", "AULIBS_DIR")
+REFUSED_TAMPERED = "not the converter this release shipped"
+REFUSED_MISSING = "no converter was shipped beside this Companion"
+SCRUBBED = ("AUCOM_MAPIO_BINARY", "AUCOM_AUE_BINARY", "AUC_AUE_BINARY", "APMAP_SCHEMA_DIR", "AULIBS_DIR")
 
 
 def this_machine():
@@ -461,7 +462,6 @@ def main():
     parser.add_argument("--archive", required=True)
     parser.add_argument("--platform", required=True)
     parser.add_argument("--version", required=True)
-    parser.add_argument("--aue-version", required=True)
     parser.add_argument("--fixture", required=True)
     parser.add_argument("--report", default=None)
     parser.add_argument("--work", default=None)
@@ -484,7 +484,7 @@ def main():
     run.check("unpack", os.path.isdir(bundle), f"{os.path.basename(args.archive)} -> {top}/")
     where = releaselib.layout(bundle, args.platform)
     companion = os.path.join(bundle, where["companion"])
-    extractor = os.path.join(bundle, where["extractor"])
+    converter = os.path.join(bundle, where["converter"])
     manifest = json.load(open(os.path.join(bundle, where["manifest"]), encoding="utf-8"))
 
     # 2. The version is the release's.
@@ -492,22 +492,30 @@ def main():
     first = out.splitlines()[0].strip() if out else ""
     run.check("companion version", code == 0 and first == args.version, f"exit {code}, printed {first!r}")
 
-    # 3. The bundled extractor, with no override and no schema directory.
-    code, out, err = run.companion(companion, "extractor", "status")
-    run.check("extractor status", code == 0 and "checked against its bundle manifest" in out, out.strip())
-    code, out, err = run.companion(companion, "extractor", "version")
-    run.check("extractor version", code == 0 and args.aue_version in out and not err.strip(),
+    # 3. The bundled converter, with no override and no schema directory.
+    code, out, err = run.companion(companion, "converter", "status")
+    run.check("converter status", code == 0 and "checked against its bundle manifest" in out, out.strip())
+    code, out, err = run.companion(companion, "converter", "version")
+    run.check("converter version", code == 0 and args.version in out and "go/mapio" in out and "Apache-2.0 AND MIT" in out and not err.strip(),
               f"exit {code}, stdout {out.strip()!r}, stderr {err.strip()!r}")
 
     # 4. Its bytes are the ones the manifest lists.
     listed = {member["path"]: member["sha256"] for member in manifest["members"]}
-    digest = releaselib.digest_of(extractor)[1]
-    run.check("extractor digest", listed.get(where["extractor"]) == digest,
+    digest = releaselib.digest_of(converter)[1]
+    run.check("converter digest", listed.get(where["converter"]) == digest,
               f"{digest} (manifest lists {listed.get(where['extractor'])})")
+
+    # 4b. Its licences travel with it, and no extractor came along.
+    notices_path = os.path.join(bundle, where["notices"])
+    notices = open(notices_path, encoding="utf-8").read() if os.path.isfile(notices_path) else ""
+    run.check("converter notices", "MIT License" in notices and "Apache License" in notices,
+              f"{where['notices']}: {len(notices)} bytes")
+    strays = files_named(bundle, "auto-pigeon-extractor")
+    run.check("no extractor in the bundle", not strays, f"extractor files: {strays}")
 
     # 5. Real conversions, through the build's own subprocess path: EVERY
     # fixture beside the one named, each compared with what expectations.json
-    # says the .map must hold (NEW_307W). A release once bundled an extractor
+    # says the .map must hold (NEW_307W). A release once bundled a converter
     # that read APMap 1.0 to 1.3 while the editor saved 1.5, and one 1.3
     # fixture could not see it. The newest fixture carries what 1.4 added, so
     # a changed version header is not the whole of the coverage.
@@ -525,7 +533,7 @@ def main():
         source = os.path.join(fixtures, name)
         shutil.copyfile(os.path.join(fixture_dir, name), source)
         declared = json.load(open(source, encoding="utf-8")).get("apmap_version")
-        code, out, err = run.companion(companion, "extractor", "convert", source)
+        code, out, err = run.companion(companion, "converter", "convert", source)
         converted = os.path.join(fixtures, f"converted-{stem}", f"{stem}.map")
         written = open(converted, encoding="utf-8").read() if os.path.isfile(converted) else ""
         lines = [line.strip() for line in written.splitlines()]
@@ -541,14 +549,14 @@ def main():
                   f"exit {code}, APMap {declared}, {len(written)} bytes of .map, classnames {classnames}, "
                   f"{brushes} brushes, face tails missing {tails} (want {want}), {out.strip()!r} {err.strip()!r}")
 
-    # 5b. A version nobody defined is still refused, by the extractor, by name.
+    # 5b. A version nobody defined is still refused, by the converter, by name.
     newest = json.load(open(os.path.join(fixtures, names[-1]), encoding="utf-8"))
     newest["apmap_version"] = "9.9"
     newest["$schema"] = str(newest.get("$schema", "")).replace(str(declared), "9.9")
     unknown = os.path.join(fixtures, "unknown-version.apmap")
     with open(unknown, "w", encoding="utf-8") as handle:
         json.dump(newest, handle)
-    code, out, err = run.companion(companion, "extractor", "convert", unknown)
+    code, out, err = run.companion(companion, "converter", "convert", unknown)
     run.check("unknown version refused", code != 0 and "not a supported APMap version" in out + err
               and not os.path.isfile(os.path.join(fixtures, "converted-unknown-version", "unknown-version.map")),
               f"exit {code}, {(out + err).strip()[:300]!r}")
@@ -559,43 +567,43 @@ def main():
     # anything executed it.
     tampered = os.path.join(work, "tampered")
     shutil.copytree(bundle, tampered, symlinks=True)
-    tampered_extractor = os.path.join(tampered, where["extractor"])
+    tampered_converter = os.path.join(tampered, where["converter"])
     tampered_companion = os.path.join(tampered, where["companion"])
-    with open(tampered_extractor, "ab") as handle:
+    with open(tampered_converter, "ab") as handle:
         handle.write(b"\0")
-    code, out, err = run.companion(tampered_companion, "extractor", "status")
+    code, out, err = run.companion(tampered_companion, "converter", "status")
     run.check("tampered: status", REFUSED_TAMPERED in out, out.strip())
-    code, out, err = run.companion(tampered_companion, "extractor", "version")
+    code, out, err = run.companion(tampered_companion, "converter", "version")
     run.check("tampered: version refused", code != 0 and REFUSED_TAMPERED in err, f"exit {code}, {err.strip()!r}")
     tampered_fixture = os.path.join(tampered, "t.apmap")
     shutil.copyfile(args.fixture, tampered_fixture)
-    code, out, err = run.companion(tampered_companion, "extractor", "convert", tampered_fixture)
+    code, out, err = run.companion(tampered_companion, "converter", "convert", tampered_fixture)
     run.check("tampered: convert refused", code != 0 and REFUSED_TAMPERED in err
               and not os.path.exists(os.path.join(tampered, "converted-t")), f"exit {code}, {err.strip()!r}")
     if not args.platform.startswith("windows-"):
         sentinel = os.path.join(work, "the-substitute-ran")
-        with open(tampered_extractor, "w", encoding="utf-8") as handle:
+        with open(tampered_converter, "w", encoding="utf-8") as handle:
             handle.write(f"#!/bin/sh\ntouch '{sentinel}'\necho '{{\"protocol\":\"1.0\"}}'\n")
-        os.chmod(tampered_extractor, 0o755)
-        code, out, err = run.companion(tampered_companion, "extractor", "version")
+        os.chmod(tampered_converter, 0o755)
+        code, out, err = run.companion(tampered_companion, "converter", "version")
         run.check("substitute: never executed", code != 0 and not os.path.exists(sentinel),
                   f"exit {code}, sentinel {'PRESENT' if os.path.exists(sentinel) else 'absent'}")
 
     # 7. Missing: the path is named, and nothing arrives in its place.
     removed = os.path.join(work, "removed")
     shutil.copytree(bundle, removed, symlinks=True)
-    os.remove(os.path.join(removed, where["extractor"]))
+    os.remove(os.path.join(removed, where["converter"]))
     removed_companion = os.path.join(removed, where["companion"])
-    code, out, err = run.companion(removed_companion, "extractor", "status")
+    code, out, err = run.companion(removed_companion, "converter", "status")
     # The path is printed as the Companion resolved its own executable (on
     # macOS /var is /private/var), so the check is the sentence and the
     # directory the bundle was copied to, not a byte-exact path.
     run.check("missing: status names the path", REFUSED_MISSING in out and "looked for" in out
-              and os.path.basename(removed) in out and os.path.basename(where["extractor"]) in out, out.strip())
-    code, out, err = run.companion(removed_companion, "extractor", "version")
-    run.check("missing: version refused", code != 0 and "no extractor" in err.lower(), f"exit {code}, {err.strip()!r}")
-    appeared = files_named(removed, "auto-pigeon-extractor") + files_named(run.home, "auto-pigeon-extractor")
-    run.check("missing: nothing fetched one", not appeared, f"extractor files after the run: {appeared}")
+              and os.path.basename(removed) in out and os.path.basename(where["converter"]) in out, out.strip())
+    code, out, err = run.companion(removed_companion, "converter", "version")
+    run.check("missing: version refused", code != 0 and "no converter" in err.lower(), f"exit {code}, {err.strip()!r}")
+    appeared = files_named(removed, releaselib.CONVERTER) + files_named(run.home, releaselib.CONVERTER)
+    run.check("missing: nothing fetched one", not appeared, f"converter files after the run: {appeared}")
 
     # 8. The application lifecycle, on the release as a user receives it.
     ok, detail = interactive_close(run, companion)
@@ -616,7 +624,6 @@ def main():
         "platform": args.platform,
         "machine": machine,
         "version": args.version,
-        "aue_version": args.aue_version,
         "verdict": "pass" if not failed else "fail",
         "steps": run.results,
     }

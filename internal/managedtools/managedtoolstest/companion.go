@@ -25,17 +25,17 @@ type CompanionSpec struct {
 	// Verdict defaults to bundled_release; State to native_pass.
 	Verdict string
 	State   string
-	// Companion and Extractor are the two programs; default the compiled
+	// Companion and Converter are the two programs; default the compiled
 	// fixture program.
-	Companion, Extractor []byte
-	// ExtractorVersion is what the bundle carries (default 1.245);
-	// ReleaseExtractorVersion what the release manifest names (default the
-	// same): differing is a wrong Companion/extractor pair.
-	ExtractorVersion        string
-	ReleaseExtractorVersion string
-	// Schema overrides the release manifest's; NoAUE drops its extractor.
-	Schema string
-	NoAUE  bool
+	Companion, Converter []byte
+	// ConverterVersion is what the bundle carries (default 1.245);
+	// ReleaseConverterVersion what the release manifest names (default the
+	// same): differing is a wrong Companion/converter pair.
+	ConverterVersion        string
+	ReleaseConverterVersion string
+	// Schema overrides the release manifest's; NoConverter drops its converter.
+	Schema      string
+	NoConverter bool
 	// Bundle changes the bundle manifest before it is written; Archive the
 	// archive's entries after (names relative to the archive's root folder).
 	Bundle  func(manifest map[string]any)
@@ -62,25 +62,25 @@ func CompanionEntries(t testing.TB, spec CompanionSpec) map[string][]byte {
 	if spec.Platform == "" {
 		spec.Platform = ThisBundlePlatform()
 	}
-	if spec.ExtractorVersion == "" {
-		spec.ExtractorVersion = "1.245"
+	if spec.ConverterVersion == "" {
+		spec.ConverterVersion = "1.245"
 	}
 	if spec.Companion == nil {
 		spec.Companion = FixtureProgram(t)
 	}
-	if spec.Extractor == nil {
-		spec.Extractor = FixtureProgram(t)
+	if spec.Converter == nil {
+		spec.Converter = FixtureProgram(t)
 	}
 	manifestPath, companion := managedtools.BundleLayout(spec.Platform)
 	suffix := ""
 	if strings.HasPrefix(spec.Platform, "windows-") {
 		suffix = ".exe"
 	}
-	extractor := "dependencies/auto-pigeon-extractor" + suffix
+	converter := "dependencies/auto-pigeon-mapio" + suffix
 	sums := sum(spec.Companion) + "  " + strings.TrimPrefix(companion, "./") + "\n"
 	entries := map[string][]byte{
 		companion:    spec.Companion,
-		extractor:    spec.Extractor,
+		converter:    spec.Converter,
 		"SHA256SUMS": []byte(sums),
 	}
 	member := func(path, product, version string) map[string]any {
@@ -88,7 +88,7 @@ func CompanionEntries(t testing.TB, spec CompanionSpec) map[string][]byte {
 			"size": len(entries[path]), "sha256": "sha256:" + sum(entries[path])}
 	}
 	manifest := map[string]any{
-		"schema_version": "aucom.bundle-manifest/1.2",
+		"schema_version": "aucom.bundle-manifest/2.0",
 		"product":        "auto-pigeon-companion",
 		"version":        spec.Version,
 		"platform":       spec.Platform,
@@ -96,11 +96,11 @@ func CompanionEntries(t testing.TB, spec CompanionSpec) map[string][]byte {
 		"members": []any{
 			member("SHA256SUMS", "auto-pigeon-companion", spec.Version),
 			member(companion, "auto-pigeon-companion", spec.Version),
-			member(extractor, "auto-pigeon-extractor", spec.ExtractorVersion),
+			member(converter, "auto-pigeon-mapio", spec.ConverterVersion),
 		},
-		"extractor": map[string]any{
-			"product": "auto-pigeon-extractor", "version": spec.ExtractorVersion, "platform": spec.Platform,
-			"file": extractor, "license": "LicenseRef-Auto-Pigeon-Proprietary",
+		"converter": map[string]any{
+			"product": "auto-pigeon-mapio", "version": spec.ConverterVersion, "platform": spec.Platform,
+			"file": converter, "license": "Apache-2.0 AND MIT",
 			"source_commit": strings.Repeat("d", 40),
 		},
 	}
@@ -128,31 +128,31 @@ func BuildCompanion(t testing.TB, spec CompanionSpec) *Release {
 	if spec.State == "" {
 		spec.State = "native_pass"
 	}
-	if spec.ExtractorVersion == "" {
-		spec.ExtractorVersion = "1.245"
+	if spec.ConverterVersion == "" {
+		spec.ConverterVersion = "1.245"
 	}
-	if spec.ReleaseExtractorVersion == "" {
-		spec.ReleaseExtractorVersion = spec.ExtractorVersion
+	if spec.ReleaseConverterVersion == "" {
+		spec.ReleaseConverterVersion = spec.ConverterVersion
 	}
 	name := CompanionArchiveName(spec.Version, spec.Platform)
 	root := strings.TrimSuffix(name, ".zip")
 	archive := Zip(t, root, CompanionEntries(t, spec), nil)
 	schema := spec.Schema
 	if schema == "" {
-		schema = "aucom.release-manifest/1.0"
+		schema = "aucom.release-manifest/2.0"
 	}
 	manifest := map[string]any{
 		"schema": schema, "product": "auto-pigeon-companion", "version": spec.Version, "tag": "v" + spec.Version,
 		"commit": strings.Repeat("a", 40), "prerelease": spec.Prerelease, "signed": false,
 		"targets": []any{map[string]any{
 			"target": strings.Replace(spec.Platform, "-", "/", 1), "verdict": spec.Verdict, "reason": "fixture",
-			"aucom_state": spec.State, "aue_status": "published", "native_acceptance_in_ci": true,
+			"aucom_state": spec.State, "converter_status": "published", "native_acceptance_in_ci": true,
 			"archive": name, "size": len(archive), "sha256": "sha256:" + sum(archive),
 		}},
 	}
-	if !spec.NoAUE {
-		manifest["aue"] = map[string]any{"repository": "auto-pigeon/auto-pigeon-extractor", "commit": strings.Repeat("d", 40),
-			"version": spec.ReleaseExtractorVersion, "protocol": "1.0", "license": "LicenseRef-Auto-Pigeon-Proprietary"}
+	if !spec.NoConverter {
+		manifest["converter"] = map[string]any{"program": "auto-pigeon-mapio", "commit": strings.Repeat("d", 40),
+			"version": spec.ReleaseConverterVersion, "protocol": "1.0", "license": "Apache-2.0 AND MIT"}
 	}
 	encoded, _ := json.MarshalIndent(manifest, "", "  ")
 	return &Release{Tag: "v" + spec.Version, Prerelease: spec.Prerelease, Draft: spec.Draft, Files: map[string][]byte{

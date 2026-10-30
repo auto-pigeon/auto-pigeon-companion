@@ -219,9 +219,14 @@ var commands = []Command{
 		Run:     runLaunch,
 	},
 	{
+		Name: "converter", Usage: "status | version | convert <file.apmap>",
+		Summary: "the auto-pigeon-mapio map converter shipped beside this program",
+		Run:     runConverter,
+	},
+	{
 		Name: "extractor", Usage: "status | version | convert <file.apmap>",
-		Summary: "the separately licensed auto-pigeon-extractor (AUE) shipped beside this program",
-		Run:     runExtractor,
+		Summary: "former name of `converter`, kept as an alias; it runs the same converter",
+		Run:     runConverter,
 	},
 	{
 		Name: "feedback", Usage: "compatibility --game <family> --summary <text> [--share <what>]",

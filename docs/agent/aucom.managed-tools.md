@@ -47,7 +47,7 @@ update belongs to `NEW_368`, which consumes this coordinator and its verificatio
    or page says can add a source, a host or a URL. `NewLoopbackSource` refuses every non-loopback
    host; the only non-test caller is behind the `aucom_fixture_releases` build tag, which no
    release build uses.
-2. **Generic acquisition stays closed.** `internal/acquire`, `internal/aue` and `internal/profile`
+2. **Generic acquisition stays closed.** `internal/acquire`, `internal/converter` and `internal/profile`
    import no HTTP client (`TestNothingThatFindsAProgramCanDownloadOne`). `managed_download` in a
    document is read and refused. `managed_official` is a BINDING mode and is not in the document
    schema's list of modes — do not add it there.

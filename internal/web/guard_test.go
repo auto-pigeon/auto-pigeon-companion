@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/auto-pigeon/auto-pigeon-companion/internal/aue"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/config"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/converter"
 )
 
 // withOrigin issues a request carrying an explicit Origin header, to a
@@ -217,7 +217,7 @@ func TestAPIResponsesAreNotCached(t *testing.T) {
 	}
 }
 
-// stubRunner is an aue.Runner that returns fixed output, so the extractor route
+// stubRunner is an converter.Runner that returns fixed output, so the extractor route
 // is testable without a real extractor binary.
 type stubRunner struct {
 	output    string
@@ -240,23 +240,23 @@ func (r *stubRunner) Available() bool { return r.available }
 // Provenance is on the Runner interface because every surface that shows an
 // extractor has to show whether anything verified it, and a caller holding a
 // Runner must not have to type-assert to find out.
-func (r *stubRunner) Provenance() aue.Provenance {
-	mode := aue.ModeBundled
+func (r *stubRunner) Provenance() converter.Provenance {
+	mode := converter.ModeBundled
 	if !r.verified {
-		mode = aue.ModeDeveloperOverride
+		mode = converter.ModeDeveloperOverride
 	}
 
-	return aue.Provenance{Mode: mode, Verified: r.verified}
+	return converter.Provenance{Mode: mode, Verified: r.verified}
 }
 
-func serverWithRunner(t *testing.T, runner aue.Runner) *Server {
+func serverWithRunner(t *testing.T, runner converter.Runner) *Server {
 	t.Helper()
 	settings := config.Default()
 	server, err := NewServer(Options{
-		Version: "test",
-		Config:  settings,
-		AUE:     runner,
-		Jobs:    newTestJobs(t),
+		Version:   "test",
+		Config:    settings,
+		Converter: runner,
+		Jobs:      newTestJobs(t),
 		UpdateConfig: func(mutate func(*config.Config) error) (config.Config, error) {
 			current := settings
 			return current, mutate(&current)
@@ -268,11 +268,11 @@ func serverWithRunner(t *testing.T, runner aue.Runner) *Server {
 	return server
 }
 
-func TestExtractorVersionRouteReturnsRunnerOutput(t *testing.T) {
+func TestConverterVersionRouteReturnsRunnerOutput(t *testing.T) {
 	runner := &stubRunner{output: "auto-pigeon-extractor 9.9.9\n", available: true}
 	server := serverWithRunner(t, runner)
 
-	response, body := do(t, server, http.MethodGet, "/api/aue/version", "")
+	response, body := do(t, server, http.MethodGet, "/api/converter/version", "")
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (%v)", response.StatusCode, body)
 	}
@@ -284,42 +284,42 @@ func TestExtractorVersionRouteReturnsRunnerOutput(t *testing.T) {
 	}
 }
 
-// TestExtractorRouteWhenUnavailable covers both shapes of "this build cannot
+// TestConverterRouteWhenUnavailable covers both shapes of "this build cannot
 // run AUE": no runner at all, and a runner that reports itself unavailable
 // because nothing was embedded and no override is set.
-func TestExtractorRouteWhenUnavailable(t *testing.T) {
-	for name, runner := range map[string]aue.Runner{
+func TestConverterRouteWhenUnavailable(t *testing.T) {
+	for name, runner := range map[string]converter.Runner{
 		"no runner":            nil,
 		"runner not available": &stubRunner{available: false},
 	} {
 		server := serverWithRunner(t, runner)
-		response, body := do(t, server, http.MethodGet, "/api/aue/version", "")
+		response, body := do(t, server, http.MethodGet, "/api/converter/version", "")
 		if response.StatusCode != http.StatusServiceUnavailable {
 			t.Errorf("%s: status = %d, want 503", name, response.StatusCode)
 			continue
 		}
-		if !strings.Contains(body["error"].(string), aue.EnvBinaryOverride) {
-			t.Errorf("%s: error %q does not name %s", name, body["error"], aue.EnvBinaryOverride)
+		if !strings.Contains(body["error"].(string), converter.EnvBinaryOverride) {
+			t.Errorf("%s: error %q does not name %s", name, body["error"], converter.EnvBinaryOverride)
 		}
 	}
 }
 
-func TestExtractorFailureIsReportedAsBadGateway(t *testing.T) {
+func TestConverterFailureIsReportedAsBadGateway(t *testing.T) {
 	server := serverWithRunner(t, &stubRunner{err: errors.New("boom"), available: true})
-	response, _ := do(t, server, http.MethodGet, "/api/aue/version", "")
+	response, _ := do(t, server, http.MethodGet, "/api/converter/version", "")
 	if response.StatusCode != http.StatusBadGateway {
 		t.Fatalf("status = %d, want 502", response.StatusCode)
 	}
 }
 
-// TestStatusReportsExtractorAvailability covers what the frontend renders
+// TestStatusReportsConverterAvailability covers what the frontend renders
 // before any extractor call is made.
-func TestStatusReportsExtractorAvailability(t *testing.T) {
+func TestStatusReportsConverterAvailability(t *testing.T) {
 	for _, available := range []bool{true, false} {
 		server := serverWithRunner(t, &stubRunner{available: available})
 		_, body := do(t, server, http.MethodGet, "/api/status", "")
-		if body["aue_available"] != available {
-			t.Errorf("aue_available = %v, want %v", body["aue_available"], available)
+		if body["converter_available"] != available {
+			t.Errorf("converter_available = %v, want %v", body["converter_available"], available)
 		}
 	}
 }

@@ -77,7 +77,7 @@ func resolveAUBInputs(ctx context.Context, env *Env, inputs map[string]string, s
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	converted, sources, conversions, err := assetref.ConvertAPMapInputsRecorded(ctx, extractorRunner(env, func(format string, args ...any) {
+	converted, sources, conversions, err := assetref.ConvertAPMapInputsRecorded(ctx, converterRunner(env, func(format string, args ...any) {
 		fmt.Fprintf(env.Stderr, format+"\n", args...)
 	}), resolved, sources)
 	return converted, sources, conversions, packages, err

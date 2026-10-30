@@ -13,8 +13,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/auto-pigeon/auto-pigeon-companion/internal/aue"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/converter"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/failure"
 )
 
@@ -29,39 +29,37 @@ import (
 // extension before that. Found by the operator's own acceptance run: build dm2
 // and e1m6 from user1's account.
 //
-// # Why the extractor does it, and not this program
+// # Why a separate converter does it
 //
-// The APMap → `.map` writer already exists twice in the workspace — the
-// editor's kernel and the extractor's `convert --apmap-to-q1map` — and the
-// extractor is the one this program is built to drive as a separate process
-// (README "Extractor"). A third writer, in Go, here, would be a third opinion
-// about plane points, texture projection and the source frame, and the first
-// map where it disagreed would be a build that compiled something the editor
-// never showed. So the conversion goes through the ONE runner this program has
-// for the extractor, with its provenance — managed and verified, or the
-// labelled developer override — recorded in the manifest beside the source.
+// The APMap → `.map` writer already exists twice in the workspace — the editor's kernel and the shared
+// go/mapio library — and this program drives the library's converter as a separate process (README
+// "Map conversion"). A third writer here would be a third opinion about plane points, texture
+// projection and the source frame, and the first map where it disagreed would be a build that compiled
+// something the editor never showed. So the conversion goes through the ONE runner this program has,
+// with its provenance — bundled and verified, or the labelled developer override — recorded in the
+// manifest beside the source.
 //
 // # What it refuses
 //
 // An APMap for a game this program has no direction for, and any conversion
-// when no extractor is available: that is said by name, with what to do, and
+// when no converter is available: that is said by name, with what to do, and
 // nothing is guessed. The `.apmap` itself is left untouched in the stage.
 
 // ConvertedFormat names what a converted input became, for the manifest.
 const ConvertedFormat = "map"
 
-// ErrNoConverter reports an APMap input with no extractor to convert it.
+// ErrNoConverter reports an APMap input with no converter to convert it.
 var ErrNoConverter = errors.New(
 	"this map is stored in Auto-Pigeon's own format (APMap), and turning it into a .map " +
 		"a compiler reads needs map conversion, which is not installed on this machine")
 
-// directions maps an APMap's `game` to the extractor's conversion direction.
+// directions maps an APMap's `game` to the converter's conversion direction.
 //
-// `quake3` is the extractor's `apmap-to-q3map` (Q3_004): Quake III `.map` text for Q3Map2, with
-// the editor's own bytes, written beside a `<stem>.q3map-manifest.json` the extractor puts in the
+// `quake3` is the converter's `apmap-to-q3map` (Q3_004): Quake III `.map` text for Q3Map2, with
+// the editor's own bytes, written beside a `<stem>.q3map-manifest.json` the converter puts in the
 // same `converted-<name>/` directory. It is only ever that direction — a Quake III document sent to
-// the Quake 1 or Quake 2 writer would lose its patches, and the extractor refuses that by game. An
-// extractor that predates the direction refuses the flag, and that refusal is the error reported.
+// the Quake 1 or Quake 2 writer would lose its patches, and the converter refuses that by game. An
+// converter that predates the direction refuses the flag, and that refusal is the error reported.
 var directions = map[string]string{
 	"quake1": "--apmap-to-q1map",
 	"quake2": "--apmap-to-q2map",
@@ -69,9 +67,9 @@ var directions = map[string]string{
 }
 
 // ConvertAPMapInputs replaces every resolved input that is an `.apmap` with the
-// `.map` the extractor writes for it, in a directory beside it in the stage,
+// `.map` the converter writes for it, in a directory beside it in the stage,
 // and records the conversion on that input's SourceRef.
-func ConvertAPMapInputs(ctx context.Context, runner aue.Runner, resolved map[string]string,
+func ConvertAPMapInputs(ctx context.Context, runner converter.Runner, resolved map[string]string,
 	sources map[string]build.SourceRef,
 ) (map[string]string, map[string]build.SourceRef, error) {
 	out, sources, _, err := ConvertAPMapInputsRecorded(ctx, runner, resolved, sources)
@@ -80,13 +78,13 @@ func ConvertAPMapInputs(ctx context.Context, runner aue.Runner, resolved map[str
 
 // ConvertAPMapInputsRecorded is [ConvertAPMapInputs] that also returns, for
 // every input it converted, the record of what it was converted FROM: the
-// APMap's digest and its own document identity, and the extractor's conversion
+// APMap's digest and its own document identity, and the converter's conversion
 // manifest when the direction writes one (Q3_010).
 //
 // The record is keyed by input name and exists whether or not the input has a
 // SourceRef — a local `.apmap` has none, and its conversion is still a fact
 // about the file a build compiled.
-func ConvertAPMapInputsRecorded(ctx context.Context, runner aue.Runner, resolved map[string]string,
+func ConvertAPMapInputsRecorded(ctx context.Context, runner converter.Runner, resolved map[string]string,
 	sources map[string]build.SourceRef,
 ) (map[string]string, map[string]build.SourceRef, map[string]build.Conversion, error) {
 	out, sources, conversions, err := convertAPMapInputs(ctx, runner, resolved, sources)
@@ -96,7 +94,7 @@ func ConvertAPMapInputsRecorded(ctx context.Context, runner aue.Runner, resolved
 	return out, sources, conversions, nil
 }
 
-func convertAPMapInputs(ctx context.Context, runner aue.Runner, resolved map[string]string,
+func convertAPMapInputs(ctx context.Context, runner converter.Runner, resolved map[string]string,
 	sources map[string]build.SourceRef,
 ) (map[string]string, map[string]build.SourceRef, map[string]build.Conversion, error) {
 	names := make([]string, 0, len(resolved))
@@ -109,7 +107,7 @@ func convertAPMapInputs(ctx context.Context, runner aue.Runner, resolved map[str
 		return resolved, sources, nil, nil
 	}
 	sort.Strings(names)
-	if !aue.Available(runner) {
+	if !converter.Available(runner) {
 		return nil, nil, nil, failure.As(failure.ConverterUnavailable,
 			fmt.Errorf("the input %q: %w", names[0], ErrNoConverter))
 	}
@@ -155,6 +153,7 @@ func convertAPMapInputs(ctx context.Context, runner aue.Runner, resolved map[str
 			DocumentID: header.DocumentID, DocumentRevision: header.Revision,
 			APMapVersion: header.Version, Game: header.Game,
 			ConvertedBy: provenance.Mode, ConverterVerified: provenance.Verified,
+			Converter: provenance.Program, ConverterVersion: provenance.Version, ConverterLibrary: provenance.Library,
 		}
 		recorded, err := conversionManifest(filepath.Join(dir, stem+conversionManifestSuffix), sourceDigest, digest)
 		if err != nil {
@@ -175,29 +174,29 @@ func convertAPMapInputs(ctx context.Context, runner aue.Runner, resolved map[str
 	return out, sources, conversions, nil
 }
 
-// conversionError says why the extractor would not write a `.map`, with the
-// extractor's own reason FIRST.
+// conversionError says why the converter would not write a `.map`, with the
+// converter's own reason FIRST.
 //
-// The reason is in the terminal record on the extractor's last stderr line —
+// The reason is in the terminal record on the converter's last stderr line —
 // `apmap-to-q3map refused [q3map_shader_unsafe]: fac_… : shader "…" is not a
 // safe Quake III shader path` — after an exit code and a version banner and
 // before an incident envelope. Printed whole, it was all there and nobody
 // could find it (`Q3_007`: "was not shown in the Companion page"). So the
-// sentence a person reads is the extractor's, and everything it printed stays
+// sentence a person reads is the converter's, and everything it printed stays
 // underneath, because that is still the record.
 func conversionError(name string, err error) error {
-	if terminal, ok := aue.ReadTerminal(err.Error()); ok && terminal.Sentence() != "" {
-		return fmt.Errorf("the input %q: the extractor would not convert it to a .map: %s\n%w",
+	if terminal, ok := converter.ReadTerminal(err.Error()); ok && terminal.Sentence() != "" {
+		return fmt.Errorf("the input %q: the converter would not convert it to a .map: %s\n%w",
 			name, terminal.Sentence(), err)
 	}
 	return fmt.Errorf("the input %q: converting it to a .map: %w", name, err)
 }
 
-// conversionManifestSuffix is what the extractor's Quake III direction names
+// conversionManifestSuffix is what the converter's Quake III direction names
 // the manifest it writes beside the `.map`.
 const conversionManifestSuffix = ".q3map-manifest.json"
 
-// conversionManifest reads the extractor's conversion manifest, when the
+// conversionManifest reads the converter's conversion manifest, when the
 // direction wrote one, and checks that it is about THIS conversion.
 //
 // The manifest states the digest of the APMap it read and of the `.map` it

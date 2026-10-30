@@ -476,7 +476,7 @@ func TestUsageListsEveryRegisteredCommand(t *testing.T) {
 	}
 }
 
-func TestExtractorArgumentErrors(t *testing.T) {
+func TestConverterArgumentErrors(t *testing.T) {
 	for _, args := range [][]string{
 		{"extractor"},
 		{"extractor", "nonsense"},

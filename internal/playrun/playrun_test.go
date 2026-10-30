@@ -63,7 +63,7 @@ func newHarness(t *testing.T) *harness {
 	h.convert = func(context.Context, playrun.Request, string) (playrun.ConvertResult, error) {
 		return playrun.ConvertResult{
 			Path:      "/work/dm1.map",
-			Extractor: &playrun.ExtractorRef{Version: "0.9.1", Protocol: "aue/1.2", Verified: true},
+			Converter: &playrun.ConverterRef{Version: "0.9.1", Protocol: "aue/1.2", Verified: true},
 		}, nil
 	}
 	h.buildRun = func(_ context.Context, _ build.Request, announce func(*build.Manifest)) (*build.Manifest, error) {
@@ -240,8 +240,8 @@ func TestOneConfirmationRunsTheWholeSequence(t *testing.T) {
 		t.Errorf("map source = %+v", record.MapSource)
 	case record.Bundle == nil || record.Bundle.Digest != strings.Repeat("a", 64):
 		t.Errorf("bundle = %+v", record.Bundle)
-	case record.Extractor == nil || !record.Extractor.Verified:
-		t.Errorf("extractor = %+v", record.Extractor)
+	case record.Converter == nil || !record.Converter.Verified:
+		t.Errorf("extractor = %+v", record.Converter)
 	case record.BuildID != "20260921T000000Z-abcdef":
 		t.Errorf("build id = %q", record.BuildID)
 	case len(record.Installed) != 2:

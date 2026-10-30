@@ -94,7 +94,7 @@ var rows = []Row{
 			{"internal/acquire", "TestNothingThatFindsAProgramCanDownloadOne"},
 			{"internal/acquire", "TestAManagedDownloadRouteIsRefusedWithTheWayAround"},
 			{"internal/cli", "TestAcquireDownloadCommandsAreGoneAndSaySo"},
-			{"internal/cli", "TestExtractorInstallSaysNothingDownloadsIt"},
+			{"internal/cli", "TestConverterInstallSaysNothingDownloadsIt"},
 			{"internal/managedtools", "TestTheAllowlistIsExactlyTheTwoOfficialRepositories"},
 			{"internal/managedtools", "TestTheProductionSourceGoesOnlyToGitHubReleaseHostsOverHTTPS"},
 			{"internal/managedtools", "TestALoopbackSourceRefusesEveryOtherHost"},
@@ -104,13 +104,13 @@ var rows = []Row{
 	},
 	{
 		ID: "T06", Category: CatSupply,
-		Title:      "The extractor beside the Companion is not the one the release shipped",
-		Asset:      "the extractor, which reads every map a user converts",
+		Title:      "The converter beside the Companion is not the one the release shipped",
+		Asset:      "the converter, which reads every map a user converts",
 		Vector:     "A file replaced after the release was unpacked, or a bundle assembled with the wrong platform's build; or a synced asset whose bytes changed in transit.",
-		Mitigation: "When the release's bundle manifest lists the extractor, its SHA-256 must match before it is run; a mismatch is a refusal, not a warning. Synced assets are verified before they are published anywhere.",
+		Mitigation: "When the release's bundle manifest lists the converter, its SHA-256 must match before it is run; a mismatch is a refusal, not a warning. Synced assets are verified before they are published anywhere.",
 		Evidence: []Evidence{
-			{"internal/aue", "TestABundledExtractorWhoseDigestDisagreesIsRefused"},
-			{"internal/aue", "TestABundledExtractorListedInTheManifestIsVerified"},
+			{"internal/converter", "TestABundledConverterWhoseDigestDisagreesIsRefused"},
+			{"internal/converter", "TestABundledConverterListedInTheManifestIsVerified"},
 			{"internal/assetsync", "TestTamperedBytesArePublishedNowhere"},
 		},
 	},
@@ -127,26 +127,26 @@ var rows = []Row{
 	},
 	{
 		ID: "T08", Category: CatSupply,
-		Title:      "A check on the extractor that could not run is treated as one that passed",
-		Asset:      "the decision to run the extractor at all",
-		Vector:     "No extractor beside the Companion, an unreadable bundle manifest, a `protocol` answer that is not one document or names a contract this build cannot drive. Each is a moment where a program that wants to be helpful runs something anyway.",
-		Mitigation: "Every one of them is a refusal. No extractor is an error naming the file and the override, never a fall-back to one; an unreadable manifest vouches for nothing; a malformed or incompatible protocol answer stops the run before the extractor is used.",
+		Title:      "A check on the converter that could not run is treated as one that passed",
+		Asset:      "the decision to run the converter at all",
+		Vector:     "No converter beside the Companion, an unreadable bundle manifest, a `protocol` answer that is not one document or names a contract this build cannot drive. Each is a moment where a program that wants to be helpful runs something anyway.",
+		Mitigation: "Every one of them is a refusal. No converter is an error naming the file and the override, never a fall-back to one; an unreadable manifest vouches for nothing; a malformed or incompatible protocol answer stops the run before the converter is used.",
 		Evidence: []Evidence{
-			{"internal/aue", "TestNoBundledExtractorIsASentenceNamingTheOverride"},
-			{"internal/aue", "TestAnUnreadableBundleManifestIsARefusal"},
-			{"internal/aue", "TestMalformedProtocolOutputIsRefused"},
-			{"internal/aue", "TestAnIncompatibleProtocolIsRefusedBeforeTheBuildIsUsed"},
+			{"internal/converter", "TestNoBundledConverterIsASentenceNamingTheOverride"},
+			{"internal/converter", "TestAnUnreadableBundleManifestIsARefusal"},
+			{"internal/converter", "TestMalformedProtocolOutputIsRefused"},
+			{"internal/converter", "TestAnIncompatibleProtocolIsRefusedBeforeTheBuildIsUsed"},
 		},
 	},
 	{
 		ID: "T09", Category: CatSupply,
-		Title:      "A developer's own extractor is mistaken for the one the release shipped",
-		Asset:      "the meaning of \"verified\" wherever an extractor is shown",
-		Vector:     "AUCOM_AUE_BINARY names a local build. If it were reported like the bundled copy, results produced with an unreviewed program would look like results the release produced.",
-		Mitigation: "The override is its own constructor and its own mode. It is labelled UNVERIFIED on every surface that shows an extractor, and nothing arrives at it by falling through a bundled resolution that failed.",
+		Title:      "A developer's own converter is mistaken for the one the release shipped",
+		Asset:      "the meaning of \"verified\" wherever a converter is shown",
+		Vector:     "AUCOM_MAPIO_BINARY names a local build. If it were reported like the bundled copy, results produced with an unreviewed program would look like results the release produced.",
+		Mitigation: "The override is its own constructor and its own mode. It is labelled UNVERIFIED on every surface that shows a converter, and nothing arrives at it by falling through a bundled resolution that failed.",
 		Evidence: []Evidence{
-			{"internal/aue", "TestTheDeveloperOverrideIsUnverifiedAndSaysSo"},
-			{"internal/cli", "TestExtractorStatusReportsAnOverrideAsUnverified"},
+			{"internal/converter", "TestTheDeveloperOverrideIsUnverifiedAndSaysSo"},
+			{"internal/cli", "TestConverterStatusReportsAnOverrideAsUnverified"},
 		},
 	},
 	{
@@ -295,9 +295,9 @@ var rows = []Row{
 			// The bound a measurement is held to has to come from the product.
 			{"internal/job", "TestTheLimitsPublishWhatTheCaptureActuallyDoes"},
 			{"internal/job", "TestALineCountIsKeptWhenNoRuleAsksForOne"},
-			{"internal/aue", "TestAnInvocationThatHangsIsStoppedAndSaysSo"},
-			{"internal/aue", "TestOutputPastTheCapIsRefusedRatherThanBuffered"},
-			{"internal/aue", "TestCancellationSendsSIGTERMBeforeAnythingHarsher"},
+			{"internal/converter", "TestAnInvocationThatHangsIsStoppedAndSaysSo"},
+			{"internal/converter", "TestOutputPastTheCapIsRefusedRatherThanBuffered"},
+			{"internal/converter", "TestCancellationSendsSIGTERMBeforeAnythingHarsher"},
 		},
 	},
 	{
@@ -318,9 +318,9 @@ var rows = []Row{
 		Vector:     "A program exits 0 having printed a warning before its JSON, or half a document, or a document with something appended. Each decodes into a partially filled struct.",
 		Mitigation: "The JSON reader refuses an empty body and trailing content, and a run's exit status and stderr are kept rather than replaced by whatever the decode made of it.",
 		Evidence: []Evidence{
-			{"internal/aue", "TestRunJSONRefusesAnythingThatIsNotOneDocument"},
-			{"internal/aue", "TestMalformedProtocolOutputIsRefused"},
-			{"internal/aue", "TestACrashKeepsItsExitCodeAndItsStderr"},
+			{"internal/converter", "TestRunJSONRefusesAnythingThatIsNotOneDocument"},
+			{"internal/converter", "TestMalformedProtocolOutputIsRefused"},
+			{"internal/converter", "TestACrashKeepsItsExitCodeAndItsStderr"},
 		},
 	},
 
@@ -676,17 +676,17 @@ var rows = []Row{
 	},
 	{
 		ID: "T44", Category: CatRecovery,
-		Title:      "Antivirus holds or quarantines the extractor shipped beside the Companion",
+		Title:      "Antivirus holds or quarantines the converter shipped beside the Companion",
 		Asset:      "the first run on a Windows machine",
-		Vector:     "Defender or a third-party scanner opens the freshly unpacked auto-pigeon-extractor.exe, and the exec fails with a sharing violation for a second or two — or the file is quarantined and never appears.",
-		Mitigation: "A missing extractor or program is reported by name with what to do about it, rather than as a generic exec failure, and resolution is retried on the next start.",
+		Vector:     "Defender or a third-party scanner opens the freshly unpacked auto-pigeon-mapio.exe, and the exec fails with a sharing violation for a second or two — or the file is quarantined and never appears.",
+		Mitigation: "A missing converter or program is reported by name with what to do about it, rather than as a generic exec failure, and resolution is retried on the next start.",
 		Evidence: []Evidence{
-			{"internal/aue", "TestNoBundledExtractorIsASentenceNamingTheOverride"},
+			{"internal/converter", "TestNoBundledConverterIsASentenceNamingTheOverride"},
 			{"internal/job", "TestAMissingExecutableSaysWhatToDoAboutIt"},
 		},
 		Manual: "On a Windows machine with Defender real-time protection ON: unpack a release bundle, then immediately run " +
-			"`companion extractor version`. " +
-			"Expected: either it prints the extractor's version, or it fails naming auto-pigeon-extractor.exe and a second run succeeds. " +
+			"`companion converter version`. " +
+			"Expected: either it prints the converter's version, or it fails naming auto-pigeon-mapio.exe and a second run succeeds. " +
 			"Not expected: an error that does not name a file.",
 		Residual: &Residual{
 			What: "No automated test exercises a real antivirus scanner holding a file open. The evidence above is the " +
@@ -730,8 +730,8 @@ var rows = []Row{
 		ID: "T45", Category: CatRelease,
 		Title:      "The artifact contains something it says it does not",
 		Asset:      "the licence of everything shipped, and the user's ability to know what they are running",
-		Vector:     "An extractor staged back into the binary with go:embed; a Go dependency added without anybody deciding; a game asset packaged into somebody's PK3.",
-		Mitigation: "The module graph is read out of the BINARY, not out of go.mod, and it is empty. CI fails on a staged extractor, on a go:embed directive in that package, and on any committed executable anywhere in the tree. The packaging policy holds unknown content for review rather than including it.",
+		Vector:     "A converter staged back into the binary with go:embed; a Go dependency added without anybody deciding; a game asset packaged into somebody's PK3.",
+		Mitigation: "The module graph is read out of the BINARY, not out of go.mod, and it is empty. CI fails on a staged converter, on a go:embed directive in that package, and on any committed executable anywhere in the tree. The packaging policy holds unknown content for review rather than including it.",
 		Evidence: []Evidence{
 			{"internal/release", "TestThisProgramLinksNoExternalModule"},
 			{"internal/release", "TestTheArtifactHoldsOnlyTheCompanionAndItsAULIBSContracts"},
@@ -744,11 +744,11 @@ var rows = []Row{
 		ID: "T46", Category: CatRelease,
 		Title:      "A shipped binary is handed out under the wrong licence, or a copyleft one with no offer of its source",
 		Asset:      "compliance with the licences of the programs this project distributes",
-		Vector:     "A copyleft program shipped beside the Companion without a corresponding-source offer, or a component list or notices file that quietly omits or mislabels what is shipped beside it — the proprietary extractor listed as MIT, which would describe the whole archive as MIT, or as a copyleft program it no longer is.",
-		Mitigation: "Any component shipped beside the Companion under a copyleft licence must carry a corresponding-source URL. The one component this project distributes besides itself today — the extractor — is proprietary (LicenseRef-Auto-Pigeon-Proprietary) and must be listed as that, never as MIT or copyleft, with its own licence file in the bundle; the notices file must name it and its licence. The rest of the component list is derived from the built-in profiles, so a toolchain added without a licence cannot become invisible.",
+		Vector:     "A copyleft program shipped beside the Companion without a corresponding-source offer, or a component list or notices file that quietly omits or mislabels what is shipped beside it — the converter listed as MIT alone, which would describe the whole archive as MIT, or an archive without the Apache-2.0 text and NOTICE its library requires.",
+		Mitigation: "Any component shipped beside the Companion under a copyleft licence must carry a corresponding-source URL. The one component this project distributes besides itself today — the converter — is Apache-2.0 AND MIT and must be listed as both, with both texts and the library's NOTICE in a notices file beside it in the bundle; THIRD_PARTY_NOTICES.md must name it and its licences. The rest of the component list is derived from the built-in profiles, so a toolchain added without a licence cannot become invisible.",
 		Evidence: []Evidence{
 			{"internal/release", "TestEveryShippedCopyleftComponentOffersItsSource"},
-			{"internal/release", "TestTheExtractorIsListedAsProprietaryNeverMITOrCopyleft"},
+			{"internal/release", "TestTheConverterIsListedUnderBothOfItsLicences"},
 			{"cmd/companion", "TestNoticesCoverEveryRedistributedComponent"},
 		},
 	},
@@ -841,9 +841,9 @@ var rows = []Row{
 	{
 		ID: "T57", Category: CatSupply,
 		Title:      "The Companion's own update puts a program in its folder that is not the release, or that cannot start",
-		Asset:      "the program that runs every build and game, the extractor beside it, and the folder the person keeps it in",
-		Vector:     "A Companion bundle whose extractor is not the one its release names, a missing or extra file, other bytes, a link or an escaping name in the archive; a staged copy changed after it was checked; a link or another user's file where a program should be; a mutable plan or journal used to make the updater write elsewhere or run something; a disk that fills mid-swap; a new version that never serves.",
-		Mitigation: "internal/managedtools checks the Companion's release manifest (schema, tag, version, bundled_release verdict, extractor version and protocol, SHA-256 and size against GitHub's listing and digest) and unpacks the archive against the bundle manifest inside it, which must pair this Companion with exactly that extractor; a proving start of the staged program must pass. internal/selfupdate writes only the running bundle's own folder, resolved from the executable and never from a file, and only the files the old and new bundle manifests list, each re-hashed; it refuses links, folders, reparse points and other users' files there, checks free space, writes the journal — every owned path's old and new SHA-256 — before anything moves, reconciles forward and back by the bytes actually present (never by recorded progress, never moving a file that is neither bundle's), proves the result in place and rolls back on any failure, rolls back an interrupted swap at the next start and a version that starts three times without serving, records rolled_back only after reading every file back and otherwise recovery_needed — then no start serves the folder, no new update begins and nothing kept is removed until `selfupdate recover` (which also runs from the copy kept in previous/) finishes it. The journal is read only as this user's plain file, is validated (schema, member paths, duplicates, digests) before any write it directs, and names no command; what is started afterwards is the program it put in place with a fixed argument list. A folder it cannot write, and macOS, are never replaced: the update is downloaded and verified and a person puts it in place.",
+		Asset:      "the program that runs every build and game, the converter beside it, and the folder the person keeps it in",
+		Vector:     "A Companion bundle whose converter is not the one its release names, a missing or extra file, other bytes, a link or an escaping name in the archive; a staged copy changed after it was checked; a link or another user's file where a program should be; a mutable plan or journal used to make the updater write elsewhere or run something; a disk that fills mid-swap; a new version that never serves.",
+		Mitigation: "internal/managedtools checks the Companion's release manifest (schema, tag, version, bundled_release verdict, converter version and protocol, SHA-256 and size against GitHub's listing and digest) and unpacks the archive against the bundle manifest inside it, which must pair this Companion with exactly that converter; a proving start of the staged program must pass. internal/selfupdate writes only the running bundle's own folder, resolved from the executable and never from a file, and only the files the old and new bundle manifests list, each re-hashed; it refuses links, folders, reparse points and other users' files there, checks free space, writes the journal — every owned path's old and new SHA-256 — before anything moves, reconciles forward and back by the bytes actually present (never by recorded progress, never moving a file that is neither bundle's), proves the result in place and rolls back on any failure, rolls back an interrupted swap at the next start and a version that starts three times without serving, records rolled_back only after reading every file back and otherwise recovery_needed — then no start serves the folder, no new update begins and nothing kept is removed until `selfupdate recover` (which also runs from the copy kept in previous/) finishes it. The journal is read only as this user's plain file, is validated (schema, member paths, duplicates, digests) before any write it directs, and names no command; what is started afterwards is the program it put in place with a fixed argument list. A folder it cannot write, and macOS, are never replaced: the update is downloaded and verified and a person puts it in place.",
 		Evidence: []Evidence{
 			{"internal/managedtools", "TestEveryCompanionBundleThatIsNotWhatItsReleaseSaysIsRefused"},
 			{"internal/managedtools", "TestABundleThatFailsItsProvingStartIsNeverStaged"},

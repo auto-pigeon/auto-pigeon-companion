@@ -6,12 +6,13 @@
 /companion
 /companion.exe
 
-# Staged AUE binary. The build script copies the platform-matching
-# auto-pigeon-extractor binary into internal/aue/embedded/ immediately before
+# A staged converter binary. Nothing stages one any more; the rule stays so a
+# program copied into internal/converter/embedded/ can never be committed. It was
+# how a binary reached the build immediately before
 # `go build` and clears it afterwards — it must never be committed. .gitkeep is
 # the only tracked file in that directory.
-/internal/aue/embedded/*
-!/internal/aue/embedded/.gitkeep
+/internal/converter/embedded/*
+!/internal/converter/embedded/.gitkeep
 
 # Downloaded external tool cache.
 #

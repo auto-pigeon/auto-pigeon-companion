@@ -271,7 +271,7 @@
         el("dt", { text: t("Qualification") }), el("dd", { text: tool.offer.qualification || "" }),
       );
       if (tool.offer.sidecar) {
-        details.append(el("dt", { text: t("Bundled extractor") }), el("dd", { text: tool.offer.sidecar.version + " (protocol " + tool.offer.sidecar.protocol + ")" }));
+        details.append(el("dt", { text: t("Bundled converter") }), el("dd", { text: tool.offer.sidecar.version + " (protocol " + tool.offer.sidecar.protocol + ")" }));
       }
       if (tool.failure && tool.failure.version === tool.offer.version) {
         details.append(el("dt", { text: t("Last attempt") }), el("dd", { text: tool.failure.error }));

@@ -132,7 +132,7 @@ func (s *Service) downloadTextures(ctx context.Context, record *Record) error {
 		return nil
 	}
 
-	// The gate. Nothing starts the extractor or a compiler on a bundle AUB has
+	// The gate. Nothing starts the converter or a compiler on a bundle AUB has
 	// said it could not complete.
 	if !result.Ref.CompilerReady {
 		// The one exception, and only when the person asked for it in the
@@ -217,18 +217,18 @@ func (s *Service) convert(ctx context.Context, record *Record) error {
 	if err != nil {
 		return err
 	}
-	record.Extractor = result.Extractor
+	record.Converter = result.Converter
 	if result.Path != "" && result.Path != record.MapFile {
 		record.ConvertedMap = result.Path
 		record.Conversion = result.Conversion
 	}
 	switch {
-	case result.Extractor == nil:
-		s.detail(record, "the revision is already a Quake .map; the extractor was not needed")
-	case result.Extractor.Verified:
-		s.detail(record, "extractor "+result.Extractor.Version+", verified")
+	case result.Converter == nil:
+		s.detail(record, "the revision is already a Quake .map; the converter was not needed")
+	case result.Converter.Verified:
+		s.detail(record, "converter "+result.Converter.Version+", verified")
 	default:
-		s.detail(record, "extractor "+result.Extractor.Version+
+		s.detail(record, "converter "+result.Converter.Version+
 			", a local developer override and NOT verified")
 	}
 

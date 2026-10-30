@@ -7,7 +7,7 @@ beside it. Standard library only, like everything else the release runs.
 # Why the platform is read out of the file
 
 A bundle pairs two separately built programs. The one mistake nothing else
-catches is pairing them for different machines: a linux/arm64 extractor beside a
+catches is pairing them for different machines: a linux/arm64 converter beside a
 linux/amd64 Companion is a bundle that unpacks, lists both digests correctly,
 and fails on the user's machine with `exec format error`. The executable header
 says which operating system and processor a file is for, so the bundle step
@@ -26,6 +26,7 @@ what `write_zip` does, so two builds of one commit produce one archive digest.
 
 import hashlib
 import os
+import platform as _platform
 import stat
 import struct
 import zipfile
@@ -34,9 +35,10 @@ import zipfile
 # bytes do not depend on when it was made.
 ZIP_EPOCH = (1980, 1, 1, 0, 0, 0)
 
-EXTRACTOR = "auto-pigeon-extractor"
-# The folder beside the Companion that holds the extractor and the bundle
-# manifest on Linux and Windows (internal/aue.DependenciesDir).
+CONVERTER = "auto-pigeon-mapio"
+NOTICES = "NOTICES-auto-pigeon-mapio.txt"
+# The folder beside the Companion that holds the converter and the bundle
+# manifest on Linux and Windows (internal/converter.DependenciesDir).
 DEPENDENCIES = "dependencies"
 COMPANION = "companion"
 APP_NAME = "Auto-Pigeon Companion.app"
@@ -90,6 +92,13 @@ def platform_of(path):
     raise ValueError(f"{path}: not an executable this release can identify (no ELF, Mach-O or PE header)")
 
 
+def host_platform():
+    """The `<goos>-<goarch>` this machine is."""
+    system = {"Linux": "linux", "Darwin": "darwin", "Windows": "windows"}.get(_platform.system(), _platform.system())
+    machine = _platform.machine().lower()
+    return system + "-" + {"x86_64": "amd64", "amd64": "amd64", "aarch64": "arm64", "arm64": "arm64"}.get(machine, machine)
+
+
 def exe_suffix(platform):
     return ".exe" if platform.startswith("windows-") else ""
 
@@ -106,26 +115,28 @@ def layout(bundle, platform):
     """Where each program and the bundle manifest live in a bundle, as paths
     relative to its root.
 
-    On Linux and Windows the Companion is at the root and the extractor and
-    the manifest are in `dependencies/` (DEPENDENCIES; operator decision,
-    2026-09-25), so the root holds only the program a person starts. On macOS,
-    inside the .app: the
-    Companion runs from `Contents/MacOS/` and looks for its extractor beside
-    itself, and reads the manifest from `Contents/Resources/` (see
-    internal/aue.bundleManifestFor, which is the other half of this).
+    On Linux and Windows the Companion is at the root and the converter, its
+    notices and the manifest are in `dependencies/` (DEPENDENCIES; operator
+    decision, 2026-09-25), so the root holds only the program a person starts.
+    On macOS, inside the .app: the Companion runs from `Contents/MacOS/` and looks
+    for its converter beside itself, and reads the manifest from
+    `Contents/Resources/` (see internal/converter.bundleManifestFor, which is the
+    other half of this).
     """
     suffix = exe_suffix(platform)
     if platform.startswith("darwin-"):
         app = app_dir(bundle)
         return {
             "companion": f"{app}/Contents/MacOS/{COMPANION}",
-            "extractor": f"{app}/Contents/MacOS/{EXTRACTOR}",
+            "converter": f"{app}/Contents/MacOS/{CONVERTER}",
+            "notices": f"{app}/Contents/Resources/{NOTICES}",
             "manifest": f"{app}/Contents/Resources/bundle-manifest.json",
             "resources": f"{app}/Contents/Resources",
         }
     return {
         "companion": COMPANION + suffix,
-        "extractor": f"{DEPENDENCIES}/{EXTRACTOR}{suffix}",
+        "converter": f"{DEPENDENCIES}/{CONVERTER}{suffix}",
+        "notices": f"{DEPENDENCIES}/{NOTICES}",
         "manifest": f"{DEPENDENCIES}/bundle-manifest.json",
         "resources": None,
     }

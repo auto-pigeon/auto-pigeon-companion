@@ -209,7 +209,7 @@ func TestAManagedDownloadRouteIsRefusedWithTheWayAround(t *testing.T) {
 func TestNothingThatFindsAProgramCanDownloadOne(t *testing.T) {
 	for _, name := range []string{
 		"github.com/auto-pigeon/auto-pigeon-companion/internal/acquire",
-		"github.com/auto-pigeon/auto-pigeon-companion/internal/aue",
+		"github.com/auto-pigeon/auto-pigeon-companion/internal/converter",
 		"github.com/auto-pigeon/auto-pigeon-companion/internal/profile",
 	} {
 		pkg, err := build.Import(name, "", 0)

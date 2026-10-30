@@ -31,7 +31,7 @@ import (
 //
 // Nothing here does any of the work. [playrun.Service] owns the order, the
 // record and the cancellation; this file is the adapter that hands it the
-// asset syncer, the texture-bundle cache, the extractor runner, the build
+// asset syncer, the texture-bundle cache, the converter runner, the build
 // runner, the level stager and the job service — each of which already exists,
 // and none of which is reimplemented.
 //
@@ -321,7 +321,7 @@ func (s *Server) backendAddress() string {
 	return ""
 }
 
-// playConvert runs the extractor out of process, through the one converter
+// playConvert runs the converter out of process, through the one converter
 // internal/assetref owns. A revision that is already a `.map` is returned
 // unchanged and nothing is started.
 func (s *Server) playConvert(ctx context.Context, _ playrun.Request, mapFile string) (playrun.ConvertResult, error) {
@@ -342,7 +342,9 @@ func (s *Server) playConvert(ctx context.Context, _ playrun.Request, mapFile str
 	return playrun.ConvertResult{
 		Path:       converted[playMapInput],
 		Conversion: conversion,
-		Extractor: &playrun.ExtractorRef{
+		Converter: &playrun.ConverterRef{
+			Program:  provenance.Program,
+			Library:  provenance.Library,
 			Version:  provenance.Version,
 			Protocol: provenance.Protocol,
 			Path:     provenance.Path,
@@ -1210,7 +1212,15 @@ func playView(record *playrun.Record, now time.Time) map[string]any {
 		}
 		out["notices"], out["notices_dir"] = notices, record.NoticesDir
 	}
+	if record.Converter != nil {
+		out["converter"] = map[string]any{
+			"program": record.Converter.Program, "version": record.Converter.Version,
+			"protocol": record.Converter.Protocol, "library": record.Converter.Library,
+			"verified": record.Converter.Verified,
+		}
+	}
 	if record.Extractor != nil {
+		// A run from before NEW_371, shown as what it was.
 		out["extractor"] = map[string]any{
 			"version": record.Extractor.Version, "protocol": record.Extractor.Protocol,
 			"verified": record.Extractor.Verified,

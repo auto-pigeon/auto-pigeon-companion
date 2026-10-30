@@ -2,22 +2,22 @@
 """The release's decisions, as one program the workflow calls (NEW_247A).
 
 `.github/workflows/release.yml` builds and publishes; everything it DECIDES is
-here, where a test can drive it: which Auto-Pigeon Extractor revision is
-bundled, which targets are released, how a bundle is made and checked, what the
+here, where a test can drive it: which go/mapio revision the converter is built
+from, which targets are released, how a bundle is made and checked, what the
 release says about itself, which files are attached, and whether a rerun may
 touch a release that already exists. The YAML carries no target list, no bundle
 format and no version arithmetic of its own.
 
 usage:
-  release-plan.py pin            [--pin build/aue-pin.json]
-  release-plan.py aue-checkout   --aue-dir <dir> [--pin ...]
-  release-plan.py matrix         --aucom-support <json> --aue-targets <dir> --out <matrix.json>
+  release-plan.py pin            [--build build/converter.json]
+  release-plan.py matrix         --aucom-support <json> --out <matrix.json> [--build ...]
   release-plan.py acceptance-matrix --matrix <matrix.json>
-  release-plan.py check-aue      --matrix <m> --aue-release <dir> --aue-version <v> [--pin ...] --out <aue-inputs.json>
-  release-plan.py bundle         --matrix <m> --aue-inputs <j> --aucom-dist <dir> --version <v> --out <dir>
-  release-plan.py verify-archive <zip> --platform <p> --version <v> --aue-version <v> --aue-commit <sha>
+  release-plan.py check-converter --matrix <m> --aucom-dist <dir> --version <v> --commit <sha> --go go
+                                 --out <converter-inputs.json> [--build ...]
+  release-plan.py bundle         --matrix <m> --converter-inputs <j> --aucom-dist <dir> --version <v> --out <dir>
+  release-plan.py verify-archive <zip> --platform <p> --version <v> --converter-inputs <j>
                                  [--commit <sha> --go go]
-  release-plan.py release        --matrix <m> --aue-inputs <j> --bundles <dir> --version <v> --commit <sha> --out <dir>
+  release-plan.py release        --matrix <m> --converter-inputs <j> --bundles <dir> --version <v> --commit <sha> --out <dir>
   release-plan.py upload-list    --release-dir <dir>
   release-plan.py reconcile      --release-dir <dir> --existing <tsv>
   release-plan.py promote-check  --release-dir <dir> --existing <tsv> --commit <sha>
@@ -58,11 +58,9 @@ def bash():
         raise Refusal("bash is not on PATH; the bundle is composed by build/bundle-sidecar.sh")
     return found
 
-PIN_SCHEMA = "aucom.aue-pin/1.1"
-BRANCH = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$")
-MATRIX_SCHEMA = "aucom.release-matrix/1.0"
-RELEASE_SCHEMA = "aucom.release-manifest/1.0"
-AUE_MANIFEST_SCHEMA = "aue-release-manifest/1.0"
+BUILD_SCHEMA = "aucom.converter-build/1.0"
+MATRIX_SCHEMA = "aucom.release-matrix/2.0"
+RELEASE_SCHEMA = "aucom.release-manifest/2.0"
 FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 VERSION = re.compile(r"^1\.[0-9]+$")
 REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
@@ -73,8 +71,8 @@ REFUSED = "refused"
 
 # The native GitHub runners the acceptance job uses, one per operating-system
 # family. This is not a target list — the targets come from native-support.json
-# and AUE's `aue-release targets` — it is which hosted machine can EXECUTE a
-# target natively. A target not here is never claimed as natively accepted by
+# and build/converter.json — it is which hosted machine can EXECUTE a target
+# natively. A target not here is never claimed as natively accepted by
 # CI, and an x64 runner is never used for an arm64 target.
 NATIVE_RUNNERS = {
     "linux-amd64": "ubuntu-latest",
@@ -82,7 +80,8 @@ NATIVE_RUNNERS = {
     "darwin-arm64": "macos-latest",
 }
 
-AUE_SOURCE_URL = "https://github.com/{repository}/tree/{commit}"
+SOURCE_URL = "https://github.com/{repository}/tree/{commit}"
+COMPANION_REPOSITORY = "auto-pigeon/auto-pigeon-companion"
 
 
 class Refusal(Exception):
@@ -105,38 +104,44 @@ def dash(target):
 
 
 # --------------------------------------------------------------------------
-# The pin
+# What the converter is built from
 
 
-def load_pin(path):
-    """Read and check build/aue-pin.json. Every rule is a refusal with a reason."""
-    pin = load_json(path)
-    if pin.get("schema") != PIN_SCHEMA:
-        raise Refusal(f"{path} is {pin.get('schema')!r}; this release reads {PIN_SCHEMA!r}")
-    ref = pin.get("ref", "")
-    if not BRANCH.match(ref) or ref.startswith("refs/") or FULL_SHA.match(ref):
-        raise Refusal(
-            f"{path}: ref {ref!r} is not a branch name. A release bundles the head of that branch as it is "
-            "when the release runs, resolved to one commit by `aue-checkout`"
-        )
-    for stale in ("commit", "version"):
-        if stale in pin:
-            raise Refusal(
-                f"{path}: {stale!r} is no longer written here. The extractor is the head of {ref!r} at release "
-                "time (operator, 2026-10-02); a commit kept here is how a release shipped an extractor too old "
-                "for the maps the editor saved"
-            )
-    if not REPOSITORY.match(pin.get("repository", "")):
-        raise Refusal(f"{path}: repository {pin.get('repository')!r} is not <owner>/<name>")
-    if not re.match(r"^[0-9]+\.[0-9]+$", pin.get("required_protocol", "")):
-        raise Refusal(f"{path}: required_protocol {pin.get('required_protocol')!r} is not <major>.<minor>")
-    if not REPOSITORY.match(pin.get("aulibs_repository", "")):
-        raise Refusal(f"{path}: aulibs_repository {pin.get('aulibs_repository')!r} is not <owner>/<name>")
-    return pin
+def load_build(path):
+    """Read and check build/converter.json. Every rule is a refusal with a reason."""
+    build = load_json(path)
+    if build.get("schema") != BUILD_SCHEMA:
+        raise Refusal(f"{path} is {build.get('schema')!r}; this release reads {BUILD_SCHEMA!r}")
+    for stale in ("commit", "version", "ref"):
+        if stale in build:
+            raise Refusal(f"{path}: {stale!r} is not written here. go.mod is the one place that names the "
+                          "go/mapio revision, so one commit of this repository always names one converter")
+    if not REPOSITORY.match(build.get("library_repository", "")):
+        raise Refusal(f"{path}: library_repository {build.get('library_repository')!r} is not <owner>/<name>")
+    if not re.match(r"^[0-9]+\.[0-9]+$", build.get("required_protocol", "")):
+        raise Refusal(f"{path}: required_protocol {build.get('required_protocol')!r} is not <major>.<minor>")
+    spdx = build.get("license", "")
+    if "APACHE-2.0" not in spdx.upper() or spdx.upper().startswith("MIT"):
+        raise Refusal(f"{path}: license {spdx!r}; the converter links an Apache-2.0 library, and an archive "
+                      "listing it as MIT alone would read as entirely MIT")
+    return build
+
+
+def pinned_version(module, go_mod=None):
+    """The exact version go.mod requires, which is the one revision a release builds."""
+    path = go_mod or os.path.join(REPO, "go.mod")
+    with open(path, encoding="utf-8") as handle:
+        text = handle.read()
+    found = re.findall(r"^\s*(?:require\s+)?" + re.escape(module) + r"\s+(\S+)\s*$", text, re.M)
+    if len(found) != 1:
+        raise Refusal(f"{path} requires {module} {len(found)} time(s); a release builds exactly one revision")
+    if re.search(r"^\s*replace\b.*" + re.escape(module), text, re.M):
+        raise Refusal(f"{path} replaces {module}: a clean checkout could not build what that names")
+    return found[0]
 
 
 def protocol_satisfies(speaks, minimum):
-    """The same rule as internal/aue.ProtocolSatisfies: equal major, minor at least."""
+    """The same rule as internal/converter.ProtocolSatisfies: equal major, minor at least."""
     try:
         s_major, s_minor = (int(part) for part in speaks.split("."))
         w_major, w_minor = (int(part) for part in minimum.split("."))
@@ -146,73 +151,28 @@ def protocol_satisfies(speaks, minimum):
 
 
 def cmd_pin(args):
-    pin = load_pin(args.pin)
-    print(f"repository={pin['repository']}")
-    print(f"ref={pin['ref']}")
-    print(f"required_protocol={pin['required_protocol']}")
-    print(f"aulibs_repository={pin['aulibs_repository']}")
-
-
-def cmd_aue_checkout(args):
-    """The checked-out AUE is resolved to ONE commit — the head of the branch
-    the release follows, as it was when this ran — and the AULIBS revision its
-    committed data was synced from is the one to build it against. Everything
-    after this step names that commit, never the branch."""
-    load_pin(args.pin)
-    head = subprocess.run(["git", "-C", args.aue_dir, "rev-parse", "HEAD"], check=True,
-                          capture_output=True, text=True).stdout.strip()
-    if not FULL_SHA.match(head):
-        raise Refusal(f"the extractor checkout's HEAD is {head!r}, not a commit")
-    count = subprocess.run(["git", "-C", args.aue_dir, "rev-list", "--count", "HEAD"], check=True,
-                           capture_output=True, text=True).stdout.strip()
-    version = f"1.{count}"
-    if count in ("", "1"):
-        raise Refusal("the extractor checkout has no history; fetch-depth 0 is needed for its 1.<count> version")
-    aulibs = set()
-    for relative in ("internal/apmap/embedded/schema/apmap-contract-provenance.json",
-                     "internal/gameparams/embedded/games/game-params-provenance.json"):
-        path = os.path.join(args.aue_dir, relative)
-        if os.path.isfile(path):
-            aulibs.add(load_json(path).get("aulibs_commit", ""))
-    aulibs.discard("")
-    if len(aulibs) != 1 or not FULL_SHA.match(next(iter(aulibs))):
-        raise Refusal(f"the extractor's embedded data names AULIBS commits {sorted(aulibs)}; want exactly one")
-    print(f"commit={head}")
-    print(f"version={version}")
-    print(f"aulibs_commit={next(iter(aulibs))}")
+    build = load_build(args.build)
+    print(f"library_module={build['library_module']}")
+    print(f"library_version={pinned_version(build['library_module'], args.go_mod)}")
+    print(f"library_repository={build['library_repository']}")
+    print(f"required_protocol={build['required_protocol']}")
 
 
 # --------------------------------------------------------------------------
 # The join
 
 
-def parse_aue_targets(directory):
-    """AUE's own answer, from the text `aue-release targets` prints."""
-    def lines(name):
-        with open(os.path.join(directory, name), encoding="utf-8") as handle:
-            return [line.rstrip("\n") for line in handle if line.strip()]
+def join(aucom_rows, build):
+    """One verdict per AUCOM target, and no target dropped without a word.
 
-    published = {}
-    for line in lines("published.txt"):
-        goos, goarch = line.split()[:2]
-        published[f"{goos}/{goarch}"] = True
-    candidates = {}
-    for line in lines("candidates.txt"):
-        parts = line.split(" ", 3)
-        if len(parts) < 4 or parts[2] != BUILD_ONLY:
-            raise Refusal(f"aue-release targets --candidates --reasons printed {line!r}")
-        candidates[f"{parts[0]}/{parts[1]}"] = parts[3]
-    unsupported = {}
-    for line in lines("unsupported.txt"):
-        parts = line.split(" ", 2)
-        if len(parts) < 3:
-            raise Refusal(f"aue-release targets --unsupported printed {line!r}")
-        unsupported[f"{parts[0]}/{parts[1]}"] = parts[2]
-    return published, candidates, unsupported
-
-
-def join(aucom_rows, published, candidates, unsupported):
-    """One verdict per AUCOM target, and no target dropped without a word."""
+    The converter is pure Go and is built for every target the Companion is. What
+    it has never been run on is its own statement, in build/converter.json; it
+    inherits nothing from another program's support matrix."""
+    build_only = build.get("build_only", {})
+    known = {row["target"] for row in aucom_rows}
+    unknown = sorted(set(build_only) - known)
+    if unknown:
+        raise Refusal(f"build/converter.json names {unknown}, which auto-pigeon-companion does not declare")
     targets = []
     for row in sorted(aucom_rows, key=lambda r: r["target"]):
         target = row["target"]
@@ -221,46 +181,29 @@ def join(aucom_rows, published, candidates, unsupported):
             "platform": dash(target),
             "aucom": {"built": row["built"], "state": row["state"]},
         }
-        if target in published:
-            entry["aue"] = {"status": "published"}
-        elif target in candidates:
-            entry["aue"] = {"status": BUILD_ONLY, "reason": candidates[target]}
-        elif target in unsupported:
-            entry["aue"] = {"status": REFUSED, "reason": unsupported[target]}
-        else:
-            raise Refusal(
-                f"the extractor's release authority says nothing about {target}: it is neither published, a "
-                "candidate nor refused. A target is never dropped silently"
-            )
         if not row["built"]:
+            entry["converter"] = {"status": REFUSED}
             entry["verdict"], entry["reason"] = REFUSED, (
                 f"auto-pigeon-companion declares no artifact for {target} (internal/release/native-support.json)")
-        elif entry["aue"]["status"] == REFUSED:
-            entry["verdict"], entry["reason"] = REFUSED, "auto-pigeon-extractor refuses it: " + entry["aue"]["reason"]
-        elif entry["aue"]["status"] == BUILD_ONLY:
+        elif target in build_only:
+            entry["converter"] = {"status": BUILD_ONLY, "reason": build_only[target]}
             entry["verdict"], entry["reason"] = BUILD_ONLY, (
-                "both programs compile for it, and auto-pigeon-extractor has never been executed on it: "
-                + entry["aue"]["reason"])
+                "both programs compile for it, and auto-pigeon-mapio has never been executed on it: "
+                + build_only[target])
         else:
-            entry["verdict"], entry["reason"] = BUNDLED, (
-                "auto-pigeon-extractor publishes it and auto-pigeon-companion builds it")
+            entry["converter"] = {"status": "published"}
+            entry["verdict"], entry["reason"] = BUNDLED, "both programs are built for it"
         targets.append(entry)
-    aucom_targets = {row["target"] for row in aucom_rows}
-    return {
-        "schema": MATRIX_SCHEMA,
-        "targets": targets,
-        "aue_only": sorted(set(published) - aucom_targets),
-    }
+    return {"schema": MATRIX_SCHEMA, "targets": targets}
 
 
 def cmd_matrix(args):
     support = load_json(args.aucom_support)
-    published, candidates, unsupported = parse_aue_targets(args.aue_targets)
-    matrix = join(support["platforms"], published, candidates, unsupported)
+    matrix = join(support["platforms"], load_build(args.build))
     write_json(args.out, matrix)
     for entry in matrix["targets"]:
         print(f"{entry['target']:15} {entry['verdict']:16} aucom={entry['aucom']['state']:15} "
-              f"aue={entry['aue']['status']}")
+              f"converter={entry['converter']['status']}")
 
 
 def acceptance_matrix(matrix):
@@ -288,85 +231,114 @@ def cmd_acceptance_matrix(args):
 
 
 # --------------------------------------------------------------------------
-# The extractor's release, checked before any of it enters a bundle
+# The converter this release built, checked before any of it enters a bundle
 
 
-def check_aue(matrix, release_dir, pin, aue_version, aue_commit):
-    manifest_path = os.path.join(release_dir, "release-manifest.json")
-    manifest = load_json(manifest_path)
-    if manifest.get("schema_version") != AUE_MANIFEST_SCHEMA:
-        raise Refusal(f"the extractor's release manifest is {manifest.get('schema_version')!r}")
-    if manifest.get("version") != aue_version:
-        raise Refusal(f"the extractor's release manifest says {manifest.get('version')} and the checkout is {aue_version}")
-    source = manifest.get("source", {})
-    if not FULL_SHA.match(aue_commit):
-        raise Refusal(f"the extractor's commit {aue_commit!r} is not a full 40-character lowercase commit SHA")
-    if source.get("commit") != aue_commit:
-        raise Refusal(f"the extractor was built from {source.get('commit')!r}; the checkout resolved to {aue_commit}")
-    # Whatever licence the pinned extractor declares travels with it, as its own
-    # file, and is QUOTED from its release manifest everywhere downstream — the
-    # bundle manifest, the release manifest, the release notes — so nothing here
-    # can disagree with the build that is shipped. Today that is
-    # LicenseRef-Auto-Pigeon-Proprietary (NEW_247G); an older pinned build says
-    # AGPL-3.0-only, and its copies keep that licence. What is refused: no
-    # licence at all, and MIT, which the extractor never was — an archive
-    # listing it so would read as entirely MIT.
-    spdx = manifest.get("license", {}).get("spdx", "")
-    if not spdx:
-        raise Refusal("the extractor's release manifest declares no licence")
-    if spdx.strip().upper().startswith("MIT"):
-        raise Refusal(f"the extractor's release manifest declares {spdx!r}; the extractor is not MIT, and an "
-                      "archive listing it so would read as entirely MIT")
-    if not protocol_satisfies(manifest.get("protocol", ""), pin["required_protocol"]):
-        raise Refusal(f"the extractor speaks protocol {manifest.get('protocol')!r} and this Companion "
-                      f"requires {pin['required_protocol']}")
-    if manifest.get("toolchain", {}).get("cgo_enabled"):
-        raise Refusal("the extractor was built with cgo enabled")
-    if not os.path.isfile(os.path.join(release_dir, "LICENSE")):
-        raise Refusal("the staged extractor release has no LICENSE")
+def go_modules(go, path):
+    """`go version -m`: what the toolchain recorded a binary as linking, by module."""
+    output = subprocess.run([go, "version", "-m", path], check=True, capture_output=True, text=True).stdout
+    modules = {}
+    for line in output.splitlines():
+        parts = line.strip().split("\t")
+        if len(parts) >= 3 and parts[0] == "dep":
+            modules[parts[1]] = parts[2]
+    return modules
 
-    def find(entries, target):
-        goos, goarch = target.split("/")
-        for artifact in entries or []:
-            if artifact.get("platform") == {"os": goos, "arch": goarch}:
-                return artifact
-        return None
 
-    inputs = {}
+def library_commit(go, module, version, go_mod_dir=None):
+    """The full commit of a pinned pseudo-version, as Go's own resolution reports it."""
+    done = subprocess.run([go, "mod", "download", "-json", f"{module}@{version}"], check=True, capture_output=True,
+                          text=True, cwd=go_mod_dir or REPO)
+    commit = json.loads(done.stdout).get("Origin", {}).get("Hash", "")
+    if not FULL_SHA.match(commit):
+        raise Refusal(f"Go reports no commit for {module}@{version} (got {commit!r})")
+    if not version.endswith(commit[:12]):
+        raise Refusal(f"{module}@{version} resolved to {commit}, which is not the commit that version names")
+    return commit
+
+
+def converter_protocol(go, entries, build):
+    """Ask the one built converter this machine can run what it is."""
+    host = releaselib.host_platform()
+    target = entries.get(host)
+    if target is None:
+        raise Refusal(f"this release built no converter for {host}, so none could be asked what it speaks")
+    done = subprocess.run([target["path"], "protocol", "--json"], check=True, capture_output=True, text=True)
+    document = json.loads(done.stdout)
+    if document.get("program") != build["program"]:
+        raise Refusal(f"the built converter calls itself {document.get('program')!r}, not {build['program']}")
+    if not protocol_satisfies(document.get("protocol", ""), build["required_protocol"]):
+        raise Refusal(f"the built converter speaks protocol {document.get('protocol')!r} and this Companion "
+                      f"requires {build['required_protocol']}")
+    if document.get("license", {}).get("spdx") != build["license"]:
+        raise Refusal(f"the built converter says its licence is {document.get('license', {}).get('spdx')!r}; "
+                      f"build/converter.json says {build['license']!r}")
+    return document
+
+
+def check_converter(matrix, dist, build, version, commit, go, go_mod=None, resolve=library_commit):
+    if not FULL_SHA.match(commit):
+        raise Refusal(f"the commit {commit!r} is not a full 40-character lowercase commit SHA")
+    module = build["library_module"]
+    pinned = pinned_version(module, go_mod)
+    notices = os.path.join(dist, "converter", releaselib.NOTICES)
+    if not os.path.isfile(notices):
+        raise Refusal(f"{notices} is not there; build/release.sh writes it, and the converter's licences require it")
+    with open(notices, encoding="utf-8") as handle:
+        text = handle.read()
+    for required in ("MIT License", "Apache License", pinned):
+        if required not in text:
+            raise Refusal(f"{notices} does not carry {required!r}")
+
+    inputs, toolchain = {}, ""
     for entry in matrix["targets"]:
         if entry["verdict"] == REFUSED:
             continue
-        if entry["verdict"] == BUNDLED:
-            artifact, status = find(manifest.get("artifacts"), entry["target"]), "published"
-        else:
-            artifact, status = find(manifest.get("candidates"), entry["target"]), BUILD_ONLY
-        if artifact is None or artifact.get("status") != status:
-            raise Refusal(f"the extractor's release has no {status} artifact for {entry['target']}")
-        if (status == BUILD_ONLY) != artifact["file"].startswith("candidates/") or ".." in artifact["file"]:
-            raise Refusal(f"the extractor's {status} artifact for {entry['target']} is filed as {artifact['file']!r}")
-        path = os.path.join(release_dir, artifact["file"])
-        size, digest = releaselib.digest_of(path)
-        if size != artifact["size"] or digest != artifact["sha256"]:
-            raise Refusal(f"{path} is {size} bytes {digest}; the extractor's manifest says "
-                          f"{artifact['size']} bytes {artifact['sha256']}")
+        platform = entry["platform"]
+        name = build["program"] + releaselib.exe_suffix(platform)
+        path = os.path.join(dist, "converter", platform, name)
+        if not os.path.isfile(path):
+            raise Refusal(f"build/release.sh produced no converter for {entry['target']} at {path}")
         built_for = releaselib.platform_of(path)
-        if built_for != entry["platform"]:
-            raise Refusal(f"{path} is built for {built_for}, and the extractor's manifest files it as {entry['target']}")
-        inputs[entry["platform"]] = {"path": os.path.abspath(path), "sha256": digest, "status": status}
+        if built_for != platform:
+            raise Refusal(f"{path} is built for {built_for}, and it is filed as {entry['target']}")
+        settings = go_build_settings(go, path)
+        if settings.get("CGO_ENABLED") != "0":
+            raise Refusal(f"{path} was built with CGO_ENABLED={settings.get('CGO_ENABLED')!r}")
+        linked = go_modules(go, path)
+        if linked != {module: pinned}:
+            raise Refusal(f"{path} links {linked}; a converter links {module} {pinned} and nothing else")
+        size, digest = releaselib.digest_of(path)
+        status = "published" if entry["verdict"] == BUNDLED else BUILD_ONLY
+        inputs[platform] = {"path": os.path.abspath(path), "sha256": digest, "size": size, "status": status}
+    if not inputs:
+        raise Refusal("no target has a converter")
+    protocol = converter_protocol(go, inputs, build)
+    toolchain = subprocess.run([go, "env", "GOVERSION"], check=True, capture_output=True, text=True).stdout.strip()
     return {
-        "version": aue_version,
-        "commit": aue_commit,
-        "repository": pin["repository"],
-        "protocol": manifest["protocol"],
-        "license": spdx,
-        "source": AUE_SOURCE_URL.format(repository=pin["repository"], commit=aue_commit),
-        "go": manifest.get("toolchain", {}).get("go", ""),
+        "program": build["program"],
+        "version": version,
+        "commit": commit,
+        "repository": COMPANION_REPOSITORY,
+        "protocol": protocol["protocol"],
+        "license": build["license"],
+        "source": SOURCE_URL.format(repository=COMPANION_REPOSITORY, commit=commit),
+        "go": toolchain,
+        "notices": os.path.abspath(notices),
+        "library": {
+            "module": module,
+            "version": pinned,
+            "commit": resolve(go, module, pinned),
+            "repository": build["library_repository"],
+            "license": "Apache-2.0",
+        },
         "targets": inputs,
     }
 
 
-def cmd_check_aue(args):
-    inputs = check_aue(load_json(args.matrix), args.aue_release, load_pin(args.pin), args.aue_version, args.aue_commit)
+def cmd_check_converter(args):
+    inputs = check_converter(load_json(args.matrix), args.aucom_dist, load_build(args.build), args.version,
+                             args.commit, args.go)
     write_json(args.out, inputs)
     for platform, entry in sorted(inputs["targets"].items()):
         print(f"{platform:15} {entry['status']:10} {entry['sha256']}")
@@ -392,22 +364,25 @@ def unpack_aucom(dist, version, platform, dest):
         raise Refusal(f"build/release.sh produced no archive for {platform} in {dist}")
 
 
-def bundle_one(entry, aue, dist, version, out, work):
+def bundle_one(entry, converter, dist, version, out, work):
     platform = entry["platform"]
     extracted = os.path.join(work, "aucom", platform)
     os.makedirs(extracted)
     unpack_aucom(dist, version, platform, extracted)
     bundles = os.path.join(work, "bundles")
-    target = aue["targets"][platform]
+    target = converter["targets"][platform]
     command = [
         bash(), os.path.join(HERE, "bundle-sidecar.sh"),
         "--platform", platform, "--version", version,
         "--binary-dir", extracted, "--out", bundles,
-        "--extractor", target["path"],
-        "--extractor-version", aue["version"],
-        "--extractor-commit", aue["commit"],
-        "--extractor-spdx", aue["license"],
-        "--extractor-source", aue["source"],
+        "--converter", target["path"],
+        "--converter-version", converter["version"],
+        "--converter-commit", converter["commit"],
+        "--converter-spdx", converter["license"],
+        "--converter-source", converter["source"],
+        "--converter-notices", converter["notices"],
+        "--library-version", converter["library"]["version"],
+        "--library-commit", converter["library"]["commit"],
     ]
     subprocess.run(command, check=True)
     build_only = entry["verdict"] == BUILD_ONLY
@@ -419,7 +394,7 @@ def bundle_one(entry, aue, dist, version, out, work):
 
 
 def cmd_bundle(args):
-    matrix, aue = load_json(args.matrix), load_json(args.aue_inputs)
+    matrix, converter = load_json(args.matrix), load_json(args.converter_inputs)
     os.makedirs(args.out, exist_ok=True)
     work = tempfile.mkdtemp(prefix="aucom-bundle-")
     try:
@@ -427,7 +402,7 @@ def cmd_bundle(args):
             if entry["verdict"] == REFUSED:
                 print(f"{entry['platform']:15} refused: {entry['reason']}")
                 continue
-            archive = bundle_one(entry, aue, args.aucom_dist, args.version, args.out, work)
+            archive = bundle_one(entry, converter, args.aucom_dist, args.version, args.out, work)
             print(f"{entry['platform']:15} {entry['verdict']:16} {os.path.relpath(archive, args.out)}")
     finally:
         shutil.rmtree(work, ignore_errors=True)
@@ -440,9 +415,9 @@ def cmd_bundle(args):
 def go_build_settings(go, path):
     """`go version -m`: what the toolchain recorded about a build.
 
-    GOOS, GOARCH, `vcs.revision` and `vcs.modified`. NOT the -ldflags: with
-    `-trimpath`, which both programs are built with, Go leaves them out, so the
-    stamped version string cannot be read back from a cross-built binary. The
+    GOOS, GOARCH, CGO_ENABLED, `vcs.revision` and `vcs.modified`. NOT the -ldflags:
+    with `-trimpath`, which both programs are built with, Go leaves them out, so
+    the stamped version string cannot be read back from a cross-built binary. The
     commit can, and a version is `1.<commit-count>` of exactly one commit; the
     string itself is read by running `companion version` on the native
     runners (build/release-acceptance.py)."""
@@ -456,7 +431,7 @@ def go_build_settings(go, path):
     return settings
 
 
-def verify_archive(archive, platform, version, aue_version, aue_commit, go=None, commit=None):
+def verify_archive(archive, platform, version, converter, go=None, commit=None):
     """Everything an eligible archive must be, or the first way it is not."""
     build_only = os.path.basename(archive) == archive_name(version, platform, True)
     if not build_only and os.path.basename(archive) != archive_name(version, platform):
@@ -498,20 +473,36 @@ def verify_archive(archive, platform, version, aue_version, aue_commit, go=None,
         if missing:
             raise Refusal(f"{archive}: the bundle manifest lists {missing}, which the archive does not carry")
 
-        extractor = manifest.get("extractor")
-        if not extractor or extractor.get("file") != where["extractor"] or where["extractor"] not in present:
-            raise Refusal(f"{archive} carries no auto-pigeon-extractor at {where['extractor']}; a released "
+        carried = manifest.get("converter")
+        if not carried or carried.get("file") != where["converter"] or where["converter"] not in present:
+            raise Refusal(f"{archive} carries no auto-pigeon-mapio at {where['converter']}; a released "
                           "bundle is never the Companion alone")
         if where["companion"] not in present:
             raise Refusal(f"{archive} carries no Companion at {where['companion']}")
-        if extractor.get("version") != aue_version or listed[where["extractor"]]["version"] != aue_version:
-            raise Refusal(f"{archive}: the extractor is listed as {extractor.get('version')}; this release built {aue_version}")
-        if listed[where["extractor"]]["product"] != "auto-pigeon-extractor":
-            raise Refusal(f"{archive}: the extractor is listed as a member of {listed[where['extractor']]['product']}")
-        if extractor.get("source_commit") != aue_commit:
-            raise Refusal(f"{archive}: the extractor was bundled from {extractor.get('source_commit')}, not {aue_commit}")
+        strays = sorted(name for name in present if "auto-pigeon-extractor" in name)
+        if strays:
+            raise Refusal(f"{archive} carries {strays}; a release ships no Auto-Pigeon Extractor")
+        if carried.get("version") != converter["version"] or listed[where["converter"]]["version"] != converter["version"]:
+            raise Refusal(f"{archive}: the converter is listed as {carried.get('version')}; this release built "
+                          f"{converter['version']}")
+        if listed[where["converter"]]["product"] != releaselib.CONVERTER:
+            raise Refusal(f"{archive}: the converter is listed as a member of {listed[where['converter']]['product']}")
+        if carried.get("source_commit") != converter["commit"]:
+            raise Refusal(f"{archive}: the converter was bundled from {carried.get('source_commit')}, not {converter['commit']}")
+        if carried.get("library") != {key: converter["library"][key] for key in ("module", "version", "commit", "license")}:
+            raise Refusal(f"{archive}: the converter names the library {carried.get('library')}; this release "
+                          f"built {converter['library']}")
+        if carried.get("license") != converter["license"]:
+            raise Refusal(f"{archive}: the converter is listed under {carried.get('license')!r}")
+        if carried.get("notices") != where["notices"] or where["notices"] not in present:
+            raise Refusal(f"{archive} carries no converter notices at {where['notices']}")
+        with open(os.path.join(bundle, where["notices"]), encoding="utf-8") as handle:
+            notices = handle.read()
+        for required in ("MIT License", "Apache License", converter["library"]["version"]):
+            if required not in notices:
+                raise Refusal(f"{archive}: the converter's notices do not carry {required!r}")
 
-        for role, revision in (("companion", commit), ("extractor", aue_commit)):
+        for role, revision in (("companion", commit), ("converter", converter["commit"])):
             path = os.path.join(bundle, where[role])
             built_for = releaselib.platform_of(path)
             if built_for != platform:
@@ -527,13 +518,17 @@ def verify_archive(archive, platform, version, aue_version, aue_commit, go=None,
                 if settings.get("vcs.modified") != "false":
                     raise Refusal(f"{archive}: the {role} was built from a modified working tree "
                                   f"(vcs.modified={settings.get('vcs.modified')!r})")
+                linked = go_modules(go, path)
+                expected = {} if role == "companion" else {converter["library"]["module"]: converter["library"]["version"]}
+                if linked != expected:
+                    raise Refusal(f"{archive}: the {role} links {linked}; it should link {expected}")
         return {"archive": os.path.basename(archive), "platform": platform, "build_only": build_only}
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
 
 def cmd_verify_archive(args):
-    result = verify_archive(args.archive, args.platform, args.version, args.aue_version, args.aue_commit, args.go,
+    result = verify_archive(args.archive, args.platform, args.version, load_json(args.converter_inputs), args.go,
                             args.commit)
     print(f"{result['archive']}: verified ({'build-only candidate' if result['build_only'] else 'release'})")
 
@@ -543,13 +538,15 @@ def cmd_verify_archive(args):
 
 
 def release_notes(document):
-    aue = document["aue"]
+    converter = document["converter"]
+    library = converter["library"]
     lines = [
         f"Auto-Pigeon Companion {document['version']} — development prerelease, built from "
         f"`{document['commit']}`.",
         "",
-        f"Each archive carries **Auto-Pigeon Extractor {aue['version']}** beside the Companion, built from "
-        f"`{aue['repository']}` at commit `{aue['commit']}` (invocation protocol {aue['protocol']}).",
+        f"Each archive carries the **auto-pigeon-mapio {converter['version']}** map converter beside the Companion, "
+        f"built from this commit and `{library['module']}` at `{library['version']}` (invocation protocol "
+        f"{converter['protocol']}). It replaces the Auto-Pigeon Extractor: no extractor is in these archives.",
         "",
         "| target | verdict | Companion native evidence | archive |",
         "| --- | --- | --- | --- |",
@@ -561,7 +558,7 @@ def release_notes(document):
         "",
         "`bundled_release` archives are the downloads. `build_only` archives are under `candidates/` inside "
         f"`auto-pigeon-companion-{document['version']}-all.zip` only: they compile, and nobody has executed the "
-        "extractor on that machine, so they are **not supported downloads**. `refused` targets have no archive, "
+        "converter on that machine, so they are **not supported downloads**. `refused` targets have no archive, "
         "and the release manifest says why. The Companion's own native evidence per target is the third column; "
         "`build_only` and `manual_pending` there are the ABSENCE of evidence, not a pass.",
         "",
@@ -570,52 +567,34 @@ def release_notes(document):
         "or truncated download detectable; it is not a signature, because anybody who can replace the archives "
         "can replace the checksum file.",
         "",
-        *licence_notes(aue["license"]),
+        *licence_notes(converter["license"]),
         "",
-        "The Companion downloads no program. The extractor reaches it only in this archive, and the Companion "
+        "The Companion downloads no program. The converter reaches it only in this archive, and the Companion "
         "checks its digest against `bundle-manifest.json` before running it.",
+        "",
+        "**Updating from an older Companion:** a Companion that bundled the Auto-Pigeon Extractor does not "
+        "recognise this release's manifest, and says so. Download this archive once by hand; updates work "
+        "in place from then on.",
     ]
     return "\n".join(lines) + "\n"
 
 
-PROPRIETARY = "LicenseRef-Auto-Pigeon-Proprietary"
-COPYLEFT_PREFIXES = ("GPL-", "AGPL-", "LGPL-")
-
-
-def licence_notes(extractor_spdx):
-    """What the release notes say about licences. The extractor's identifier is
-    quoted from its own release manifest, never restated, and no sentence here
-    calls the archive MIT: it holds an MIT program, Apache-2.0 data compiled
-    into that program, and the extractor under its own licence. The archives
-    carry no licence files (operator decision, 2026-09-25); the notes say where
-    the texts are."""
-    lines = [
+def licence_notes(converter_spdx):
+    """What the release notes say about licences. No sentence here calls the archive MIT: it holds an
+    MIT program, Apache-2.0 data compiled into that program, and the converter under both licences."""
+    return [
         "**These archives are not under one licence.** Auto-Pigeon Companion's own code is MIT "
         "(`LICENSE` in the Companion's repository). The contract files from auto-pigeon-libraries compiled into "
-        "it are Apache-2.0. Auto-Pigeon Extractor is a separate program under its own licence (declared "
-        f"`{extractor_spdx}`, text in the extractor's repository), shipped beside the Companion and run as its "
-        "own process; the Companion's MIT licence does not cover it. Third-party programs the Companion runs are "
-        "the user's own, under their own licences. `THIRD_PARTY_NOTICES.md` in the Companion's repository says "
-        "which is which, and each archive's `bundle-manifest.json` names every file's licence.",
+        f"it are Apache-2.0. The auto-pigeon-mapio converter is `{converter_spdx}`: the go/mapio library and a small "
+        "wrapper, shipped beside the Companion and run as its own process, with their texts and the library's "
+        "NOTICE in `NOTICES-auto-pigeon-mapio.txt` beside it. Third-party programs the Companion runs are the "
+        "user's own, under their own licences. `THIRD_PARTY_NOTICES.md` in the Companion's repository says which "
+        "is which, and each archive's `bundle-manifest.json` names every file's licence.",
     ]
-    if extractor_spdx == PROPRIETARY:
-        lines += [
-            "",
-            "**Auto-Pigeon Extractor is proprietary** (Copyright (c) 2026 Andrea D'Intino, all rights reserved). "
-            "Its licence grants no right to use it except through a separate written authorization from the "
-            "copyright owner.",
-        ]
-    elif extractor_spdx.startswith(COPYLEFT_PREFIXES):
-        lines += [
-            "",
-            f"The extractor in these archives was built from a commit that declared `{extractor_spdx}`, and these "
-            "copies are under that licence.",
-        ]
-    return lines
 
 
 def cmd_release(args):
-    matrix, aue = load_json(args.matrix), load_json(args.aue_inputs)
+    matrix, converter = load_json(args.matrix), load_json(args.converter_inputs)
     os.makedirs(args.out, exist_ok=True)
     targets = []
     for entry in matrix["targets"]:
@@ -624,15 +603,14 @@ def cmd_release(args):
             "verdict": entry["verdict"],
             "reason": entry["reason"],
             "aucom_state": entry["aucom"]["state"],
-            "aue_status": entry["aue"]["status"],
+            "converter_status": entry["converter"]["status"],
             "native_acceptance_in_ci": entry["platform"] in NATIVE_RUNNERS and entry["verdict"] == BUNDLED,
         }
         if entry["verdict"] != REFUSED:
             build_only = entry["verdict"] == BUILD_ONLY
             relative = archive_name(args.version, entry["platform"], build_only)
             source = os.path.join(args.bundles, "candidates" if build_only else "", relative)
-            verify_archive(source, entry["platform"], args.version, aue["version"], aue["commit"], args.go,
-                           args.commit)
+            verify_archive(source, entry["platform"], args.version, converter, args.go, args.commit)
             size, digest = releaselib.digest_of(source)
             if build_only:
                 row["candidate"] = f"candidates/{relative}"
@@ -652,14 +630,16 @@ def cmd_release(args):
         "commit": args.commit,
         "prerelease": True,
         "signed": False,
-        "aue": {
-            "repository": aue["repository"],
-            "commit": aue["commit"],
-            "version": aue["version"],
-            "protocol": aue["protocol"],
-            "license": aue["license"],
-            "source": aue["source"],
-            "go": aue["go"],
+        "converter": {
+            "program": converter["program"],
+            "repository": converter["repository"],
+            "commit": converter["commit"],
+            "version": converter["version"],
+            "protocol": converter["protocol"],
+            "license": converter["license"],
+            "source": converter["source"],
+            "go": converter["go"],
+            "library": converter["library"],
         },
         "targets": targets,
     }
@@ -797,20 +777,16 @@ def cmd_promote_check(args):
 def main(argv):
     parser = argparse.ArgumentParser(prog="release-plan.py")
     sub = parser.add_subparsers(dest="command", required=True)
-    default_pin = os.path.join(HERE, "aue-pin.json")
+    default_build = os.path.join(HERE, "converter.json")
 
     p = sub.add_parser("pin")
-    p.add_argument("--pin", default=default_pin)
+    p.add_argument("--build", default=default_build)
+    p.add_argument("--go-mod", default=None)
     p.set_defaults(run=cmd_pin)
 
-    p = sub.add_parser("aue-checkout")
-    p.add_argument("--pin", default=default_pin)
-    p.add_argument("--aue-dir", required=True)
-    p.set_defaults(run=cmd_aue_checkout)
-
     p = sub.add_parser("matrix")
+    p.add_argument("--build", default=default_build)
     p.add_argument("--aucom-support", required=True, help="`companion release support --json`")
-    p.add_argument("--aue-targets", required=True, help="published.txt, candidates.txt, unsupported.txt")
     p.add_argument("--out", required=True)
     p.set_defaults(run=cmd_matrix)
 
@@ -818,18 +794,19 @@ def main(argv):
     p.add_argument("--matrix", required=True)
     p.set_defaults(run=cmd_acceptance_matrix)
 
-    p = sub.add_parser("check-aue")
-    p.add_argument("--pin", default=default_pin)
+    p = sub.add_parser("check-converter")
+    p.add_argument("--build", default=default_build)
     p.add_argument("--matrix", required=True)
-    p.add_argument("--aue-release", required=True)
-    p.add_argument("--aue-version", required=True)
-    p.add_argument("--aue-commit", required=True, help="the commit `aue-checkout` resolved")
+    p.add_argument("--aucom-dist", required=True)
+    p.add_argument("--version", required=True)
+    p.add_argument("--commit", required=True, help="the commit this release is built from")
+    p.add_argument("--go", default="go")
     p.add_argument("--out", required=True)
-    p.set_defaults(run=cmd_check_aue)
+    p.set_defaults(run=cmd_check_converter)
 
     p = sub.add_parser("bundle")
     p.add_argument("--matrix", required=True)
-    p.add_argument("--aue-inputs", required=True)
+    p.add_argument("--converter-inputs", required=True)
     p.add_argument("--aucom-dist", required=True)
     p.add_argument("--version", required=True)
     p.add_argument("--out", required=True)
@@ -839,15 +816,14 @@ def main(argv):
     p.add_argument("archive")
     p.add_argument("--platform", required=True)
     p.add_argument("--version", required=True)
-    p.add_argument("--aue-version", required=True)
-    p.add_argument("--aue-commit", required=True)
+    p.add_argument("--converter-inputs", required=True)
     p.add_argument("--commit", default=None, help="the Companion commit this archive was built from")
     p.add_argument("--go", default=None)
     p.set_defaults(run=cmd_verify_archive)
 
     p = sub.add_parser("release")
     p.add_argument("--matrix", required=True)
-    p.add_argument("--aue-inputs", required=True)
+    p.add_argument("--converter-inputs", required=True)
     p.add_argument("--bundles", required=True)
     p.add_argument("--version", required=True)
     p.add_argument("--commit", required=True)

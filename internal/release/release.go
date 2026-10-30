@@ -19,12 +19,14 @@
 //     [Components] derives them from the built-in profiles, so a toolchain
 //     added without a licence and a corresponding-source URL cannot become
 //     invisible here.
-//  3. **The extractor is a third thing again** — proprietary
-//     ([ExtractorSPDX], (c) Andrea D'Intino, all rights reserved; NEW_247G),
-//     shipped as its own file beside the Companion in the release bundle,
+//  3. **The map converter is a third thing again** — [ConverterSPDX]: the
+//     Apache-2.0 go/mapio library of auto-pigeon-libraries and this
+//     repository's MIT wrapper, cmd/mapio, compiled into one executable,
+//     shipped as its own file beside the Companion in the release bundle and
 //     never inside the Companion's binary. An archive that carries it is
 //     therefore never "an MIT archive": it holds an MIT program, Apache-2.0
-//     AULIBS data inside that program, and a proprietary program beside it.
+//     AULIBS data inside that program, and a program under both licences
+//     beside it, with their texts in a notices file beside it (NEW_371).
 //
 // A release therefore ships an SBOM and a checksum file that are *generated
 // from* the program, not written beside it.
@@ -33,7 +35,7 @@
 //
 // It lists this module and its module graph, which for this program is empty,
 // and it lists the external components with the relationship each has to the
-// artifact. The extractor is in the document with
+// artifact. The converter is in the document with
 // `distribution: shipped-beside-in-the-release`: listing it as the Companion's
 // contents would be as misleading as leaving it out.
 package release
@@ -66,21 +68,21 @@ const License = "MIT"
 // the Companion's binary.
 const AULIBSLicense = "Apache-2.0"
 
-// ExtractorSPDX and ExtractorLicenseName are Auto-Pigeon Extractor's licence
-// (NEW_247G): proprietary, owned by Andrea D'Intino, all rights reserved.
-// A LicenseRef, because no SPDX list identifier describes it and inventing an
-// open-source one would be a lie.
-//
-// This is the CURRENT POLICY, compiled into the component list a Companion
-// build prints (`companion security audit`, `companion release sbom`). What a
-// given release archive carries is quoted from the pinned extractor itself —
-// its release manifest's `license.spdx` and its own LICENSE file, copied in as
-// LICENSE-auto-pigeon-extractor.txt (build/release-plan.py) — so an archive
-// never disagrees with the extractor build inside it. Extractor builds that
-// were distributed under AGPL-3.0-only keep the rights that licence granted.
+// ConverterSPDX is the licence of the auto-pigeon-mapio executable: the go/mapio library and this
+// repository's wrapper, both compiled into it. An SPDX AND expression, because the wrapper does not
+// relicense the library and the library does not cover the wrapper.
 const (
-	ExtractorSPDX        = "LicenseRef-Auto-Pigeon-Proprietary"
-	ExtractorLicenseName = "Auto-Pigeon Proprietary Software License"
+	ConverterSPDX        = "Apache-2.0 AND MIT"
+	ConverterLicenseName = "Apache License 2.0 (go/mapio) and MIT License (cmd/mapio)"
+)
+
+// ConverterLibraryModule and ConverterLibraryVersion are the exact public source the converter is
+// built from. The version is go.mod's; TestTheConverterNamesTheLibraryRevisionGoModPins fails when the
+// two differ. It is written here too because the Companion's own binary does not link the library, so
+// its build information cannot say.
+const (
+	ConverterLibraryModule  = "github.com/auto-pigeon/auto-pigeon-libraries"
+	ConverterLibraryVersion = "v0.0.0-20261030192305-2f8248100896"
 )
 
 // Distribution says what relationship a component has to the released artifact.
@@ -187,11 +189,13 @@ func Components(version string) ([]Component, error) {
 		Repository:   "https://" + ModulePath,
 		Notice: "Auto-Pigeon Companion's own code is MIT licensed, Copyright (c) 2026 Andrea D'Intino. " +
 			"Its binary also carries Apache-2.0 contract files from auto-pigeon-libraries, listed separately. " +
-			"It contains no GPL tool, no engine and no extractor: each of those is a separate program, " +
+			"It contains no GPL tool, no engine and no map converter: each of those is a separate program, " +
 			"run as its own process.",
 	}}
 	components = append(components, AULIBSContracts...)
-	components = append(components, Extractor)
+	converter := Converter
+	converter.Version = version
+	components = append(components, converter)
 
 	entries, err := builtin.Load()
 	if err != nil {
@@ -235,30 +239,21 @@ func distributionFor(builtin.Entry) Distribution {
 	return UserSupplied
 }
 
-// Extractor is Auto-Pigeon Extractor as a release carries it: its own file
-// beside the Companion (build/bundle-sidecar.sh), proprietary.
-//
-// It carries NO corresponding source: that is a copyleft obligation, and the
-// extractor is not copyleft. [ExtractorRepository] is where it is developed —
-// a private repository — named for provenance, not offered as source.
-var Extractor = Component{
-	Name:         "auto-pigeon-extractor",
+// Converter is auto-pigeon-mapio as a release carries it: its own file beside the Companion
+// (build/bundle-sidecar.sh), built in this repository from cmd/mapio and the public go/mapio library.
+var Converter = Component{
+	Name:         "auto-pigeon-mapio",
 	Kind:         "tool",
 	Distribution: ShippedBeside,
-	SPDX:         ExtractorSPDX,
-	LicenseName:  ExtractorLicenseName,
-	Repository:   ExtractorRepository,
-	Notice: "Proprietary: Copyright (c) 2026 Andrea D'Intino, all rights reserved. A separate program, " +
-		"shipped as its own file beside the Companion with its own licence " +
-		"(LICENSE-auto-pigeon-extractor.txt in a release bundle), and run as its own process. " +
-		"The Companion's MIT licence does not cover it, and the Companion does not link, embed or " +
-		"relicense it. Its licence grants no right to use it without the copyright owner's written " +
-		"authorization.",
+	SPDX:         ConverterSPDX,
+	LicenseName:  ConverterLicenseName,
+	Repository:   "https://" + ConverterLibraryModule,
+	Notice: "A separate program, shipped as its own file beside the Companion and run as its own process. " +
+		"It is go/mapio from auto-pigeon-libraries (Apache-2.0), " + ConverterLibraryVersion + ", and this " +
+		"repository's cmd/mapio wrapper (MIT), and neither licence relicenses the other part. Their texts and " +
+		"the library's NOTICE are in the notices file beside it in a release bundle. It contains no " +
+		"Auto-Pigeon Extractor code outside what the owner published in go/mapio, and it runs no other program.",
 }
-
-// ExtractorRepository is where the extractor is developed. It is private: a
-// reference for provenance, not a source offer.
-const ExtractorRepository = "https://github.com/auto-pigeon/auto-pigeon-extractor"
 
 // AULIBSRepository is where the Apache-2.0 contract files compiled into the
 // Companion come from.

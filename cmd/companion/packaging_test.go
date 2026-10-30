@@ -194,11 +194,10 @@ func TestLicenseIsMIT(t *testing.T) {
 	mustContain(t, "THIRD_PARTY_NOTICES.md", notices, "MIT", "GPL-2.0", "Apache-2.0")
 }
 
-// An archive that carries the extractor is not an MIT archive (NEW_247G). No
-// file a user reads about a release or an installed package may say it is, and
-// the one line the macOS bundle shows as its copyright must not call the whole
-// .app MIT, because a release puts the proprietary extractor inside it.
-func TestNothingCallsAnArchiveWithTheExtractorMIT(t *testing.T) {
+// An archive that carries the converter is not an MIT archive. No file a user reads about a release or
+// an installed package may say it is, and the one line the macOS bundle shows as its copyright must not
+// call the whole .app MIT, because a release puts the Apache-2.0 library inside it.
+func TestNothingCallsAnArchiveWithTheConverterMIT(t *testing.T) {
 	for _, file := range [][]string{
 		{"README.md"},
 		{"THIRD_PARTY_NOTICES.md"},
@@ -224,9 +223,9 @@ func TestNothingCallsAnArchiveWithTheExtractorMIT(t *testing.T) {
 	}
 	script := repoFile(t, "build", "macos", "make-app-bundle.sh")
 	if strings.Contains(script, "Andrea D'Intino. MIT licensed;") {
-		t.Error("the macOS bundle's copyright line calls the whole .app MIT, and a release puts the extractor in it")
+		t.Error("the macOS bundle's copyright line calls the whole .app MIT, and a release puts the converter in it")
 	}
-	mustContain(t, "make-app-bundle.sh", script, "Auto-Pigeon Extractor is proprietary")
+	mustContain(t, "make-app-bundle.sh", script, "auto-pigeon-mapio converter is Apache-2.0 and MIT")
 }
 
 // TestNoCompiledInAUBPort is the workspace port contract in test form: 8090 is
@@ -269,51 +268,43 @@ func TestNoCompiledInAUBPort(t *testing.T) {
 	}
 }
 
-// TestNoticesCoverEveryRedistributedComponent guards the claims in
-// THIRD_PARTY_NOTICES.md that a code change could quietly falsify.
+// TestNoticesCoverEveryRedistributedComponent guards the claims in THIRD_PARTY_NOTICES.md that a code
+// change could quietly falsify.
 //
-// The dangerous one is AUE: a release bundle ships it beside this executable,
-// and it is proprietary (NEW_247G) — not MIT, whatever the archive's other
-// licence files say, and not AGPL any more. The notices are what a person who
-// unpacks an archive reads, so a notices file that listed it under the wrong
-// licence, or stopped saying that using it needs the owner's authorization,
-// would be the whole failure.
+// The dangerous one is the converter: a release bundle ships it beside this executable, and it is two
+// licences in one file. The notices are what a person who unpacks an archive reads, so a notices file
+// that listed it as MIT, or stopped saying where the Apache-2.0 text travels, would be the whole failure.
 func TestNoticesCoverEveryRedistributedComponent(t *testing.T) {
 	notices := repoFile(t, "THIRD_PARTY_NOTICES.md")
 	mustContain(t, "THIRD_PARTY_NOTICES.md", notices,
-		"auto-pigeon-extractor",
-		"LicenseRef-Auto-Pigeon-Proprietary",
-		"Auto-Pigeon Proprietary Software License",
-		"No licence or notice file ships inside a release archive",
-		"written authorization",
+		"auto-pigeon-mapio",
+		"Apache-2.0 AND MIT",
+		"NOTICES-auto-pigeon-mapio.txt",
 		"auto-pigeon-libraries",
 		"Apache-2.0",
 		"GPL-2.0",
 		"MIT",
 	)
-	// The summary row for the extractor names the proprietary licence and
-	// neither of the ones it must never be listed under.
+	// The summary row names both licences.
 	row := ""
 	for _, line := range strings.Split(notices, "\n") {
-		if strings.HasPrefix(line, "| auto-pigeon-extractor") {
+		if strings.HasPrefix(line, "| auto-pigeon-mapio") {
 			row = line
 		}
 	}
 	if row == "" {
-		t.Fatal("THIRD_PARTY_NOTICES.md has no summary row for auto-pigeon-extractor")
+		t.Fatal("THIRD_PARTY_NOTICES.md has no summary row for auto-pigeon-mapio")
 	}
 	licence := strings.Split(row, "|")[2]
-	if !strings.Contains(licence, "LicenseRef-Auto-Pigeon-Proprietary") ||
-		strings.Contains(licence, "MIT") || strings.Contains(licence, "GPL") {
-		t.Errorf("the extractor's summary row lists its licence as %q", strings.TrimSpace(licence))
+	if !strings.Contains(licence, "Apache-2.0 AND MIT") || strings.Contains(licence, "Proprietary") ||
+		strings.Contains(licence, "GPL") {
+		t.Errorf("the converter's summary row lists its licence as %q", strings.TrimSpace(licence))
 	}
 
-	// The claim "no release embeds AUE yet" rests on this: the staging
-	// directory holds nothing but .gitkeep in a clean checkout, and .gitignore
-	// is what keeps a staged binary from ever being committed.
+	// .gitignore is what keeps a staged binary from ever being committed.
 	ignore := repoFile(t, ".gitignore")
 	mustContain(t, ".gitignore", ignore,
-		"/internal/aue/embedded/*",
-		"!/internal/aue/embedded/.gitkeep",
+		"/internal/converter/embedded/*",
+		"!/internal/converter/embedded/.gitkeep",
 	)
 }

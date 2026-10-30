@@ -67,7 +67,7 @@ const (
 	ReasonDigestDisagrees     Reason = "digests_disagree"
 	ReasonRefusedIdentity     Reason = "refused_by_profile"
 	ReasonNotAccepted         Reason = "not_accepted_by_profile"
-	ReasonNoSidecar           Reason = "no_bundled_extractor"
+	ReasonNoSidecar           Reason = "no_bundled_converter"
 )
 
 // Candidate is one release this Companion could install, with every fact the
@@ -98,7 +98,7 @@ type Candidate struct {
 	Qualification string `json:"qualification"`
 	// Signed is what the release says; always false today, and shown as such.
 	Signed bool `json:"signed"`
-	// Sidecar is the extractor a Companion release bundles, as its release
+	// Sidecar is the converter a Companion release bundles, as its release
 	// manifest names it; empty for a toolchain.
 	Sidecar *Sidecar `json:"sidecar,omitempty"`
 	// PlatformState is the release's own native-support state for Target
@@ -106,7 +106,7 @@ type Candidate struct {
 	PlatformState string `json:"platform_state,omitempty"`
 }
 
-// Sidecar is the extractor a Companion bundle carries.
+// Sidecar is the converter a Companion bundle carries.
 type Sidecar struct {
 	Version  string `json:"version"`
 	Protocol string `json:"protocol"`
@@ -429,7 +429,7 @@ func (r Reason) Describe() string {
 	case ReasonNotAccepted:
 		return "the built-in profile does not accept that release"
 	case ReasonNoSidecar:
-		return "it ships no extractor for this computer"
+		return "it ships no converter for this computer"
 	}
 	return string(r)
 }

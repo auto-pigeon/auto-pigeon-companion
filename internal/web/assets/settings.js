@@ -127,17 +127,17 @@
     });
   }
 
-  async function extractorVersion(button) {
+  async function converterVersion(button) {
     await withBusy(button, async () => {
-      const out = $("extractor-output");
+      const out = $("converter-output");
       out.textContent = "reading…";
-      const { ok, body } = await api("/api/aue/version");
+      const { ok, body } = await api("/api/converter/version");
       out.textContent = ok ? body.version : body.error;
     });
   }
 
   $("settings-save").addEventListener("click", (event) => save(event.currentTarget));
-  $("extractor-version").addEventListener("click", (event) => extractorVersion(event.currentTarget));
+  $("converter-version").addEventListener("click", (event) => converterVersion(event.currentTarget));
 
   window.AUCOM.areas.settings = { refresh };
 })();

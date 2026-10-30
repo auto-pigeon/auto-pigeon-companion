@@ -114,22 +114,37 @@ family row are different axes and neither is allowed to stand in for the other.
 
 `.github/workflows/release.yml` publishes a prerelease `v1.<count>` on every
 push to main, and **every decision it makes is `build/release-plan.py`**: the
-pin, the AUCOM × AUE target join, the bundle layout, the archive checks, the
+library revision, the target join, the bundle layout, the archive checks, the
 release manifest, the upload list, and whether a rerun may touch an existing
 release. The YAML holds no target list, no bundle format and no version
 arithmetic. `cmd/companion/release_contract_test.go` fails if it grows one, and
 fails for each fault the prompt listed.
 
-**The extractor is the newest one, and a new one needs a new commit here
-(`NEW_307W`).** `build/aue-pin.json` names a branch, not a commit. Each release
-checks out its head, `aue-checkout` prints the commit it resolved to, and the
-bundle manifest, the release manifest and the release notes carry that commit.
-Nothing in this repository chooses an extractor version any more, so nothing
-here can fall behind the APMap version the editor saves. Because a release's
-version is this repository's commit count and `reconcile` never replaces an
-attached asset, **re-running a release on the same commit after the extractor
-moved is refused at publish**: picking a new extractor up takes a new commit on
-main (an empty one will do). Do not relax `reconcile` to make a rerun pass.
+**The converter is this commit plus one exact library revision (`NEW_371`).** `build/release.sh`
+builds `cmd/mapio` for every target against the `go/mapio` revision `go.mod` pins, and that line is the
+only place the revision is written. `check-converter` then reads, from what the toolchain recorded in
+each built file, that it links that module at that version and nothing else, was built without cgo, and
+is for the platform it is filed under, and it runs the host's converter to ask what it is. No other
+repository is checked out and no job reads a secret, so a release builds from a clone. The bundle
+manifest, the release manifest and the release notes carry the library's version and commit.
+
+**The APMap a release can read is that revision's, so a new contract needs a `go get` here.** The old
+rule, that each release took the head of the extractor's branch, is superseded: it protected a release
+from falling behind the APMap version the editor saves, and that protection is now a deliberate step.
+When AULIBS promotes an APMap version, move this repository's pin in the same change that needs it, and
+never by resolving `main` in a workflow: two jobs resolving a branch independently can compile one binary
+against a revision another's manifest does not name.
+
+**Which targets release is `build/converter.json`'s own statement**, joined with
+`internal/release/native-support.json`. The converter inherits no other program's support matrix.
+`windows/arm64` stays `build_only` until a native job has run it. A target that compiles is not a target
+that has been executed, and the release manifest keeps those two facts apart.
+
+**A Companion that bundled the extractor does not update itself to this shape.** The manifest schemas
+are `aucom.release-manifest/2.0` and `aucom.bundle-manifest/2.0`; an older Companion refuses them and
+says a newer Companion may, so its user downloads the archive once by hand, and the release notes say so.
+That is deliberate: making an old updater accept a new bundle would need a manifest that calls the
+converter the extractor. Old release manifests and assets are never rewritten.
 
 **Acceptance converts every fixture, not one.** `build/release-fixtures/` holds
 the APMap 1.3 slab kept as backward-compatibility evidence and a Quake 1 APMap
@@ -203,7 +218,7 @@ What the authorization does not cover, and what every push still owes:
 - **Follow after** — the exact commit's `build` and `release` runs to terminal results, every job (macOS and
   Windows included). Repair a failure the task caused on its owning code or test, then follow the next head. Do not
   weaken the CI policy or drop a platform's tests to get green.
-- **Verify the publication** — the tag, `SHA256SUMS`, `release-manifest.json` (commit and bundled extractor) and the
+- **Verify the publication** — the tag, `SHA256SUMS`, `release-manifest.json` (commit and bundled converter) and the
   extracted bytes of at least the archive for the host you are on.
 - **Record** the commit, both run ids and the tag in the task's handoff.
 - **CI is not acceptance.** A green release replaces none of the browser, released-binary or engine observations a
@@ -221,7 +236,7 @@ $ go vet ./...
 $ go test ./...
 $ ./build/release.sh --out dist/local --targets linux/amd64,windows/amd64
 $ build/release-acceptance.py --archive dist/auto-pigeon-companion-1.163-linux-amd64.zip \
-    --platform linux-amd64 --version 1.163 --aue-version 1.214 \
+    --platform linux-amd64 --version 1.163 \
     --fixture build/release-fixtures/release-acceptance.apmap
 $ acceptance/run-acceptance.sh --companion ~/auto-pigeon-companion-1.158-linux-arm64/companion
 ```

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Build a release of Auto-Pigeon Companion: every supported target, the macOS
-# bundles, an SBOM, and a checksum file.
+# bundles, the auto-pigeon-mapio converter for each target, an SBOM, and a
+# checksum file.
 #
 # Usage, from the repository root:
 #
@@ -121,6 +122,18 @@ for target in "${targets[@]}"; do
         -o "${staging}/companion${ext}" \
         ./cmd/companion
 
+    # The converter for the same machine, with the same constraints: pure Go,
+    # from cmd/mapio in this commit and the go/mapio revision go.mod pins. It is
+    # kept out of the archive below, which is the Companion alone; the bundle step
+    # puts the two together and checks they are a pair (build/release-plan.py).
+    converter_dir="$OUT/converter/${goos}-${goarch}"
+    mkdir -p "$converter_dir"
+    GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 go build \
+        -trimpath \
+        -ldflags "-s -w -X main.version=${VERSION}" \
+        -o "${converter_dir}/auto-pigeon-mapio${ext}" \
+        ./cmd/mapio
+
     # An archive carries what it takes to run the Companion and nothing else
     # (operator decision, 2026-09-25): no licence or notice files and no
     # acceptance kit. The licences and THIRD_PARTY_NOTICES.md live in this
@@ -163,6 +176,39 @@ for target in "${targets[@]}"; do
         exit 1
     fi
 done
+
+# The converter's notices: the texts its licences require to travel with it, taken
+# from this commit and from the exact module revision that was compiled in. The
+# one notices file a bundle carries (NEW_371): the library is redistributed in
+# binary form, and Apache-2.0 asks for its licence and NOTICE to go with it.
+echo "== converter notices =="
+library_dir="$(go list -m -f '{{.Dir}}' github.com/auto-pigeon/auto-pigeon-libraries)"
+library_version="$(go list -m -f '{{.Version}}' github.com/auto-pigeon/auto-pigeon-libraries)"
+{
+    echo "auto-pigeon-mapio ${VERSION}"
+    echo
+    echo "This program is two things compiled together, each under its own licence:"
+    echo
+    echo "  cmd/mapio, from auto-pigeon-companion: the MIT License"
+    echo "  go/mapio ${library_version}, from auto-pigeon-libraries: the Apache License 2.0"
+    echo
+    echo "Neither licence relicenses the other part."
+    echo
+    echo "================================================================================"
+    echo "cmd/mapio"
+    echo "================================================================================"
+    cat "$repo_root/LICENSE"
+    echo
+    echo "================================================================================"
+    echo "go/mapio: NOTICE"
+    echo "================================================================================"
+    cat "$library_dir/NOTICE"
+    echo
+    echo "================================================================================"
+    echo "go/mapio: Apache License 2.0"
+    echo "================================================================================"
+    cat "$library_dir/LICENSE"
+} > "$OUT/converter/NOTICES-auto-pigeon-mapio.txt"
 
 # The SBOM comes from the program, not from a file beside it: an SBOM somebody
 # maintains by hand is one that is wrong within two changes. It is generated

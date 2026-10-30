@@ -1,0 +1,13 @@
+{
+  "schema": "aucom.converter-build/1.0",
+  "comment": "What a Companion release builds as its map converter: cmd/mapio in this repository, linking go/mapio from the public auto-pigeon-libraries module. The exact revision is go.mod's and nowhere else (release-plan.py reads it from there, and internal/release restates it for the SBOM under a test), so one commit of this repository always names one converter. Nothing here needs a credential or any other repository's checkout. `build_only` is this converter's own statement of which targets it has never run on; it inherits nothing from any other program's support matrix.",
+  "program": "auto-pigeon-mapio",
+  "package": "./cmd/mapio",
+  "library_module": "github.com/auto-pigeon/auto-pigeon-libraries",
+  "library_repository": "auto-pigeon/auto-pigeon-libraries",
+  "required_protocol": "1.0",
+  "license": "Apache-2.0 AND MIT",
+  "build_only": {
+    "windows/arm64": "No native Windows-arm64 machine has run this artifact. Every release builds it and records its digest, and Windows on ARM runs the windows/amd64 build under emulation, so nobody on that machine is stranded. It becomes a released target when a native Windows-arm64 job has executed it."
+  }
+}

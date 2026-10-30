@@ -13,7 +13,7 @@ error: APMap contract: APMAP_SCHEMA_DIR is not configured
 AUE-TERMINAL/1.0 {"schema_version":"aue-terminal/1.0","outcome":"failed","reason":"internal_error","code":"aue.job_failed","message":"The extractor failed unexpectedly.","detail":"the APMap contract could not be loaded"}
 {"code":"aue.job_failed","event":"incident.raised"}`
 
-func TestTheSummaryIsTheExtractorsOwnSentence(t *testing.T) {
+func TestTheSummaryIsTheConvertersOwnSentence(t *testing.T) {
 	got := Summary(liveExtractorFailure)
 	want := "The extractor failed unexpectedly: the APMap contract could not be loaded."
 	if got != want {
@@ -34,7 +34,7 @@ func TestTheSummaryOfAnOrdinaryErrorIsItsFirstLine(t *testing.T) {
 }
 
 // A missing setting on this computer must not be blamed on the map.
-func TestAnExtractorSetupFailureDoesNotBlameTheMap(t *testing.T) {
+func TestAConverterSetupFailureDoesNotBlameTheMap(t *testing.T) {
 	remedy := remedyFor(Converting, errors.New(liveExtractorFailure))
 	if !strings.Contains(remedy, "not with your map") {
 		t.Fatalf("remedy = %q", remedy)
@@ -44,7 +44,7 @@ func TestAnExtractorSetupFailureDoesNotBlameTheMap(t *testing.T) {
 	}
 }
 
-func TestAMapTheExtractorRejectsSaysSo(t *testing.T) {
+func TestAMapTheConverterRejectsSaysSo(t *testing.T) {
 	rejected := `convert failed
 AUE-TERMINAL/1.0 {"outcome":"failed","reason":"schema_invalid","message":"The map does not match its schema."}`
 	if remedy := remedyFor(Converting, errors.New(rejected)); !strings.Contains(remedy, "save it again") {
