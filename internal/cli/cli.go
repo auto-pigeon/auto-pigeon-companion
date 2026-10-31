@@ -317,6 +317,7 @@ func Names() []string {
 
 // Run executes one invocation and returns the process exit code.
 func Run(env *Env, args []string) int {
+	useBundleTools(env)
 	// One incident reporter per invocation, flushed on the way out so a
 	// one-shot command's report is not lost when the process exits. A copy of
 	// the caller's Env, as below, so nothing a test hands in is mutated.

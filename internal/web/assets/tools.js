@@ -85,6 +85,68 @@
     return rows;
   }
 
+  // --- installing ------------------------------------------------------------
+  //
+  // Nothing is downloaded until a person says so (HITL, 2026-10-31). The page
+  // asks once per browser session; Cancel leaves Profiles' Install buttons.
+
+  let asking = false;
+  let installing = [];
+
+  function declined() {
+    try { return window.sessionStorage.getItem("aucom-tools-declined") === "1"; } catch { return asking; }
+  }
+
+  function decline() {
+    try { window.sessionStorage.setItem("aucom-tools-declined", "1"); } catch { /* asked again next time */ }
+  }
+
+  async function install(ids) {
+    installing = ids;
+    const { ok, body } = await api("/api/v1/tools/install", { method: "POST", body: { tools: ids } });
+    if (ok) apply(body); else setMessage("tools-setup-message", body.error || "", "error");
+  }
+
+  async function askToInstall() {
+    const waiting = (status?.tools || []).filter((tool) => tool.awaiting_install);
+    if (asking || !waiting.length || declined() || document.querySelector("dialog[open]")) return;
+    asking = true;
+    const yes = await window.AUCOM.confirmModal({
+      title: t("Install the Auto-Pigeon build tools"),
+      body: t("The Companion is about to install these programs from GitHub. They are highly recommended for building maps made with Auto-Pigeon: most advanced features produce geometry that other tools may not be able to process."),
+      content: [el("ul", { children: waiting.map((tool) => el("li", { children: [
+        el("a", { text: tool.title, attrs: { href: tool.releases_url, target: "_blank", rel: "noopener noreferrer" } }),
+      ] })) })],
+      confirm: t("Install"), cancel: t("Cancel"),
+    });
+    asking = false;
+    if (yes) await install(waiting.map((tool) => tool.id)); else decline();
+  }
+
+  // The notice once everything a press of Install asked for is in place.
+  function tellInstalled() {
+    if (!installing.length) return;
+    const tools = (status?.tools || []).filter((tool) => installing.includes(tool.id));
+    if (tools.some((tool) => tool.phase !== "ready" && tool.phase !== "failed" && tool.phase !== "unsupported")) return;
+    const done = tools.some((tool) => tool.phase === "ready");
+    installing = [];
+    if (!done) return;
+    window.AUCOM.confirmModal({
+      title: t("Build tools installed"), body: t("The build tools were installed in this folder:"),
+      content: [el("p", { children: [el("code", { text: status.root || "" })] })], confirm: t("OK"), cancel: null,
+    });
+  }
+
+  // installButton is the Install beside a build tool in Profiles, or null.
+  window.AUCOM.installButton = (profileId) => {
+    const entry = Object.entries(status?.profiles || {}).find(([, rows]) => rows.some((row) => row.id === profileId));
+    const tool = entry && (status.tools || []).find((row) => row.id === entry[0]);
+    if (!tool?.awaiting_install) return null;
+    const control = el("button", { text: t("Install"), className: "secondary", attrs: { type: "button" } });
+    control.addEventListener("click", () => withBusy(control, () => install([tool.id])));
+    return control;
+  };
+
   // --- the setup card --------------------------------------------------------
 
   function renderSetup() {
@@ -536,6 +598,8 @@
         if (area && !area.hidden) window.AUCOM.areas[name]?.refresh?.();
       }
     }
+    askToInstall();
+    tellInstalled();
   }
 
   function schedule(ms) {

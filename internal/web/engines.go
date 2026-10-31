@@ -204,7 +204,10 @@ func (s *Server) handleEngineList(w http.ResponseWriter, r *http.Request) {
 		local, _ := set.Find(entry.Profile.Metadata().ID)
 		items = append(items, s.describeEngine(entry, local, action))
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items, "platform": currentPlatform()})
+	s.mu.RLock()
+	last := s.settings.LastEngine
+	s.mu.RUnlock()
+	writeJSON(w, http.StatusOK, map[string]any{"items": items, "platform": currentPlatform(), "last_used": last})
 }
 
 func (s *Server) handleEngineGet(w http.ResponseWriter, r *http.Request) {

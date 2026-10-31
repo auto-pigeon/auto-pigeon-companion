@@ -161,6 +161,8 @@
       // A pipeline waits for a TOOL: the row names that tool, once.
       if (state.cause) status.append(el("span", { className: "muted small", text: " " + state.cause.name }));
     }
+    const install = window.AUCOM.installButton?.(profile.id);
+    if (install) status.append(" ", install);
     return el("li", { className: "profile-row", attrs: { "data-profile": profile.id, "data-state": state?.code || "" },
       children: [link, kind, status] });
   }

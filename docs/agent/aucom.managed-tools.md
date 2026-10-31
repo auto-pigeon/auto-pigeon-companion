@@ -123,6 +123,13 @@ update belongs to `NEW_368`, which consumes this coordinator and its verificatio
     a server keeps it off (`internal/cli` sets `AUCOM_MANAGED_TOOLS=off` and its own
     `XDG_DATA_HOME`): no test may reach GitHub or this machine's data folder.
 
+10a. **Nothing is installed before a person says so (HITL, 2026-10-31; replaces installing on
+    first launch).** `Options.AskFirst` holds a toolchain until `ApproveInstall`; the page asks in a
+    blocking modal at start, and Profiles has an Install button. A portable bundle's default tools
+    folder is `<bundle>/build-tools` (`config.SetBundleToolsDir`, set in `cli.Run`), no member of the
+    bundle, so a self-update leaves it. `AUCOM_TOOLS_DIR` and a configured folder still win, and a
+    toolchain installed earlier stays where it is.
+
 11. **The Companion's own update (NEW_368) is a third target on the same coordinator**, never
     a second downloader. `managedtools.Self` is added by `Options.Self`; there is no first
     install of oneself; the bundle is checked against both manifests and proved before it is

@@ -157,6 +157,9 @@ type Config struct {
 	// DefaultToolsDir. Not `tool_cache_dir`, which is the retired download
 	// cache's setting and is still ignored.
 	ToolsDir string `json:"managed_tools_dir,omitempty"`
+	// LastEngine is the engine profile a run last used: Build & Run's default
+	// when a person has chosen none (HITL, 2026-10-31).
+	LastEngine string `json:"last_engine,omitempty"`
 }
 
 // EnvToolsDir overrides where the managed toolchains are installed, like
@@ -172,7 +175,12 @@ const EnvToolsDir = "AUCOM_TOOLS_DIR"
 //	Linux    $XDG_DATA_HOME/auto-pigeon-companion/tools, else ~/.local/share/…
 //	macOS    ~/Library/Application Support/auto-pigeon-companion/tools
 //	Windows  %LocalAppData%\auto-pigeon-companion\tools
+//
+// A portable bundle keeps them beside itself instead; see [SetBundleToolsDir].
 func DefaultToolsDir() (string, error) {
+	if bundleToolsDir != "" {
+		return bundleToolsDir, nil
+	}
 	var base string
 	switch runtime.GOOS {
 	case "windows":
@@ -214,6 +222,14 @@ func (c Config) Tools() (string, error) {
 	}
 	return DefaultToolsDir()
 }
+
+// bundleToolsDir is the default tools folder of a portable bundle.
+var bundleToolsDir string
+
+// SetBundleToolsDir makes dir the default tools folder of this process (HITL,
+// 2026-10-31: build tools go beside the Companion). AUCOM_TOOLS_DIR and a
+// configured folder still win. Empty goes back to the per-user folder.
+func SetBundleToolsDir(dir string) { bundleToolsDir = dir }
 
 // URIHandler is the record of a registered `autopigeon://` handler.
 type URIHandler struct {

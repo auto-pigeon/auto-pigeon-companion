@@ -135,6 +135,15 @@
       visible($("area-play")) && visible($("play-local-map")) && !visible($("first-run")),
       `current area ${document.querySelector('.area-tab[aria-current="page"]').dataset.area}`
     );
+    // No game is configured here: Build & Run says where that is done (HITL,
+    // 2026-10-31), and Cancel stays on the form.
+    await waitFor("the no-game question", () => document.querySelector("dialog[open]"));
+    record(
+      "with no game configured, Build & Run sends the person to Profiles",
+      textOf(document.querySelector("dialog[open]")).includes("Open Profiles"),
+      textOf(document.querySelector("dialog[open]")).slice(0, 80)
+    );
+    [...document.querySelectorAll("dialog[open] button")].find((button) => textOf(button) === "Cancel").click();
     await go("library");
     record(
       "the Library says it is the one area that needs an account",

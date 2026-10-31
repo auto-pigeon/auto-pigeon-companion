@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/config"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/lockfile"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/managedtools"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/release"
@@ -66,6 +67,16 @@ func runSelfUpdate(env *Env, args []string) int {
 // serveSelf is the bundle `serve` runs from; tests name one, because a test
 // binary is no bundle.
 var serveSelf = inspectSelf
+
+// useBundleTools makes the folder beside a portable bundle this process's
+// default tools folder. A folder a person or a configuration named still wins.
+func useBundleTools(env *Env) {
+	dir := ""
+	if self := inspectSelf(env); self.Mode == managedtools.SelfPortable {
+		dir = filepath.Join(self.Root, managedtools.BuildToolsDirName)
+	}
+	config.SetBundleToolsDir(dir)
+}
 
 // inspectSelf is this process's bundle.
 func inspectSelf(env *Env) managedtools.SelfInstall {

@@ -657,6 +657,10 @@ func (m *Manager) targets() []Tool {
 	return append(append([]Tool(nil), Tools...), Self)
 }
 
+// BuildToolsDirName is the folder a portable bundle keeps its build tools in,
+// beside the Companion. It is no member of the bundle: a self-update leaves it.
+const BuildToolsDirName = "build-tools"
+
 // SelfInstall is what this coordinator knows of the running bundle.
 func (m *Manager) SelfInstall() (SelfInstall, bool) {
 	if m.opts.Self == nil {

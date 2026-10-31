@@ -2,9 +2,10 @@
 //
 // The editor's Build button opens `autopigeon://build/request/<id>`, and the
 // link only RECORDS the request on this machine. This file watches for one from
-// wherever the page is and says so in one notice; Review build takes it into
-// Build & Run's own form (play.js), on the exact saved revision, where the
-// person presses Build or Build & Run. It is leakrequest.js's pattern for a
+// wherever the page is, says so in one notice and opens Build & Run's own form
+// (play.js) on the exact saved revision, with the map and the default tool and
+// engine chosen; the person presses Build or Build & Run there (HITL,
+// 2026-10-31: no Review build, no Dismiss). It is leakrequest.js's pattern for a
 // different request — not a leak test, and nothing here touches one.
 //
 //   - The watch is cheap and local: `/api/v1/build-request/request` answers
@@ -28,6 +29,7 @@
   let seen = null;
   let details = null;
   let reviewing = null;
+  let opened = null;
   let generation = 0;
   let reading = false;
   let resolving = false;
@@ -73,7 +75,7 @@
     // Bound to the request THIS notice shows, not to whatever is on screen
     // when the click is handled.
     const shown = seen.request_id;
-    actions.append(button(t("Dismiss"), "secondary", () => dismissRequest(shown)));
+    const dismiss = () => button(t("Dismiss"), "secondary", () => dismissRequest(shown));
 
     if (!details) {
       state.textContent = t("Checking the request with your account…");
@@ -85,24 +87,23 @@
       // alike, on purpose; so does this.
       state.className = "leak-request__state message error";
       state.textContent = t("This account cannot find the request. The Companion may be signed in to another server or account, or the request expired.");
-      actions.append(button(t("Retry"), "secondary", async () => resolve(true)));
+      actions.append(dismiss(), button(t("Retry"), "secondary", async () => resolve(true)));
     } else if (!details.ok) {
       state.className = "leak-request__state message error";
       state.textContent = details.status === 409
         ? t("This request cannot be built: {why}.", { why: details.body.error })
         : t("The request could not be checked: {why}", { why: details.body.error || t("the account server did not answer") });
+      actions.append(dismiss());
       if (details.status !== 409) actions.append(button(t("Retry"), "secondary", async () => resolve(true)));
     } else if (details.body.unsupported) {
       // Not Quake 1 by default, and no review: nothing was run and nothing will be.
       state.className = "leak-request__state message error";
       state.textContent = t("This saved revision is a {game} map. Build & Run builds {list} maps only, so nothing will run.", {
         game: gameName(details.body.game_profile), list: (details.body.supported_profiles || []).map(gameName).join(", ") });
-    } else if (reviewing === seen.request_id) {
-      state.textContent = t("In review in Build & Run. Nothing runs until you press {action}.", { action });
-      actions.append(button(t("Go to the review"), "secondary", async () => window.AUCOM.showArea("play")));
+      actions.append(dismiss());
     } else {
-      state.textContent = t("It is still the saved revision the editor asked about. Review it; nothing runs until you press {action} there.", { action });
-      actions.append(button(t("Review build"), "primary", review));
+      state.textContent = t("Ready in Build & Run. Nothing runs until you press {action}.", { action });
+      if (opened !== seen.request_id) { opened = seen.request_id; review(); }
     }
     lines.push(state);
     // The request is HERE either way. Whether the editor knows is a separate
@@ -180,6 +181,7 @@
     if (!told.ok) { details = told; render(); return; }
     reviewing = request.request_id;
     render();
+    window.AUCOM.showArea("play");
     await window.AUCOM.areas.play?.adoptBuildRequest?.(request);
   }
 
@@ -192,10 +194,10 @@
     watch();
   }
 
-  // The form stopped building what the editor asked for: the notice offers
-  // the review again.
+  // The form stopped building what the editor asked for: a person chose
+  // something else, and the request is over.
   document.addEventListener("aucom:build-request-dropped", (event) => {
-    if (seen && reviewing === event.detail?.id) { reviewing = null; render(); }
+    if (seen && reviewing === event.detail?.id) dismissRequest(event.detail.id);
   });
   // The form started it: the request is consumed, and the watch says so.
   document.addEventListener("aucom:build-request-started", () => watch());

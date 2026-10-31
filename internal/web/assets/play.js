@@ -709,6 +709,7 @@
     if (sequence !== engineRefresh) return;
     if (!ok) { state.engines = []; state.engine = ""; $("play-engine").replaceChildren(); renderActions(); renderFinalSummary(); return; }
     state.engines = body.items || [];
+    state.lastEngine = body.last_used || "";
     renderEngines();
   }
 
@@ -721,6 +722,20 @@
     const own = engine.readiness?.problems || [];
     const offered = Object.keys(ACTIONS).filter((id) => !packaged() || id === "play_map");
     return own.length ? own : offered.flatMap((id) => engine.action_problems?.[id] || []);
+  }
+
+  // No game can be started yet: say where that is set up, once per page.
+  let askedForGame = false;
+  async function askForGame() {
+    const playable = state.engines.some((engine) => Object.keys(ACTIONS).some((id) => window.AUCOM.actionReady(engine, id)));
+    if (askedForGame || playable) return;
+    if (document.querySelector("dialog[open]")) { window.setTimeout(askForGame, 1500); return; }
+    askedForGame = true;
+    const open = await window.AUCOM.confirmModal({
+      title: t("Configure a game"), body: t("Build & Run needs a game to start. Configure one in the Profiles page."),
+      confirm: t("Open Profiles"), cancel: t("Cancel"),
+    });
+    if (open) window.location.hash = "#profiles";
   }
 
   function renderEngines() {
@@ -736,6 +751,13 @@
     // stays, said against the build profile chosen NOW, until an engine is
     // chosen: arrowing through the list is several changes, and the first
     // one's message must not be wiped by the next (seen live, NEW_330).
+    // Nothing chosen yet: the engine used last, or the only one there is. A
+    // choice this render cleared stays cleared, with its reason below.
+    if (!state.engine && !previous) {
+      const fitting = state.engines.filter((engine) => engineFits(engine) && ready(engine));
+      const pick = fitting.find((engine) => engine.id === state.lastEngine) || (fitting.length === 1 ? fitting[0] : null);
+      if (pick) { select.value = pick.id; state.engine = pick.id; }
+    }
     const lost = state.engines.find((e) => e.id === previous);
     if (previous && !state.engine && lost && !engineFits(lost)) state.droppedEngine = previous;
     if (state.engine) state.droppedEngine = "";
@@ -2555,6 +2577,7 @@
       } finally {
         settle();
       }
+      askForGame();
       showAutobuild();
       renderFinalSummary();
       if (argument === "autobuild") {

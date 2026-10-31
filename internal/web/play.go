@@ -15,6 +15,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/assetsync"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/autobuild"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/config"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/engine"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/maturity"
@@ -856,6 +857,25 @@ func (s *Server) playRequest(body playRequestBody) (playrun.Request, int, error)
 	return request, http.StatusOK, nil
 }
 
+// rememberEngine keeps the engine a run used, for the next form. Failing to
+// write it costs a default, not a run.
+func (s *Server) rememberEngine(id string) {
+	if id == "" {
+		return
+	}
+	updated, err := s.updateConfig(func(current *config.Config) error {
+		current.LastEngine = id
+		return nil
+	})
+	if err != nil {
+		s.logf("remembering the engine: %v", err)
+		return
+	}
+	s.mu.Lock()
+	s.settings.LastEngine = updated.LastEngine
+	s.mu.Unlock()
+}
+
 func (s *Server) handlePlayStart(w http.ResponseWriter, r *http.Request) {
 	var body playRequestBody
 	if !decodeJSON(w, r, &body) {
@@ -892,6 +912,7 @@ func (s *Server) handlePlayStart(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	s.rememberEngine(request.EngineProfileID)
 	writeJSON(w, http.StatusAccepted, playView(record, time.Now().UTC()))
 }
 

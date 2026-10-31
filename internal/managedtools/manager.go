@@ -55,6 +55,9 @@ type Options struct {
 	// Probes are the built-in profiles' compatibility rules per tool: a
 	// release they would refuse is never installed.
 	Probes map[ToolID]*profile.CompatibilityProbe
+	// AskFirst installs a toolchain only after a person approved it
+	// ([Manager.ApproveInstall]), HITL 2026-10-31. Updates are offered as ever.
+	AskFirst bool
 	// Disabled turns automatic setup and checks off (Settings). The status,
 	// and anything already installed, stay.
 	Disabled bool
@@ -498,6 +501,29 @@ func (m *Manager) evaluator(tool Tool) evaluator {
 	}
 }
 
+// ApproveInstall records that a person asked for these toolchains and wakes
+// the coordinator. An installed one, or the Companion itself, is refused.
+func (m *Manager) ApproveInstall(ids []ToolID) error {
+	for _, id := range ids {
+		tool, ok := Find(id)
+		if !ok || tool.Kind == KindApplication {
+			return fmt.Errorf("managedtools: %q is not a build tool", id)
+		}
+	}
+	if _, err := UpdateState(m.opts.StatePath, func(state *State) error {
+		for _, id := range ids {
+			ts := state.Tool(id)
+			ts.InstallApproved = true
+			ts.Failure = nil
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	m.Wake()
+	return nil
+}
+
 // advance moves one tool toward what its state asks for.
 func (m *Manager) advance(ctx context.Context, tool Tool) error {
 	m.workMu.Lock()
@@ -516,7 +542,7 @@ func (m *Manager) advance(ctx context.Context, tool Tool) error {
 	now := m.now()
 
 	if ts.Active == nil {
-		if best == nil || ts.Integrity != nil {
+		if best == nil || ts.Integrity != nil || (m.opts.AskFirst && !ts.InstallApproved) {
 			return nil
 		}
 		if ts.Failure != nil && ts.Failure.Version == best.Version && now.Before(ts.Failure.NextAttempt) {

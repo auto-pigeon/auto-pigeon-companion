@@ -374,6 +374,7 @@ func newManagedTools(env *Env, settings config.Config, configDir string, server 
 		return nil, err
 	}
 	return managedtools.New(managedtools.Options{
+		AskFirst:  true,
 		Uses:      uses,
 		ToolsRoot: root,
 		StatePath: filepath.Join(configDir, managedtools.StateFileName),

@@ -237,6 +237,7 @@ func (s *Server) toolsAPI() map[string]http.HandlerFunc {
 	return map[string]http.HandlerFunc{
 		"GET /api/v1/tools":                        s.handleToolsStatus,
 		"POST /api/v1/tools/check":                 s.handleToolsCheck,
+		"POST /api/v1/tools/install":               s.handleToolsInstall,
 		"POST /api/v1/tools/{tool}/retry":          s.handleToolsRetry,
 		"POST /api/v1/tools/{tool}/decide":         s.handleToolsDecide,
 		"POST /api/v1/tools/{tool}/cancel-pending": s.handleToolsCancelPending,
@@ -323,6 +324,24 @@ func (s *Server) handleToolsCheck(w http.ResponseWriter, r *http.Request) {
 	outcomes := s.tools.CheckNow(ctx)
 	body := s.toolsStatus()
 	writeJSON(w, http.StatusOK, map[string]any{"outcomes": outcomes, "status": body})
+}
+
+// handleToolsInstall is a person's Install: the toolchains they approved.
+func (s *Server) handleToolsInstall(w http.ResponseWriter, r *http.Request) {
+	if !s.requireTools(w) {
+		return
+	}
+	var request struct {
+		Tools []managedtools.ToolID `json:"tools"`
+	}
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	if err := s.tools.ApproveInstall(request.Tools); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.toolsStatus())
 }
 
 func toolParam(w http.ResponseWriter, r *http.Request) (managedtools.ToolID, bool) {

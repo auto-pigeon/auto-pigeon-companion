@@ -33,11 +33,13 @@ type Status struct {
 
 // ToolStatus is one tool.
 type ToolStatus struct {
-	ID          ToolID `json:"id"`
-	Kind        Kind   `json:"kind,omitempty"`
-	Title       string `json:"title"`
-	ReleasesURL string `json:"releases_url"`
-	Phase       Phase  `json:"phase"`
+	// AwaitingInstall: not installed, and nobody has approved installing it.
+	AwaitingInstall bool   `json:"awaiting_install,omitempty"`
+	ID              ToolID `json:"id"`
+	Kind            Kind   `json:"kind,omitempty"`
+	Title           string `json:"title"`
+	ReleasesURL     string `json:"releases_url"`
+	Phase           Phase  `json:"phase"`
 	// Version is what Phase is about: the version downloading, or active.
 	Version string `json:"version,omitempty"`
 	Done    int64  `json:"done,omitempty"`
@@ -147,7 +149,9 @@ func (m *Manager) Status() Status {
 		default:
 			view.Phase = PhaseNotChecked
 		}
-		if view.Active == nil && view.Phase != PhaseDisabled {
+		view.AwaitingInstall = m.opts.AskFirst && !ts.InstallApproved && view.Active == nil && view.Phase != PhaseDisabled &&
+			view.Phase != PhaseUnsupported
+		if view.Active == nil && view.Phase != PhaseDisabled && !view.AwaitingInstall {
 			out.SettingUp = true
 		}
 		if view.Active != nil && best != nil && m.newer(tool, best.Version, view.Active.Version) {

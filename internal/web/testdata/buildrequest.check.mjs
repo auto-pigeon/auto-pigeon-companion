@@ -87,7 +87,9 @@ const PENDING = "/api/v1/build-request/pending";
   assert.equal(p.calls.filter((call) => call.path.startsWith(PENDING)).at(-1).path, PENDING + "?request_id=" + B.request_id);
   await p.answer(PENDING, 200, resolved(B, "second", 9));
   assert.match(text(p.box), /second, saved revision 9/);
-  assert.ok(buttonNamed(p.box, "Review build"));
+  assert.equal(buttonNamed(p.box, "Review build"), undefined, "the form opens by itself");
+  assert.equal(buttonNamed(p.box, "Dismiss"), undefined, "nothing to dismiss once it is in the form");
+  assert.ok(p.calls.some((call) => call.path === "/api/v1/build-request/review"), "the form was not opened");
 }
 
 // 2. An older server that resolves whatever is pending answers B's details to
@@ -111,17 +113,17 @@ const PENDING = "/api/v1/build-request/pending";
   assert.doesNotMatch(text(p.box), /first/, "A's answer was shown on B's notice");
   await p.answer(REQUEST, 200, B);
   await p.answer(PENDING, 200, resolved(B, "second", 9));
-  buttonNamed(p.box, "Review build").listeners.click();
-  await p.settle();
   const told = await p.answer("/api/v1/build-request/review", 200, { reviewing: true });
   assert.deepEqual(told.body, { request_id: B.request_id });
   assert.equal(p.adopted.length, 1);
   assert.equal(p.adopted[0].request_id, B.request_id);
   assert.equal(p.adopted[0].revision_id, "rev-b");
-  assert.match(text(p.box), /In review in Build & Run\. Nothing runs until you press Build & Run\./);
-  // The form dropped it: the notice offers the review again.
+  assert.match(text(p.box), /Ready in Build & Run\. Nothing runs until you press Build & Run\./);
+  // The form dropped it: a person chose something else, and the request ends.
   p.document.dispatchEvent(new CustomEvent("aucom:build-request-dropped", { detail: { id: B.request_id } }));
-  assert.ok(buttonNamed(p.box, "Review build"));
+  await p.settle();
+  const dropped = await p.answer("/api/v1/build-request/dismiss", 200, { dismissed: true });
+  assert.deepEqual(dropped.body, { request_id: B.request_id });
 }
 
 // 4. A request the account cannot find keeps its notice and offers Retry; an
@@ -151,8 +153,6 @@ const PENDING = "/api/v1/build-request/pending";
   const p = load();
   await p.answer(REQUEST, 200, B);
   await p.answer(PENDING, 200, resolved(B, "second", 9));
-  buttonNamed(p.box, "Review build").listeners.click();
-  await p.settle();
   await p.answer("/api/v1/build-request/review", 200, { reviewing: true });
   await p.tick();
   await p.answer(REQUEST, 200, { pending: false });

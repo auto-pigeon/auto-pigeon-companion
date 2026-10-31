@@ -644,6 +644,7 @@ function terminal(state) {
 // the sentence; `closeX` puts the canonical × in the corner (NEW_365: a
 // decision a build needs before it can start). Both optional.
 function confirmModal({ title, body, confirm = "Continue", cancel = "Cancel", content = [], closeX = false }) {
+  // `cancel: null` is a notice: it has the one button.
   return new Promise((resolve) => {
     const opener = document.activeElement;
     const confirmButton = el("button", { text: confirm, className: "primary", attrs: { type: "button" } });
@@ -658,7 +659,7 @@ function confirmModal({ title, body, confirm = "Continue", cancel = "Cancel", co
         el("div", { className: "modal-head", children: [el("h2", { text: title, attrs: { id: "modal-title", tabindex: "-1" } }), close].filter(Boolean) }),
         el("p", { text: body }),
         ...content,
-        el("div", { className: "modal-actions", children: [cancelButton, confirmButton] }),
+        el("div", { className: "modal-actions", children: cancel === null ? [confirmButton] : [cancelButton, confirmButton] }),
       ],
     });
     close?.addEventListener("click", () => finish(false));

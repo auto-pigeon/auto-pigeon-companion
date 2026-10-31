@@ -114,6 +114,8 @@ type ToolState struct {
 	// Intent, IntentFor: what the person chose, and for which bytes.
 	Intent    Intent         `json:"intent,omitempty"`
 	IntentFor *BytesIdentity `json:"intent_for,omitempty"`
+	// InstallApproved: a person asked for this toolchain ([Options.AskFirst]).
+	InstallApproved bool `json:"install_approved,omitempty"`
 	// Skipped is "don't ask again for this version": exact bytes, per tool.
 	Skipped   []BytesIdentity `json:"skipped,omitempty"`
 	Dismissed *Dismissal      `json:"dismissed,omitempty"`

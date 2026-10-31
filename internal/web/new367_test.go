@@ -42,6 +42,16 @@ type toolsMachine struct {
 	clock    *toolsClock
 }
 
+// toolsMachineAsks makes the next machine wait for a person's Install.
+var toolsMachineAsks bool
+
+func newToolsMachineAsking(t *testing.T) *toolsMachine {
+	t.Helper()
+	toolsMachineAsks = true
+	defer func() { toolsMachineAsks = false }()
+	return newToolsMachine(t)
+}
+
 func newToolsMachine(t *testing.T) *toolsMachine {
 	t.Helper()
 	m := newMachine(t)
@@ -58,6 +68,7 @@ func newToolsMachine(t *testing.T) *toolsMachine {
 		t.Fatal(err)
 	}
 	tools, err := managedtools.New(managedtools.Options{
+		AskFirst:  toolsMachineAsks,
 		Uses:      uses,
 		ToolsRoot: filepath.Join(m.dir, "tools"),
 		StatePath: filepath.Join(m.dir, "config", managedtools.StateFileName),

@@ -197,8 +197,13 @@ and its programs are asked what they are before any profile reads ready. A
 profile you pointed at your own programs is left exactly as it is; Settings
 offers **Use the Companion's … for …** beside it.
 
-Where they go: a folder of the Companion's own, one per version, never your
-`PATH`, a system folder or a game folder, and no administrator rights:
+Nothing is downloaded until you say so: at start the Companion asks in a window
+that names the two programs, and Profiles has an **Install** button beside each.
+
+Where they go: a `build-tools` folder beside the Companion when you unpacked it
+somewhere you can write, one folder per version, never your `PATH`, a system
+folder or a game folder, and no administrator rights. An update of the Companion
+leaves that folder alone. A Companion that cannot write beside itself uses:
 
 | System | Tools folder |
 | --- | --- |
