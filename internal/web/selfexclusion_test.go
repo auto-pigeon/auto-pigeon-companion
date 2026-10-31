@@ -211,3 +211,30 @@ func waitUntilIdle(t *testing.T, server *Server) {
 	}
 	server.HeldSelfExclusion().Release()
 }
+
+// Refused by the bundle after the tools folder admitted it: the lease in the
+// tools folder is given back, or a compiler update would wait for nothing.
+func TestAPipelineRefusedByTheBundleGivesBackItsToolsLease(t *testing.T) {
+	server, _ := selfServer(t)
+	gate, err := server.bundleUse.Switch(BundleTool, "the Companion replacing itself")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer gate.Release()
+	registry, err := server.ToolRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ToolLeaser(registry, server.bundleUse, "racing build", 0)(nil); !errors.Is(err, tooluse.ErrSwitching) {
+		t.Fatalf("a pipeline racing the bundle's gate: %v", err)
+	}
+	entries, err := os.ReadDir(filepath.Join(registry.Root(), tooluse.DirName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), "use-") {
+			t.Fatalf("a refused pipeline left %s", entry.Name())
+		}
+	}
+}
