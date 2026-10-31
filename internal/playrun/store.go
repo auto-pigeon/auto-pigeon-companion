@@ -27,6 +27,10 @@ var ErrNotFound = errors.New("playrun: no such run")
 type Store struct {
 	root string
 	mu   sync.Mutex
+	// beforeSave is nil outside a test. It is the one place a test can hold a
+	// write, or fail it, at the exact moment a record is about to be published:
+	// that is an interleaving no amount of waiting produces on demand (NEW_371D).
+	beforeSave func(*Record) error
 }
 
 // OpenStore prepares a store under root.
@@ -87,6 +91,11 @@ func (s *Store) Save(record *Record) error {
 	path, err := s.path(record.ID)
 	if err != nil {
 		return err
+	}
+	if s.beforeSave != nil {
+		if err = s.beforeSave(record); err != nil {
+			return err
+		}
 	}
 	encoded, err := json.MarshalIndent(record, "", "  ")
 	if err != nil {

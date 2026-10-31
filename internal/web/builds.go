@@ -54,9 +54,9 @@ type buildRuns struct {
 	mu   sync.Mutex
 	runs map[string]*buildRun
 	// starting is every build request being started or running, by its
-	// identity (buildRequestKey) and the build it became: two presses or two
-	// tabs asking for the same build start it once (NEW_365).
-	starting map[string]string
+	// identity (buildRequestKey): two presses or two tabs asking for the same
+	// build start it once (NEW_365).
+	starting map[string]*buildClaim
 	// observed is called after each thing a read of a build looked at — the
 	// run's own completion, the manifest on disk — with the build it was about,
 	// or "" for the whole list. Nil outside a test: it is the one place a test
@@ -64,6 +64,11 @@ type buildRuns struct {
 	// interleaving NEW_323B was about and which no amount of waiting produces
 	// on demand.
 	observed func(id string)
+	// passed is nil outside a test. It is told when a build's goroutine reaches
+	// a point of its ending ("returned": the runner has returned and the run is
+	// not recorded as over; "exited": nothing of it is left), which is how a
+	// test holds the two windows a read and a claim could disagree in (NEW_371D).
+	passed func(id, point string)
 }
 
 func (r *buildRuns) observe(id string) {
@@ -72,34 +77,107 @@ func (r *buildRuns) observe(id string) {
 	}
 }
 
-func newBuildRuns() *buildRuns {
-	return &buildRuns{runs: map[string]*buildRun{}, starting: map[string]string{}}
+func (r *buildRuns) pass(id, point string) {
+	if r.passed != nil {
+		r.passed(id, point)
+	}
 }
 
-// claim reserves a build request, or reports the build already holding it
-// ("" while that one has no id yet).
-func (r *buildRuns) claim(key string) (string, bool) {
+func newBuildRuns() *buildRuns {
+	return &buildRuns{runs: map[string]*buildRun{}, starting: map[string]*buildClaim{}}
+}
+
+// buildClaim is one start's hold on a build request, and the pointer is what
+// owns it: a build has no id when it claims, and a key outlives any one build.
+// Everything done with a claim is done with the claim that was granted, so a
+// build that has been replaced can neither free nor rename what replaced it
+// (NEW_371D).
+type buildClaim struct {
+	key string
+	// id is the build it became, "" until it has one. Under buildRuns.mu.
+	id string
+}
+
+// claim reserves a build request, or returns the claim already holding it.
+func (r *buildRuns) claim(key string) (mine, holder *buildClaim) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if held, busy := r.starting[key]; busy {
-		return held, false
+		return nil, held
 	}
-	r.starting[key] = ""
-	return "", true
+	mine = &buildClaim{key: key}
+	r.starting[key] = mine
+	return mine, nil
 }
 
-func (r *buildRuns) named(key, id string) {
+// named records the build a claim became.
+func (r *buildRuns) named(claim *buildClaim, id string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, held := r.starting[key]; held {
-		r.starting[key] = id
+	claim.id = id
+}
+
+// idOf is the build a claim became, "" while it has no id.
+func (r *buildRuns) idOf(claim *buildClaim) string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return claim.id
+}
+
+// release gives up a claim, if it is still the one holding its key. Safe to
+// call twice, and late.
+func (r *buildRuns) release(claim *buildClaim) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.starting[claim.key] == claim {
+		delete(r.starting, claim.key)
 	}
 }
 
-func (r *buildRuns) release(key string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	delete(r.starting, key)
+// claimBuild reserves a build request, or says which build holds it ("" while
+// that one has no id yet).
+//
+// THE INVARIANT (NEW_371D): a request is refused only while a read of the
+// build holding it would still say that build is live. The holder's own
+// goroutine releases its claim when the run is recorded as over, which is not
+// when a read learns that: the runner writes the terminal manifest a moment
+// earlier (answerBuild), and a page that reads it and presses again is asking
+// for a build nothing is doing. So a refusal first asks what a read would ask.
+// A holder that has ended is replaced, by its own claim, so this cannot free a
+// newer one; what it leaves behind is a goroutine with no more use for the
+// request — the build's directory is its own.
+func (s *Server) claimBuild(key string) (*buildClaim, string) {
+	for {
+		mine, holder := s.builds.claim(key)
+		if mine != nil {
+			return mine, ""
+		}
+		id := s.builds.idOf(holder)
+		if id == "" || !s.buildHasEnded(id) {
+			return nil, id
+		}
+		s.builds.release(holder)
+	}
+}
+
+// buildHasEnded answers what answerBuild answers about a build this process
+// started: over when the run is recorded as over, or when the manifest on disk
+// says so. A manifest that cannot be read is not a reason to start a second
+// copy of a build.
+func (s *Server) buildHasEnded(id string) bool {
+	run, tracked := s.builds.get(id)
+	if !tracked {
+		return false
+	}
+	if finished, _ := run.state(); finished {
+		return true
+	}
+	dir, err := s.buildsDir()
+	if err != nil {
+		return false
+	}
+	manifest, err := build.Find(dir, id)
+	return err == nil && manifest.State.Terminal()
 }
 
 // buildRequestKey is what makes two file-build requests the same build:
@@ -724,26 +802,19 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// One build per request at a time, whichever page or tab asked (NEW_365).
-	key := buildRequestKey(request)
-	if held, claimed := s.builds.claim(key); !claimed {
+	claim, held := s.claimBuild(buildRequestKey(request))
+	if claim == nil {
 		writeJSON(w, http.StatusConflict, map[string]any{
 			"error": "this exact build is already running", "code": "already_running", "build": held,
 		})
 		return
-	}
-	released := false
-	release := func() {
-		if !released {
-			released = true
-			s.builds.release(key)
-		}
 	}
 	// Released by the build's own goroutine once it ends; by this handler if
 	// it never got that far.
 	handedOver := false
 	defer func() {
 		if !handedOver {
-			release()
+			s.builds.release(claim)
 		}
 	}()
 
@@ -790,6 +861,9 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 		}
 		run.ID = manifest.BuildID
 		s.builds.put(run)
+		// Here and not when the handler hears of it: from this moment a read
+		// can find this build, and a build can end before the handler runs.
+		s.builds.named(claim, manifest.BuildID)
 		identified <- manifest.BuildID
 	}
 
@@ -849,7 +923,8 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 	failed := make(chan error, 1)
 	handedOver = true
 	go func() {
-		defer s.builds.release(key)
+		defer func() { s.builds.pass(run.ID, "exited") }()
+		defer s.builds.release(claim)
 		defer cancel()
 		// The run's own copy of the textures goes with the run, however it
 		// ended: finished, failed, cancelled.
@@ -868,7 +943,12 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 			Strict:      request.Strict,
 			Mirror:      run.log,
 		})
+		s.builds.pass(run.ID, "returned")
 		run.finish(manifest, err)
+		// Before anything that follows, because none of it needs the request:
+		// the delivery is about this build's id and can wait on a slow network,
+		// and the texture copy is this run's own.
+		s.builds.release(claim)
 		if leakRequest != nil && manifest != nil && manifest.BuildID != "" && manifest.State.Terminal() {
 			// The delivery is recorded beside the build, so the page can show
 			// it apart from the compiler's verdict and send it again.
@@ -889,7 +969,6 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 
 	select {
 	case id := <-identified:
-		s.builds.named(key, id)
 		w.Header().Set("Location", "/api/v1/build/runs/"+id)
 		writeJSON(w, http.StatusAccepted, map[string]any{
 			"build": id, "pipeline": request.Pipeline, "label": request.Label, "started": true,

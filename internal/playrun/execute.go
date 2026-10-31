@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
@@ -63,8 +64,7 @@ func (s *Service) execute(ctx context.Context, record *Record) {
 	if record.Request.BuildOnly {
 		record.State = Succeeded
 		record.FinishedAt = s.deps.Now()
-		s.save(record)
-		s.deps.Logf("run %s: built in %s (build only)", record.ID, record.Elapsed(s.deps.Now()))
+		s.conclude(record, fmt.Sprintf("run %s: built in %s (build only)", record.ID, record.Elapsed(s.deps.Now())))
 
 		return
 	}
@@ -75,8 +75,29 @@ func (s *Service) execute(ctx context.Context, record *Record) {
 	s.closeStage(record, "")
 	record.State = Succeeded
 	record.FinishedAt = s.deps.Now()
-	s.save(record)
-	s.deps.Logf("run %s: succeeded in %s", record.ID, record.Elapsed(s.deps.Now()))
+	s.conclude(record, fmt.Sprintf("run %s: succeeded in %s", record.ID, record.Elapsed(s.deps.Now())))
+}
+
+// conclude is how every run ends: the terminal record and the release of the
+// request are one step ([Live.publish]), and the closing line is logged after
+// it, with nothing held. Whatever a run still has to do with its files —
+// Unstage — is done before this, so a run that can be asked for again has
+// finished with them.
+//
+// A terminal record that cannot be written is said, in the log, as what it is.
+// What stays readable is the last record that WAS written: an active one, with
+// no goroutine behind it from a moment later. That is what a run a stopped
+// Companion left looks like, and it is answered the same way — Cancel records
+// it cancelled, the next start-up's Recover records it failed. Nothing claims
+// the outcome the disk would not take.
+func (s *Service) conclude(record *Record, closing string) {
+	err := s.live.publish(record.ID, func() error { return s.store.Save(record) })
+	if err != nil {
+		s.deps.Logf("%s; that could not be written, so the record on disk does not say so: %v", closing, err)
+
+		return
+	}
+	s.deps.Logf("%s", closing)
 }
 
 // --- the stages -------------------------------------------------------------
@@ -476,6 +497,10 @@ func (s *Service) detail(record *Record, detail string) {
 
 // closeStage finishes the current stage, with its duration.
 func (s *Service) closeStage(record *Record, cause string) {
+	closeStageAt(record, s.deps.Now(), cause)
+}
+
+func closeStageAt(record *Record, now time.Time, cause string) {
 	if len(record.Stages) == 0 {
 		return
 	}
@@ -483,7 +508,7 @@ func (s *Service) closeStage(record *Record, cause string) {
 	if !stage.FinishedAt.IsZero() {
 		return
 	}
-	stage.FinishedAt = s.deps.Now()
+	stage.FinishedAt = now
 	stage.DurationMS = stage.FinishedAt.Sub(stage.StartedAt).Milliseconds()
 	stage.Error = cause
 }
@@ -517,8 +542,7 @@ func (s *Service) failed(record *Record, state State, cause error) {
 			record.Installed, record.InstalledDir = nil, ""
 		}
 	}
-	s.save(record)
-	s.deps.Logf("run %s: failed at %s: %v", record.ID, state, cause)
+	s.conclude(record, fmt.Sprintf("run %s: failed at %s: %v", record.ID, state, cause))
 }
 
 func (s *Service) cancelled(record *Record) {
@@ -532,8 +556,7 @@ func (s *Service) cancelled(record *Record) {
 			record.Installed, record.InstalledDir = nil, ""
 		}
 	}
-	s.save(record)
-	s.deps.Logf("run %s: cancelled", record.ID)
+	s.conclude(record, fmt.Sprintf("run %s: cancelled", record.ID))
 }
 
 // remedyFor is what the user can do about a failure at this stage.

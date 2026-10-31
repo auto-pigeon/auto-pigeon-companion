@@ -199,17 +199,46 @@ func (e *RemedyError) Unwrap() error { return e.Err }
 var ErrNotCompilerReady = errors.New("playrun: this map's texture bundle is not compiler-ready")
 
 // Live is the set of runs this process is executing, and how to stop each.
+//
+// # An entry holds two things, and a run gives them up at different moments
+//
+// The REQUEST KEY says this build is being worked on, so asking for it again
+// is refused. It goes in [Live.publish], in one step with the record that says
+// the run ended: there is no moment at which a read says a run is over and a
+// start is told it is running, and none at which a run with nothing left to do
+// can be mistaken for one that was abandoned (NEW_371D).
+//
+// The ENTRY says a goroutine is still on its way out, so [Live.WaitIdle] has
+// something to wait for at shutdown. It goes with the goroutine, by the run's
+// own id — never by key, which by then may be somebody else's. An entry that
+// has ended excludes nobody, is not in [Live.Running], and cannot be cancelled
+// into a different outcome.
+//
+// # Lock order
+//
+// retrying, then mu, then Store.mu; never the other way. Store.mu is held only
+// across one file's write and calls nothing. Only [Live.publish] and
+// [Live.stopOr] hold mu across anything, and that is a record's read or write,
+// run by this package: no Unstage, no stage, no Logf and no Deps function is
+// ever called with mu held, so a callback can re-enter this registry freely.
 type Live struct {
 	mu      sync.Mutex
 	running map[string]liveRun
+	// retrying makes "is there a retry of this run yet?" and starting one a
+	// single step in this process, whichever Service each press arrived on
+	// (Retry). Here and not on the Service because internal/web builds a
+	// Service per request.
+	retrying sync.Mutex
 }
 
 type liveRun struct {
 	cancel context.CancelFunc
 	label  string
 	// key is the request's identity (requestKey): two live runs never share
-	// one (NEW_365).
+	// one (NEW_365). Empty once the run has ended.
 	key string
+	// ended is set with the terminal record: only the goroutine is left.
+	ended bool
 }
 
 // LiveRun is one run this process is executing, as the lifecycle names it.
@@ -251,20 +280,53 @@ func (l *Live) remove(id string) {
 	delete(l.running, id)
 }
 
-func (l *Live) lookup(id string) (context.CancelFunc, bool) {
+// publish runs write, which saves a run's terminal record, and gives up the
+// run's request, as one step. A reader can see the record the instant it is
+// renamed into place, but a start or a Cancel acting on that needs this lock,
+// and so finds the request already free.
+//
+// The request is given up whether or not the write worked: the run is over
+// either way, and a claim kept for a record that cannot be written would
+// refuse that build until the Companion restarted.
+func (l *Live) publish(id string, write func() error) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	run, ok := l.running[id]
+	err := write()
+	if run, live := l.running[id]; live {
+		run.key, run.ended = "", true
+		l.running[id] = run
+	}
 
-	return run.cancel, ok
+	return err
 }
 
-// Running lists the runs this process is executing, by id.
+// stopOr is Cancel's decision, made where a run cannot end underneath it. A
+// run still working is answered with how to stop it, which the caller calls
+// with no lock held. Any other run — ended, or never this process's — has
+// nothing here to stop, and orphan runs under the lock, ordered with
+// [Live.publish]: it either sees the terminal record or is before it, and in
+// that case a worker still exists and this branch was not taken.
+func (l *Live) stopOr(id string, orphan func() error) (context.CancelFunc, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if run, live := l.running[id]; live && !run.ended {
+		return run.cancel, nil
+	}
+
+	return nil, orphan()
+}
+
+// Running lists the runs this process is executing, by id. A run whose ending
+// is written is not one: that is what is shown and asked about at Quit, and a
+// new run of the same build is listed alone.
 func (l *Live) Running() []LiveRun {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	out := make([]LiveRun, 0, len(l.running))
 	for id, run := range l.running {
+		if run.ended {
+			continue
+		}
 		out = append(out, LiveRun{ID: id, Label: run.label})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
@@ -286,8 +348,8 @@ func (l *Live) CancelAll() {
 	}
 }
 
-// WaitIdle waits until no run is executing, or the timeout passes. It reports
-// whether every run ended.
+// WaitIdle waits until no run's goroutine is left, or the timeout passes. It
+// reports whether every one had gone.
 func (l *Live) WaitIdle(timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 	for {
@@ -309,9 +371,10 @@ type Service struct {
 	store *Store
 	deps  Deps
 	live  *Live
-	// retrying makes "is there a retry of this run yet?" and starting one a
-	// single step in this process (Retry).
-	retrying sync.Mutex
+	// cancelRead is nil outside a test: it runs after Cancel has read a record
+	// and before it acts on what it read, which is where a run can end
+	// underneath it (NEW_371D).
+	cancelRead func()
 }
 
 // NewService builds a coordinator.
@@ -398,6 +461,8 @@ func (s *Service) start(request Request, retryOf string) (*Record, error) {
 
 	go func() {
 		defer cancel()
+		// The entry, by this run's own id. Every ending already gave up the
+		// request (conclude); this is also what gives it up if one did not.
 		defer s.live.remove(id)
 		s.execute(ctx, record)
 	}()
@@ -450,21 +515,46 @@ func (s *Service) Cancel(id string) error {
 		return err
 	}
 	if record.State.Terminal() {
-		return fmt.Errorf("playrun: run %s already %s", id, record.State)
+		return alreadyEnded(record)
 	}
-	if cancel, live := s.live.lookup(id); live {
+	if s.cancelRead != nil {
+		s.cancelRead()
+	}
+	// What was just read is only a reason to ask. The run can end from here
+	// on, and a Cancel that went on acting on this read would write `cancelled`
+	// over a run that succeeded; the decision is made again in [Live.stopOr].
+	now := s.deps.Now()
+	cancel, err := s.live.stopOr(id, func() error { return s.abandon(id, now) })
+	if cancel != nil {
 		cancel()
-
-		return nil
 	}
-	// Nothing in this process is running it. That is a run a previous process
-	// left behind, and recording it as cancelled is the truthful answer: no
-	// child of this program is going to finish it.
+
+	return err
+}
+
+// abandon records as cancelled a run no goroutine of this process has, from a
+// record read now. Nothing in this process is running it: that is a run a
+// previous process left behind, or one whose ending could not be written, and
+// recording it as cancelled is the truthful answer, since no child of this
+// program is going to finish it. A run that turns out to have ended stays as
+// it ended. Called under the registry's lock: see [Live.stopOr].
+func (s *Service) abandon(id string, now time.Time) error {
+	record, err := s.store.Load(id)
+	if err != nil {
+		return err
+	}
+	if record.State.Terminal() {
+		return alreadyEnded(record)
+	}
 	record.State = Cancelled
-	record.FinishedAt = s.deps.Now()
-	s.closeStage(record, "the Companion that started this run is no longer running")
+	record.FinishedAt = now
+	closeStageAt(record, now, "the Companion that started this run is no longer running")
 
 	return s.store.Save(record)
+}
+
+func alreadyEnded(record *Record) error {
+	return fmt.Errorf("playrun: run %s already %s", record.ID, record.State)
 }
 
 // Retry starts a NEW run from a finished one.
@@ -486,8 +576,8 @@ func (s *Service) Retry(id string) (*Record, error) {
 	// Try again is pressed once per failure: a second press — another tab, a
 	// double click, a reload that replays it — is answered with the retry that
 	// already exists, never a second build of the same pinned request (NEW_363).
-	s.retrying.Lock()
-	defer s.retrying.Unlock()
+	s.live.retrying.Lock()
+	defer s.live.retrying.Unlock()
 	if records, listErr := s.store.List(); listErr == nil {
 		for _, record := range records {
 			if record.RetryOf == previous.ID {

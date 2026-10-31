@@ -3,6 +3,7 @@ package playrun_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -38,6 +39,9 @@ type harness struct {
 	verify      func(context.Context, playrun.Request, []playrun.StagedFile) error
 	launch      func(context.Context, playrun.Request) (playrun.LaunchRecord, error)
 	unstaged    int
+	// logged, when set, is told every line the coordinator logs, from the
+	// goroutine that logged it.
+	logged func(line string)
 }
 
 func newHarness(t *testing.T) *harness {
@@ -145,7 +149,15 @@ func newHarness(t *testing.T) *harness {
 
 			return nil
 		},
-		Logf: func(format string, args ...any) { t.Logf("playrun: "+format, args...) },
+		Logf: func(format string, args ...any) {
+			t.Logf("playrun: "+format, args...)
+			h.mu.Lock()
+			logged := h.logged
+			h.mu.Unlock()
+			if logged != nil {
+				logged(fmt.Sprintf(format, args...))
+			}
+		},
 	}
 	service, err := playrun.NewService(store, h.deps)
 	if err != nil {

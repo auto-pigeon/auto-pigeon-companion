@@ -18,13 +18,15 @@ func TestAFileBuildRequestIsAdmittedOnceUntilItEnds(t *testing.T) {
 	var group sync.WaitGroup
 	var mu sync.Mutex
 	admitted := 0
+	var owner *buildClaim
 	for i := 0; i < 16; i++ {
 		group.Add(1)
 		go func() {
 			defer group.Done()
-			if _, ok := runs.claim(one); ok {
+			if mine, _ := runs.claim(one); mine != nil {
 				mu.Lock()
 				admitted++
+				owner = mine
 				mu.Unlock()
 			}
 		}()
@@ -33,15 +35,15 @@ func TestAFileBuildRequestIsAdmittedOnceUntilItEnds(t *testing.T) {
 	if admitted != 1 {
 		t.Fatalf("%d of 16 concurrent presses admitted, want 1", admitted)
 	}
-	runs.named(one, "20261028T160000Z-abcdef12")
-	if held, ok := runs.claim(same); ok || held != "20261028T160000Z-abcdef12" {
-		t.Fatalf("a second tab = %q %v, want refused naming the running build", held, ok)
+	runs.named(owner, "20261028T160000Z-abcdef12")
+	if mine, held := runs.claim(same); mine != nil || runs.idOf(held) != "20261028T160000Z-abcdef12" {
+		t.Fatalf("a second tab = %v %v, want refused naming the running build", mine, held)
 	}
-	if _, ok := runs.claim(other); !ok {
+	if mine, _ := runs.claim(other); mine == nil {
 		t.Fatalf("a different request was refused")
 	}
-	runs.release(one)
-	if _, ok := runs.claim(same); !ok {
+	runs.release(owner)
+	if mine, _ := runs.claim(same); mine == nil {
 		t.Fatalf("the same build after the first ended was refused")
 	}
 }

@@ -287,6 +287,11 @@ type fixtureBackend struct {
 	// rendezvous answer 503, the way an AUB that is away does.
 	leakStatuses     []string
 	refuseLeakResult bool
+	// holdLeakResult, when set, stops the result rendezvous until it is
+	// closed, and leakResultHeld is closed when the first one gets there: a
+	// slow network, on demand (NEW_371D).
+	holdLeakResult chan struct{}
+	leakResultHeld chan struct{}
 	// failLeakStatus answers that many progress POSTs with 503 before letting
 	// one through; leakStatusPosts counts every one that arrived, refused or
 	// not, and leakStatusBodies keeps the accepted documents.
@@ -391,6 +396,19 @@ func (b *fixtureBackend) catalogFaulted() bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.catalogFault.status != 0
+}
+
+func (b *fixtureBackend) waitOutLeakResultHold() {
+	b.mu.Lock()
+	hold, held := b.holdLeakResult, b.leakResultHeld
+	b.leakResultHeld = nil
+	b.mu.Unlock()
+	if held != nil {
+		close(held)
+	}
+	if hold != nil {
+		<-hold
+	}
 }
 
 func (b *fixtureBackend) refusesLeakResult() bool {
@@ -585,6 +603,7 @@ func (b *fixtureBackend) serve(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"message":"the server is away"}`, http.StatusServiceUnavailable)
 		return
 	case strings.HasPrefix(rest, "/leak-results/") && r.Method == http.MethodPost:
+		b.waitOutLeakResultHold()
 		var result map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&result); err != nil {
 			http.Error(w, "bad result", http.StatusBadRequest)
