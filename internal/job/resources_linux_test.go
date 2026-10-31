@@ -3,9 +3,12 @@
 package job
 
 import (
+	"context"
+	"fmt"
 	"os"
 	"regexp"
 	"runtime"
+	"runtime/pprof"
 	"strconv"
 	"strings"
 	"sync"
@@ -229,6 +232,64 @@ func pidsOf(stdout string) []int {
 	return out
 }
 
+const (
+	// viewerLabel marks the goroutines this test's viewers run on. A goroutine inherits its
+	// creator's labels, so whatever a viewer's read starts carries it too.
+	viewerLabel = "many-viewers"
+	// settleBound is how long a goroutine the test expects has to appear or go. It stays
+	// under the 2.2 seconds left of the viewers' job when they finish, so anything that lasts
+	// as long as the job is still alive when this runs out.
+	settleBound = 2 * time.Second
+)
+
+func goroutineProfile(t *testing.T) string {
+	t.Helper()
+	var text strings.Builder
+	if err := pprof.Lookup("goroutine").WriteTo(&text, 1); err != nil {
+		t.Fatalf("reading the goroutine profile: %v", err)
+	}
+	return text.String()
+}
+
+// goroutinesIn counts the goroutines whose stack or labels in a profile mention marker.
+func goroutinesIn(t *testing.T, profile, marker string) int {
+	t.Helper()
+	_, blocks, _ := strings.Cut(profile, "\n") // the first line is the total
+	found := 0
+	for _, block := range strings.Split(blocks, "\n\n") {
+		if !strings.Contains(block, marker) {
+			continue
+		}
+		count, _, _ := strings.Cut(block, " @ ")
+		n, err := strconv.Atoi(count)
+		if err != nil {
+			t.Fatalf("reading a goroutine profile block %q: %v", block, err)
+		}
+		found += n
+	}
+	return found
+}
+
+// settleGoroutines polls until unsettled has nothing left to say about the profile, and fails
+// with its last word and the profile once settleBound has passed. Goroutines cannot be waited
+// for from outside, so this watches the actual state rather than sleeping and hoping.
+func settleGoroutines(t *testing.T, unsettled func(profile string) string) {
+	t.Helper()
+	start := time.Now()
+	for {
+		profile := goroutineProfile(t)
+		reason := unsettled(profile)
+		if reason == "" {
+			t.Logf("settled in %s", time.Since(start).Round(time.Microsecond))
+			return
+		}
+		if time.Since(start) > settleBound {
+			t.Fatalf("%s, still after %s:\n%s", reason, settleBound, profile)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
 func TestManyViewersShareOneSamplerAndAnEngineHasNone(t *testing.T) {
 	engine := withSessionRole(fixtureAction{
 		ID: "play_map", Title: "Play a map", Executable: "helper",
@@ -253,27 +314,50 @@ func TestManyViewersShareOneSamplerAndAnEngineHasNone(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitForState(t, h, job.ID, Running)
+	// Running is recorded from inside onStarted, and only then does the executor start the
+	// sampler, the two output readers and the waiter, in that order. A count taken here could
+	// be those four short: 8 grew to 12 with every viewer gone (NEW_371A, build job
+	// 124336092517), which settling the second count would never have cured. The waiter is the
+	// last of them, so seeing it means the baseline holds all four.
+	settleGoroutines(t, func(profile string) string {
+		if goroutinesIn(t, profile, "os/exec.(*Cmd).Wait+") != 1 {
+			return "the job's waiter has not started"
+		}
+		return ""
+	})
 	before := runtime.NumGoroutine()
 	var group sync.WaitGroup
 	for viewer := 0; viewer < 3; viewer++ {
 		group.Add(1)
-		go func() {
+		go pprof.Do(context.Background(), pprof.Labels("test", viewerLabel), func(context.Context) {
 			defer group.Done()
 			for i := 0; i < 10; i++ {
 				liveOf(t, h, job.ID)
 				time.Sleep(50 * time.Millisecond)
 			}
-		}()
+		})
 	}
 	group.Wait()
+	// Wait proves each viewer called Done, not that it has returned, so these are given
+	// settleBound. The first two are by cause: the process-wide count alone would let a
+	// harness goroutine exiting pay for a goroutine a viewer left behind.
+	settleGoroutines(t, func(profile string) string {
+		left, sampling, after := goroutinesIn(t, profile, viewerLabel), goroutinesIn(t, profile, "(*sampler).run+"), runtime.NumGoroutine()
+		switch {
+		case left != 0:
+			return fmt.Sprintf("%d goroutines a viewer ran on or started are alive", left)
+		case sampling != 1:
+			return fmt.Sprintf("%d sampler goroutines for one job read by three viewers, want 1", sampling)
+		case after > before:
+			return fmt.Sprintf("goroutines grew from %d to %d while three viewers read", before, after)
+		}
+		return ""
+	})
 	h.service.mu.Lock()
 	samplers := len(h.service.samplers)
 	h.service.mu.Unlock()
 	if samplers != 1 {
 		t.Errorf("%d samplers for one job read by three viewers, want 1", samplers)
-	}
-	if after := runtime.NumGoroutine(); after > before+1 {
-		t.Errorf("goroutines grew from %d to %d while three viewers read", before, after)
 	}
 	h.waitFor(job.ID)
 }
