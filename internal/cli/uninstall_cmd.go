@@ -174,7 +174,9 @@ func uninstallTargets(env *Env) ([]removable, error) {
 			continue
 		}
 		seen[target.Path] = true
-		target.Refused = refuseToRemove(target.Path)
+		if !config.IsBundleToolsDir(target.Path) {
+			target.Refused = refuseToRemove(target.Path)
+		}
 		if info, err := os.Stat(target.Path); err == nil && info.IsDir() {
 			target.Present = true
 			target.Bytes, target.Files = measure(target.Path)

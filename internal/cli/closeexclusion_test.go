@@ -90,3 +90,32 @@ func TestServeCoordinatesInTheBundleItRunsFrom(t *testing.T) {
 	}
 	t.Fatalf("serve did not open the bundle's coordination at %s", own)
 }
+
+// A portable bundle's build-tools is this program's own, though its name does
+// not say so; the same name anywhere else is still somebody's folder.
+func TestPurgeRemovesTheBundlesBuildToolsAndNoOtherFolderOfThatName(t *testing.T) {
+	env, _ := uninstallEnv(t)
+	own := filepath.Join(t.TempDir(), managedtools.BuildToolsDirName)
+	config.SetBundleToolsDir(own)
+	defer config.SetBundleToolsDir("")
+	t.Setenv(config.EnvToolsDir, own)
+	targets, err := uninstallTargets(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, target := range targets {
+		if target.Path == own {
+			found = true
+			if target.Refused != "" {
+				t.Fatalf("the bundle's folder was refused: %s", target.Refused)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("not listed: %+v", targets)
+	}
+	if refuseToRemove(filepath.Join(t.TempDir(), managedtools.BuildToolsDirName)) == "" {
+		t.Fatal("another folder of that name would be removed")
+	}
+}

@@ -17,6 +17,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/failure"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/noconsole"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/raisewindow"
 )
 
 // Supervision: one process, started from an argument array, watched until it
@@ -180,6 +181,10 @@ func configureLaunch(process *exec.Cmd, action profile.Action) {
 	}
 }
 
+// raiseWait bounds how long a session's window is looked for: an engine that
+// shows none by then is a console or a dedicated server.
+const raiseWait = 30 * time.Second
+
 // background: a tool job, not a session (a client, or a server people join).
 func background(action profile.Action) bool { return action.SessionRole == "" }
 
@@ -233,6 +238,10 @@ func (e *execution) run(ctx context.Context) outcome {
 		result.err = failure.As(failure.ToolUnavailable,
 			fmt.Errorf("job: starting %s: %w", filepath.Base(e.invocation.Command.Executable), err))
 		return result
+	}
+	if !background(e.action) {
+		// A game a person is about to play comes up in front of the page.
+		go raisewindow.Raise(process.Process.Pid, raiseWait)
 	}
 	// The child has its own descriptors now. Closing these is what makes the
 	// readers below see end-of-file when the last writer exits.

@@ -231,6 +231,12 @@ var bundleToolsDir string
 // configured folder still win. Empty goes back to the per-user folder.
 func SetBundleToolsDir(dir string) { bundleToolsDir = dir }
 
+// IsBundleToolsDir reports whether path is the folder [SetBundleToolsDir] named:
+// this program made it, whatever its name says.
+func IsBundleToolsDir(path string) bool {
+	return bundleToolsDir != "" && filepath.Clean(path) == filepath.Clean(bundleToolsDir)
+}
+
 // URIHandler is the record of a registered `autopigeon://` handler.
 type URIHandler struct {
 	// Executable is the program the handler was pointed at.

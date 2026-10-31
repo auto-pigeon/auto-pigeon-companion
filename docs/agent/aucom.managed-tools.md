@@ -129,6 +129,8 @@ update belongs to `NEW_368`, which consumes this coordinator and its verificatio
     folder is `<bundle>/build-tools` (`config.SetBundleToolsDir`, set in `cli.Run`), no member of the
     bundle, so a self-update leaves it. `AUCOM_TOOLS_DIR` and a configured folder still win, and a
     toolchain installed earlier stays where it is.
+    `uninstall --purge` removes that folder by path (`config.IsBundleToolsDir`): its name alone
+    would be refused, and a folder of that name anywhere else still is.
 
 11. **The Companion's own update (NEW_368) is a third target on the same coordinator**, never
     a second downloader. `managedtools.Self` is added by `Options.Self`; there is no first
