@@ -290,7 +290,7 @@ func serve(env *Env, args []string) (int, func()) {
 	// The bundle this process runs from, and how its last replacement
 	// ended: an interrupted one is rolled back here, before anything runs
 	// the converter beside it (NEW_368).
-	self := inspectSelf(env)
+	self := serveSelf(env)
 	updateLog := &selfUpdateLog{path: filepath.Join(configDir, SelfUpdateLogName)}
 	var tools *managedtools.Manager
 	var selfResults []managedtools.SelfResult
@@ -455,6 +455,7 @@ func serve(env *Env, args []string) (int, func()) {
 	if err != nil {
 		return fail(env, err), nil
 	}
+	server.SetBundle(self)
 	// Every build, Build & Run and hosted listing this process started stops
 	// with it; the job service's own Close (deferred above, so it runs after
 	// this) then stops the processes. A Companion that quits leaving a

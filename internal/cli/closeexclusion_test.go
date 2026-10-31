@@ -9,6 +9,8 @@ import (
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/config"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/managedtools"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/selfupdate"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/tooluse"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/web"
 )
 
@@ -69,4 +71,22 @@ func TestACloseDoesNotReplaceOnAToolsFolderItCannotRead(t *testing.T) {
 	if exclusion, err := exclusionForClose(server, "1.900"); err == nil || exclusion != nil {
 		t.Fatalf("nothing can be read and it goes ahead: %v %v", exclusion, err)
 	}
+}
+
+// The wiring itself, through the real `serve`: a native Windows run showed
+// v1.352 never gave the server its bundle, with every test above still green.
+func TestServeCoordinatesInTheBundleItRunsFrom(t *testing.T) {
+	bundle := t.TempDir()
+	defer func(saved func(*Env) managedtools.SelfInstall) { serveSelf = saved }(serveSelf)
+	serveSelf = func(env *Env) managedtools.SelfInstall {
+		return managedtools.SelfInstall{Version: env.Version, Mode: managedtools.SelfPortable, Root: bundle}
+	}
+	startServe(t, []string{"serve", "--interactive", "--open"}, nil)
+	own := filepath.Join(bundle, selfupdate.DirName, tooluse.DirName)
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		if _, err := os.Stat(own); err == nil {
+			return
+		}
+	}
+	t.Fatalf("serve did not open the bundle's coordination at %s", own)
 }

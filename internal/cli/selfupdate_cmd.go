@@ -63,6 +63,10 @@ func runSelfUpdate(env *Env, args []string) int {
 	return 2
 }
 
+// serveSelf is the bundle `serve` runs from; tests name one, because a test
+// binary is no bundle.
+var serveSelf = inspectSelf
+
 // inspectSelf is this process's bundle.
 func inspectSelf(env *Env) managedtools.SelfInstall {
 	executable, err := os.Executable()
