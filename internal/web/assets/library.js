@@ -538,8 +538,8 @@
 
   $("local-map-choose").addEventListener("click", (event) => withBusy(event.currentTarget, async () => {
     const message = $("local-map-message");
-    setMessage(message, "");
     const accepted = await acceptedMapExtensions();
+    setMessage(message, t("A file chooser is open. If you can't see it, look on the taskbar."));
     const { ok, status, body } = await api("/api/v1/paths/pick", {
       method: "POST",
       body: {
@@ -561,6 +561,7 @@
       showTypedPath();
       return;
     }
+    setMessage(message, "");
     await useLocalMap(body.path);
   }));
 

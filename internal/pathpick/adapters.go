@@ -191,9 +191,34 @@ func powershellAdapter() adapter {
 	}
 }
 
+// windowsRaise is what puts the dialog in front of the browser (NEW_368).
+//
+// The helper is a background process: the click was the browser's, so Windows
+// refuses it the foreground, and an unowned dialog opens behind the page that
+// asked for it. Windows does let any process change the z-order without
+// activating anything, so an invisible owner is shown first and, once the
+// dialog is its popup, one tick raises that popup through the topmost band and
+// straight back out. Nothing stays topmost, focus is not taken and no input is
+// simulated: the person's first click lands on the dialog. The timer stops
+// itself on that one tick.
+const windowsRaise = "Add-Type -Namespace AutoPigeon -Name Window -MemberDefinition " +
+	"'[DllImport(\"user32.dll\")] public static extern IntPtr GetWindow(IntPtr window, uint relation); " +
+	"[DllImport(\"user32.dll\")] public static extern bool SetWindowPos(IntPtr window, IntPtr after, int x, int y, int width, int height, uint flags);'; " +
+	"$owner = New-Object System.Windows.Forms.Form; " +
+	"$owner.ShowInTaskbar = $false; $owner.FormBorderStyle = 'None'; $owner.StartPosition = 'CenterScreen'; " +
+	"$owner.Size = New-Object System.Drawing.Size(1, 1); $owner.Opacity = 0; $owner.Show(); " +
+	"$raise = New-Object System.Windows.Forms.Timer; $raise.Interval = 150; " +
+	"$raise.add_Tick({ " +
+	"$popup = [AutoPigeon.Window]::GetWindow($owner.Handle, 6); " + // GW_ENABLEDPOPUP
+	"if ($popup -ne [IntPtr]::Zero) { $raise.Stop(); " +
+	"[void][AutoPigeon.Window]::SetWindowPos($popup, [IntPtr](-1), 0, 0, 0, 0, 0x13); " + // HWND_TOPMOST, no move, size or activation
+	"[void][AutoPigeon.Window]::SetWindowPos($popup, [IntPtr](-2), 0, 0, 0, 0, 0x13) } " + // HWND_NOTOPMOST
+	"}); $raise.Start(); "
+
 func windowsScript(request Request) (string, error) {
 	var body strings.Builder
 	body.WriteString("Add-Type -AssemblyName System.Windows.Forms; ")
+	body.WriteString(windowsRaise)
 	switch request.Kind {
 	case Directory:
 		body.WriteString("$dialog = New-Object System.Windows.Forms.FolderBrowserDialog; ")
@@ -201,7 +226,7 @@ func windowsScript(request Request) (string, error) {
 		if request.StartDir != "" {
 			body.WriteString("$dialog.SelectedPath = " + powerShellString(request.StartDir) + "; ")
 		}
-		body.WriteString("if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) " +
+		body.WriteString("if ($dialog.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) " +
 			"{ [Console]::Out.Write($dialog.SelectedPath) }")
 	case OpenFile, SaveFile:
 		control := "OpenFileDialog"
@@ -216,7 +241,7 @@ func windowsScript(request Request) (string, error) {
 		if filter := windowsFilter(request.Filters); filter != "" {
 			body.WriteString("$dialog.Filter = " + powerShellString(filter) + "; ")
 		}
-		body.WriteString("if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) " +
+		body.WriteString("if ($dialog.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) " +
 			"{ [Console]::Out.Write($dialog.FileName) }")
 	default:
 		return "", fmt.Errorf("pathpick: no Windows dialog for %q", request.Kind)

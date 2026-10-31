@@ -325,6 +325,9 @@ function pathField(options) {
 
   browse.addEventListener("click", () =>
     withBusy(browse, async () => {
+      // The chooser is another window; without this the button only looks
+      // disabled for as long as it stays open (NEW_368).
+      setMessage(status, "A file chooser is open. If you can't see it, look on the taskbar, or type the path in the box.");
       const { ok, status: code, body } = await api("/api/v1/paths/pick", {
         method: "POST",
         body: { kind, title: label, start_dir: input.value || undefined },

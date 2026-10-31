@@ -360,3 +360,28 @@ func TestTitlesAreQuotedForTheirLanguage(t *testing.T) {
 		t.Errorf("appleString = %s", got)
 	}
 }
+
+// The script's shape, for what must never creep in. Whether the dialog really
+// comes to the front is observed on Windows, through the product's own button:
+// a string test cannot say (NEW_368).
+func TestTheWindowsDialogIsRaisedOnceAndNothingStaysOnTop(t *testing.T) {
+	script, err := windowsScript(Request{Kind: OpenFile, Title: "Choose", StartDir: `C:\it's a $dir`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(script, `'C:\it''s a $dir'`) {
+		t.Fatalf("the start folder is not one quoted string: %s", script)
+	}
+	if !strings.Contains(script, "ShowDialog($owner)") {
+		t.Fatalf("the dialog has no owner: %s", script)
+	}
+	on, off := strings.Index(script, "[IntPtr](-1)"), strings.Index(script, "[IntPtr](-2)")
+	if on < 0 || off < on {
+		t.Fatalf("topmost is not undone straight after it is set: %s", script)
+	}
+	for _, never := range []string{"TopMost", "SetForegroundWindow", "SendKeys", "keybd_event", "AttachThreadInput", "SPI_SET"} {
+		if strings.Contains(script, never) {
+			t.Fatalf("the script uses %s: %s", never, script)
+		}
+	}
+}
