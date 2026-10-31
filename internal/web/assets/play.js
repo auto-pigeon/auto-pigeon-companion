@@ -727,8 +727,12 @@
   // No game can be started yet: say where that is set up, once per page.
   let askedForGame = false;
   async function askForGame() {
-    const playable = state.engines.some((engine) => Object.keys(ACTIONS).some((id) => window.AUCOM.actionReady(engine, id)));
-    if (askedForGame || playable) return;
+    if (askedForGame) return;
+    // The server's answer, not state.engines: that list can be empty only
+    // because a newer refresh threw this one's answer away.
+    const { ok, body } = await api("/api/v1/engines");
+    const playable = (body?.items || []).some((engine) => Object.keys(ACTIONS).some((id) => window.AUCOM.actionReady(engine, id)));
+    if (!ok || playable || askedForGame || $("area-play").hidden) return;
     if (document.querySelector("dialog[open]")) { window.setTimeout(askForGame, 1500); return; }
     askedForGame = true;
     const open = await window.AUCOM.confirmModal({
