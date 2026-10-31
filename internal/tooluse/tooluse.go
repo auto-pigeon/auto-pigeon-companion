@@ -65,7 +65,15 @@
 // treats a job whose process is still verifiably that process — or one it
 // cannot verify, for up to [abandonAfter] — as still using the folder.
 // Switching versions does not wait for an orphan: it rewrites only bindings,
-// and the orphan runs from absolute paths that stay on disk.
+// and the orphan runs from absolute paths that stay on disk. Replacing the
+// Companion's own bundle does ([Gate.Holders]): the user's rule is that it
+// happens with no build running, and a build's compiler is one.
+//
+// # A registry is a folder, not only a tools folder
+//
+// The Companion's bundle has a registry of its own, in its transaction folder
+// (web.BundleRegistry): two configurations with two tools folders can run from
+// one bundle, and only the bundle's own folder is shared by both.
 package tooluse
 
 import (
@@ -396,6 +404,37 @@ func (g *Gate) Users() []Use {
 	return out
 }
 
+// Holders is what replacing the Companion's bundle waits for: every live
+// lease on the gate's tool, as [Gate.Users] says, and also a dead lease whose
+// jobs' programs still run or cannot be verified not to, and a lease record
+// not yet readable. A dead lease that is verifiably over is removed here. It
+// is read after the gate is written, and an error means nothing is known: the
+// replacement must not go ahead on it.
+func (g *Gate) Holders() ([]Use, error) {
+	leases, unsettled, err := g.r.readLeases()
+	if err != nil {
+		return nil, fmt.Errorf("tooluse: reading what is running in %s: %w", g.r.dir, err)
+	}
+	var out []Use
+	for _, name := range unsettled {
+		out = append(out, Use{Label: "a build whose record " + name + " cannot be read yet"})
+	}
+	for _, lease := range leases {
+		if !contains(lease.record.Tools, g.tool) {
+			continue
+		}
+		if g.r.live(lease.record, lease.modTime) {
+			here := lease.record.Host == g.r.host && lease.record.PID == g.r.self.PID
+			out = append(out, Use{Label: "a build in " + lease.record.describe(), Here: here})
+			continue
+		}
+		if hold := g.r.orphanHold(lease); hold != "" {
+			out = append(out, Use{Label: hold})
+		}
+	}
+	return out, nil
+}
+
 // Release gives the gate up: it removes the record at the gate's path only
 // if that is still this gate. Repeating it does nothing. Should the guard
 // not come free in [guardWait], it goes on trying in the background.
@@ -484,20 +523,26 @@ func (r *Registry) References(tool, dir string) []string {
 			out = append(out, "a build in "+record.describe())
 			continue
 		}
-		switch r.orphans(record) {
-		case orphanRunning:
-			out = append(out, fmt.Sprintf("a compiler started by %s, which has ended, is still running", record.describe()))
-		case orphanUnknown:
-			if time.Since(lease.modTime) < abandonAfter {
-				out = append(out, fmt.Sprintf("a compiler started by %s, which has ended, may still be running", record.describe()))
-				continue
-			}
-			_ = os.Remove(lease.path)
-		default:
-			_ = os.Remove(lease.path)
+		if hold := r.orphanHold(lease); hold != "" {
+			out = append(out, hold)
 		}
 	}
 	return out
+}
+
+// orphanHold says what of a dead lease's work may still run, and removes the
+// lease when nothing does.
+func (r *Registry) orphanHold(lease leaseFile) string {
+	switch r.orphans(lease.record) {
+	case orphanRunning:
+		return fmt.Sprintf("a compiler started by %s, which has ended, is still running", lease.record.describe())
+	case orphanUnknown:
+		if time.Since(lease.modTime) < abandonAfter {
+			return fmt.Sprintf("a compiler started by %s, which has ended, may still be running", lease.record.describe())
+		}
+	}
+	_ = os.Remove(lease.path)
+	return ""
 }
 
 type orphanState int
@@ -537,6 +582,9 @@ func (r *Registry) orphans(record Record) orphanState {
 			}
 			running, known := job.ProcessRunning(j.Process)
 			switch {
+			case !known && lockfile.ProcessGone(j.Process.PID):
+				// No start time here (macOS, Windows): a pid that no longer
+				// exists is certainly over, as in [Registry.live].
 			case !known:
 				state = orphanUnknown
 			case running:
@@ -565,11 +613,18 @@ type leaseFile struct {
 }
 
 func (r *Registry) leases() []leaseFile {
+	leases, _, _ := r.readLeases()
+	return leases
+}
+
+// readLeases is every lease record. unsettled names a file that is there but
+// is not a record yet — one that has gone a stale period like that is not one
+// — and an error is a folder or a record this process may not read at all.
+func (r *Registry) readLeases() (leases []leaseFile, unsettled []string, err error) {
 	entries, err := os.ReadDir(r.dir)
 	if err != nil {
-		return nil
+		return nil, nil, err
 	}
-	var out []leaseFile
 	for _, entry := range entries {
 		name := entry.Name()
 		if !strings.HasPrefix(name, "use-") || !strings.HasSuffix(name, ".json") {
@@ -577,12 +632,18 @@ func (r *Registry) leases() []leaseFile {
 		}
 		path := filepath.Join(r.dir, name)
 		record, info, err := readRecord(path)
-		if err != nil {
-			continue
+		switch {
+		case err == nil:
+			leases = append(leases, leaseFile{path: path, record: record, modTime: info.ModTime()})
+		case errors.Is(err, fs.ErrNotExist):
+			// Released between the listing and the read.
+		case info == nil || errors.Is(err, fs.ErrPermission):
+			return nil, nil, err
+		case time.Since(info.ModTime()) < staleAfter:
+			unsettled = append(unsettled, name)
 		}
-		out = append(out, leaseFile{path: path, record: record, modTime: info.ModTime()})
 	}
-	return out
+	return leases, unsettled, nil
 }
 
 // Switching is nil, or the [SwitchingError] a lease on tools would get now.

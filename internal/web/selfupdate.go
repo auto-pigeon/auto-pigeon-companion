@@ -237,29 +237,27 @@ func (h selfHost) RestartForUpdate(record managedtools.InstallRecord) ([]string,
 		s.admission.reopen()
 		return nil, errors.New("this Companion has no lifecycle to stop")
 	}
-	// Other Companion processes sharing the tools folder — a `companion build
-	// run` in a terminal — run from this bundle too: the bundle's switch gate
-	// keeps new ones out and their running builds are waited for, like this
-	// process's own (01_NEW_368 §2).
-	if registry, err := s.toolRegistry(); err == nil {
-		gate, err := registry.Switch(BundleTool, "the Companion replacing itself with "+record.Version)
-		if err != nil {
-			s.admission.reopen()
-			return []string{err.Error()}, nil
-		}
-		var elsewhere []string
-		for _, use := range gate.Users() {
-			if !use.Here {
-				elsewhere = append(elsewhere, use.Label)
-			}
-		}
-		if len(elsewhere) > 0 {
-			gate.Release()
-			s.admission.reopen()
-			return elsewhere, nil
-		}
-		s.selfGate.Store(gate)
+	// Other Companion processes sharing the tools folder or this bundle — a
+	// `companion build run` in a terminal — are kept out and waited for, like
+	// this process's own builds (01_NEW_368 §2). What cannot be read is not
+	// nothing running: the update stays staged and says why (02_NEW_368).
+	exclusion, users, err := s.TakeSelfExclusion(record.Version)
+	if err != nil {
+		s.admission.reopen()
+		return []string{err.Error()}, nil
 	}
+	var elsewhere []string
+	for _, use := range users {
+		if !use.Here {
+			elsewhere = append(elsewhere, use.Label)
+		}
+	}
+	if len(elsewhere) > 0 {
+		exclusion.Release()
+		s.admission.reopen()
+		return elsewhere, nil
+	}
+	s.selfGate.Store(exclusion)
 	s.selfRestart.Store(&record)
 	s.logf("self update: admission closed, nothing running; stopping to put %s in place", record.Version)
 	s.lifecycle.Stop(ExitUpdate)
@@ -276,8 +274,8 @@ func (s *Server) SelfRestartRecord() (managedtools.InstallRecord, bool) {
 	return *record, true
 }
 
-// SelfGate hands over the bundle's switch gate "Update now" took, once.
-func (s *Server) SelfGate() *tooluse.Gate { return s.selfGate.Swap(nil) }
+// HeldSelfExclusion hands over the exclusion "Update now" took, once.
+func (s *Server) HeldSelfExclusion() *SelfExclusion { return s.selfGate.Swap(nil) }
 
 // ToolRegistry is the tools folder's cross-process coordination.
 func (s *Server) ToolRegistry() (*tooluse.Registry, error) { return s.toolRegistry() }

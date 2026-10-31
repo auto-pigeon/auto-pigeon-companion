@@ -140,9 +140,12 @@ type Server struct {
 	toolUseOnce sync.Once
 	toolUse     *tooluse.Registry
 	toolUseErr  error
-	// selfGate is the bundle's switch gate an "Update now" holds from its
+	// bundleUse is the bundle's own coordination; see [BundleRegistry].
+	bundleUse    *tooluse.Registry
+	bundleUseErr error
+	// selfGate is the exclusion an "Update now" holds from its
 	// last check until the replacement is done.
-	selfGate atomic.Pointer[tooluse.Gate]
+	selfGate atomic.Pointer[SelfExclusion]
 	// admission is the fence an "Update now" of the Companion closes;
 	// selfRestart is the staged bundle it stopped for (NEW_368).
 	admission   admission

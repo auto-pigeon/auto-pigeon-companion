@@ -143,6 +143,10 @@ func openRunner(env *Env, service *job.Service, settings config.Config) (*build.
 	if err != nil {
 		return nil, err
 	}
+	bundle, err := web.BundleRegistry(inspectSelf(env))
+	if err != nil {
+		return nil, err
+	}
 	// The same cross-process lease the server's builds take (01_NEW_368 §2):
 	// a toolchain update in a running Companion waits for this build, and
 	// this build waits — at most cliLeaseWait — for one already switching.
@@ -151,7 +155,7 @@ func openRunner(env *Env, service *job.Service, settings config.Config) (*build.
 		Dir:       dir,
 		Bindings:  binding.Lookup(bindingsPath),
 		Companion: env.Version,
-		Lease:     web.ToolLeaser(registry, "companion build run", cliLeaseWait),
+		Lease:     web.ToolLeaser(registry, bundle, "companion build run", cliLeaseWait),
 	})
 }
 

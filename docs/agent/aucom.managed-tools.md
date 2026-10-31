@@ -138,6 +138,17 @@ update belongs to `NEW_368`, which consumes this coordinator and its verificatio
     port) once every defer has run, and puts the old one back if the new one does not serve
     within 90 s. A live fixture candidate that refuses to serve is
     `AUCOM_FIXTURE_FAIL_SERVE=<version>` in an `aucom_fixture_releases` build only.
+    **No bundle is replaced while a build runs, in any process (HITL, 2026-10-30).** Every
+    pipeline holds `companion` in the tools folder's `.in-use/` and, for a portable bundle, in
+    `<bundle>/.companion-update/.in-use/` (`web.BundleRegistry`): two configurations can run
+    from one bundle with two tools folders, so the bundle is its own exclusion domain, and one
+    tools folder shared by two bundles waits too. Update now and a close take the same
+    `web.SelfExclusion` (both gates, then `Gate.Holders`), which counts a dead lease whose
+    compiler still runs or cannot be verified gone (at most `abandonAfter`). Anything that
+    cannot be read means waiting, with the reason shown, never going ahead. It is held from
+    the last look until the new Companion serves or the old one is back, because a rollback
+    changes the bundle too. A close that finds work leaves the update chosen and the app
+    closed; a Quit with `now` chosen leaves it for the next start. Staging never waits.
 
 12. **The self-update transaction is write-ahead and reconciled by bytes (01_NEW_368).** The
     journal (`aucom.self-update-journal/2`) is written once, before anything moves, with every

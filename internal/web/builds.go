@@ -425,6 +425,9 @@ func (s *Server) buildRunner(announce func(*build.Manifest)) (*build.Runner, err
 	if err != nil {
 		return nil, err
 	}
+	if s.bundleUseErr != nil {
+		return nil, s.bundleUseErr
+	}
 	return build.New(build.Options{
 		Service:   service,
 		Dir:       dir,
@@ -432,7 +435,7 @@ func (s *Server) buildRunner(announce func(*build.Manifest)) (*build.Runner, err
 		Companion: s.version,
 		Announce:  announce,
 		Hold:      s.toolGate.hold,
-		Lease:     ToolLeaser(registry, "companion serve "+s.version, leaseWait),
+		Lease:     ToolLeaser(registry, s.bundleUse, "companion serve "+s.version, leaseWait),
 	})
 }
 

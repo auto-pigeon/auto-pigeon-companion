@@ -680,36 +680,66 @@ func replaceSelfAtExit(server *web.Server, tools *managedtools.Manager, self man
 		relaunch = nil
 		record, ok = server.SelfAtExit(false)
 	}
+	exclusion := server.HeldSelfExclusion()
 	if !ok {
+		exclusion.Release()
 		return nil
 	}
-	// The bundle's switch gate: "Update now" took it at its last check; a
-	// close takes it here. A build another Companion process is running from
-	// this bundle keeps the update chosen for the next close (01_NEW_368 §2).
-	gate := server.SelfGate()
-	if gate == nil {
-		if registry, err := server.ToolRegistry(); err == nil {
-			gate, err = registry.Switch(web.BundleTool, "the Companion replacing itself with "+record.Version)
-			if err != nil {
-				log.logf("exit: %s not installed: %v; it stays chosen", record.Version, err)
-				return nil
-			}
-			var busy []string
-			for _, use := range gate.Users() {
-				busy = append(busy, use.Label)
-			}
-			if len(busy) > 0 {
-				gate.Release()
-				log.logf("exit: %s not installed: it waits for %s; it stays chosen", record.Version, strings.Join(busy, "; "))
-				return nil
-			}
+	// Not installed now: a close stays closed, and "Update now" comes back
+	// and goes on waiting.
+	notNow := func() func() {
+		if relaunch == nil {
+			return nil
+		}
+		return func() { startCompanion(self.Executable, relaunch, log) }
+	}
+	// The exclusion: "Update now" took it at its last check; a close takes it
+	// here. A build another Companion process is running from this bundle or
+	// tools folder keeps the update chosen for the next close, and so does not
+	// being able to tell (01_NEW_368 §2, 02_NEW_368).
+	if exclusion == nil {
+		var err error
+		if exclusion, err = exclusionForClose(server, record.Version); err != nil {
+			log.logf("exit: %s not installed: %v; it stays chosen", record.Version, err)
+			return notNow()
 		}
 	}
-	if gate != nil {
-		defer gate.Release()
+	if !exclusion.Held() {
+		exclusion.Release()
+		log.logf("exit: %s not installed: another Companion took over its gate; it stays chosen", record.Version)
+		return notNow()
 	}
 	logf("self update: installing %s as this Companion closes (log: %s)", record.Version, log.path)
-	return replaceSelf(self, record, tools.Root(), configDir, relaunch, log, server.RecordSelfResult)
+	after := replaceSelf(self, record, tools.Root(), configDir, relaunch, log, server.RecordSelfResult)
+	if after == nil {
+		exclusion.Release()
+		return nil
+	}
+	// Held until the new Companion serves or the old one is back: that is the
+	// last moment the bundle's files can change.
+	return func() {
+		defer exclusion.Release()
+		after()
+	}
+}
+
+// exclusionForClose takes the exclusion for a replacement as this process
+// closes, when every build of its own has ended: anything still there, or
+// not being able to tell, is why not.
+func exclusionForClose(server *web.Server, version string) (*web.SelfExclusion, error) {
+	exclusion, users, err := server.TakeSelfExclusion(version)
+	if err != nil {
+		return nil, err
+	}
+	if len(users) > 0 {
+		exclusion.Release()
+		var busy []string
+		for _, use := range users {
+			busy = append(busy, use.Label)
+		}
+		return nil, fmt.Errorf("it waits for %s", strings.Join(busy, "; "))
+	}
+	return exclusion, nil
 }
 
 // listenerPort is the port a listener bound.
