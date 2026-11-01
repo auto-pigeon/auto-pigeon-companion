@@ -163,4 +163,4 @@ NEW_365: `testdata/playjourney.js` (Checking setup…, a held plan answer never 
 beside it, two fast presses → one run), `testdata/hostjourney.js` (the listing dialog: Cancel starts nothing),
 `testdata/liveline.check.mjs`, `testdata/buildreview.check.mjs`, `internal/playrun/new365_test.go`,
 `internal/autobuild/new365_test.go`, `TestAFileBuildRequestIsAdmittedOnceUntilItEnds`.
-NEW_374: `testdata/configuregame.js` (`TestConfigureAGameFollowsTheInstallWindowInABrowser`, ten pages in a real browser).
+NEW_374: `testdata/configuregame.js` (`TestConfigureAGameFollowsTheInstallWindowInABrowser`, eleven pages in a real browser).

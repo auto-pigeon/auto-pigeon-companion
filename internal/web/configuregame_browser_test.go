@@ -16,7 +16,7 @@ func TestConfigureAGameFollowsTheInstallWindowInABrowser(t *testing.T) {
 	}
 	for _, scenario := range []string{
 		"after-install", "open-profiles", "install-cancelled", "install-failed", "left-while-installing",
-		"stale-answer", "configured-elsewhere", "changed-request", "other-dialog",
+		"stale-answer", "configured-elsewhere", "changed-request", "other-dialog", "notice-waits",
 	} {
 		t.Run(scenario, func(t *testing.T) {
 			m := newToolsMachineAsking(t)

@@ -164,9 +164,14 @@
 
   // The notice once everything a press of Install asked for is in place.
   async function tellInstalled() {
-    if (!installing.length || document.querySelector("dialog[open]")) return;
+    if (!installing.length) return;
     const tools = (status?.tools || []).filter((tool) => installing.includes(tool.id));
     if (tools.some((tool) => tool.phase !== "ready" && tool.phase !== "failed" && tool.phase !== "unsupported")) return;
+    const other = document.querySelector("dialog[open]");
+    if (other) {
+      other.addEventListener("close", () => tellInstalled(), { once: true });
+      return;
+    }
     const done = tools.some((tool) => tool.phase === "ready");
     installing = [];
     if (done) {

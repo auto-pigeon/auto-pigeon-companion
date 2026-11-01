@@ -254,6 +254,21 @@
       record("it follows the one that was open", times(CONFIGURE) === 1, `shown ${times(CONFIGURE)} time(s)`);
     },
 
+    // The install ends under another question: the notice waits for it.
+    async "notice-waits"() {
+      press(await waitFor(`"${INSTALL}"`, () => dialogNamed(INSTALL)), "Install");
+      await waitFor("the install to be accepted", () => window.AUCOM.toolsStatus()?.setting_up);
+      window.AUCOM.confirmModal({ title: "Another question", body: "One at a time.", confirm: "Yes", cancel: "No" });
+      await control("tools-step");
+      await waitFor("the tools to be in", () => window.AUCOM.toolsStatus()?.tools?.every((tool) => tool.phase === "ready"));
+      await sleep(300);
+      record("the notice does not open over another", openDialogs().length === 1, `open: ${openDialogs().map(titleOf).join(", ")}`);
+      press(dialogNamed("Another question"), "No");
+      press(await installed(), "OK");
+      await waitFor(`"${CONFIGURE}" after the notice`, () => dialogNamed(CONFIGURE));
+      record("the order holds", seen.join(" > ").endsWith(`Another question > ${INSTALLED} > ${CONFIGURE}`), seen.join(" > "));
+    },
+
     // Nothing to install: asked at once, as before.
     async "nothing-to-install"() {
       await waitFor(`"${CONFIGURE}"`, () => dialogNamed(CONFIGURE));
