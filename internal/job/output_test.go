@@ -2,6 +2,8 @@ package job
 
 import (
 	"bytes"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -215,6 +217,102 @@ func TestARewrittenLogResetsTheReaderRatherThanSkippingIt(t *testing.T) {
 	}
 	if !sawFirst || !sawReset {
 		t.Errorf("first pass seen = %v, reset seen = %v; a shorter file must restart the reader", sawFirst, sawReset)
+	}
+}
+
+// A rewrite job held between its two passes and let go by the test, with the
+// record a reader loaded while it ran: the schedule of Windows CI build
+// 41236212023 (NEW_374 L7a), which was neither a sharing violation nor the
+// rewrite. The reader had a Running record, the job ended, and the workspace
+// went between looking at run.log and opening it: "cannot find the file".
+func endedRewriteJob(t *testing.T, keep bool) (*harness, *Job, OutputSource) {
+	t.Helper()
+	action := fixtureAction{
+		ID: "rewrite", Title: "Rewrite", Executable: "helper",
+		Args: []any{helperFlag, "sidecar-rewrite", "{output.log}", "400"},
+		Outputs: []map[string]any{
+			{"name": "log", "title": "Log", "role": "test.run.log", "path": "run.log", "optional": true},
+		},
+		Roots:   []map[string]any{{"role": "workspace", "access": "read_write", "purpose": "write"}},
+		Timeout: 60,
+	}
+	h := newHarness(t, fixtureProfile(t, "test.output.ended", action), func(o *Options) { o.KeepWorkspace = keep })
+	submitted, err := h.service.Submit(h.helperRequest("test.output.ended", "rewrite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stale := waitForState(t, h, submitted.ID, Running)
+	waitForState(t, h, submitted.ID, Succeeded)
+	return h, stale, OutputSource{ID: sidecarPrefix + "log", Kind: OutputSidecar}
+}
+
+func TestALogThatGoesAsItsJobEndsIsReadFromItsArtifact(t *testing.T) {
+	const final = "second pass\n"
+	for name, test := range map[string]struct {
+		keep  bool // the workspace is still there when the reader looks
+		open  func(string) (*os.File, error)
+		start int64
+		text  string
+		reset bool
+	}{
+		// Gone between the look and the open, which is what CI saw.
+		"gone between the look and the open, mid file": {keep: true, start: 7, text: "pass\n", open: func(path string) (*os.File, error) {
+			if strings.Contains(path, "workspace") {
+				_ = os.Remove(path)
+			}
+			return openShared(path)
+		}},
+		// Past the end of what was published: the second pass made it shorter,
+		// so this is still a rewrite, and still said to be one.
+		"gone between the look and the open, past the end": {keep: true, start: 640, text: final, reset: true, open: func(path string) (*os.File, error) {
+			if strings.Contains(path, "workspace") {
+				_ = os.Remove(path)
+			}
+			return openShared(path)
+		}},
+		// Gone before the look: the same record, a moment later.
+		"gone before the look": {start: 7, text: "pass\n"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h, stale, source := endedRewriteJob(t, test.keep)
+			if test.open != nil {
+				h.service.openSidecar = test.open
+			}
+			chunk := &OutputChunk{}
+			raw, err := h.service.readSidecar(stale, source, test.start, DefaultOutputChunk, chunk)
+			if err != nil {
+				t.Fatalf("a job that ended under the reader is a read error: %v", err)
+			}
+			if string(raw) != test.text || chunk.Reset != test.reset || chunk.Size != int64(len(final)) {
+				t.Errorf("read %q reset=%v size=%d; want %q reset=%v size=%d",
+					raw, chunk.Reset, chunk.Size, test.text, test.reset, len(final))
+			}
+		})
+	}
+}
+
+// What is wrong with a log stays said: only a file that is not there is an
+// answer, and a tool that took its log away has made the reader start again.
+func TestALogThatCannotBeReadIsAnError(t *testing.T) {
+	refused := errors.New("the file is locked for good")
+	h, stale, source := endedRewriteJob(t, true)
+	for name, cause := range map[string]error{
+		"no permission": &fs.PathError{Op: "open", Path: "run.log", Err: fs.ErrPermission},
+		"anything else": refused,
+	} {
+		h.service.openSidecar = func(string) (*os.File, error) { return nil, cause }
+		chunk := &OutputChunk{}
+		if _, err := h.service.readSidecar(stale, source, 0, DefaultOutputChunk, chunk); !errors.Is(err, cause) {
+			t.Errorf("%s: the reader answered %v", name, err)
+		}
+	}
+	// Still running, and its log is gone: nothing to read, and the place in
+	// the file no longer means anything.
+	h.service.openSidecar = func(string) (*os.File, error) { return nil, fs.ErrNotExist }
+	chunk := &OutputChunk{}
+	raw, err := h.service.readSidecar(stale, source, 640, DefaultOutputChunk, chunk)
+	if err != nil || len(raw) != 0 || !chunk.Reset || chunk.Offset != 0 {
+		t.Errorf("a log the tool took away reads %q %+v, %v", raw, chunk, err)
 	}
 }
 

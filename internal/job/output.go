@@ -407,9 +407,8 @@ func (s *Service) sidecarPath(j *Job, sidecar SidecarLog) (string, error) {
 	return "", last
 }
 
-// readSidecar reads a transcript the tool is still writing.
-func (s *Service) readSidecar(j *Job, source OutputSource, offset int64, max int, chunk *OutputChunk) ([]byte, error) {
-	name := strings.TrimPrefix(source.ID, sidecarPrefix)
+// openSidecarLog opens a declared transcript where it is now.
+func (s *Service) openSidecarLog(j *Job, name string) (*os.File, error) {
 	var sidecar SidecarLog
 	for _, candidate := range j.SidecarLogs {
 		if candidate.Name == name {
@@ -417,18 +416,38 @@ func (s *Service) readSidecar(j *Job, source OutputSource, offset int64, max int
 		}
 	}
 	path, err := s.sidecarPath(j, sidecar)
+	if err != nil {
+		return nil, err
+	}
+	file, err := s.openSidecar(path)
+	if err != nil {
+		return nil, fmt.Errorf("job: reading %s: %w", filepath.Base(path), err)
+	}
+	return file, nil
+}
+
+// readSidecar reads a transcript the tool is still writing.
+func (s *Service) readSidecar(j *Job, source OutputSource, offset int64, max int, chunk *OutputChunk) ([]byte, error) {
+	name := strings.TrimPrefix(source.ID, sidecarPrefix)
+	file, err := s.openSidecarLog(j, name)
+	if errors.Is(err, fs.ErrNotExist) && !j.State.Terminal() {
+		// The record was read while the job ran, and it may have ended since:
+		// a finished job's workspace goes, on every platform, and what the
+		// reader wants is the artifact it was copied to (NEW_374).
+		if current, loadErr := s.store.Load(j.ID); loadErr == nil && current.State.Terminal() {
+			file, err = s.openSidecarLog(current, name)
+		}
+	}
 	if errors.Is(err, fs.ErrNotExist) {
 		// Declared and not created yet — a tool creates its log when it gets
-		// to it. Nothing to read is an answer, not an error.
+		// to it — or taken away, which starts the reader again. Nothing to
+		// read is an answer, not an error.
+		chunk.Reset = offset > 0
 		chunk.Offset, chunk.Size = 0, 0
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
-	}
-	file, err := openShared(path)
-	if err != nil {
-		return nil, fmt.Errorf("job: reading %s: %w", filepath.Base(path), err)
 	}
 	defer file.Close()
 	info, err := file.Stat()

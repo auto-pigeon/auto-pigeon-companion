@@ -87,6 +87,8 @@ type Options struct {
 
 // Service is the job runtime.
 type Service struct {
+	// openSidecar opens a transcript another process may be writing.
+	openSidecar func(path string) (*os.File, error)
 	store       *Store
 	catalog     Catalog
 	bindings    BindingLookup
@@ -171,6 +173,7 @@ func NewService(options Options) (*Service, error) {
 		lookupEnv:    options.LookupEnv,
 		now:          options.Now,
 		keep:         options.KeepWorkspace,
+		openSidecar:  openShared,
 		logf:         options.Logf,
 		onFinished:   options.OnFinished,
 		recordFacts:  options.RecordFacts,
