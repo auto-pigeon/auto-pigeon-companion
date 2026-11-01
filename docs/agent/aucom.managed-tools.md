@@ -178,7 +178,9 @@ update belongs to `NEW_368`, which consumes this coordinator and its verificatio
     closes the old Companion first. Abrupt process death is PROVEN (children killed at every
     boundary, `internal/selfupdate/crash_test.go`); power loss is argued from fsync ordering, not
     tested. An "Update now" or a close also takes the `companion` switch gate and waits for other
-    processes' leases.
+    processes' leases. `Reason` is why a rollback began and every later pass keeps it, so a start
+    that finishes an interrupted rollback says what began it; `recoverSelfAtStart` prints that and
+    the recorded starts, and never infers "unready" from a rollback (NEW_374).
 
 13. **A migration bridge is the only way an older updater crosses to a MapIO-only release, and it is not a
     release (`NEW_371A`, ADR-0011).** Self-update exists in v1.323, 1.325, 1.332, 1.334 and 1.336; every older

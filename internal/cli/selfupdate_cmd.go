@@ -319,12 +319,14 @@ func recoverSelfAtStart(self managedtools.SelfInstall, log *selfUpdateLog, recor
 			self.Root, err, filepath.Base(self.Executable), selfupdate.RecoverCommand)
 	case selfupdate.RolledBack:
 		record(managedtools.SelfResult{From: journal.From, To: journal.To, Outcome: "rolled_back", Detail: journal.Detail, At: time.Now().UTC()})
-		log.logf("start: %s -> %s rolled back: %s", journal.From, journal.To, journal.Detail)
+		log.logf("start: %s -> %s rolled back after %d recorded start(s): %s", journal.From, journal.To, journal.Starts, journal.Detail)
 		if sha != journal.FromSHA256 {
 			// This process is the new program that was just taken out: what
-			// is in the folder now is the previous one, which it is not.
-			return nil, fmt.Errorf("version %s was taken back out after %d starts that never became ready; start the Companion again to run %s",
-				self.Version, journal.Starts, journal.From)
+			// is in the folder now is the previous one, which it is not. The
+			// journal says why: an interrupted update never got to prove
+			// anything, and a Companion that failed its readiness did.
+			return nil, fmt.Errorf("version %s was taken back out after %d recorded start(s): %s; start the Companion again to run %s",
+				self.Version, journal.Starts, journal.Detail, journal.From)
 		}
 	case selfupdate.Pending:
 		return func() {

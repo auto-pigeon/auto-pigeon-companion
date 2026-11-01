@@ -143,19 +143,23 @@ type Step struct {
 type Journal struct {
 	Schema string `json:"schema"`
 	// ID names this replacement; the folders it discards carry it.
-	ID         string    `json:"id,omitempty"`
-	From       string    `json:"from"`
-	To         string    `json:"to"`
-	FromSHA256 string    `json:"from_sha256"`
-	ToSHA256   string    `json:"to_sha256"`
-	Companion  string    `json:"companion"`
-	State      State     `json:"state"`
-	Members    []Member  `json:"members,omitempty"`
-	Steps      []Step    `json:"steps,omitempty"`
-	Starts     int       `json:"starts,omitempty"`
-	Detail     string    `json:"detail,omitempty"`
-	Started    time.Time `json:"started"`
-	Updated    time.Time `json:"updated"`
+	ID         string   `json:"id,omitempty"`
+	From       string   `json:"from"`
+	To         string   `json:"to"`
+	FromSHA256 string   `json:"from_sha256"`
+	ToSHA256   string   `json:"to_sha256"`
+	Companion  string   `json:"companion"`
+	State      State    `json:"state"`
+	Members    []Member `json:"members,omitempty"`
+	Steps      []Step   `json:"steps,omitempty"`
+	Starts     int      `json:"starts,omitempty"`
+	Detail     string   `json:"detail,omitempty"`
+	// Reason is why a rollback began, in the words of what found it. The pass
+	// that finishes one another pass began keeps it: an interrupted rollback
+	// of a Companion that failed its proving start is still that failure.
+	Reason  string    `json:"reason,omitempty"`
+	Started time.Time `json:"started"`
+	Updated time.Time `json:"updated"`
 }
 
 // Request is one replacement. Every field comes from the running process's
@@ -748,6 +752,13 @@ func (t transaction) abandon(detail string) error {
 // what is where; it never records StateRolledBack it has not checked.
 func (t transaction) rollback(detail string) error {
 	journal := t.journal
+	if journal.Reason == "" {
+		journal.Reason = detail
+		if journal.State == StateRollingBack && journal.Detail != "" {
+			journal.Reason = journal.Detail // written before Reason existed
+		}
+	}
+	detail = journal.Reason
 	if journal.Schema == legacySchema {
 		return t.legacyRollback(detail)
 	}
