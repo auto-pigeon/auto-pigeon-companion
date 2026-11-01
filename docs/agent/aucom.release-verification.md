@@ -251,3 +251,5 @@ the real-browser close step (`AUCOM_TEST_BROWSER` names a browser it does not fi
 `acceptance/run-acceptance.sh` (`acceptance\run-acceptance.ps1 -Companion …\companion.exe` on
 Windows) is the native kit for hardware CI does not have: it runs from a checkout against an
 unpacked archive and writes a result bundle to send back.
+`--tool-path` / `-ToolPath` takes the folder an EricW release unpacks to or the `bin` folder inside it, and
+`acquire resolve` decides which: nothing else is looked at, so a compiler elsewhere is never picked up (NEW_374).

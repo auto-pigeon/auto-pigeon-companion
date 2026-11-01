@@ -347,17 +347,38 @@ func (r *run) laneToolchain(ctx context.Context) Lane {
 			"no --tool-path was given, so there is no build to bind"))
 		return lane
 	}
+	folder, refused := r.toolFolder(ctx, document)
+	if refused != "" {
+		add(failed("an EricW build the operator already has is bound by user_path", refused))
+		return lane
+	}
 	bind := r.exec(ctx, 300*time.Second, "acquire", "resolve", document,
-		"--mode", "user_path", "--user-path", r.options.ToolPath, "--bind")
+		"--mode", "user_path", "--user-path", folder, "--bind")
 	if bind.code == 0 {
 		r.compilersBound = true
 		add(pass("an EricW build the operator already has is bound by user_path",
-			"the operator named the directory; nothing was downloaded"))
+			"the operator named the directory ("+r.redact.Line(folder)+"); nothing was downloaded"))
 	} else {
 		add(failed("an EricW build the operator already has is bound by user_path",
 			r.redact.Line(bind.output())))
 	}
 	return lane
+}
+
+// toolFolder is where the build --tool-path names has its programs: that
+// folder, or its bin folder, which is where an official archive keeps them. The
+// one resolver a profile binds through decides, and these two are all it is
+// asked about: not finding a compiler there never finds another one.
+func (r *run) toolFolder(ctx context.Context, document string) (folder, refused string) {
+	var reasons []string
+	for _, candidate := range []string{r.options.ToolPath, filepath.Join(r.options.ToolPath, "bin")} {
+		found := r.exec(ctx, 60*time.Second, "acquire", "resolve", document, "--mode", "user_path", "--user-path", candidate)
+		if found.code == 0 {
+			return candidate, ""
+		}
+		reasons = append(reasons, r.redact.Line(found.output()))
+	}
+	return "", "--tool-path names a folder with no complete EricW build, in it or in its bin folder: " + strings.Join(reasons, "; ")
 }
 
 func shortDigest(digest string) string {

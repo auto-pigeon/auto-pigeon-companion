@@ -41,7 +41,8 @@ type Options struct {
 	// program, and ChecksumDetail is its one-line account of it.
 	ChecksumsVerified State
 	ChecksumDetail    string
-	// ToolPath is a directory holding an EricW build the operator already has.
+	// ToolPath is an EricW build the operator already has: the folder its
+	// programs are in, or the folder above that bin folder.
 	ToolPath string
 	// EngineRoot is the engine executable the operator supplied.
 	EngineRoot string

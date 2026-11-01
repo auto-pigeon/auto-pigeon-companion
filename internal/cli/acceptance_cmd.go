@@ -39,7 +39,7 @@ run flags:
   --artifact-dir <dir>     the unpacked release directory (default: beside this program)
   --only <a,b>             run only these lanes
   --skip <a,b>             run everything but these lanes
-  --tool-path <dir>        a directory holding an EricW build you already have
+  --tool-path <dir>        an EricW build you already have: its folder or the bin folder inside it
   --json                   print the bundle to stdout as well
 
 owned game (both are needed, and neither has a default):
@@ -96,7 +96,7 @@ func acceptanceRun(env *Env, args []string) int {
 	artifactDir := set.String("artifact-dir", "", "the unpacked release directory")
 	only := set.String("only", "", "run only these lanes")
 	skip := set.String("skip", "", "run everything but these lanes")
-	toolPath := set.String("tool-path", "", "a directory holding an EricW build you already have")
+	toolPath := set.String("tool-path", "", "an EricW build you already have: its folder or the bin folder inside it")
 	enginePath := set.String("engine", "", "an engine executable you already have")
 	gameRoot := set.String("game-root", "", "a game installation you already own")
 	gameFamily := set.String("game-family", "quake1", "quake1, quake2 or quake3")

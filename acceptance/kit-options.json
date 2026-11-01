@@ -16,7 +16,7 @@
       "name": "--tool-path",
       "takes_value": true,
       "forwarded": true,
-      "summary": "the ROOT of an EricW build you already have; the profile finds bin/qbsp under it"
+      "summary": "an EricW build you already have: the folder with qbsp in it, or the folder above that bin folder; no other compiler is looked for"
     },
     {
       "name": "--engine",

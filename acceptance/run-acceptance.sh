@@ -47,7 +47,7 @@ skip=""
 usage() {
     printf 'usage: run-acceptance.sh [options]\n\n' >&2
     printf '  --out <dir>           where the result bundle is written\n' >&2
-    printf '  --tool-path <dir>     the ROOT of an EricW build you already have\n' >&2
+    printf '  --tool-path <dir>     an EricW build you already have: its folder or its bin folder\n' >&2
     printf '  --engine <path>       an engine executable you already have\n' >&2
     printf '  --game-root <dir>     a game installation you already own\n' >&2
     printf '  --game-family <name>  quake1 (default), quake2 or quake3\n' >&2

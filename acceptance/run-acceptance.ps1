@@ -63,7 +63,7 @@ function Show-Usage {
     Write-Host "usage: run-acceptance.ps1 [options]"
     Write-Host ""
     Write-Host "  -Out <dir>           where the result bundle is written"
-    Write-Host "  -ToolPath <dir>      the ROOT of an EricW build you already have"
+    Write-Host "  -ToolPath <dir>      an EricW build you already have: its folder or its bin folder"
     Write-Host "  -Engine <path>       an engine executable you already have"
     Write-Host "  -GameRoot <dir>      a game installation you already own"
     Write-Host "  -GameFamily <name>   quake1 (default), quake2 or quake3"
