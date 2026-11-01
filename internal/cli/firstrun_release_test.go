@@ -368,6 +368,10 @@ func (f *firstRun) answerInBrowser(answer string) (consentReport, bool) {
 		"--no-first-run", "--no-default-browser-check", "--disable-extensions", "--disable-background-networking",
 		"--disable-component-update", "--password-store=basic", "--window-size=1280,900", "--user-data-dir="+profileDir, front.URL+"/")
 	command.WaitDelay = 15 * time.Second
+	// A pipe, so Wait lasts until the helpers sharing it have gone and the
+	// profile can be removed (browser_test.go stopBrowser).
+	var browserOutput strings.Builder
+	command.Stdout, command.Stderr = &browserOutput, &browserOutput
 	if err := command.Start(); err != nil {
 		t.Skipf("could not start %s: %v", browser, err)
 	}
