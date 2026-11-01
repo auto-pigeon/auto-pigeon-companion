@@ -393,7 +393,6 @@ func TestAnExpiredSessionAsksForSignInAndTheSameRequestThenResolves(t *testing.T
 					token = expired
 				}
 				m.server.aubClient().SetToken(token)
-				served := m.backend.count()
 				status, body := m.call(http.MethodGet, "/api/v1/leak-test/pending?request_id="+link.RequestID, nil)
 				if status != http.StatusOK || body["sign_in_required"] != true || body["request_id"] != link.RequestID || body["source_ref"] != nil {
 					t.Fatalf("the %s session: %d %v", kind, status, body)
@@ -412,8 +411,10 @@ func TestAnExpiredSessionAsksForSignInAndTheSameRequestThenResolves(t *testing.T
 				case kind == "expired" && arrived != nil:
 					// Whatever reached AUB while the expired session was the
 					// session, it was not a new request: the only POST there is
-					// is the older one, still held.
-					if got := m.backend.count() - served; got != 0 {
+					// is the older one, still held. Counted by the session each
+					// request carried: the refused session's handoff ack is its
+					// own goroutine, and arrives here when it arrives.
+					if got := m.backend.countWith(expired); got != 0 {
 						t.Fatalf("the expired session made %d request(s) to the account server", got)
 					}
 					release()

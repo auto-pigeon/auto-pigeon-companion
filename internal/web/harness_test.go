@@ -256,6 +256,8 @@ type fixtureBackend struct {
 	// disk rather than going back to the network.
 	mu     sync.Mutex
 	served int
+	// servedWith counts them by the session they carried.
+	servedWith map[string]int
 
 	// games, when set, answers the hosted-game, game-profile and profile
 	// catalogue routes (244F). See games_test.go.
@@ -441,6 +443,13 @@ func (b *fixtureBackend) count() int {
 	return b.served
 }
 
+// countWith is how many requests carried this session.
+func (b *fixtureBackend) countWith(token string) int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.servedWith[token]
+}
+
 func newFixtureBackend(t *testing.T) *fixtureBackend {
 	t.Helper()
 	backend := &fixtureBackend{
@@ -474,6 +483,10 @@ func (b *fixtureBackend) savedAPMap(game string) {
 func (b *fixtureBackend) serve(w http.ResponseWriter, r *http.Request) {
 	b.mu.Lock()
 	b.served++
+	if b.servedWith == nil {
+		b.servedWith = map[string]int{}
+	}
+	b.servedWith[r.Header.Get("Authorization")]++
 	b.mu.Unlock()
 	write := func(body any) {
 		w.Header().Set("Content-Type", "application/json")
