@@ -89,9 +89,35 @@
   //
   // Nothing is downloaded until a person says so (HITL, 2026-10-31). The page
   // asks once per browser session; Cancel leaves Profiles' Install buttons.
+  //
+  // The Install window, the download it starts and the notice that ends it are
+  // one interaction. Whoever comes next asks installSettled how it ended, and
+  // is answered when it has: nothing polls for a dialog to go away.
 
   let asking = false;
   let installing = [];
+  let interaction = null;
+  let settleInteraction = () => {};
+  let ended = { outcome: "none", moves: -1 };
+  let settleFirstLook = () => {};
+  const firstLook = new Promise((resolve) => { settleFirstLook = resolve; });
+
+  function endInteraction(outcome) {
+    const settle = settleInteraction;
+    interaction = null;
+    settleInteraction = () => {};
+    ended = { outcome, moves: window.AUCOM.areaMoves };
+    settle(outcome);
+  }
+
+  // How the interaction ended: "installed", "declined" or "failed", or "none"
+  // when there was none since the person last moved to another area. Answers
+  // once the page knows: the tools' first status decides what is asked first.
+  window.AUCOM.installSettled = async () => {
+    await firstLook;
+    if (interaction) return interaction;
+    return ended.moves === window.AUCOM.areaMoves ? ended.outcome : "none";
+  };
 
   function declined() {
     try { return window.sessionStorage.getItem("aucom-tools-declined") === "1"; } catch { return asking; }
@@ -104,13 +130,21 @@
   async function install(ids) {
     installing = ids;
     const { ok, body } = await api("/api/v1/tools/install", { method: "POST", body: { tools: ids } });
-    if (ok) apply(body); else setMessage("tools-setup-message", body.error || "", "error");
+    if (ok) {
+      apply(body);
+      schedule(FAST_MS);
+    } else {
+      installing = [];
+      setMessage("tools-setup-message", body.error || "", "error");
+    }
+    return ok;
   }
 
   async function askToInstall() {
     const waiting = (status?.tools || []).filter((tool) => tool.awaiting_install);
     if (asking || !waiting.length || declined() || document.querySelector("dialog[open]")) return;
     asking = true;
+    interaction = new Promise((resolve) => { settleInteraction = resolve; });
     const yes = await window.AUCOM.confirmModal({
       title: t("Install the Auto-Pigeon build tools"),
       body: t("The Companion is about to install these programs from GitHub. They are highly recommended for building maps made with Auto-Pigeon: most advanced features produce geometry that other tools may not be able to process."),
@@ -120,21 +154,28 @@
       confirm: t("Install"), cancel: t("Cancel"),
     });
     asking = false;
-    if (yes) await install(waiting.map((tool) => tool.id)); else decline();
+    if (!yes) {
+      decline();
+      endInteraction("declined");
+    } else if (!await install(waiting.map((tool) => tool.id))) {
+      endInteraction("failed");
+    }
   }
 
   // The notice once everything a press of Install asked for is in place.
-  function tellInstalled() {
-    if (!installing.length) return;
+  async function tellInstalled() {
+    if (!installing.length || document.querySelector("dialog[open]")) return;
     const tools = (status?.tools || []).filter((tool) => installing.includes(tool.id));
     if (tools.some((tool) => tool.phase !== "ready" && tool.phase !== "failed" && tool.phase !== "unsupported")) return;
     const done = tools.some((tool) => tool.phase === "ready");
     installing = [];
-    if (!done) return;
-    window.AUCOM.confirmModal({
-      title: t("Build tools installed"), body: t("The build tools were installed in this folder:"),
-      content: [el("p", { children: [el("code", { text: status.root || "" })] })], confirm: t("OK"), cancel: null,
-    });
+    if (done) {
+      await window.AUCOM.confirmModal({
+        title: t("Build tools installed"), body: t("The build tools were installed in this folder:"),
+        content: [el("p", { children: [el("code", { text: status.root || "" })] })], confirm: t("OK"), cancel: null,
+      });
+    }
+    endInteraction(done ? "installed" : "failed");
   }
 
   // installButton is the Install beside a build tool in Profiles, or null.
@@ -610,6 +651,7 @@
   async function poll() {
     const { ok, body } = await api("/api/v1/tools");
     if (ok) apply(body);
+    settleFirstLook();
     schedule(needsFast() ? FAST_MS : SLOW_MS);
   }
 

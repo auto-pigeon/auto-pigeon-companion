@@ -105,6 +105,17 @@ they bind every surface that offers a choice, says why something cannot start, o
 - Budget: the ordinary viewport carries at most 90 authored explanatory words (measured 38 at 1440x900 with
   the compiler's name included; the five-step page carried 91 on step 1 alone).
 
+## The first start asks one thing at a time (NEW_374)
+
+- **Install, then Configure a game, never two at once.** The Install window, the download it starts and the
+  *Build tools installed* notice are one interaction (`tools.js`); `AUCOM.installSettled` answers how it ended and
+  `play.js` `askForGame` waits on that answer, so the second question opens the moment the notice closes. Nothing
+  polls for a dialog to go away. Any other `<dialog>` is waited for by its own `close` event.
+- **A Cancel or a failed install asks nothing further now.** The person has just answered; the next move to Build &
+  Run asks, once per page (`AUCOM.areaMoves`). The newest `askForGame` call is the only one that may open the dialog,
+  and it re-reads what it needs after each wait, so leaving the area, a game set up meanwhile, a build request with no
+  run or a late answer opens nothing and takes no focus.
+
 ## Profiles: one row, one state, one page in task order (NEW_364)
 
 - **A row is a name, a kind and game, and ONE state** — the server's `setup_state`, said as *Ready*, *Partly ready*
@@ -152,3 +163,4 @@ NEW_365: `testdata/playjourney.js` (Checking setup…, a held plan answer never 
 beside it, two fast presses → one run), `testdata/hostjourney.js` (the listing dialog: Cancel starts nothing),
 `testdata/liveline.check.mjs`, `testdata/buildreview.check.mjs`, `internal/playrun/new365_test.go`,
 `internal/autobuild/new365_test.go`, `TestAFileBuildRequestIsAdmittedOnceUntilItEnds`.
+NEW_374: `testdata/configuregame.js` (`TestConfigureAGameFollowsTheInstallWindowInABrowser`, ten pages in a real browser).

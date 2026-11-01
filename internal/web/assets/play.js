@@ -725,15 +725,31 @@
   }
 
   // No game can be started yet: say where that is set up, once per page.
+  //
+  // After the Install interaction, never over it, and only if it ended with
+  // the tools in place: a person who just said no is not asked the next thing
+  // at once, and the next visit to this area asks. The newest call is the only
+  // one that may ask, so an answer for a page the person has left, or for a
+  // request since replaced, opens nothing.
   let askedForGame = false;
+  let gameAsk = 0;
   async function askForGame() {
-    if (askedForGame) return;
+    const ask = ++gameAsk;
+    const wanted = () => ask === gameAsk && !askedForGame && state.runAfter && !$("area-play").hidden;
+    if (!wanted()) return;
+    const install = await window.AUCOM.installSettled();
+    if (install === "declined" || install === "failed" || !wanted()) return;
     // The server's answer, not state.engines: that list can be empty only
     // because a newer refresh threw this one's answer away.
     const { ok, body } = await api("/api/v1/engines");
     const playable = (body?.items || []).some((engine) => Object.keys(ACTIONS).some((id) => window.AUCOM.actionReady(engine, id)));
-    if (!ok || playable || askedForGame || $("area-play").hidden) return;
-    if (document.querySelector("dialog[open]")) { window.setTimeout(askForGame, 1500); return; }
+    if (!ok || playable || !wanted()) return;
+    if (document.querySelector(".auth-modal:not([hidden])")) return;
+    const other = document.querySelector("dialog[open]");
+    if (other) {
+      other.addEventListener("close", () => askForGame(), { once: true });
+      return;
+    }
     askedForGame = true;
     const open = await window.AUCOM.confirmModal({
       title: t("Configure a game"), body: t("Build & Run needs a game to start. Configure one in the Profiles page."),

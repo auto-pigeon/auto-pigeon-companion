@@ -35,9 +35,18 @@ type playDriveHandler struct {
 	backend *fixtureBackend
 	// shots is nil unless AUCOM_JOURNEY_SCREENSHOTS is set; see screenshot_test.go.
 	shots *screenshotter
+	// controls are a journey's own levers, by path: what a person cannot do
+	// from the page, such as the coordinator's next step.
+	controls map[string]func()
 }
 
 func (d *playDriveHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if control, ok := d.controls[r.URL.Path]; ok {
+		control()
+		w.WriteHeader(http.StatusNoContent)
+
+		return
+	}
 	if r.URL.Path == "/journey/snap" {
 		var request struct {
 			Name string `json:"name"`
@@ -161,6 +170,11 @@ func runPlayJourney(t *testing.T, browser, window, label string) {
 // drivePlayPage runs one driver script against the real page of a prepared
 // machine, in a real browser, and reports each step it recorded.
 func drivePlayPage(t *testing.T, m *machine, browser, window, label, driver string, overrides ...map[string]any) {
+	drivePlayPageWith(t, m, browser, window, label, driver, nil, overrides...)
+}
+
+// drivePlayPageWith is drivePlayPage with a journey's own controls.
+func drivePlayPageWith(t *testing.T, m *machine, browser, window, label, driver string, controls map[string]func(), overrides ...map[string]any) {
 	script, err := os.ReadFile(driver)
 	if err != nil {
 		t.Fatal(err)
@@ -196,7 +210,8 @@ func drivePlayPage(t *testing.T, m *machine, browser, window, label, driver stri
 			reports: make(chan journeyReport, 1),
 			logs:    make(chan string, 256),
 		},
-		backend: m.backend,
+		backend:  m.backend,
+		controls: controls,
 	}
 	front := httptest.NewServer(handler)
 	defer front.Close()

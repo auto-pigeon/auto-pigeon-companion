@@ -199,6 +199,9 @@ offers **Use the Companion's … for …** beside it.
 
 Nothing is downloaded until you say so: at start the Companion asks in a window
 that names the two programs, and Profiles has an **Install** button beside each.
+With no game set up yet, **Configure a game** follows once the tools are in and
+you have pressed **OK**. If you cancel the install, or it fails, you are not asked
+straight away: the question comes the next time you open Build & Run.
 
 Where they go: a `build-tools` folder beside the Companion when you unpacked it
 somewhere you can write, one folder per version, never your `PATH`, a system

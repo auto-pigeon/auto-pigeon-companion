@@ -51,6 +51,9 @@
     return window.AUCOM.status?.authenticated ? "play" : "play/local";
   }
 
+  let shownArea = "";
+  window.AUCOM.areaMoves = 0;
+
   function show(area, { focus = true } = {}) {
     // An area may carry one argument after a slash — `#games/<id>` is one game —
     // so a reload comes back to the same game rather than to the list.
@@ -62,6 +65,10 @@
     if (!areaNames.includes(area)) {
       [area, argument = ""] = defaultArea().split("/");
     }
+    // A move to another area counts as one: a question a person turned down
+    // waits for the next time they come here (play.js askForGame).
+    if (shownArea && area !== shownArea) window.AUCOM.areaMoves += 1;
+    shownArea = area;
     for (const name of areaNames) {
       $("area-" + name).hidden = name !== area;
     }

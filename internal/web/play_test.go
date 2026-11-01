@@ -36,10 +36,16 @@ func (m *machine) preparePlay(t *testing.T) {
 		t.Fatalf("granting the toolchain = %d: %v", status, body["error"])
 	}
 	m.bindExecutable("aucom.fixture.toolchain", "tool", self)
+	m.bindPlayableEngine(t)
+}
+
+// bindPlayableEngine makes the fixture Quake 1 engine ready to play a map.
+func (m *machine) bindPlayableEngine(t *testing.T) {
+	t.Helper()
 
 	_, engineProfile := m.call(http.MethodGet, "/api/v1/profiles/aucom.fixture.q1-engine", nil)
 	status, body := m.call(http.MethodPost, "/api/v1/profiles/aucom.fixture.q1-engine/bind", map[string]any{
-		"executables": map[string]string{"engine": self},
+		"executables": map[string]string{"engine": mustExecutable(t)},
 		"roots":       map[string]string{"game_root": m.gameRoot, "content_root": m.content},
 		"approve":     true,
 		"digest":      engineProfile["digest"],
