@@ -131,6 +131,8 @@ update belongs to `NEW_368`, which consumes this coordinator and its verificatio
     toolchain installed earlier stays where it is.
     `uninstall --purge` removes that folder by path (`config.IsBundleToolsDir`): its name alone
     would be refused, and a folder of that name anywhere else still is.
+    `internal/cli/firstrun_release_test.go` proves this on the real `main` of a real unpacked bundle,
+    with the Install window answered in the real page; only the fixture tag differs from a release.
 
 11. **The Companion's own update (NEW_368) is a third target on the same coordinator**, never
     a second downloader. `managedtools.Self` is added by `Options.Self`; there is no first

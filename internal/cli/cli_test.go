@@ -68,6 +68,7 @@ func TestMain(m *testing.M) {
 		os.Setenv("XDG_DATA_HOME", data)
 		code := m.Run()
 		os.RemoveAll(data)
+		os.RemoveAll(firstRunProgram.dir)
 		os.Exit(code)
 	}
 	os.Exit(m.Run())
