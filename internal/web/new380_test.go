@@ -255,16 +255,15 @@ func TestAnOldUpstreamFolderIsNotTheFork(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("the fork's page: %d %v", status, body)
 	}
-	if ready(body) {
+	if fork, _ := body["readiness"].(map[string]any); fork["ready"] == true {
 		t.Fatalf("the fork reads ready on an upstream folder: %v", body["readiness"])
 	}
 	if body["programs_not_carried_from"] != "auto-pigeon.ericw-tools.q1" {
 		t.Errorf("the page does not say the older programs were not reused: %v", body["programs_not_carried_from"])
 	}
-	if pipeline := findItem(t, func() map[string]any {
-		_, list := m.call(http.MethodGet, "/api/v1/build/pipelines", nil)
-		return list
-	}(), "id", builtin.Q1Normal); ready(pipeline) {
+	_, list := m.call(http.MethodGet, "/api/v1/build/pipelines", nil)
+	pipeline := findItem(t, list, "id", builtin.Q1Normal)
+	if readiness, _ := pipeline["readiness"].(map[string]any); readiness["ready"] == true {
 		t.Fatalf("the Quake 1 build reads ready on an upstream folder: %v", pipeline)
 	}
 }

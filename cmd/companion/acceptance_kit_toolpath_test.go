@@ -78,7 +78,7 @@ func TestTheKitTakesAnEricWBuildByItsFolderOrItsBinFolder(t *testing.T) {
 		},
 		"its bin folder": {
 			layout: func(t *testing.T, build string) { writePrograms(t, filepath.Join(build, "bin"), ericwPrograms...) },
-			named:  "bin", state: "pass", detail: filepath.Join("<tool_path>", ".."),
+			named:  "bin", state: "pass", detail: "(<tool_path>" + string(filepath.Separator) + "..)",
 		},
 		// Upstream's layout. The profile bound here is the Auto-Pigeon build's, whose
 		// programs are in bin/, so this is not that build (NEW_380).

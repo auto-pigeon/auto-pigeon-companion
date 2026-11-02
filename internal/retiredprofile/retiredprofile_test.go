@@ -17,6 +17,11 @@ import (
 
 var now = time.Date(2026, 11, 2, 12, 0, 0, 0, time.UTC)
 
+// folder is an absolute path on any platform; a binding refuses anything else.
+func folder(parts ...string) string {
+	return filepath.Join(append([]string{os.TempDir(), "new380"}, parts...)...)
+}
+
 func stored(t *testing.T, path string, bindings ...binding.LocalBinding) {
 	t.Helper()
 	set := binding.NewSet()
@@ -52,10 +57,10 @@ func machine(t *testing.T) (bindings string, catalog job.Catalog) {
 // binding they had stays, unchanged, as the record of it.
 func TestFoldersAndArgumentsMoveToTheForkAndProgramsDoNot(t *testing.T) {
 	path, catalog := machine(t)
-	upstream := "/opt/ericw-tools-2.0.0-alpha11/qbsp"
+	upstream := folder("ericw-tools-2.0.0-alpha11", "qbsp")
 	stored(t, path, binding.LocalBinding{ProfileID: retiredfixture.EricwQ2, Trust: profile.TrustBuiltin,
 		Acquisition: profile.AcquireUserPath, Executables: map[string]string{"qbsp": upstream},
-		Roots:     map[string]string{profile.RootGame: "/games/quake2", profile.RootContent: "/games/quake2/baseq2", profile.RootToolInstall: "/opt/ericw-tools-2.0.0-alpha11"},
+		Roots:     map[string]string{profile.RootGame: folder("quake2"), profile.RootContent: folder("quake2", "baseq2"), profile.RootToolInstall: folder("ericw-tools-2.0.0-alpha11")},
 		Arguments: map[string][]string{"qbsp": {"-worldextent", "65536"}}, GameProfileID: "game-record", Compatibility: nil})
 	done, err := Apply(path, catalog, now)
 	if err != nil {
@@ -71,7 +76,7 @@ func TestFoldersAndArgumentsMoveToTheForkAndProgramsDoNot(t *testing.T) {
 	if len(fork.Executables) != 0 || fork.Managed != nil {
 		t.Fatalf("an upstream program was relabelled the fork: %+v", fork)
 	}
-	if fork.Roots[profile.RootGame] != "/games/quake2" || fork.Roots[profile.RootContent] != "/games/quake2/baseq2" || fork.GameProfileID != "game-record" {
+	if fork.Roots[profile.RootGame] != folder("quake2") || fork.Roots[profile.RootContent] != folder("quake2", "baseq2") || fork.GameProfileID != "game-record" {
 		t.Errorf("a setting was lost: %+v", fork)
 	}
 	if _, kept := fork.Roots[profile.RootToolInstall]; kept {
@@ -134,15 +139,15 @@ func TestAnArgumentTheForkManagesIsNotCarriedAndIsNamed(t *testing.T) {
 func TestWhatTheForkAlreadyHasIsKept(t *testing.T) {
 	path, catalog := machine(t)
 	stored(t, path,
-		binding.LocalBinding{ProfileID: retiredfixture.EricwQ2, Trust: profile.TrustBuiltin, Roots: map[string]string{profile.RootGame: "/old"}},
-		binding.LocalBinding{ProfileID: builtin.EricwAutoPigeonQ2, Trust: profile.TrustBuiltin, Roots: map[string]string{profile.RootGame: "/mine"},
-			Executables: map[string]string{"qbsp": "/mine/bin/qbsp"}})
+		binding.LocalBinding{ProfileID: retiredfixture.EricwQ2, Trust: profile.TrustBuiltin, Roots: map[string]string{profile.RootGame: folder("old")}},
+		binding.LocalBinding{ProfileID: builtin.EricwAutoPigeonQ2, Trust: profile.TrustBuiltin, Roots: map[string]string{profile.RootGame: folder("mine")},
+			Executables: map[string]string{"qbsp": folder("mine", "bin", "qbsp")}})
 	done, err := Apply(path, catalog, now)
 	if err != nil || len(done) != 1 || len(done[0].NotCarried) != 1 {
 		t.Fatalf("%+v %v", done, err)
 	}
 	fork, _ := read(t, path, builtin.EricwAutoPigeonQ2)
-	if fork.Roots[profile.RootGame] != "/mine" || fork.Executables["qbsp"] != "/mine/bin/qbsp" {
+	if fork.Roots[profile.RootGame] != folder("mine") || fork.Executables["qbsp"] != folder("mine", "bin", "qbsp") {
 		t.Errorf("the fork's own settings were replaced: %+v", fork)
 	}
 }
@@ -182,7 +187,7 @@ func TestAPersonsOwnDocumentWithARetiredIDIsLeftAlone(t *testing.T) {
 	}
 	catalog := job.NewCatalog(filepath.Join(dir, "profiles"))
 	stored(t, path, binding.LocalBinding{ProfileID: retiredfixture.EricwQ1, Trust: profile.TrustLocal,
-		Roots: map[string]string{profile.RootContent: "/mine"}})
+		Roots: map[string]string{profile.RootContent: folder("mine")}})
 	done, err := Apply(path, catalog, now)
 	if err != nil || len(done) != 0 {
 		t.Fatalf("%+v %v", done, err)

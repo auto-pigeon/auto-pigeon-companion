@@ -43,7 +43,6 @@ func TestAFolderBindsEveryDeclaredProgramAsALocalBinding(t *testing.T) {
 	// missing, rather than binding a release the version probe would then
 	// disagree with (NEW_380: an old upstream folder is not the fork).
 	old := filepath.Join(m.dir, "ericw-tools-2.0.0-alpha11")
-	writeEricwLayout(t, filepath.Join(old, ".."), "unrelated")
 	for _, program := range []string{"qbsp", "vis", "light", "bspinfo", "bsputil"} {
 		writeFixtureFile(t, filepath.Join(old, program+currentPlatform().ExeSuffix()), "#!/bin/sh\n")
 	}

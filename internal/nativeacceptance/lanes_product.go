@@ -375,7 +375,7 @@ func (r *run) toolFolder(ctx context.Context, document string) (folder, shown, r
 	candidates := []candidate{{r.options.ToolPath, r.redact.Line(r.options.ToolPath)}}
 	if filepath.Base(filepath.Clean(r.options.ToolPath)) == "bin" {
 		candidates = append(candidates, candidate{filepath.Dir(filepath.Clean(r.options.ToolPath)),
-			filepath.Join(r.redact.Line(r.options.ToolPath), "..")})
+			r.redact.Line(r.options.ToolPath) + string(filepath.Separator) + ".."})
 	}
 	var reasons []string
 	for _, candidate := range candidates {
