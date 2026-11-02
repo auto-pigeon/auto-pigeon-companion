@@ -123,10 +123,8 @@ func TestThePressChecksTheSavedRevisionAgain(t *testing.T) {
 		t.Fatalf("pending: %d %v", status, body)
 	}
 	jobs := len(m.jobIDs())
-	m.backend.mu.Lock()
-	pinnedRevision := m.backend.asset.revisionID
-	m.backend.asset.revision++ // a new save after the editor's click
-	m.backend.mu.Unlock()
+	pinnedRevision := m.backend.assetNow().revisionID
+	m.backend.setAsset(func(asset *fixtureAsset) { asset.revision++ }) // a new save after the editor's click
 	status, body := m.call(http.MethodPost, "/api/v1/build/runs", map[string]any{
 		"pipeline":        "aucom.fixture.q1-leak",
 		"inputs":          map[string]string{"source_map": "aub:map/" + link.AssetID + "@" + pinnedRevision + "#fixture.apmap"},

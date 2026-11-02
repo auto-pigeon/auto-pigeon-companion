@@ -249,8 +249,10 @@ type fixtureBackend struct {
 
 	server *httptest.Server
 	asset  fixtureAsset
-	token  string
-	email  string
+	// assetMu guards asset; see assetNow.
+	assetMu sync.RWMutex
+	token   string
+	email   string
 
 	// served counts requests, so a test can assert that a restart read from
 	// disk rather than going back to the network.
@@ -561,7 +563,7 @@ func (b *fixtureBackend) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rest := strings.TrimPrefix(path, aub.CompanionPrefix)
-	asset := b.asset
+	asset := b.assetNow()
 
 	switch {
 	case strings.HasPrefix(rest, "/handoff-acks/") && r.Method == http.MethodPost:
@@ -691,7 +693,7 @@ func (b *fixtureBackend) serve(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			b.mu.Lock()
-			asset = b.asset
+			asset = b.assetNow()
 			b.mu.Unlock()
 		}
 		write(map[string]any{
@@ -763,7 +765,8 @@ func (b *fixtureBackend) serveTextureExport(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	mapID := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/maps/"), "/texture-export")
-	if mapID != b.asset.assetID {
+	asset := b.assetNow()
+	if mapID != asset.assetID {
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"data": map[string]any{"reason": map[string]any{"code": "map_not_found"}},
@@ -771,7 +774,7 @@ func (b *fixtureBackend) serveTextureExport(w http.ResponseWriter, r *http.Reque
 
 		return
 	}
-	if raw := r.URL.Query().Get("revision"); raw != "" && raw != fmt.Sprint(b.asset.revision) {
+	if raw := r.URL.Query().Get("revision"); raw != "" && raw != fmt.Sprint(asset.revision) {
 		w.WriteHeader(http.StatusConflict)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"message": "This map's texture export is built from its current saved document.",
@@ -782,7 +785,7 @@ func (b *fixtureBackend) serveTextureExport(w http.ResponseWriter, r *http.Reque
 	}
 	bundle := b.textures
 	if bundle == nil {
-		bundle = fixtureTextureBundle(b.asset.assetID, b.asset.revision, true)
+		bundle = fixtureTextureBundle(asset.assetID, asset.revision, true)
 	}
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", `attachment; filename="fixture-textures.zip"`)
@@ -908,23 +911,42 @@ func fixtureTextureBundle(mapID string, revision int, ready bool) []byte {
 	return buffer.Bytes()
 }
 
+// assetNow is the one asset as it is at this moment. A journey can save a new
+// revision while the page is reading (NEW_380), so a reader takes a copy here and
+// [fixtureBackend.setAsset] changes it, under a lock of their own: b.mu is held
+// across a response, and these two are called from inside it too.
+func (b *fixtureBackend) assetNow() fixtureAsset {
+	b.assetMu.RLock()
+	defer b.assetMu.RUnlock()
+	return b.asset
+}
+
+func (b *fixtureBackend) setAsset(change func(*fixtureAsset)) {
+	b.assetMu.Lock()
+	defer b.assetMu.Unlock()
+	change(&b.asset)
+}
+
 func (b *fixtureBackend) assetPath() string {
-	return "/assets/" + b.asset.assetType + "/" + b.asset.assetID
+	asset := b.assetNow()
+	return "/assets/" + asset.assetType + "/" + asset.assetID
 }
 
 func (b *fixtureBackend) revisionSummary() map[string]any {
+	asset := b.assetNow()
 	return map[string]any{
-		"revision_id": b.asset.revisionID, "revision": b.asset.revision,
-		"immutable": true, "content_sha256": b.asset.digest(),
+		"revision_id": asset.revisionID, "revision": asset.revision,
+		"immutable": true, "content_sha256": asset.digest(),
 		"author_user_id": "user1", "created_at": "2026-09-01T10:00:00Z",
 		"kind": "full", "base_revision": 0,
 	}
 }
 
 func (b *fixtureBackend) assetView() map[string]any {
+	asset := b.assetNow()
 	return map[string]any{
-		"asset_type": b.asset.assetType, "asset_id": b.asset.assetID,
-		"display_name": b.asset.name, "game": "quake1", "visibility": "private",
+		"asset_type": asset.assetType, "asset_id": asset.assetID,
+		"display_name": asset.name, "game": "quake1", "visibility": "private",
 		"owner_user_id": "user1", "access_path": "owned", "role": "owner",
 		"created_at": "2026-09-01T10:00:00Z", "revision_addressing": "revision_id",
 		"current_revision": b.revisionSummary(),

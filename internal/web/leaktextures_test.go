@@ -310,11 +310,13 @@ func (m *machine) saveRoom(mapID string, revision int, room string, bundle []byt
 	if err != nil {
 		m.t.Fatal(err)
 	}
+	m.backend.setAsset(func(asset *fixtureAsset) {
+		asset.assetID, asset.revision = mapID, revision
+		asset.revisionID = fmt.Sprintf("%s-rev-%d", mapID, revision)
+		asset.fileName, asset.body = "fixture.apmap", apmap
+	})
 	m.backend.mu.Lock()
 	defer m.backend.mu.Unlock()
-	m.backend.asset.assetID, m.backend.asset.revision = mapID, revision
-	m.backend.asset.revisionID = fmt.Sprintf("%s-rev-%d", mapID, revision)
-	m.backend.asset.fileName, m.backend.asset.body = "fixture.apmap", apmap
 	m.backend.textures = bundle
 }
 
