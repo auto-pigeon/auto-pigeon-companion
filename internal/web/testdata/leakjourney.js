@@ -93,6 +93,7 @@
       record("one press is one build", await count() === 1, `${await count()} build(s)`);
       await waitFor("the notice to go", () => !notice());
       record("the verdict is shown", Boolean(document.querySelector("#build-leak .leak-verdict")?.textContent), document.querySelector("#build-leak .leak-verdict")?.textContent);
+      record("the spent request leaves no Build behind it", !enabled() && !label(), label());
     },
 
     // A's revision is in the air when B replaces it; A's answer lands afterwards.

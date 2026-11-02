@@ -998,16 +998,17 @@
       setMessage("build-result", "", "");
       record(`Build started: ${$("build-label").value.trim() || currentPipeline()?.name || "untitled"}`, "", "running");
       currentBuild = body.build;
-      if (asked.leak_request_id) {
-        leakAdoption = null;
-        leakSaid = "";
-        document.dispatchEvent(new CustomEvent("aucom:leak-build-started", { detail: { request_id: asked.leak_request_id } }));
-      }
       $("build-current-panel").hidden = false;
       $("build-step-4").hidden = false;
       $("build-current-title").textContent = "Building " + ($("build-label").value.trim() || currentPipeline()?.name || "");
       $("build-current-title").setAttribute("tabindex", "-1");
       $("build-current-title").focus();
+      // The request is spent: the form it filled is not left under a Build button
+      // that would run the same map again as an ordinary build.
+      if (asked.leak_request_id) {
+        dropLeakRequest(asked.leak_request_id);
+        document.dispatchEvent(new CustomEvent("aucom:leak-build-started", { detail: { request_id: asked.leak_request_id } }));
+      }
       renderSteps();
       setMessage("build-start-message", t("Started. Progress is below."), "ok");
       poll();

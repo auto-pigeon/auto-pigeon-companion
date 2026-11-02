@@ -168,8 +168,15 @@ func (s *Server) describeLeakPipeline(base map[string]any, game, pinned string) 
 		if tool, found := resolver.EntryForStep(step); found {
 			meta := tool.Profile.Metadata()
 			base["pipeline_tool"] = meta.Name
-			if local, found := set.Find(meta.ID); found && local.ResolvedVersion != "" {
-				base["pipeline_tool_version"] = local.ResolvedVersion
+			// What is installed, which a managed update can have moved past the
+			// release the document is named after.
+			if local, found := set.Find(meta.ID); found {
+				switch {
+				case local.Managed != nil:
+					base["pipeline_tool_version"] = local.Managed.Version
+				case local.ResolvedVersion != "":
+					base["pipeline_tool_version"] = local.ResolvedVersion
+				}
 			}
 		}
 	}

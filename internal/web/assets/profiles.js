@@ -893,9 +893,14 @@
 
     // The folder chosen for the retired upstream profile was not reused: it is
     // not known to be this build (NEW_380). Said only while it matters.
-    if (body.programs_not_carried_from && nothingChosenYet(body)) {
+    const noPrograms = !Object.values(body.binding?.executables || {}).some(Boolean);
+    if (body.programs_not_carried_from && noPrograms) {
       detail.append(el("p", { className: "muted small", text: t("The programs chosen for the older built-in profile were not reused, because nothing shows they are this build. Install this build, or choose its folder below.") }));
     }
+    // A leak request's or a build's Set up link lands here, so the action that
+    // sets a managed tool up is here too, not only on the list (NEW_380).
+    const install = noPrograms ? window.AUCOM.installButton?.(body.id) : null;
+    if (install) detail.append(el("div", { className: "row-actions", children: [install] }));
 
     // The Companion downloads no program (operator, 2026-09-23): the way to a
     // program nobody has installed yet is its own homepage — said only while
