@@ -302,7 +302,8 @@ func (r *Runner) previewGameData(request Request, steps []profile.ResolvedStep) 
 	if err != nil {
 		return request, err
 	}
-	if _, err := fsGame(request, steps); err != nil {
+	name, err := fsGame(request, steps)
+	if err != nil {
 		return request, err
 	}
 	approved, _, access := r.approvedRoots(request, steps)
@@ -313,6 +314,9 @@ func (r *Runner) previewGameData(request Request, steps []profile.ResolvedStep) 
 	// Said in the review, not discovered by pressing Build: a preview whose
 	// job is "this is what would happen" refuses what the run would refuse.
 	if err := missingGameFolder(approved, access, packages); err != nil {
+		return request, err
+	}
+	if err := q3vfs.CheckLayout(q3vfs.Request{FSGame: name, Roots: approved}); err != nil {
 		return request, err
 	}
 	roots := make(map[string]string, len(request.Roots)+len(access))

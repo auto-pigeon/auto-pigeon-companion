@@ -271,6 +271,43 @@ func CheckFSGame(name string) error {
 	return nil
 }
 
+func noGameDirectory(role, source string, games []string) error {
+	return failure.As(failure.GameDataMissing, fmt.Errorf(
+		"the %q folder %s has no %s directory: Q3Map2 reads `<folder>/%s/…`, so choose the folder that "+
+			"CONTAINS %s, not %s itself and not a folder beside it",
+		role, source, describeGames(games), BaseGame, BaseGame, BaseGame))
+}
+
+// CheckLayout is Build's refusal of a folder with no game directory, for a check
+// that stages nothing. Without it a preview called a folder fine, Build was
+// offered, and the press spent an editor's request on a build that stopped before
+// its first stage (NEW_380, found live: `baseq3` itself chosen as the folder).
+func CheckLayout(request Request) error {
+	if err := CheckFSGame(request.FSGame); err != nil {
+		return err
+	}
+	games := []string{BaseGame}
+	if request.FSGame != "" && !strings.EqualFold(request.FSGame, BaseGame) {
+		games = append(games, request.FSGame)
+	}
+	roles := make([]string, 0, len(request.Roots))
+	for role := range request.Roots {
+		roles = append(roles, role)
+	}
+	sort.Strings(roles)
+	for _, role := range roles {
+		present := false
+		for _, name := range games {
+			info, err := os.Stat(filepath.Join(request.Roots[role], name))
+			present = present || (err == nil && info.IsDir())
+		}
+		if !present {
+			return noGameDirectory(role, request.Roots[role], games)
+		}
+	}
+	return nil
+}
+
 // Build stages the request's roots.
 //
 // It refuses — with a class from internal/failure, and having staged nothing a
@@ -341,10 +378,7 @@ func Build(request Request) (*Stage, error) {
 			}
 		}
 		if !anyPresent {
-			return nil, failure.As(failure.GameDataMissing, fmt.Errorf(
-				"the %q folder %s has no %s directory: Q3Map2 reads `<folder>/%s/…`, so choose the folder that "+
-					"CONTAINS %s, not %s itself and not a folder beside it",
-				role, root.Source, describeGames(games), BaseGame, BaseGame, BaseGame))
+			return nil, noGameDirectory(role, root.Source, games)
 		}
 		stage.Roots = append(stage.Roots, root)
 	}

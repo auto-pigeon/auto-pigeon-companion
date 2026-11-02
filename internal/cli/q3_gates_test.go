@@ -517,3 +517,25 @@ func TestAFileAMapNamesIsLookedForInTheGameDataAndItsAbsenceIsClassed(t *testing
 		}
 	})
 }
+
+// NEW_380, found live: `baseq3` itself chosen as the folder. The run refused it
+// before its first stage, the preview called it fine, and Build was offered, so
+// the press spent an editor's leak request on a build that could read nothing.
+func TestAQuake3PreviewRefusesWhatTheRunRefusesAboutAFolder(t *testing.T) {
+	env, _, _ := testEnv(t)
+	contentRoot, _ := q3Content(t)
+	baseq3 := filepath.Join(contentRoot, "baseq3")
+	bindQ3Map2(t, env, contentRoot, baseq3)
+	code, _, errOut := runCLI(t, env, "build", "preview", "--pipeline", "auto-pigeon.q3.fast-preview",
+		"--input", "source_map="+q3Source(t, "preview.map", ""))
+	if code == 0 || !strings.Contains(errOut, "CONTAINS baseq3") {
+		t.Fatalf("a preview of a folder with no baseq3: exit %d\n%s", code, errOut)
+	}
+	// The folder that contains it is fine, and the same check says nothing.
+	bindQ3Map2(t, env, contentRoot, contentRoot)
+	code, _, errOut = runCLI(t, env, "build", "preview", "--pipeline", "auto-pigeon.q3.fast-preview",
+		"--input", "source_map="+q3Source(t, "preview.map", ""))
+	if code != 0 {
+		t.Fatalf("a preview of the right folder: exit %d\n%s", code, errOut)
+	}
+}
