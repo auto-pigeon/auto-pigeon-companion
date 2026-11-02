@@ -204,7 +204,7 @@ func TestASyntheticQuake2MapTravelsTheWholeExperimentalPath(t *testing.T) {
 		executables[name] = path
 	}
 	base := gameDataRoot(t)
-	bindTool(t, env, builtin.EricwQ2, executables, map[string]string{
+	bindTool(t, env, builtin.EricwAutoPigeonQ2, executables, map[string]string{
 		// The three bindings `AUP/AUCOM 215` asks for separately: the programs
 		// above, the base game data, and the mod. Here the last two are the
 		// same directory, which is what upstream's own auto-detection does for
@@ -446,7 +446,7 @@ func TestQuake2FailsOrWarnsExplicitlyAndClaimsNoGenericSupport(t *testing.T) {
 		executables[name] = path
 	}
 	base := gameDataRoot(t)
-	bindTool(t, env, builtin.EricwQ2, executables,
+	bindTool(t, env, builtin.EricwAutoPigeonQ2, executables,
 		map[string]string{profile.RootGame: base, profile.RootContent: base})
 
 	env, stdout, stderr := testEnvAt(t, env.ConfigPath)

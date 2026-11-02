@@ -153,9 +153,6 @@ func TestTheQ3ForkProfileNamesTheReleaseTheManifestDescribes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !IsAlternativeTool(Q3Map2AutoPigeon) || AlternativeOf(Q3Map2AutoPigeon) != Q3Map2 {
-		t.Fatalf("%s must stand beside %s as an alternative", Q3Map2AutoPigeon, Q3Map2)
-	}
 	tool := entry.Profile.(*profile.ToolProfile)
 	encoded, err := json.Marshal(tool)
 	if err != nil {

@@ -254,7 +254,7 @@ func TestTheProfileCatalogIsServed(t *testing.T) {
 			t.Errorf("%s has no digest or trust state: %v", id, entry)
 		}
 	}
-	if !found["auto-pigeon.ericw-tools.q1"] {
+	if !found["auto-pigeon.ericw-tools.auto-pigeon-build.q1"] {
 		t.Errorf("the built-in sample toolchain is missing: %v", found)
 	}
 	// NEW_244D retired the launch-config stub: nothing generated from a

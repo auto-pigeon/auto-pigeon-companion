@@ -211,7 +211,7 @@ func TestTheInstalledQ3Map2AnswersTheAuthoredControls(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			env, _, _ := testEnv(t)
-			bindTool(t, env, builtin.Q3Map2, map[string]string{q3ToolName: tool}, map[string]string{
+			bindTool(t, env, builtin.Q3Map2AutoPigeon, map[string]string{q3ToolName: tool}, map[string]string{
 				profile.RootGame:    filepath.Join(controls, "gameroot"),
 				profile.RootContent: filepath.Join(controls, "gameroot"),
 			})

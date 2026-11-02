@@ -11,7 +11,7 @@ import (
 
 func probedTool(t *testing.T, mutate func(document map[string]any)) error {
 	t.Helper()
-	raw, err := os.ReadFile("builtin/ericw-tools-q1.tool.json")
+	raw, err := os.ReadFile("builtin/ericw-tools-auto-pigeon-q1.tool.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +142,7 @@ func TestTheProbeActionIsNotSomethingADocumentCanDeclare(t *testing.T) {
 	if err == nil {
 		t.Fatal("a document declared an action with the probe's id")
 	}
-	raw, _ := os.ReadFile("builtin/ericw-tools-q1.tool.json")
+	raw, _ := os.ReadFile("builtin/ericw-tools-auto-pigeon-q1.tool.json")
 	decoded, err := Decode(raw)
 	if err != nil {
 		t.Fatal(err)

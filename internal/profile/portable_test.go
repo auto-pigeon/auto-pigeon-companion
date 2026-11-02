@@ -127,7 +127,7 @@ func TestPublishedProfilesCarryNoEmptyObjects(t *testing.T) {
 	for _, path := range []string{
 		"valid/minimal.tool.json",
 		"community/user-q1-toolchain.tool.json",
-		"../builtin/ericw-tools-q1.tool.json",
+		"../builtin/ericw-tools-auto-pigeon-q1.tool.json",
 		"../builtin/quakespasm.engine.json",
 		"../builtin/ironwail.engine.json",
 		"../builtin/q1-normal.pipeline.json",

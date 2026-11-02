@@ -83,7 +83,7 @@ func TestProfileShowSaysNothingIsGrantedYet(t *testing.T) {
 // shipped. Claiming a built-in id is not the same as being one.
 func TestProfileShowTrustsABuiltinDocumentByItsBytes(t *testing.T) {
 	env, stdout, stderr := testEnv(t)
-	path := filepath.Join("..", "profile", "builtin", "ericw-tools-q1.tool.json")
+	path := filepath.Join("..", "profile", "builtin", "ericw-tools-auto-pigeon-q1.tool.json")
 	if code := Run(env, []string{"profile", "show", path}); code != 0 {
 		t.Fatalf("exit code = %d, stderr = %s", code, stderr)
 	}
@@ -178,7 +178,7 @@ func TestProfileListShowsWhatShipsWithThisBuild(t *testing.T) {
 	}
 	out := stdout.String()
 	for _, want := range []string{"tool", "engine", "pipeline", "builtin",
-		"auto-pigeon.ericw-tools.q1", "auto-pigeon.engine.quakespasm", "auto-pigeon.q1.normal"} {
+		"auto-pigeon.ericw-tools.auto-pigeon-build.q1", "auto-pigeon.engine.quakespasm", "auto-pigeon.q1.normal"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output does not contain %q:\n%s", want, out)
 		}

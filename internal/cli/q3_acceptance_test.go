@@ -124,7 +124,7 @@ func bindQ3Map2(t *testing.T, env *Env, gameRoot, contentRoot string) string {
 	if err != nil {
 		t.Fatalf("standing in for q3map2: %v", err)
 	}
-	bindTool(t, env, builtin.Q3Map2, map[string]string{q3ToolName: path}, map[string]string{
+	bindTool(t, env, builtin.Q3Map2AutoPigeon, map[string]string{q3ToolName: path}, map[string]string{
 		profile.RootGame:    gameRoot,
 		profile.RootContent: contentRoot,
 	})

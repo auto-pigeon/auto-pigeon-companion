@@ -63,15 +63,22 @@ they bind every surface that offers a choice, says why something cannot start, o
 - **Dead ends are not offered.** With nothing ready, the list is replaced by one sentence and the
   open setup rows; the primary stays disabled. A list that cannot be read is one message and one
   **Retry**, never a blank select.
-- **Review is not execute.** Choosing or pinning runs nothing, and its copy never says it will
-  ("Next, you review the test; nothing runs until you press Build"). Execution keeps its own
-  explicit confirmation; no surface replaces it with a vague Continue.
+- **Preparing is not executing.** Choosing or pinning runs nothing, and its copy never says it will
+  ("Nothing runs until you press Build"). Execution keeps its own explicit press; no surface
+  replaces it with a vague Continue, and no surface adds a second press before it (NEW_380: a leak
+  request opens with Build ready; the command stays under **Technical details**).
 - **An answer belongs to the opening that asked.** A late response — a list, a pin — for a dialog
   that has since closed or reopened for another request neither closes the new one nor starts a
   review (`pinSession`).
 - **Every sentence through `t()`, in both languages.** A count gets a singular and a plural key; an
   Italian phrase avoids agreement it cannot know ("qbsp, vis e light ancora da configurare").
   Leak test is *test delle perdite*, as in AUP.
+
+## A request from the editor opens ready (NEW_366, NEW_380)
+
+An editor's build request and an editor's leak request open Build & Run on the exact saved revision with the
+form's ordinary button; the notice above says what is prepared and what, if anything, stops it. The leak
+contract is `aucom.leak-adapters` ("A request opens ready to Build").
 
 ## Build & Run is one form with one primary (NEW_363)
 
@@ -151,7 +158,7 @@ they bind every surface that offers a choice, says why something cannot start, o
 | --- | --- | --- |
 | selected vs unrelated | four paragraphs of other pipelines' reasons under the select | `ready` + the selected name + its summary; "Other pipelines (4 need setup)" closed |
 | summary vs diagnostics | "Compile the map: \"Compile the map\" needs …" | "ericw-tools 2.0.0-alpha11 (Quake 1): qbsp, vis, and light not set up yet. Set up" + Details |
-| review vs execute | **Pin and review** / **Not now** | **Use pipeline** / **Cancel**; the review in Build still ends at **Build** |
+| preparing vs execute | **Pin and review** / **Not now** | **Use pipeline** / **Cancel**; Build & Run opens ready, and only **Build** runs anything |
 
 ## Tests that hold it
 
@@ -163,4 +170,6 @@ NEW_365: `testdata/playjourney.js` (Checking setup…, a held plan answer never 
 beside it, two fast presses → one run), `testdata/hostjourney.js` (the listing dialog: Cancel starts nothing),
 `testdata/liveline.check.mjs`, `testdata/buildreview.check.mjs`, `internal/playrun/new365_test.go`,
 `internal/autobuild/new365_test.go`, `TestAFileBuildRequestIsAdmittedOnceUntilItEnds`.
+NEW_380: `testdata/leakjourney.js` (`TestALeakRequestOpensReadyToBuildInABrowser`: a real page, a held answer, the
+aim of the button sampled throughout), `testdata/leakrequest.check.mjs` cases 15–21, `new380_test.go`.
 NEW_374: `testdata/configuregame.js` (`TestConfigureAGameFollowsTheInstallWindowInABrowser`, eleven pages in a real browser).

@@ -10,6 +10,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile/builtin"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile/builtin/retiredfixture"
 )
 
 // The first lines each program really prints when started with nothing,
@@ -47,21 +48,37 @@ const (
 	earlierQbsp = "---- qbsp / ericw-tools 2.0.0-alpha11-27-g69db3ffa+auto-pigeon.1.4513 ----\nqbsp performs geometric level processing of Quake .MAP files to create\nQuake .BSP files.\n"
 )
 
+// The retired upstream document is the other half of these comparisons: what a
+// probe says about a program depends on the document's own rule, and only that
+// document accepts upstream's banner. A fixture since NEW_380.
 func tool(t *testing.T, id string) *profile.ToolProfile {
 	t.Helper()
-	entry, err := builtin.Find(id)
-	if err != nil {
-		t.Fatal(err)
+	var document *profile.ToolProfile
+	if id == upstreamID || id == retiredfixture.Q3Map2 {
+		retired, err := retiredfixture.Tool(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		document = retired
+	} else {
+		entry, err := builtin.Find(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		found, ok := entry.Profile.(*profile.ToolProfile)
+		if !ok {
+			t.Fatalf("%s is not a tool", id)
+		}
+		document = found
 	}
-	document, ok := entry.Profile.(*profile.ToolProfile)
-	if !ok || document.CompatibilityProbe == nil {
+	if document.CompatibilityProbe == nil {
 		t.Fatalf("%s declares no compatibility probe", id)
 	}
 	return document
 }
 
 const (
-	upstreamID = "auto-pigeon.ericw-tools.q1"
+	upstreamID = retiredfixture.EricwQ1
 	forkID     = "auto-pigeon.ericw-tools.auto-pigeon-build.q1"
 )
 
@@ -181,12 +198,12 @@ func TestOnlyTheProgramsADocumentNamesAreHeldToIt(t *testing.T) {
 	}
 	// A document that declares nothing requires nothing: a community profile
 	// written for 0.18.1 keeps working exactly as it did.
-	entry, err := builtin.Find("auto-pigeon.q3map2")
+	undeclaring, err := retiredfixture.Tool(retiredfixture.Q3Map2)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, action := range entry.Profile.ActionList() {
-		if _, _, required := Requirement(entry.Profile, action); required {
+	for _, action := range undeclaring.ActionList() {
+		if _, _, required := Requirement(undeclaring, action); required {
 			t.Errorf("q3map2's %s is held to a probe it does not declare", action.ID)
 		}
 	}

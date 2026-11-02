@@ -20,12 +20,12 @@ import (
 // that is not installed is said by name.
 func TestAStagesPageNamesTheToolTheStageNames(t *testing.T) {
 	m := newMachine(t)
-	raw, err := os.ReadFile("../profile/builtin/ericw-tools-q1.tool.json")
+	raw, err := os.ReadFile("../profile/builtin/ericw-tools-auto-pigeon-q1.tool.json")
 	if err != nil {
 		t.Fatal(err)
 	}
 	m.writeProfile("my-ericw.tool.json",
-		[]byte(strings.Replace(string(raw), `"auto-pigeon.ericw-tools.q1"`, `"local.tool.my-ericw"`, 1)))
+		[]byte(strings.Replace(string(raw), `"auto-pigeon.ericw-tools.auto-pigeon-build.q1"`, `"local.tool.my-ericw"`, 1)))
 	leak, err := builtin.Find("auto-pigeon.q1.leak-test")
 	if err != nil {
 		t.Fatal(err)
@@ -33,7 +33,7 @@ func TestAStagesPageNamesTheToolTheStageNames(t *testing.T) {
 	pipeline := *leak.Profile.(*profile.PipelineProfile)
 	pipeline.Steps = append([]profile.PipelineStep(nil), pipeline.Steps...)
 
-	for _, named := range []string{builtin.EricwQ1, "local.tool.my-ericw"} {
+	for _, named := range []string{builtin.EricwAutoPigeonQ1, "local.tool.my-ericw"} {
 		pipeline.Steps[0].Tool = named
 		stages := m.server.describeStages(&pipeline, binding.LocalBinding{})
 		tool, _ := stages[0]["tool"].(map[string]any)
@@ -70,7 +70,7 @@ func TestBuildAndRunAsksThePipelineWhetherItReadsTheTextureFolder(t *testing.T) 
 // tool, exactly as the build resolves it.
 func TestTheTextureFolderFollowsTheNamedToolsDeclaration(t *testing.T) {
 	m := newMachine(t)
-	raw, err := os.ReadFile("../profile/builtin/ericw-tools-q1.tool.json")
+	raw, err := os.ReadFile("../profile/builtin/ericw-tools-auto-pigeon-q1.tool.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,9 +115,9 @@ func TestTheTextureFolderFollowsTheNamedToolsDeclaration(t *testing.T) {
 	for _, c := range []struct {
 		tool  string
 		reads bool
-	}{{"local.tool.no-wads", false}, {builtin.EricwQ1, true}} {
+	}{{"local.tool.no-wads", false}, {builtin.EricwAutoPigeonQ1, true}} {
 		id := "local.pipeline.reads-" + strings.ReplaceAll(c.tool, ".", "-")
-		document := strings.ReplaceAll(string(normal), `"auto-pigeon.ericw-tools.q1"`, `"`+c.tool+`"`)
+		document := strings.ReplaceAll(string(normal), `"auto-pigeon.ericw-tools.auto-pigeon-build.q1"`, `"`+c.tool+`"`)
 		document = strings.Replace(document, `"id": "auto-pigeon.q1.normal"`, `"id": "`+id+`"`, 1)
 		m.writeProfile(id+".pipeline.json", []byte(document))
 		reads, err := m.server.pipelineDeclaresRoot(id, "content_root")

@@ -11,7 +11,7 @@ import (
 // substring `0 clusters`, which every count ending in 0 contains. ericw-tools
 // right-aligns the count, so a zero is preceded by a space and nothing else is.
 func TestOnlyAZeroClusterCountIsReportedAsNoClusters(t *testing.T) {
-	for _, id := range []string{EricwQ2, EricwAutoPigeonQ2} {
+	for _, id := range []string{EricwAutoPigeonQ2} {
 		entry, err := Find(id)
 		if err != nil {
 			t.Fatal(err)

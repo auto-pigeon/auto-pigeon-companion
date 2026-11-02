@@ -200,7 +200,7 @@ func TestTheSBOMIsValidJSONAndNamesEveryExternalProgram(t *testing.T) {
 	if round["bomFormat"] != "CycloneDX" || round["specVersion"] != "1.5" {
 		t.Errorf("the SBOM is not a CycloneDX 1.5 document: %v %v", round["bomFormat"], round["specVersion"])
 	}
-	for _, want := range []string{"auto-pigeon.ericw-tools.q1", "auto-pigeon.q3map2", "corresponding-source"} {
+	for _, want := range []string{"auto-pigeon.ericw-tools.auto-pigeon-build.q1", "auto-pigeon.q3map2.auto-pigeon-build", "corresponding-source"} {
 		if !strings.Contains(string(raw), want) {
 			t.Errorf("the SBOM does not mention %q", want)
 		}

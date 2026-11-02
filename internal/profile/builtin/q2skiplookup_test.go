@@ -25,7 +25,7 @@ func TestQbspsOwnSkipLookupIsNotAMissingTexture(t *testing.T) {
 		"WARNING: Couldn't locate texture for e1u1/floor1_3":   {"error:texture_missing"},
 		"WARNING: Couldn't locate texture for skipped/wall_02": {"error:texture_missing"},
 	}
-	for _, id := range []string{EricwQ2, EricwAutoPigeonQ2} {
+	for _, id := range []string{EricwAutoPigeonQ2} {
 		entry, err := Find(id)
 		if err != nil {
 			t.Fatal(err)

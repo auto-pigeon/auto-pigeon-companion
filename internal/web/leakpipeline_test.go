@@ -210,25 +210,27 @@ func TestAnUnreadyChoiceNamesTheToolToSetUp(t *testing.T) {
 	}
 }
 
-// NEW_340A: the Auto-Pigeon q3map2 build has a leak-only pipeline of its own,
-// shipped: it is offered for Quake III beside the upstream one (that one first),
-// marked built in, pinnable without retargeting a stage, and read the same
-// way. Every choice says which stages it runs, and so does the request card of
+// NEW_380: the game's one built-in leak test is the Auto-Pigeon build's: marked
+// built in, pinnable without retargeting a stage, and with no upstream twin
+// beside it. Every choice says which stages it runs, and so does the request card of
 // a pinned pipeline, so a full pipeline is never presented as a leak test alone.
-func TestTheForkLeakTestIsOfferedBuiltInAndEveryChoiceSaysWhatItRuns(t *testing.T) {
+func TestOneBuiltInLeakTestIsOfferedPerGameAndEveryChoiceSaysWhatItRuns(t *testing.T) {
 	m := unpinned(t)
 	status, body := m.call(http.MethodGet, "/api/v1/leak-test/pipelines?game=quake3", nil)
 	if status != http.StatusOK {
 		t.Fatalf("choices: %d %v", status, body)
 	}
 	choices, _ := body["choices"].([]any)
-	if len(choices) < 2 {
-		t.Fatalf("Quake III choices: %v", choices)
+	if len(choices) == 0 {
+		t.Fatal("no Quake III choice")
 	}
-	first, second := choices[0].(map[string]any), choices[1].(map[string]any)
-	if first["id"] != "auto-pigeon.q3.leak-test" || second["id"] != "auto-pigeon.q3.leak-test.auto-pigeon-build" ||
-		first["builtin"] != true || second["builtin"] != true {
-		t.Fatalf("the two built-in Quake III leak tests are not offered first, upstream's before the fork's: %v %v", first, second)
+	if first := choices[0].(map[string]any); first["id"] != "auto-pigeon.q3.leak-test" || first["builtin"] != true {
+		t.Fatalf("the built-in Quake III leak test is not offered first: %v", first)
+	}
+	for _, choice := range choices[1:] {
+		if row := choice.(map[string]any); row["builtin"] == true {
+			t.Fatalf("a second built-in Quake III leak test is offered: %v", row)
+		}
 	}
 	for _, choice := range choices {
 		row := choice.(map[string]any)
@@ -241,20 +243,26 @@ func TestTheForkLeakTestIsOfferedBuiltInAndEveryChoiceSaysWhatItRuns(t *testing.
 		}
 	}
 	if status, body := m.call(http.MethodPost, "/api/v1/leak-test/pipelines",
-		map[string]string{"game": "quake3", "pipeline": "auto-pigeon.q3.leak-test.auto-pigeon-build"}); status != http.StatusOK {
-		t.Fatalf("pinning the fork's leak test: %d %v", status, body)
+		map[string]string{"game": "quake3", "pipeline": "auto-pigeon.q3.leak-test"}); status != http.StatusOK {
+		t.Fatalf("pinning the leak test: %d %v", status, body)
 	}
-	binding, err := m.server.leakBindingForBuild("auto-pigeon.q3.leak-test.auto-pigeon-build", build.Conversion{Game: "quake3"}, true)
-	if err != nil || binding.Pipeline != "auto-pigeon.q3.leak-test.auto-pigeon-build" || binding.CompileStep != "compile" ||
+	binding, err := m.server.leakBindingForBuild("auto-pigeon.q3.leak-test", build.Conversion{Game: "quake3"}, true)
+	if err != nil || binding.Pipeline != "auto-pigeon.q3.leak-test" || binding.CompileStep != "compile" ||
 		binding.Pointfile != "lin" || binding.Log != "compile_log" {
-		t.Fatalf("the fork's leak test binds as %+v (%v)", binding, err)
+		t.Fatalf("the leak test binds as %+v (%v)", binding, err)
+	}
+	// The retired pipeline can no longer be chosen, and a build recorded with it
+	// is still read as the Quake III leak test it was.
+	if status, _ := m.call(http.MethodPost, "/api/v1/leak-test/pipelines",
+		map[string]string{"game": "quake3", "pipeline": "auto-pigeon.q3.leak-test.auto-pigeon-build"}); status != http.StatusConflict {
+		t.Errorf("pinning a retired pipeline: %d", status)
 	}
 	if adapter, ok := leakadapter.ForPipeline("auto-pigeon.q3.leak-test.auto-pigeon-build"); !ok || adapter.Profile != "quake3" ||
 		adapter.BuiltinFor("auto-pigeon.q3.leak-test.auto-pigeon-build").Pipeline != "auto-pigeon.q3.leak-test.auto-pigeon-build" {
-		t.Errorf("the fork's leak test is not a Quake III built-in leak pipeline")
+		t.Errorf("a recorded build of the retired pipeline is not read")
 	}
-	if !m.server.isLeakPipeline("auto-pigeon.q3.leak-test.auto-pigeon-build") {
-		t.Error("the Build page does not flag the fork's leak test as one")
+	if !m.server.isLeakPipeline("auto-pigeon.q3.leak-test") {
+		t.Error("the Build page does not flag the leak test as one")
 	}
 }
 

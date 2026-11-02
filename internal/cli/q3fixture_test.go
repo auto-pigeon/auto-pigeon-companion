@@ -84,8 +84,8 @@ func parseQ3Args(args []string) q3Args {
 // the binary was invoked under.
 func q3ToolMain(args []string) int {
 	parsed := parseQ3Args(args)
-	fmt.Println("2.5.17n-git-68ecbed")
-	fmt.Println("Q3Map (ydnar) - v2.5.17n-git-68ecbed")
+	fmt.Println("2.5.17n-ap.3030+gca2e281d.upstream.82161339")
+	fmt.Println("Q3Map (ydnar) - v2.5.17n-ap.3030+gca2e281d.upstream.82161339")
 	if parsed.homePath != "" {
 		fmt.Printf("VFS Init: %s\n", filepath.Join(parsed.homePath, "baseq3"))
 	}

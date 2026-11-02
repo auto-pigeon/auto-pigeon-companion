@@ -2,7 +2,7 @@
   "schema_version": "aucom.profile/1.1",
   "kind": "pipeline",
   "id": "auto-pigeon.q3.fast-preview",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "name": "Quake III — fast preview (experimental)",
   "summary": "Experimental: compile, a crude visibility pass and fast lighting on one thread. For looking at what you just built.",
   "description": "The quickest Quake III build that still produces something an engine will load: the BSP stage, a crude visibility pass and fast lighting, all on one thread.\n\nOne thread is not a performance choice. Measured on Q3Map2 2.5.17n, two eight-thread lighting runs of one map produced two different BSPs and two one-thread runs produced the same one twice, so a preview built this way can be compared byte for byte with the last one. A preview whose output changes when nothing changed cannot answer 'did my edit do anything'.\n\nThe light stage is handed three files rather than one: the BSP, the surface file the compile wrote, and the map source. Measured — it exits 1 without either companion, and the file it names in that error is one nobody thought they had asked for.\n\nThe crude visibility pass is not what you ship. “Quake III — normal” is.\n\nQuake III support in Auto-Pigeon is work in progress. Shader, patch, entity, compilation and engine workflows may be incomplete.",
@@ -39,7 +39,7 @@
       "id": "compile",
       "title": "Compile the map",
       "capability": "q3.bsp.compile",
-      "tool": "auto-pigeon.q3map2",
+      "tool": "auto-pigeon.q3map2.auto-pigeon-build",
       "inputs": [
         {
           "name": "source_map",
@@ -56,7 +56,7 @@
       "id": "vis",
       "title": "Compute visibility",
       "capability": "q3.bsp.vis",
-      "tool": "auto-pigeon.q3map2",
+      "tool": "auto-pigeon.q3map2.auto-pigeon-build",
       "inputs": [
         {
           "name": "bsp",
@@ -76,7 +76,7 @@
       "id": "light",
       "title": "Compute lighting",
       "capability": "q3.bsp.light",
-      "tool": "auto-pigeon.q3map2",
+      "tool": "auto-pigeon.q3map2.auto-pigeon-build",
       "inputs": [
         {
           "name": "bsp",

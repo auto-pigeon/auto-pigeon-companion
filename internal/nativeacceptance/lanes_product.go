@@ -331,7 +331,7 @@ func (r *run) laneToolchain(ctx context.Context) Lane {
 		lane.Reason = r.redact.Line(err.Error())
 		return lane
 	}
-	document := filepath.Join(r.work, "ericw-tools-q1.tool.json")
+	document := filepath.Join(r.work, "ericw-tools-auto-pigeon-q1.tool.json")
 	if err := os.WriteFile(document, append(canonical, '\n'), 0o644); err != nil {
 		lane.State = NotAvailable
 		lane.Reason = r.redact.Line(err.Error())
@@ -347,7 +347,7 @@ func (r *run) laneToolchain(ctx context.Context) Lane {
 			"no --tool-path was given, so there is no build to bind"))
 		return lane
 	}
-	folder, refused := r.toolFolder(ctx, document)
+	folder, shown, refused := r.toolFolder(ctx, document)
 	if refused != "" {
 		add(failed("an EricW build the operator already has is bound by user_path", refused))
 		return lane
@@ -357,7 +357,7 @@ func (r *run) laneToolchain(ctx context.Context) Lane {
 	if bind.code == 0 {
 		r.compilersBound = true
 		add(pass("an EricW build the operator already has is bound by user_path",
-			"the operator named the directory ("+r.redact.Line(folder)+"); nothing was downloaded"))
+			"the operator named the directory ("+shown+"); nothing was downloaded"))
 	} else {
 		add(failed("an EricW build the operator already has is bound by user_path",
 			r.redact.Line(bind.output())))
@@ -365,20 +365,27 @@ func (r *run) laneToolchain(ctx context.Context) Lane {
 	return lane
 }
 
-// toolFolder is where the build --tool-path names has its programs: that
-// folder, or its bin folder, which is where an official archive keeps them. The
-// one resolver a profile binds through decides, and these two are all it is
-// asked about: not finding a compiler there never finds another one.
-func (r *run) toolFolder(ctx context.Context, document string) (folder, refused string) {
+// toolFolder is the folder of the build --tool-path names: that folder, which
+// holds bin/ as an official archive does, or the folder above it when it names
+// bin/ itself. shown is how the bundle says it, in terms of the path the operator
+// gave. The one resolver a profile binds through decides, and these two are all
+// it is asked about: not finding a compiler there never finds another one.
+func (r *run) toolFolder(ctx context.Context, document string) (folder, shown, refused string) {
+	type candidate struct{ path, shown string }
+	candidates := []candidate{{r.options.ToolPath, r.redact.Line(r.options.ToolPath)}}
+	if filepath.Base(filepath.Clean(r.options.ToolPath)) == "bin" {
+		candidates = append(candidates, candidate{filepath.Dir(filepath.Clean(r.options.ToolPath)),
+			filepath.Join(r.redact.Line(r.options.ToolPath), "..")})
+	}
 	var reasons []string
-	for _, candidate := range []string{r.options.ToolPath, filepath.Join(r.options.ToolPath, "bin")} {
-		found := r.exec(ctx, 60*time.Second, "acquire", "resolve", document, "--mode", "user_path", "--user-path", candidate)
+	for _, candidate := range candidates {
+		found := r.exec(ctx, 60*time.Second, "acquire", "resolve", document, "--mode", "user_path", "--user-path", candidate.path)
 		if found.code == 0 {
-			return candidate, ""
+			return candidate.path, candidate.shown, ""
 		}
 		reasons = append(reasons, r.redact.Line(found.output()))
 	}
-	return "", "--tool-path names a folder with no complete EricW build, in it or in its bin folder: " + strings.Join(reasons, "; ")
+	return "", "", "--tool-path names no complete Auto-Pigeon EricW build, there or above its bin folder: " + strings.Join(reasons, "; ")
 }
 
 func shortDigest(digest string) string {

@@ -58,28 +58,35 @@
   // Bumped by every change to steps 1 and 2, so a check that was out while the
   // choices changed cannot mark the new choices checked.
   let generation = 0;
-  let leakRequestID = null;
+  // leakAdoption is the editor's leak request this form is filled with: the
+  // request, and exactly what was prepared for it. Build carries the request's id
+  // only while the form is still that (`leakBound`), so a form somebody changed
+  // is an ordinary build, said to be, and never a leak test of something else.
+  let leakAdoption = null;
+  // The state the notice was last told, so it is told once per change.
+  let leakSaid = "";
   // localMap is a file chosen in My Maps › On this computer (NEW_265): a path
   // on this machine, labelled as exactly that wherever the wizard shows it.
   let localMap = null;
 
-  // An operating-system link only asks. The user's own page resolves the saved revision and
-  // displays it here; the ordinary Build preview and explicit Build press still own execution.
-  // The request itself is shown by leakrequest.js, above every area, so a page
-  // that is open on My Maps sees it too (NEW_307W). What is here is the one
-  // thing only this area can do: take the reviewed request into the wizard.
-  // It returns a sentence when it cannot, and nothing when it did.
-  async function adoptLeakRequest(body) {
+  // An operating-system link only asks. The user's own page resolves the saved
+  // revision and hands it here; the automatic check and an explicit Build press
+  // still own execution. The request itself is shown by leakrequest.js, above
+  // every area, so a page that is open on My Maps sees it too (NEW_307W). What is
+  // here is the one thing only this area can do: fill the form with the request
+  // (NEW_380: by itself, with no Review step). `current` says whether this is
+  // still the request to prepare, after each wait. It returns a sentence when it
+  // cannot, and nothing when it did.
+  async function adoptLeakRequest(body, current = () => true) {
     if (outcome === "running") {
-      return t("A build is running here. Review this leak test when it has finished, or cancel it first.");
+      return t("A build is running here. This leak test opens when it has finished; you can cancel it below.");
     }
     await refreshPipelines();
+    if (!current()) return "";
     const pipeline = pipelines.find((item) => item.id === body.pipeline);
     if (!pipeline || !window.AUCOM.pipelineReady(pipeline)) {
-      if (pipeline) return "This leak-test pipeline needs setup: " + (pipeline.readiness?.problems || []).map(p => p.summary).join(" ") + " Set it up in Profiles, then review again.";
-      return body.game_profile === "quake3"
-        ? t("The Quake III leak-test pipeline is unavailable on this computer. Set up Q3Map2 in Profiles, then review this request again.")
-        : t("The leak-test pipeline is unavailable on this computer. Set up a Quake 1 compiler (qbsp) in Profiles, then review this request again.");
+      return t("The leak-test pipeline {name} cannot be used on this computer yet. Set it up in Profiles; Build is enabled when it is ready.",
+        { name: body.pipeline_name || body.pipeline });
     }
     const name = body.name || body.asset_id;
     $("build-pipeline").value = body.pipeline;
@@ -92,11 +99,60 @@
     for (const row of inputFields.values()) {
       if (row.kind === "map") { row.source.value = "asset"; row.apply(); }
     }
-    $("build-label").value = t("Leak test: {name}, revision {n}", { name, n: body.revision });
-    leakRequestID = body.request_id || null;
-    choicesChanged();
-    showStep(2);
+    const label = t("Leak test: {name}, revision {n}", { name, n: body.revision });
+    $("build-label").value = label;
+    leakAdoption = { id: body.request_id, pipeline: body.pipeline, asset_id: body.asset_id, revision_id: body.revision_id, label };
+    leakSaid = "";
+    forgetReview();
+    $("build-start").scrollIntoView?.({ block: "nearest" });
     return "";
+  }
+
+  // leakBound: is this form still the request it was filled with?
+  function leakBound() {
+    const chosen = window.AUCOM.chosenRevision;
+    if (!leakAdoption || currentPipeline()?.id !== leakAdoption.pipeline) return false;
+    if (chosen?.asset_id !== leakAdoption.asset_id || chosen?.revision_id !== leakAdoption.revision_id) return false;
+    return [...inputFields.values()].every((row) => row.kind !== "map" || row.source.value === "asset");
+  }
+
+  function sayLeakForm(id, state, why) {
+    document.dispatchEvent(new CustomEvent("aucom:leak-form", { detail: { request_id: id, state, why } }));
+  }
+
+  // tellLeakNotice is the form's state, for the notice above it. One place,
+  // called wherever the button is drawn, so the two cannot say different things.
+  function tellLeakNotice(blocked) {
+    if (!leakAdoption) return;
+    if (!leakBound()) {
+      const { id } = leakAdoption;
+      leakAdoption = null;
+      leakSaid = "";
+      sayLeakForm(id, "left");
+      return;
+    }
+    const state = !blocked ? "ok" : blocked.checking ? "preparing" : "blocked";
+    const said = state + "|" + (blocked?.text || "");
+    if (said === leakSaid) return;
+    leakSaid = said;
+    sayLeakForm(leakAdoption.id, state, blocked?.text || "");
+  }
+
+  // dropLeakRequest takes a request out of the form: replaced, dismissed, gone,
+  // or no longer this account's. Whoever drops it, the button stops being aimed
+  // at that map in this turn. It leaves a form somebody changed alone.
+  function dropLeakRequest(id) {
+    if (leakAdoption?.id !== id) return;
+    const { asset_id: asset, revision_id: revision, label } = leakAdoption;
+    leakAdoption = null;
+    leakSaid = "";
+    const chosen = window.AUCOM.chosenRevision;
+    if (chosen?.asset_id === asset && chosen?.revision_id === revision) {
+      window.AUCOM.chosenRevision = null;
+      revisionChosen();
+    }
+    if ($("build-label").value === label) $("build-label").value = "";
+    forgetReview();
   }
 
   // How returning a leak build's result to the editor went, apart from what
@@ -470,6 +526,7 @@
     button.disabled = Boolean(blocked) || starting;
     const status = $("build-start-message");
     if (!status || starting) return;
+    tellLeakNotice(blocked);
     if (blocked?.checking) scheduleCheck();
     // Redrawn only when what it says changes (see play.js renderPrimary).
     const key = !blocked ? "" : blocked.checking ? "checking" : `${blocked.text}|${blocked.link?.getAttribute?.("href") || ""}`;
@@ -515,8 +572,7 @@
     }, 250);
   }
 
-  // showStep (kept for the callers it had as a wizard: My Maps, the leak-test
-  // request, a refused input) brings the part of the form that step was to
+  // showStep (kept for the callers it had as a wizard: My Maps, a refused input) brings the part of the form that step was to
   // the reader: 1 the build profile, 2 the map, 3 the check, 4 the progress.
   function showStep(n, { focus = true } = {}) {
     renderSteps();
@@ -677,7 +733,7 @@
       roots: Object.keys(roots).length ? roots : undefined,
       label: $("build-label").value.trim() || undefined,
       strict: $("build-strict").checked,
-      leak_request_id: pipeline?.leak_test ? leakRequestID || undefined : undefined,
+      leak_request_id: leakBound() ? leakAdoption.id : undefined,
     };
   }
 
@@ -907,7 +963,8 @@
     $("build-start-message").dataset.shown = "pressed";
     busy("build-start-message", t("Starting…"));
     await (async () => {
-      const { ok, body } = await api("/api/v1/build/runs", { method: "POST", body: requestBody() });
+      const asked = requestBody();
+      const { ok, body } = await api("/api/v1/build/runs", { method: "POST", body: asked });
       starting = false;
       if (!ok && body.code === "already_running" && body.build) {
         // Another press or another tab started exactly this: follow that one.
@@ -924,6 +981,11 @@
         checked = "blocked";
         checkedWhy = explain(body.error)?.advice || sentenceOf(body.error) || t("the build could not be started");
         renderSteps();
+        // The press went to the server and the server said no: what the notice
+        // shows is asked for again, and that decides what happens to the form.
+        if (asked.leak_request_id) {
+          document.dispatchEvent(new CustomEvent("aucom:leak-build-refused", { detail: { request_id: asked.leak_request_id, code: body.code } }));
+        }
         // The refusal's own words, whole, in Activity — and its kind, when the
         // Companion classified it (Q3_010: a converter refusal such as
         // `q3map_shader_unsafe` never becomes a build, so this line and the
@@ -936,7 +998,11 @@
       setMessage("build-result", "", "");
       record(`Build started: ${$("build-label").value.trim() || currentPipeline()?.name || "untitled"}`, "", "running");
       currentBuild = body.build;
-      leakRequestID = null;
+      if (asked.leak_request_id) {
+        leakAdoption = null;
+        leakSaid = "";
+        document.dispatchEvent(new CustomEvent("aucom:leak-build-started", { detail: { request_id: asked.leak_request_id } }));
+      }
       $("build-current-panel").hidden = false;
       $("build-step-4").hidden = false;
       $("build-current-title").textContent = "Building " + ($("build-label").value.trim() || currentPipeline()?.name || "");
@@ -968,6 +1034,8 @@
       const state = body.manifest.state;
       outcome = state;
       renderSteps();
+      // A leak request that was waiting for this build goes on now.
+      document.dispatchEvent(new CustomEvent("aucom:build-ended", { detail: { build: currentBuild, state } }));
       // A compiler that exited 0 while it warned (Q3Map2's `Couldn't find image
       // for shader`) did not produce a finished map, and the result says so.
       const warned = (body.manifest.steps || []).reduce((sum, step) =>
@@ -1545,6 +1613,7 @@
       }
     },
     adoptLeakRequest,
+    dropLeakRequest,
     async refresh() {
       await refreshPipelines();
       applyLocalMap();

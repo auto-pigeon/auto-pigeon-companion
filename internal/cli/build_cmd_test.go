@@ -94,8 +94,8 @@ func TestBuildPipelinesAsJSON(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &rows); err != nil {
 		t.Fatalf("the output is not JSON: %v\n%s", err, stdout.String())
 	}
-	if len(rows) != 11 {
-		t.Fatalf("expected the three Quake 1, two Quake II and two Quake III built-in pipelines and the Quake 1, Quake II, Quake III and Quake III (Auto-Pigeon q3map2 build) leak tests, got %d",
+	if len(rows) != 10 {
+		t.Fatalf("expected the three Quake 1, two Quake II and two Quake III built-in pipelines and the three leak tests, got %d",
 			len(rows))
 	}
 	unfinished := map[string]int{}
@@ -133,8 +133,8 @@ func TestBuildPipelinesAsJSON(t *testing.T) {
 			t.Errorf("%s declares the family %q", row.ID, row.Family)
 		}
 	}
-	if diagnostics != 4 {
-		t.Errorf("%d leak-test pipelines were listed, want the Quake 1, Quake II and both Quake III ones", diagnostics)
+	if diagnostics != 3 {
+		t.Errorf("%d leak-test pipelines were listed, want one per game", diagnostics)
 	}
 	if unfinished["quake2"] != 2 || unfinished["quake3"] != 2 {
 		t.Errorf("%d Quake II and %d Quake III pipelines were listed",

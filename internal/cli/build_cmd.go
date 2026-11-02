@@ -17,6 +17,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/leakadapter"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/maturity"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile/builtin"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/tooluse"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/web"
 )
@@ -880,7 +881,7 @@ func buildLeakPipeline(env *Env, args []string) int {
 		}
 		choices = append(choices, choice{ID: meta.ID, Name: meta.Name, Builtin: adapter.Ships(meta.ID), Steps: steps})
 	}
-	// The game's first built-in pipeline, then its alternatives, then the rest:
+	// The game's built-in pipeline, then the rest:
 	// the page's order.
 	rank := func(c choice) int {
 		switch {
@@ -893,7 +894,12 @@ func buildLeakPipeline(env *Env, args []string) int {
 	}
 	sort.SliceStable(choices, func(i, j int) bool { return rank(choices[i]) < rank(choices[j]) })
 
+	// A pin on a retired built-in pipeline means its replacement (NEW_380), as it
+	// does on the page.
 	pinned := settings.LeakTestPipelines[adapter.Profile]
+	if pinned != "" {
+		pinned = builtin.Current(pinned, func(id string) bool { _, installed := eligible[id]; return installed })
+	}
 	if *pin != "" || *unpin {
 		if *pin != "" {
 			why, installed := eligible[*pin]

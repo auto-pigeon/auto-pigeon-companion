@@ -54,7 +54,7 @@ func q2Request(t *testing.T, game string, platform profile.Platform, action stri
 func TestTheQuake2BaseFolderIsTheOneThatHoldsTheGameNotTheOneAboveIt(t *testing.T) {
 	install, baseq2 := q2BaseFolder(t)
 	linux := profile.Platform{OS: "linux", Arch: "amd64"}
-	for _, id := range []string{EricwQ2, EricwAutoPigeonQ2} {
+	for _, id := range []string{EricwAutoPigeonQ2} {
 		entry, err := Find(id)
 		if err != nil {
 			t.Fatal(err)
@@ -75,7 +75,7 @@ func TestTheQuake2BaseFolderIsTheOneThatHoldsTheGameNotTheOneAboveIt(t *testing.
 }
 
 func TestQuake2LightNeedsTheTexinfoTheCompileWrote(t *testing.T) {
-	for _, id := range []string{EricwQ2, EricwAutoPigeonQ2} {
+	for _, id := range []string{EricwAutoPigeonQ2} {
 		entry, err := Find(id)
 		if err != nil {
 			t.Fatal(err)
@@ -225,13 +225,9 @@ func TestTheForkLightPassesLmextentsOnlyWhenAStageSetsIt(t *testing.T) {
 	if _, err := profile.Resolve(entry.Profile, "light", request); err == nil {
 		t.Error("light with lmextents=double was accepted")
 	}
-	upstream, err := Find(EricwQ2)
-	if err != nil {
-		t.Fatal(err)
-	}
 	request = q2Request(t, baseq2, linux, "light")
 	request.Options = map[string]string{"lmextents": "float32"}
-	if _, err := profile.Resolve(upstream.Profile, "light", request); err == nil {
-		t.Error("the upstream alpha7 profile accepted lmextents, which its light does not know")
+	if _, err := profile.Resolve(retiredDocument(t, EricwAutoPigeonQ2), "light", request); err == nil {
+		t.Error("the upstream alpha7 document accepted lmextents, which its light does not know")
 	}
 }

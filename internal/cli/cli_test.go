@@ -259,7 +259,7 @@ func TestJobProfilesListsWhatCanBeRun(t *testing.T) {
 	if code := Run(env, []string{"job", "profiles"}); code != 0 {
 		t.Fatalf("exit code = %d (stderr: %s)", code, stderr.String())
 	}
-	for _, want := range []string{"auto-pigeon.ericw-tools.q1", "auto-pigeon.engine.quakespasm"} {
+	for _, want := range []string{"auto-pigeon.ericw-tools.auto-pigeon-build.q1", "auto-pigeon.engine.quakespasm"} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Errorf("the catalog is missing %q:\n%s", want, stdout.String())
 		}

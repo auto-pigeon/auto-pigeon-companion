@@ -85,22 +85,17 @@ func q2ToolMain(name string, args []string) int {
 
 // fixtureUsage is what each program prints when it is given nothing, which is
 // how the Companion asks it what it is (Q2_008): the banner and the options its
-// action passes, as 2.0.0-alpha7 spells them. qbsp exits 1 there — alpha7's
-// qbsp stops its usage with `number is too big` before it reaches `-basedir`,
-// measured — and vis and light exit 0. The answer is the text, not the exit.
+// action passes, as the Auto-Pigeon build spells them. The answer is the text,
+// not the exit.
 func fixtureUsage(name string) int {
 	usage := map[string][]string{
-		"qbsp":  {"-q2bsp                        target Quake II's BSP format", "-leaktest                     make compilation fail if the map leaks"},
+		"qbsp":  {"-q2bsp                        target Quake II's BSP format", "-gamedir \"relative/path\"", "-basedir \"relative/path\"", "-leaktest                     make compilation fail if the map leaks"},
 		"vis":   {"-threads n", "-fast                         run very simple & fast vis procedure", "-gamedir \"relative/path\"", "-basedir \"relative/path\"", "-noambient", "-level n"},
 		"light": {"-threads n", "-extra", "-gamedir \"relative/path\"", "-basedir \"relative/path\"", "-nolights", "-soft [n]"},
 	}[name]
-	fmt.Printf("---- %s / ericw-tools 2.0.0-alpha7 ----\nusage: %s [-help/-h/-?] [-options] ...\n", name, name)
+	fmt.Printf("---- %s / ericw-tools 2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535 ----\nusage: %s [-help/-h/-?] [-options] ...\n", name, name)
 	for _, line := range usage {
 		fmt.Println("  " + line)
-	}
-	if name == "qbsp" {
-		fmt.Println("************ ERROR ************\nnumber is too big")
-		return 1
 	}
 	return 0
 }
@@ -191,7 +186,7 @@ func fixtureQBSP(args []string) int {
 		return 2
 	}
 	source, destination := parsed.rest[0], parsed.rest[1]
-	fmt.Println("---- qbsp / ericw-tools 2.0.0-alpha7 ----")
+	fmt.Println("---- qbsp / ericw-tools 2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535 ----")
 	if parsed.baseDir == "" {
 		fmt.Println("WARNING: failed to find basedir")
 	}
@@ -268,7 +263,7 @@ func fixtureVis(args []string) int {
 	}
 	bsp := parsed.rest[0]
 	stem := strings.TrimSuffix(bsp, filepath.Ext(bsp))
-	fmt.Println("---- vis / ericw-tools 2.0.0-alpha7 ----")
+	fmt.Println("---- vis / ericw-tools 2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535 ----")
 	portals, err := os.ReadFile(stem + ".prt")
 	if err != nil {
 		// The measured failure: vis opens the portal file by name, in the
@@ -302,7 +297,7 @@ func fixtureLight(args []string) int {
 	}
 	bsp := parsed.rest[0]
 	stem := strings.TrimSuffix(bsp, filepath.Ext(bsp))
-	fmt.Println("---- light / ericw-tools 2.0.0-alpha7 ----")
+	fmt.Println("---- light / ericw-tools 2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535 ----")
 	if _, err := os.Stat(stem + ".texinfo.json"); err == nil {
 		fmt.Printf("Loading extended texinfo flags from %s.texinfo.json...\n", stem)
 	}

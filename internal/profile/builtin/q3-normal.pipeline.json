@@ -2,7 +2,7 @@
   "schema_version": "aucom.profile/1.1",
   "kind": "pipeline",
   "id": "auto-pigeon.q3.normal",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "name": "Quake III — normal (experimental)",
   "summary": "Experimental: the full visibility pass and lighting with supersampling, filtering and one bounce.",
   "description": "The Quake III build to ship: the BSP stage with surfaces combined, a full visibility pass, and lighting with adaptive supersampling, filtering and one bounce of radiosity.\n\nFour threads, and that has a cost this document states rather than hides: measured on Q3Map2 2.5.17n, the lighting stage produces a different BSP on different runs above one thread. The map is the same map — the lightmap packing is not deterministic — so two builds of an unchanged source will not compare equal. Use “Quake III — fast preview”, which runs on one thread, when that comparison is what you need.\n\nThe light stage is handed the BSP, the compile's surface file and the map source, because it refuses to run without all three.\n\nQuake III support in Auto-Pigeon is work in progress. Shader, patch, entity, compilation and engine workflows may be incomplete.",
@@ -39,7 +39,7 @@
       "id": "compile",
       "title": "Compile the map",
       "capability": "q3.bsp.compile",
-      "tool": "auto-pigeon.q3map2",
+      "tool": "auto-pigeon.q3map2.auto-pigeon-build",
       "inputs": [
         {
           "name": "source_map",
@@ -56,7 +56,7 @@
       "id": "vis",
       "title": "Compute visibility",
       "capability": "q3.bsp.vis",
-      "tool": "auto-pigeon.q3map2",
+      "tool": "auto-pigeon.q3map2.auto-pigeon-build",
       "inputs": [
         {
           "name": "bsp",
@@ -76,7 +76,7 @@
       "id": "light",
       "title": "Compute lighting",
       "capability": "q3.bsp.light",
-      "tool": "auto-pigeon.q3map2",
+      "tool": "auto-pigeon.q3map2.auto-pigeon-build",
       "inputs": [
         {
           "name": "bsp",

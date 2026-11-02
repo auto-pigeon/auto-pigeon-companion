@@ -505,7 +505,7 @@ func TestAReleaseKeepsWhatAPersonChose(t *testing.T) {
 			if err := os.WriteFile(program, mt.FixtureProgram(t), 0o755); err != nil {
 				t.Fatal(err)
 			}
-			entry, err := builtin.Find("auto-pigeon.ericw-tools.q1")
+			entry, err := builtin.Find("auto-pigeon.ericw-tools.auto-pigeon-build.q1")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -550,9 +550,9 @@ func TestAReleaseKeepsWhatAPersonChose(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				other, _ := after.Find("auto-pigeon.ericw-tools.q2")
+				other, _ := after.Find("auto-pigeon.ericw-tools.auto-pigeon-build.q2")
 				if other.Managed != nil {
-					mine, _ := after.Find("auto-pigeon.ericw-tools.q1")
+					mine, _ := after.Find("auto-pigeon.ericw-tools.auto-pigeon-build.q1")
 					if mine.Acquisition != profile.AcquireUserPath || mine.Executables["qbsp"] != program || mine.Managed != nil {
 						t.Fatalf("the person's own program was replaced: %+v", mine)
 					}

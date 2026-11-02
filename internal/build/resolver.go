@@ -73,12 +73,6 @@ func NewResolver(catalog Catalog) (*Resolver, error) {
 			if _, seen := own[action.Capability]; !seen {
 				own[action.Capability] = provider{entry: entry, tool: tool, action: action}
 			}
-			// A built-in ALTERNATIVE build of a compiler (the Auto-Pigeon build of
-			// ericw-tools) is reached only by a stage that names it: it is neither
-			// the provider of an unnamed stage nor a conflict with the default.
-			if entry.Trust == profile.TrustBuiltin && builtin.IsAlternativeTool(tool.Meta.ID) {
-				continue
-			}
 			if first, taken := r.providers[action.Capability]; taken {
 				r.Conflicts[action.Capability] = uniqueSorted(append(r.Conflicts[action.Capability],
 					first.entry.Profile.Metadata().ID, tool.Meta.ID))
@@ -116,6 +110,12 @@ func (r *Resolver) ExplainNamedTool(tool, capability string) (problem, fix strin
 	kind, installed := r.kinds[tool]
 	switch {
 	case !installed:
+		// A stage a person or an older document wrote is not rewritten for them,
+		// and it does not fall back: it is told what took the retired tool's place.
+		if replacement, retired := builtin.ReplacementFor(tool); retired {
+			return fmt.Sprintf("names the tool %s, which this Companion no longer ships", tool),
+				"choose " + replacement + " for this stage"
+		}
 		return fmt.Sprintf("names the tool %s, which is not installed", tool),
 			"install " + tool + ", or choose another tool for this stage"
 	case kind != profile.KindTool:

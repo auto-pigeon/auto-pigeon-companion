@@ -66,7 +66,9 @@ update belongs to `NEW_368`, which consumes this coordinator and its verificatio
 5. **Bind only what nobody chose.** `web.bindManaged` rebinds a profile only when it is unbound,
    has no programs, or is already `managed_official`; all of a tool's profiles in one
    `binding.Update`. A person's own program clears `managed` and is never replaced; Settings and
-   `companion tools use-managed` are the only way back.
+   `companion tools use-managed` are the only way back. At every start `bindUnboundToInstalled` gives a
+   built-in profile with no programs the verified installation already here (`NEW_380`: a person's
+   earlier bindings could all be on a retired document); it downloads nothing and looks at nothing else.
 6. **Offer, never apply unasked.** Update now / Update when I close Companion / Cancel, and "Don't
    ask again for this version" suppresses exactly `(tool, version, asset id, sha256)`. A Cancel
    without it is not shown again in this process, nor for a day. A version seen with other bytes is

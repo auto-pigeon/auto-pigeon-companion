@@ -2,7 +2,7 @@
   "schema_version": "aucom.profile/1.1",
   "kind": "pipeline",
   "id": "auto-pigeon.q3.leak-test",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "name": "Quake III — leak test (experimental)",
   "summary": "Experimental: only Q3Map2's BSP stage, with the leak test on: does the map leak, and where.",
   "description": "For the question “is this map sealed”, asked of one exact saved revision. It runs Q3Map2's BSP stage with `-leaktest` and stops there: no visibility, no lighting, no package and no engine, because none of them says anything about a leak.\n\nMeasured on Q3Map2 2.5.17n: a leaked map exits 0, prints `Entity N, Brush 0: Entity leaked`, writes a `.lin` line file beside the staged map and writes no BSP. The compile step is therefore recorded as failed — its BSP is not there, which is the truthful state of a compile that refused to write one — while the leak is a separate fact, read from what the compiler said and the line file it left. Both are published: the line file as `lin`, and everything Q3Map2 printed as `compile_log`, whichever way the step ended.\n\nThe line file runs from OUTSIDE the map to the entity Q3Map2 reached. That is the opposite of EricW's Quake 1 point file, which starts at the entity.\n\nWhat a pass means is narrow on purpose: this compiler, at this version, found no leak in this revision. A map with no entity standing in open space is not tested at all — Q3Map2 prints the same `leaked` banner for it, names no entity and writes no line file, and that is reported as not tested rather than as a hole. A curved patch or a detail brush across a gap does not seal it. Four threads: the BSP stage was measured to produce the same file at any thread count.\n\nThe Auto-Pigeon editor asks for this pipeline through an `autopigeon://leaktest/` link, and a person approves it here before anything runs.\n\nQuake III support in Auto-Pigeon is work in progress. Shader, patch, entity, compilation and engine workflows may be incomplete.",
@@ -39,7 +39,7 @@
       "id": "compile",
       "title": "Compile the map",
       "capability": "q3.bsp.compile",
-      "tool": "auto-pigeon.q3map2",
+      "tool": "auto-pigeon.q3map2.auto-pigeon-build",
       "inputs": [
         {
           "name": "source_map",

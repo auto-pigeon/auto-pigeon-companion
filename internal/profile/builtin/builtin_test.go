@@ -71,7 +71,7 @@ func TestBuiltinDigestsAreStableAcrossLoads(t *testing.T) {
 }
 
 func TestFindReportsAMissingIdByName(t *testing.T) {
-	if _, err := Find(EricwQ1); err != nil {
+	if _, err := Find(EricwAutoPigeonQ1); err != nil {
 		t.Errorf("a built-in profile could not be found: %v", err)
 	}
 	_, err := Find("not.installed")
@@ -94,7 +94,7 @@ func TestFindReportsAMissingIdByName(t *testing.T) {
 //
 // If a privileged path for built-in profiles ever appears, this is what fails.
 func TestBuiltinAndUserAuthoredResolveToTheSameCommand(t *testing.T) {
-	sample, err := Find(EricwQ1)
+	sample, err := Find(EricwAutoPigeonQ1)
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
@@ -176,7 +176,7 @@ func TestNoTwoBuiltinToolsProvideTheSameCapability(t *testing.T) {
 	provider := map[string]string{}
 	for _, e := range entries {
 		tool, isTool := e.Profile.(*profile.ToolProfile)
-		if !isTool || IsAlternativeTool(tool.Meta.ID) {
+		if !isTool {
 			continue
 		}
 		for _, a := range tool.Actions {
@@ -191,16 +191,17 @@ func TestNoTwoBuiltinToolsProvideTheSameCapability(t *testing.T) {
 	}
 }
 
-// An alternative build is the same compiler from another publisher, so it does
-// what its family default does and nothing else: the same capabilities, the same
-// actions and options, the same game. What differs is where it comes from and
-// where its programs sit in the folder — and those are stated, not left to be
-// the default's by inheritance.
+// A fork took over from the upstream document it replaced (NEW_380), so it does
+// what that document did and nothing else: the same capabilities, the same
+// actions and options, the same game — no pipeline option was lost in the move.
+// What differs is where it comes from and where its programs sit in the folder,
+// and those are stated, not left to be the old document's by inheritance. The
+// retired documents are read from testdata/retired; no catalogue offers them.
 //
 // One exception, listed by name in forkOnlyOptions: an option of the fork's own
-// that its default's release does not have. It is advanced and has no default,
-// so a stage that does not set it renders exactly the default's argv.
-func TestTheAutoPigeonBuildsAreAlternativesThatPointAtTheirGitHubReleases(t *testing.T) {
+// that the retired release did not have. It is advanced and has no default, so a
+// stage that does not set it renders exactly the retired document's argv.
+func TestEachForkDoesWhatTheDocumentItReplacedDidAndPointsAtItsGitHubReleases(t *testing.T) {
 	const releases = "https://github.com/auto-pigeon/ericw-tools/releases"
 	for _, id := range []string{EricwAutoPigeonQ1, EricwAutoPigeonQ2} {
 		entry, err := Find(id)
@@ -208,17 +209,13 @@ func TestTheAutoPigeonBuildsAreAlternativesThatPointAtTheirGitHubReleases(t *tes
 			t.Fatalf("%s: %v", id, err)
 		}
 		fork := entry.Profile.(*profile.ToolProfile)
-		base, err := Find(AlternativeOf(id))
-		if err != nil {
-			t.Fatalf("%s stands beside %q: %v", id, AlternativeOf(id), err)
-		}
-		upstream := base.Profile.(*profile.ToolProfile)
+		upstream := retiredDocument(t, id)
 
 		if fork.GameProfile.EngineFamily != upstream.GameProfile.EngineFamily {
-			t.Errorf("%s is for %s, its default for %s", id, fork.GameProfile.EngineFamily, upstream.GameProfile.EngineFamily)
+			t.Errorf("%s is for %s, what it replaced for %s", id, fork.GameProfile.EngineFamily, upstream.GameProfile.EngineFamily)
 		}
 		if len(fork.Actions) != len(upstream.Actions) {
-			t.Fatalf("%s has %d actions, its default %d", id, len(fork.Actions), len(upstream.Actions))
+			t.Fatalf("%s has %d actions, what it replaced %d", id, len(fork.Actions), len(upstream.Actions))
 		}
 		for index, action := range fork.Actions {
 			want := upstream.Actions[index]
@@ -238,7 +235,7 @@ func TestTheAutoPigeonBuildsAreAlternativesThatPointAtTheirGitHubReleases(t *tes
 			}
 			if action.ID != want.ID || action.Capability != want.Capability || action.Executable != want.Executable ||
 				options != len(want.Options) || args != len(want.Args) {
-				t.Errorf("%s action %s differs from its default's %s", id, action.ID, want.ID)
+				t.Errorf("%s action %s differs from the retired document's %s", id, action.ID, want.ID)
 			}
 		}
 
@@ -292,7 +289,7 @@ func TestEveryBuiltinPipelineResolvesAgainstTheBuiltinToolchain(t *testing.T) {
 	// experimental Quake II compiler, a Quake II pipeline can never silently
 	// fall back to the stable Quake 1 one, and neither can reach Q3Map2.
 	toolchains := map[string]*profile.ToolProfile{}
-	for family, id := range map[string]string{"quake1": EricwQ1, "quake2": EricwQ2, "quake3": Q3Map2} {
+	for family, id := range map[string]string{"quake1": EricwAutoPigeonQ1, "quake2": EricwAutoPigeonQ2, "quake3": Q3Map2AutoPigeon} {
 		entry, err := Find(id)
 		if err != nil {
 			t.Fatalf("%v", err)
@@ -320,13 +317,6 @@ func TestEveryBuiltinPipelineResolvesAgainstTheBuiltinToolchain(t *testing.T) {
 		if !known {
 			t.Errorf("%s is for the family %q, which this build ships no toolchain for", e.File, family)
 			continue
-		}
-		if alternative, ok := AlternativePipelines[pipeline.ID]; ok {
-			entry, err := Find(alternative)
-			if err != nil {
-				t.Fatal(err)
-			}
-			tool = entry.Profile.(*profile.ToolProfile)
 		}
 		steps, err := pipeline.Resolve(installed{tool})
 		if err != nil {
@@ -371,9 +361,9 @@ func TestAPipelineCannotResolveAgainstAnotherGamesToolchain(t *testing.T) {
 		toolchain string
 		pipelines []string
 	}{
-		{"Quake 1", EricwQ1, Q1Pipelines},
-		{"Quake II", EricwQ2, Q2Pipelines},
-		{"Quake III", Q3Map2, Q3Pipelines},
+		{"Quake 1", EricwAutoPigeonQ1, Q1Pipelines},
+		{"Quake II", EricwAutoPigeonQ2, Q2Pipelines},
+		{"Quake III", Q3Map2AutoPigeon, Q3Pipelines},
 	}
 	for _, tool := range families {
 		entry, err := Find(tool.toolchain)
@@ -597,34 +587,33 @@ func TestTheGenericQuake3ProfileSendsOnlyTheVanillaVocabulary(t *testing.T) {
 	}
 }
 
-// Q3Map2 is the only toolchain here with no managed download, and that is a
-// decision rather than an omission: upstream publishes it inside a bundle of
-// the NetRadiant editor, in a container this program does not unpack, and
-// `AUP/AUCOM 216` says not to install an editor to get at a compiler. A later
-// change that adds a `managed_download` has to add a catalogue entry for a
-// 40 MB editor first, and this is where it is asked to think about that.
-func TestQ3Map2DeclaresNoManagedDownloadAndSaysWhy(t *testing.T) {
-	entry, err := Find(Q3Map2)
-	if err != nil {
-		t.Fatalf("%v", err)
-	}
-	tool := entry.Profile.(*profile.ToolProfile)
-	if len(tool.Acquisition) == 0 {
-		t.Fatal("Q3Map2 declares no way of being acquired at all")
-	}
-	for _, option := range tool.Acquisition {
-		if option.Mode == profile.AcquireManagedDownload {
-			t.Errorf("Q3Map2 declares a managed download of %q; there is no artifact to pin that is not "+
-				"a map editor", option.CatalogPackage)
+// A document names no download: `managed_download` is read and refused
+// (aucom.managed-tools), and the two official toolchains come from one owner,
+// internal/managedtools. What a document does say is where a person gets the
+// same release by hand.
+func TestADocumentNamesNoDownloadOnlyTheReleasesPage(t *testing.T) {
+	for id, page := range map[string]string{
+		EricwAutoPigeonQ1: "https://github.com/auto-pigeon/ericw-tools/releases",
+		EricwAutoPigeonQ2: "https://github.com/auto-pigeon/ericw-tools/releases",
+		Q3Map2AutoPigeon:  "https://github.com/auto-pigeon/q3map2/releases",
+	} {
+		entry, err := Find(id)
+		if err != nil {
+			t.Fatalf("%v", err)
 		}
-	}
-	first := tool.Acquisition[0]
-	if first.Mode != profile.AcquireUserPath {
-		t.Errorf("Q3Map2's first acquisition route is %q; the one that works is user_path", first.Mode)
-	}
-	if !strings.Contains(first.Note, "editor") {
-		t.Error("Q3Map2's first acquisition route does not say why there is no download; " +
-			"`unavailable` with no reason is the thing a user cannot act on")
+		tool := entry.Profile.(*profile.ToolProfile)
+		if len(tool.Acquisition) == 0 {
+			t.Fatalf("%s declares no way of being acquired at all", id)
+		}
+		for _, option := range tool.Acquisition {
+			if option.Mode == profile.AcquireManagedDownload {
+				t.Errorf("%s declares a managed download of %q", id, option.CatalogPackage)
+			}
+		}
+		first := tool.Acquisition[0]
+		if first.Mode != profile.AcquireUserPath || !strings.Contains(first.Note, page) {
+			t.Errorf("%s first route = %q, note %q: want user_path naming %s", id, first.Mode, first.Note, page)
+		}
 	}
 }
 
@@ -1014,7 +1003,7 @@ func (i installed) ProviderFrom(tool, capability string) (*profile.ToolProfile, 
 // HITL): a user's own tool that provides the same capability must never make a
 // built-in pipeline ambiguous, nor be used by it unasked.
 func TestEveryBuiltinPipelineStageNamesItsFamilysBuiltinTool(t *testing.T) {
-	want := map[string]string{"quake1": EricwQ1, "quake2": EricwQ2, "quake3": Q3Map2}
+	want := map[string]string{"quake1": EricwAutoPigeonQ1, "quake2": EricwAutoPigeonQ2, "quake3": Q3Map2AutoPigeon}
 	entries, err := Load()
 	if err != nil {
 		t.Fatal(err)
@@ -1025,13 +1014,6 @@ func TestEveryBuiltinPipelineStageNamesItsFamilysBuiltinTool(t *testing.T) {
 			continue
 		}
 		wantTool := want[pipeline.GameProfile.EngineFamily]
-		if alternative, ok := AlternativePipelines[pipeline.ID]; ok {
-			// Named on every stage, and a built-in alternative of THIS family.
-			if !IsAlternativeTool(alternative) || alternativeTools[alternative] != wantTool {
-				t.Errorf("%s names %q, which is not a %s alternative", e.File, alternative, pipeline.GameProfile.EngineFamily)
-			}
-			wantTool = alternative
-		}
 		for _, step := range pipeline.Steps {
 			if step.Tool != wantTool {
 				t.Errorf("%s step %s names tool %q, want %q", e.File, step.ID, step.Tool, wantTool)

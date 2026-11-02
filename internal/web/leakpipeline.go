@@ -12,6 +12,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/config"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/leakadapter"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile/builtin"
 )
 
 // The pipeline a leak test runs is the user's choice, per game (NEW_310, HITL
@@ -31,10 +32,25 @@ import (
 // APMap's own word; a pin never decides it.
 
 // pinnedLeakPipeline is the pipeline pinned for a game, or "".
+//
+// A pin on a pipeline this build retired means its replacement (NEW_380): the
+// file is not rewritten, so an older Companion after a rollback reads what it
+// wrote, and a pin on a person's own profile of that id stays theirs.
 func (s *Server) pinnedLeakPipeline(game string) string {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.settings.LeakTestPipelines[game]
+	pinned := s.settings.LeakTestPipelines[game]
+	s.mu.RUnlock()
+	if pinned == "" {
+		return ""
+	}
+	return builtin.Current(pinned, func(id string) bool {
+		catalog, err := s.catalog()
+		if err != nil {
+			return true // cannot tell: the pin is reported as it stands
+		}
+		_, err = catalog.Lookup(id)
+		return err == nil
+	})
 }
 
 // leakBinding binds one installed pipeline to a game's leak test.
@@ -101,7 +117,7 @@ func (s *Server) leakChoices(game string) ([]map[string]any, error) {
 			"builtin": adapter.Ships(meta.ID), "readiness": readiness.view(), "steps": pipelineSteps(pipeline),
 		})
 	}
-	// The game's first built-in pipeline, then its alternatives, then the rest.
+	// The game's built-in pipeline, then the rest.
 	rank := func(choice map[string]any) int {
 		switch {
 		case choice["id"] == adapter.PipelineID:

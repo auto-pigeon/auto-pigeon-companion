@@ -48,3 +48,4 @@ ways.
 | [0009](0009-a-program-is-asked-what-it-is-and-the-answer-is-evidence-about-one-file.md) | A program is asked what it is, by the executor, and the answer is evidence about one file | Accepted (operator review pending) | 2026-10-12 |
 | [0010](0010-the-companion-installs-and-updates-two-official-toolchains.md) | The Companion installs and updates the two toolchains Auto-Pigeon maintains, and nothing else | Accepted; amended by NEW_368 (the Companion's own release is the second managed target) | 2026-10-28 |
 | [0011](0011-map-conversion-is-an-open-source-converter-built-here.md) | Map conversion is an open-source converter built here | accepted |
+| [0012](0012-the-built-in-compilers-are-auto-pigeons-builds.md) | The built-in compilers are Auto-Pigeon's builds, and a program is not migrated | Accepted | 2026-11-02 |

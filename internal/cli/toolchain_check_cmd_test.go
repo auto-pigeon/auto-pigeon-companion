@@ -12,6 +12,7 @@ import (
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile/builtin/retiredfixture"
 )
 
 // NEW_323D from a terminal: `toolchain check`, `job run` and `build run` give
@@ -19,7 +20,7 @@ import (
 // not written for, and none of them starts a compiler. The fixture programs
 // record their own arguments.
 
-const ericwQ1 = "auto-pigeon.ericw-tools.q1"
+const ericwQ1 = "auto-pigeon.ericw-tools.auto-pigeon-build.q1"
 
 func compatPrograms(t *testing.T, dir, log string, banners map[string]string) map[string]string {
 	t.Helper()
@@ -76,7 +77,7 @@ func TestTheCommandLineRefusesWhatThePageRefuses(t *testing.T) {
 
 	// A modern qbsp beside a 0.18.1 vis and light: the mixed installation.
 	bindCompat(t, env, compatPrograms(t, dir, log, map[string]string{
-		"qbsp": "2.0.0-alpha11", "vis": "v0.18.1", "light": "v0.18.1", "bspinfo": "v0.18.1", "bsputil": "v0.18.1"}))
+		"qbsp": "2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535", "vis": "v0.18.1", "light": "v0.18.1", "bspinfo": "v0.18.1", "bsputil": "v0.18.1"}))
 
 	code, out, errOut := runCLI(t, env, "toolchain", "check", ericwQ1, "--json")
 	if code != 1 {
@@ -98,7 +99,7 @@ func TestTheCommandLineRefusesWhatThePageRefuses(t *testing.T) {
 			t.Errorf("%s: the problem does not say what it is: %s", program.Executable, program.Problem)
 		}
 	}
-	if report.Compatible || got["qbsp"] != "compatible 2.0.0-alpha11" || got["vis"] != "incompatible v0.18.1" || got["light"] != "incompatible v0.18.1" || len(got) != 3 {
+	if report.Compatible || got["qbsp"] != "compatible 2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535" || got["vis"] != "incompatible v0.18.1" || got["light"] != "incompatible v0.18.1" || len(got) != 3 {
 		t.Fatalf("toolchain check: %+v", report)
 	}
 
@@ -170,7 +171,7 @@ func TestTheCommandLineRefusesWhatThePageRefuses(t *testing.T) {
 
 	// Supported programs throughout: the check passes and says so.
 	bindCompat(t, env, compatPrograms(t, dir, log, map[string]string{
-		"qbsp": "2.0.0-alpha11", "vis": "2.0.0-alpha11", "light": "2.0.0-alpha11", "bspinfo": "2.0.0-alpha11", "bsputil": "2.0.0-alpha11"}))
+		"qbsp": "2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535", "vis": "2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535", "light": "2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535", "bspinfo": "2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535", "bsputil": "2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535"}))
 	if code, out, errOut = runCLI(t, env, "toolchain", "check", ericwQ1); code != 0 || strings.Contains(out, "incompatible") {
 		t.Errorf("toolchain check on supported programs exited %d: %s%s", code, out, errOut)
 	}
@@ -183,8 +184,20 @@ func TestTheCommandLineRefusesWhatThePageRefuses(t *testing.T) {
 	if strings.Contains(out, "tool_incompatible") {
 		t.Errorf("build pipelines on supported programs still names an incompatible program: %s", out)
 	}
-	// A toolchain that requires nothing has nothing to check, and says that.
-	if code, out, _ = runCLI(t, env, "toolchain", "check", "auto-pigeon.q3map2"); code != 0 || !strings.Contains(out, "requires nothing") {
+	// A toolchain that requires nothing has nothing to check, and says that. Every
+	// built-in document requires something now, so this one is a person's own.
+	own, err := retiredfixture.Raw(retiredfixture.Q3Map2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mine := filepath.Join(filepath.Dir(env.ConfigPath), "profiles")
+	if err := os.MkdirAll(mine, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(mine, "my-q3map2.tool.json"), own, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if code, out, _ = runCLI(t, env, "toolchain", "check", retiredfixture.Q3Map2); code != 0 || !strings.Contains(out, "requires nothing") {
 		t.Errorf("toolchain check q3map2 (%d): %s", code, out)
 	}
 }

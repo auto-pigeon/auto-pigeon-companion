@@ -318,7 +318,7 @@ func TestConcurrentGrantsAndWithdrawalsLoseNoUnrelatedBinding(t *testing.T) {
 // appeared in a directory being treated as one that shipped with the program.
 func TestABuiltinKeepsItsTrustAndNeedsNoGrant(t *testing.T) {
 	m := newMachine(t)
-	const builtinID = "auto-pigeon.ericw-tools.q1"
+	const builtinID = "auto-pigeon.ericw-tools.auto-pigeon-build.q1"
 
 	decision := m.review(builtinID)
 	if decision.Entry.Trust != profile.TrustBuiltin {

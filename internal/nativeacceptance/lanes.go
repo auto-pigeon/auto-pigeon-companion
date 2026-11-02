@@ -21,7 +21,7 @@ const ToolProfileID = "auto-pigeon.acceptance.native-kit"
 // Q1ToolProfileID and Q1PipelineID are the built-in documents the compile lane
 // drives. Named here rather than typed at three call sites.
 const (
-	Q1ToolProfileID = "auto-pigeon.ericw-tools.q1"
+	Q1ToolProfileID = "auto-pigeon.ericw-tools.auto-pigeon-build.q1"
 	Q1PipelineID    = "auto-pigeon.q1.normal"
 )
 

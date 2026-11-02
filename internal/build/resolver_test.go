@@ -18,7 +18,7 @@ func (c listCatalog) List() ([]job.CatalogEntry, error) { return c, nil }
 // New profile wizard invites (NEW_310, found live on Windows).
 func twoEricWs(t *testing.T) (listCatalog, *profile.PipelineProfile) {
 	t.Helper()
-	tool, err := builtin.Find(builtin.EricwQ1)
+	tool, err := builtin.Find(builtin.EricwAutoPigeonQ1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,10 +50,10 @@ func TestAStageThatNamesItsToolIsNeverAmbiguous(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := steps[0].Profile.Meta.ID; got != builtin.EricwQ1 {
+	if got := steps[0].Profile.Meta.ID; got != builtin.EricwAutoPigeonQ1 {
 		t.Errorf("the built-in leak test ran %s", got)
 	}
-	if entry, ok := resolver.EntryForStep(leak.Steps[0]); !ok || entry.Profile.Metadata().ID != builtin.EricwQ1 {
+	if entry, ok := resolver.EntryForStep(leak.Steps[0]); !ok || entry.Profile.Metadata().ID != builtin.EricwAutoPigeonQ1 {
 		t.Errorf("the recorded tool is %v", entry.Profile)
 	}
 
@@ -70,7 +70,7 @@ func TestAStageThatNamesItsToolIsNeverAmbiguous(t *testing.T) {
 	unnamed.Steps = append([]profile.PipelineStep(nil), leak.Steps...)
 	unnamed.Steps[0].Tool = ""
 	err = resolver.CheckSteps(unnamed.Steps)
-	if err == nil || !strings.Contains(err.Error(), builtin.EricwQ1) || !strings.Contains(err.Error(), "local.tool.my-ericw") {
+	if err == nil || !strings.Contains(err.Error(), builtin.EricwAutoPigeonQ1) || !strings.Contains(err.Error(), "local.tool.my-ericw") {
 		t.Errorf("an unnamed stage with two providers: %v", err)
 	}
 
@@ -83,60 +83,58 @@ func TestAStageThatNamesItsToolIsNeverAmbiguous(t *testing.T) {
 	}
 }
 
-// The Auto-Pigeon build of ericw-tools ships beside the upstream profile and
-// provides the same capabilities. It is an ALTERNATIVE: it must not make a stage
-// that names no tool ambiguous — that would break every such pipeline on every
-// installation the day it updated — and it must not be chosen for one either.
-// It runs only for a stage that names it, whichever order the catalog lists the
-// two in.
-func TestTheAutoPigeonBuildNeverAnswersAStageThatDidNotNameIt(t *testing.T) {
-	for family, pair := range map[string][2]string{
-		"quake1": {builtin.EricwQ1, builtin.EricwAutoPigeonQ1},
-		"quake2": {builtin.EricwQ2, builtin.EricwAutoPigeonQ2},
-	} {
-		upstream, err := builtin.Find(pair[0])
+// NEW_380: the forks stand alone, so a stage a person left unnamed is answered by
+// the one built-in tool of its game, with nothing to rank and no conflict.
+func TestAnUnnamedStageIsAnsweredByTheMaintainedBuild(t *testing.T) {
+	for _, id := range []string{builtin.EricwAutoPigeonQ1, builtin.EricwAutoPigeonQ2, builtin.Q3Map2AutoPigeon} {
+		fork, err := builtin.Find(id)
 		if err != nil {
 			t.Fatal(err)
 		}
-		fork, err := builtin.Find(pair[1])
+		resolver, err := NewResolver(listCatalog{{Profile: fork.Profile, Trust: profile.TrustBuiltin}})
 		if err != nil {
 			t.Fatal(err)
 		}
-		capability := upstream.Profile.(*profile.ToolProfile).Actions[0].Capability
-		for name, catalog := range map[string]listCatalog{
-			"upstream listed first": {{Profile: upstream.Profile, Trust: profile.TrustBuiltin}, {Profile: fork.Profile, Trust: profile.TrustBuiltin}},
-			"fork listed first":     {{Profile: fork.Profile, Trust: profile.TrustBuiltin}, {Profile: upstream.Profile, Trust: profile.TrustBuiltin}},
-		} {
-			resolver, err := NewResolver(catalog)
-			if err != nil {
-				t.Fatal(err)
-			}
-			unnamed := []profile.PipelineStep{{ID: "compile", Capability: capability}}
-			if err := resolver.CheckSteps(unnamed); err != nil {
-				t.Errorf("%s, %s: an unnamed stage became ambiguous: %v", family, name, err)
-			}
-			if len(resolver.Conflicts) != 0 {
-				t.Errorf("%s, %s: conflicts = %v", family, name, resolver.Conflicts)
-			}
-			if tool, _, ok := resolver.ProviderForStep(unnamed[0]); !ok || tool.Meta.ID != pair[0] {
-				t.Errorf("%s, %s: an unnamed stage resolved to %v, want %s", family, name, tool, pair[0])
-			}
-			named := profile.PipelineStep{ID: "compile", Capability: capability, Tool: pair[1]}
-			tool, action, ok := resolver.ProviderForStep(named)
-			if !ok || tool.Meta.ID != pair[1] || action.Capability != capability {
-				t.Errorf("%s, %s: a stage naming the Auto-Pigeon build resolved to %v", family, name, tool)
-			}
-			if entry, ok := resolver.EntryForStep(named); !ok || entry.Profile.Metadata().ID != pair[1] {
-				t.Errorf("%s, %s: the recorded tool for a named stage is wrong", family, name)
-			}
+		capability := fork.Profile.(*profile.ToolProfile).Actions[0].Capability
+		unnamed := []profile.PipelineStep{{ID: "compile", Capability: capability}}
+		if err := resolver.CheckSteps(unnamed); err != nil || len(resolver.Conflicts) != 0 {
+			t.Errorf("%s: an unnamed stage: %v, conflicts %v", id, err, resolver.Conflicts)
 		}
+		if tool, _, ok := resolver.ProviderForStep(unnamed[0]); !ok || tool.Meta.ID != id {
+			t.Errorf("an unnamed stage resolved to %v, want %s", tool, id)
+		}
+	}
+}
+
+// NEW_380: a user's pipeline that names a retired built-in tool keeps naming it.
+// It is not rewritten and does not fall back to the fork, and it is told, by
+// name, what took that tool's place.
+func TestAStageNamingARetiredToolIsToldWhatReplacedItAndDoesNotFallBack(t *testing.T) {
+	fork, err := builtin.Find(builtin.EricwAutoPigeonQ1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolver, err := NewResolver(listCatalog{{Profile: fork.Profile, Trust: profile.TrustBuiltin}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, ok := resolver.ProviderFrom("auto-pigeon.ericw-tools.q1", "q1.bsp.compile"); ok {
+		t.Fatal("a retired tool resolved to something")
+	}
+	problem, fix := resolver.ExplainNamedTool("auto-pigeon.ericw-tools.q1", "q1.bsp.compile")
+	if !strings.Contains(problem, "no longer ships") || !strings.Contains(fix, builtin.EricwAutoPigeonQ1) {
+		t.Errorf("explained as %q / %q", problem, fix)
+	}
+	// Anything else that is missing is still only missing.
+	if problem, _ := resolver.ExplainNamedTool("local.tool.gone", "q1.bsp.compile"); !strings.Contains(problem, "is not installed") {
+		t.Errorf("a missing user tool: %q", problem)
 	}
 }
 
 // Only a BUILT-IN alternative is exempt. A user's own tool that borrows the id is
 // an ordinary second provider, refused as every other one is.
 func TestAUserProfileCannotBorrowTheAlternativeExemption(t *testing.T) {
-	upstream, err := builtin.Find(builtin.EricwQ1)
+	upstream, err := builtin.Find(builtin.EricwAutoPigeonQ1)
 	if err != nil {
 		t.Fatal(err)
 	}

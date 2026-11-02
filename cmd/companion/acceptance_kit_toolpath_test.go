@@ -74,15 +74,17 @@ func TestTheKitTakesAnEricWBuildByItsFolderOrItsBinFolder(t *testing.T) {
 	}{
 		"the official archive's folder": {
 			layout: func(t *testing.T, build string) { writePrograms(t, filepath.Join(build, "bin"), ericwPrograms...) },
-			named:  ".", state: "pass", detail: filepath.Join("<tool_path>", "bin"),
+			named:  ".", state: "pass", detail: "(<tool_path>)",
 		},
 		"its bin folder": {
 			layout: func(t *testing.T, build string) { writePrograms(t, filepath.Join(build, "bin"), ericwPrograms...) },
-			named:  "bin", state: "pass", detail: "<tool_path>",
+			named:  "bin", state: "pass", detail: filepath.Join("<tool_path>", ".."),
 		},
+		// Upstream's layout. The profile bound here is the Auto-Pigeon build's, whose
+		// programs are in bin/, so this is not that build (NEW_380).
 		"a build with its programs at the top": {
 			layout: func(t *testing.T, build string) { writePrograms(t, build, ericwPrograms...) },
-			named:  ".", state: "pass", detail: "<tool_path>",
+			named:  ".", state: "fail", detail: "no complete Auto-Pigeon EricW build",
 		},
 		"a program missing": {
 			layout: func(t *testing.T, build string) {
@@ -92,7 +94,7 @@ func TestTheKitTakesAnEricWBuildByItsFolderOrItsBinFolder(t *testing.T) {
 		},
 		"the wrong folder": {
 			layout: func(t *testing.T, build string) { writePrograms(t, filepath.Join(build, "other"), ericwPrograms...) },
-			named:  ".", state: "fail", detail: "in it or in its bin folder",
+			named:  ".", state: "fail", detail: "no complete Auto-Pigeon EricW build",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

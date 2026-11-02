@@ -19,8 +19,16 @@
 //     A hidden page still learns of it, and says so in its tab title.
 //   - One read at a time, and an answer about a request that has since been
 //     replaced is thrown away. `generation` is what tells them apart.
-//   - Nothing here runs anything. Review takes the request into the Build
-//     wizard; the wizard shows the command; a person presses Build.
+//   - Nothing here runs anything. A request that can run is prepared by itself
+//     (NEW_380, HITL: no separate Review step): the form opens on the exact saved
+//     revision, its automatic check runs, and Build is enabled. A person presses
+//     it; the command stays under Technical details. A received or prepared
+//     request is neither compiling nor finished, and the editor is told only
+//     that it is ready.
+//   - What the Build button is aimed at follows what this notice shows. A
+//     request replaced, dismissed, gone or no longer this account's is dropped
+//     from the form in the same turn, before anything newer is prepared, and the
+//     server checks the press again whatever the page believes.
 
 "use strict";
 
@@ -31,13 +39,23 @@
   const box = $("leak-request");
 
   // `seen` is the request the notice is about; `details` is what resolving it
-  // said; `reviewing` is the request taken into the wizard from THIS page.
+  // said. `form` is how far THIS page got with it: "" nothing yet, "preparing"
+  // the form is being filled and checked, "ready" Build is enabled, "blocked" the
+  // check says why not, "busy" another build is running here, "left" a person
+  // changed the form into another build. `formWhy` is the sentence for the last
+  // two. `formKey` is what was prepared, so one request, pipeline and setup is
+  // prepared once and a changed pin or a recovered setup prepares again.
   let seen = null;
   let details = null;
-  let reviewing = null;
+  let form = "";
+  let formWhy = "";
+  let formKey = "";
+  let told = null; // the request the editor was told is ready
   let generation = 0;
   let reading = false;
   let resolving = false;
+  let checkingSetup = false;
+  let account = null;
   const title = document.title;
 
   function when(value) {
@@ -53,6 +71,12 @@
   function compilerName(id) {
     return { "ericw-qbsp": "qbsp (EricW)", "ericw-qbsp-q2": "qbsp (EricW, Quake II mode)", q3map2: "Q3Map2" }[id] || id || t("the compiler");
   }
+  // The maintained build a pipeline's compile stage runs, with the version the
+  // program itself reported when it has been asked.
+  function toolName(body) {
+    const name = body.pipeline_tool || compilerName(body.compiler);
+    return body.pipeline_tool_version ? t("{name}, installed {version}", { name, version: body.pipeline_tool_version }) : name;
+  }
 
   function button(text, kind, onClick) {
     const control = el("button", { text, attrs: { type: "button", class: kind } });
@@ -62,7 +86,7 @@
 
   function render() {
     // The tab strip is the one thing visible of a window that is behind another.
-    document.title = seen && reviewing !== seen.request_id ? t("Leak test requested") + " — " + title : title;
+    document.title = seen && form !== "ready" ? t("Leak test requested") + " — " + title : title;
     if (!seen) { box.hidden = true; box.replaceChildren(); return; }
     box.hidden = false;
     const name = details?.body?.name || seen.asset_id;
@@ -102,32 +126,57 @@
         ? t("The pipeline pinned for {game} leak tests cannot be used any more: {why}.", { game: gameName(details.body.game_profile), why: details.body.pinned_problem }) + " "
         : t("No pipeline is chosen yet for testing {game} maps for leaks on this computer.", { game: gameName(details.body.game_profile) }) + " ")
         + t("Choose one; it is kept for every later request.");
-      actions.append(button(t("Choose leak-test pipeline"), "primary", async () => openPin(details.body.game_profile, true)));
-      if (askedFor !== seen.request_id) { askedFor = seen.request_id; openPin(details.body.game_profile, true); }
-    } else if (reviewing === seen.request_id) {
-      state.textContent = t("In review. The Build area shows the exact command; nothing runs until you press Build.");
-      actions.append(button(t("Go to the review"), "secondary", async () => window.AUCOM.showArea("build")));
+      actions.append(button(t("Choose leak-test pipeline"), "primary", async () => openPin(details.body.game_profile)));
+      if (askedFor !== seen.request_id) { askedFor = seen.request_id; openPin(details.body.game_profile); }
     } else {
-      state.textContent = t("Its content still matches what the editor asked about. It is a {game} map, so the test is {compiler}'s. Review the compiler command first; nothing runs until you press Build.", {
-        game: gameName(details.body.game_profile), compiler: compilerName(details.body.compiler) })
-        + (details.body.pipeline_name && stagesLine(details.body.pipeline_steps)
-          ? " " + t("The pipeline chosen for these maps is {name}.", { name: details.body.pipeline_name }) + " " + stagesLine(details.body.pipeline_steps)
-          : "");
-      actions.append(button(t("Change pipeline"), "secondary", async () => openPin(details.body.game_profile, false)));
-      actions.append(button(t("Review leak test"), "primary", review));
+      renderPrepared(details.body, state, actions);
     }
     actions.prepend(dismiss);
     // The request is HERE either way. Whether the editor's tab knows is a
     // separate fact, said only when it does not.
     const relay = seen.relay?.state;
-    const told = relay === "retrying"
+    const heard = relay === "retrying"
       ? t("The editor has not been told yet: the account server is not answering. The Companion keeps trying; the request stays here.")
       : relay === "stopped"
-        ? t("The editor cannot be told about this request: the account server rejected it. The review above says why.")
+        ? t("The editor cannot be told about this request: the account server rejected it. The line above says why.")
         : "";
     const lines = [head, what, state];
-    if (told) lines.push(el("p", { className: "leak-request__relay hint", text: told }));
+    if (heard) lines.push(el("p", { className: "leak-request__relay hint", text: heard }));
     box.replaceChildren(...lines, actions);
+  }
+
+  // What a request that can be built says: which game, which compiler, which
+  // pipeline, and how far it is from Build. Everything here is the server's or
+  // the form's own answer; nothing is called ready because a button was removed.
+  function renderPrepared(body, state, actions) {
+    const identity = t("{game} map. Compiler: {tool}. Pipeline: {pipeline}.", {
+      game: gameName(body.game_profile), tool: toolName(body), pipeline: body.pipeline_name || body.pipeline });
+    const change = () => button(t("Change pipeline"), "secondary", async () => openPin(body.game_profile));
+    const toBuild = () => button(t("Go to Build"), "secondary", async () => window.AUCOM.showArea("build"));
+    if (!pipelineReady(body)) {
+      state.textContent = identity + " " + t("It needs setup before it can run.");
+      for (const cause of setupCauses(body)) {
+        state.append(el("span", { className: "leak-request__cause", children: [document.createTextNode(" " + cause.text + " "), setupLink(cause)] }));
+      }
+      actions.append(change());
+    } else if (form === "ready") {
+      state.textContent = identity + " " + t("Ready: nothing runs until you press Build.")
+        + (stagesLine(body.pipeline_steps) ? " " + stagesLine(body.pipeline_steps) : "");
+      actions.append(change(), toBuild());
+    } else if (form === "busy") {
+      state.textContent = identity + " " + formWhy;
+      actions.append(toBuild());
+    } else if (form === "left") {
+      state.textContent = identity + " " + t("The form below no longer builds this leak test, so Build there will not answer the editor.");
+      actions.append(button(t("Open leak test"), "primary", async () => { formKey = ""; await prepare(); }));
+    } else if (form === "blocked") {
+      state.className = "leak-request__state message error";
+      state.textContent = identity + " " + formWhy;
+      actions.append(change(), button(t("Retry"), "secondary", async () => { formKey = ""; dropForm(); await resolve(true); }));
+    } else {
+      state.textContent = identity + " " + t("Checking setup…");
+      actions.append(change());
+    }
   }
 
   // sameRequest: does an answer speak about the request on screen? Every field
@@ -145,7 +194,7 @@
   // between the watch that showed A and this question, and the answer would
   // then be about B: the server says so (`replaced`) instead of resolving B,
   // and an answer that names anything but the request on screen is thrown
-  // away and the watch re-reads — B is never shown, reviewed or built as A.
+  // away and the watch re-reads — B is never shown, prepared or built as A.
   async function resolve(force) {
     if (!seen || resolving || (details && !force)) return;
     resolving = true;
@@ -159,11 +208,22 @@
     if (answer.ok && (answer.body.replaced || !sameRequest(answer.body, asked))) { watch(); return; }
     details = answer;
     render();
+    await prepare();
+  }
+
+  // dropForm takes the request out of the Build form, now, in this turn: from
+  // here on the button cannot be aimed at it.
+  function dropForm() {
+    const id = seen?.request_id;
+    form = formWhy = "";
+    if (id) window.AUCOM.areas.build?.dropLeakRequest?.(id);
   }
 
   function forget() {
+    dropForm();
     generation += 1;
-    seen = details = reviewing = null;
+    seen = details = told = null;
+    formKey = "";
     render();
   }
 
@@ -175,9 +235,11 @@
     if (!ok) return; // The local server is away; the stale-page banner says so.
     if (!body.pending) { if (seen) forget(); return; }
     if (!seen || !sameRequest(body, seen)) {
+      dropForm();
       generation += 1;
       seen = body;
-      details = reviewing = null;
+      details = told = null;
+      formKey = "";
       render();
       record(t("Leak test requested by the editor"), t("map {id}, revision {n}", { id: body.asset_id, n: body.revision }), "running");
     } else if ((body.relay?.state || "") !== (seen.relay?.state || "")) {
@@ -186,26 +248,75 @@
       render();
     }
     resolve(false);
+    recheckSetup();
   }
 
-  async function review() {
-    if (!seen || !details?.ok || !sameRequest(details.body, seen)) return;
-    if (details.body.needs_pipeline || !details.body.pipeline) return; // nothing pinned: the dialog asks first
+  // A request waiting for setup: is it done? Asked of this machine alone, on the
+  // watch that is already running, so a tool installed or a folder chosen enables
+  // Build without another request. Only then is the account's server asked again.
+  async function recheckSetup() {
+    const body = details?.ok ? details.body : null;
+    if (!body?.pipeline || pipelineReady(body) || checkingSetup) return;
+    checkingSetup = true;
     const own = generation;
-    const request = details.body;
-    const told = await api("/api/v1/leak-test/reviewing", { method: "POST", body: { request_id: request.request_id } });
-    if (own !== generation) return;
-    if (!told.ok) { details = told; render(); return; }
-    window.AUCOM.showArea("build");
-    const refused = await window.AUCOM.areas.build.adoptLeakRequest(request);
-    if (own !== generation) return;
-    if (refused) {
-      box.querySelector(".leak-request__state").textContent = refused;
-      return;
-    }
-    reviewing = request.request_id;
-    render();
+    const { ok, body: listed } = await api("/api/v1/leak-test/pipelines?game=" + encodeURIComponent(body.game_profile));
+    checkingSetup = false;
+    if (own !== generation || !ok) return;
+    const item = (listed.choices || []).find((choice) => choice.id === body.pipeline);
+    if (listed.pinned !== body.pipeline || pipelineReady(item)) resolve(true);
   }
+
+  // prepare fills the Build form with the request on screen, once per request,
+  // pipeline and setup. It starts nothing: the form checks the exact choices by
+  // itself and says how that went (`aucom:leak-form`). `current` is how the form
+  // knows, after its own waits, that this is still the request to prepare.
+  async function prepare() {
+    if (!seen || !details?.ok || !sameRequest(details.body, seen)) return;
+    const request = details.body;
+    if (request.sign_in_required || request.unsupported || request.needs_pipeline || !request.pipeline || !pipelineReady(request)) return;
+    const key = JSON.stringify([request.request_id, request.revision_id, request.pipeline]);
+    if (key === formKey) return;
+    const own = generation;
+    formKey = key;
+    form = "preparing";
+    render();
+    window.AUCOM.showArea("build");
+    const refused = await window.AUCOM.areas.build.adoptLeakRequest(request, () => own === generation && formKey === key);
+    if (own !== generation || formKey !== key) return;
+    if (refused) {
+      form = "busy";
+      formWhy = refused;
+      formKey = "";
+      render();
+    }
+  }
+
+  // The form's own account of itself. Nothing about any other request counts.
+  document.addEventListener("aucom:leak-form", async ({ detail }) => {
+    if (!seen || detail?.request_id !== seen.request_id) return;
+    form = detail.state === "ok" ? "ready" : detail.state;
+    formWhy = detail.why || "";
+    render();
+    // The editor's "ready to build" is true only from here. An answer to this
+    // about a request since replaced changes nothing on screen.
+    if (form === "ready" && told !== seen.request_id) {
+      told = seen.request_id;
+      const own = generation;
+      const answer = await api("/api/v1/leak-test/reviewing", { method: "POST", body: { request_id: seen.request_id } });
+      if (own === generation && !answer.ok) watch();
+    }
+  });
+  // Another build on this page ended: a request that was waiting for it goes on.
+  document.addEventListener("aucom:build-ended", () => { if (form === "busy") { formKey = ""; prepare(); } });
+  // The server refused the press, or the request was used: the request is asked
+  // about again, and what it says now is what the notice shows.
+  document.addEventListener("aucom:leak-build-refused", ({ detail }) => {
+    if (!seen || detail?.request_id !== seen.request_id) return;
+    dropForm();
+    formKey = "";
+    resolve(true);
+  });
+  document.addEventListener("aucom:leak-build-started", () => watch());
 
   // --- choosing the pipeline -------------------------------------------------
   //
@@ -219,14 +330,10 @@
   // this game's leak test. Choosing runs nothing: a pin is a setting.
   let askedFor = null; // the request whose dialog opened by itself, once
   let pinGame = "";
-  let pinThenReview = false;
-  // The request the dialog was opened for, and the generation it was seen in:
-  // a pin confirmed after that request was replaced reviews nothing.
-  let pinFor = null;
   let pinGeneration = 0;
   // Each opening of the dialog is a session. A pin answered after the dialog
   // was closed and opened again — for a newer request — belongs to the old
-  // opening, and neither closes the new one nor reviews anything (NEW_345).
+  // opening, and neither closes the new one nor prepares anything (NEW_345).
   let pinSession = 0;
   let pinOpener = null;
   let choices = [];
@@ -316,14 +423,12 @@
     renderPinStatus();
   }
 
-  async function openPin(game, thenReview) {
+  async function openPin(game) {
     pinGame = game;
-    pinThenReview = thenReview;
     pinSession += 1;
-    pinFor = seen ? { request: seen.request_id, generation } : null;
     if (pinModal.hidden) pinOpener = document.activeElement;
     $("leak-pin-intro").textContent = t("Choose a pipeline for {game} leak tests. You can change it later.", { game: gameName(game) })
-      + (thenReview ? " " + t("Next, you review the test; nothing runs until you press Build.") : "");
+      + " " + t("Nothing runs until you press Build.");
     pinModal.hidden = false;
     $("leak-pin-select").focus();
     await loadPin();
@@ -351,13 +456,11 @@
     // Whose pin this is, decided now — not after the answer, by which time the
     // dialog may be showing a newer request (NEW_345).
     const session = pinSession;
-    const asked = pinFor;
     const game = pinGame;
-    const continueToReview = pinThenReview;
     const { ok, body } = await api("/api/v1/leak-test/pipelines", { method: "POST", body: { game, pipeline } });
     if (session !== pinSession) {
       // Answered for an opening that is gone. The pin, if recorded, is the
-      // game's setting; a dialog open now shows it. Nothing is reviewed.
+      // game's setting; a dialog open now shows it. Nothing is prepared.
       if (!pinModal.hidden) loadPin();
       return;
     }
@@ -371,18 +474,18 @@
     record(t("Leak tests for {game} use {pipeline}", { game: gameName(game), pipeline }), "", "ok");
     closePin({ restoreFocus: false });
     // A read that started before the pin answers for the time before it: wait
-    // for it, then ask again, so the review is of the pinned pipeline (found
-    // live on Windows: the continuation reviewed a stale "nothing pinned").
+    // for it, then ask again, so what is prepared is the pinned pipeline (found
+    // live on Windows: the continuation worked from a stale "nothing pinned").
+    // `resolve` prepares whatever the request on screen now says, so a request
+    // that replaced this one meanwhile is shown as itself, and a pin changed
+    // elsewhere is the pipeline prepared. Neither starts anything.
     while (resolving) await new Promise((done) => setTimeout(done, 100));
+    dropForm();
+    formKey = "";
     await resolve(true);
-    // Opened again meanwhile (Change pipeline): that opening owns the page now.
     if (!pinModal.hidden) return;
-    // Review only the request the dialog was opened for, still current, and
-    // only with the pipeline just pinned (NEW_310A): a request that replaced
-    // it meanwhile, or a pin changed elsewhere, is shown, never started.
-    const still = asked && seen && seen.request_id === asked.request && generation === asked.generation;
-    if (continueToReview && still && details?.ok && details.body.pipeline === pipeline && !details.body.needs_pipeline) await review();
-    else box.querySelector("button.primary, button")?.focus();
+    if (!box.querySelector("button.primary, button")) return;
+    box.querySelector("button.primary, button").focus?.();
   }));
   for (const close of [$("leak-pin-cancel"), $("leak-pin-close")]) close.addEventListener("click", () => closePin());
   pinModal.querySelector("[data-dismiss=leak-pin]")?.addEventListener("click", () => closePin());
@@ -410,7 +513,17 @@
   window.setInterval(watch, WATCH_MS);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) { watch(); if (details && !details.ok && details.status !== 409) resolve(true); } });
   window.addEventListener("focus", watch);
-  // A sign-in or a sign-out changes what resolving the request says.
-  document.addEventListener("aucom:status", () => { if (seen && (!details || details.body?.sign_in_required || !details.ok)) resolve(true); });
+  // A sign-in or a sign-out changes what resolving the request says, and another
+  // account is another reader: what this page prepared for the last one is not
+  // left under a Build button.
+  document.addEventListener("aucom:status", () => {
+    const status = window.AUCOM.status;
+    const now = JSON.stringify([Boolean(status?.authenticated), status?.email || "", status?.user_id || ""]);
+    const changed = account !== null && account !== now;
+    account = now;
+    if (!seen) return;
+    if (changed) { dropForm(); formKey = ""; resolve(true); return; }
+    if (!details || details.body?.sign_in_required || !details.ok) resolve(true);
+  });
   watch();
 })();

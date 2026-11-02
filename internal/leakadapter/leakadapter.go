@@ -95,11 +95,10 @@ type Adapter struct {
 	// not the only one a request may run: the user pins the pipeline for each
 	// game in the Companion, and this is the one offered first.
 	PipelineID string
-	// Alternatives are the other built-in pipelines that answer this game's
-	// leak test with the same reading: the same single compile stage run by
-	// another tool profile (NEW_340A: the Auto-Pigeon q3map2 build). They are
-	// offered beside PipelineID, never instead of it, and pinned the same way.
-	Alternatives []string
+	// Retired are built-in pipelines earlier Companions shipped for this row.
+	// Nothing offers one (NEW_380: Quake III's second pipeline became the same
+	// document as its first), and a build recorded with one is still read.
+	Retired []string
 	// Compiler and PointfileFormat are the envelope's names for what ran and
 	// what it wrote; Direction says which end of the point file is the entity.
 	Compiler        string
@@ -154,7 +153,7 @@ var adapters = map[string]Adapter{
 		ResultSchema: Schema10, QualifiedVersions: []string{"v0.18.1", "0.18.1", "2.0.0-alpha11"},
 	},
 	ProfileQuake3: {
-		Profile: ProfileQuake3, PipelineID: "auto-pigeon.q3.leak-test", Alternatives: []string{"auto-pigeon.q3.leak-test.auto-pigeon-build"},
+		Profile: ProfileQuake3, PipelineID: "auto-pigeon.q3.leak-test", Retired: []string{"auto-pigeon.q3.leak-test.auto-pigeon-build"},
 		Compiler: CompilerQ3Map2, PointfileFormat: FormatQ3Map2Lin, Direction: DirectionOutsideFirst,
 		PointfileOutput: "lin", LogOutput: "compile_log", BSPOutput: "bsp", PointfileBesideSource: true,
 		PointfileRole: "q3.lin", LogRoles: []string{StepLogRole}, BSPRole: "q3.bsp",
@@ -278,23 +277,21 @@ func (a Adapter) Builtin() Binding {
 	return a.BuiltinFor(a.PipelineID)
 }
 
-// BuiltinFor is one of the row's shipped pipelines (PipelineID or an
-// alternative) read the way a pinned one is: they publish the same outputs.
+// BuiltinFor is one of the row's shipped pipelines, current or retired, read the
+// way a pinned one is: they publish the same outputs.
 func (a Adapter) BuiltinFor(id string) Binding {
 	step := "compile"
 	return Binding{Game: a.Profile, Pipeline: id, Pointfile: a.PointfileOutput,
 		Log: a.LogOutput, BSP: a.BSPOutput, CompileStep: step}
 }
 
-// Ships reports whether id is one of the row's built-in pipelines.
-func (a Adapter) Ships(id string) bool {
-	return id == a.PipelineID || slices.Contains(a.Alternatives, id)
-}
+// Ships reports whether id is the row's built-in pipeline.
+func (a Adapter) Ships(id string) bool { return id == a.PipelineID }
 
 // ForPipeline is the row whose built-in pipeline this is.
 func ForPipeline(id string) (Adapter, bool) {
 	for _, adapter := range adapters {
-		if adapter.Ships(id) {
+		if adapter.Ships(id) || slices.Contains(adapter.Retired, id) {
 			return adapter, true
 		}
 	}

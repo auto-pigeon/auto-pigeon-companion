@@ -644,7 +644,7 @@ func TestAnotherPublishersProfileWithTheSameIDIsRefusedWithoutAChange(t *testing
 }
 
 func TestABuiltinsIDIsRefusedWithoutAChange(t *testing.T) {
-	entry, err := builtin.Find("auto-pigeon.ericw-tools.q1")
+	entry, err := builtin.Find("auto-pigeon.ericw-tools.auto-pigeon-build.q1")
 	if err != nil {
 		t.Fatal(err)
 	}

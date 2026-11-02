@@ -139,6 +139,14 @@ arguments a document chose.
   folder that sets it. A program handed a switch twice honours one of them, and which one is its
   choice. A switch the action never passes is the person's own.
 
+## The retired upstream documents
+
+Since `NEW_380` (ADR-0012) the only built-in compiler documents are the Auto-Pigeon builds'. The upstream ones
+this module's history is about live in `internal/profile/builtin/retiredfixture`, which only a test may import
+(`TestNothingButATestReadsTheRetiredDocuments`): they are what the rule "a profile decides only for itself" is
+exercised with. What a binding, a pin or a stage naming a retired id is told is `builtin.ReplacementFor`, and
+`internal/retiredprofile` carries folders and arguments, never programs.
+
 ## The pinned release, and where its facts come from
 
 The two Auto-Pigeon-build profiles name ONE release of the fork, and

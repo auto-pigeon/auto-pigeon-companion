@@ -18,7 +18,7 @@ import (
 // reported BESIDE the problems that were already reported — it replaces none
 // of them and is replaced by none.
 
-const ericwQ1 = "auto-pigeon.ericw-tools.q1"
+const ericwQ1 = "auto-pigeon.ericw-tools.auto-pigeon-build.q1"
 
 // compatBinding binds the built-in 2.0 profile to one real file per program,
 // with a recorded answer of the given state for vis.

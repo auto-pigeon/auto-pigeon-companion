@@ -18,9 +18,9 @@ import (
 // writeEricwLayout lays out a release the way the profile declares it, on the
 // platform the test is running on.
 //
-// The profile declares `qbsp{platform.exe_suffix}` — the 2.0 release keeps its
-// programs at the top of the folder (HITL 2026-10-07; 0.18.1 had them in bin/)
-// — so on Windows the files it looks for are `qbsp.exe` and friends. Writing
+// The profile declares `bin/qbsp{platform.exe_suffix}` — an Auto-Pigeon release
+// keeps its programs in bin/ — so on Windows the files it looks for are
+// `bin/qbsp.exe` and friends. Writing
 // POSIX names there made the bind refuse with "missing qbsp.exe, vis.exe, ..."
 // and this test failed on windows/amd64 for a reason that had nothing to do
 // with what it checks: the fixture was wrong, not the binding. Found by
@@ -28,7 +28,7 @@ import (
 func writeEricwLayout(t *testing.T, root string, programs ...string) {
 	t.Helper()
 	for _, program := range programs {
-		name := program + currentPlatform().ExeSuffix()
+		name := filepath.Join("bin", program+currentPlatform().ExeSuffix())
 		writeFixtureFile(t, filepath.Join(root, name), "#!/bin/sh\n")
 		if err := os.Chmod(filepath.Join(root, name), 0o755); err != nil {
 			t.Fatal(err)
@@ -38,27 +38,31 @@ func writeEricwLayout(t *testing.T, root string, programs ...string) {
 
 func TestAFolderBindsEveryDeclaredProgramAsALocalBinding(t *testing.T) {
 	m := newMachine(t)
-	// An unpacked 0.18.1 keeps its programs in bin/, which is not what the
-	// profile describes: choosing it is refused naming what is missing, rather
-	// than binding a release the version probe would then disagree with.
-	old := filepath.Join(m.dir, "ericw tools v0.18.1")
-	writeEricwLayout(t, filepath.Join(old, "bin"), "qbsp", "vis", "light", "bspinfo", "bsputil")
-	status, body := m.call(http.MethodPost, "/api/v1/profiles/auto-pigeon.ericw-tools.q1/bind",
+	// Upstream's 2.0 release keeps its programs at the top of the folder, which
+	// is not what the profile describes: choosing it is refused naming what is
+	// missing, rather than binding a release the version probe would then
+	// disagree with (NEW_380: an old upstream folder is not the fork).
+	old := filepath.Join(m.dir, "ericw-tools-2.0.0-alpha11")
+	writeEricwLayout(t, filepath.Join(old, ".."), "unrelated")
+	for _, program := range []string{"qbsp", "vis", "light", "bspinfo", "bsputil"} {
+		writeFixtureFile(t, filepath.Join(old, program+currentPlatform().ExeSuffix()), "#!/bin/sh\n")
+	}
+	status, body := m.call(http.MethodPost, "/api/v1/profiles/auto-pigeon.ericw-tools.auto-pigeon-build.q1/bind",
 		map[string]any{"folder": old})
-	if message, _ := body["error"].(string); status != http.StatusBadRequest || !strings.Contains(message, "missing qbsp") {
-		t.Errorf("binding a 0.18.1 layout = %d %v", status, body)
+	if message, _ := body["error"].(string); status != http.StatusBadRequest || !strings.Contains(message, "missing") || !strings.Contains(message, "qbsp") {
+		t.Errorf("binding an upstream layout = %d %v", status, body)
 	}
 
-	root := filepath.Join(m.dir, "ericw-tools-2.0.0-alpha11")
+	root := filepath.Join(m.dir, "auto-pigeon-ericw-tools-1.4535")
 	writeEricwLayout(t, root, "qbsp", "vis", "light", "bspinfo", "bsputil")
-	status, body = m.call(http.MethodPost, "/api/v1/profiles/auto-pigeon.ericw-tools.q1/bind",
+	status, body = m.call(http.MethodPost, "/api/v1/profiles/auto-pigeon.ericw-tools.auto-pigeon-build.q1/bind",
 		map[string]any{"folder": root})
 	if status != http.StatusOK {
 		t.Fatalf("binding %s = %d %v", root, status, body)
 	}
 	recorded, _ := body["binding"].(map[string]any)
 	executables, _ := recorded["executables"].(map[string]any)
-	wantVis := filepath.Join(root, "vis"+currentPlatform().ExeSuffix())
+	wantVis := filepath.Join(root, "bin", "vis"+currentPlatform().ExeSuffix())
 	if len(executables) != 5 || executables["vis"] != wantVis {
 		t.Errorf("choosing %s recorded %v", root, executables)
 	}
@@ -71,15 +75,15 @@ func TestAFolderWithHalfAToolchainIsRefusedAndRecordsNothing(t *testing.T) {
 	m := newMachine(t)
 	root := filepath.Join(m.dir, "partial")
 	writeEricwLayout(t, root, "qbsp", "light")
-	status, body := m.call(http.MethodPost, "/api/v1/profiles/auto-pigeon.ericw-tools.q1/bind",
+	status, body := m.call(http.MethodPost, "/api/v1/profiles/auto-pigeon.ericw-tools.auto-pigeon-build.q1/bind",
 		map[string]any{"folder": root})
 	message, _ := body["error"].(string)
-	if status != http.StatusBadRequest || !strings.Contains(message, "missing vis") {
+	if status != http.StatusBadRequest || !strings.Contains(message, "vis") {
 		t.Fatalf("status = %d, error = %q", status, message)
 	}
 	set, err := binding.LoadFile(m.bindings)
 	if err == nil {
-		if _, found := set.Find("auto-pigeon.ericw-tools.q1"); found {
+		if _, found := set.Find("auto-pigeon.ericw-tools.auto-pigeon-build.q1"); found {
 			t.Error("a refused folder still recorded a binding")
 		}
 	}
@@ -93,7 +97,7 @@ func TestNamingAProgramReplacesAManagedProvenance(t *testing.T) {
 	writeEricwLayout(t, root, "qbsp", "vis", "light", "bspinfo", "bsputil")
 	_, err := binding.Update(m.bindings, func(set *binding.Set) error {
 		return set.Put(binding.LocalBinding{
-			SchemaVersion: binding.SchemaVersion, ProfileID: "auto-pigeon.ericw-tools.q1",
+			SchemaVersion: binding.SchemaVersion, ProfileID: "auto-pigeon.ericw-tools.auto-pigeon-build.q1",
 			ProfileVersion: "1.0.0", ProfileDigest: "sha256:" + strings.Repeat("0", 64),
 			Trust:       profile.TrustBuiltin,
 			Acquisition: profile.AcquireManagedDownload,
@@ -105,8 +109,8 @@ func TestNamingAProgramReplacesAManagedProvenance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	status, body := m.call(http.MethodPost, "/api/v1/profiles/auto-pigeon.ericw-tools.q1/bind",
-		map[string]any{"executables": map[string]string{"qbsp": filepath.Join(root, "qbsp"+currentPlatform().ExeSuffix())}})
+	status, body := m.call(http.MethodPost, "/api/v1/profiles/auto-pigeon.ericw-tools.auto-pigeon-build.q1/bind",
+		map[string]any{"executables": map[string]string{"qbsp": filepath.Join(root, "bin", "qbsp"+currentPlatform().ExeSuffix())}})
 	if status != http.StatusOK {
 		t.Fatalf("status = %d %v", status, body)
 	}

@@ -86,7 +86,7 @@ func TestTheQuake2LeakTestIsTheCompileStepAloneWithItsLeakTestOn(t *testing.T) {
 		executables[name] = path
 	}
 	base := gameDataRoot(t)
-	bindTool(t, env, builtin.EricwQ2, executables, map[string]string{profile.RootGame: base, profile.RootContent: base})
+	bindTool(t, env, builtin.EricwAutoPigeonQ2, executables, map[string]string{profile.RootGame: base, profile.RootContent: base})
 	source := filepath.Join(t.TempDir(), "room.map")
 	if err := os.WriteFile(source, []byte(syntheticQ2Map), 0o600); err != nil {
 		t.Fatal(err)
@@ -154,7 +154,7 @@ func TestTheInstalledQ2QbspAnswersTheAuthoredControls(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			env, _, _ := testEnv(t)
-			bindTool(t, env, builtin.EricwQ2, map[string]string{"qbsp": tool}, map[string]string{
+			bindTool(t, env, builtin.EricwAutoPigeonQ2, map[string]string{"qbsp": tool}, map[string]string{
 				profile.RootGame:    base,
 				profile.RootContent: filepath.Join(controls, "content"),
 			})

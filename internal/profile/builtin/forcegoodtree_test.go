@@ -13,7 +13,7 @@ import (
 // turns the typed option off. Every built-in Q1 pipeline, the editor's leak test included, compiles
 // through this action, so this is the argv a user's build gets.
 func TestTheBuiltInQ1CompileForcesTheCarefulTreeBuildByDefault(t *testing.T) {
-	entry, err := Find("auto-pigeon.ericw-tools.q1")
+	entry, err := Find(EricwAutoPigeonQ1)
 	if err != nil {
 		t.Fatal(err)
 	}

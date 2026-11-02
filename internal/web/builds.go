@@ -882,6 +882,15 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusConflict, errors.New("the editor leak request expired or no longer matches this pinned map revision"))
 			return
 		}
+		// What the page prepared is older than this press. The owner that showed
+		// the request answers again, for this session, now (NEW_380).
+		if pending := s.pendingLeakRequest(request.LeakRequestID); pending != nil {
+			if _, _, _, refusal := s.leakRevision(r.Context(), *pending); refusal != nil {
+				cancel()
+				writeLeakRefusal(w, refusal)
+				return
+			}
+		}
 		// The same resolver the review used, on the bytes that were just
 		// staged: the game the pinned APMap declares decides the pipeline. A
 		// request that names another one — a stale page, a hand-made call —

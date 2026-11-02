@@ -12,7 +12,7 @@ import (
 // a map naming `gfx/metal.wad` finds its WAD and the fixture beside-the-map
 // case still builds with nothing set.
 func TestTheBuiltInQ1CompilePassesTheTextureFolderOnlyWhenOneIsSet(t *testing.T) {
-	entry, err := Find("auto-pigeon.ericw-tools.q1")
+	entry, err := Find(EricwAutoPigeonQ1)
 	if err != nil {
 		t.Fatal(err)
 	}

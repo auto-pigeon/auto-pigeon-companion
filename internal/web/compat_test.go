@@ -22,9 +22,9 @@ import (
 // the server said.
 
 const (
-	ericwQ1       = "auto-pigeon.ericw-tools.q1"
+	ericwQ1       = "auto-pigeon.ericw-tools.auto-pigeon-build.q1"
 	fixtureLegacy = "---- %s / ericw-tools v0.18.1 ----\nusage: %s [-threads #] [-level 0-4] [-fast] bspfile"
-	fixtureModern = "---- %s / ericw-tools 2.0.0-alpha11 ----\n  -logfile \"path\"               File to output logging data to."
+	fixtureModern = "---- %s / ericw-tools 2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535 ----\n  -logfile \"path\"               File to output logging data to."
 )
 
 type compatFixture struct {
@@ -33,13 +33,13 @@ type compatFixture struct {
 	log string
 }
 
-// release lays out a folder the way the built-in 2.0 profile describes it —
-// five programs at the top — each printing banner when started with nothing.
+// release lays out a folder the way the built-in profile describes it — five
+// programs under bin/ — each printing banner when started with nothing.
 func (f *compatFixture) release(name, banner string) string {
 	f.t.Helper()
 	root := filepath.Join(f.m.dir, name)
 	for _, program := range []string{"qbsp", "vis", "light", "bspinfo", "bsputil"} {
-		f.program(filepath.Join(root, program), program, banner)
+		f.program(filepath.Join(root, "bin", program), program, banner)
 	}
 	return root
 }
@@ -167,7 +167,7 @@ func TestAModernProfileOnLegacyProgramsIsRefusedTheSameWayEverywhere(t *testing.
 		t.Errorf("Profiles' problems: %s", got)
 	}
 	recorded, _ := bound["binding"].(map[string]any)
-	if executables, _ := recorded["executables"].(map[string]any); executables["vis"] != filepath.Join(legacy, "vis") {
+	if executables, _ := recorded["executables"].(map[string]any); executables["vis"] != filepath.Join(legacy, "bin", "vis") {
 		t.Errorf("the chosen programs were not kept as chosen: %v", executables)
 	}
 	// Per action: the compilers are stopped, the inspection program nothing is
@@ -224,7 +224,7 @@ func TestAModernProfileOnLegacyProgramsIsRefusedTheSameWayEverywhere(t *testing.
 		t.Fatal(err)
 	}
 	local, _ := set.Find(ericwQ1)
-	if local.Grant != nil || local.Executables["vis"] != filepath.Join(legacy, "vis") || local.Compatibility["vis"].State != binding.FactIncompatible {
+	if local.Grant != nil || local.Executables["vis"] != filepath.Join(legacy, "bin", "vis") || local.Compatibility["vis"].State != binding.FactIncompatible {
 		t.Errorf("the binding after the refusals: grant %v, vis %s, fact %+v", local.Grant, local.Executables["vis"], local.Compatibility["vis"])
 	}
 }
@@ -237,7 +237,7 @@ func TestRebindingAndReplacingAProgramMovesReadinessBothWays(t *testing.T) {
 	if bound := f.bindFolder(modern); !ready(bound) {
 		t.Fatalf("supported programs are not ready: %v", bound["readiness"])
 	}
-	if state, identity := programState(f.profile(), "vis"); state != "compatible" || identity != "2.0.0-alpha11" {
+	if state, identity := programState(f.profile(), "vis"); state != "compatible" || identity != "2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535" {
 		t.Fatalf("vis: %q %q", state, identity)
 	}
 	if !ready(f.pipeline("auto-pigeon.q1.fast-preview")) {
@@ -248,7 +248,7 @@ func TestRebindingAndReplacingAProgramMovesReadinessBothWays(t *testing.T) {
 	// pipeline that needs it change at once; the pipeline that does not need
 	// it does not.
 	status, mixed := f.m.call(http.MethodPost, "/api/v1/profiles/"+ericwQ1+"/bind",
-		map[string]any{"executables": map[string]string{"vis": filepath.Join(legacy, "vis")}})
+		map[string]any{"executables": map[string]string{"vis": filepath.Join(legacy, "bin", "vis")}})
 	if status != http.StatusOK || ready(mixed) {
 		t.Fatalf("after rebinding vis: %d ready=%v", status, ready(mixed))
 	}
@@ -268,14 +268,14 @@ func TestRebindingAndReplacingAProgramMovesReadinessBothWays(t *testing.T) {
 
 	// Restored through the same route: ready again, with no restart.
 	status, restored := f.m.call(http.MethodPost, "/api/v1/profiles/"+ericwQ1+"/bind",
-		map[string]any{"executables": map[string]string{"vis": filepath.Join(modern, "vis")}})
+		map[string]any{"executables": map[string]string{"vis": filepath.Join(modern, "bin", "vis")}})
 	if status != http.StatusOK || !ready(restored) || !ready(f.pipeline("auto-pigeon.q1.fast-preview")) {
 		t.Fatalf("after restoring vis: %d %v", status, restored["readiness"])
 	}
 
 	// Replaced where it stands, behind the Companion's back. The page does not
 	// go on showing the old badge: the answer on record is about another file.
-	f.program(filepath.Join(modern, "vis"), "vis", fixtureLegacy)
+	f.program(filepath.Join(modern, "bin", "vis"), "vis", fixtureLegacy)
 	stale := f.profile()
 	if state, _ := programState(stale, "vis"); state != "not_checked" || ready(stale) {
 		t.Fatalf("a replaced vis still reads %q, ready=%v", state, ready(stale))
@@ -294,7 +294,7 @@ func TestRebindingAndReplacingAProgramMovesReadinessBothWays(t *testing.T) {
 	if state, identity := programState(checked, "vis"); status != http.StatusOK || state != "incompatible" || identity != "v0.18.1" {
 		t.Fatalf("check: %d %q %q", status, state, identity)
 	}
-	f.program(filepath.Join(modern, "vis"), "vis", fixtureModern)
+	f.program(filepath.Join(modern, "bin", "vis"), "vis", fixtureModern)
 	status, checked = f.m.call(http.MethodPost, "/api/v1/profiles/"+ericwQ1+"/check", nil)
 	if status != http.StatusOK || !ready(checked) || !ready(f.pipeline("auto-pigeon.q1.fast-preview")) {
 		t.Fatalf("check after restoring the file: %d %v", status, checked["readiness"])
@@ -351,7 +351,7 @@ func TestAnOptionalStageWithTheWrongProgramDoesNotStopItsPipeline(t *testing.T) 
 	f.bindFolder(modern)
 	for _, program := range []string{"vis", "light"} {
 		if status, body := f.m.call(http.MethodPost, "/api/v1/profiles/"+ericwQ1+"/bind",
-			map[string]any{"executables": map[string]string{program: filepath.Join(legacy, program)}}); status != http.StatusOK {
+			map[string]any{"executables": map[string]string{program: filepath.Join(legacy, "bin", program)}}); status != http.StatusOK {
 			t.Fatalf("rebinding %s: %d %v", program, status, body)
 		}
 	}

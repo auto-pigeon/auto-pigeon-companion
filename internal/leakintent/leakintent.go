@@ -39,12 +39,33 @@ const FileName = "leak-test-intent.json"
 // sign in, short enough that yesterday's click is not today's surprise.
 const Lifetime = 10 * time.Minute
 
+// RetiredFor is how long a used or replaced request id is remembered: longer
+// than any operating system holds a link, and short enough that the file stays
+// small. retiredLimit bounds it however many requests a day brings.
+const (
+	RetiredFor   = 24 * time.Hour
+	retiredLimit = 32
+)
+
+// Retired is a request id that may not become pending again.
+type Retired struct {
+	RequestID string    `json:"request_id"`
+	Until     time.Time `json:"until"`
+}
+
 // Intent is the file.
 type Intent struct {
 	SchemaVersion string            `json:"schema_version"`
 	Request       *aub.LeakTestLink `json:"request,omitempty"`
 	ReceivedAt    time.Time         `json:"received_at,omitempty"`
 	ExpiresAt     time.Time         `json:"expires_at,omitempty"`
+	// Retired are the requests that were built, or replaced by a newer click
+	// (NEW_380). One press is one job: the same link delivered again — a second
+	// click on Open again, a link the operating system held back, an old tab —
+	// must not put a used request back under a Build button, and must not put an
+	// older request over a newer one. Optional, so an older Companion reads this
+	// file as before. A dismissed request is not here: a person may ask again.
+	Retired []Retired `json:"retired,omitempty"`
 	// LaunchedByVersion is the version of the program the link started
 	// (NEW_368). When a Companion was already running, that program handed the
 	// link to it, and the running one is what serves it: the two are told
@@ -61,7 +82,9 @@ func options() lockfile.Options {
 }
 
 // Receive records a link the operating system delivered. A newer link replaces
-// an older one: the editor asks about the revision it has open now.
+// an older one: the editor asks about the revision it has open now. A link whose
+// request was already built or replaced records nothing, and that is not an
+// error: the delivery is simply old.
 func Receive(path string, link aub.LeakTestLink, now time.Time) error {
 	return ReceiveFrom(path, link, "", now)
 }
@@ -74,10 +97,35 @@ func ReceiveFrom(path string, link aub.LeakTestLink, launchedBy string, now time
 	}
 
 	return update(path, now, func(intent *Intent) {
+		if link.RequestID != "" && intent.retired(link.RequestID) {
+			return
+		}
+		if intent.Request != nil && intent.Request.RequestID != link.RequestID {
+			intent.retire(intent.Request.RequestID, now)
+		}
 		request := link
 		intent.Request, intent.ReceivedAt, intent.ExpiresAt = &request, now, now.Add(Lifetime)
 		intent.LaunchedByVersion = launchedBy
 	})
+}
+
+func (i *Intent) retired(requestID string) bool {
+	for _, item := range i.Retired {
+		if item.RequestID == requestID {
+			return true
+		}
+	}
+	return false
+}
+
+func (i *Intent) retire(requestID string, now time.Time) {
+	if requestID == "" || i.retired(requestID) {
+		return
+	}
+	i.Retired = append(i.Retired, Retired{RequestID: requestID, Until: now.Add(RetiredFor)})
+	if len(i.Retired) > retiredLimit {
+		i.Retired = i.Retired[len(i.Retired)-retiredLimit:]
+	}
 }
 
 // Read is the pending request, or nil.
@@ -110,6 +158,7 @@ func Consume(path, requestID string, now time.Time) (*aub.LeakTestLink, error) {
 		}
 		copy := *intent.Request
 		consumed = &copy
+		intent.retire(requestID, now)
 		intent.Request, intent.ReceivedAt, intent.ExpiresAt = nil, time.Time{}, time.Time{}
 	})
 	return consumed, err
@@ -159,6 +208,13 @@ func prune(intent *Intent, now time.Time) {
 	if intent.Request != nil && !now.Before(intent.ExpiresAt) {
 		intent.Request, intent.ReceivedAt, intent.ExpiresAt = nil, time.Time{}, time.Time{}
 	}
+	kept := intent.Retired[:0]
+	for _, item := range intent.Retired {
+		if now.Before(item.Until) {
+			kept = append(kept, item)
+		}
+	}
+	intent.Retired = kept
 	intent.SchemaVersion = SchemaVersion
 }
 
@@ -166,7 +222,7 @@ func save(path string, intent Intent) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	if intent.Request == nil {
+	if intent.Request == nil && len(intent.Retired) == 0 {
 		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}

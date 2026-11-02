@@ -21,6 +21,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile/builtin"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/retiredprofile"
 )
 
 // The Profiles area: reading a document, writing one, and approving one.
@@ -175,6 +176,14 @@ func (s *Server) describeCatalogEntryWith(entry job.CatalogEntry, local binding.
 	body["report"] = profile.ProfileReport(entry.Profile, entry.Trust)
 	body["binding"] = describeBinding(local)
 	body["editable"] = strings.HasPrefix(entry.Source, s.profilesPrefix())
+	// The retired document this one took over from, when a person had chosen
+	// programs for that one: they were not reused, and this page is where that
+	// surprises somebody (NEW_380).
+	if path, err := s.bindingsPath(); err == nil {
+		if predecessor, found := retiredprofile.Load(path).For(entry.Profile.Metadata().ID); found && predecessor.OwnPrograms {
+			body["programs_not_carried_from"] = predecessor.Retired
+		}
+	}
 
 	err := profile.Authorize(entry.Profile, entry.Trust, entry.Digest, local.Grant)
 	body["authorized"] = err == nil

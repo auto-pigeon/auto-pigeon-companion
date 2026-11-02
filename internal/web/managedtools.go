@@ -476,7 +476,46 @@ func (s *Server) StartManagedTools(ctx context.Context) {
 	for _, line := range s.tools.ApplyAtStart() {
 		s.logf("managed tools: %s", line)
 	}
+	s.bindUnboundToInstalled()
 	go s.tools.Run(ctx)
+}
+
+// bindUnboundToInstalled gives a built-in profile nothing is chosen for the
+// installation that is already here. A person who used an older Companion can
+// have a verified toolchain and a maintained profile that was never bound to it
+// (NEW_380: everything had been bound to the retired document); the record the
+// installer verified is the proof, the same one an update binds from. A profile
+// with a program of its own is not looked at, and nothing here downloads.
+func (s *Server) bindUnboundToInstalled() {
+	path, err := s.bindingsPath()
+	if err != nil {
+		return
+	}
+	for _, tool := range managedtools.Tools {
+		record, installed := s.tools.ActiveInstall(tool.ID)
+		if !installed {
+			continue
+		}
+		for _, id := range tool.Profiles {
+			set, err := binding.LoadFile(path)
+			if err != nil && !errors.Is(err, binding.ErrNoFile) {
+				s.logf("managed tools: reading the bindings: %v", err)
+				return
+			}
+			if local, found := set.Find(id); found && len(local.Executables) > 0 {
+				continue
+			}
+			if _, err := s.bindManaged(tool, record, &id); err != nil {
+				s.logf("managed tools: binding %s to %s %s: %v", id, tool.ID, record.Version, err)
+				continue
+			}
+			go func(id string) {
+				if err := s.checkPrograms(id, false); err != nil {
+					s.logf("managed tools: checking %s: %v", id, err)
+				}
+			}(id)
+		}
+	}
 }
 
 // ApplyToolUpdatesOnExit is the close half of "Update when I close

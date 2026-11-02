@@ -31,7 +31,6 @@ paths:
   - internal/profile/builtin/q1-leak-test.pipeline.json
   - internal/profile/builtin/q2-leak-test.pipeline.json
   - internal/profile/builtin/q3-leak-test.pipeline.json
-  - internal/profile/builtin/q3-leak-test-auto-pigeon.pipeline.json
 prerequisites:
 ---
 
@@ -50,16 +49,15 @@ is not one.
 
 | game | built-in pipeline | compiler | point file | direction | envelope |
 | --- | --- | --- | --- | --- | --- |
-| `quake1` | `auto-pigeon.q1.leak-test` | `ericw-qbsp` (EricW 2.0.0-alpha11; 0.18.1 also qualified) | `ericw-pts` | `occupant_to_outside` | `aucom.leak-result/1.0` |
+| `quake1` | `auto-pigeon.q1.leak-test` | `ericw-qbsp` (run by the Auto-Pigeon build; EricW 2.0.0-alpha11 and 0.18.1 are also read) | `ericw-pts` | `occupant_to_outside` | `aucom.leak-result/1.0` |
 | `quake2` | `auto-pigeon.q2.leak-test` | `ericw-qbsp-q2` (qbsp `-q2bsp`, Auto-Pigeon build 1.4518; 1.4522; releases 1.4524, 1.4533 and 1.4535) | `ericw-pts` | `occupant_to_outside` | `aucom.leak-result/1.1` |
-| `quake3` | `auto-pigeon.q3.leak-test` (alternative: `auto-pigeon.q3.leak-test.auto-pigeon-build`) | `q3map2` (2.5.17n-git-68ecbed; the Auto-Pigeon fork's releases 2.5.17n-ap.3026 and 2.5.17n-ap.3030) | `q3map2-lin` | `outside_to_occupant` | `aucom.leak-result/1.1` |
+| `quake3` | `auto-pigeon.q3.leak-test` | `q3map2` (2.5.17n-git-68ecbed; the Auto-Pigeon fork's releases 2.5.17n-ap.3026 and 2.5.17n-ap.3030) | `q3map2-lin` | `outside_to_occupant` | `aucom.leak-result/1.1` |
 
 The pipeline column is the built-in one. It is not what runs unless the user chose it — see the
-next section. An ALTERNATIVE (`Adapter.Alternatives`, NEW_340A) is another shipped pipeline with the
-same single compile stage and outputs, every stage naming a built-in alternative tool
-(`builtin.AlternativePipelines`): it is offered right after the row's own, marked built in, pinned like
-any other, and read by `BuiltinFor` when a manifest predates the leak-test record. It is never chosen
-for the user.
+next section. Since `NEW_380` each row has exactly one, and it names the game's Auto-Pigeon build on its
+stage. `Adapter.Retired` keeps a pipeline earlier Companions shipped for the row
+(`auto-pigeon.q3.leak-test.auto-pigeon-build`): nothing offers it, a pin on it means its replacement
+(`builtin.Current`, at read time, so config.json is not rewritten), and a build recorded with it is still read.
 
 **A game with no row is unsupported, by name. It is never Quake 1.** Quake II's `qbsp` being Quake
 1's program was never the reason it has a row: the authored controls in
@@ -82,7 +80,7 @@ answers a game's leak test is the user's choice, per game, with no default**: `l
 in config.json, `GET/POST /api/v1/leak-test/pipelines`, and a chooser the Companion opens when a
 request arrives for a game with nothing pinned (eligible pipelines, built-in first, unready ones
 disabled with their reasons, a way to Profiles). There is no "first ready" fallback and no automatic
-pin; Cancel starts nothing and keeps the request; a pin that is gone or unusable is reported and
+pin (`NEW_380` kept this for HITL review: a pin is a choice, and the chooser now leads straight to Build); Cancel starts nothing and keeps the request; a pin that is gone or unusable is reported and
 asked for again, never replaced by another.
 
 A pipeline is ELIGIBLE when `leakadapter.Adapter.Bind` binds it: it is for that game and publishes,
@@ -91,6 +89,38 @@ by ROLE, the point file and the compiler's text (a role-named log, or the reserv
 is not evidence. The binding — game, pipeline, point-file/log/BSP output names and the compile step
 — is recorded in the build manifest (schema 1.4, `leak_test`), and the result is read from THAT
 record, never from today's pin or a fixed step id.
+
+## A request opens ready to Build (NEW_380, HITL)
+
+There is no Review step. `GET /api/v1/leak-test/pending` says the map, the game, the pinned pipeline, the tool
+that compiles and `readiness`, the one every surface reads. `leakrequest.js` prepares a request that can run by
+itself, once per request, revision and pipeline: it opens Build & Run and `build.js` `adoptLeakRequest` fills the
+form on the exact revision; the form's own check (`POST /api/v1/build/preview`, which fetches a Quake 1 request's
+textures) enables the ordinary `#build-start`. An opened page has started zero jobs. The states and who owns them:
+
+| state | owner | Build |
+| --- | --- | --- |
+| sign in, revision changed, unreadable, account server away, unsupported game | `leakRevision` (the one check, used by `pending` and by the press) | not offered; the notice says the remedy |
+| nothing pinned, or the pin unusable | the chooser | not offered until a choice |
+| pinned, needs setup (no tool, unverified program, no game folder) | `pipelineReadiness` | not offered; the notice links to the tool. `recheckSetup` asks this machine on the existing 2 s watch and prepares on recovery |
+| check refused (texture bundle, inputs) | the form's check | disabled; its sentence in both places, with Retry |
+| another build running here | `build.js` | prepared when it ends (`aucom:build-ended`) |
+| a person changed the form | `leakBound` | an ordinary build; the notice offers **Open leak test** |
+| ready | the form's check | enabled; the editor is told `reviewing` only now |
+
+`reviewing` stays the wire value AUB and AUP read ("open and ready to build"); it is not a step any more. A
+received or prepared request is neither compiling nor finished.
+
+**The Build button follows the notice.** When a request is replaced, dismissed, gone, or the account changes,
+`dropForm` takes it out of the form in that same turn, before anything newer is prepared; `adoptLeakRequest`
+asks `current()` after each wait, so a held answer lands nowhere. `start()` sends what `leakBound` still vouches
+for. The server does not rely on any of that: `handleBuildStart` asks `leakRevision` again at the press (code
+`sign_in_required`, `revision_changed` or `account_unavailable`; the page re-resolves on `aucom:leak-build-refused`),
+then the pin, then `leakintent.Consume`.
+
+**One press, one job.** `claimBuild` refuses a second press while one runs, `Consume` uses a request up, and
+`leakintent` remembers a used or replaced id for `RetiredFor`, so a link delivered again cannot put it back under a
+Build button, nor an older request over a newer one. A dismissed request may be asked for again.
 
 ## What the pipeline owns
 
@@ -201,7 +231,7 @@ A row is a claim that somebody did all of this, on the machine, with the install
    and the editor, from the same vectors.
 4. A dedicated one-step pipeline, a row in each of the three tables, and — when the envelope needs
    a field it does not have — a new envelope version that the old readers refuse.
-5. The live journey: saved revision → link → notice → Review → Build → return → route, on the real
+5. The live journey: saved revision → link → notice → Build → return → route, on the real
    desktop.
 
 Until then the game is unsupported, and says so.

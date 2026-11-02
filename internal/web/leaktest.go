@@ -63,56 +63,22 @@ func (s *Server) handleLeakTestPending(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.adoptSessionFromDisk()
-	client := s.aubClient()
 	// A session that has run out is "signed out" to the person looking at this
 	// notice. Found live (`NEW_307W1`): a token that expired a week earlier got
 	// past "is a token set", AUB answered 401, and the notice printed the raw
 	// refusal with a Retry that could only be refused again — where the one
 	// thing that helps is Sign in.
-	signIn := func() {
-		writeJSON(w, http.StatusOK, map[string]any{"pending": true, "sign_in_required": true,
-			"request_id": request.RequestID, "asset_id": request.AssetID, "revision": request.Revision,
-			"content_sha256": request.ContentSHA256, "received_at": received})
-	}
-	if client == nil || !client.Authenticated() || client.SessionExpired(time.Now()) {
-		signIn()
-		return
-	}
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
-	// A new save after the editor's click makes this request stale. Refuse it:
-	// resolving @current and then submitting @current would compile different bytes.
-	revision, err := client.Revision(ctx, aub.AssetTypeMap, request.AssetID, aub.CurrentRevision)
-	if err != nil {
-		var refused *aub.APIError
-		if errors.As(err, &refused) && refused.Unauthorized() {
-			// AUB is the authority on a token that carries no expiry of its own.
-			signIn()
+	revision, source, client, refusal := s.leakRevision(ctx, *request)
+	if refusal != nil {
+		if refusal.code == leakRefusedSignIn {
+			writeJSON(w, http.StatusOK, map[string]any{"pending": true, "sign_in_required": true,
+				"request_id": request.RequestID, "asset_id": request.AssetID, "revision": request.Revision,
+				"content_sha256": request.ContentSHA256, "received_at": received})
 			return
 		}
-		writeError(w, aubStatus(err), err)
-		return
-	}
-	if revision.AssetID != request.AssetID || revision.AssetType != aub.AssetTypeMap ||
-		revision.Number != request.Revision || revision.ContentSHA256 != request.ContentSHA256 ||
-		!revision.Immutable || revision.ID == "" {
-		s.reportLeakStatus(*request, leakBlocked, "the saved map revision changed since this request", "")
-		writeError(w, http.StatusConflict, errors.New("the saved map revision changed or cannot be pinned; ask the editor again"))
-		return
-	}
-	var source string
-	for _, file := range revision.Files {
-		if strings.EqualFold(filepath.Ext(file.Path), ".apmap") {
-			if source != "" {
-				writeError(w, http.StatusConflict, errors.New("this revision has more than one APMap source"))
-				return
-			}
-			source = file.Path
-		}
-	}
-	if source == "" {
-		writeError(w, http.StatusConflict, errors.New("this revision has no APMap source"))
+		writeError(w, refusal.status, refusal.err)
 		return
 	}
 	// The game is the saved document's own word, read from the pinned bytes.
@@ -158,15 +124,118 @@ func (s *Server) handleLeakTestPending(w http.ResponseWriter, r *http.Request) {
 		base["pipeline"] = pinned
 		// What it will run, said before anything runs: a pinned pipeline may have
 		// more stages than the one compile stage a leak test needs (NEW_340A).
-		if catalog, err := s.catalog(); err == nil {
-			if entry, err := catalog.Lookup(pinned); err == nil {
-				if pipeline, ok := entry.Profile.(*profile.PipelineProfile); ok {
-					base["pipeline_name"], base["pipeline_steps"] = pipeline.Meta.Name, pipelineSteps(pipeline)
-				}
+		s.describeLeakPipeline(base, game, pinned)
+	}
+	writeJSON(w, http.StatusOK, base)
+}
+
+// describeLeakPipeline adds what the page shows beside Build: the pipeline, the
+// stages it runs, the tool that compiles and the readiness every other surface
+// reads. It runs nothing and asks nobody: a page that cannot start tells the
+// person why from here, with the link to the tool that needs setting up.
+func (s *Server) describeLeakPipeline(base map[string]any, game, pinned string) {
+	catalog, err := s.catalog()
+	if err != nil {
+		return
+	}
+	entry, err := catalog.Lookup(pinned)
+	if err != nil {
+		return
+	}
+	pipeline, ok := entry.Profile.(*profile.PipelineProfile)
+	if !ok {
+		return
+	}
+	base["pipeline_name"], base["pipeline_steps"] = pipeline.Meta.Name, pipelineSteps(pipeline)
+	runner, err := s.buildRunner(nil)
+	if err != nil {
+		return
+	}
+	set, _, err := s.bindings()
+	if err != nil {
+		return
+	}
+	resolver := runner.Resolver()
+	base["readiness"] = pipelineReadiness(pipeline, resolver, set).view()
+	bound, err := s.leakBinding(game, pinned)
+	if err != nil {
+		return
+	}
+	for _, step := range pipeline.Steps {
+		if step.ID != bound.CompileStep {
+			continue
+		}
+		if tool, found := resolver.EntryForStep(step); found {
+			meta := tool.Profile.Metadata()
+			base["pipeline_tool"] = meta.Name
+			if local, found := set.Find(meta.ID); found && local.ResolvedVersion != "" {
+				base["pipeline_tool_version"] = local.ResolvedVersion
 			}
 		}
 	}
-	writeJSON(w, http.StatusOK, base)
+}
+
+// The refusals a page acts on by their code, never by their English.
+const (
+	leakRefusedSignIn   = "sign_in_required"
+	leakRefusedRevision = "revision_changed"
+	leakRefusedAccount  = "account_unavailable"
+)
+
+// leakRefusal is why a request cannot be used right now.
+type leakRefusal struct {
+	status int
+	code   string
+	err    error
+}
+
+// leakRevision is the one answer to "may this request still be built": this
+// session, asked now, says its map's current revision is exactly what the editor
+// clicked on. The notice asks it to show the request, and the Build press asks it
+// again (NEW_380), because the page's answer is older than the press: a save, a
+// sign-out or another account in between must not start a compiler on what is no
+// longer the map the person is looking at.
+func (s *Server) leakRevision(ctx context.Context, request aub.LeakTestLink) (aub.Revision, string, *aub.Client, *leakRefusal) {
+	s.adoptSessionFromDisk()
+	client := s.aubClient()
+	signIn := &leakRefusal{status: http.StatusConflict, code: leakRefusedSignIn,
+		err: errors.New("sign in to the account this map is in; the Companion cannot check the saved revision while signed out")}
+	if client == nil || !client.Authenticated() || client.SessionExpired(time.Now()) {
+		return aub.Revision{}, "", client, signIn
+	}
+	// A new save after the editor's click makes this request stale. Refuse it:
+	// resolving @current and then submitting @current would compile different bytes.
+	revision, err := client.Revision(ctx, aub.AssetTypeMap, request.AssetID, aub.CurrentRevision)
+	if err != nil {
+		var refused *aub.APIError
+		if errors.As(err, &refused) && refused.Unauthorized() {
+			// AUB is the authority on a token that carries no expiry of its own.
+			return aub.Revision{}, "", client, signIn
+		}
+		return aub.Revision{}, "", client, &leakRefusal{status: aubStatus(err), code: leakRefusedAccount, err: err}
+	}
+	if revision.AssetID != request.AssetID || revision.AssetType != aub.AssetTypeMap ||
+		revision.Number != request.Revision || revision.ContentSHA256 != request.ContentSHA256 ||
+		!revision.Immutable || revision.ID == "" {
+		s.reportLeakStatus(request, leakBlocked, "the saved map revision changed since this request", "")
+		return aub.Revision{}, "", client, &leakRefusal{status: http.StatusConflict, code: leakRefusedRevision,
+			err: errors.New("the saved map revision changed or cannot be pinned; ask the editor again")}
+	}
+	var source string
+	for _, file := range revision.Files {
+		if strings.EqualFold(filepath.Ext(file.Path), ".apmap") {
+			if source != "" {
+				return aub.Revision{}, "", client, &leakRefusal{status: http.StatusConflict, code: leakRefusedRevision,
+					err: errors.New("this revision has more than one APMap source")}
+			}
+			source = file.Path
+		}
+	}
+	if source == "" {
+		return aub.Revision{}, "", client, &leakRefusal{status: http.StatusConflict, code: leakRefusedRevision,
+			err: errors.New("this revision has no APMap source")}
+	}
+	return revision, source, client, nil
 }
 
 // errNoLeakLog reports a leak-test build that left no compiler text at all.
@@ -237,6 +306,12 @@ func (s *Server) leakBindingForBuild(pipelineID string, conversion build.Convers
 			conversion.Game, pinned, pipelineID)
 	}
 	return s.leakBinding(conversion.Game, pipelineID)
+}
+
+// writeLeakRefusal answers a Build press the request cannot take, with the code
+// the page acts on.
+func writeLeakRefusal(w http.ResponseWriter, refusal *leakRefusal) {
+	writeJSON(w, refusal.status, map[string]any{"error": refusal.err.Error(), "code": refusal.code})
 }
 
 func (s *Server) matchesPendingLeakRequest(requestID string, source build.SourceRef) bool {

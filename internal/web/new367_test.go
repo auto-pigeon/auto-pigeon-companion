@@ -108,7 +108,6 @@ func (m *toolsMachine) active(id managedtools.ToolID) managedtools.InstallRecord
 }
 
 var ericwProfiles = []string{
-	"auto-pigeon.ericw-tools.q1", "auto-pigeon.ericw-tools.q2",
 	"auto-pigeon.ericw-tools.auto-pigeon-build.q1", "auto-pigeon.ericw-tools.auto-pigeon-build.q2",
 }
 
@@ -144,7 +143,7 @@ func TestTheManagedEricWIsVerifiedAndBindsQuake1AndQuakeIIToOneInstallation(t *t
 		}
 	}
 	q3 := m.active(managedtools.Q3Map2)
-	if local, _ := m.binding("auto-pigeon.q3map2"); local.Managed == nil || local.Managed.Dir != q3.Dir {
+	if local, _ := m.binding("auto-pigeon.q3map2.auto-pigeon-build"); local.Managed == nil || local.Managed.Dir != q3.Dir {
 		t.Fatalf("q3map2 is not bound: %+v", local)
 	}
 	if got := m.releases.Downloads[mt.ArchiveName(mustTool(managedtools.EricW), "1.4536", mt.ThisTarget())]; got != 1 {
@@ -177,7 +176,7 @@ func TestAProgramSomebodyChoseIsLeftAloneUntilTheyChooseTheManagedOne(t *testing
 	}
 	set, _ := binding.LoadFile(m.bindings)
 	catalog, _ := m.server.catalog()
-	entry, err := catalog.Lookup("auto-pigeon.ericw-tools.q1")
+	entry, err := catalog.Lookup("auto-pigeon.ericw-tools.auto-pigeon-build.q1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,11 +187,11 @@ func TestAProgramSomebodyChoseIsLeftAloneUntilTheyChooseTheManagedOne(t *testing
 		t.Fatal(err)
 	}
 	m.step()
-	local, _ := m.binding("auto-pigeon.ericw-tools.q1")
+	local, _ := m.binding("auto-pigeon.ericw-tools.auto-pigeon-build.q1")
 	if local.Acquisition != profile.AcquireUserPath || local.Executables["qbsp"] != self || local.Managed != nil {
 		t.Fatalf("the person's own qbsp was replaced: %+v", local)
 	}
-	if q2, _ := m.binding("auto-pigeon.ericw-tools.q2"); q2.Managed == nil {
+	if q2, _ := m.binding("auto-pigeon.ericw-tools.auto-pigeon-build.q2"); q2.Managed == nil {
 		t.Fatal("the profile nobody chose for was not bound")
 	}
 	_, body := m.call(http.MethodGet, "/api/v1/tools", nil)
@@ -200,27 +199,27 @@ func TestAProgramSomebodyChoseIsLeftAloneUntilTheyChooseTheManagedOne(t *testing
 	custom := false
 	for _, row := range rows {
 		r := row.(map[string]any)
-		if r["id"] == "auto-pigeon.ericw-tools.q1" {
+		if r["id"] == "auto-pigeon.ericw-tools.auto-pigeon-build.q1" {
 			custom = r["custom"] == true
 		}
 	}
 	if !custom {
 		t.Fatalf("the person's own binding is not shown as theirs: %v", rows)
 	}
-	status, answer := m.call(http.MethodPost, "/api/v1/profiles/auto-pigeon.ericw-tools.q1/use-managed", map[string]any{})
+	status, answer := m.call(http.MethodPost, "/api/v1/profiles/auto-pigeon.ericw-tools.auto-pigeon-build.q1/use-managed", map[string]any{})
 	if status != http.StatusOK {
 		t.Fatalf("use-managed = %d: %v", status, answer["error"])
 	}
-	if local, _ := m.binding("auto-pigeon.ericw-tools.q1"); local.Managed == nil || local.Acquisition != profile.AcquireManagedOfficial {
+	if local, _ := m.binding("auto-pigeon.ericw-tools.auto-pigeon-build.q1"); local.Managed == nil || local.Acquisition != profile.AcquireManagedOfficial {
 		t.Fatalf("after choosing the managed installation: %+v", local)
 	}
 	// And choosing a program again takes it back out of the Companion's hands.
-	status, answer = m.call(http.MethodPost, "/api/v1/profiles/auto-pigeon.ericw-tools.q1/bind",
+	status, answer = m.call(http.MethodPost, "/api/v1/profiles/auto-pigeon.ericw-tools.auto-pigeon-build.q1/bind",
 		map[string]any{"executables": map[string]string{"qbsp": self}})
 	if status != http.StatusOK {
 		t.Fatalf("bind = %d: %v", status, answer["error"])
 	}
-	if local, _ := m.binding("auto-pigeon.ericw-tools.q1"); local.Managed != nil || local.Acquisition != profile.AcquireUserPath {
+	if local, _ := m.binding("auto-pigeon.ericw-tools.auto-pigeon-build.q1"); local.Managed != nil || local.Acquisition != profile.AcquireUserPath {
 		t.Fatalf("a program chosen after the managed one: %+v", local)
 	}
 }

@@ -86,7 +86,7 @@ func TestATestedProfileFilledIntoTheFormAndComposedBackIsTheSameDocument(t *test
 // What the person changes in the form is what changes — and what they remove
 // stays removed, even though the tested profile had it.
 func TestEditsToAFilledFormAreKeptAndNothingRemovedComesBack(t *testing.T) {
-	const id = "auto-pigeon.ericw-tools.q1"
+	const id = "auto-pigeon.ericw-tools.auto-pigeon-build.q1"
 	original, composed := composeFilled(t, id, func(scratch *scratchDocument) {
 		// A fourth program and an action for it; one action dropped; one
 		// argument added to the compiler.
@@ -162,7 +162,7 @@ func TestBasedOnNamesATestedProfileOfTheSameKind(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.applyBasedOn(tree, "auto-pigeon.ericw-tools.q1"); err == nil {
+	if err := s.applyBasedOn(tree, "auto-pigeon.ericw-tools.auto-pigeon-build.q1"); err == nil {
 		t.Error("a pipeline form was filled from a tool")
 	}
 	if err := s.applyBasedOn(tree, "local.something"); err == nil {
@@ -241,7 +241,7 @@ func TestActionSettingsAndLitExtensionSurviveComposition(t *testing.T) {
 	if len(env["inherit"].([]any)) != 1 || env["set"].(map[string]any)["APPIMAGE_EXTRACT_AND_RUN"] != "1" {
 		t.Fatalf("environment lost: %v", env)
 	}
-	_, tool := composeFilled(t, "auto-pigeon.ericw-tools.q1", nil)
+	_, tool := composeFilled(t, "auto-pigeon.ericw-tools.auto-pigeon-build.q1", nil)
 	for _, action := range objects(tool, "actions") {
 		if text(action, "id") == "light" {
 			found := false

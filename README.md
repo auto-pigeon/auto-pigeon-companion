@@ -261,7 +261,7 @@ $ companion tools check
 $ companion tools update ericw-tools --now          # or --on-close
 $ companion tools skip ericw-tools --dont-ask-again
 $ companion tools reset-skipped
-$ companion tools use-managed auto-pigeon.ericw-tools.q1
+$ companion tools use-managed auto-pigeon.ericw-tools.auto-pigeon-build.q1
 $ curl -fsS -H "X-AUCOM-Token: $token" "$api/api/v1/tools" | jq '.tools[] | {id, phase, version, offer: .offer.version}'
 $ curl -fsS -H "X-AUCOM-Token: $token" "$api/api/v1/tools" | jq '{checks, check_failures}'   # checks running / failed
 $ curl -fsS -X POST -H "X-AUCOM-Token: $token" "$api/api/v1/checks/retry" | jq '.checks'   # Retry the program check
@@ -370,41 +370,16 @@ it. `NOTICES-migration-bridge.txt` beside the program says the same.
 ### Setting up the Quake 1 compiler
 
 Normally there is nothing to do: the Companion installs the Auto-Pigeon build
-(above). To use another ericw-tools instead:
+(above). The built-in compilers are Auto-Pigeon's own builds and no others:
+**EricW tools, Auto-Pigeon build (Quake 1)** and **(Quake II, experimental)**,
+published at <https://github.com/auto-pigeon/ericw-tools/releases> (the
+profile's **Homepage** button). It is upstream's 2.0.0-alpha11 plus changes to
+qbsp that upstream has not reviewed. The profiles are written for **release
+1.4535**; the profile's description lists what it was measured not to do.
 
-The qualified compiler is ericw-tools **2.0.0-alpha11** (v0.18.1 is retired).
-Download it from its homepage (the profile's **Homepage** button), unpack it,
-then in **Profiles** open **ericw-tools** and, under **Setup**, choose that
-folder — the one with `qbsp` directly inside it. From a terminal, with the
-profile document from this repository:
-
-```console
-$ companion acquire resolve internal/profile/builtin/ericw-tools-q1.tool.json \
-    --mode user_path --user-path ~/tools/ericw-tools-2.0.0-alpha11 --bind
-```
-
-A profile only runs after you approve what it does (**Profiles**, or
-`companion toolchain grant`).
-
-The Quake 1 compile step passes `-forcegoodtree` by default (**Careful tree
-build**, under the advanced options): alpha11's quicker tree build can report a
-leak on a map that is sealed. To compare with it off for one build:
-
-```console
-$ companion build run --pipeline auto-pigeon.q1.leak-test --input source_map=level.map \
-    --option compile.forcegoodtree=false
-```
-
-**The Auto-Pigeon build of ericw-tools.** **Profiles** also lists **EricW tools,
-Auto-Pigeon build (Quake 1)** and **(Quake II, experimental)**: Auto-Pigeon's own
-fork of ericw-tools, published at
-<https://github.com/auto-pigeon/ericw-tools/releases> (the profile's
-**Homepage** button). It is upstream's 2.0.0-alpha11 plus changes to qbsp that
-upstream has not reviewed. The profiles are written for **release 1.4535**; the
-profile's description lists what it was measured not to do. Fetch the archive for
-your platform, check it against the `SHA256SUMS` beside it, unpack it into a
-folder of its own, and choose the unpacked folder — the one that **contains**
-`bin/`:
+To unpack a release yourself, fetch the archive for your platform, check it
+against the `SHA256SUMS` beside it, unpack it into a folder of its own, and
+choose the unpacked folder — the one that **contains** `bin/`:
 
 ```console
 $ companion acquire resolve internal/profile/builtin/ericw-tools-auto-pigeon-q1.tool.json \
@@ -415,35 +390,54 @@ $ companion job run --profile auto-pigeon.ericw-tools.auto-pigeon-build.q1 --act
     --input source_map="$PWD/level.map" --root content_root="$PWD" --wait
 ```
 
+The Quake 1 compile step passes `-forcegoodtree` by default (**Careful tree
+build**, under the advanced options): the quicker tree build can report a leak
+on a map that is sealed. To compare with it off for one build:
+
+```console
+$ companion build run --pipeline auto-pigeon.q1.leak-test --input source_map=level.map \
+    --option compile.forcegoodtree=false
+```
+
 Releases 1.4502 and 1.4505 are refused by the Quake 1 profile (they can fill a
-map's air with solid without reporting anything); unpack a newer one. These
-profiles are **alternatives**: every built-in build profile keeps naming the
-upstream compiler. To build with the Auto-Pigeon one, duplicate a build profile
-in **Profiles** and choose it as the tool of each stage. When the Companion set
-the tools up itself, every built-in build profile already runs the Auto-Pigeon
-build, because the upstream-named profiles are bound to it too.
+map's air with solid without reporting anything); unpack a newer one.
+
+**If you used upstream ericw-tools or Q3Map2 here.** Earlier Companions also
+shipped profiles for upstream's programs (`auto-pigeon.ericw-tools.q1`,
+`auto-pigeon.ericw-tools.q2`, `auto-pigeon.q3map2`). They are gone, and the
+built-in build profiles keep their names and now run the Auto-Pigeon builds. The
+folders your game needs and the arguments you added carry over once, by
+themselves, when the new profile can take them; anything it cannot take is left
+out and recorded in `retired-profiles.json` beside `bindings.json`. Programs do
+not carry over: nothing shows that a folder chosen for upstream's profile is an
+Auto-Pigeon build, so that profile says **Needs setup** until you install the
+build or choose its folder. A toolchain the Companion installed is used
+straight away. A leak-test pin on the former `auto-pigeon.q3.leak-test.auto-pigeon-build`
+now means `auto-pigeon.q3.leak-test`. Old builds keep saying what ran. A profile
+of your own is not touched: one whose stage names a retired tool says which
+Auto-Pigeon build to choose for that stage, and it is yours to change.
 
 ### A program is asked what it is
 
 A profile can say which program versions it was written for. Pointing the
-ericw-tools 2.0.0-alpha11 profile at a 0.18.1 folder makes it **needs setup**,
-in Profiles and in every pipeline list, and nothing is compiled. The folder you
+Auto-Pigeon build's profile at a folder holding another ericw-tools makes it
+**needs setup**, in Profiles and in every pipeline list, and nothing is compiled. The folder you
 picked stays recorded; choose one the profile was written for, or use a profile
 written for the version you have. Each program is asked once, as a job you can
 see in **Jobs**: when you record its path, when you approve its profile, when it
 changed since it was last asked, and when you press **Check these programs**.
 
 ```console
-$ companion toolchain check auto-pigeon.ericw-tools.q1
+$ companion toolchain check auto-pigeon.ericw-tools.auto-pigeon-build.q1
 light    incompatible       v0.18.1  /opt/ericw-tools-v0.18.1/bin/light
-         The light recorded for ericw-tools 2.0.0-alpha11 (Quake 1) is not the program this profile was written for …
-$ companion toolchain check auto-pigeon.ericw-tools.q1 --json   # the same answers, with each file's SHA-256
+         The light recorded for EricW tools, Auto-Pigeon build 1.4535 (Quake 1) is not the program this profile was written for …
+$ companion toolchain check auto-pigeon.ericw-tools.auto-pigeon-build.q1 --json   # the same answers, with each file's SHA-256
 $ companion build pipelines                                     # every pipeline, whether it is ready, and why not
 ```
 
 ```bash
 curl -sS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" -X POST \
-  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/profiles/auto-pigeon.ericw-tools.q1/check"
+  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/profiles/auto-pigeon.ericw-tools.auto-pigeon-build.q1/check"
 ```
 
 A problem's `fault` is `tool_incompatible` (the program said what it is, and it
@@ -710,7 +704,7 @@ curl -sS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
   -d '{"name":"My build","version":"1.0.0","summary":"One stage.","publisher_name":"Me","license_spdx":"NOASSERTION",
        "scratch":{"kind":"pipeline",
          "inputs":[{"name":"source_map","role":"q1.map.source","required":true,"extensions":[".map"]}],
-         "steps":[{"id":"compile","title":"Compile","capability":"q1.bsp.compile","tool":"auto-pigeon.ericw-tools.q1","inputs":{}}]}}'
+         "steps":[{"id":"compile","title":"Compile","capability":"q1.bsp.compile","tool":"auto-pigeon.ericw-tools.auto-pigeon-build.q1","inputs":{}}]}}'
 # → {"valid": false, "error": "this pipeline's stages do not fit the tools installed here: …"}
 ```
 
@@ -805,10 +799,17 @@ your account in the editor and press **Leaks → Test in Companion**. Keep the
 editor tab open.
 
 Within about two seconds a notice appears in the open Companion window, with
-the map's name and saved revision. **Review leak test** takes that revision and
-its game's leak-test pipeline into Build; the preview shows the exact command,
-and only **Build** runs the compiler. **Dismiss** forgets that request. The game
-is read from the saved map itself, never from the link.
+the map's name, saved revision and game, the compiler and the pipeline. There is
+no step to go through first: the page opens Build & Run on that exact revision
+with **Build** ready to press, and only **Build** runs the compiler. The exact
+command is under **Technical details**. If something is missing, the notice says
+what, with a **Set up** link, and **Build** is enabled as soon as it is done,
+with no need to ask from the editor again. **Dismiss** forgets that request. The
+game is read from the saved map itself, never from the link.
+
+What you see is checked again when you press **Build**: if the map was saved
+since, or you signed out, nothing runs and the notice says why. One press is one
+build; a request that was built, or replaced by a newer one, cannot come back.
 
 **A Quake 1 leak test compiles with the map's own textures.** When you press
 **Build**, the Companion takes the texture bundle of exactly the saved revision
@@ -832,8 +833,8 @@ $ ./companion build show <build-id> --json |
 first request for a game opens **Choose a leak-test pipeline**, listing every
 installed pipeline that can test it, the built-in one first. Pick a ready one —
 the dialog shows it as **Ready** with its own summary — and press
-**Use pipeline**; the review in Build follows, and nothing runs until you press
-**Build** there. **Cancel**, `×` and Escape choose nothing and keep the request.
+**Use pipeline**; **Build** is ready straight away, and nothing runs until you
+press it. **Cancel**, `×` and Escape choose nothing and keep the request.
 Pipelines that need setup are listed disabled, and what each one still needs is
 in the closed **Other pipelines (n need setup)** list under it: one line per
 missing program set, a **Set up** link to the tool's own page in Profiles, and
@@ -866,14 +867,14 @@ curl -s -H "X-AUCOM-Token: $(cat "$CONFIG_DIR/api-token")" -H 'Content-Type: app
 
 | the saved map is | pipeline offered first | what **Build** runs | point file |
 | --- | --- | --- | --- |
-| Quake 1 | `auto-pigeon.q1.leak-test` | EricW `qbsp -leaktest` | `.pts` |
+| Quake 1 | `auto-pigeon.q1.leak-test` | EricW `qbsp -leaktest` (the Auto-Pigeon build, as in every row) | `.pts` |
 | Quake II (experimental) | `auto-pigeon.q2.leak-test` | EricW `qbsp -q2bsp -leaktest` only | `.pts` |
-| Quake III | `auto-pigeon.q3.leak-test`, then `auto-pigeon.q3.leak-test.auto-pigeon-build` | Q3Map2 `-bsp -leaktest` only (upstream's, or the Auto-Pigeon build's) | `.lin` |
+| Quake III | `auto-pigeon.q3.leak-test` | Q3Map2 `-bsp -leaktest` only | `.lin` |
 | anything else | none | nothing: the notice says the game has no leak test here | — |
 
 **Every choice says what it runs.** The dialog shows each pipeline's stages, and
 the notice of a request names the pinned pipeline and its stages before you
-review it: a pipeline you made may run visibility and lighting too, after the
+press **Build**: a pipeline you made may run visibility and lighting too, after the
 leak test's compile stage (they run only when the map is sealed). While it
 builds, the editor is told which stage is running and every stage the build
 runs (`vis of compile,vis,light`), so it never promises a leak test alone for a
@@ -886,17 +887,8 @@ curl -s -H "X-AUCOM-Token: $(cat "$CONFIG_DIR/api-token")" \
   jq -r '.choices[] | "\(.id) builtin=\(.builtin): \([.steps[].id] | join(", "))"'
 ```
 
-For Quake III with the Auto-Pigeon build of Q3Map2 set up in **Profiles**, pin
-the built-in `auto-pigeon.q3.leak-test.auto-pigeon-build` — the same one-stage
-leak test, run by that tool; no stage to retarget and no binding to edit:
-
-```console
-$ ./companion build leak-pipeline --game quake3 --pin auto-pigeon.q3.leak-test.auto-pigeon-build
-```
-
 For Quake II, only releases 1.4518, 1.4522, 1.4524, 1.4533 and 1.4535 of the Auto-Pigeon build of
-ericw-tools have been measured: make your own copy of the pipeline whose stage
-names it (**Profiles**) and pin it for Quake II. For Yamagi Quake II 8.70 on a
+ericw-tools have been measured. For Yamagi Quake II 8.70 on a
 64-bit computer, set the light stage's **Lightmap size arithmetic** to `float32`
 (1.4522 or newer); without it Yamagi reads some faces' lighting with another row
 length:
@@ -968,25 +960,16 @@ produced, not a signed attestation.
 
 ## Quake III maps (work in progress)
 
-**Setting up Q3Map2.** Bind it once, pointing at a folder where `q3map2` is a
-regular file — the Companion refuses a symbolic link, and NetRadiant-custom's
-`usr/bin/q3map2` is one: point at a hard link of `q3map2.x86_64` in a sibling
-folder of `usr/bin`, so its `../lib` still resolves.
-
-```console
-$ companion acquire resolve internal/profile/builtin/q3map2.tool.json \
-    --mode user_path --user-path /opt/netradiant-custom/usr/aucom-bin --bind
-```
-
-**The Auto-Pigeon build of Q3Map2.** A second profile,
-`auto-pigeon.q3map2.auto-pigeon-build`, describes the Auto-Pigeon fork of q3map2
-published at <https://github.com/auto-pigeon/q3map2/releases> (the profile's
-**Homepage** button): upstream's compiler plus fixes for thin walls and rods
-that lost their collision, faces beside a near-parallel face that were not
-drawn, a thin sliver that could fill a pipe's bore, and narrow real openings a
-slot 0.125 wide through a wall that upstream reports sealed. It is written for
-**release 2.5.17n-ap.3030**, and its description lists what that release was
-measured to do and not to do. Fetch the archive for your platform, check it
+**Setting up Q3Map2.** The Companion installs the Auto-Pigeon build, or
+`auto-pigeon.q3map2.auto-pigeon-build` is bound to one you unpack. It describes
+the Auto-Pigeon fork of q3map2 published at
+<https://github.com/auto-pigeon/q3map2/releases> (the profile's **Homepage**
+button): upstream's compiler plus fixes for thin walls and rods that lost their
+collision, faces beside a near-parallel face that were not drawn, a thin sliver
+that could fill a pipe's bore, and narrow real openings a slot 0.125 wide through
+a wall that upstream reports sealed. It is written for **release
+2.5.17n-ap.3030**, and its description lists what that release was measured to
+do and not to do. Fetch the archive for your platform, check it
 against the `SHA256SUMS` beside it, unpack it into a folder of its own, and
 choose the unpacked folder — the one that **contains** `bin/`, where `q3map2`
 sits beside every library it loads:
@@ -1001,11 +984,8 @@ $ companion job run --profile auto-pigeon.q3map2.auto-pigeon-build --action comp
 ```
 
 Release 2.5.17n-ap.3017 is refused (it reads past a table on a degenerate brush
-side); unpack a newer one. Like the EricW build, this profile is an
-**alternative**: every built-in Quake III build profile keeps naming the upstream
-compiler. To build with the Auto-Pigeon one, duplicate a build profile in
-**Profiles** and choose it as the tool of each stage. Its leak test is built in:
-`auto-pigeon.q3.leak-test.auto-pigeon-build` (above). A build records, for each
+side); unpack a newer one. Every built-in Quake III build profile and leak test
+runs it. A build records, for each
 program it started, the SHA-256 of the file and what that same file said it was
 when it was last checked — beside the version the profile expects:
 

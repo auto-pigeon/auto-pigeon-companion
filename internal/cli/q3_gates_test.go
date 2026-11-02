@@ -367,7 +367,7 @@ func TestAQuake3BuildSaysWhatKindOfThingStoppedIt(t *testing.T) {
 		bindQ3Map2(t, env, contentRoot, contentRoot)
 		// Bound, then removed from under the binding: what an uninstalled or
 		// moved NetRadiant looks like.
-		settings := mustBinding(t, env, builtin.Q3Map2)
+		settings := mustBinding(t, env, builtin.Q3Map2AutoPigeon)
 		if err := os.Remove(settings.Executables[q3ToolName]); err != nil {
 			t.Fatal(err)
 		}
@@ -403,8 +403,8 @@ func TestAQuake3PreviewRefusesWhatTheRunWouldRefuse(t *testing.T) {
 	contentRoot, _ := q3Content(t)
 	bindQ3Map2(t, env, contentRoot, contentRoot)
 	// The content folder is taken away again: only the base game data is set.
-	local := mustBinding(t, env, builtin.Q3Map2)
-	bindTool(t, env, builtin.Q3Map2, local.Executables, map[string]string{"game_root": contentRoot})
+	local := mustBinding(t, env, builtin.Q3Map2AutoPigeon)
+	bindTool(t, env, builtin.Q3Map2AutoPigeon, local.Executables, map[string]string{"game_root": contentRoot})
 
 	source := q3Source(t, "preview.map", "")
 	env, stdout, stderr := testEnvAt(t, env.ConfigPath)

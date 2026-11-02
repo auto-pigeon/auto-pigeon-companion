@@ -9,6 +9,7 @@ import (
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/failure"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile/builtin/retiredfixture"
 )
 
 // NEW_323D against the real programs, where a machine has them: EricW 0.18.1,
@@ -28,7 +29,7 @@ import (
 // None is downloaded and none is assumed: a release that is not named is
 // skipped, by name.
 func TestTheBuiltInProfilesJudgeTheInstalledReleases(t *testing.T) {
-	const upstream, fork = "auto-pigeon.ericw-tools.q1", "auto-pigeon.ericw-tools.auto-pigeon-build.q1"
+	const upstream, fork = retiredfixture.EricwQ1, "auto-pigeon.ericw-tools.auto-pigeon-build.q1"
 	releases := []struct {
 		variable string
 		// want is the state under each profile.
@@ -55,6 +56,7 @@ func TestTheBuiltInProfilesJudgeTheInstalledReleases(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
+				installRetired(t, dir, upstream)
 				suffix := ""
 				if runtime.GOOS == "windows" {
 					suffix = ".exe"
@@ -113,7 +115,7 @@ func TestTheBuiltInProfilesJudgeTheInstalledReleases(t *testing.T) {
 //
 // and the four variables above.
 func TestTheBuiltInQuake2ProfilesJudgeTheInstalledReleases(t *testing.T) {
-	const upstream, fork = "auto-pigeon.ericw-tools.q2", "auto-pigeon.ericw-tools.auto-pigeon-build.q2"
+	const upstream, fork = retiredfixture.EricwQ2, "auto-pigeon.ericw-tools.auto-pigeon-build.q2"
 	releases := []struct {
 		variable                 string
 		underUpstream, underFork binding.FactState
@@ -140,6 +142,7 @@ func TestTheBuiltInQuake2ProfilesJudgeTheInstalledReleases(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
+				installRetired(t, dir, upstream)
 				suffix := ""
 				if runtime.GOOS == "windows" {
 					suffix = ".exe"
@@ -184,5 +187,23 @@ func TestTheBuiltInQuake2ProfilesJudgeTheInstalledReleases(t *testing.T) {
 	}
 	if !ran {
 		t.Skip("no installed ericw-tools release was named; the built-in Quake II profiles were NOT judged against real programs")
+	}
+}
+
+// installRetired puts a retired upstream document where a person's own profile
+// goes: this build ships it no longer, and it is still what upstream's programs
+// are judged by here.
+func installRetired(t *testing.T, dir, id string) {
+	t.Helper()
+	raw, err := retiredfixture.Raw(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	profiles := filepath.Join(dir, "profiles")
+	if err := os.MkdirAll(profiles, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(profiles, "retired.tool.json"), raw, 0o600); err != nil {
+		t.Fatal(err)
 	}
 }

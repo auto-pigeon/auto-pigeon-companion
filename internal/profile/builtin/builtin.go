@@ -17,21 +17,18 @@
 //
 // # What "qualified" means here, and it is not one thing
 //
-// All three toolchains and all seven pipelines are qualified by *measurement*.
-// For Q1 the version is the one AUT pinned; for Q2 it is the 2.x pre-release
-// that was unpacked and run here against a synthetic Quake II map; for Q3 it is
-// Q3Map2 2.5.17n out of NetRadiant-custom's `20260114` release, run here
-// against a synthetic Quake III map. What each program does was established by
-// running it rather than read off a manual — which is how the Q2 document came
-// to differ from the Q1 one in seven places, and the Q3 one from both in nine,
-// that a copy-and-edit would have got wrong.
+// The three toolchains are Auto-Pigeon's own builds of ericw-tools and q3map2
+// (HITL, NEW_380: "Offer the maintained Auto-Pigeon builds"), and each is
+// qualified by *measurement*: what a program does was established by running it
+// rather than read off a manual — which is how the Quake II document came to
+// differ from the Quake 1 one in seven places, and the Quake III one from both
+// in nine, that a copy-and-edit would have got wrong. Their releases are
+// installed by internal/managedtools or unpacked by the user from the same
+// GitHub pages.
 //
-// The EricW archives are pinned by digest in the signed catalogue. Q3Map2's is
-// not, and that is a difference in the *artifact* rather than in the standard:
-// upstream publishes it only inside a bundle of the NetRadiant editor, in a
-// container this program does not unpack, and `AUP/AUCOM 216` says not to
-// install an editor to get at a compiler. So that document declares no managed
-// download and says why, which is the honest version of "unavailable".
+// The upstream documents those measurements started from are not shipped any
+// more. They are kept as test fixtures in testdata/retired, and [ReplacementFor]
+// is what a binding, a pin or a stage that still names one is told.
 //
 // The ten engine profiles are qualified by *documentation*. Their command lines
 // come from each engine's own published usage and source, and no build of any
@@ -63,7 +60,8 @@
 // this step" a question a pipeline resolves by iteration order; and the engine
 // sample would be an eighth engine in a list of seven, describing an engine
 // that does not exist. `TestNoTwoBuiltinToolsProvideTheSameCapability` is what
-// keeps the first half from coming back.
+// keeps the first half from coming back — and why NEW_380 could drop the idea
+// of an "alternative" tool altogether once the forks stood alone.
 package builtin
 
 import (
@@ -89,23 +87,11 @@ var files embed.FS
 // in a job record and in a build manifest, and a typo in one of those places is
 // a lookup that fails in a way nobody reads as a typo.
 const (
-	// EricwQ1 is the qualified Quake 1 toolchain: ericw-tools 2.0.0-alpha11
-	// (HITL, 2026-10-07: the build AUT's acceptance pins; 0.18.1 is retired).
-	EricwQ1 = "auto-pigeon.ericw-tools.q1"
-	// EricwQ2 is the experimental Quake II toolchain: ericw-tools 2.0.0-alpha7.
-	//
-	// A second document rather than a second version of the first, because the
-	// two describe different programs with different archive layouts, different
-	// log names and different outputs, and because the Q1 line must not be
-	// moved onto a pre-release to gain a Q2 mode.
-	EricwQ2 = "auto-pigeon.ericw-tools.q2"
 	// EricwAutoPigeonQ1 and EricwAutoPigeonQ2 are the Auto-Pigeon fork's build of
-	// ericw-tools, as published on its GitHub releases page (HITL, 2026-10-10).
-	//
-	// They are ALTERNATIVES to the two documents above, not replacements: each
-	// provides exactly its family default's capabilities, and no built-in
-	// pipeline names one. A stage reaches one only by naming it. See
-	// [IsAlternativeTool].
+	// ericw-tools, as published on its GitHub releases page: Quake 1 and the
+	// experimental Quake II. Two documents rather than one, because the two games
+	// read different inputs and write different outputs. Since NEW_380 every
+	// built-in Quake 1 and Quake II pipeline names one of these on every stage.
 	EricwAutoPigeonQ1 = "auto-pigeon.ericw-tools.auto-pigeon-build.q1"
 	EricwAutoPigeonQ2 = "auto-pigeon.ericw-tools.auto-pigeon-build.q2"
 	// The three Q1 pipelines, which differ only in the options they set.
@@ -124,24 +110,13 @@ const (
 	Q2Normal      = "auto-pigeon.q2.normal"
 	// Q2LeakTest is the Quake II counterpart of Q1LeakTest (`Q2_010`): qbsp's
 	// Quake II compile step alone with the leak test on. It publishes the
-	// `.pts` point file and what qbsp printed. Like every built-in pipeline it
-	// names the family's default tool, not the Auto-Pigeon build.
+	// `.pts` point file and what qbsp printed.
 	Q2LeakTest = "auto-pigeon.q2.leak-test"
 
-	// Q3Map2 is the experimental Quake III toolchain: Q3Map2 2.5.17n, from
-	// NetRadiant-custom's `20260114` release.
-	//
+	// Q3Map2AutoPigeon is the experimental Quake III toolchain: the Auto-Pigeon
+	// fork's build of q3map2, as published on its GitHub releases page (NEW_340).
 	// One executable with three stage switches, where the two EricW documents
-	// describe several programs — and the only toolchain here with no managed
-	// download, because upstream ships it inside a map editor and this program
-	// does not install one to get at it. See the document's own acquisition
-	// note.
-	Q3Map2 = "auto-pigeon.q3map2"
-	// Q3Map2AutoPigeon is the Auto-Pigeon fork's build of q3map2, as published on
-	// its GitHub releases page (NEW_340). Like the EricW fork's two documents it
-	// is an ALTERNATIVE to Q3Map2, not a replacement: a stage reaches it only by
-	// naming it. See [IsAlternativeTool]. One built-in pipeline names it,
-	// [Q3LeakTestAutoPigeon]; see [AlternativePipelines].
+	// describe several programs.
 	Q3Map2AutoPigeon = "auto-pigeon.q3map2.auto-pigeon-build"
 	// The two Q3 pipelines, for the same reason there are two Q2 ones.
 	Q3FastPreview = "auto-pigeon.q3.fast-preview"
@@ -150,10 +125,6 @@ const (
 	// BSP stage alone with the leak test on. It publishes the `.lin` line file
 	// and what Q3Map2 printed (`Q3_018`).
 	Q3LeakTest = "auto-pigeon.q3.leak-test"
-	// Q3LeakTestAutoPigeon is the same leak test run by Q3Map2AutoPigeon
-	// (NEW_340A): the fork-compatible leak-only setup chosen through Profiles and
-	// the leak chooser, with no stage retargeted and no binding edited by hand.
-	Q3LeakTestAutoPigeon = "auto-pigeon.q3.leak-test.auto-pigeon-build"
 
 	// The curated Quake 1 engines. Each is one upstream project, and the id is
 	// the name that project calls itself.
@@ -199,14 +170,7 @@ var Q1Pipelines = []string{Q1FastPreview, Q1Normal, Q1Final}
 // DiagnosticPipelines answer a question about a map rather than build it: one
 // step, no playable output. Listed apart so "every build pipeline is compile,
 // vis, light" stays a statement about builds.
-var DiagnosticPipelines = []string{Q1LeakTest, Q2LeakTest, Q3LeakTest, Q3LeakTestAutoPigeon}
-
-// AlternativePipelines are the built-in pipelines whose every stage names a
-// built-in ALTERNATIVE tool instead of its family's default, keyed to that tool.
-// Every other built-in pipeline names the default on every stage (NEW_310,
-// HITL). An alternative is still never used unasked: these pipelines are chosen
-// by name, like any other, and each names its tool on every stage.
-var AlternativePipelines = map[string]string{Q3LeakTestAutoPigeon: Q3Map2AutoPigeon}
+var DiagnosticPipelines = []string{Q1LeakTest, Q2LeakTest, Q3LeakTest}
 
 // Q2Engines is every curated Quake II engine profile this build ships, in the
 // order they are listed. Yamagi first because it is the one the Quake II path
@@ -359,30 +323,46 @@ func Find(id string) (Entry, error) {
 	return Entry{}, fmt.Errorf("builtin: no built-in profile has the id %q", id)
 }
 
-// alternativeTools maps each built-in alternative tool to the family default it
-// stands beside.
-var alternativeTools = map[string]string{
-	EricwAutoPigeonQ1: EricwQ1,
-	EricwAutoPigeonQ2: EricwQ2,
-	Q3Map2AutoPigeon:  Q3Map2,
-}
-
-// IsAlternativeTool reports whether a built-in tool profile is a second build of
-// a compiler this program already ships a default profile for.
+// retired maps every document earlier Companions shipped and this one does not
+// to the maintained document that does its job (NEW_380).
 //
-// A capability two installed profiles both claim is refused for a stage that
-// names no tool, because ranking them would make "which compiler built this"
-// depend on a rule nobody was told. Shipping a second built-in provider would
-// therefore break every pipeline whose stages leave the tool to the machine —
-// on every installation, the day it updated. So an alternative is never a
-// candidate for an unnamed stage and never counts as a conflict: an unnamed
-// stage goes on resolving to the default exactly as before, and the alternative
-// runs only for a stage that names it.
-func IsAlternativeTool(id string) bool {
-	_, ok := alternativeTools[id]
-
-	return ok
+// The table is the whole of what "migrating" a retired id may mean: it says
+// which document a binding's folders and a pin may carry over to. It says nothing
+// about programs. A folder somebody bound to ericw-tools 2.0.0-alpha11 is not an
+// Auto-Pigeon build because a table says so: the replacement's own binding is
+// filled by the managed installer or by the person, and its version check decides.
+var retired = map[string]string{
+	"auto-pigeon.ericw-tools.q1":                 EricwAutoPigeonQ1,
+	"auto-pigeon.ericw-tools.q2":                 EricwAutoPigeonQ2,
+	"auto-pigeon.q3map2":                         Q3Map2AutoPigeon,
+	"auto-pigeon.q3.leak-test.auto-pigeon-build": Q3LeakTest,
 }
 
-// AlternativeOf is the default tool an alternative stands beside, or "".
-func AlternativeOf(id string) string { return alternativeTools[id] }
+// ReplacementFor is the maintained document a retired built-in id was replaced
+// by. false for every id this build does not know as retired, which includes
+// everything a user wrote.
+func ReplacementFor(id string) (string, bool) {
+	replacement, ok := retired[id]
+	return replacement, ok
+}
+
+// Current is the profile a stored reference means today: its replacement when
+// it names a retired document, unless something installed still answers to that
+// id — then it is a person's own profile, and the reference is theirs. This is
+// how a leak-test pin made before NEW_380 keeps working without being rewritten.
+func Current(id string, installed func(string) bool) string {
+	if replacement, ok := retired[id]; ok && !installed(id) {
+		return replacement
+	}
+	return id
+}
+
+// Retired is every retired id, sorted.
+func Retired() []string {
+	ids := make([]string, 0, len(retired))
+	for id := range retired {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
+}

@@ -65,7 +65,7 @@ func q2SetupEnv(t *testing.T, game string) *Env {
 		}
 		executables[name] = path
 	}
-	bindTool(t, env, builtin.EricwQ2, executables, map[string]string{profile.RootGame: game, profile.RootContent: game})
+	bindTool(t, env, builtin.EricwAutoPigeonQ2, executables, map[string]string{profile.RootGame: game, profile.RootContent: game})
 	return env
 }
 

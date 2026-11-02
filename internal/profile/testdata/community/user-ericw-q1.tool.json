@@ -747,27 +747,27 @@
     {
       "name": "qbsp",
       "title": "Map compiler",
-      "file": "qbsp{platform.exe_suffix}"
+      "file": "bin/qbsp{platform.exe_suffix}"
     },
     {
       "name": "vis",
       "title": "Visibility",
-      "file": "vis{platform.exe_suffix}"
+      "file": "bin/vis{platform.exe_suffix}"
     },
     {
       "name": "light",
       "title": "Lighting",
-      "file": "light{platform.exe_suffix}"
+      "file": "bin/light{platform.exe_suffix}"
     },
     {
       "name": "bspinfo",
       "title": "BSP reporter",
-      "file": "bspinfo{platform.exe_suffix}"
+      "file": "bin/bspinfo{platform.exe_suffix}"
     },
     {
       "name": "bsputil",
       "title": "BSP utility",
-      "file": "bsputil{platform.exe_suffix}"
+      "file": "bin/bsputil{platform.exe_suffix}"
     }
   ],
   "capabilities": [

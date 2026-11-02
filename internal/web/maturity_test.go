@@ -151,7 +151,7 @@ func TestTheReportRouteAttachesWhatWasConsentedTo(t *testing.T) {
 		"summary":       "the areaportal did not seal",
 		"share":         map[string]any{"versions": true, "profiles": true},
 		"profiles": []map[string]any{
-			{"role": "tool", "id": "auto-pigeon.ericw-tools.q2", "version": "1.0.0", "tool_version": "2.0.0-alpha7"},
+			{"role": "tool", "id": "auto-pigeon.ericw-tools.auto-pigeon-build.q2", "version": "1.0.0", "tool_version": "2.0.0-alpha7"},
 		},
 	})
 	report := body["report"].(map[string]any)

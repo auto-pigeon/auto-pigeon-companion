@@ -15,6 +15,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/incident"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/retiredprofile"
 )
 
 // `companion job` — the same executor the GUI drives, from a terminal.
@@ -226,18 +227,45 @@ func openJobs(ctx context.Context, env *Env, started bool, logf func(string, ...
 func statePaths(env *Env, settings config.Config) (jobsDir, profilesDir, bindingsPath string, err error) {
 	if env.ConfigPath != "" {
 		dir := filepath.Dir(env.ConfigPath)
-		return filepath.Join(dir, "jobs"), filepath.Join(dir, "profiles"), filepath.Join(dir, "bindings.json"), nil
+		jobsDir, profilesDir, bindingsPath = filepath.Join(dir, "jobs"), filepath.Join(dir, "profiles"), filepath.Join(dir, "bindings.json")
+	} else {
+		if jobsDir, err = settings.Jobs(); err != nil {
+			return "", "", "", err
+		}
+		if profilesDir, err = settings.Profiles(); err != nil {
+			return "", "", "", err
+		}
+		if bindingsPath, err = config.BindingsPath(); err != nil {
+			return "", "", "", err
+		}
 	}
-	if jobsDir, err = settings.Jobs(); err != nil {
-		return "", "", "", err
-	}
-	if profilesDir, err = settings.Profiles(); err != nil {
-		return "", "", "", err
-	}
-	if bindingsPath, err = config.BindingsPath(); err != nil {
-		return "", "", "", err
-	}
+	adoptRetiredProfiles(env, profilesDir, bindingsPath)
 	return jobsDir, profilesDir, bindingsPath, nil
+}
+
+// adoptRetiredProfiles carries a binding of a retired built-in document over,
+// once, before anything reads the bindings. Every command and the server come
+// through statePaths, so this is one place; it costs a read of two small files
+// on every run after the first. A failure is said and changes nothing: the
+// replacement then simply needs setting up, and the next run tries again.
+func adoptRetiredProfiles(env *Env, profilesDir, bindingsPath string) {
+	done, err := retiredprofile.Apply(bindingsPath, job.NewCatalog(profilesDir), time.Now().UTC())
+	if err != nil {
+		fmt.Fprintf(env.Stderr, "warning: carrying over the settings of retired profiles: %v\n", err)
+		return
+	}
+	for _, entry := range done {
+		fmt.Fprintf(env.Stderr, "The Companion no longer ships %s; %s took its place. Settings carried over: %s. "+
+			"Programs are never carried over: an Auto-Pigeon build is installed or chosen for it.\n",
+			entry.Retired, entry.Replacement, describeCarried(entry))
+	}
+}
+
+func describeCarried(entry retiredprofile.Entry) string {
+	if len(entry.Carried) == 0 {
+		return "none"
+	}
+	return strings.Join(entry.Carried, ", ")
 }
 
 // warnNotWaiting says what `--wait=false` actually does today.
