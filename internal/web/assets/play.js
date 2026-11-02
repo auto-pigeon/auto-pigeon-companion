@@ -739,6 +739,11 @@
     if (!wanted()) return;
     const install = await window.AUCOM.installSettled();
     if (install === "declined" || install === "failed" || !wanted()) return;
+    // An editor's leak request runs no game, so this question does not stand in
+    // front of its Build (NEW_380). The first read of the request is waited for,
+    // so a page opened by the link is not asked before it knows that.
+    await window.AUCOM.leakRequestRead;
+    if (window.AUCOM.leakRequestShown?.() || !wanted()) return;
     // The server's answer, not state.engines: that list can be empty only
     // because a newer refresh threw this one's answer away.
     const { ok, body } = await api("/api/v1/engines");

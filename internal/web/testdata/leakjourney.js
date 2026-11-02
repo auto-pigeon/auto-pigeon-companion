@@ -82,6 +82,8 @@
       await waitFor("the notice", () => /saved revision 1/.test(notice()));
       await waitFor("Build to be enabled", enabled);
       record("the page opened on Build", !document.getElementById("area-play").hidden, window.location.hash);
+      await sleep(600);
+      record("no question stands in front of Build", !document.querySelector("dialog[open]"), document.querySelector("dialog[open] h2")?.textContent || "none");
       record("there is no Review step", !/review/i.test(notice()) && ![...document.querySelectorAll("#leak-request button")].some((b) => /review/i.test(b.textContent)), notice());
       record("the button says Build", button().textContent === "Build", button().textContent);
       record("it says the pipeline and that nothing runs yet", /Fixture Quake 1 leak test/.test(notice()) && /nothing runs until you press Build/i.test(notice()), notice());

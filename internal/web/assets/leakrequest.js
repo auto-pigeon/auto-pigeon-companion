@@ -525,5 +525,7 @@
     if (changed) { dropForm(); formKey = ""; resolve(true); return; }
     if (!details || details.body?.sign_in_required || !details.ok) resolve(true);
   });
-  watch();
+  // What another question needs to know before it opens over this one's Build.
+  window.AUCOM.leakRequestShown = () => Boolean(seen);
+  window.AUCOM.leakRequestRead = watch();
 })();
