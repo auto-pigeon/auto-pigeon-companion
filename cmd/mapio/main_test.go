@@ -65,8 +65,9 @@ func TestTheProtocolNamesThisProgramAndItsLicences(t *testing.T) {
 	if document.Library.Module != "github.com/auto-pigeon/auto-pigeon-libraries" {
 		t.Fatalf("library: %+v", document.Library)
 	}
-	for _, want := range []string{"apmap-to-q1map", "apmap-to-q2map", "apmap-to-q3map"} {
-		if !strings.Contains(strings.Join(document.Capabilities.Directions, " "), want) {
+	for _, want := range []string{"apmap-to-q1map", "apmap-to-q2map", "apmap-to-q3map", "q1map-to-apmap", "q2map-to-apmap",
+		"q2rmf-to-apmap", "apmap-to-q2rmf", "q3map-to-apmap"} {
+		if !strings.Contains(" "+strings.Join(document.Capabilities.Directions, " ")+" ", " "+want+" ") {
 			t.Fatalf("%s is not advertised: %+v", want, document.Capabilities)
 		}
 	}

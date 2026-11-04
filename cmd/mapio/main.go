@@ -174,9 +174,12 @@ func runVersion(args []string, stdout, stderr io.Writer) int {
 		return exitFailed
 	}
 	if *asJSON {
-		return writeJSON(stdout, stderr, map[string]string{
-			"program": Program, "version": version, "library_version": document.Library.Version,
-			"apmap_current": document.Capabilities.APMapCurrent, "license": License,
+		// The directions are the library's own table, so a reader can check what this build
+		// converts — Quake III import included — rather than infer it from a module version.
+		return writeJSON(stdout, stderr, map[string]any{
+			"program": Program, "version": version, "library_module": document.Library.Module,
+			"library_version": document.Library.Version, "apmap_current": document.Capabilities.APMapCurrent,
+			"directions": document.Capabilities.Directions, "license": License,
 		})
 	}
 	fmt.Fprintf(stdout, "%s %s (go/mapio %s, APMap %s, protocol %s, %s)\n", Program, version,

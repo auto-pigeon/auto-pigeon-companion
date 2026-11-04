@@ -1466,14 +1466,14 @@ $ AUCOM_MAPIO_BINARY=$PWD/auto-pigeon-mapio ./companion converter convert room.a
 ### Map conversion
 
 `auto-pigeon-mapio` is a small program of its own, and it works without the Companion. It converts between
-Quake `.map`, Worldcraft `.rmf` and APMap, using the
+Quake `.map` (Quake 1, Quake II and Quake III), Worldcraft `.rmf` and APMap, using the
 [`go/mapio`](https://github.com/auto-pigeon/auto-pigeon-libraries/tree/main/go/mapio) library, whose README
 has the full conversion matrix and its known limitations. It validates every APMap it reads or writes, and it
 publishes a result whole:
 
 ```console
 $ auto-pigeon-mapio version
-auto-pigeon-mapio 1.320 (go/mapio v0.0.0-20261030192305-2f8248100896, APMap 1.5, protocol 1.0, Apache-2.0 AND MIT)
+auto-pigeon-mapio 1.320 (go/mapio v0.0.0-20261104005048-d11e6d1cf459, APMap 1.5, protocol 1.0, Apache-2.0 AND MIT)
 $ auto-pigeon-mapio convert --apmap-to-q3map --input room.apmap --output out --json
 {
   "direction": "apmap-to-q3map",
@@ -1485,6 +1485,11 @@ $ auto-pigeon-mapio convert --apmap-to-q3map --input room.apmap --output out --j
 }
 $ auto-pigeon-mapio convert --q1map-to-apmap --input e1m1.map --output out
 out/e1m1.apmap
+$ auto-pigeon-mapio convert --q3map-to-apmap --input q3room.map --output out     # a Quake III .map, read as the editor reads one
+warning: q3map_shader_prefix_removed: 6 shader name(s) written with textures/ are stored without it (Q3Map2 adds it)
+out/q3room.apmap
+$ auto-pigeon-mapio version --json | jq -c .directions
+["q1map-to-apmap","apmap-to-q1map","q2map-to-apmap","apmap-to-q2map","q2rmf-to-apmap","apmap-to-q2rmf","q3map-to-apmap","apmap-to-q3map"]
 $ auto-pigeon-mapio protocol --json     # what it is, its licences, the directions and APMap versions it speaks
 ```
 
