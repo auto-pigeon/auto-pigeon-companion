@@ -18,6 +18,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/converter"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/leakadapter"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/leakintent"
@@ -436,6 +437,11 @@ func (s *Server) buildRunner(announce func(*build.Manifest)) (*build.Runner, err
 		Announce:  announce,
 		Hold:      s.toolGate.hold,
 		Lease:     ToolLeaser(registry, s.bundleUse, "companion serve "+s.version, leaseWait),
+		// A map from Auto-Pigeon is compiled as the copy the bundled converter
+		// checks and writes (internal/build mapconfine.go, NEW_434).
+		CanonicalMap: func(ctx context.Context, source, destination string) ([]string, error) {
+			return converter.CanonicalMap(ctx, s.runner, source, destination)
+		},
 	})
 }
 

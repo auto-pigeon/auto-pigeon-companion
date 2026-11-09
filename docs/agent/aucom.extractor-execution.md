@@ -49,17 +49,24 @@ and a wrong answer to any is a refusal:
    boundary (`converter.ProtocolSatisfies` here, `protocol_satisfies` in `build/release-plan.py`) and a
    third call site implementing a laxer version of it is the failure mode.
 3. **Can it do what a build needs?** Its capabilities must list every direction in
-   `converter.RequiredDirections` and name the APMap versions it reads and writes.
+   `converter.RequiredDirections`, name the APMap versions it reads and writes, and name
+   `converter.RequiredCompileBoundary` as its `compile_boundary` (`NEW_434`).
 
-The required protocol is `converter.RequiredProtocol` (`"1.0"`), compiled in. The bundled converter is
+The required protocol is `converter.RequiredProtocol` (`"1.1"`, `build/converter.json` beside it),
+compiled in. 1.1 added `canonical-map`, the compile boundary every map from Auto-Pigeon passes before a
+build stages it (`internal/build/mapconfine.go`; the rule is `cmd/mapio/canonical.go`): a 1.0 converter has
+none, so it is refused in the handshake rather than trusted. A build with no converter refuses a map from
+Auto-Pigeon instead of compiling the downloaded bytes. The bundled converter is
 asked before it is handed to anybody — whether or not the bundle manifest listed its digest. A
 `AUCOM_MAPIO_BINARY` developer override gets no handshake; that is part of why it is labelled UNVERIFIED.
 
 Without a required protocol the Companion would be trusting a version NUMBER to imply a contract, which
 is exactly the assumption a rebuilt or forked converter breaks.
 
-`cmd/mapio`'s contract is its protocol document: `version`, `protocol --json` and
-`convert --<direction> --input <file> --output <dir> [--json]`. Exit 0 wrote the output, 1 did not, 2 was
+`cmd/mapio`'s contract is its protocol document: `version`, `protocol --json`,
+`convert --<direction> --input <file> --output <dir> [--json]` and
+`canonical-map --input <file.map> --output <new file> [--json]` (which writes a new file only, follows no
+link, and refuses with reason `map_refused` and a sentence that names the entity and line, never the value). Exit 0 wrote the output, 1 did not, 2 was
 a wrong invocation. A failed conversion's last stderr line is `MAPIO-TERMINAL/1.0 {reason, message, detail}`,
 and its reasons are `go/mapio`'s refusal codes plus `io_error`. It validates always and takes no flag that
 turns validation off.

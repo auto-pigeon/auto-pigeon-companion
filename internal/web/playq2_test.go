@@ -156,7 +156,7 @@ func (m *machine) prepareQ2Play(t *testing.T) (gameRoot, content string) {
 	m.backend.asset.fileName = "q2room.map"
 	// The map uses a texture of an account texture source it binds, which
 	// its texture export carries (Q2_015A).
-	m.backend.asset.body = []byte("// q2texture " + q2AccountTexture + "\n{ \"classname\" \"worldspawn\" }\n")
+	m.backend.asset.body = []byte("{\n\"classname\" \"worldspawn\"\n\"_aucom_test_q2texture\" \"" + q2AccountTexture + "\"\n}\n")
 	m.backend.textures = fixtureQ2TextureBundle(m.backend.asset.assetID, m.backend.asset.revision, "bound")
 	return gameRoot, content
 }

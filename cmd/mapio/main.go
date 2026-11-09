@@ -3,11 +3,14 @@
 // It is a wrapper and nothing else: argument handling, file I/O, process signals and a machine-readable
 // result around go/mapio from auto-pigeon-libraries (Apache-2.0), which owns the formats. This file is
 // MIT, like the rest of this repository; the executable built from it contains both, and its protocol
-// document says so. It has no format code, runs no other program and reads no mapper configuration.
+// document says so. It runs no other program and reads no mapper configuration. Its one piece of format
+// code is the compile boundary's writer for a parsed Quake III tree (canonical.go, NEW_434), which
+// go/mapio does not have.
 //
 //	auto-pigeon-mapio version [--json]
 //	auto-pigeon-mapio protocol --json
 //	auto-pigeon-mapio convert --<direction> --input <file> --output <dir> [--json]
+//	auto-pigeon-mapio canonical-map --input <file.map> --output <new file> [--json]
 //
 // Exit 0 is a conversion that published its whole result, 1 a conversion that did not, and 2 an
 // invocation that was wrong. commit.go says exactly what each of those leaves in the output directory. A
@@ -38,8 +41,9 @@ import (
 const Program = "auto-pigeon-mapio"
 
 // Protocol is the invocation contract: the commands, their flags, the JSON documents and the exit
-// codes below. A later minor only adds; a later major is a different contract.
-const Protocol = "1.0"
+// codes below. A later minor only adds; a later major is a different contract. 1.1 added
+// `canonical-map` and the `compile_boundary` capability (NEW_434).
+const Protocol = "1.1"
 
 // SchemaVersion names the shape of the protocol document itself.
 const SchemaVersion = "auto-pigeon-mapio-protocol/1.0"
@@ -92,6 +96,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return runProtocol(args[1:], stdout, stderr)
 	case "convert":
 		return runConvert(ctx, args[1:], stdout, stderr)
+	case "canonical-map":
+		return runCanonicalMap(args[1:], stdout, stderr)
 	case "help", "-h", "--help":
 		usage(stdout)
 		return exitOK
@@ -106,6 +112,7 @@ func usage(out io.Writer) {
 	fmt.Fprintln(out, "  "+Program+" version [--json]")
 	fmt.Fprintln(out, "  "+Program+" protocol --json")
 	fmt.Fprintln(out, "  "+Program+" convert --<direction> --input <file> --output <dir> [--json]")
+	fmt.Fprintln(out, "  "+Program+" canonical-map --input <file.map> --output <new file> [--json]")
 	fmt.Fprintln(out, "directions:")
 	for _, direction := range mapio.Directions() {
 		fmt.Fprintf(out, "  --%-16s %s\n", direction.Name, direction.Summary)
@@ -139,6 +146,8 @@ type capabilities struct {
 	APMapCurrent   string   `json:"apmap_current"`
 	APMapReadable  []string `json:"apmap_readable"`
 	ContractSource string   `json:"contract_source"`
+	// CompileBoundary is the rule `canonical-map` enforces (protocol 1.1).
+	CompileBoundary string `json:"compile_boundary"`
 }
 
 func describe() (protocolDocument, error) {
@@ -155,7 +164,8 @@ func describe() (protocolDocument, error) {
 		License: license{SPDX: License, Source: Source},
 		Library: library{Module: mapio.ModulePath, Version: mapio.BuildModuleVersion()},
 		Capabilities: capabilities{Directions: names, APMapCurrent: found.APMapCurrent,
-			APMapReadable: found.APMapReadable, ContractSource: found.ContractSource},
+			APMapReadable: found.APMapReadable, ContractSource: found.ContractSource,
+			CompileBoundary: CompileBoundary},
 		ExitCodes: map[int]string{exitOK: "the conversion wrote its output", exitFailed: "the conversion did not",
 			exitUsage: "the invocation was wrong"},
 	}, nil

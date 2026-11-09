@@ -91,11 +91,7 @@ func leakQbspMain(args []string) int {
 	if len(declared) > 0 && len(opened) == 0 {
 		say("No valid WAD filenames")
 	}
-	for _, line := range strings.Split(string(contents), "\n") {
-		texture, uses := strings.CutPrefix(strings.TrimSpace(line), "// uses ")
-		if !uses {
-			continue
-		}
+	for _, texture := range fixtureValues(contents, "_aucom_test_uses") {
 		present := false
 		for _, wad := range opened {
 			present = present || bytes.Contains(wad, append([]byte(texture), 0))
@@ -107,7 +103,7 @@ func leakQbspMain(args []string) int {
 	// ericw-tools 2.0 says this for every Quake 1 map, whatever it opened
 	// (measured live, NEW_357): `skip` has no picture in any WAD.
 	say("WARNING: unable to find texture skip")
-	leaks := strings.Contains(string(contents), "// leaks")
+	leaks := len(fixtureValues(contents, "_aucom_test_leaks")) > 0
 	if leaks {
 		say("Reached occupant at (0 0 0), no filling performed.")
 		say("Leak file written to %s.pts", filepath.Base(stem))
@@ -194,7 +190,10 @@ type fixtureConverter struct {
 	calls int
 }
 
-func (c *fixtureConverter) Run(_ context.Context, _ string, args ...string) ([]byte, error) {
+func (c *fixtureConverter) Run(_ context.Context, subcommand string, args ...string) ([]byte, error) {
+	if subcommand == "canonical-map" {
+		return fixtureCanonicalMap(args...)
+	}
 	c.mu.Lock()
 	c.calls++
 	c.mu.Unlock()
@@ -221,6 +220,38 @@ func (c *fixtureConverter) Run(_ context.Context, _ string, args ...string) ([]b
 	return []byte("{}"), os.WriteFile(filepath.Join(output, stem+".map"), []byte(document.Map), 0o600)
 }
 
+// fixtureCanonicalMap stands in for the converter's `canonical-map`: the copy
+// a build of a map from Auto-Pigeon stages (internal/build mapconfine.go,
+// NEW_434), here the bytes unchanged and the output created exclusively. The
+// rule itself is tested in cmd/mapio and, through the runner, internal/build.
+func fixtureCanonicalMap(args ...string) ([]byte, error) {
+	var input, output string
+	for i := 0; i+1 < len(args); i++ {
+		switch args[i] {
+		case "--input":
+			input = args[i+1]
+		case "--output":
+			output = args[i+1]
+		}
+	}
+	raw, err := os.ReadFile(input)
+	if err != nil {
+		return nil, err
+	}
+	file, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	if _, err = file.Write(raw); err != nil {
+		file.Close()
+		return nil, err
+	}
+	if err = file.Close(); err != nil {
+		return nil, err
+	}
+	return json.Marshal(map[string]any{"input": input, "output": output, "reduced_wads": []string{}})
+}
+
 func (c *fixtureConverter) Provenance() converter.Provenance {
 	return converter.Provenance{Mode: converter.ModeBundled, Verified: true}
 }
@@ -228,14 +259,17 @@ func (c *fixtureConverter) Provenance() converter.Provenance {
 // q1Room is a tiny Quake 1 room: worldspawn names its WADs, and each `// uses`
 // line is a texture its faces use.
 func q1Room(wads string, leaks bool, textures ...string) string {
-	text := ""
+	// What the fixture compiler is to find and say, as worldspawn keys: a map
+	// from Auto-Pigeon is compiled as a canonical copy that keeps every key and
+	// no comment (internal/build/mapconfine.go, NEW_434).
+	text := "{\n\"classname\" \"worldspawn\"\n\"wad\" \"" + wads + "\"\n"
 	for _, texture := range textures {
-		text += "// uses " + texture + "\n"
+		text += "\"_aucom_test_uses\" \"" + texture + "\"\n"
 	}
 	if leaks {
-		text += "// leaks\n"
+		text += "\"_aucom_test_leaks\" \"1\"\n"
 	}
-	return text + "{\n\"classname\" \"worldspawn\"\n\"wad\" \"" + wads + "\"\n}\n"
+	return text + "}\n"
 }
 
 // leakBundle is an AUB texture export of the WADs named in order, carrying
@@ -856,7 +890,8 @@ func TestACancelledLeakTestLeavesNoTexturesAndNoResult(t *testing.T) {
 	m, _ := newLeakMachine(t)
 	wad := fixturewad.WAD("n357_floor", 8)
 	gate := filepath.Join(m.dir, "release-compiler")
-	m.saveRoom("new357c", 1, holdUntilMarker+gate+"\n"+q1Room("new357.wad", false, "n357_floor"),
+	m.saveRoom("new357c", 1, strings.Replace(q1Room("new357.wad", false, "n357_floor"),
+		"\"classname\" \"worldspawn\"\n", "\"classname\" \"worldspawn\"\n\""+holdUntilKey+"\" \""+gate+"\"\n", 1),
 		leakBundle("new357c", 1, []string{"new357.wad"}, map[string][]byte{"new357.wad": wad}))
 
 	// While fetching: the request's own context ends before the bundle is had.

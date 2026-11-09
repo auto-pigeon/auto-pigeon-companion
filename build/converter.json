@@ -5,7 +5,7 @@
   "package": "./cmd/mapio",
   "library_module": "github.com/auto-pigeon/auto-pigeon-libraries",
   "library_repository": "auto-pigeon/auto-pigeon-libraries",
-  "required_protocol": "1.0",
+  "required_protocol": "1.1",
   "license": "Apache-2.0 AND MIT",
   "build_only": {
     "windows/arm64": "No native Windows-arm64 machine has run this artifact. Every release builds it and records its digest, and Windows on ARM runs the windows/amd64 build under emulation, so nobody on that machine is stranded. It becomes a released target when a native Windows-arm64 job has executed it."

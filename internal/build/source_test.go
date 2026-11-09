@@ -93,10 +93,10 @@ func TestALocalInputRecordsNoSourceAtAll(t *testing.T) {
 // build that reproduced exactly.
 func TestTheReproducibleKeyIgnoresWhereAnInputCameFrom(t *testing.T) {
 	h := newHarness(t, standardFixtures(t))
-	// Ending in a newline, as every map the extractor writes does: a map from
-	// Auto-Pigeon that did NOT would be staged with one added (mapconfine.go,
-	// NEW_348), and then the bytes compiled — not just the provenance — differ.
-	source := h.sourceMap("e1m1.map", "{ }\n")
+	// Already in the canonical spelling a map from Auto-Pigeon is staged in
+	// (mapconfine.go, NEW_434): one in any other spelling is staged rewritten,
+	// and then the bytes compiled — not just the provenance — differ.
+	source := h.sourceMap("e1m1.map", "{\n}\n")
 
 	plain := h.mustRun(Request{
 		PipelineID: "test.build.pipeline",

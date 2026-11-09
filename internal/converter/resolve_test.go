@@ -28,7 +28,7 @@ func protocolAnswer(protocol string) string {
 		`"version":"0.9.0","license":{"spdx":"Apache-2.0 AND MIT","source":"https://example.org/mapio-src"},` +
 		`"library":{"version":"v0.0.0-20261030000000-abcdefabcdef"},` +
 		`"capabilities":{"directions":["apmap-to-q1map","apmap-to-q2map","apmap-to-q3map"],` +
-		`"apmap_current":"1.5","apmap_readable":["1.4","1.5"]}}`
+		`"apmap_current":"1.5","apmap_readable":["1.4","1.5"],"compile_boundary":"canonical-map/1"}}`
 }
 
 // newBundle writes the converter as a shell script: `protocol` prints answer,
@@ -89,7 +89,7 @@ func (b *bundle) resolver() *converter.Resolver { return &converter.Resolver{Dir
 // The release case: the converter beside the Companion, listed with its digest,
 // speaking this build's protocol. It is verified, and says what it is.
 func TestABundledConverterListedInTheManifestIsVerified(t *testing.T) {
-	b := newBundle(t, protocolAnswer("1.0"), "echo ok\n")
+	b := newBundle(t, protocolAnswer("1.1"), "echo ok\n")
 	b.list("")
 
 	status := b.resolver().Status()
@@ -101,7 +101,7 @@ func TestABundledConverterListedInTheManifestIsVerified(t *testing.T) {
 		t.Fatal(err)
 	}
 	provenance := runner.Provenance()
-	if !provenance.Verified || provenance.Protocol != "1.0" || provenance.Version != "0.9.0" ||
+	if !provenance.Verified || provenance.Protocol != "1.1" || provenance.Version != "0.9.0" ||
 		provenance.License != "Apache-2.0 AND MIT" || !strings.HasPrefix(provenance.Digest, "sha256:") {
 		t.Errorf("provenance = %+v", provenance)
 	}
@@ -114,7 +114,7 @@ func TestABundledConverterListedInTheManifestIsVerified(t *testing.T) {
 // The handshake reports what the converter says it is: the licences, the library compiled into it and
 // the APMap versions it speaks, so a build records them rather than assuming them.
 func TestTheHandshakeRecordsWhatTheConverterIs(t *testing.T) {
-	b := newBundle(t, protocolAnswer("1.0"), "echo ok\n")
+	b := newBundle(t, protocolAnswer("1.1"), "echo ok\n")
 	b.list("")
 
 	runner, err := b.resolver().Resolve(context.Background())
@@ -146,7 +146,7 @@ func TestAnotherProgramAtTheConvertersPathIsRefused(t *testing.T) {
 }
 
 func TestAConverterMissingADirectionABuildNeedsIsRefused(t *testing.T) {
-	answer := strings.Replace(protocolAnswer("1.0"), `"apmap-to-q3map"`, `"apmap-to-q9map"`, 1)
+	answer := strings.Replace(protocolAnswer("1.1"), `"apmap-to-q3map"`, `"apmap-to-q9map"`, 1)
 	b := newBundle(t, answer, "")
 	if _, err := b.resolver().Resolve(context.Background()); err == nil || !strings.Contains(err.Error(), "apmap-to-q3map") {
 		t.Fatalf("a converter without a direction was accepted: %v", err)
@@ -154,10 +154,27 @@ func TestAConverterMissingADirectionABuildNeedsIsRefused(t *testing.T) {
 }
 
 func TestAConverterNamingNoAPMapVersionIsRefused(t *testing.T) {
-	answer := strings.Replace(protocolAnswer("1.0"), `"apmap_current":"1.5"`, `"apmap_current":""`, 1)
+	answer := strings.Replace(protocolAnswer("1.1"), `"apmap_current":"1.5"`, `"apmap_current":""`, 1)
 	b := newBundle(t, answer, "")
 	if _, err := b.resolver().Resolve(context.Background()); err == nil || !strings.Contains(err.Error(), "APMap") {
 		t.Fatalf("a converter naming no APMap version was accepted: %v", err)
+	}
+}
+
+// A converter that does not enforce the compile boundary this build was tested
+// with is refused: a map from Auto-Pigeon is compiled only as the copy its
+// `canonical-map` writes (NEW_434). A 1.0 converter has none at all.
+func TestAConverterWithoutTheCompileBoundaryIsRefused(t *testing.T) {
+	for name, answer := range map[string]string{
+		"another rule": strings.Replace(protocolAnswer("1.1"), `"canonical-map/1"`, `"canonical-map/0"`, 1),
+		"no rule":      strings.Replace(protocolAnswer("1.1"), `,"compile_boundary":"canonical-map/1"`, "", 1),
+		"protocol 1.0": strings.Replace(protocolAnswer("1.0"), `,"compile_boundary":"canonical-map/1"`, "", 1),
+	} {
+		b := newBundle(t, answer, "")
+		if _, err := b.resolver().Resolve(context.Background()); err == nil ||
+			!(strings.Contains(err.Error(), "canonical-map") || strings.Contains(err.Error(), "1.1 is required")) {
+			t.Fatalf("%s: a converter without the compile boundary was accepted: %v", name, err)
+		}
 	}
 }
 
@@ -191,7 +208,7 @@ func TestATerminalRecordIsReadAndAHistoricOneStillIs(t *testing.T) {
 
 // A file the manifest does not describe is not the one the release shipped.
 func TestABundledConverterWhoseDigestDisagreesIsRefused(t *testing.T) {
-	b := newBundle(t, protocolAnswer("1.0"), "")
+	b := newBundle(t, protocolAnswer("1.1"), "")
 	b.list("sha256:" + strings.Repeat("0", 64))
 
 	if status := b.resolver().Status(); status.Available {
@@ -205,7 +222,7 @@ func TestABundledConverterWhoseDigestDisagreesIsRefused(t *testing.T) {
 // No manifest — a development tree — still runs, still handshakes, and says
 // nothing vouched for its bytes.
 func TestAnUnlistedBundledConverterRunsAndSaysSo(t *testing.T) {
-	b := newBundle(t, protocolAnswer("1.0"), "")
+	b := newBundle(t, protocolAnswer("1.1"), "")
 
 	runner, err := b.resolver().Resolve(context.Background())
 	if err != nil {
@@ -259,7 +276,7 @@ func TestMalformedProtocolOutputIsRefused(t *testing.T) {
 }
 
 func TestACrashKeepsItsExitCodeAndItsStderr(t *testing.T) {
-	b := newBundle(t, protocolAnswer("1.0"), "echo 'the map is not a map' >&2\nexit 1\n")
+	b := newBundle(t, protocolAnswer("1.1"), "echo 'the map is not a map' >&2\nexit 1\n")
 	runner, err := b.resolver().Resolve(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -281,7 +298,7 @@ func TestACrashKeepsItsExitCodeAndItsStderr(t *testing.T) {
 // The override wins over a bundled copy, is not handshaken, and says it is
 // unverified everywhere it is described.
 func TestTheDeveloperOverrideIsUnverifiedAndSaysSo(t *testing.T) {
-	b := newBundle(t, protocolAnswer("1.0"), "")
+	b := newBundle(t, protocolAnswer("1.1"), "")
 	b.list("")
 	override := newBundle(t, "not json", "")
 
@@ -317,7 +334,7 @@ func TestProtocolSatisfiesIsSameMajorAndAtLeastTheMinor(t *testing.T) {
 // A bundle manifest that is there and cannot be read vouches for nothing, and
 // is a refusal rather than a quiet fall-back to "unlisted".
 func TestAnUnreadableBundleManifestIsARefusal(t *testing.T) {
-	b := newBundle(t, protocolAnswer("1.0"), "")
+	b := newBundle(t, protocolAnswer("1.1"), "")
 	if err := os.WriteFile(filepath.Join(b.deps(), converter.BundleManifestName), []byte("{not json"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -336,7 +353,7 @@ func TestAnUnreadableBundleManifestIsARefusal(t *testing.T) {
 // on every other platform (NEW_247A).
 func TestAnConverterInsideAMacOSAppIsCheckedAgainstTheAppsManifest(t *testing.T) {
 	for _, tampered := range []bool{false, true} {
-		b := newBundle(t, protocolAnswer("1.0"), "echo ok\n")
+		b := newBundle(t, protocolAnswer("1.1"), "echo ok\n")
 		app := filepath.Join(b.dir, "Auto-Pigeon Companion.app")
 		macos := filepath.Join(app, "Contents", "MacOS")
 		resources := filepath.Join(app, "Contents", "Resources")
@@ -382,7 +399,7 @@ func TestAnConverterInsideAMacOSAppIsCheckedAgainstTheAppsManifest(t *testing.T)
 // archive root, where releases before 1.160 put it, is not found, and nothing
 // falls back to it.
 func TestAnConverterBesideTheCompanionIsNotLookedFor(t *testing.T) {
-	b := newBundle(t, protocolAnswer("1.0"), "echo ok\n")
+	b := newBundle(t, protocolAnswer("1.1"), "echo ok\n")
 	b.list("")
 	if err := os.Rename(b.path(), filepath.Join(b.dir, "auto-pigeon-mapio")); err != nil {
 		t.Fatal(err)
@@ -425,7 +442,7 @@ func TestABridgesConverterGetsItsExecuteBitBackAndNothingElseDoes(t *testing.T) 
 	}
 
 	t.Run("a bridge", func(t *testing.T) {
-		b := newBundle(t, protocolAnswer("1.0"), "")
+		b := newBundle(t, protocolAnswer("1.1"), "")
 		write(t, b, "aucom.bundle-manifest/1.2", converter.BridgeKind, digestOf(t, b))
 		resolver := &converter.Resolver{Dir: b.dir}
 		runner, err := resolver.Resolve(context.Background())
@@ -442,7 +459,7 @@ func TestABridgesConverterGetsItsExecuteBitBackAndNothingElseDoes(t *testing.T) 
 		"bytes it does not list": {"aucom.bundle-manifest/1.2", converter.BridgeKind, "sha256:" + strings.Repeat("0", 64)},
 	} {
 		t.Run(name, func(t *testing.T) {
-			b := newBundle(t, protocolAnswer("1.0"), "")
+			b := newBundle(t, protocolAnswer("1.1"), "")
 			digest := refused.digest
 			if digest == "" {
 				digest = digestOf(t, b)

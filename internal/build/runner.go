@@ -52,6 +52,11 @@ type Options struct {
 	// must not block and must not keep the pointer: the manifest goes on
 	// changing underneath. Copy what is needed. Nil discards them.
 	Announce func(*Manifest)
+	// CanonicalMap writes the copy of a map from Auto-Pigeon that a build
+	// compiles (mapconfine.go, NEW_434): converter.CanonicalMap over the
+	// bundled converter. Nil refuses every input that came from Auto-Pigeon and
+	// is map text; a local file is staged as it is either way.
+	CanonicalMap CanonicalMapFunc
 	// Hold is taken for the whole of a Run and released when it returns. A
 	// pipeline resolves each stage's program when the stage starts, so a
 	// managed toolchain switched between two stages would build one map with
@@ -305,7 +310,7 @@ func (r *Runner) Run(ctx context.Context, request Request) (*Manifest, error) {
 		}
 	}
 
-	wires, err := r.stageInputs(pipeline, request, layout, manifest)
+	wires, err := r.stageInputs(ctx, pipeline, request, layout, manifest)
 	if err != nil {
 		return r.fail(manifest, job.Failed, err)
 	}
@@ -624,7 +629,7 @@ func (r *Runner) resolveSteps(pipeline *profile.PipelineProfile) ([]profile.Reso
 // file they are handed, and a build that let a tool reach the user's own BSP
 // would be a build that could damage it. It also puts every file a step reads
 // inside one root, which is what the `build_root` role is.
-func (r *Runner) stageInputs(pipeline *profile.PipelineProfile, request Request, layout layout, manifest *Manifest) (map[string]wire, error) {
+func (r *Runner) stageInputs(ctx context.Context, pipeline *profile.PipelineProfile, request Request, layout layout, manifest *Manifest) (map[string]wire, error) {
 	wires := map[string]wire{}
 	for _, name := range sortedKeys(request.Inputs) {
 		declared := false
@@ -654,13 +659,11 @@ func (r *Runner) stageInputs(pipeline *profile.PipelineProfile, request Request,
 		if err := os.MkdirAll(filepath.Dir(destination), 0o700); err != nil {
 			return nil, fmt.Errorf("creating %s: %w", filepath.Dir(destination), err)
 		}
-		if err := copyFile(source, destination); err != nil {
-			return nil, fmt.Errorf("the input %q: %w", input.Name, err)
-		}
-		// A map that came from Auto-Pigeon is confined to the build before any
-		// step reads it; the user's own file is not (mapconfine.go, NEW_348).
-		if _, fromAUB := request.Sources[input.Name]; fromAUB && strings.EqualFold(filepath.Ext(destination), ".map") {
-			rewritten, err := confineStagedMap(destination)
+		// A map that came from Auto-Pigeon reaches the compiler only as the
+		// copy the Companion writes from a parsed map; the user's own file is
+		// copied as it is (mapconfine.go, NEW_434).
+		if _, fromAUB := request.Sources[input.Name]; fromAUB && isMapInput(input.Role, source) {
+			rewritten, err := stageAUBMap(ctx, r.options.CanonicalMap, layout.Input, source, destination)
 			if err != nil {
 				return nil, fmt.Errorf("the input %q: %w", input.Name, err)
 			}
@@ -668,6 +671,8 @@ func (r *Runner) stageInputs(pipeline *profile.PipelineProfile, request Request,
 				r.options.Logf("build: the input %q named WADs outside the build; kept only their file names: %s",
 					input.Name, strings.Join(rewritten, "; "))
 			}
+		} else if err := copyFile(source, destination); err != nil {
+			return nil, fmt.Errorf("the input %q: %w", input.Name, err)
 		}
 		digest, size, err := digestFile(destination)
 		if err != nil {

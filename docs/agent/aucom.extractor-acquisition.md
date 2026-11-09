@@ -53,6 +53,12 @@ manifest, and runs as its own process.**
 Only `cmd/mapio` imports `go/mapio`. `companion security audit` still reports no Go module dependencies,
 because the Companion's own binary has none; the SBOM names the converter and the library revision.
 
+That is also why the compile boundary for maps from Auto-Pigeon (`NEW_434`) is the converter's
+`canonical-map` and not code in the Companion: parsing a map with go/mapio's reader and writing it with its
+writer can only happen in the program that links them. The wrapper's one piece of format code is that
+command's writer for a parsed Quake III tree, which go/mapio does not have (`cmd/mapio/canonical.go`).
+Putting the parser in the Companion was tried in `NEW_434` and reverted for exactly this rule.
+
 Licence rules for the converter:
 
 - **Both licences, always.** MIT alone is refused by `bundle-manifest.py` and `release-plan.py`: an

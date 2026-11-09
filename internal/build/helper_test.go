@@ -484,6 +484,8 @@ func newHarnessKeeping(t *testing.T, documents map[string][]byte, keep bool, adj
 		Bindings:  lookup,
 		Companion: "0.0.0-test",
 		Logf:      func(format string, args ...any) { t.Logf("build: "+format, args...) },
+		// The real converter, as production wires it (mapconfine.go, NEW_434).
+		CanonicalMap: realCanonicalMap,
 	})
 	if err != nil {
 		t.Fatalf("building the runner: %v", err)

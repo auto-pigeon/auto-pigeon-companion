@@ -180,6 +180,7 @@ func TestASyntheticQuake2MapTravelsTheWholeExperimentalPath(t *testing.T) {
 	// 1. The editor's export, as an exact AUB revision. The backend serves a
 	//    `.map`, which is what an export produces, and the build reads it by
 	//    revision id rather than by path.
+	useRealConverter(t)
 	backend := fakeCompanionAUBServing(t, "level.map", "text/plain", syntheticQ2Map)
 	env, _, _ := signedInEnv(t, backend.URL)
 
@@ -426,6 +427,7 @@ func manifestJSON(t *testing.T, out string) []byte {
 // warns explicitly, and nothing anywhere reports Quake II as plainly supported.
 func TestQuake2FailsOrWarnsExplicitlyAndClaimsNoGenericSupport(t *testing.T) {
 	// A leaking map, with the leak test on, is a refusal and not a BSP.
+	useRealConverter(t)
 	backend := fakeCompanionAUBServing(t, "level.map", "text/plain",
 		strings.Replace(syntheticQ2Map, `"message" "Auto-Pigeon Companion Q2 fixture"`,
 			`"message" "aucom-leak"`, 1))

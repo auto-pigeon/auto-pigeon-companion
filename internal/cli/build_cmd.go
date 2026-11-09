@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/config"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/converter"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/engine"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/leakadapter"
@@ -151,12 +153,18 @@ func openRunner(env *Env, service *job.Service, settings config.Config) (*build.
 	// The same cross-process lease the server's builds take (01_NEW_368 §2):
 	// a toolchain update in a running Companion waits for this build, and
 	// this build waits — at most cliLeaseWait — for one already switching.
+	// A map from Auto-Pigeon is compiled as the copy the bundled converter
+	// checks and writes (internal/build mapconfine.go, NEW_434).
+	mapConverter := converterRunner(env, nil)
 	return build.New(build.Options{
 		Service:   service,
 		Dir:       dir,
 		Bindings:  binding.Lookup(bindingsPath),
 		Companion: env.Version,
 		Lease:     web.ToolLeaser(registry, bundle, "companion build run", cliLeaseWait),
+		CanonicalMap: func(ctx context.Context, source, destination string) ([]string, error) {
+			return converter.CanonicalMap(ctx, mapConverter, source, destination)
+		},
 	})
 }
 

@@ -20,8 +20,10 @@ import (
 )
 
 // RequiredProtocol is the invocation protocol this build drives: the bundled
-// converter must speak the same major and at least this minor.
-const RequiredProtocol = "1.0"
+// converter must speak the same major and at least this minor. 1.1 is the one
+// with `canonical-map`, which every build of a map from Auto-Pigeon runs
+// (NEW_434).
+const RequiredProtocol = "1.1"
 
 // ExecutableBase is the converter's program name, and what it must call itself in the handshake.
 const ExecutableBase = "auto-pigeon-mapio"
@@ -352,6 +354,8 @@ type protocolDocument struct {
 		Directions    []string `json:"directions"`
 		APMapCurrent  string   `json:"apmap_current"`
 		APMapReadable []string `json:"apmap_readable"`
+		// CompileBoundary is the rule `canonical-map` enforces (protocol 1.1).
+		CompileBoundary string `json:"compile_boundary"`
 	} `json:"capabilities"`
 }
 
@@ -378,6 +382,10 @@ func handshake(ctx context.Context, runner *ProcessRunner, minProtocol string) e
 		if !slices.Contains(document.Capabilities.Directions, required) {
 			return fmt.Errorf("converter: %s %s offers no %s, which a build needs", ProgramName, document.Version, required)
 		}
+	}
+	if document.Capabilities.CompileBoundary != RequiredCompileBoundary {
+		return fmt.Errorf("converter: %s %s checks maps from Auto-Pigeon by %q, not the %q this Companion compiles "+
+			"them through", ProgramName, document.Version, document.Capabilities.CompileBoundary, RequiredCompileBoundary)
 	}
 	if document.Capabilities.APMapCurrent == "" || len(document.Capabilities.APMapReadable) == 0 {
 		return fmt.Errorf("converter: %s %s names no APMap version it reads or writes", ProgramName, document.Version)

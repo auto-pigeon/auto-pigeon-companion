@@ -326,6 +326,39 @@ var rows = []Row{
 
 	// --- the local API -----------------------------------------------------
 	{
+		ID: "T59", Category: CatExecution,
+		Title:  "A map from Auto-Pigeon makes the user's compiler read a file, or set its own options",
+		Asset:  "the files on the machine that compiles a map somebody else may save, and the BSP a hosted game then serves to other readers",
+		Vector: "A co-editor saves a revision whose text names files the compiler opens: worldspawn `wad` entries that are absolute or climb with `..`, an `_external_map`, a Quake III `model`/`_remap`/`_celshader`/`_indexmap` value with `../`, a face texture written as a Windows path (`C:\\…`, `..\\…`), or a worldspawn key ericw light applies as its own setting (`_radlights`, `_logfile`, `_gamedir`). Or the text is shaped so a guard and the compiler read it differently: a fence texture `{fence` that moves a brace counter, a `;` comment one tokenizer has and the other has not, a backslash before a closing quote.",
+		Mitigation: "internal/build/mapconfine.go and cmd/mapio/canonical.go (NEW_434): an input with a SourceRef that is map text is never copied; the bundled converter's `canonical-map` (protocol 1.1, required in the handshake; no converter means the map is refused) parses it with go/mapio/quake3map (Q3Map2's tokenizer), every token is held to a rule ericw's and Q3Map2's tokenizers read alike, lengths and counts are bounded, the key policy refuses `_external_map`, worldspawn's file-valued light settings and file/shader keys that are absolute or climb, reduces escaping WAD entries to their file names and keeps every other key, and the map is serialized (mapfile.Write's layout, mapfile.FormatNumber's spelling, the sign of a zero kept) into a new file created exclusively in the build's own input folder, then parsed again and compared; the Companion checks the folder, the name and what was written. Any fault refuses the whole map. Arguments come from the profile as an argv (T16), never from the map.",
+		Evidence: []Evidence{
+			{"cmd/mapio", "TestFenceTexturesCannotHideAnExternalMap"},
+			{"cmd/mapio", "TestAnEscapedQuoteCannotOpenAStringOnlyTheCompilerSees"},
+			{"cmd/mapio", "TestNoQuoteIsLeftOpenAndNoTextLiesBeyondTheEnd"},
+			{"cmd/mapio", "TestEntityLineInjectionIsReadAsAnEntity"},
+			{"cmd/mapio", "TestATextureTokenIsAPlainNameInsideTheGame"},
+			{"cmd/mapio", "TestWorldspawnCannotSetTheCompilersFiles"},
+			{"cmd/mapio", "TestAnExternalMapReferenceIsRefused"},
+			{"cmd/mapio", "TestQuake3KeysNameFilesInsideTheGame"},
+			{"cmd/mapio", "TestValidMapsOfEveryGameKeepTheirMeaning"},
+			{"cmd/mapio", "TestTheCanonicalMapCommandWritesANewFileOrRefuses"},
+			{"internal/build", "TestAnAutoPigeonInputIsCanonicalAndALocalOneIsNot"},
+			{"internal/build", "TestWithNoConverterAMapFromAutoPigeonIsRefused"},
+			{"internal/build", "TestMapKeysNeverBecomeCompilerArguments"},
+			{"internal/build", "TestTheCanonicalCopyCannotBeRedirected"},
+		},
+		Residual: &Residual{
+			What: "Windows path resolution by the compilers was not observed on a Windows host (the boundary refuses `\\` and `:` in a " +
+				"texture token instead); the compilers' own memory safety on bytes the rule admits is not certified; the rest of " +
+				"ericw light's lighting vocabulary stays settable from worldspawn; and a WAD or texture file from Auto-Pigeon is " +
+				"binary content this boundary does not read.",
+			Why: "The boundary is enforced in the Companion before any compiler starts, and is what NEW_434 owns; the Windows " +
+				"run, the compiler audit and the release verdict belong to the independent NEW_435 audit and to HITL.",
+			Owner:  "NEW_434 implementation, pending NEW_435 independent audit and HITL acceptance",
+			Review: "2026-12-09",
+		},
+	},
+	{
 		ID: "T22", Category: CatLocalAPI,
 		Title:      "A name that resolves to 127.0.0.1 makes a hostile page same-origin",
 		Asset:      "the local API, which can start processes",

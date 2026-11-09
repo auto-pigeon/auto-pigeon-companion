@@ -1300,19 +1300,50 @@ $ companion uninstall                                # what it keeps on this com
 other `profile` spelling still resolve to the same commands.
 
 **A map from Auto-Pigeon cannot make the compiler read your files.** A map's text
-can name files the compiler then opens: worldspawn's `wad`/`_wad` list, and a
-`misc_external_map`'s `_external_map`. For every input that came from
-Auto-Pigeon — Build & Run, hosting, a leak test — the Companion confines the copy
-it compiles before any step reads it (`NEW_348`): a WAD entry that is absolute,
-has a drive, or climbs out with `..` keeps only its file name (which is how the
-map's WADs are laid out for the build), and an `_external_map` stops the build
-by name. A map file you choose on your own disk is compiled exactly as it is.
+can name files the compiler then opens — worldspawn's `wad`/`_wad` list, a
+`misc_external_map`'s `_external_map`, a Quake III `model` or `_remap`, a face's
+texture name — and ericw `light` takes worldspawn keys as its own settings. For
+every input that came from Auto-Pigeon — Build & Run, hosting, a leak test, a
+prefab map — the Companion never hands the compiler the downloaded bytes
+(`NEW_434`). The map converter beside it (`auto-pigeon-mapio canonical-map`,
+below) reads the map as a map (classic, Valve 220, `brushDef` and
+`patchDef2` brushes), checks every name and number, and writes a fresh copy into
+the build's own folder, which is what every step compiles:
+
+- a WAD entry that is absolute, has a drive, or climbs out with `..` keeps only
+  its file name (which is how the map's WADs are laid out for the build);
+- an `_external_map` stops the build, and so do the worldspawn keys that would
+  give `light` a file or a search path (`_radlights`, `_logfile`, `_gamedir`,
+  `_basedir`, `_path`); the lighting keys themselves (`_sunlight`, `_dirt`,
+  `_bounce`, …) are kept;
+- a texture, shader, model or sound name that is absolute, holds a backslash or a
+  drive, or climbs out with `..` stops the build. Fence (`{fence`), liquid
+  (`*water0`), animated (`+0button`) and folder (`e1u1/floor1_1`) names are
+  ordinary names and are kept;
+- text the compilers could read in two ways — a string left open, a backslash
+  before a closing quote, a stray `;` or `#` in a name — stops the build, and so
+  does a map over the size and count limits;
+- every other key is kept as it was, in order. Comments and spacing are not
+  carried, and numbers are written as the shortest spelling of the same value.
+
+Without the converter there is no check, so a map from Auto-Pigeon is not built
+at all (`companion converter status` says why). A map file you choose on your
+own disk is compiled exactly as it is. A refusal
+names the entity and the line, never the value, and says what to change in the
+editor:
 
 ```text
 Error: Compiling: the input "source_map": the map names an external map file
 (`_external_map`), which a map from Auto-Pigeon may not do: the compiler would
 read that file from this computer. Remove the misc_external_map entity, or merge
 its brushes into the map
+```
+
+```text
+Error: Compiling: the input "source_map": a map from Auto-Pigeon is compiled only
+as a copy the Companion can read back exactly, and this one has a face whose
+texture name holds ':' (entity 0, line 5). Save the map again from the editor, or
+correct it there
 ```
 
 **The local page answers only your own account.** The page at
@@ -1476,7 +1507,7 @@ publishes a result whole:
 
 ```console
 $ auto-pigeon-mapio version
-auto-pigeon-mapio 1.320 (go/mapio v0.0.0-20261104005048-d11e6d1cf459, APMap 1.5, protocol 1.0, Apache-2.0 AND MIT)
+auto-pigeon-mapio 1.320 (go/mapio v0.0.0-20261104005048-d11e6d1cf459, APMap 1.5, protocol 1.1, Apache-2.0 AND MIT)
 $ auto-pigeon-mapio convert --apmap-to-q3map --input room.apmap --output out --json
 {
   "direction": "apmap-to-q3map",
@@ -1494,7 +1525,20 @@ out/q3room.apmap
 $ auto-pigeon-mapio version --json | jq -c .directions
 ["q1map-to-apmap","apmap-to-q1map","q2map-to-apmap","apmap-to-q2map","q2rmf-to-apmap","apmap-to-q2rmf","q3map-to-apmap","apmap-to-q3map"]
 $ auto-pigeon-mapio protocol --json     # what it is, its licences, the directions and APMap versions it speaks
+$ auto-pigeon-mapio canonical-map --input e1m1.map --output checked.map --json   # what a build compiles from a map from Auto-Pigeon
+{
+  "input": "e1m1.map",
+  "output": "checked.map",
+  "reduced_wads": [
+    "C:\\quake\\id1\\gfx.wad"
+  ]
+}
 ```
+
+`canonical-map` is the check every map that came from Auto-Pigeon goes through before the Companion
+compiles it (see *A map from Auto-Pigeon cannot make the compiler read your files*): it reads the map, refuses
+what it may not carry, and writes a new file — never over an existing one, never through a link. A refused
+map is exit 1 with a `MAPIO-TERMINAL/1.0` record whose reason is `map_refused`.
 
 It exits 0 when it published its whole result, 1 when it did not and 2 for a wrong command line. A failure's
 last line on stderr is a `MAPIO-TERMINAL/1.0` record naming the reason, for a program to read.

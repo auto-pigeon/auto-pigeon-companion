@@ -22,6 +22,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/config"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/converter"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/enginefixture"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/pathpick"
@@ -48,9 +49,29 @@ import (
 // depended on one would be testing around the thing it is meant to exercise.
 const buildHelperFlag = "-aucom-web-build-helper"
 
-// holdUntilMarker starts the source line that holds the fixture compiler; see
-// buildHelperMain.
-const holdUntilMarker = "// hold-until "
+// holdUntilKey is the worldspawn key whose value, a file path, holds the
+// fixture compiler until that file exists; see holdIfAsked. A key and not a
+// comment: a map from Auto-Pigeon is compiled as a canonical copy that keeps
+// every key and no comment (internal/build/mapconfine.go, NEW_434).
+const holdUntilKey = "_aucom_test_hold_until"
+
+// heldWorld is a worldspawn-only map that holds the fixture compiler until gate
+// exists.
+func heldWorld(gate string) string {
+	return "{\n\"classname\" \"worldspawn\"\n\"" + holdUntilKey + "\" \"" + gate + "\"\n}\n"
+}
+
+// fixtureValues is every value of key in a map's text, from the
+// `"key" "value"` lines both a hand-written map and a canonical copy carry.
+func fixtureValues(contents []byte, key string) []string {
+	var values []string
+	for _, line := range strings.Split(string(contents), "\n") {
+		if rest, ok := strings.CutPrefix(strings.TrimSpace(line), "\""+key+"\" \""); ok {
+			values = append(values, strings.TrimSuffix(rest, "\""))
+		}
+	}
+	return values
+}
 
 func TestMain(m *testing.M) {
 	if len(os.Args) > 1 {
@@ -170,14 +191,9 @@ func buildHelperMain(args []string) int {
 	fmt.Println("reading", filepath.Base(source))
 	output := append([]byte("BSP:"), contents...)
 	if quake2 {
-		// The source names any further texture on a `// q2texture <name>`
-		// line, so a test can compile a map that uses an account texture.
-		textures := []string{q2FixtureTexture}
-		for _, line := range strings.Split(string(contents), "\n") {
-			if name, ok := strings.CutPrefix(strings.TrimSpace(line), "// q2texture "); ok {
-				textures = append(textures, strings.TrimSpace(name))
-			}
-		}
+		// The source names any further texture in a `_aucom_test_q2texture`
+		// key, so a test can compile a map that uses an account texture.
+		textures := append([]string{q2FixtureTexture}, fixtureValues(contents, "_aucom_test_q2texture")...)
 		output = q2fixture.BSP(`{ "classname" "worldspawn" }`, textures...)
 	}
 	if err := os.WriteFile(destination, output, 0o600); err != nil {
@@ -201,11 +217,7 @@ func holdIfAsked(source string) {
 	if err != nil {
 		return
 	}
-	for _, line := range strings.Split(string(contents), "\n") {
-		gate, held := strings.CutPrefix(strings.TrimSpace(line), holdUntilMarker)
-		if !held {
-			continue
-		}
+	for _, gate := range fixtureValues(contents, holdUntilKey) {
 		fmt.Println("holding")
 		for deadline := time.Now().Add(60 * time.Second); time.Now().Before(deadline); time.Sleep(5 * time.Millisecond) {
 			if _, err := os.Stat(strings.TrimSpace(gate)); err == nil {
@@ -1042,10 +1054,11 @@ func newMachine(t *testing.T) *machine {
 		t.Fatal(err)
 	}
 	server, err := NewServer(Options{
-		Version: "test",
-		Config:  settings,
-		Client:  client,
-		Jobs:    service,
+		Version:   "test",
+		Config:    settings,
+		Client:    client,
+		Jobs:      service,
+		Converter: canonicalOnlyConverter{},
 		Paths: Paths{
 			Profiles:   m.profiles,
 			Bindings:   m.bindings,
@@ -1352,10 +1365,11 @@ func (m *machine) restart() *machine {
 	}
 	client.SetToken(m.settings.Session.Token)
 	server, err := NewServer(Options{
-		Version: "test",
-		Config:  m.settings,
-		Client:  client,
-		Jobs:    m.server.jobs,
+		Version:   "test",
+		Config:    m.settings,
+		Client:    client,
+		Jobs:      m.server.jobs,
+		Converter: canonicalOnlyConverter{},
 		Paths: Paths{
 			Profiles:   m.profiles,
 			Bindings:   m.bindings,
@@ -1400,3 +1414,21 @@ func (m *machine) jobIDs() []string {
 	}
 	return ids
 }
+
+// canonicalOnlyConverter is the machine's converter: what a Companion with no
+// converter answers — unavailable, ErrNoConverter for every command — except
+// `canonical-map`, which a build of a map from Auto-Pigeon runs before staging
+// it (internal/build mapconfine.go, NEW_434) and which fixtureCanonicalMap
+// stands in for. A test that converts APMaps sets fixtureConverter instead.
+type canonicalOnlyConverter struct{}
+
+func (canonicalOnlyConverter) Run(_ context.Context, subcommand string, args ...string) ([]byte, error) {
+	if subcommand == "canonical-map" {
+		return fixtureCanonicalMap(args...)
+	}
+	return nil, converter.ErrNoConverter
+}
+
+func (canonicalOnlyConverter) Available() bool { return false }
+
+func (canonicalOnlyConverter) Provenance() converter.Provenance { return converter.Provenance{} }

@@ -36,7 +36,7 @@ func (m *machine) heldBuild(options map[string]map[string]string) (id, source st
 	m.t.Helper()
 	gate := filepath.Join(m.dir, "release-the-compiler")
 	path := filepath.Join(m.content, "held.map")
-	source = "{ \"classname\" \"worldspawn\" }\n" + holdUntilMarker + gate + "\n"
+	source = heldWorld(gate)
 	writeFixtureFile(m.t, path, source)
 	var once sync.Once
 	release = func() {

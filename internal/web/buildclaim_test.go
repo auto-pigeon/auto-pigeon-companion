@@ -112,7 +112,7 @@ func (m *machine) gatedBuild(name string) (request map[string]any, open, shut fu
 	m.t.Helper()
 	gate := filepath.Join(m.dir, name+"-gate")
 	path := filepath.Join(m.content, name+".map")
-	writeFixtureFile(m.t, path, "{ \"classname\" \"worldspawn\" }\n"+holdUntilMarker+gate+"\n")
+	writeFixtureFile(m.t, path, heldWorld(gate))
 	open = func() {
 		if err := os.WriteFile(gate, nil, 0o600); err != nil {
 			m.t.Errorf("opening the gate: %v", err)
