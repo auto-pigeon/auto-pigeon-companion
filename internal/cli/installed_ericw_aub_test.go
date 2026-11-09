@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -87,6 +88,16 @@ func TestInstalledEricwBuildsAMapFromAutoPigeon(t *testing.T) {
 		t.Fatalf("the staged input is not the canonical copy of an Auto-Pigeon map:\n%.400s", staged)
 	}
 	t.Logf("staged canonical copy: %d bytes from %d", len(staged), len(text))
+	// Every WAD entry reaches qbsp as one plain file name, whatever the map
+	// wrote (NEW_440): no drive, share, folder or stream survives the copy.
+	if match := regexp.MustCompile(`(?i)"_?wad"\s+"([^"]*)"`).FindSubmatch(staged); match != nil {
+		for _, entry := range strings.Split(string(match[1]), ";") {
+			if strings.ContainsAny(entry, `/\:`) || !strings.HasSuffix(strings.ToLower(entry), ".wad") {
+				t.Fatalf("the staged copy names the WAD %q, which is not one plain .wad file name", entry)
+			}
+		}
+		t.Logf("staged WAD list: %q", match[1])
+	}
 
 	local := filepath.Join(t.TempDir(), "level.map")
 	if err := os.WriteFile(local, text, 0o600); err != nil {

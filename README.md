@@ -1310,12 +1310,18 @@ below) reads the map as a map (classic, Valve 220, `brushDef` and
 `patchDef2` brushes), checks every name and number, and writes a fresh copy into
 the build's own folder, which is what every step compiles:
 
-- a WAD entry that is absolute, has a drive, or climbs out with `..` keeps only
-  its file name (which is how the map's WADs are laid out for the build);
+- every WAD entry keeps only its file name, whatever was in front of it — a
+  drive (`C:\quake\id1\gfx.wad`, or `C:gfx.wad`), a network share, a folder
+  (`gfx/base.wad`), `..` — which is how the map's WADs are laid out for the
+  build; an entry that names only a folder (`c:\quake\`) is dropped, and a name
+  that is not a plain `.wad` file name both Windows and Linux open as written
+  (a Windows device name such as `nul.wad`, another kind of file, a character
+  Windows cannot hold in a name) stops the build;
 - an `_external_map` stops the build, and so do the worldspawn keys that would
   give `light` a file or a search path (`_radlights`, `_logfile`, `_gamedir`,
-  `_basedir`, `_path`); the lighting keys themselves (`_sunlight`, `_dirt`,
-  `_bounce`, …) are kept;
+  `_basedir`, `_path`) or name `qbsp`'s WAD folders and definition files
+  (`_wadpath`, `_xwadpath`, `_aliasdef`, `_texturedefs`, `_add`); the lighting
+  keys themselves (`_sunlight`, `_dirt`, `_bounce`, …) are kept;
 - a texture, shader, model or sound name that is absolute, holds a backslash or a
   drive, or climbs out with `..` stops the build. Fence (`{fence`), liquid
   (`*water0`), animated (`+0button`) and folder (`e1u1/floor1_1`) names are

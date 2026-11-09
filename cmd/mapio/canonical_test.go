@@ -301,7 +301,7 @@ func TestFenceTexturesCannotHideAnExternalMap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if value, _ := ericwEntities(string(out))[0].get("wad"); value != "probe.wad;x.wad;gfx/base.wad" || len(changed) != 2 {
+	if value, _ := ericwEntities(string(out))[0].get("wad"); value != "probe.wad;x.wad;base.wad" || len(changed) != 3 {
 		t.Fatalf("worldspawn's WADs after two fence brushes: %q (%v)", value, changed)
 	}
 	if got := ericwEntities(string(out))[0].textures; len(got) != 12 || got[0] != "{fence" {
@@ -457,23 +457,28 @@ func TestQuake3KeysNameFilesInsideTheGame(t *testing.T) {
 	}
 }
 
-// A WAD entry that leaves the build keeps only its file name.
+// A WAD entry keeps only its file name, a folder in front of it included
+// (NEW_440: the build's WAD folder is flat, and a subpath is a path).
 func TestConfiningAMapKeepsOnlyWADNamesInsideTheBuild(t *testing.T) {
 	text := world(`"wad" "/home/victim/private.wad;..\..\outside\rel.wad;gfx/base.wad;C:\quake\id1\gfx.wad;//server/share/net.wad;metal.wad"`+"\n", box("sand"))
 	out, changed, err := canonicalMapText([]byte(text))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if value, _ := ericwEntities(string(out))[0].get("wad"); value != "private.wad;rel.wad;gfx/base.wad;gfx.wad;net.wad;metal.wad" {
+	if value, _ := ericwEntities(string(out))[0].get("wad"); value != "private.wad;rel.wad;base.wad;gfx.wad;net.wad;metal.wad" {
 		t.Fatalf("wad = %q", value)
 	}
-	if len(changed) != 4 {
-		t.Fatalf("changed = %v, want the four entries that pointed outside", changed)
+	if len(changed) != 5 {
+		t.Fatalf("changed = %v, want the five entries that were paths", changed)
 	}
-	// An old editor's `"wad" "c:\quake\"` ends in a backslash; it is confined
-	// to a name before the quoting rule sees it.
-	if _, _, err := canonicalMapText([]byte(world(`"wad" "c:\quake\"` + "\n"))); err != nil {
+	// An old editor's `"wad" "c:\quake\"` ends in a backslash; it names a
+	// folder, which is dropped before the quoting rule sees it.
+	out, _, err = canonicalMapText([]byte(world(`"wad" "c:\quake\"` + "\n")))
+	if err != nil {
 		t.Fatalf("an old editor's trailing-backslash WAD value was refused: %v", err)
+	}
+	if value, _ := ericwEntities(string(out))[0].get("wad"); value != "" {
+		t.Fatalf("an old editor's folder entry became %q", value)
 	}
 }
 
@@ -500,7 +505,7 @@ func TestValidMapsOfEveryGameKeepTheirMeaning(t *testing.T) {
 			want := before[index].pairs
 			if index == 0 && name == "quake1" {
 				want = append([][2]string(nil), want...)
-				want[1][1] = "gfx/base.wad;gfx.wad"
+				want[1][1] = "base.wad;gfx.wad"
 			}
 			if !reflect.DeepEqual(want, after[index].pairs) {
 				t.Fatalf("%s: entity %d's keys changed:\n%v\n%v", name, index, want, after[index].pairs)

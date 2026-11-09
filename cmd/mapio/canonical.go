@@ -9,8 +9,6 @@ import (
 	"io"
 	"math"
 	"os"
-	"path"
-	"path/filepath"
 	"reflect"
 	"strings"
 
@@ -90,12 +88,21 @@ import (
 //   - `_external_map`, on any entity: refused when not empty. Nothing
 //     Auto-Pigeon stages is one;
 //   - on worldspawn, `radlights`, `logfile`, `gamedir`, `basedir` and `path` —
-//     the light settings that are files or search paths: refused when not
-//     empty. The rest of the lighting vocabulary is open by design;
-//   - `wad`: each entry that is absolute, has a drive or scheme, or climbs with
-//     `..` keeps only its file name, which is how AUB names a map's WADs and how
-//     the content root is laid out (the Companion's declaredwads.go). An archive the build does
-//     not hold simply is not found, as it would not have been on another
+//     the light settings that are files or search paths — and qbsp's
+//     `wadpath`, `xwadpath`, `aliasdef`, `texturedefs` and `add`, which qbsp
+//     does not take from a map today: refused when not empty. The rest of the
+//     lighting vocabulary is open by design;
+//   - `wad`/`_wad`: every entry is written as one plain `.wad` file name — what
+//     follows its last `/`, `\` or `:`, so a drive (`C:\…`, the drive-relative
+//     `C:name.wad`), a UNC share, a scheme, a stream (`host:name.wad`) and a
+//     folder in front (`gfx/`, `..\`) all fall away — which is how AUB names a
+//     map's WADs and how the content root is laid out (the Companion's
+//     declaredwads.go). An entry naming only a folder (`c:\quake\`, `..`) opens
+//     nothing and is dropped. A name that is still not a plain `.wad` file name
+//     both POSIX and Windows open as written — a Windows device name, another
+//     extension, a leading dot, a character Windows cannot hold or one outside
+//     ASCII, over 255 bytes — refuses the map (NEW_440). An archive the build
+//     does not hold simply is not found, as it would not have been on another
 //     machine;
 //   - the keys that name a file or shader (`model`, `model2`, `noise`, `music`,
 //     `skin`, `indexmap`, `alphamap`, `shader`, `celshader`, `flareshader`,
@@ -347,11 +354,15 @@ func keyName(key string) string {
 	return strings.ToLower(strings.TrimLeft(key, "_"))
 }
 
-// worldSettingFiles are the ericw light settings a worldspawn key can set that
-// are files or search paths (`common_settings` and `light_settings`). Every
-// other light setting a map can set is lighting, and stays open.
+// worldSettingFiles are the ericw settings a worldspawn key could set that are
+// files or search paths: light's (`common_settings` and `light_settings`),
+// which light applies from worldspawn today, and qbsp's (`wadpath`,
+// `xwadpath`, `aliasdef`, `texturedefs`, `add`), which qbsp 1.4556 does not
+// apply from a map but would be live the day it did (NEW_436, NEW_440). Every
+// other setting a map can set is lighting, and stays open.
 var worldSettingFiles = map[string]bool{
 	"radlights": true, "logfile": true, "gamedir": true, "basedir": true, "path": true,
+	"wadpath": true, "xwadpath": true, "aliasdef": true, "texturedefs": true, "add": true,
 }
 
 // pathKeys name a file or a shader a compiler or the engine resolves through
@@ -378,7 +389,10 @@ func propertyPolicy(entity int, property quake3map.Property) (quake3map.Property
 				"sets the compiler's %q on worldspawn, which names a file on this computer; remove the key", property.Key)
 		}
 	case name == "wad":
-		property.Value, reduced = confineWADList(property.Value)
+		var err error
+		if property.Value, reduced, err = confineWADList(entity, property.Line, property.Value); err != nil {
+			return property, nil, err
+		}
 	case pathKeys[name]:
 		if reason := pathProblem(property.Value, false); reason != "" {
 			return property, nil, refuse(entity, property.Line, "names a file with %q, and %s", property.Key, reason)
@@ -423,37 +437,74 @@ func quotedProblem(text string, limit int) string {
 	return ""
 }
 
-// confineWADList keeps each `;`-separated entry that stays inside the build and
-// reduces every other one to its file name, returning the entries it changed.
-func confineWADList(list string) (string, []string) {
-	entries := strings.Split(list, ";")
-	var changed []string
-	kept := entries[:0]
-	for _, entry := range entries {
+// maxWADNameBytes bounds one WAD file name: the longest name a file system
+// here holds.
+const maxWADNameBytes = 255
+
+// confineWADList writes each `;`-separated entry as one plain `.wad` file name
+// (NEW_440), returning the list to write and the entries it changed. An entry
+// keeps what follows its last `/`, `\` or `:` — the file name whichever system
+// wrote it, a drive-relative `C:name.wad` and a stream `host:name.wad`
+// included; an entry naming a folder (`c:\quake\`, `..`) opens nothing and is
+// dropped; a name that is still not a plain `.wad` file name refuses the map.
+func confineWADList(entity, line int, list string) (string, []string, error) {
+	var kept, changed []string
+	for _, entry := range strings.Split(list, ";") {
 		trimmed := strings.TrimSpace(entry)
 		if trimmed == "" {
 			continue
 		}
-		slashed := strings.ReplaceAll(trimmed, `\`, "/")
-		escapes := strings.HasPrefix(slashed, "/") || strings.Contains(slashed, ":") || filepath.IsAbs(trimmed)
-		for _, segment := range strings.Split(slashed, "/") {
-			if segment == ".." {
-				escapes = true
-			}
-		}
-		if !escapes {
-			kept = append(kept, entry)
+		name := strings.TrimSpace(trimmed[strings.LastIndexAny(trimmed, `/\:`)+1:])
+		if name == "" || name == "." || name == ".." {
+			changed = append(changed, trimmed)
 			continue
 		}
-		changed = append(changed, trimmed)
-		if name := path.Base(slashed); name != "" && name != "." && name != ".." && name != "/" {
-			kept = append(kept, name)
+		if reason := wadNameProblem(name); reason != "" {
+			return "", nil, refuse(entity, line, "names a texture WAD that %s; a WAD is named by one plain file name "+
+				"ending in .wad, which is how the build lays the map's WADs out", reason)
+		}
+		if name != trimmed {
+			changed = append(changed, trimmed)
+		}
+		kept = append(kept, name)
+	}
+	return strings.Join(kept, ";"), changed, nil
+}
+
+// wadNameProblem says why name is not one plain `.wad` file name that a POSIX
+// and a Windows qbsp both open, spelled as written, directly inside the folder
+// they join it to — or "" when it is. It holds no separator by construction.
+// Windows respells or redirects what this refuses: a reserved device name
+// (with any extension), a trailing dot or space (dropped; ruled out by the
+// `.wad` ending), and the characters it cannot hold in a name — the
+// separators among them, refused here again rather than trusted to the split.
+func wadNameProblem(name string) string {
+	switch {
+	case len(name) > maxWADNameBytes:
+		return fmt.Sprintf("is %d bytes, more than %d", len(name), maxWADNameBytes)
+	case name[0] == '.':
+		return "begins with a dot"
+	}
+	for index := 0; index < len(name); index++ {
+		if c := name[index]; c < 0x20 || c >= 0x7f || strings.IndexByte(`<>:"/\|?*`, c) >= 0 {
+			return "holds a character outside plain ASCII or one Windows cannot hold in a file name"
 		}
 	}
-	if len(changed) == 0 {
-		return list, nil
+	if !strings.HasSuffix(strings.ToLower(name), ".wad") {
+		return "is not a .wad file"
 	}
-	return strings.Join(kept, ";"), changed
+	stem := strings.ToUpper(strings.TrimRight(name[:strings.IndexByte(name, '.')], " "))
+	if windowsDeviceNames[stem] || (len(stem) == 4 && (strings.HasPrefix(stem, "COM") || strings.HasPrefix(stem, "LPT")) &&
+		stem[3] >= '0' && stem[3] <= '9') {
+		return "is a name Windows opens as a device"
+	}
+	return ""
+}
+
+// windowsDeviceNames are opened by Windows as a device in any folder, whatever
+// extension follows them; COM0-9 and LPT0-9 are matched in wadNameProblem.
+var windowsDeviceNames = map[string]bool{
+	"CON": true, "PRN": true, "AUX": true, "NUL": true, "CONIN$": true, "CONOUT$": true, "CLOCK$": true,
 }
 
 // writeCanonicalMap serializes parsed entities, in the layout `mapfile.Write`
