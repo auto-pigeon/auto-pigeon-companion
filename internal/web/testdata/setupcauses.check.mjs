@@ -52,9 +52,9 @@ const context = { el, AUCOM, document: { createTextNode: (value) => Object.assig
 runInNewContext(core.slice(start, end) + "\nthis.setupActions = setupActions; this.setupCauses = setupCauses;", context);
 
 const missing = (step, executable) => ({ fault: "missing_engine", step, executable,
-  summary: `${step}: Nothing on this machine says where EricW tools, Auto-Pigeon build 1.4535 (Quake 1)'s "${executable}" executable is.`,
+  summary: `${step}: Nothing on this machine says where EricW tools, Auto-Pigeon build 1.4556 (Quake 1)'s "${executable}" executable is.`,
   fix: "Choose it under \"Where these programs are on this machine\" in Profiles.",
-  profile: "auto-pigeon.ericw-tools.auto-pigeon-build.q1", profile_name: "EricW tools, Auto-Pigeon build 1.4535 (Quake 1)" });
+  profile: "auto-pigeon.ericw-tools.auto-pigeon-build.q1", profile_name: "EricW tools, Auto-Pigeon build 1.4556 (Quake 1)" });
 const pipeline = (id, name, problems) => ({ id, name, readiness: { ready: false, problems } });
 const full = (id, name) => pipeline(id, name, [missing("Compile the map", "qbsp"), missing("Compute visibility", "vis"), missing("Compute lighting", "light")]);
 
@@ -63,7 +63,7 @@ const full = (id, name) => pipeline(id, name, [missing("Compile the map", "qbsp"
   const [cause, ...rest] = context.setupCauses(full("auto-pigeon.q1.normal", "Quake 1 — normal build"));
   assert.equal(rest.length, 0, "one missing tool was said more than once");
   assert.equal(cause.profile, "auto-pigeon.ericw-tools.auto-pigeon-build.q1", "the setup link goes to the pipeline, not to the tool");
-  assert.equal(cause.text, "EricW tools, Auto-Pigeon build 1.4535 (Quake 1): qbsp, vis, and light not set up yet.");
+  assert.equal(cause.text, "EricW tools, Auto-Pigeon build 1.4556 (Quake 1): qbsp, vis, and light not set up yet.");
   // the same fault of every stage is said once, in the tool's own sentence
   const folder = (step) => ({ fault: "unbound_root", step, summary: `${step}: "${step}" needs the installed game folder.`,
     detail: `"${step}" needs the installed game folder.`, profile: "q2.tool", profile_name: "Q2 tool", executable: "qbsp" });

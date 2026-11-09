@@ -57,7 +57,7 @@ func (h *selfHost) restarts() []managedtools.InstallRecord {
 func selfRig(t *testing.T, version string, mode managedtools.SelfMode) (*rig, *selfHost, func(...func(*managedtools.Options)) *managedtools.Manager) {
 	t.Helper()
 	r := newRig(t)
-	r.publishBoth("1.4536", "2.5.17n-ap.3031")
+	r.publishBoth("1.4566", "2.5.17n-ap.3031")
 	host := &selfHost{}
 	self := &managedtools.SelfInstall{Version: version, Platform: mt.ThisBundlePlatform(), Mode: mode,
 		Root: filepath.Join(t.TempDir(), "Auto Pigeon — bundle"), Reason: "a reason"}
@@ -142,7 +142,7 @@ func TestSkippingTheCompanionsVersionIsExactAndSeparateFromTheTools(t *testing.T
 	r.publishCompanion(mt.CompanionSpec{Version: "1.320", Prerelease: true})
 	m := make()
 	m.Step(context.Background())
-	r.publish(ericwRepo, mt.Spec{Tool: managedtools.EricW, Version: "1.4540", Prerelease: true})
+	r.publish(ericwRepo, mt.Spec{Tool: managedtools.EricW, Version: "1.4570", Prerelease: true})
 	r.clock.Advance(2 * time.Hour)
 	m.Step(context.Background())
 	status := m.Status()
@@ -480,7 +480,7 @@ func TestTheCompanionRestartWaitsForAToolchainUpdateInProgress(t *testing.T) {
 	r.publishCompanion(mt.CompanionSpec{Version: "1.320", Prerelease: true})
 	m := make()
 	m.Step(context.Background())
-	r.publish(ericwRepo, mt.Spec{Tool: managedtools.EricW, Version: "1.4540", Prerelease: true})
+	r.publish(ericwRepo, mt.Spec{Tool: managedtools.EricW, Version: "1.4570", Prerelease: true})
 	r.clock.Advance(2 * time.Hour)
 	m.Step(context.Background())
 	status := m.Status()
@@ -498,7 +498,7 @@ func TestTheCompanionRestartWaitsForAToolchainUpdateInProgress(t *testing.T) {
 	}
 	r.host.setBusy()
 	m.Step(context.Background())
-	if v := tool(m.Status(), managedtools.EricW).Version; v != "1.4540" {
+	if v := tool(m.Status(), managedtools.EricW).Version; v != "1.4570" {
 		t.Fatalf("EricW is %s", v)
 	}
 	if len(host.restarts()) != 1 {

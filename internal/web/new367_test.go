@@ -56,7 +56,7 @@ func newToolsMachine(t *testing.T) *toolsMachine {
 	t.Helper()
 	m := newMachine(t)
 	releases := mt.NewServer(t)
-	releases.Publish("auto-pigeon/ericw-tools", mt.Build(t, mt.Spec{Tool: managedtools.EricW, Version: "1.4536", Prerelease: true}))
+	releases.Publish("auto-pigeon/ericw-tools", mt.Build(t, mt.Spec{Tool: managedtools.EricW, Version: "1.4566", Prerelease: true}))
 	releases.Publish("auto-pigeon/q3map2", mt.Build(t, mt.Spec{Tool: managedtools.Q3Map2, Version: "2.5.17n-ap.3031", Prerelease: true}))
 	probes, err := managedtools.BuiltinProbes()
 	if err != nil {
@@ -146,7 +146,7 @@ func TestTheManagedEricWIsVerifiedAndBindsQuake1AndQuakeIIToOneInstallation(t *t
 	if local, _ := m.binding("auto-pigeon.q3map2.auto-pigeon-build"); local.Managed == nil || local.Managed.Dir != q3.Dir {
 		t.Fatalf("q3map2 is not bound: %+v", local)
 	}
-	if got := m.releases.Downloads[mt.ArchiveName(mustTool(managedtools.EricW), "1.4536", mt.ThisTarget())]; got != 1 {
+	if got := m.releases.Downloads[mt.ArchiveName(mustTool(managedtools.EricW), "1.4566", mt.ThisTarget())]; got != 1 {
 		t.Fatalf("the EricW archive was downloaded %d times for two games", got)
 	}
 
@@ -231,7 +231,7 @@ func TestAnUpdateWaitsForARunningBuildAndTheNextBuildRecordsTheInstalledBytes(t 
 	m := newToolsMachine(t)
 	m.step()
 	old := m.active(managedtools.EricW)
-	m.releases.Publish("auto-pigeon/ericw-tools", mt.Build(t, mt.Spec{Tool: managedtools.EricW, Version: "1.4540", Prerelease: true}))
+	m.releases.Publish("auto-pigeon/ericw-tools", mt.Build(t, mt.Spec{Tool: managedtools.EricW, Version: "1.4570", Prerelease: true}))
 	m.clock.advance(2 * time.Hour)
 	m.step()
 	_, body := m.call(http.MethodGet, "/api/v1/tools", nil)
@@ -245,11 +245,11 @@ func TestAnUpdateWaitsForARunningBuildAndTheNextBuildRecordsTheInstalledBytes(t 
 		t.Fatalf("decide = %d: %v", status, answer["error"])
 	}
 	m.step()
-	if got := m.active(managedtools.EricW); got.Version != "1.4536" {
+	if got := m.active(managedtools.EricW); got.Version != "1.4566" {
 		t.Fatalf("activated %s while a build ran", got.Version)
 	}
 	for _, id := range ericwProfiles {
-		if local, _ := m.binding(id); local.Managed.Version != "1.4536" {
+		if local, _ := m.binding(id); local.Managed.Version != "1.4566" {
 			t.Fatalf("%s moved while a build ran", id)
 		}
 	}
@@ -260,11 +260,11 @@ func TestAnUpdateWaitsForARunningBuildAndTheNextBuildRecordsTheInstalledBytes(t 
 	release()
 	m.step()
 	updated := m.active(managedtools.EricW)
-	if updated.Version != "1.4540" {
+	if updated.Version != "1.4570" {
 		t.Fatalf("after the build: %s", updated.Version)
 	}
 	for _, id := range ericwProfiles {
-		if local, _ := m.binding(id); local.Managed.Version != "1.4540" || local.Managed.Dir != updated.Dir {
+		if local, _ := m.binding(id); local.Managed.Version != "1.4570" || local.Managed.Dir != updated.Dir {
 			t.Fatalf("%s did not move with the others: %+v", id, local.Managed)
 		}
 	}
@@ -285,7 +285,7 @@ func TestAnUpdateWaitsForARunningBuildAndTheNextBuildRecordsTheInstalledBytes(t 
 		t.Fatalf("the build on managed tools: %v %v", manifest["state"], manifest["error"])
 	}
 	record := managedToolRecord(t, manifest)
-	if record["version"] != "1.4540" || record["sha256"] != updated.ActualSHA256 || record["dir"] != updated.Dir {
+	if record["version"] != "1.4570" || record["sha256"] != updated.ActualSHA256 || record["dir"] != updated.Dir {
 		t.Fatalf("the build's provenance: %v; installed %s %s", record, updated.Version, updated.ActualSHA256)
 	}
 	qbsp, _ := os.ReadFile(updated.Programs["qbsp"])
@@ -296,7 +296,7 @@ func TestAnUpdateWaitsForARunningBuildAndTheNextBuildRecordsTheInstalledBytes(t 
 
 	// A later check that finds another release changes nothing recorded.
 	before := string(mustJSON(t, manifest))
-	m.releases.Publish("auto-pigeon/ericw-tools", mt.Build(t, mt.Spec{Tool: managedtools.EricW, Version: "1.4541", Prerelease: true}))
+	m.releases.Publish("auto-pigeon/ericw-tools", mt.Build(t, mt.Spec{Tool: managedtools.EricW, Version: "1.4571", Prerelease: true}))
 	m.clock.advance(2 * time.Hour)
 	m.step()
 	if after := string(mustJSON(t, m.waitForBuild(started["build"].(string)))); after != before {

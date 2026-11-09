@@ -54,7 +54,7 @@ func TestAnUpdateWhoseGateWasReclaimedDoesNotActivateUnderAnotherSwitchersGate(t
 	r.host.setBusy()
 	m.Step(context.Background())
 	view := tool(m.Status(), managedtools.EricW)
-	if view.Active.Version != "1.4536" {
+	if view.Active.Version != "1.4566" {
 		t.Fatalf("the update activated %s under another switcher's gate", view.Active.Version)
 	}
 	if view.Pending == nil || !strings.Contains(strings.Join(view.Pending.Waiting, "; "), "another Companion") {
@@ -68,7 +68,7 @@ func TestAnUpdateWhoseGateWasReclaimedDoesNotActivateUnderAnotherSwitchersGate(t
 
 	theirs.Release()
 	m.Step(context.Background())
-	if view := tool(m.Status(), managedtools.EricW); view.Active.Version != "1.4540" {
+	if view := tool(m.Status(), managedtools.EricW); view.Active.Version != "1.4570" {
 		t.Fatalf("once the gate was free again: active %s, pending %+v", view.Active.Version, view.Pending)
 	}
 	if _, err := os.Stat(gatePath); !os.IsNotExist(err) {

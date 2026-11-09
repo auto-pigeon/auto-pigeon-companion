@@ -24,7 +24,7 @@ import (
 const (
 	ericwQ1       = "auto-pigeon.ericw-tools.auto-pigeon-build.q1"
 	fixtureLegacy = "---- %s / ericw-tools v0.18.1 ----\nusage: %s [-threads #] [-level 0-4] [-fast] bspfile"
-	fixtureModern = "---- %s / ericw-tools 2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535 ----\n  -logfile \"path\"               File to output logging data to."
+	fixtureModern = "---- %s / ericw-tools 2.0.0-alpha11-70-ge923cca3+auto-pigeon.1.4556 ----\n  -logfile \"path\"               File to output logging data to."
 )
 
 type compatFixture struct {
@@ -237,7 +237,7 @@ func TestRebindingAndReplacingAProgramMovesReadinessBothWays(t *testing.T) {
 	if bound := f.bindFolder(modern); !ready(bound) {
 		t.Fatalf("supported programs are not ready: %v", bound["readiness"])
 	}
-	if state, identity := programState(f.profile(), "vis"); state != "compatible" || identity != "2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535" {
+	if state, identity := programState(f.profile(), "vis"); state != "compatible" || identity != "2.0.0-alpha11-70-ge923cca3+auto-pigeon.1.4556" {
 		t.Fatalf("vis: %q %q", state, identity)
 	}
 	if !ready(f.pipeline("auto-pigeon.q1.fast-preview")) {

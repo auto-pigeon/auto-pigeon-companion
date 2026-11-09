@@ -111,7 +111,7 @@ var Tools = []Tool{
 		ArchiveSchemas:  []string{"auto-pigeon-ericw-archive-manifest/1"},
 		Programs:        []string{"bin/qbsp", "bin/vis", "bin/light", "bin/bspinfo", "bin/bsputil"},
 		Profiles:        []string{"auto-pigeon.ericw-tools.auto-pigeon-build.q1", "auto-pigeon.ericw-tools.auto-pigeon-build.q2"},
-		Baseline:        "1.4535",
+		Baseline:        "1.4556",
 		parse:           parseEricWVersion,
 	},
 	{
@@ -218,7 +218,7 @@ func (s Sequence) Compare(other Sequence) int {
 
 var ericwVersion = regexp.MustCompile(`^[0-9]{1,6}(\.[0-9]{1,9}){1,3}$`)
 
-// parseEricWVersion reads "1.4535": dot-separated numbers.
+// parseEricWVersion reads "1.4556": dot-separated numbers.
 func parseEricWVersion(version string) (Sequence, error) {
 	if !ericwVersion.MatchString(version) {
 		return nil, fmt.Errorf("%q is not an ericw-tools release version", version)

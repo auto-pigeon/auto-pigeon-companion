@@ -19,7 +19,7 @@ import (
 // names a folder, writes the address to url.txt there, and stops when
 // stop.txt appears or after AUCOM_FIXTURE_RELEASES_MINUTES (default 60).
 //
-//	POST /control/publish?tool=ericw-tools&version=1.4540[&prints=1.4539]
+//	POST /control/publish?tool=ericw-tools&version=1.4570[&prints=1.4569]
 //	POST /control/publish-companion?version=1.901&companion=<file>&converter=<file>&converter_version=1.245
 //	POST /control/hold     archive downloads wait until /control/release
 //	POST /control/release
@@ -35,7 +35,7 @@ func TestServeFixtureReleasesForALiveTask(t *testing.T) {
 			Prerelease: true, PrintsVersion: prints}))
 		t.Logf("published %s %s (prints %q)", tool, version, prints)
 	}
-	publish("ericw-tools", "1.4536", "")
+	publish("ericw-tools", "1.4566", "")
 	publish("q3map2", "2.5.17n-ap.3031", "")
 	control := http.NewServeMux()
 	control.HandleFunc("POST /control/publish", func(w http.ResponseWriter, r *http.Request) {

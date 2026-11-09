@@ -254,8 +254,8 @@ terminal, against the running Companion:
 ```console
 $ companion tools status
 Build tools for linux-amd64 (beta channel), in /home/me/.local/share/auto-pigeon-companion/tools
-  EricW tools (Auto-Pigeon build)    ready 1.4535
-      auto-pigeon-ericw-v1.4535, 2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535, sha256 91cad841…
+  EricW tools (Auto-Pigeon build)    ready 1.4556
+      auto-pigeon-ericw-v1.4556, 2.0.0-alpha11-70-ge923cca3+auto-pigeon.1.4556, sha256 bd8f3952…
   q3map2 (Auto-Pigeon build)         ready 2.5.17n-ap.3030
 $ companion tools check
 $ companion tools update ericw-tools --now          # or --on-close
@@ -374,8 +374,11 @@ Normally there is nothing to do: the Companion installs the Auto-Pigeon build
 **EricW tools, Auto-Pigeon build (Quake 1)** and **(Quake II, experimental)**,
 published at <https://github.com/auto-pigeon/ericw-tools/releases> (the
 profile's **Homepage** button). It is upstream's 2.0.0-alpha11 plus changes to
-qbsp that upstream has not reviewed. The profiles are written for **release
-1.4535**; the profile's description lists what it was measured not to do.
+qbsp, vis and light that upstream has not reviewed. The profiles are written for **release
+1.4556**; the profile's description lists what it was measured not to do.
+Its `vis` reads a portal of up to 326 points, where stock `vis` stops at 64: a
+map whose portal is cut by 64 or more planes through one axis (a long bent
+corridor, a fine arc) gets through VIS only with this build.
 
 To unpack a release yourself, fetch the archive for your platform, check it
 against the `SHA256SUMS` beside it, unpack it into a folder of its own, and
@@ -383,7 +386,7 @@ choose the unpacked folder — the one that **contains** `bin/`:
 
 ```console
 $ companion acquire resolve internal/profile/builtin/ericw-tools-auto-pigeon-q1.tool.json \
-    --mode user_path --user-path ~/tools/auto-pigeon-ericw-tools-1.4535-linux-amd64 --bind
+    --mode user_path --user-path ~/tools/auto-pigeon-ericw-tools-1.4556-linux-amd64 --bind
 $ companion toolchain grant auto-pigeon.ericw-tools.auto-pigeon-build.q1      # read it, then approve
 $ companion toolchain check auto-pigeon.ericw-tools.auto-pigeon-build.q1      # asks qbsp, vis and light what they are
 $ companion job run --profile auto-pigeon.ericw-tools.auto-pigeon-build.q1 --action compile \
@@ -430,7 +433,7 @@ changed since it was last asked, and when you press **Check these programs**.
 ```console
 $ companion toolchain check auto-pigeon.ericw-tools.auto-pigeon-build.q1
 light    incompatible       v0.18.1  /opt/ericw-tools-v0.18.1/bin/light
-         The light recorded for EricW tools, Auto-Pigeon build 1.4535 (Quake 1) is not the program this profile was written for …
+         The light recorded for EricW tools, Auto-Pigeon build 1.4556 (Quake 1) is not the program this profile was written for …
 $ companion toolchain check auto-pigeon.ericw-tools.auto-pigeon-build.q1 --json   # the same answers, with each file's SHA-256
 $ companion build pipelines                                     # every pipeline, whether it is ready, and why not
 ```
@@ -887,7 +890,7 @@ curl -s -H "X-AUCOM-Token: $(cat "$CONFIG_DIR/api-token")" \
   jq -r '.choices[] | "\(.id) builtin=\(.builtin): \([.steps[].id] | join(", "))"'
 ```
 
-For Quake II, only releases 1.4518, 1.4522, 1.4524, 1.4533 and 1.4535 of the Auto-Pigeon build of
+For Quake II, only releases 1.4518, 1.4522, 1.4524, 1.4533, 1.4535 and 1.4556 of the Auto-Pigeon build of
 ericw-tools have been measured. For Yamagi Quake II 8.70 on a
 64-bit computer, set the light stage's **Lightmap size arithmetic** to `float32`
 (1.4522 or newer); without it Yamagi reads some faces' lighting with another row

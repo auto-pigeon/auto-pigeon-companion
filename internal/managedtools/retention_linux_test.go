@@ -17,7 +17,7 @@ import (
 )
 
 // 01_NEW_368 §2: retention honours every live reference, not just active and
-// previous. A compiler whose Companion was killed keeps running from 1.4536;
+// previous. A compiler whose Companion was killed keeps running from 1.4566;
 // three later updates move active and previous past it, and its installation
 // is still not removed — by the job's own verified process identity — until
 // it ends. Nothing signals it.
@@ -65,8 +65,8 @@ func TestAnOlderInstallationAnOrphanedCompilerRunsFromSurvivesLaterUpdates(t *te
 		t.Fatal(err)
 	}
 
-	for _, version := range []string{"1.4540", "1.4541", "1.4542", "1.4543"} {
-		if version != "1.4540" {
+	for _, version := range []string{"1.4570", "1.4571", "1.4572", "1.4573"} {
+		if version != "1.4570" {
 			r.publish(ericwRepo, mt.Spec{Tool: managedtools.EricW, Version: version, Prerelease: true})
 			r.clock.Advance(2 * time.Hour)
 			m.Step(context.Background())

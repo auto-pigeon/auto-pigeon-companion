@@ -108,7 +108,7 @@ func TestEveryArchiveThatIsNotWhatItsReleaseSaysIsRefused(t *testing.T) {
 			t.Parallel()
 			r := newRig(t)
 			// A working installation first, which must survive.
-			r.publish(ericwRepo, mt.Spec{Tool: managedtools.EricW, Version: "1.4536", Prerelease: true})
+			r.publish(ericwRepo, mt.Spec{Tool: managedtools.EricW, Version: "1.4566", Prerelease: true})
 			m := r.manager()
 			m.Step(context.Background())
 			before := tool(m.Status(), managedtools.EricW).Active
@@ -129,7 +129,7 @@ func TestEveryArchiveThatIsNotWhatItsReleaseSaysIsRefused(t *testing.T) {
 			}
 			verified := r.host.verified
 
-			c.spec.Tool, c.spec.Version, c.spec.Prerelease = managedtools.EricW, "1.4540", true
+			c.spec.Tool, c.spec.Version, c.spec.Prerelease = managedtools.EricW, "1.4570", true
 			release := mt.Build(t, c.spec)
 			if c.release != nil {
 				c.release(release)
@@ -148,7 +148,7 @@ func TestEveryArchiveThatIsNotWhatItsReleaseSaysIsRefused(t *testing.T) {
 			m.Step(context.Background())
 			offer := tool(m.Status(), managedtools.EricW).Offer
 			if offer == nil {
-				t.Fatalf("1.4540 was not offered: %+v", tool(m.Status(), managedtools.EricW).Newer)
+				t.Fatalf("1.4570 was not offered: %+v", tool(m.Status(), managedtools.EricW).Newer)
 			}
 			_ = m.Decide(managedtools.EricW, managedtools.DecideNow, offer.Identity(), false)
 			m.Step(context.Background())
@@ -156,7 +156,7 @@ func TestEveryArchiveThatIsNotWhatItsReleaseSaysIsRefused(t *testing.T) {
 			if view.Failure == nil || !strings.Contains(view.Failure.Error, c.want) {
 				t.Fatalf("failure %+v; want one saying %q", view.Failure, c.want)
 			}
-			if view.Active == nil || view.Active.Dir != before.Dir || view.Active.Version != "1.4536" {
+			if view.Active == nil || view.Active.Dir != before.Dir || view.Active.Version != "1.4566" {
 				t.Fatalf("the working installation did not survive: %+v", view.Active)
 			}
 			if _, err := managedtools.ReadInstall(before.Dir); err != nil {
@@ -210,7 +210,7 @@ func TestAnUnwritableToolsFolderFailsAndSaysWhere(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(r.root, 0o700) })
-	r.publish(ericwRepo, mt.Spec{Tool: managedtools.EricW, Version: "1.4536", Prerelease: true})
+	r.publish(ericwRepo, mt.Spec{Tool: managedtools.EricW, Version: "1.4566", Prerelease: true})
 	m := r.manager()
 	m.Step(context.Background())
 	view := tool(m.Status(), managedtools.EricW)
@@ -223,7 +223,7 @@ func TestAnUnwritableToolsFolderFailsAndSaysWhere(t *testing.T) {
 // one to an allowed host is followed.
 func TestDownloadsFollowOnlyRedirectsToTheReleaseHosts(t *testing.T) {
 	r := newRig(t)
-	r.publish(ericwRepo, mt.Spec{Tool: managedtools.EricW, Version: "1.4536", Prerelease: true})
+	r.publish(ericwRepo, mt.Spec{Tool: managedtools.EricW, Version: "1.4566", Prerelease: true})
 	r.server.Mutate(func() { r.server.RedirectTo = "http://evil.invalid/{path}?X-Amz-Signature=secret" })
 	m := r.manager()
 	m.Step(context.Background())

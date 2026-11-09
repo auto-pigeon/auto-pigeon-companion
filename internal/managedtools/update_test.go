@@ -29,15 +29,15 @@ func waitFor(t *testing.T, condition func() bool) {
 func offered(t *testing.T) (*rig, *managedtools.Manager, *managedtools.Candidate) {
 	t.Helper()
 	r := newRig(t)
-	r.publishBoth("1.4536", "2.5.17n-ap.3031")
+	r.publishBoth("1.4566", "2.5.17n-ap.3031")
 	m := r.manager()
 	m.Step(context.Background())
-	r.publish(ericwRepo, mt.Spec{Tool: managedtools.EricW, Version: "1.4540", Prerelease: true})
+	r.publish(ericwRepo, mt.Spec{Tool: managedtools.EricW, Version: "1.4570", Prerelease: true})
 	r.clock.Advance(2 * time.Hour)
 	m.Step(context.Background())
 	view := tool(m.Status(), managedtools.EricW)
-	if view.Offer == nil || view.Offer.Version != "1.4540" || view.Active.Version != "1.4536" {
-		t.Fatalf("no offer of 1.4540 over 1.4536: %+v", view)
+	if view.Offer == nil || view.Offer.Version != "1.4570" || view.Active.Version != "1.4566" {
+		t.Fatalf("no offer of 1.4570 over 1.4566: %+v", view)
 	}
 	if tool(m.Status(), managedtools.Q3Map2).Offer != nil {
 		t.Fatal("q3map2 has an offer nobody published")
@@ -62,7 +62,7 @@ func TestCancelAndDontAskAgainSuppressOnlyThisVersionOfThisTool(t *testing.T) {
 		t.Fatal("a cancelled offer came back at the next hourly check of the same run")
 	}
 	next := r.manager() // the next launch
-	if view := tool(next.Status(), managedtools.EricW); view.Offer == nil || view.Offer.Version != "1.4540" {
+	if view := tool(next.Status(), managedtools.EricW); view.Offer == nil || view.Offer.Version != "1.4570" {
 		t.Fatal("a cancelled offer without \"don't ask again\" did not come back at the next launch")
 	}
 
@@ -88,10 +88,10 @@ func TestCancelAndDontAskAgainSuppressOnlyThisVersionOfThisTool(t *testing.T) {
 		t.Fatal("q3map2's update was suppressed by an EricW skip")
 	}
 	// A genuinely newer EricW is offered.
-	r.publish(ericwRepo, mt.Spec{Tool: managedtools.EricW, Version: "1.4541", Prerelease: true})
+	r.publish(ericwRepo, mt.Spec{Tool: managedtools.EricW, Version: "1.4571", Prerelease: true})
 	r.clock.Advance(2 * time.Hour)
 	next.Step(context.Background())
-	if view := tool(next.Status(), managedtools.EricW); view.Offer == nil || view.Offer.Version != "1.4541" {
+	if view := tool(next.Status(), managedtools.EricW); view.Offer == nil || view.Offer.Version != "1.4571" {
 		t.Fatal("a newer version than the skipped one was not offered")
 	}
 	// Settings' reset forgets the skip.
@@ -120,11 +120,11 @@ func TestAVersionRepublishedWithOtherBytesIsAnIntegrityEventAndNeverInstalled(t 
 	if err := m.Decide(managedtools.EricW, managedtools.DecideCancel, offer.Identity(), true); err != nil {
 		t.Fatal(err)
 	}
-	// 1.4540 is published again with different bytes.
+	// 1.4570 is published again with different bytes.
 	r.server.Mutate(func() { r.server.Releases[ericwRepo] = r.server.Releases[ericwRepo][1:] })
-	r.publish(ericwRepo, mt.Spec{Tool: managedtools.EricW, Version: "1.4540", Prerelease: true,
+	r.publish(ericwRepo, mt.Spec{Tool: managedtools.EricW, Version: "1.4570", Prerelease: true,
 		Archive: func(e map[string][]byte) map[string][]byte {
-			e["README.md"] = []byte("fixture release 1.4540\n")
+			e["README.md"] = []byte("fixture release 1.4570\n")
 			return e
 		},
 		ArchiveManifest: func(m map[string]any) { m["commit"] = strings.Repeat("d", 40) }})
@@ -132,10 +132,10 @@ func TestAVersionRepublishedWithOtherBytesIsAnIntegrityEventAndNeverInstalled(t 
 	before := archiveDownloads(r.server)
 	m.Step(context.Background())
 	view := tool(m.Status(), managedtools.EricW)
-	if view.Integrity == nil || view.Integrity.Seen.Version != "1.4540" || view.Offer != nil {
+	if view.Integrity == nil || view.Integrity.Seen.Version != "1.4570" || view.Offer != nil {
 		t.Fatalf("a republished version is not an integrity event: %+v", view)
 	}
-	if archiveDownloads(r.server) != before || view.Active.Version != "1.4536" {
+	if archiveDownloads(r.server) != before || view.Active.Version != "1.4566" {
 		t.Fatal("republished bytes were downloaded or activated")
 	}
 }
@@ -150,20 +150,20 @@ func TestUpdateNowWaitsForWorkAndKeepsThePreviousInstallation(t *testing.T) {
 	}
 	m.Step(context.Background())
 	view := tool(m.Status(), managedtools.EricW)
-	if view.Active.Version != "1.4536" || view.Pending == nil || !view.Pending.Staged || len(view.Pending.Waiting) != 1 {
+	if view.Active.Version != "1.4566" || view.Pending == nil || !view.Pending.Staged || len(view.Pending.Waiting) != 1 {
 		t.Fatalf("while a build runs: active %s, pending %+v", view.Active.Version, view.Pending)
 	}
 	oldDir := view.Active.Dir
 	r.host.setBusy()
 	m.Step(context.Background())
 	view = tool(m.Status(), managedtools.EricW)
-	if view.Active.Version != "1.4540" || view.Pending != nil || view.Previous == nil || view.Previous.Dir != oldDir {
+	if view.Active.Version != "1.4570" || view.Pending != nil || view.Previous == nil || view.Previous.Dir != oldDir {
 		t.Fatalf("after the build: %+v", view)
 	}
 	if _, err := os.Stat(filepath.Join(oldDir, "install.json")); err != nil {
 		t.Fatal("the previous installation was removed; it is the rollback")
 	}
-	if len(m.Status().Notices) == 0 || !strings.Contains(m.Status().Notices[len(m.Status().Notices)-1].Text, "1.4540") {
+	if len(m.Status().Notices) == 0 || !strings.Contains(m.Status().Notices[len(m.Status().Notices)-1].Text, "1.4570") {
 		t.Fatal("no Ready notice for the update")
 	}
 }
@@ -178,17 +178,17 @@ func TestAFailedVersionCheckLeavesThePriorVersionActive(t *testing.T) {
 	}
 	m.Step(context.Background())
 	view := tool(m.Status(), managedtools.EricW)
-	if view.Active.Version != "1.4536" || view.Failure == nil || !strings.Contains(view.Failure.Error, "version check") {
+	if view.Active.Version != "1.4566" || view.Failure == nil || !strings.Contains(view.Failure.Error, "version check") {
 		t.Fatalf("a failed check: %+v", view)
 	}
-	if _, err := os.Stat(filepath.Join(r.root, "ericw-tools", "1.4540-"+offer.SHA256[:8])); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(r.root, "ericw-tools", "1.4570-"+offer.SHA256[:8])); !os.IsNotExist(err) {
 		t.Fatal("an installation that failed its check was left on disk")
 	}
 	// Retrying after the cause is gone succeeds.
 	r.host.verifyErr = nil
 	_ = m.Retry(managedtools.EricW)
 	m.Step(context.Background())
-	if view := tool(m.Status(), managedtools.EricW); view.Active.Version != "1.4540" {
+	if view := tool(m.Status(), managedtools.EricW); view.Active.Version != "1.4570" {
 		t.Fatalf("retry: %+v", view)
 	}
 }
@@ -199,7 +199,7 @@ func TestAFailedActivationLeavesThePriorVersion(t *testing.T) {
 	r.host.failBind = errors.New("bindings.json is locked")
 	_ = m.Decide(managedtools.EricW, managedtools.DecideNow, offer.Identity(), false)
 	m.Step(context.Background())
-	if view := tool(m.Status(), managedtools.EricW); view.Active.Version != "1.4536" || view.Failure == nil {
+	if view := tool(m.Status(), managedtools.EricW); view.Active.Version != "1.4566" || view.Failure == nil {
 		t.Fatalf("a failed activation: %+v", view)
 	}
 }
@@ -213,20 +213,20 @@ func TestUpdateOnCloseAppliesAtExitOrAtTheNextStartAfterACrash(t *testing.T) {
 	}
 	m.Step(context.Background())
 	view := tool(m.Status(), managedtools.EricW)
-	if view.Active.Version != "1.4536" || view.Pending == nil || !view.Pending.Staged || view.Pending.Intent != managedtools.IntentOnExit {
+	if view.Active.Version != "1.4566" || view.Pending == nil || !view.Pending.Staged || view.Pending.Intent != managedtools.IntentOnExit {
 		t.Fatalf("staged for close: %+v", view.Pending)
 	}
 	// A closed page is not a closed Companion: nothing changes on a step.
 	m.Step(context.Background())
-	if tool(m.Status(), managedtools.EricW).Active.Version != "1.4536" {
+	if tool(m.Status(), managedtools.EricW).Active.Version != "1.4566" {
 		t.Fatal("an update for the close was applied while the Companion ran")
 	}
 	// The process is killed: ApplyOnExit never runs. The next start applies it.
 	next := r.manager()
-	if got := next.ApplyAtStart(); len(got) != 1 || !strings.Contains(got[0], "1.4540") {
+	if got := next.ApplyAtStart(); len(got) != 1 || !strings.Contains(got[0], "1.4570") {
 		t.Fatalf("ApplyAtStart: %v", got)
 	}
-	if tool(next.Status(), managedtools.EricW).Active.Version != "1.4540" {
+	if tool(next.Status(), managedtools.EricW).Active.Version != "1.4570" {
 		t.Fatal("not applied at the next start")
 	}
 }
@@ -235,7 +235,7 @@ func TestUpdateOnCloseAppliesAtANormalExit(t *testing.T) {
 	_, m, offer := offered(t)
 	_ = m.Decide(managedtools.EricW, managedtools.DecideOnExit, offer.Identity(), false)
 	m.Step(context.Background())
-	if got := m.ApplyOnExit(); len(got) != 1 || !strings.Contains(got[0], "updated to 1.4540") {
+	if got := m.ApplyOnExit(); len(got) != 1 || !strings.Contains(got[0], "updated to 1.4570") {
 		t.Fatalf("ApplyOnExit: %v", got)
 	}
 }
@@ -252,7 +252,7 @@ func TestCancellingAPendingUpdateKeepsTheActiveVersionAndDoesNotReofferAtOnce(t 
 	r.host.setBusy()
 	m.Step(context.Background())
 	view := tool(m.Status(), managedtools.EricW)
-	if view.Active.Version != "1.4536" || view.Pending != nil || view.Offer != nil {
+	if view.Active.Version != "1.4566" || view.Pending != nil || view.Offer != nil {
 		t.Fatalf("after cancelling: %+v", view)
 	}
 }
@@ -260,7 +260,7 @@ func TestCancellingAPendingUpdateKeepsTheActiveVersionAndDoesNotReofferAtOnce(t 
 // Retention: never more than the bound, never the active or previous one.
 func TestOldInstallationsArePrunedButNeverTheActiveOrPrevious(t *testing.T) {
 	r, m, _ := offered(t)
-	for _, version := range []string{"1.4541", "1.4542", "1.4543"} {
+	for _, version := range []string{"1.4571", "1.4572", "1.4573"} {
 		r.publish(ericwRepo, mt.Spec{Tool: managedtools.EricW, Version: version, Prerelease: true})
 		r.clock.Advance(2 * time.Hour)
 		m.Step(context.Background())
@@ -273,7 +273,7 @@ func TestOldInstallationsArePrunedButNeverTheActiveOrPrevious(t *testing.T) {
 		m.Step(context.Background())
 	}
 	view := tool(m.Status(), managedtools.EricW)
-	if view.Active.Version != "1.4543" || view.Previous == nil || view.Previous.Version != "1.4542" {
+	if view.Active.Version != "1.4573" || view.Previous == nil || view.Previous.Version != "1.4572" {
 		t.Fatalf("active %s previous %+v", view.Active.Version, view.Previous)
 	}
 	entries, _ := os.ReadDir(filepath.Join(r.root, "ericw-tools"))
@@ -291,7 +291,7 @@ func TestOldInstallationsArePrunedButNeverTheActiveOrPrevious(t *testing.T) {
 // A disabled coordinator checks and installs nothing.
 func TestTurnedOffNothingIsCheckedOrInstalled(t *testing.T) {
 	r := newRig(t)
-	r.publishBoth("1.4536", "2.5.17n-ap.3031")
+	r.publishBoth("1.4566", "2.5.17n-ap.3031")
 	m := r.manager(func(o *managedtools.Options) { o.Disabled = true })
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
@@ -338,14 +338,14 @@ func TestTheStatusSaysWhatAnUpdateIsWaitingForNotADownload(t *testing.T) {
 	go func() { m.Step(context.Background()); close(done) }()
 	waitFor(t, func() bool { return tool(m.Status(), managedtools.EricW).Phase == managedtools.PhaseVerifying })
 	view := tool(m.Status(), managedtools.EricW)
-	if view.Done != 0 || view.Total != 0 || view.Version != "1.4540" {
+	if view.Done != 0 || view.Total != 0 || view.Version != "1.4570" {
 		t.Fatalf("while the programs are checked: %+v", view)
 	}
 	close(hold)
 	<-done
 	m.Step(context.Background())
 	view = tool(m.Status(), managedtools.EricW)
-	if view.Phase != managedtools.PhaseReady || view.Version != "1.4536" || view.Done != 0 || view.Total != 0 {
+	if view.Phase != managedtools.PhaseReady || view.Version != "1.4566" || view.Done != 0 || view.Total != 0 {
 		t.Fatalf("while the update waits for work: %+v", view)
 	}
 	if view.Pending == nil || !view.Pending.Staged || len(view.Pending.Waiting) != 1 {
@@ -356,7 +356,7 @@ func TestTheStatusSaysWhatAnUpdateIsWaitingForNotADownload(t *testing.T) {
 	r.host.mu.Unlock()
 	m.Step(context.Background())
 	view = tool(m.Status(), managedtools.EricW)
-	if view.Phase != managedtools.PhaseReady || view.Version != "1.4540" || view.Pending != nil {
+	if view.Phase != managedtools.PhaseReady || view.Version != "1.4570" || view.Pending != nil {
 		t.Fatalf("after the work ended: %+v", view)
 	}
 }

@@ -77,7 +77,7 @@ func TestTheCommandLineRefusesWhatThePageRefuses(t *testing.T) {
 
 	// A modern qbsp beside a 0.18.1 vis and light: the mixed installation.
 	bindCompat(t, env, compatPrograms(t, dir, log, map[string]string{
-		"qbsp": "2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535", "vis": "v0.18.1", "light": "v0.18.1", "bspinfo": "v0.18.1", "bsputil": "v0.18.1"}))
+		"qbsp": "2.0.0-alpha11-70-ge923cca3+auto-pigeon.1.4556", "vis": "v0.18.1", "light": "v0.18.1", "bspinfo": "v0.18.1", "bsputil": "v0.18.1"}))
 
 	code, out, errOut := runCLI(t, env, "toolchain", "check", ericwQ1, "--json")
 	if code != 1 {
@@ -99,7 +99,7 @@ func TestTheCommandLineRefusesWhatThePageRefuses(t *testing.T) {
 			t.Errorf("%s: the problem does not say what it is: %s", program.Executable, program.Problem)
 		}
 	}
-	if report.Compatible || got["qbsp"] != "compatible 2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535" || got["vis"] != "incompatible v0.18.1" || got["light"] != "incompatible v0.18.1" || len(got) != 3 {
+	if report.Compatible || got["qbsp"] != "compatible 2.0.0-alpha11-70-ge923cca3+auto-pigeon.1.4556" || got["vis"] != "incompatible v0.18.1" || got["light"] != "incompatible v0.18.1" || len(got) != 3 {
 		t.Fatalf("toolchain check: %+v", report)
 	}
 
@@ -171,7 +171,7 @@ func TestTheCommandLineRefusesWhatThePageRefuses(t *testing.T) {
 
 	// Supported programs throughout: the check passes and says so.
 	bindCompat(t, env, compatPrograms(t, dir, log, map[string]string{
-		"qbsp": "2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535", "vis": "2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535", "light": "2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535", "bspinfo": "2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535", "bsputil": "2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535"}))
+		"qbsp": "2.0.0-alpha11-70-ge923cca3+auto-pigeon.1.4556", "vis": "2.0.0-alpha11-70-ge923cca3+auto-pigeon.1.4556", "light": "2.0.0-alpha11-70-ge923cca3+auto-pigeon.1.4556", "bspinfo": "2.0.0-alpha11-70-ge923cca3+auto-pigeon.1.4556", "bsputil": "2.0.0-alpha11-70-ge923cca3+auto-pigeon.1.4556"}))
 	if code, out, errOut = runCLI(t, env, "toolchain", "check", ericwQ1); code != 0 || strings.Contains(out, "incompatible") {
 		t.Errorf("toolchain check on supported programs exited %d: %s%s", code, out, errOut)
 	}

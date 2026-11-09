@@ -169,7 +169,7 @@ func archiveDownloads(s *mt.Server) int {
 // M1: a fresh root installs each tool once, and a second launch is a no-op.
 func TestAFreshRootInstallsEachToolOnceAndASecondLaunchDoesNothing(t *testing.T) {
 	r := newRig(t)
-	r.publishBoth("1.4536", "2.5.17n-ap.3031")
+	r.publishBoth("1.4566", "2.5.17n-ap.3031")
 	first := r.manager()
 	first.Step(context.Background())
 
@@ -218,7 +218,7 @@ func TestAFreshRootInstallsEachToolOnceAndASecondLaunchDoesNothing(t *testing.T)
 // M1: two Companions starting together download each archive once.
 func TestTwoCompanionsStartingTogetherDownloadEachArchiveOnce(t *testing.T) {
 	r := newRig(t)
-	r.publish(ericwRepo, mt.Spec{Tool: managedtools.EricW, Version: "1.4536", Prerelease: true})
+	r.publish(ericwRepo, mt.Spec{Tool: managedtools.EricW, Version: "1.4566", Prerelease: true})
 	hold := make(chan struct{})
 	r.server.Mutate(func() { r.server.Hold = hold })
 	a, b := r.manager(), r.manager()
@@ -241,7 +241,7 @@ func TestTwoCompanionsStartingTogetherDownloadEachArchiveOnce(t *testing.T) {
 // next attempt completes.
 func TestAnInterruptedDownloadLeavesNothingAndTheNextAttemptCompletes(t *testing.T) {
 	r := newRig(t)
-	r.publish(ericwRepo, mt.Spec{Tool: managedtools.EricW, Version: "1.4536", Prerelease: true})
+	r.publish(ericwRepo, mt.Spec{Tool: managedtools.EricW, Version: "1.4566", Prerelease: true})
 	hold := make(chan struct{})
 	r.server.Mutate(func() { r.server.Hold = hold })
 	m := r.manager()
@@ -294,7 +294,7 @@ func TestOfflineChecksBackOffAndRetryAsksAgain(t *testing.T) {
 		t.Error("a step inside the backoff asked again")
 	}
 	r.server.Fail.Store(false)
-	r.publish(ericwRepo, mt.Spec{Tool: managedtools.EricW, Version: "1.4536", Prerelease: true})
+	r.publish(ericwRepo, mt.Spec{Tool: managedtools.EricW, Version: "1.4566", Prerelease: true})
 	_ = m.Retry(managedtools.EricW)
 	m.Step(context.Background())
 	if view := tool(m.Status(), managedtools.EricW); view.Phase != managedtools.PhaseReady {
@@ -313,7 +313,7 @@ func TestOfflineChecksBackOffAndRetryAsksAgain(t *testing.T) {
 // a 429 is honoured.
 func TestChecksAreHourlyAcrossRestartsAndHonour304And429(t *testing.T) {
 	r := newRig(t)
-	r.publishBoth("1.4536", "2.5.17n-ap.3031")
+	r.publishBoth("1.4566", "2.5.17n-ap.3031")
 	r.manager().Step(context.Background())
 	base := r.server.Requests[ericwRepo]
 	for restart := 0; restart < 9; restart++ {
@@ -362,19 +362,19 @@ func TestIneligibleReleasesAreRefusedForTheirReasonAndAnOlderOneIsChosen(t *test
 		mutate func(*mt.Release)
 		reason managedtools.Reason
 	}{
-		{"no build for this platform", mt.Spec{Version: "1.4540", Targets: []string{other}}, nil, managedtools.ReasonNoTarget},
-		{"unknown manifest schema", mt.Spec{Version: "1.4540", Schema: "auto-pigeon-ericw-release-manifest/2"}, nil, managedtools.ReasonManifestUnsupported},
-		{"not qualified", mt.Spec{Version: "1.4540", Unqualified: true}, nil, managedtools.ReasonNotQualified},
-		{"refused identity", mt.Spec{Version: "1.4540", Banner: refusedBanner}, nil, managedtools.ReasonRefusedIdentity},
-		{"not an Auto-Pigeon build", mt.Spec{Version: "1.4540", Banner: "2.0.0-alpha11"}, nil, managedtools.ReasonNotAccepted},
-		{"digest disagrees", mt.Spec{Version: "1.4540"}, func(release *mt.Release) {
+		{"no build for this platform", mt.Spec{Version: "1.4570", Targets: []string{other}}, nil, managedtools.ReasonNoTarget},
+		{"unknown manifest schema", mt.Spec{Version: "1.4570", Schema: "auto-pigeon-ericw-release-manifest/2"}, nil, managedtools.ReasonManifestUnsupported},
+		{"not qualified", mt.Spec{Version: "1.4570", Unqualified: true}, nil, managedtools.ReasonNotQualified},
+		{"refused identity", mt.Spec{Version: "1.4570", Banner: refusedBanner}, nil, managedtools.ReasonRefusedIdentity},
+		{"not an Auto-Pigeon build", mt.Spec{Version: "1.4570", Banner: "2.0.0-alpha11"}, nil, managedtools.ReasonNotAccepted},
+		{"digest disagrees", mt.Spec{Version: "1.4570"}, func(release *mt.Release) {
 			for name := range release.Files {
 				if strings.HasSuffix(name, ".zip") {
 					release.Digests = map[string]*string{name: mt.Digest([]byte("other bytes"))}
 				}
 			}
 		}, managedtools.ReasonDigestDisagrees},
-		{"no manifest", mt.Spec{Version: "1.4540"}, func(release *mt.Release) {
+		{"no manifest", mt.Spec{Version: "1.4570"}, func(release *mt.Release) {
 			delete(release.Files, managedtools.ManifestAssetName)
 		}, managedtools.ReasonNoManifest},
 	}
@@ -382,7 +382,7 @@ func TestIneligibleReleasesAreRefusedForTheirReasonAndAnOlderOneIsChosen(t *test
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 			r := newRig(t)
-			r.publish(ericwRepo, mt.Spec{Tool: managedtools.EricW, Version: "1.4537", Prerelease: true})
+			r.publish(ericwRepo, mt.Spec{Tool: managedtools.EricW, Version: "1.4567", Prerelease: true})
 			c.spec.Tool, c.spec.Prerelease = managedtools.EricW, true
 			release := mt.Build(t, c.spec)
 			if c.mutate != nil {
@@ -392,7 +392,7 @@ func TestIneligibleReleasesAreRefusedForTheirReasonAndAnOlderOneIsChosen(t *test
 			m := r.manager()
 			m.Step(context.Background())
 			view := tool(m.Status(), managedtools.EricW)
-			if view.Active == nil || view.Active.Version != "1.4537" {
+			if view.Active == nil || view.Active.Version != "1.4567" {
 				t.Fatalf("the older eligible release was not chosen: %s %s", view.Phase, view.Detail)
 			}
 			if len(view.Newer) != 1 || view.Newer[0].Reason != c.reason {
@@ -404,14 +404,14 @@ func TestIneligibleReleasesAreRefusedForTheirReasonAndAnOlderOneIsChosen(t *test
 
 func TestDraftsMalformedTagsStableChannelAndTheBaselineAreRespected(t *testing.T) {
 	r := newRig(t)
-	r.publish(ericwRepo, mt.Spec{Tool: managedtools.EricW, Version: "1.4534", Prerelease: false}) // older than the baseline
-	draft := mt.Build(t, mt.Spec{Tool: managedtools.EricW, Version: "1.4550"})
+	r.publish(ericwRepo, mt.Spec{Tool: managedtools.EricW, Version: "1.4555", Prerelease: false}) // older than the baseline
+	draft := mt.Build(t, mt.Spec{Tool: managedtools.EricW, Version: "1.4580"})
 	draft.Draft = true
 	r.server.Publish(ericwRepo, draft)
-	malformed := mt.Build(t, mt.Spec{Tool: managedtools.EricW, Version: "1.4551"})
+	malformed := mt.Build(t, mt.Spec{Tool: managedtools.EricW, Version: "1.4581"})
 	malformed.Tag = "auto-pigeon-ericw-v1.45x1"
 	r.server.Publish(ericwRepo, malformed)
-	r.publish(ericwRepo, mt.Spec{Tool: managedtools.EricW, Version: "1.4539", Prerelease: true})
+	r.publish(ericwRepo, mt.Spec{Tool: managedtools.EricW, Version: "1.4569", Prerelease: true})
 
 	stable := r.manager(func(o *managedtools.Options) { o.Channel = managedtools.ChannelStable })
 	stable.Step(context.Background())
@@ -427,7 +427,7 @@ func TestDraftsMalformedTagsStableChannelAndTheBaselineAreRespected(t *testing.T
 	beta.server = r.server
 	m := beta.manager()
 	m.Step(context.Background())
-	if view := tool(m.Status(), managedtools.EricW); view.Active == nil || view.Active.Version != "1.4539" {
+	if view := tool(m.Status(), managedtools.EricW); view.Active == nil || view.Active.Version != "1.4569" {
 		t.Fatalf("beta did not install the newest prerelease: %+v", view)
 	}
 }

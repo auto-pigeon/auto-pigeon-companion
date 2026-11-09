@@ -42,7 +42,7 @@ const EricwQ2ReleaseVersion = "2.0.0-alpha11-38-gd4717d68+auto-pigeon.1.4524"
 const EricwQ2PinnedVersion = "2.0.0-alpha11-47-gcaad08e1+auto-pigeon.1.4533"
 
 // EricwQ2Release1535Version is the fork's release 1.4535 (`NEW_353A`), the one
-// the Auto-Pigeon build profiles are written for now: 1.4533 plus one change to
+// the Auto-Pigeon build profiles were written for until `NEW_425`: 1.4533 plus one change to
 // the map-text parser the programs share. Every control below was run again
 // with the published linux-amd64 archive's qbsp (`testdata/q2/logs-1.4535`,
 // `pts-1.4535`): the same exits, files left and point files as 1.4533, the
@@ -50,8 +50,19 @@ const EricwQ2PinnedVersion = "2.0.0-alpha11-47-gcaad08e1+auto-pigeon.1.4533"
 // added.
 const EricwQ2Release1535Version = "2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535"
 
+// EricwQ2Release1556Version is the fork's release 1.4556 (`NEW_425`), the one
+// the Auto-Pigeon build profiles are written for now: 1.4535 plus four qbsp
+// repairs of a sealed map read as a leak through solid (NEW_377, NEW_390,
+// NEW_396) and a vis that reads a portal of up to 326 points. Every control
+// below was run again with the published linux-amd64 archive's qbsp
+// (`testdata/q2/logs-1.4556`, `pts-1.4556`): the same exits, files left and
+// point files as 1.4535, BSP and portal files byte for byte, the logs equal but
+// for the banner, the timings and the progress ticks. Only this exact banner is
+// added; 1.4559, with the same compiler source, is not measured and not added.
+const EricwQ2Release1556Version = "2.0.0-alpha11-70-ge923cca3+auto-pigeon.1.4556"
+
 // EricwQ2MeasuredVersions are the qbsp builds the reading below was measured on.
-var EricwQ2MeasuredVersions = []string{EricwQ2MeasuredVersion, EricwQ2CandidateVersion, EricwQ2ReleaseVersion, EricwQ2PinnedVersion, EricwQ2Release1535Version}
+var EricwQ2MeasuredVersions = []string{EricwQ2MeasuredVersion, EricwQ2CandidateVersion, EricwQ2ReleaseVersion, EricwQ2PinnedVersion, EricwQ2Release1535Version, EricwQ2Release1556Version}
 
 // What qbsp 1.4518 prints with `-q2bsp -leaktest`, measured on the authored
 // controls in `testdata/q2/controls` (the logs beside them are those runs,

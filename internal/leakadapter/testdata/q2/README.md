@@ -61,3 +61,16 @@ the same command, game view and job layout. Every exit, file left and point file
 1.4533's only in the banner and in timings (19 of 19). `TestTheRelease1535QbspIsReadAsTheMeasuredRelease` reads each
 row as the 1.4518 row is read. `pts-1.4535/i_stale_pts.pts` is the planted file. The runner is
 `LLM/runs/auto-pigeon/NEW_353A/aucom-controls/scripts/run_aucom_controls_1.4535.sh`.
+
+## The release 1.4556 (`NEW_425`)
+
+`logs-1.4556/` and `pts-1.4556/` are the same controls run by release 1.4556
+(`2.0.0-alpha11-70-ge923cca3+auto-pigeon.1.4556`, tag `auto-pigeon-ericw-v1.4556`, the published
+`auto-pigeon-ericw-tools-1.4556-linux-amd64.zip`, SHA-256 `bd8f3952…` checked against the release's `SHA256SUMS`) with
+the same command, game view and job layout. 1.4556 changes qbsp (NEW_377, NEW_390, NEW_396: four sealed maps no longer
+read as leaking through solid) and vis; none of these controls changed. Every exit, file left and point file is 1.4535's,
+and every BSP, `.prt` and `.leak.prt` left is byte for byte 1.4535's (29 of 29); the logs differ from 1.4535's only in
+the banner, in timings and in the progress bar's ticks, which depend on thread scheduling (19 of 19).
+`TestTheRelease1556QbspIsReadAsTheMeasuredRelease` reads each row as the 1.4518 row is read.
+`pts-1.4556/i_stale_pts.pts` is the planted file. The runner is
+`LLM/runs/ericw-tools/new425/aucom-adopt/q2/scripts/run_aucom_controls_1.4556.sh`.

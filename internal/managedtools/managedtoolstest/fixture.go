@@ -265,7 +265,7 @@ func ThisTarget() string { return managedtools.Target(runtime.GOOS, runtime.GOAR
 // Banner is a version banner the built-in profiles accept for a version.
 func Banner(tool managedtools.ToolID, version string) string {
 	if tool == managedtools.EricW {
-		return "2.0.0-alpha11-49-gd645c6f4+auto-pigeon." + version
+		return "2.0.0-alpha11-70-ge923cca3+auto-pigeon." + version
 	}
 	return version + "+gca2e281d.upstream.82161339"
 }
@@ -465,7 +465,7 @@ func main() {
 		fmt.Println("Q3Map         - v1.0r (c) 1999 Id Software Inc.")
 		fmt.Println("Q3Map (ydnar) - v" + stamp)
 	} else {
-		stamp = "2.0.0-alpha11-49-gd645c6f4+auto-pigeon." + version
+		stamp = "2.0.0-alpha11-70-ge923cca3+auto-pigeon." + version
 		fmt.Println("---- " + name + " / ericw-tools " + stamp + " ----")
 		fmt.Println("ericw-tools " + stamp)
 		fmt.Println("usage: -logfile -threads -basedir -gamedir -fast -level -q2bsp -leaktest -wadpath")

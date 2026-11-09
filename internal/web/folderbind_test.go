@@ -52,7 +52,7 @@ func TestAFolderBindsEveryDeclaredProgramAsALocalBinding(t *testing.T) {
 		t.Errorf("binding an upstream layout = %d %v", status, body)
 	}
 
-	root := filepath.Join(m.dir, "auto-pigeon-ericw-tools-1.4535")
+	root := filepath.Join(m.dir, "auto-pigeon-ericw-tools-1.4556")
 	writeEricwLayout(t, root, "qbsp", "vis", "light", "bspinfo", "bsputil")
 	status, body = m.call(http.MethodPost, "/api/v1/profiles/auto-pigeon.ericw-tools.auto-pigeon-build.q1/bind",
 		map[string]any{"folder": root})

@@ -34,7 +34,7 @@ const buttonNamed = (node, name) => all(node).find((child) => child.tag === "but
 const A = { pending: true, request_id: "a".repeat(32), asset_id: "map-one", revision: 3, content_sha256: "1".repeat(64), received_at: "2026-10-03T10:00:00Z" };
 const B = { pending: true, request_id: "b".repeat(32), asset_id: "map-two", revision: 9, content_sha256: "2".repeat(64), received_at: "2026-10-03T10:00:05Z" };
 const resolved = (request, name) => ({ ...request, name, revision_id: "rev-" + request.request_id[0], game_profile: "quake1", compiler: "ericw-qbsp",
-  pipeline: "auto-pigeon.q1.leak-test", pipeline_name: "Quake 1 — leak test", pipeline_tool: "EricW tools, Auto-Pigeon build 1.4535 (Quake 1)",
+  pipeline: "auto-pigeon.q1.leak-test", pipeline_name: "Quake 1 — leak test", pipeline_tool: "EricW tools, Auto-Pigeon build 1.4556 (Quake 1)",
   readiness: { ready: true, problems: [] },
   source_ref: `aub:map/${request.asset_id}@rev-${request.request_id[0]}#${name}.apmap`, files: [] });
 const needsTool = { ready: false, problems: [{ fault: "missing_engine", summary: "x", profile: "auto-pigeon.ericw-tools.auto-pigeon-build.q1", executable: "qbsp" }] };

@@ -93,7 +93,7 @@ func fixtureUsage(name string) int {
 		"vis":   {"-threads n", "-fast                         run very simple & fast vis procedure", "-gamedir \"relative/path\"", "-basedir \"relative/path\"", "-noambient", "-level n"},
 		"light": {"-threads n", "-extra", "-gamedir \"relative/path\"", "-basedir \"relative/path\"", "-nolights", "-soft [n]"},
 	}[name]
-	fmt.Printf("---- %s / ericw-tools 2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535 ----\nusage: %s [-help/-h/-?] [-options] ...\n", name, name)
+	fmt.Printf("---- %s / ericw-tools 2.0.0-alpha11-70-ge923cca3+auto-pigeon.1.4556 ----\nusage: %s [-help/-h/-?] [-options] ...\n", name, name)
 	for _, line := range usage {
 		fmt.Println("  " + line)
 	}
@@ -186,7 +186,7 @@ func fixtureQBSP(args []string) int {
 		return 2
 	}
 	source, destination := parsed.rest[0], parsed.rest[1]
-	fmt.Println("---- qbsp / ericw-tools 2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535 ----")
+	fmt.Println("---- qbsp / ericw-tools 2.0.0-alpha11-70-ge923cca3+auto-pigeon.1.4556 ----")
 	if parsed.baseDir == "" {
 		fmt.Println("WARNING: failed to find basedir")
 	}
@@ -263,7 +263,7 @@ func fixtureVis(args []string) int {
 	}
 	bsp := parsed.rest[0]
 	stem := strings.TrimSuffix(bsp, filepath.Ext(bsp))
-	fmt.Println("---- vis / ericw-tools 2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535 ----")
+	fmt.Println("---- vis / ericw-tools 2.0.0-alpha11-70-ge923cca3+auto-pigeon.1.4556 ----")
 	portals, err := os.ReadFile(stem + ".prt")
 	if err != nil {
 		// The measured failure: vis opens the portal file by name, in the
@@ -297,7 +297,7 @@ func fixtureLight(args []string) int {
 	}
 	bsp := parsed.rest[0]
 	stem := strings.TrimSuffix(bsp, filepath.Ext(bsp))
-	fmt.Println("---- light / ericw-tools 2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535 ----")
+	fmt.Println("---- light / ericw-tools 2.0.0-alpha11-70-ge923cca3+auto-pigeon.1.4556 ----")
 	if _, err := os.Stat(stem + ".texinfo.json"); err == nil {
 		fmt.Printf("Loading extended texinfo flags from %s.texinfo.json...\n", stem)
 	}

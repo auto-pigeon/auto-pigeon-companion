@@ -115,7 +115,7 @@ func newFirstRun(t *testing.T) *firstRun {
 			t.Fatal(err)
 		}
 	}
-	for tool, version := range map[managedtools.ToolID]string{managedtools.EricW: "1.4536", managedtools.Q3Map2: "2.5.17n-ap.3031"} {
+	for tool, version := range map[managedtools.ToolID]string{managedtools.EricW: "1.4566", managedtools.Q3Map2: "2.5.17n-ap.3031"} {
 		found, _ := managedtools.Find(tool)
 		f.releases.Publish(found.Owner+"/"+found.Repo, mt.Build(t, mt.Spec{Tool: tool, Version: version, Prerelease: true}))
 		f.archives[string(tool)] = mt.ArchiveName(found, version, mt.ThisTarget())

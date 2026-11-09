@@ -84,9 +84,9 @@ func TestAnotherProcessesBuildHoldsTheCompilerUpdate(t *testing.T) {
 	registry, _ := m.server.ToolRegistry()
 	_, stdin := otherProcess(t, registry.Root(), BundleTool, string(managedtools.EricW))
 
-	m.decideNow(t, "1.4540")
+	m.decideNow(t, "1.4570")
 	m.step()
-	if got := m.active(managedtools.EricW); got.Version != "1.4536" {
+	if got := m.active(managedtools.EricW); got.Version != "1.4566" {
 		t.Fatalf("activated %s while another process's build ran", got.Version)
 	}
 	tool := toolIn(t, m.server.toolsStatus().Status, managedtools.EricW)
@@ -109,7 +109,7 @@ func TestAnotherProcessesBuildHoldsTheCompilerUpdate(t *testing.T) {
 
 	stdin.Close()
 	deadline := time.Now().Add(5 * time.Second)
-	for m.step(); m.active(managedtools.EricW).Version != "1.4540"; m.step() {
+	for m.step(); m.active(managedtools.EricW).Version != "1.4570"; m.step() {
 		if time.Now().After(deadline) {
 			t.Fatalf("the update did not proceed after the other build ended: %+v", toolIn(t, m.server.toolsStatus().Status, managedtools.EricW).Pending)
 		}
@@ -118,15 +118,15 @@ func TestAnotherProcessesBuildHoldsTheCompilerUpdate(t *testing.T) {
 
 	// A process killed while holding its lease.
 	killed, _ := otherProcess(t, registry.Root(), BundleTool, string(managedtools.EricW))
-	m.decideNow(t, "1.4541")
+	m.decideNow(t, "1.4571")
 	m.step()
-	if got := m.active(managedtools.EricW); got.Version != "1.4540" {
+	if got := m.active(managedtools.EricW); got.Version != "1.4570" {
 		t.Fatalf("activated %s while the other build was alive", got.Version)
 	}
 	_ = killed.Process.Kill()
 	_ = killed.Wait()
 	m.step()
-	if got := m.active(managedtools.EricW); got.Version != "1.4541" {
+	if got := m.active(managedtools.EricW); got.Version != "1.4571" {
 		t.Fatalf("a dead process's lease still holds the update: %s %+v", got.Version, toolIn(t, m.server.toolsStatus().Status, managedtools.EricW).Pending)
 	}
 }
