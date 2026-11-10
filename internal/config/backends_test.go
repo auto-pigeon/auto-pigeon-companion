@@ -9,7 +9,8 @@ import (
 func TestOnlyTheTwoPublicDeploymentsAreOfficial(t *testing.T) {
 	for address, want := range map[string]bool{
 		"https://auto-pigeon.com": true, "https://beta.auto-pigeon.com/": true,
-		"http://auto-pigeon.com": false, "https://aub.example": false, "": false,
+		"https://beta-aub.auto-pigeon.com/": true,
+		"http://auto-pigeon.com":            false, "https://aub.example": false, "": false,
 	} {
 		if got := IsOfficialBackend(address); got != want {
 			t.Errorf("IsOfficialBackend(%q) = %v", address, got)

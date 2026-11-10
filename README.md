@@ -182,9 +182,11 @@ curl -fsS -H "X-AUCOM-Token: $token" -H 'Content-Type: application/json' "$api/a
 ```
 
 **Signing in.** **Settings** and the **Sign in** dialog offer the two official
-deployments by name — **Auto-Pigeon** (`https://auto-pigeon.com`) and
-**Auto-Pigeon beta** (`https://beta.auto-pigeon.com`). Nothing is contacted
-until you pick one.
+deployments by name, **Auto-Pigeon** (`https://auto-pigeon.com`) and
+**Auto-Pigeon beta** (`https://beta.auto-pigeon.com`). The beta choice uses
+`https://beta-aub.auto-pigeon.com` for its API calls and links to the public
+site for account signup and password resets. The Companion connects after you
+pick a deployment.
 
 ### Build tools: setup and updates
 

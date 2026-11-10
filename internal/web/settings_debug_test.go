@@ -29,7 +29,8 @@ func TestOnlyDebugModeAcceptsAnAddressThatIsNotOfficial(t *testing.T) {
 		t.Errorf("a refused address was saved: %q", saved.AUBBaseURL)
 	}
 	_, status := do(t, server, http.MethodGet, "/api/status", "")
-	if status["debug"] != false || status["backend_label"] != "Auto-Pigeon beta" {
+	if status["debug"] != false || status["backend_label"] != "Auto-Pigeon beta" ||
+		status["aub_base_url"] != "https://beta-aub.auto-pigeon.com" {
 		t.Errorf("status = %v", status)
 	}
 	backends, _ := status["backends"].([]any)
@@ -51,10 +52,10 @@ func TestOnlyDebugModeAcceptsAnAddressThatIsNotOfficial(t *testing.T) {
 // by the .env or the config.json beside the executable, which set it — reached
 // every CLI command and never the GUI.
 func TestTheEnvironmentsServerAddressReachesThePage(t *testing.T) {
-	t.Setenv(config.EnvAUBBaseURL, "https://beta.auto-pigeon.com")
+	t.Setenv(config.EnvAUBBaseURL, "https://beta-aub.auto-pigeon.com")
 	server, _ := newTestServer(t, nil)
 	_, status := do(t, server, http.MethodGet, "/api/status", "")
-	if status["aub_base_url"] != "https://beta.auto-pigeon.com" || status["backend_label"] != "Auto-Pigeon beta" {
+	if status["aub_base_url"] != "https://beta-aub.auto-pigeon.com" || status["backend_label"] != "Auto-Pigeon beta" {
 		t.Errorf("status = %v", status)
 	}
 }

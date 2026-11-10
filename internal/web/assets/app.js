@@ -171,9 +171,13 @@
   // officialSite is the official deployment in use, as {url, host}, or null.
   // A person is shown `auto-pigeon.com`, never an address with a port — a
   // development server is called that, and its address is in Settings.
-  function officialSite(body) {
+  function officialBackend(body) {
     const current = (body.aub_base_url || "").replace(/\/+$/, "");
-    const backend = (body.backends || []).find((item) => item.url === current);
+    return (body.backends || []).find((item) => item.url === current || item.api_url === current);
+  }
+
+  function officialSite(body) {
+    const backend = officialBackend(body);
     return backend ? { url: backend.url, host: backend.url.replace(/^https?:\/\//, ""), label: backend.label } : null;
   }
   window.AUCOM.officialSite = officialSite;
@@ -204,11 +208,11 @@
     for (const backend of body.backends || []) {
       select.append(el("option", { text: `${backend.label} (${backend.url.replace(/^https:\/\//, "")})`, attrs: { value: backend.url } }));
     }
-    const official = (body.backends || []).some((backend) => backend.url === current);
+    const official = officialBackend(body);
     if (current && !official) {
       select.append(el("option", { text: `Development server (${current})`, attrs: { value: current } }));
     }
-    select.value = current;
+    select.value = official?.url ?? current;
     select.disabled = Boolean(current && !official && !body.debug);
   }
   window.AUCOM.renderBackendChoice = renderBackendChoice;

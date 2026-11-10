@@ -287,13 +287,8 @@ func checkGameRoots(roots map[string]string) (map[string]string, error) {
 
 // backendLabel names an official deployment, or "" for any other address.
 func backendLabel(address string) string {
-	trimmed := strings.TrimRight(strings.TrimSpace(address), "/")
-	for _, backend := range config.OfficialBackends {
-		if trimmed == backend.URL {
-			return backend.Label
-		}
-	}
-	return ""
+	backend, _ := config.OfficialBackend(address)
+	return backend.Label
 }
 
 // pageLanguages are the language codes the page offers (assets/i18n.js).

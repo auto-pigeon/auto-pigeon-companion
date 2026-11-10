@@ -284,8 +284,8 @@ func Default() Config {
 	return Config{Port: DefaultPort}
 }
 
-// AUB resolves the effective AUB address: the environment variable if set,
-// otherwise the config file's value, otherwise ErrAUBNotConfigured.
+// AUB resolves the effective AUB address from an explicit override or the
+// saved server choice. An official choice can have a separate AUB origin.
 //
 // Under the release rule (release_policy.go) the environment variable can only
 // have come from the config.json beside the executable, and a saved address
@@ -295,9 +295,13 @@ func (c Config) AUB() (string, error) {
 		return fromEnv, nil
 	}
 	if trimmed := strings.TrimSpace(c.AUBBaseURL); trimmed != "" {
-		if OfficialOnly() && !IsOfficialBackend(trimmed) {
+		backend, official := OfficialBackend(trimmed)
+		if OfficialOnly() && !official {
 			NoteIgnoredAddress(trimmed, "an earlier Settings choice saved in this user's config.json")
 			return "", ErrAUBNotConfigured
+		}
+		if backend.APIURL != "" {
+			return backend.APIURL, nil
 		}
 		return trimmed, nil
 	}

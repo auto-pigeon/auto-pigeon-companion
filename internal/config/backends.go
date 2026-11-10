@@ -36,27 +36,39 @@ import (
 
 // Backend is one official Auto-Pigeon deployment a person may choose.
 type Backend struct {
-	ID    string `json:"id"`
-	Label string `json:"label"`
-	URL   string `json:"url"`
+	ID     string `json:"id"`
+	Label  string `json:"label"`
+	URL    string `json:"url"`               // Public site and saved selector value.
+	APIURL string `json:"api_url,omitempty"` // AUB origin when separate from the public site.
 }
 
 // OfficialBackends are the deployments Settings and the sign-in dialog offer.
 var OfficialBackends = []Backend{
 	{ID: "auto-pigeon", Label: "Auto-Pigeon", URL: "https://auto-pigeon.com"},
-	{ID: "auto-pigeon-beta", Label: "Auto-Pigeon beta", URL: "https://beta.auto-pigeon.com"},
+	{
+		ID: "auto-pigeon-beta", Label: "Auto-Pigeon beta",
+		URL: "https://beta.auto-pigeon.com", APIURL: "https://beta-aub.auto-pigeon.com",
+	},
 }
 
-// IsOfficialBackend reports whether an address is one of OfficialBackends,
-// ignoring a trailing slash.
-func IsOfficialBackend(address string) bool {
+// OfficialBackend matches the public selector URL or the deployment's AUB origin.
+func OfficialBackend(address string) (Backend, bool) {
 	trimmed := strings.TrimRight(strings.TrimSpace(address), "/")
+	if trimmed == "" {
+		return Backend{}, false
+	}
 	for _, backend := range OfficialBackends {
-		if trimmed == backend.URL {
-			return true
+		if trimmed == backend.URL || trimmed == backend.APIURL {
+			return backend, true
 		}
 	}
-	return false
+	return Backend{}, false
+}
+
+// IsOfficialBackend reports whether an address belongs to an official deployment.
+func IsOfficialBackend(address string) bool {
+	_, ok := OfficialBackend(address)
+	return ok
 }
 
 // EnvPort is the GUI port an override supplies when `--port` is not given.

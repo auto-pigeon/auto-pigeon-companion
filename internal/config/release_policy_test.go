@@ -104,8 +104,11 @@ func TestAReleaseSetsASavedDevelopmentAddressAside(t *testing.T) {
 		t.Errorf("ignored = %v", ignored)
 	}
 	official := Config{AUBBaseURL: "https://beta.auto-pigeon.com"}
-	if got, err := official.AUB(); err != nil || got != "https://beta.auto-pigeon.com" {
+	if got, err := official.AUB(); err != nil || got != "https://beta-aub.auto-pigeon.com" {
 		t.Errorf("an official choice gave %q, %v", got, err)
+	}
+	if got := official.SavedAUB(); got != "https://beta.auto-pigeon.com" {
+		t.Errorf("the saved selector value changed to %q", got)
 	}
 }
 
