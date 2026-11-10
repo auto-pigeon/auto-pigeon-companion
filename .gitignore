@@ -59,3 +59,5 @@ Thumbs.db
 # (sys.dont_write_bytecode), because an untracked file makes `go build` stamp
 # vcs.modified=true; this only keeps a stray one out of a commit.
 __pycache__/
+# trail: local repo context graph and learnings, never committed (HITL 2026-11-11)
+/.trail/
