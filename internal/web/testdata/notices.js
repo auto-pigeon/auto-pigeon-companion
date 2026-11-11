@@ -63,6 +63,27 @@
       item(publicTitle),
       $("notice-list").textContent.slice(0, 120)
     );
+    // NEW_508: a notice is an entry in Activity, never a strip under the header.
+    const gap = () => Math.round(document.querySelector(".app-body").getBoundingClientRect().top -
+      document.querySelector(".app-header").getBoundingClientRect().bottom);
+    record(
+      "a notice takes no room between the header and the page",
+      gap() === 0 && $("activity").contains($("notice-banner")),
+      `gap ${gap()}px; in Activity: ${$("activity").contains($("notice-banner"))}`
+    );
+    await waitFor("Activity to count the notice", () => $("activity-count").textContent === "1" && !$("activity-count").hidden);
+    record(
+      "Activity is in the header and counts the notice",
+      !$("activity-open").hidden && $("activity-count").textContent === "1",
+      `count "${$("activity-count").textContent}", title "${$("activity-open").title}"`
+    );
+    $("activity-open").click();
+    record(
+      "opening Activity shows the notice",
+      !$("activity").hidden && $("notice-banner").checkVisibility(),
+      String($("notice-banner").checkVisibility())
+    );
+    $("activity-close").click();
     const publicItem = item(publicTitle);
     record(
       "a notice's body is text: markup in it is shown, never rendered",
@@ -90,6 +111,13 @@
       "a critical notice offers no Dismiss and is announced",
       !privateItem.querySelector("button") && privateItem.getAttribute("role") === "alert",
       privateItem.outerHTML.slice(0, 160)
+    );
+    await waitFor("the blocker line", () => [...document.querySelectorAll(".service-blocker")].every((slot) => !slot.hidden));
+    record(
+      "a critical notice is also said, in one line, in the areas that need the server (NEW_508)",
+      [...document.querySelectorAll(".service-blocker")].length === 2 &&
+        [...document.querySelectorAll(".service-blocker")].every((slot) => slot.textContent.includes(privateTitle)) && gap() === 0,
+      [...document.querySelectorAll(".service-blocker")].map((slot) => slot.dataset.area + ":" + slot.textContent).join(" | ").slice(0, 160)
     );
     record(
       "the critical notice is listed first",

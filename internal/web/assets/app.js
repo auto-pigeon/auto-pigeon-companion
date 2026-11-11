@@ -127,11 +127,9 @@
     $("account-signed-out").hidden = Boolean(body.authenticated);
     $("user-sign-in").hidden = Boolean(body.authenticated);
     $("sign-out").hidden = !body.authenticated;
-    $("user-button").setAttribute("aria-label", body.authenticated ? `Account — signed in as ${body.email || "you"}` : "Account — not signed in");
-    $("user-button").title = $("user-button").getAttribute("aria-label");
+    $("user-button").title = body.authenticated ? t("Signed in as {email}", { email: body.email || t("you") }) : t("Not signed in");
     $("account-signed-out").textContent = body.session_expired ? "session expired" : "not signed in";
     $("account-menu").hidden = !body.authenticated;
-    $("sync-help").hidden = !body.authenticated;
     window.AUCOM.account?.statusChanged?.(body);
     // The notice banner (notices.mjs, a module) re-evaluates at once on a
     // sign-in or a sign-out, rather than at its next poll.
@@ -182,21 +180,24 @@
   }
   window.AUCOM.officialSite = officialSite;
 
-  // renderSignInHelp: the Companion cannot create an account or reset a
-  // password; both happen on the Auto-Pigeon site the account is on.
+  // renderSignInHelp says only what is true of the site today (NEW_508, issue
+  // #1): accounts are created there, in its own sign-up dialog, so the link
+  // is to the site. The site has NO password reset, so nothing here promises
+  // one — the sentence that did sent people to a page that could not help.
+  // With no official site in use (a development server) there is no address
+  // to offer and the list stays empty.
   function renderSignInHelp(site) {
-    const link = (text, href) => el("a", { text, attrs: { href, target: "_blank", rel: "noopener noreferrer" } });
     const signup = $("sign-in-signup");
     const reset = $("sign-in-reset");
     signup.replaceChildren();
     reset.replaceChildren();
-    if (site) {
-      signup.append(document.createTextNode("No account yet? Accounts are created on "), link(site.host, site.url), document.createTextNode(", not in the Companion."));
-      reset.append(document.createTextNode("Forgot your password? Passwords are reset on "), link(site.host, site.url), document.createTextNode("."));
-    } else {
-      signup.textContent = "Accounts are created on the Auto-Pigeon site, not in the Companion.";
-      reset.textContent = "Passwords are reset on the Auto-Pigeon site.";
-    }
+    reset.hidden = true;
+    signup.hidden = !site;
+    $("sign-in-help").hidden = !site;
+    if (!site) return;
+    signup.append(document.createTextNode(t("No account yet?") + " "),
+      el("a", { text: t("Create one on {site}", { site: site.host }), attrs: { href: site.url, target: "_blank", rel: "noopener noreferrer" } }),
+      document.createTextNode("."));
   }
 
   // renderBackendChoice draws the official servers as a choice. An address that
@@ -320,6 +321,104 @@
     closeSignIn({ restoreFocus: false });
     show("settings");
   });
+
+  // --- Activity: the count, and the way back to an editor's request -----------
+  //
+  // Activity is always in the header (NEW_508). Its count is the number of
+  // entries that want something from the person: an editor's request, an
+  // update that waits, a tool that failed to set up, a service notice. Work
+  // that is merely going on — a build, tools installing — is said as
+  // "running", and an idle Companion shows the bare word and nothing else.
+  //
+  // The entries themselves are owned by the files that know them (tools.js,
+  // notices.mjs, play.js); this only counts what they show, by watching the
+  // few nodes involved rather than polling.
+
+  const requestCards = [
+    { box: $("leak-request"), key: "leak" },
+    { box: $("build-request"), key: "build" },
+  ];
+  let announcedEntries = "";
+
+  function requestPointers() {
+    const host = $("activity-requests");
+    const rows = [];
+    for (const { box, key } of requestCards) {
+      if (box.hidden) continue;
+      const title = box.querySelector(".leak-request__title")?.textContent || "";
+      const what = box.querySelector(".leak-request__what")?.textContent || "";
+      if (!title) continue;
+      const open = el("button", { text: t("Open in Build & Run"), className: "secondary", attrs: { type: "button", "data-request": key } });
+      open.addEventListener("click", () => {
+        window.AUCOM.closeActivity?.({ focus: false });
+        show("play", { focus: false });
+        box.scrollIntoView({ block: "nearest" });
+        (box.querySelector("button.primary, button") || $("area-heading")).focus();
+      });
+      rows.push(el("div", { className: "activity-item", attrs: { "data-request": key }, children: [
+        el("p", { className: "activity-item__title", text: title }),
+        ...(what ? [el("p", { className: "activity-item__what", text: what })] : []),
+        el("div", { className: "row-actions", children: [open] }),
+      ] }));
+    }
+    const signature = rows.map((row) => row.textContent).join("|");
+    if (host.dataset.signature !== signature) {
+      // Rebuilt only when what it says changed, so a focused button in it
+      // survives the requests' two-second watch.
+      const focused = host.contains(document.activeElement) ? document.activeElement.dataset.request : "";
+      host.dataset.signature = signature;
+      host.replaceChildren(...rows);
+      if (focused) host.querySelector(`button[data-request="${focused}"]`)?.focus();
+    }
+    host.hidden = rows.length === 0;
+    return rows.length;
+  }
+
+  // A link the person has just followed in the editor brings them to Build &
+  // Run, where its card is — whatever the request turns out to need (a
+  // sign-in, a pipeline, nothing). It never moves a page that is in the
+  // middle of something: an open dialog keeps the page where it is, and a
+  // request found waiting by a page opened later is only counted in Activity.
+  window.AUCOM.requestArrived = (request) => {
+    const age = Date.now() - Date.parse(request?.received_at || "");
+    if (!(age >= 0 && age < 15000)) return;
+    if (document.querySelector("dialog[open], .auth-modal:not([hidden])")) return;
+    if (shownArea !== "play") show("play", { focus: false });
+  };
+
+  function activityBadge() {
+    const requests = requestPointers();
+    const setup = $("tools-setup");
+    const setupWants = !setup.hidden && setup.dataset.attention === "1";
+    const notices = $("notice-banner").hidden ? 0 : $("notice-list").children.length;
+    const wants = requests + ($("tools-update-badge").hidden ? 0 : 1) + (setupWants ? 1 : 0) + notices;
+    const runs = window.AUCOM.activityRuns || { active: false };
+    const busy = runs.active || (!setup.hidden && setup.dataset.attention === "0");
+    const pill = $("activity-count");
+    pill.hidden = !wants && !busy;
+    pill.textContent = wants ? String(wants) : busy ? t("running") : "";
+    pill.className = "pill" + (wants ? " pill--wants" : "");
+    $("activity-open").title = wants
+      ? (wants === 1 ? t("Activity: 1 entry needs you") : t("Activity: {n} entries need you", { n: wants }))
+      : busy ? t("Activity: work in progress") : t("Activity");
+    $("activity-items").hidden = !wants && setup.hidden;
+    // Said once per change of what is waiting, politely, and never by a poll
+    // that found the same things again.
+    const now = [requests, !$("tools-update-badge").hidden, setupWants, notices].join("/");
+    if (now !== announcedEntries) {
+      const grew = announcedEntries !== "" && wants > Number(pill.dataset.wants || 0);
+      announcedEntries = now;
+      if (grew && $("activity").hidden) announce(wants === 1 ? t("Activity: 1 entry needs you") : t("Activity: {n} entries need you", { n: wants }));
+    }
+    pill.dataset.wants = String(wants);
+  }
+  window.AUCOM.activityBadge = activityBadge;
+
+  const watcher = new MutationObserver(activityBadge);
+  for (const node of [$("leak-request"), $("build-request"), $("tools-setup"), $("notice-banner"), $("tools-update-badge")]) {
+    watcher.observe(node, { attributes: true, attributeFilter: ["hidden", "data-attention"], childList: true, subtree: node.id !== "tools-setup" });
+  }
+  activityBadge();
 
   // --- boot -----------------------------------------------------------------
 

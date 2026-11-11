@@ -22,6 +22,10 @@ paths:
   - internal/web/assets/play.js
   - internal/web/assets/autobuild.js
   - internal/web/assets/leakrequest.js
+  - internal/web/assets/buildrequest.js
+  - internal/web/assets/account.js
+  - internal/web/assets/app.js
+  - internal/web/assets/notices.mjs
   - internal/web/assets/index.html
   - internal/web/assets/app.css
   - internal/web/assets/locales/it.js
@@ -74,10 +78,58 @@ they bind every surface that offers a choice, says why something cannot start, o
   Italian phrase avoids agreement it cannot know ("qbsp, vis e light ancora da configurare").
   Leak test is *test delle perdite*, as in AUP.
 
+## Nothing sits between the header and the page (NEW_508)
+
+HITL: *remove the global green band completely*. `<body>` used to hold six full-width surfaces under the header —
+tool setup, service notices, the editor's two requests, "back online" and the stale-page bar — each pushing every
+area down, plus a standing green **Synced** in the header. A smaller, recoloured or renamed strip is the same defect.
+
+- **An idle, connected, installed, up-to-date Companion shows nothing.** No status light, no "all good" row. The
+  header is the brand and three utilities with their names: **Activity**, **Settings**, **Account**.
+- **Each surface has ONE home, beside what it is about:**
+
+  | was a strip | now |
+  | --- | --- |
+  | `#leak-request`, `#build-request` | a `.request-card` at the top of Build & Run; a link just followed moves the window there (`app.js` `requestArrived`: never over an open dialog, never for a request found waiting by a page opened later); from elsewhere Activity has **Open in Build & Run** |
+  | `#tools-setup` | an Activity entry; `data-attention` = `1` wants the person, `0` work going on, empty a routine check (listed, never counted) |
+  | `#notice-banner` | Activity entries, same fetch/scope/severity/expiry/dismissal (`notices.mjs`); a critical notice or started maintenance is also ONE line in My Maps and Live Games (`.service-blocker`), announced once |
+  | `#reconnect-banner`, **Synced** | `#account-button`, a chip shown only while there is something to sync; the Account menu says the rest |
+  | update offer dialog opening by itself | one Activity entry (`#tools-update-badge`); the same dialog opens from it, or straight after the person's own **Check for updates** |
+  | `#stale-page` bar | a small fixed card, `role="alert"`, with **Reload** |
+
+- **Activity is always in the header.** Its pill is a number when entries want the person, `running` while work
+  goes on, and absent otherwise (`app.js` `activityBadge`, one MutationObserver, no poll). An entry is refreshed in
+  place and rebuilt only when what it says changed, so a focused button survives; a growing count is announced
+  once, politely.
+- **A modal is for a decision the person just asked for.** Nothing routine opens one.
+- **"Sync" names its object.** **Sync profiles** (account), **Download revision** (a map), **Check for updates**
+  (tools and the app, in Settings). Three states, never one indicator.
+- **Sync profiles is a review, then one press.** The dry run's `reviewed` fingerprint goes back with the press; a
+  list that changed is answered `409 changed` with the new review, and nothing is sent or installed
+  (`account.go` `reviewFingerprint`). A same-version conflict says *Both copies changed. Save the one you want to
+  keep as a new version.* with the server's sentence under Details.
+- **Colour:** teal is interactive, never a status ground. Green is on a confirmed result only. A leak is amber — a
+  result, not a failure; red is a test that could not finish. Tokens are AUP's, mapped in `app.css` `:root`; a new
+  one is added there with the AUP token it stands for.
+- **Navigation is one flat list in task order:** Build & Run, My Maps (Builds on this machine under it), Run, Live
+  Games, Profiles, Jobs. Routes and fragments are unchanged.
+- **A leak result leads with one of four headlines** (`build.js` `leakHeadline`): *Leak found*, *No leak found*,
+  *Couldn’t determine whether the map leaks*, *Leak test couldn’t finish*. Sealed is never read off an exit status.
+- **A profile that changed since it was set up says so** — *Changed: approve this version*, and that the folders
+  and programs chosen are kept (#3). A profile installed from a listing stays **Community** (#19,
+  `binding.Provenance`).
+- **A second window does not go stale.** Settings and the package page's game folder are read again when the
+  window comes back; an unsaved edit is kept and a real conflict is named (#23, #2).
+
+Held by `new508_test.go` (structure, wording, the review fingerprint, the repeat), the shell records in
+`testdata/notices.js` and `testdata/leakjourney.js`, `TestApprovingAnInstalledCommunityProfileKeepsItsProvenance`,
+`TestAUsedLinkDeliveredAgainIsARepeatNotASecondRequest`, `TestTheHandlerIsNamedForTheProgramNotOneOfItsUses`.
+
 ## A request from the editor opens ready (NEW_366, NEW_380)
 
 An editor's build request and an editor's leak request open Build & Run on the exact saved revision with the
-form's ordinary button; the notice above says what is prepared and what, if anything, stops it. The leak
+form's ordinary button; the card at the top of Build & Run says what is prepared and what, if anything, stops it.
+A used leak link opened again says *This leak test already ran* with **Open the result** and starts nothing (#20). The leak
 contract is `aucom.leak-adapters` ("A request opens ready to Build").
 
 ## Build & Run is one form with one primary (NEW_363)

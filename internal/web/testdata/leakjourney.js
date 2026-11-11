@@ -84,6 +84,17 @@
       record("the page opened on Build", !document.getElementById("area-play").hidden, window.location.hash);
       await sleep(600);
       record("no question stands in front of Build", !document.querySelector("dialog[open]"), document.querySelector("dialog[open] h2")?.textContent || "none");
+      // NEW_508: the request is a card at the top of Build & Run, beside the
+      // map it is about — not a strip above every area.
+      record("the request is in Build & Run and takes no room under the header",
+        document.getElementById("area-play").contains(document.getElementById("leak-request")) &&
+          document.getElementById("leak-request").checkVisibility() &&
+          Math.round(document.querySelector(".app-body").getBoundingClientRect().top - document.querySelector(".app-header").getBoundingClientRect().bottom) === 0,
+        `visible ${document.getElementById("leak-request").checkVisibility()}`);
+      record("Activity counts the request and offers the way back",
+        document.getElementById("activity-count").textContent === "1" &&
+          Boolean(document.querySelector('#activity-requests button[data-request="leak"]')),
+        `count "${document.getElementById("activity-count").textContent}"`);
       record("there is no Review step", !/review/i.test(notice()) && ![...document.querySelectorAll("#leak-request button")].some((b) => /review/i.test(b.textContent)), notice());
       record("the button says Build", button().textContent === "Build", button().textContent);
       record("it says the pipeline and that nothing runs yet", /Fixture Quake 1 leak test/.test(notice()) && /nothing runs until you press Build/i.test(notice()), notice());
@@ -94,6 +105,10 @@
       record("two clicks are one press", presses.length === 1, `${presses.length} press(es)`);
       record("one press is one build", await count() === 1, `${await count()} build(s)`);
       await waitFor("the notice to go", () => !notice());
+      record("the result leads with its headline (NEW_508)",
+        ["Leak found", "No leak found", "Couldn’t determine whether the map leaks", "Leak test couldn’t finish"]
+          .includes(document.querySelector("#build-leak .leak-headline")?.textContent),
+        document.querySelector("#build-leak .leak-headline")?.textContent);
       record("the verdict is shown", Boolean(document.querySelector("#build-leak .leak-verdict")?.textContent), document.querySelector("#build-leak .leak-verdict")?.textContent);
       record("the spent request leaves no Build behind it", !enabled() && !label(), label());
     },

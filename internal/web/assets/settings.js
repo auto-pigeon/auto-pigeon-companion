@@ -43,6 +43,15 @@
     await refreshLinks();
   }));
 
+  // What the form last took from the server, per field: the difference
+  // between that and what a field shows now is an edit nobody has saved.
+  let loaded = null;
+  const FIELDS = ["settings-aub", "settings-backend", "settings-port", "settings-concurrency"];
+  const LABELS = {
+    "settings-aub": "Server address", "settings-backend": "Server",
+    "settings-port": "GUI port", "settings-concurrency": "Jobs at once",
+  };
+
   async function refresh() {
     refreshLinks();
     const { ok, body } = await api("/api/v1/settings");
@@ -52,6 +61,15 @@
     }
     window.AUCOM.settings = body;
 
+    // Field by field (NEW_508, issue #23). This runs when the area opens AND
+    // when the window comes back, because another window or a terminal may
+    // have saved meanwhile — a second window used to show what it read at
+    // start for as long as it stayed open. A field nobody is editing takes the
+    // saved value. A field with an edit that has not been saved KEEPS the
+    // edit; if the saved value also changed under it, that is a real conflict
+    // and the form says so, naming the other value, instead of silently
+    // choosing one.
+    const before = Object.fromEntries(FIELDS.map((id) => [id, $(id).value]));
     $("settings-aub").value = body.aub_base_url || "";
     // A person chooses one of the official servers. Typing an address is a
     // developer's act: the field exists only with --debug (HITL, NEW_244D).
@@ -61,6 +79,21 @@
     $("settings-aub-field").hidden = !body.debug;
     $("settings-port").value = body.port ?? 0;
     $("settings-concurrency").value = body.job_concurrency ?? 0;
+    // What the form shows for what is saved now, read back from the fields
+    // themselves so the comparison is in each control's own terms.
+    const server = Object.fromEntries(FIELDS.map((id) => [id, $(id).value]));
+    const conflicts = [];
+    for (const id of FIELDS) {
+      if (loaded === null || before[id] === loaded[id]) continue;
+      if (loaded[id] !== server[id] && before[id] !== server[id] && !$(id).closest("[hidden]")) {
+        conflicts.push(t("{field} was saved elsewhere as {value}", { field: t(LABELS[id]), value: server[id] || t("none") }));
+      }
+      $(id).value = before[id];
+    }
+    loaded = server;
+    if (conflicts.length) {
+      setMessage("settings-message", t("{what}. Save keeps what you entered here.", { what: conflicts.join("; ") }), "error");
+    }
     // The field holds what the file holds, so pressing Save never copies an
     // environment variable's value into the file. The note says what is
     // actually in use when the two differ.
@@ -116,6 +149,8 @@
         return;
       }
       window.AUCOM.settings = body;
+      // Saved: nothing in the form is an unsaved edit any more.
+      loaded = null;
       setMessage(
         "settings-message",
         "Saved. The port takes effect the next time the Companion starts; the server choice is in use now.",
@@ -138,6 +173,11 @@
 
   $("settings-save").addEventListener("click", (event) => save(event.currentTarget));
   $("converter-version").addEventListener("click", (event) => converterVersion(event.currentTarget));
+
+  // Back to this window: read again, when Settings is what is on screen.
+  const reread = () => { if (!document.hidden && !$("area-settings").hidden && loaded !== null) refresh(); };
+  window.addEventListener("focus", reread);
+  document.addEventListener("visibilitychange", reread);
 
   window.AUCOM.areas.settings = { refresh };
 })();

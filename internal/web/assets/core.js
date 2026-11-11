@@ -75,6 +75,15 @@ async function api(path, options = {}) {
         "Reload the page to continue — every job, build and setting is still recorded.";
       const banner = document.getElementById("stale-page");
       if (banner) banner.hidden = false;
+      // A refused token is an answer: the Companion is running again. The
+      // "has stopped" dialog this page may be showing is no longer true, and
+      // its overlay covered the one button that recovers the page (seen live,
+      // NEW_508) — so it gives way to the card and its Reload.
+      const stopped = document.getElementById("stopped-modal");
+      if (stopped && !stopped.hidden) {
+        stopped.hidden = true;
+        document.getElementById("stale-page-reload")?.focus();
+      }
     }
     return { ok: response.ok, status: response.status, body };
   } catch (err) {
@@ -897,6 +906,12 @@ function profileState(item) {
   if (code === "partly_ready" && startable.length === 1) {
     const action = (item.actions || []).find((candidate) => candidate.id === startable[0]);
     text = AUCOM.t("Ready: {action} only", { action: AUCOM.t(action?.title || startable[0]) });
+  }
+  // A profile that changed after it was approved is not one nobody has looked
+  // at: the row says which (NEW_508, issue #3), and its page says the folders
+  // and programs chosen for the earlier version are kept.
+  if (code === "needs_approval" && (item.readiness?.problems || []).some((problem) => problem.fault === "stale_binding")) {
+    text = AUCOM.t("Changed: approve this version");
   }
   const causes = code === "ready" || code === "partly_ready" ? [] : setupCauses(item);
   return { code, text, kind, cause: causes.find((cause) => cause.profile !== item.id) || null, causes };

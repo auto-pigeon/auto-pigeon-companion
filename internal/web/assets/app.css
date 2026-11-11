@@ -17,48 +17,67 @@
 
 :root {
   /*
-    The palette, type and control shapes are auto-pigeon-gallery's
-    (`src/styles/tokens.css` and `base.css`, which follow AUP's), mapped onto
-    this sheet's own names so the layout below did not have to change
-    (NEW_244D, at the operator's request: the Companion should look like the
-    same product). Dark only, as AUG is. No font is downloaded — the page's CSP
-    forbids it and the stacks fall back to the system's own face.
+    The palette, type and control shapes are AUP's (`frontend/src/styles/
+    tokens.css` and `base.css`, read at auto-pigeon 115b92da for NEW_508),
+    mapped onto this sheet's own short names so the Companion looks like the
+    same product without importing the editor's stylesheet or depending on it
+    at run time. Dark only, as AUP is. No font is downloaded — the page's CSP
+    forbids it and the stack is the system's own face, as AUP's `--font-ui` is.
 
-    `--ink-muted` is AUG's *secondary* text colour, not its muted one: muted
+    The mapping, AUP name in the comment. It is the WHOLE set: a new colour or
+    size is added here with the AUP token it stands for, or not at all.
+
+    `--ink-muted` is AUP's *secondary* text colour, not its muted one: muted
     measures under 4.5:1 on these surfaces and this page uses the variable for
     whole sentences.
+
+    What each hue means, as in AUP: teal (`--accent`) is INTERACTIVE — the
+    primary action, a link, the current tab — and is never a status ground.
+    Green (`--ok`) is an outcome, on the result it belongs to. Amber
+    (`--warn`) asks to be noticed; red (`--bad`) is danger or failure.
   */
   color-scheme: dark;
 
-  --bg: #0b0d10;            /* --color-bg-canvas */
-  --surface: #12151a;       /* --color-bg-panel */
-  --surface-2: #1a1e26;     /* --color-bg-raised */
-  --overlay: #1d222b;       /* --color-bg-overlay */
-  --inset: #0e1116;         /* --color-bg-inset */
+  --bg: #07090c;            /* --color-bg-canvas: the page, behind everything */
+  --surface: #0b0d10;       /* --color-bg-panel: every docked surface */
+  --surface-2: #1a1e26;     /* --color-bg-raised: hovered or lifted, inside a panel */
+  --overlay: #1a1e26;       /* --color-bg-overlay: dialogs, menus, the drawer */
+  --inset: #0e1116;         /* --color-bg-inset: a well inside a panel; inputs, code */
   --ink: #e8eaf0;           /* --color-text-primary */
   --ink-muted: #a6adba;     /* --color-text-secondary */
   --ink-faint: #6f7684;     /* --color-text-muted */
   --line: #262b34;          /* --color-separator */
   --line-strong: #333a46;   /* --color-separator-strong */
-  --accent: #4fd1c5;
-  --accent-strong: #7ee6dc;
+  --accent: #4fd1c5;        /* --color-accent */
+  --accent-strong: #7ee6dc; /* --color-accent-strong */
   --accent-soft: rgb(79 209 197 / .14);
-  --accent-ink: #0b0d10;
-  --ok: #6fd08c;
+  --accent-ink: #07090c;    /* text on a filled accent: the canvas, as AUP's .btn-primary:hover */
+  --ok: #6fd08c;            /* --color-success */
   --ok-soft: rgb(111 208 140 / .14);
-  --warn: #f5a524;
+  --warn: #f5a524;          /* --color-warning / --color-amber */
   --warn-soft: rgb(245 165 36 / .14);
-  --bad: #f36a5a;
-  --bad-soft: rgb(243 106 90 / .14);
-  --focus: #7ee6dc;
+  --bad: #ef4b57;           /* --color-danger */
+  --bad-soft: rgb(239 75 87 / .14);
+  --focus: #7ee6dc;         /* --color-focus */
 
   --radius: 4px;            /* --radius-sm: every control */
   --radius-panel: 8px;      /* --radius-md: panels and dialogs */
   --shadow-lg: 0 12px 32px rgb(0 0 0 / .55);
-  --gap: 0.75rem;
-  --font: "Inter", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-display: "Inter", "Trebuchet MS", system-ui, sans-serif;
-  --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", "Segoe UI Mono", monospace;
+  --space-1: 4px;           /* AUP's spacing rhythm, by the same names */
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --gap: var(--space-3);
+  --text-xs: .72rem;        /* AUP's type scale, by the same names */
+  --text-sm: .8125rem;
+  --text-base: .9rem;
+  --text-md: 1rem;
+  --text-lg: 1.15rem;
+  --control-height: 30px;   /* one height for a select, a field and a button in a row */
+  --font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;  /* --font-ui */
+  --font-display: var(--font);
+  --mono: ui-monospace, "Cascadia Mono", "Segoe UI Mono", "JetBrains Mono", monospace;
 }
 
 * { box-sizing: border-box; }
@@ -78,7 +97,7 @@ main, .activity { overflow-wrap: break-word; }
 body {
   margin: 0;
   font-family: var(--font);
-  font-size: 15px;
+  font-size: var(--text-base);
   line-height: 1.45;
   color: var(--ink);
   background: var(--bg);
@@ -86,10 +105,10 @@ body {
 }
 
 h1, h2, h3, h4 { font-family: var(--font-display); font-weight: 600; letter-spacing: -.01em; }
-h1 { font-size: 1.15rem; margin: 0; }
-h2 { font-size: 1.35rem; margin: 0 0 0.25rem; }
-h3 { font-size: 1.02rem; margin: 0; }
-h4 { font-size: 0.94rem; margin: 1rem 0 0.35rem; }
+h1 { font-size: 1.05rem; margin: 0; }
+h2 { font-size: var(--text-lg); margin: 0 0 0.25rem; }
+h3 { font-size: var(--text-md); margin: 0; }
+h4 { font-size: var(--text-base); margin: 1rem 0 0.35rem; }
 
 .muted { color: var(--ink-muted); }
 .hint { color: var(--ink-muted); font-weight: normal; font-size: 0.85em; }
@@ -136,7 +155,7 @@ a:hover { color: var(--accent-strong); text-decoration-color: currentColor; }
 .app-header {
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
   gap: var(--gap);
-  padding: 0.75rem 1rem;
+  padding: var(--space-2) var(--space-4);
   background: var(--surface);
   border-bottom: 1px solid var(--line);
 }
@@ -171,19 +190,24 @@ a:hover { color: var(--accent-strong); text-decoration-color: currentColor; }
 .auth-dialog__form { display: grid; gap: 0.75rem; }
 .auth-dialog__form .field { min-width: 0; }
 .auth-dialog__foot { margin: 0; border-top: 1px solid var(--line); padding-top: 0.5rem; font-size: 0.8125rem; }
-.notice { border-left: 3px solid var(--accent); }
+.panel.notice { border-left: 3px solid var(--line-strong); }
 details.more { display: inline-block; }
 details.more > summary { cursor: pointer; color: var(--ink-muted); font-size: 0.8125rem; padding: .4rem .5rem; list-style: none; }
 details.more > summary::after { content: " ▾"; }
 details.more[open] > summary { color: var(--accent-strong); }
 details.more > button { margin-top: 0.35rem; }
 
-/* The account button: AUP's COLLABORATE shape — a status, a word, a caret. */
+/* Profiles to sync (NEW_508): a chip in the header ONLY while there is
+   something to sync — a dot, the action and the count. There is no "Synced"
+   state to draw: in sync, the chip is not there. */
 .account-menu { position: relative; }
-.account-button { display: inline-flex; align-items: center; gap: 0.45rem; }
-.account-button .caret { color: var(--ink-faint); font-size: 0.7rem; }
+.account-menu:has(> .sync-chip[hidden]) { display: none; }
+.sync-chip {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  background: var(--accent-soft); border-color: var(--accent); color: var(--accent-strong);
+}
+.sync-chip:hover:not(:disabled) { background: var(--accent); color: var(--accent-ink); }
 .status-dot { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--ink-faint); flex-shrink: 0; }
-.status-dot.synced { background: var(--ok); }
 .status-dot.pending { background: var(--warn); }
 .status-dot.conflict { background: var(--bad); }
 .status-dot.offline { background: var(--ink-faint); box-shadow: inset 0 0 0 1px var(--line-strong); }
@@ -199,28 +223,24 @@ details.more > button { margin-top: 0.35rem; }
 .menu [role="menuitem"]:hover:not(:disabled), .menu [role="menuitem"]:focus-visible { background: var(--surface-2); color: var(--accent-strong); }
 .menu-note { margin: 0.2rem 0.6rem 0.4rem; font-size: 0.8125rem; color: var(--ink-muted); }
 .menu-note + .menu-note { border-bottom: 1px solid var(--line); padding-bottom: 0.5rem; }
-.reconnect-banner {
-  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--gap);
-  padding: 0.6rem 1rem; background: var(--accent-soft); border-bottom: 1px solid var(--accent);
-}
-.reconnect-banner p { margin: 0; }
-/* Operational notices: the reconnect banner's compact shape, one row per
-   notice, the severity carried by the left rule and a word, never colour alone. */
-.notice-banner { border-bottom: 1px solid var(--line); background: var(--surface); }
-.notice-list { list-style: none; margin: 0; padding: 0; }
+/* Operational notices are entries in Activity (NEW_508; they were a strip
+   under the header). One row per notice on the drawer's neutral ground: the
+   severity is a word and a left rule, never a filled band. */
+.notice-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
 .notice {
-  display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem var(--gap);
-  padding: 0.5rem 1rem; border-left: 3px solid var(--accent); background: var(--accent-soft);
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3);
+  padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-left: 3px solid var(--line-strong);
+  border-radius: var(--radius); background: var(--surface);
 }
-.notice + .notice { border-top: 1px solid var(--line); }
-.notice--critical { border-left-color: var(--bad); background: var(--bad-soft); }
-.notice--maintenance, .notice--warning { border-left-color: var(--warn); background: var(--warn-soft); }
-.notice__severity { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-muted); }
+.notice--critical { border-left-color: var(--bad); }
+.notice--maintenance, .notice--warning { border-left-color: var(--warn); }
+.notice__severity { font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-muted); }
+.notice--critical .notice__severity { color: var(--bad); }
 .notice__title { margin: 0; font-weight: 600; }
-.notice__when { font-size: 0.8125rem; color: var(--ink-muted); }
-.notice__body { flex-basis: 100%; margin: 0; white-space: pre-line; font-size: 0.875rem; }
+.notice__when { font-size: var(--text-sm); color: var(--ink-muted); }
+.notice__body { flex-basis: 100%; margin: 0; white-space: pre-line; font-size: var(--text-sm); }
 .notice__dismiss { margin-left: auto; }
-.notice-limit { margin: 0; padding: 0.25rem 1rem 0.4rem; font-size: 0.75rem; color: var(--ink-faint); }
+.notice-limit { margin: var(--space-1) 0 0; font-size: var(--text-xs); color: var(--ink-faint); }
 .sync-dialog { width: min(40rem, 100%); }
 .auth-dialog__help { margin: 0; padding-left: 1.1rem; display: grid; gap: 0.3rem; font-size: 0.8125rem; color: var(--ink-muted); }
 /* AUP's tab treatment (AUG's `.auth-dialog__tabs [role=tab]`): transparent,
@@ -463,75 +483,60 @@ fieldset { min-width: 0; }
 .build-chosen { margin: 0.25rem 0 0.75rem; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem 0.75rem; }
 .build-chosen__name { font-size: 1.15rem; font-weight: 600; color: var(--ink); }
 .build-chosen__detail { font-size: 0.9rem; color: var(--ink-muted); }
+/* A page from an earlier start of the Companion (NEW_508): a small card over
+   the bottom corner, out of the page's flow, so it takes no room and pushes
+   nothing. It was a full-width bar. Above the drawer and under a dialog. */
 .stale-page {
-  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--gap);
-  padding: 0.6rem 1rem; background: var(--warn-soft); border-bottom: 1px solid var(--warn); color: var(--ink);
+  position: fixed; inset-block-end: var(--space-4); inset-inline-end: var(--space-4); z-index: 60;
+  inline-size: min(22rem, calc(100vw - 2 * var(--space-4)));
+  display: grid; gap: var(--space-2); justify-items: start;
+  padding: var(--space-3) var(--space-4);
+  background: var(--overlay); color: var(--ink);
+  border: 1px solid var(--warn); border-radius: var(--radius-panel); box-shadow: var(--shadow-lg);
 }
-.stale-page p { margin: 0; }
-.notice p { margin: 0 0 0.5rem; }
+.stale-page p { margin: 0; font-size: var(--text-sm); }
+.panel.notice p { margin: 0 0 0.5rem; }
 
 /* The sidebar column is painted by the body, full height, so its background
    and its edge do not stop where the (sticky) navigation's own box ends. */
 .app-body {
   display: flex; align-items: flex-start; gap: 0;
-  --sidebar: 13.5rem;
+  --sidebar: 11.5rem;
   background: linear-gradient(to right, var(--surface) var(--sidebar), var(--line) var(--sidebar),
     var(--line) calc(var(--sidebar) + 1px), transparent calc(var(--sidebar) + 1px));
   min-height: calc(100vh - 7rem);
 }
 
 /*
-  The sidebar (operator, 2026-09-22): Build & Run stands alone at the top as
-  the program's main journey — larger, framed, with its own line of what it
-  does — and every other area is a sub-action beneath it, lighter and smaller,
-  in three titled groups. The current area always carries the left bar as well
-  as the colour, so it reads without colour too.
+  The sidebar (NEW_508): one flat list in task order, compact, so the height
+  is the page's. Build & Run is first and a step heavier — it is what the
+  program is for — and is no longer a framed card with a tagline. The current
+  area carries the left bar as well as the colour, so it reads without colour.
 */
 .areas {
   flex: 0 0 var(--sidebar);
-  display: flex; flex-direction: column; gap: 1.1rem;
-  padding: 0.85rem 0.65rem 1.25rem;
+  padding: var(--space-3) var(--space-2) var(--space-4);
   border-right: 1px solid var(--line);
   background: var(--surface);
   position: sticky; top: 0; align-self: flex-start;
 }
-.areas ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.1rem; }
+.areas ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
 .areas li { margin: 0; }
+.areas li:has(> [hidden]) { display: none; }
 .area-tab {
   display: block; width: 100%; text-align: left;
-  background: transparent; color: var(--ink);
-  border: 1px solid transparent; border-radius: var(--radius);
-  font: inherit; cursor: pointer;
+  padding: 0.4rem var(--space-3);
+  background: transparent; color: var(--ink-muted);
+  border: 0; border-left: 2px solid transparent; border-radius: 0 var(--radius) var(--radius) 0;
+  font: inherit; font-size: var(--text-sm); font-weight: 500; cursor: pointer;
+  overflow-wrap: anywhere;
 }
-.area-tab--main {
-  display: grid; gap: 0.2rem;
-  padding: 0.8rem 0.85rem;
-  border: 1px solid var(--line-strong); border-radius: var(--radius-panel);
-  background: var(--surface-2);
-}
-.area-tab__label { font-family: var(--font-display); font-size: 1.08rem; font-weight: 700; letter-spacing: -.01em; }
-.area-tab--main .tab-note { font-size: 0.78rem; color: var(--ink-muted); }
-.area-tab--main:hover { border-color: var(--accent); background: var(--overlay); }
-.area-tab--main[aria-current="page"] {
-  background: var(--accent-soft); border-color: var(--accent); color: var(--accent-strong);
-  box-shadow: inset 4px 0 0 var(--accent);
-}
-.area-tab--main[aria-current="page"] .tab-note { color: var(--ink); }
-.areas-group__title {
-  margin: 0 0 0.3rem; padding: 0 0.6rem;
-  font-size: 0.68rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
-  color: var(--ink-faint);
-}
-.area-tab--sub {
-  padding: 0.38rem 0.6rem 0.38rem 0.75rem;
-  font-size: 0.875rem; font-weight: 500; color: var(--ink-muted);
-  border-left: 2px solid transparent; border-radius: 0 var(--radius) var(--radius) 0;
-}
-.area-tab--sub:hover { color: var(--ink); background: var(--surface-2); }
-.area-tab--sub[aria-current="page"] {
+.area-tab:hover:not(:disabled) { color: var(--ink); background: var(--surface-2); border-color: transparent; }
+.area-tab[aria-current="page"], .area-tab[aria-current="page"]:hover:not(:disabled) {
   color: var(--accent-strong); background: var(--accent-soft); border-left-color: var(--accent); font-weight: 600;
 }
-.tab-note { display: block; font-weight: normal; font-size: 0.78rem; color: var(--ink-muted); }
+.area-tab--main { color: var(--ink); font-weight: 600; font-size: var(--text-base); margin-bottom: var(--space-1); }
+.area-tab--child { padding-inline-start: var(--space-5); font-size: var(--text-xs); }
 
 main { flex: 1 1 auto; padding: 1rem 1.25rem 3rem; min-width: 0; }
 .area-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--gap); }
@@ -785,14 +790,14 @@ button.link {
   .app-body { flex-direction: column; align-items: stretch; background: none; min-height: 0; }
   .areas {
     flex: none; width: 100%; border-right: none; border-bottom: 1px solid var(--line); min-height: 0;
-    position: static; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.75rem; padding: 0.6rem;
+    position: static; padding: var(--space-2);
   }
-  .area-tab--main { flex: 1 1 100%; }
-  .areas-group { display: flex; align-items: center; gap: 0.35rem; }
-  .areas-group__title { display: none; }
-  .areas ul { display: flex; flex-wrap: wrap; gap: 0.25rem; }
-  .area-tab--sub { border-left: none; border-bottom: 2px solid transparent; border-radius: var(--radius); }
-  .area-tab--sub[aria-current="page"] { border-bottom-color: var(--accent); }
+  .areas ul { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+  .area-tab, .area-tab--main, .area-tab--child {
+    width: auto; margin: 0; padding: 0.35rem var(--space-2); font-size: var(--text-sm);
+    border-left: 0; border-bottom: 2px solid transparent; border-radius: var(--radius);
+  }
+  .area-tab[aria-current="page"] { border-bottom-color: var(--accent); }
   main { padding: 0.85rem; }
   .cards { grid-template-columns: 1fr; }
   .paths { grid-template-columns: 1fr; }
@@ -1016,32 +1021,59 @@ ol.numbered { list-style: none; padding-inline-start: 0; }
 }
 
 
-/* --- The header's icon buttons: the cog and the help bubble ------------------
-   AUG's `.site-icon-button` and AUP's `.icon-button` / `HelpBubble`, with the
-   Tabler glyphs inlined (the page loads nothing from anywhere else). */
-.account { flex-wrap: wrap; justify-content: flex-end; }
+/* --- The header's utilities: Activity, Settings, Account (NEW_508) -----------
+   Each is its glyph AND its name — a cog and a head alone had to be guessed —
+   in AUP's quiet button: no fill at rest, the raised ground on hover, the
+   accent only while its menu or the drawer is open. Tabler glyphs, inlined
+   (the page loads nothing from anywhere else). Below 46rem the names fold
+   away and the glyphs keep their accessible names. */
+.account { flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
 .site-settings { position: relative; flex: 0 0 auto; }
-.site-icon-button {
-  display: inline-grid; place-items: center; inline-size: 36px; block-size: 36px; padding: 0;
-  background: transparent; border-color: transparent; color: var(--ink-muted);
+.util-button {
+  display: inline-flex; align-items: center; gap: var(--space-2); min-block-size: var(--control-height);
+  padding: 0.3rem var(--space-2);
+  background: transparent; border-color: transparent; color: var(--ink-muted); white-space: nowrap;
 }
-.site-icon-button:hover:not(:disabled) { color: var(--ink); background: var(--overlay); border-color: transparent; }
-.site-icon-button[aria-expanded="true"] { color: var(--accent-strong); border-color: var(--accent); }
-.icon-button--sm { inline-size: 28px; block-size: 28px; display: inline-grid; place-items: center; padding: 0; color: var(--ink-muted); border-radius: var(--radius); }
-.icon-button--sm:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); border-color: transparent; }
-.icon-button--sm[aria-expanded="true"] { color: var(--accent-strong); }
-.help-bubble { position: relative; display: inline-flex; margin-left: -0.5rem; }
-.help-bubble__panel {
-  position: absolute; z-index: 160; inset-block-start: calc(100% + 4px); inset-inline-end: 0;
-  inline-size: min(24rem, 90vw); padding: 0.75rem 0.9rem;
-  background: var(--overlay); border: 1px solid var(--line-strong);
-  border-radius: var(--radius-panel); box-shadow: var(--shadow-lg);
-  font-size: 0.85rem; line-height: 1.5;
-  animation: tooltip-in 180ms cubic-bezier(.2,.6,.2,1);
+.util-button:hover:not(:disabled) { color: var(--ink); background: var(--surface-2); border-color: transparent; }
+.util-button[aria-expanded="true"] { color: var(--accent-strong); border-color: var(--accent); }
+.util-button svg { flex: 0 0 auto; }
+/* The count beside Activity: a number when an entry wants the person, the
+   word "running" while work goes on, and nothing at all otherwise. */
+.pill {
+  display: inline-block; min-inline-size: 1.25rem; padding: 0 0.4rem; border-radius: 999px;
+  font-size: var(--text-xs); font-weight: 600; line-height: 1.5; text-align: center;
+  background: var(--surface-2); color: var(--ink-muted);
 }
-.help-bubble__panel p { margin: 0 0 0.5rem; }
-.help-bubble__panel p:last-child { margin: 0; }
+.pill--wants { background: var(--accent); color: var(--accent-ink); }
+@media (max-width: 46rem) {
+  .util-button__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
 @keyframes tooltip-in { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: translateY(0); } }
+
+/* --- Activity's entries (NEW_508) ---------------------------------------------
+   What used to be strips under the header. Each entry is a bordered row on the
+   drawer's ground: a title, a line of what, and its one action. */
+.activity-items { display: grid; gap: var(--space-2); }
+.activity-requests { display: grid; gap: var(--space-2); }
+.activity-item {
+  display: grid; gap: var(--space-1); padding: var(--space-3);
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+}
+.activity-item p { margin: 0; }
+.activity-item__title, .activity-item h3 { font-size: var(--text-base); font-weight: 600; }
+.activity-item__what { font-size: var(--text-sm); color: var(--ink-muted); }
+.activity-item--action { text-align: left; font-weight: 600; color: var(--accent-strong); border-color: var(--accent); background: var(--accent-soft); }
+.activity-item.notice-banner { padding: 0; border: 0; background: none; }
+.activity-section { margin: var(--space-2) 0 0; font-size: var(--text-xs); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-faint); }
+.activity-items[hidden] + .activity-section { display: none; }
+.sync-permissions { margin: 0; padding-left: 1.1rem; font-size: var(--text-sm); color: var(--ink-muted); }
+/* A service notice that stops what an area is for, said in that area. */
+.service-blocker {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3);
+  margin: 0 0 var(--space-4); padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line); border-left: 3px solid var(--bad); border-radius: var(--radius); background: var(--surface);
+  font-size: var(--text-sm);
+}
 .menu-field { display: grid; gap: 0.3rem; padding: 0.5rem 0.6rem 0.35rem; border-top: 1px solid var(--line); margin-top: 0.25rem; }
 .menu-field label { font-size: 0.75rem; color: var(--ink-muted); font-weight: 500; }
 
@@ -1364,8 +1396,6 @@ main { padding: 1.25rem 1.75rem 3rem; }
 .wad-menu__list { margin: 0; padding: 0.2rem 0.6rem 0.2rem 1.4rem; list-style: disc; font-family: var(--mono); font-size: 0.78rem; color: var(--ink); }
 .wad-menu__list li { padding: 0.1rem 0; }
 
-/* A sub-item under a side-menu entry (Builds on this machine under Build). */
-.area-tab--child { padding-inline-start: 1.6rem; font-size: 0.82rem; }
 
 /* --- live output (NEW_265) ------------------------------------------------
    One view for the Jobs page and the Activity drawer: a bounded scrollable
@@ -1447,20 +1477,30 @@ main { padding: 1.25rem 1.75rem 3rem; }
 .q3pkg-facts dd { margin: 0; overflow-wrap: anywhere; }
 .q3pkg label.check { display: flex; gap: 0.5rem; align-items: center; margin: 0.5rem 0; }
 
-/* The editor's leak-test request, above every area (leakrequest.js). The
-   service-notice treatment: an accent rule and the soft accent ground. */
-.leak-request {
-  display: grid; gap: 0.25rem; padding: 0.75rem 1rem;
-  border-bottom: 1px solid var(--line); border-left: 3px solid var(--accent); background: var(--accent-soft);
+/* The editor's requests, at the top of Build & Run (leakrequest.js,
+   buildrequest.js; NEW_508: they were an accent-filled strip above every
+   area). A card on the panel ground, as wide as the form it sits over: the
+   accent is on its one primary button, not on its background. */
+.request-card {
+  display: grid; gap: var(--space-1); max-inline-size: 78rem;
+  padding: var(--space-3) var(--space-4); margin: 0 0 var(--space-4);
+  background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius-panel);
 }
-.leak-request p { margin: 0; }
+.request-card p { margin: 0; }
 .leak-request__title { font-weight: 600; }
-.leak-request__what { font-size: 0.875rem; }
-.leak-request__state { font-size: 0.875rem; color: var(--ink-muted); }
-.leak-request .row-actions { margin-top: 0.4rem; }
+.leak-request__what { font-size: var(--text-sm); }
+.leak-request__state { font-size: var(--text-sm); color: var(--ink-muted); }
+.request-card .row-actions { margin-top: var(--space-2); }
 .leak-outcome { display: grid; gap: 0.4rem; justify-items: start; }
 .leak-outcome p { margin: 0; }
-.leak-verdict { font-weight: 600; }
+/* The result at a glance, then how the Companion knows (NEW_508). A leak is a
+   result, so it is amber, not the failure red; only a test that could not
+   finish is red, and green is on a confirmed "no leak" alone. */
+.leak-headline { font-size: var(--text-lg); font-weight: 600; }
+.leak-outcome--sealed .leak-headline { color: var(--ok); }
+.leak-outcome--leak .leak-headline { color: var(--warn); }
+.leak-outcome--failed .leak-headline { color: var(--bad); }
+.leak-verdict { font-size: var(--text-sm); color: var(--ink-muted); }
 
 /* Execution entries stay visible while their setup is incomplete. */
 option:disabled { color: var(--ink-faint); }
@@ -1535,7 +1575,7 @@ option:disabled { color: var(--ink-faint); }
 
 /* Build tools the Companion installs and updates itself (NEW_367, tools.js).
    The setup card is compact: one line per tool, the details on demand. */
-.tools-setup { margin: 0.75rem 1rem; display: grid; gap: 0.4rem; }
+.tools-setup { display: grid; gap: var(--space-2); }
 .tools-setup h3 { margin: 0; }
 .tools-setup .row:has(> button[hidden]:only-child), .tools-setup .message:empty { display: none; }
 .tools-list { display: grid; gap: 0.35rem; margin: 0; padding: 0; list-style: none; }

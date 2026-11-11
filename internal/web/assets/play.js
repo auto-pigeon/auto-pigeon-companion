@@ -1871,11 +1871,13 @@
     poll();
   }
 
-  function closeActivity() {
+  function closeActivity({ focus = true } = {}) {
     $("activity").hidden = true;
     $("activity-open").setAttribute("aria-expanded", "false");
-    $("activity-open").focus();
+    if (focus) $("activity-open").focus();
   }
+  window.AUCOM.openActivity = openActivity;
+  window.AUCOM.closeActivity = closeActivity;
 
   function watch(id) {
     watching = id;
@@ -1912,8 +1914,10 @@
       }
       renderPrimary();
     }
-    $("activity-open").hidden = !(body.items || []).length;
-    $("activity-count").textContent = active ? "running" : "";
+    // The header's Activity button is always there (NEW_508); what it says
+    // beside its name is counted in one place, app.js `activityBadge`.
+    window.AUCOM.activityRuns = { active, any: Boolean((body.items || []).length) };
+    window.AUCOM.activityBadge?.();
     // Polled rather than streamed: one small request a second while something
     // is running, and a slow one while nothing is. A server-sent stream would
     // be a second transport for a page that already has one.

@@ -350,9 +350,25 @@
     } else {
       // Never done for anybody: the digest of the document as it is now goes
       // back with it, and the server refuses one that is not on disk.
-      status.textContent = t("Not approved on this machine yet. Read what it asks for above, then approve it.");
+      // Two different situations, said apart (NEW_508, issue #3). A profile
+      // nobody approved here yet; and one that WAS set up here and has since
+      // changed — an update, an edit, a newer version from the account. The
+      // second used to read like the first, or like a folder that was never
+      // chosen; what was chosen for the earlier version is still recorded and
+      // is kept by the approval (the bind handlers carry the paths over).
+      const bound = body.binding;
+      const changed = Boolean(bound?.profile_digest) && bound.profile_digest !== body.digest;
+      const kept = changed && (Object.keys(bound.executables || {}).length || Object.keys(bound.roots || {}).length);
+      status.textContent = changed
+        ? (bound.profile_version && bound.profile_version !== body.version
+          ? t("This profile changed since you set it up here (version {from} → {to}).", { from: bound.profile_version, to: body.version })
+          : t("This profile changed since you set it up here.")) + " " +
+          (kept ? t("The folders and programs you chose are kept.") + " " : "") +
+          t("Read what it asks for now, then approve this version.")
+        : t("Not approved on this machine yet. Read what it asks for above, then approve it.");
       status.className = "message error";
-      const approve = el("button", { text: t("I have read this — approve it"), attrs: { type: "button", class: "primary" } });
+      if (changed) status.dataset.changed = "1";
+      const approve = el("button", { text: changed ? t("Approve this version") : t("I have read this — approve it"), attrs: { type: "button", class: "primary" } });
       approve.addEventListener("click", () =>
         withBusy(approve, async () => {
           const { ok, body: out } = await api(`/api/v1/profiles/${encodeURIComponent(body.id)}/grant`, {

@@ -1,4 +1,5 @@
-// The editor's build request, shown above every area.
+// The editor's build request, shown at the top of Build & Run (NEW_508: it was
+// a strip above every area; from another area Activity has the way back).
 //
 // The editor's Build button opens `autopigeon://build/request/<id>`, and the
 // link only RECORDS the request on this machine. This file watches for one from
@@ -81,7 +82,9 @@
       state.textContent = t("Checking the request with your account…");
     } else if (details.body.sign_in_required) {
       state.textContent = t("Sign in to the account the editor uses. The Companion cannot read this request while signed out.");
-      actions.append(button(t("Sign in"), "primary", async () => window.AUCOM.openSignIn?.()));
+      // Dismiss too (NEW_508): signed out, the request cannot go anywhere, and
+      // a card nobody can remove would be counted in Activity until it expired.
+      actions.append(dismiss(), button(t("Sign in"), "primary", async () => window.AUCOM.openSignIn?.()));
     } else if (details.ok && details.body.not_found) {
       // AUB says unknown, expired, another account's and an unreadable map
       // alike, on purpose; so does this.
@@ -154,7 +157,7 @@
     reading = true;
     const { ok, body } = await api("/api/v1/build-request/request");
     reading = false;
-    if (!ok) return; // The local server is away; the stale-page banner says so.
+    if (!ok) return; // The local server is away; the stale-page card says so.
     if (!body.pending) { if (seen) forget(); return; }
     if (!seen || !sameRequest(body, seen)) {
       if (seen) forget();
@@ -163,6 +166,7 @@
       details = reviewing = null;
       render();
       record(body.run_after ? t("Build & Run requested by the editor") : t("Build requested by the editor"), "", "running");
+      window.AUCOM.requestArrived?.(body);
     } else if ((body.relay?.state || "") !== (seen.relay?.state || "")) {
       seen = body;
       render();

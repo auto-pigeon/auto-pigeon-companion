@@ -438,6 +438,16 @@
     } else {
       note.textContent = t("Its game folder: {folder}", { folder: engine.game_root });
     }
+    // The folder this line names is the one Install writes to. When it is not
+    // the folder last shown for this engine — the engine was bound again, in
+    // Profiles, another window or a terminal — an install preview made for the
+    // old one is about somewhere else, and goes (NEW_508, issue #2).
+    const shownKey = engine.id + "\n" + (engine.game_root || "");
+    if (state.shownRoot && state.shownRoot !== shownKey && state.shownRoot.startsWith(engine.id + "\n") && !state.installation) {
+      $("q3pkg-install-out").replaceChildren();
+      setMessage("q3pkg-install-message", "");
+    }
+    state.shownRoot = shownKey;
     $("q3pkg-install").disabled = !engineReady(engine);
     $("q3pkg-install-preview").disabled = !engineReady(engine);
     window.AUCOM.executionChoices(actions, engine.actions || [], previousAction, actionReady,
@@ -486,6 +496,21 @@
   async function install(button, previewOnly) {
     if (!state.pkg || !engineReady(currentEngine())) return;
     await withBusy(button, async () => {
+      // The binding is read again before anything is checked or written: the
+      // list this page holds may be from before the engine was bound to
+      // another folder (NEW_508, issue #2). A preview simply answers for the
+      // folder that is true now. An Install whose folder is not the one the
+      // page was showing stops, shows the new one and waits for a second
+      // press — nobody installs into a folder they have not read.
+      const before = state.shownRoot;
+      await refreshEngines();
+      if (!engineReady(currentEngine())) return;
+      if (!previewOnly && before && state.shownRoot !== before) {
+        setMessage("q3pkg-install-message", t("This engine's game folder changed to {folder}. Nothing was written. Check it, then press Install again.",
+          { folder: currentEngine().game_root }), "error");
+        $("q3pkg-engine-note").focus?.();
+        return;
+      }
       busy("q3pkg-install-message", previewOnly ? t("Checking where it would go…") : t("Installing…"));
       const response = await api(previewOnly ? state.api + "/installs/preview" : state.api + "/installs",
         { method: "POST", body: installBody() });
@@ -803,5 +828,13 @@
   }
 
   wire();
+  // Back from Profiles, another window or a terminal where the engine may
+  // have been bound to another folder: the line under the engine is read
+  // again, so it names where Install writes NOW (NEW_508, issue #2).
+  const rereadEngines = () => {
+    if (state && !document.hidden && !$("q3pkg-step-install").hidden && $("q3pkg-step-install").checkVisibility?.() !== false) refreshEngines();
+  };
+  window.addEventListener("focus", rereadEngines);
+  document.addEventListener("visibilitychange", rereadEngines);
   window.AUCOM.q3package = { show };
 })();

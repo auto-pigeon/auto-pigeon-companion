@@ -153,7 +153,7 @@
       query.set("map", asset.asset_id);
       window.location.assign("?" + query.toString() + "#play");
     });
-    const download = el("button", { text: t("Download"), attrs: { type: "button", class: "secondary" } });
+    const download = el("button", { text: t("Download revision"), attrs: { type: "button", class: "secondary" } });
     download.disabled = !revision;
     download.addEventListener("click", () =>
       withBusy(download, () => downloadRevision(asset, revision || {}, "current", status, download))
@@ -325,7 +325,7 @@
       : t("Downloaded ({size}). It is ready to build.", { size: bytes(body.bytes_fetched) });
     setMessage(status, summary, "ok");
     cachedKeys.add(body.key);
-    if (button) button.textContent = "Download again";
+    if (button) button.textContent = t("Download again");
     record(`Downloaded ${nameOf(asset)}, revision ${body.record.revision}`, "", "ok");
     await refreshCached();
     chooseRevision(asset, body.record, body.key);

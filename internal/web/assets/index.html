@@ -14,7 +14,7 @@
     <!-- The Auto-Pigeon mark, the same file AUG and AUP show (see internal/web/brand_test.go). -->
     <link rel="icon" type="image/png" href="brand/auto-pigeon-long-tail-transparent-no-padding-128x128.png" />
     <meta name="color-scheme" content="dark" />
-    <meta name="theme-color" content="#0b0d10" />
+    <meta name="theme-color" content="#07090c" />
     <link rel="stylesheet" href="app.css" />
   </head>
   <body>
@@ -28,50 +28,32 @@
         <h1 class="brand-name"><img class="brand-mark" src="brand/auto-pigeon-long-tail-transparent-no-padding-128x128.png" alt="" aria-hidden="true" draggable="false" width="128" height="128" />Auto-Pigeon Companion</h1>
       </div>
       <div class="account">
-        <!-- In the header, not floating over the page: fixed to the corner it
-             sat on top of every step's primary button (246I1.1, seen live). -->
-        <!-- An update offer that waited for a safe moment (NEW_368): never a
-             dialog over a review or another dialog, so it waits here. -->
-        <button type="button" id="tools-update-badge" class="activity-open" hidden>Updates available</button>
-        <button type="button" id="activity-open" class="activity-open" hidden aria-expanded="false" aria-controls="activity">
-          Activity <span id="activity-count" class="pill"></span>
+        <!-- Utilities, top right (NEW_508): Activity, Settings and Account, each with
+             its name beside its icon. Nothing here is a status: a connected,
+             installed, up-to-date Companion shows three quiet buttons and no more. -->
+        <!-- Profiles that differ between this computer and the account: shown
+             only while there is something to sync (or a conflict), never as a
+             standing "Synced". Pressing it opens the review. account.js. -->
+        <div class="account-menu" id="account-menu" hidden>
+          <button type="button" id="account-button" class="sync-chip" hidden>
+            <span class="status-dot" id="account-dot" aria-hidden="true"></span>
+            <span id="account-label">Sync profiles</span>
+          </button>
+        </div>
+        <!-- Activity: background work, links from the editor, service notices
+             and tool updates, in one place. Always here; the count says how
+             many entries want something from the person. -->
+        <button type="button" id="activity-open" class="util-button" aria-expanded="false" aria-controls="activity">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3 8l4 -16l3 8h4"/></svg>
+          <span class="util-button__label">Activity</span>
+          <span id="activity-count" class="pill" hidden></span>
         </button>
         <button type="button" id="sign-in-open" class="primary" hidden>Sign in</button>
-        <!--
-          The account button (NEW_244D, operator): shown only once signed in,
-          like AUP's COLLABORATE — it says whether this machine can reach the
-          account and whether its profiles are in sync, and its menu is where
-          "Sync to cloud" lives. See account.js and internal/web/account.go.
-        -->
-        <div class="account-menu" id="account-menu" hidden>
-          <button type="button" id="account-button" class="account-button" aria-haspopup="menu" aria-expanded="false" aria-controls="account-dropdown">
-            <span class="status-dot" id="account-dot" aria-hidden="true"></span>
-            <span id="account-label">Checking…</span>
-            <span class="caret" aria-hidden="true">▾</span>
-          </button>
-          <div class="menu" id="account-dropdown" role="menu" hidden>
-            <p class="menu-note" id="account-sync-note"></p>
-            <button type="button" role="menuitem" id="account-sync">Sync to cloud…</button>
-            <button type="button" role="menuitem" id="account-check">Check connection</button>
-          </div>
-        </div>
-        <!-- What "Sync needed" means, in plain words: AUP's HelpBubble, a
-             circled question mark that opens a small panel on click. -->
-        <span class="help-bubble" id="sync-help" hidden>
-          <button type="button" class="icon-button icon-button--sm" id="sync-help-button" aria-label="What is sync?" title="What is sync?" aria-expanded="false" aria-controls="sync-help-panel">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/><path d="M12 16v.01"/><path d="M12 13a2 2 0 0 0 .914 -3.782a1.98 1.98 0 0 0 -2.414 .483"/></svg>
-          </button>
-          <div class="help-bubble__panel" id="sync-help-panel" role="group" aria-label="What is sync?" hidden>
-            <p><strong>Sync keeps your profiles the same everywhere.</strong></p>
-            <p>A profile is how the Companion runs one tool or engine. Profiles you write or install can be kept in your Auto-Pigeon account, so every computer you sign in on has the same ones.</p>
-            <p><strong>Sync needed</strong> means some profiles on this computer and in your account are different. Press <strong>Sync to cloud</strong> in this menu to see exactly what would change; nothing is sent or installed until you confirm.</p>
-            <p class="muted">Where programs are installed on this computer, and what you approved here, never leave it.</p>
-          </div>
-        </span>
         <!-- Settings behind a cog, top right, as in AUP and AUG. -->
         <div class="site-settings" id="site-settings">
-          <button type="button" class="site-icon-button" id="settings-button" aria-haspopup="menu" aria-expanded="false" aria-controls="settings-menu" aria-label="Settings" title="Settings">
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065z"/><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/></svg>
+          <button type="button" class="util-button" id="settings-button" aria-haspopup="menu" aria-expanded="false" aria-controls="settings-menu">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065z"/><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/></svg>
+            <span class="util-button__label">Settings</span>
           </button>
           <div class="menu" id="settings-menu" role="menu" hidden>
             <button type="button" role="menuitem" id="settings-open">Settings</button>
@@ -86,13 +68,19 @@
           </div>
         </div>
         <!-- The account, top right, as in AUP and AUG (operator, 2026-09-23):
-             who you are signed in as and where, and signing in or out. -->
+             who you are signed in as and where, signing in or out, and — once
+             signed in — whether this computer's profiles match the account
+             (NEW_508: the difference is worked out when the menu opens). -->
         <div class="site-settings" id="site-account">
-          <button type="button" class="site-icon-button" id="user-button" aria-haspopup="menu" aria-expanded="false" aria-controls="user-menu" aria-label="Account" title="Account">
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/><path d="M9 10a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"/><path d="M6.168 18.849a4 4 0 0 1 3.832 -2.849h4a4 4 0 0 1 3.834 2.855"/></svg>
+          <button type="button" class="util-button" id="user-button" aria-haspopup="menu" aria-expanded="false" aria-controls="user-menu">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/><path d="M9 10a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"/><path d="M6.168 18.849a4 4 0 0 1 3.832 -2.849h4a4 4 0 0 1 3.834 2.855"/></svg>
+            <span class="util-button__label">Account</span>
           </button>
           <div class="menu" id="user-menu" role="menu" hidden>
             <p class="menu-note"><span id="account-signed-out" class="account-email">not signed in</span><span id="account-email" class="account-email"></span><span id="account-server" class="muted"></span></p>
+            <p class="menu-note" id="account-sync-note" hidden></p>
+            <button type="button" role="menuitem" id="account-sync" hidden>Sync profiles…</button>
+            <button type="button" role="menuitem" id="account-check" hidden>Check connection</button>
             <a role="menuitem" id="account-site" target="_blank" rel="noopener noreferrer" hidden>Open Auto-Pigeon</a>
             <button type="button" role="menuitem" id="user-sign-in" hidden>Sign in…</button>
             <button type="button" role="menuitem" id="sign-out">Sign out</button>
@@ -110,86 +98,35 @@
       (NEW_244D). It is dismissible (Close, Escape, the sheet), so nobody is
       trapped in it.
     -->
-    <div id="stale-page" class="stale-page" role="alert" hidden>
-      <p>The Companion has restarted since this page was opened. Reload the page to continue — nothing was lost.</p>
-      <button type="button" id="stale-page-reload" class="primary">Reload</button>
-    </div>
+    <!-- NEW_508: nothing lives between the header and the page any more. The
+         full-width strip that used to sit here — tool setup, service notices,
+         the editor's requests, "back online" and the stale-page bar — took
+         vertical space from every area, including when there was nothing to
+         do. Each now has ONE home: the editor's requests are at the top of
+         Build & Run, beside the map they are about; background work, notices
+         and updates are entries in Activity; profiles to sync is the chip in
+         the header; and a page from an earlier start says so in a small card
+         of its own (bottom of this file). -->
 
-    <!--
-      Operational notices (241): planned maintenance and similar statements the
-      operator published in the Auto-Pigeon server, shown whether or not anybody
-      is signed in. Rendered by notices.mjs as TEXT only, with the shared AULIBS
-      contract (vendor/operational-notice-contract) deciding what is shown and
-      when, from the server's clock rather than this machine's.
-    -->
-    <section id="notice-banner" class="notice-banner" aria-label="Service notices" hidden>
-      <ul id="notice-list" class="notice-list"></ul>
-      <p id="notice-limit" class="notice-limit">
-        Notices announce planned maintenance, and one already shown stays visible while the
-        server is down. They cannot warn about an unplanned outage.
-      </p>
-    </section>
-
-    <!--
-      The editor's leak-test request (leakrequest.js), above every area: a page
-      open on My Maps sees it without a reload. It only offers a review; nothing
-      runs until a person presses Build in the Build area.
-    -->
-    <section id="leak-request" class="leak-request" role="status" aria-live="polite" aria-label="Leak test request" hidden></section>
-
-    <!--
-      The editor's build request (buildrequest.js), above every area: Review build
-      takes it into Build & Run on the exact saved revision. Nothing runs until a
-      person presses Build or Build & Run there.
-    -->
-    <section id="build-request" class="leak-request" role="status" aria-live="polite" aria-label="Build request" hidden></section>
-
-    <!-- Setting up build tools (NEW_367): the Companion installs Auto-Pigeon's
-         own EricW tools and q3map2 on first launch, in the background. One
-         compact card with each tool's real state; the details on demand. It
-         never starts a compiler: what was waiting for setup is checked again
-         and goes back to review. tools.js. -->
-    <section id="tools-setup" class="panel notice tools-setup" role="status" aria-live="polite" aria-labelledby="tools-setup-title" hidden>
-      <h3 id="tools-setup-title">Setting up build tools</h3>
-      <ul id="tools-setup-list" class="rows tools-list"></ul>
-      <div class="row">
-        <button type="button" id="tools-setup-retry" class="secondary" hidden>Retry</button>
-      </div>
-      <p id="tools-setup-message" class="message" role="alert"></p>
-      <details>
-        <summary>Details</summary>
-        <dl id="tools-setup-details" class="paths"></dl>
-      </details>
-    </section>
-
-    <!-- Back online with something to sync: said once, where the person is. -->
-    <div id="reconnect-banner" class="reconnect-banner" role="status" hidden>
-      <p id="reconnect-text"></p>
-      <div class="row-actions">
-        <button type="button" id="reconnect-sync" class="primary">Sync to cloud…</button>
-        <button type="button" id="reconnect-dismiss" class="secondary">Later</button>
-      </div>
-    </div>
-
-    <!-- Sync to cloud: a review first, then the result. Nothing is sent or
-         installed until Sync is pressed in here. -->
+    <!-- Sync profiles: a review first, then the result. Nothing is sent or
+         installed until Sync profiles is pressed in here. -->
     <div id="sync-modal" class="auth-modal" hidden>
       <div class="auth-overlay" data-dismiss="sync"></div>
       <div class="auth-dialog__layer">
         <section id="sync-dialog" class="auth-dialog sync-dialog" role="dialog" aria-modal="true" aria-labelledby="sync-heading">
           <div class="auth-dialog__head">
-            <h2 id="sync-heading">Sync to cloud</h2>
-            <p id="sync-intro">Checking what differs between this computer and your account…</p>
+            <h2 id="sync-heading">Sync profiles</h2>
+            <p id="sync-intro" aria-live="polite"></p>
             <button type="button" id="sync-close" class="auth-dialog__close" aria-label="Close">×</button>
           </div>
-          <ul id="sync-list" class="rows" aria-label="What a sync would do"></ul>
+          <ul id="sync-list" class="rows" aria-label="What Sync profiles would do"></ul>
           <p class="auth-dialog__foot muted">
-            Your own profiles are kept privately in your account. Where programs are on
-            this computer, and what this computer has approved, never leave it.
+            Kept privately in your account. Program paths and approvals stay on this computer.
           </p>
           <div class="row">
-            <button type="button" id="sync-run" class="primary" disabled>Sync</button>
-            <button type="button" id="sync-cancel" class="secondary">Cancel</button>
+            <button type="button" id="sync-run" class="primary" disabled>Sync profiles</button>
+            <button type="button" id="sync-retry" class="secondary" hidden>Retry</button>
+            <button type="button" id="sync-cancel" class="secondary">Close</button>
           </div>
           <p id="sync-message" class="message" role="alert"></p>
         </section>
@@ -333,43 +270,27 @@
             <li id="sign-in-signup"></li>
             <li id="sign-in-reset"></li>
           </ul>
-          <p class="auth-dialog__foot muted">While you are offline you can keep building; sync your profiles when you are back.</p>
+          <p class="auth-dialog__foot muted">Building and running work without an account.</p>
         </section>
       </div>
     </div>
 
     <div class="app-body">
-      <!-- Build & Run is the program's one main journey and stands on its
-           own; everything else is a sub-action, drawn lighter, in three small
-           groups: things to do, things to set up, and what has happened
-           (operator, 2026-09-22). Settings is behind the cog and About is in
-           the footer. -->
+      <!-- One flat list in task order (NEW_508): Build & Run first — it is what
+           the program is for — then the library, running, joining, setup and
+           history. The three group headings ("Actions", "Setup", "History")
+           went: six entries need no chapters. Settings and Account are
+           utilities in the header, and About is in the footer. -->
       <nav class="areas" aria-label="Areas">
-        <button type="button" class="area-tab area-tab--main" data-area="play">
-          <span class="area-tab__label">Build &amp; Run</span>
-          <span class="tab-note">your map, built and in the game</span>
-        </button>
-        <div class="areas-group">
-          <p class="areas-group__title" id="areas-actions">Actions</p>
-          <ul aria-labelledby="areas-actions">
-            <li><button type="button" class="area-tab area-tab--sub" data-area="library">My Maps</button></li>
-            <li><button type="button" class="area-tab area-tab--sub area-tab--child" data-area="builds" id="builds-tab" hidden>Builds on this machine</button></li>
-            <li><button type="button" class="area-tab area-tab--sub" data-area="run">Run</button></li>
-            <li><button type="button" class="area-tab area-tab--sub" data-area="games">Live Games</button></li>
-          </ul>
-        </div>
-        <div class="areas-group">
-          <p class="areas-group__title" id="areas-setup">Setup</p>
-          <ul aria-labelledby="areas-setup">
-            <li><button type="button" class="area-tab area-tab--sub" data-area="profiles">Profiles</button></li>
-          </ul>
-        </div>
-        <div class="areas-group">
-          <p class="areas-group__title" id="areas-history">History</p>
-          <ul aria-labelledby="areas-history">
-            <li><button type="button" class="area-tab area-tab--sub" data-area="jobs">Jobs</button></li>
-          </ul>
-        </div>
+        <ul>
+          <li><button type="button" class="area-tab area-tab--main" data-area="play">Build &amp; Run</button></li>
+          <li><button type="button" class="area-tab" data-area="library">My Maps</button></li>
+          <li><button type="button" class="area-tab area-tab--child" data-area="builds" id="builds-tab" hidden>Builds on this machine</button></li>
+          <li><button type="button" class="area-tab" data-area="run">Run</button></li>
+          <li><button type="button" class="area-tab" data-area="games">Live Games</button></li>
+          <li><button type="button" class="area-tab" data-area="profiles">Profiles</button></li>
+          <li><button type="button" class="area-tab" data-area="jobs">Jobs</button></li>
+        </ul>
       </nav>
 
       <main id="main">
@@ -395,7 +316,13 @@
              server-side and durable — Activity and Jobs follow the run, and
              closing this tab does not stop it. -->
         <section id="area-play" class="area brun" aria-labelledby="area-heading" hidden>
-          <p class="lede">Choose a map and a build profile, then build — and play it if you like.</p>
+          <!-- The editor's requests (leakrequest.js, buildrequest.js), beside the
+               map they are about (NEW_508; they were a strip above every area).
+               Each only offers a review: nothing runs until a person presses
+               Build here. From another area, Activity has the way back. -->
+          <section id="leak-request" class="request-card" role="status" aria-live="polite" aria-label="Leak test request" hidden></section>
+          <section id="build-request" class="request-card" role="status" aria-live="polite" aria-label="Build request" hidden></section>
+          
 
           <div id="play-signed-out" class="panel notice" hidden>
             <p>
@@ -761,6 +688,7 @@
 
         <!-- Library ------------------------------------------------------ -->
         <section id="area-library" class="area" aria-labelledby="area-heading">
+          <p class="service-blocker" data-area="library" hidden></p>
           <p class="lede">
             The maps in your Auto-Pigeon account. Each card lists the textures
             the map uses — a build downloads them for you, so there is nothing
@@ -912,6 +840,7 @@
           link puts that game's card first without starting anything.
         -->
         <section id="area-games" class="area" aria-labelledby="area-heading" hidden>
+          <p class="service-blocker" data-area="games" hidden></p>
           <p class="lede">
             Games people are hosting right now. Joining uses an engine and a
             copy of the game you already have; Join downloads only the map files
@@ -1257,7 +1186,7 @@
             </p>
             <p id="uri-state" class="muted" role="status">Checking…</p>
             <div class="row">
-              <button type="button" id="uri-register" class="primary" hidden>Open Auto-Pigeon links with this Companion</button>
+              <button type="button" id="uri-register" class="secondary" hidden>Open Auto-Pigeon links with this Companion</button>
             </div>
             <p id="uri-message" class="message" role="alert"></p>
           </div>
@@ -1418,6 +1347,15 @@
     -->
     <p id="live-region" class="visually-hidden" role="status" aria-live="polite"></p>
 
+    <!-- This page was opened from an earlier start of the Companion (NEW_508:
+         a small card over the corner, where it takes no room from the page;
+         it was a full-width bar). Nothing works until the reload, so it is
+         announced once and carries the one action. core.js shows it. -->
+    <div id="stale-page" class="stale-page" role="alert" hidden>
+      <p><strong>This page is out of date.</strong> The Companion restarted after it was opened. Nothing was lost.</p>
+      <button type="button" id="stale-page-reload" class="primary">Reload</button>
+    </div>
+
     <!-- Activity: one drawer on a wide window, one full-screen pane on a
          narrow one. Live progress and detailed results live here, so no page
          ends in a dump of logs. The durable history is the Jobs page. -->
@@ -1426,6 +1364,36 @@
         <h2 id="activity-heading" tabindex="-1">Activity</h2>
         <button type="button" id="activity-close" class="icon-button" aria-label="Close Activity">&times;</button>
       </div>
+      <!-- One entry per thing that is going on or wants an answer (NEW_508):
+           a link from the editor, tools being set up, an update that waits, a
+           service notice. An entry is refreshed in place; none of them is a
+           toast, and with nothing to say this block is empty and takes no room. -->
+      <div id="activity-items" class="activity-items">
+        <div id="activity-requests" class="activity-requests" hidden></div>
+        <!-- An update offer that waited for a safe moment (NEW_368): never a
+             dialog over a review or another dialog, so it waits here. -->
+        <button type="button" id="tools-update-badge" class="activity-item activity-item--action" hidden>Updates available</button>
+        <section id="tools-setup" class="activity-item tools-setup" role="status" aria-labelledby="tools-setup-title" hidden>
+      <h3 id="tools-setup-title">Setting up build tools</h3>
+      <ul id="tools-setup-list" class="rows tools-list"></ul>
+      <div class="row">
+        <button type="button" id="tools-setup-retry" class="secondary" hidden>Retry</button>
+      </div>
+      <p id="tools-setup-message" class="message" role="alert"></p>
+      <details>
+        <summary>Details</summary>
+        <dl id="tools-setup-details" class="paths"></dl>
+      </details>
+    </section>
+        <section id="notice-banner" class="activity-item notice-banner" aria-label="Service notices" hidden>
+      <ul id="notice-list" class="notice-list"></ul>
+      <p id="notice-limit" class="notice-limit">
+        Notices announce planned maintenance, and one already shown stays visible while the
+        server is down. They cannot warn about an unplanned outage.
+      </p>
+    </section>
+      </div>
+      <h3 class="activity-section" id="activity-runs-title">Builds and runs</h3>
       <div id="activity-body" class="activity-body" role="region" aria-live="polite"></div>
       <p class="activity-foot muted">
         Every run here is also on the <button type="button" class="linkish" data-area-link="jobs">Jobs</button> page,

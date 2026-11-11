@@ -10,8 +10,7 @@ interface in the browser you already have; every command it offers is also
 available from a terminal.
 
 > **Quake 1 is the supported path. Quake II and Quake III are work in
-> progress.** No Quake engine has been run by this project; the engine profiles
-> it ships are marked `unverified` until one is.
+> progress.**
 
 - [Download and run](#download-and-run)
 - [Using it](#using-it)
@@ -145,7 +144,52 @@ The page has these areas, in the order of a first run:
 | **Run** | Starting an engine on its own: joining a server, a mod, a map you already built. |
 | **Profiles** | What a tool or engine asks to be allowed to do, approving it, and writing your own. |
 | **Jobs** | Everything that has run, with its command, exit status, how long it took and its output. |
+| **Live Games** | Games people are hosting, what this computer still needs to join one, and hosting your own. |
 | **Settings** | Which Auto-Pigeon you use, and where the Companion keeps things. |
+
+Three things are always in the top right: **Activity**, **Settings** and
+**Account**. Nothing sits between them and the page — a Companion with nothing
+to tell you shows nothing.
+
+- **Activity** is where background work and things that want an answer are
+  listed, one entry each: a build or a game that is running, a link you
+  followed in the editor, build tools being installed, an update that is ready,
+  and service notices from Auto-Pigeon. A number beside it says how many
+  entries want something from you; **running** says work is going on. Opening
+  it never stops anything.
+- **Account** says who is signed in and where. Signed in, opening it works out
+  whether the profiles on this computer and in your account are the same. When
+  they are not, **Sync profiles** appears in the menu and as a button in the
+  header with what would move — for example *Send 2 · Get 1*. Pressing it shows
+  each profile by name with its direction, what a download asks permission for,
+  and nothing is sent or installed until you press **Sync profiles** in that
+  review. If the list changes between reading it and pressing, the new list is
+  shown instead of being acted on. When both copies of a profile changed under
+  the same version, neither is overwritten: save the one you want to keep as a
+  new version. Program paths and approvals never leave this computer.
+
+The same review and the same press from a terminal, against the running
+Companion:
+
+```console
+$ api="$(cat ~/.config/auto-pigeon-companion/api-url)"; token="$(cat ~/.config/auto-pigeon-companion/api-token)"
+$ curl -fsS -H "X-AUCOM-Token: $token" "$api/api/v1/account" | jq '{online, to_upload, to_download, conflicts}'
+$ review=$(curl -fsS -H "X-AUCOM-Token: $token" -H 'Content-Type: application/json' \
+    "$api/api/v1/account/sync" -d '{"dry_run":true}')
+$ echo "$review" | jq '.outcomes[] | {name, action, permissions}'     # what would move; nothing has
+$ curl -sS -H "X-AUCOM-Token: $token" -H 'Content-Type: application/json' "$api/api/v1/account/sync" \
+    -d "{\"confirmed\":true,\"reviewed\":$(echo "$review" | jq '.reviewed')}" | jq '{changed, outcomes}'
+```
+
+`reviewed` is the review's own fingerprint. Sent back with `confirmed`, a list
+that changed meanwhile is answered `409` with `"changed": true` and the new
+review, and nothing is sent or installed; leaving it out keeps the older
+behaviour, where `confirmed` alone is the approval.
+
+Three different words for three different things: you **sync profiles** with
+your account, you **download a revision** of a map (My Maps), and you **check
+for updates** of the build tools and the Companion (Settings). None of them
+waits for, or changes, the others, and building works signed out.
 
 ### Build & Run
 
@@ -200,7 +244,11 @@ profile you pointed at your own programs is left exactly as it is; Settings
 offers **Use the Companion's … for …** beside it.
 
 Nothing is downloaded until you say so: at start the Companion asks in a window
-that names the two programs, and Profiles has an **Install** button beside each.
+that names the programs and the folder they go in, and Profiles has an
+**Install** button beside each. If you cancel, Build & Run says **The build
+tools are not installed yet** beside the build profile, with **Install build
+tools** to ask again. While they install, Activity says **running** and lists
+each tool's progress.
 With no game set up yet, **Configure a game** follows once the tools are in and
 you have pressed **OK**. If you cancel the install, or it fails, you are not asked
 straight away: the question comes the next time you open Build & Run.
@@ -771,9 +819,10 @@ $ ./companion game open 'autopigeon://build/request/<id>?intent=build' --no-brow
 the Companion is open at http://127.0.0.1:<port>/#play
 ```
 
-Opening it starts nothing and asks nobody anything. A notice — **Build requested
-by the editor** or **Build & Run requested by the editor** — appears in the open
-Companion window. The Companion asks your account, with its own sign-in, which
+Opening it starts nothing and asks nobody anything. A card — **Build requested
+by the editor** or **Build & Run requested by the editor** — appears at the top
+of Build & Run in the open Companion window, and the window moves there; from
+another area, **Activity** counts it and has **Open in Build & Run**. The Companion asks your account, with its own sign-in, which
 saved map and revision the request is about, and checks that revision itself.
 **Review build** opens Build & Run on that exact saved revision, with Run after
 build set as the editor asked, and checks the setup as usual; nothing runs until
@@ -813,8 +862,9 @@ Make sure the `autopigeon://` handler is registered (above), save the map to
 your account in the editor and press **Leaks → Test in Companion**. Keep the
 editor tab open.
 
-Within about two seconds a notice appears in the open Companion window, with
-the map's name, saved revision and game, the compiler and the pipeline. There is
+Within about two seconds a card appears at the top of Build & Run in the open
+Companion window, with the map's name, saved revision and game, the compiler
+and the pipeline (from another area, **Activity** has the way to it). There is
 no step to go through first: the page opens Build & Run on that exact revision
 with **Build** ready to press, and only **Build** runs the compiler. The exact
 command is under **Technical details**. If something is missing, the notice says
@@ -825,6 +875,22 @@ game is read from the saved map itself, never from the link.
 What you see is checked again when you press **Build**: if the map was saved
 since, or you signed out, nothing runs and the notice says why. One press is one
 build; a request that was built, or replaced by a newer one, cannot come back.
+Opening a link whose test already ran says **This leak test already ran** and
+offers **Open the result**; it never starts a second one. To test again, press
+**Test in Companion** in the editor.
+
+```console
+$ curl -fsS -H "X-AUCOM-Token: $token" "$api/api/v1/leak-test/request" | jq '{pending, repeat}'
+{ "pending": false, "repeat": { "request_id": "…", "build_id": "…", "revision": 7, "received_at": "…", "until": "…" } }
+$ curl -fsS -X POST -H "X-AUCOM-Token: $token" -H 'Content-Type: application/json' \
+    "$api/api/v1/leak-test/dismiss" -d '{"request_id":"…","repeat":true}'     # forget the note; no request is touched
+```
+
+The result is one of four headlines, with how the Companion knows underneath:
+**Leak found**, **No leak found**, **Couldn’t determine whether the map leaks**
+(the compiler ran and its output does not say), and **Leak test couldn’t
+finish** (the build stopped; the failed stage and its output say why). A leak
+is a result, not a failure of the test.
 
 **A Quake 1 leak test compiles with the map's own textures.** When you press
 **Build**, the Companion takes the texture bundle of exactly the saved revision
@@ -1395,7 +1461,9 @@ document came from, and an update must come from that same listing
 wrote or pasted here, or the id of something installed from another account is
 refused before anything is written — your program paths, arguments, approvals
 and pipelines stay exactly as they were. Your account's own profiles coming back
-through **Sync** may replace the copy you wrote here. A profile installed before
+through **Sync profiles** may replace the copy you wrote here. A profile
+installed from a listing is shown, and stays recorded, as **Community** — before
+and after you approve it or choose its folders. A profile installed before
 this release has no recorded origin, so an update to it is refused rather than
 guessed; remove it and install it again if you mean to replace it.
 

@@ -1,4 +1,6 @@
-// The editor's leak-test request, shown above every area (NEW_307W).
+// The editor's leak-test request, shown at the top of Build & Run (NEW_307W;
+// NEW_508: it was a strip above every area, and from another area Activity
+// has the way back).
 //
 // A link from the editor only RECORDS a request on this machine. The page that
 // showed it used to be the Build area alone, and only when somebody entered
@@ -46,6 +48,7 @@
   // two. `formKey` is what was prepared, so one request, pipeline and setup is
   // prepared once and a changed pin or a recovered setup prepares again.
   let seen = null;
+  let repeat = null; // a used link that was opened again, or null
   let details = null;
   let form = "";
   let formWhy = "";
@@ -84,9 +87,34 @@
     return control;
   }
 
+  // A used link opened again (NEW_508, issue #20): one editor request is one
+  // test, so nothing becomes pending — and the click is still answered, with
+  // the test that already ran and the way to its result, rather than with a
+  // page that appears not to have noticed.
+  function renderRepeat() {
+    box.hidden = false;
+    const shown = repeat.request_id;
+    const built = repeat.build_id;
+    const open = button(t("Open the result"), "primary", async () => window.AUCOM.areas.build.openBuild(built));
+    const dismiss = button(t("Dismiss"), "secondary", async () => {
+      await api("/api/v1/leak-test/dismiss", { method: "POST", body: { request_id: shown, repeat: true } });
+      if (repeat && repeat.request_id === shown) { repeat = null; render(); }
+    });
+    box.replaceChildren(
+      el("p", { className: "leak-request__title", text: t("This leak test already ran") }),
+      el("p", { className: "leak-request__what", text: repeat.revision
+        ? t("Saved revision {n}. The link was opened again; nothing was started a second time.", { n: repeat.revision })
+        : t("The link was opened again; nothing was started a second time.") }),
+      el("p", { className: "leak-request__state", text: built
+        ? t("To test again, press Test in Companion in the editor.")
+        : t("It is still running. To test again afterwards, press Test in Companion in the editor.") }),
+      el("div", { className: "row-actions", children: built ? [dismiss, open] : [dismiss] }));
+  }
+
   function render() {
     // The tab strip is the one thing visible of a window that is behind another.
     document.title = seen && form !== "ready" ? t("Leak test requested") + " — " + title : title;
+    if (!seen && repeat) { renderRepeat(); return; }
     if (!seen) { box.hidden = true; box.replaceChildren(); return; }
     box.hidden = false;
     const name = details?.body?.name || seen.asset_id;
@@ -232,7 +260,20 @@
     reading = true;
     const { ok, body } = await api("/api/v1/leak-test/request");
     reading = false;
-    if (!ok) return; // The local server is away; the stale-page banner says so.
+    if (!ok) return; // The local server is away; the stale-page card says so.
+    // The repeat is drawn only when it changed: a card rebuilt every two
+    // seconds would take the focus off its own buttons.
+    const repeated = body.repeat || null;
+    const repeatKey = (value) => (value ? [value.request_id, value.build_id || "", value.received_at].join("|") : "");
+    if (repeatKey(repeated) !== repeatKey(repeat)) {
+      const fresh = repeated && (!repeat || repeat.received_at !== repeated.received_at);
+      repeat = repeated;
+      if (fresh) {
+        record(t("This leak test already ran"), "", "ok");
+        window.AUCOM.requestArrived?.(repeated);
+      }
+      if (!body.pending && !seen) render();
+    }
     if (!body.pending) { if (seen) forget(); return; }
     if (!seen || !sameRequest(body, seen)) {
       dropForm();
@@ -242,6 +283,7 @@
       formKey = "";
       render();
       record(t("Leak test requested by the editor"), t("map {id}, revision {n}", { id: body.asset_id, n: body.revision }), "running");
+      window.AUCOM.requestArrived?.(body);
     } else if ((body.relay?.state || "") !== (seen.relay?.state || "")) {
       // Whether the editor has been told changed; the request did not.
       seen = body;

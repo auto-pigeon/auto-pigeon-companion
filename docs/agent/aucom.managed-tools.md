@@ -74,6 +74,10 @@ update belongs to `NEW_368`, which consumes this coordinator and its verificatio
    without it is not shown again in this process, nor for a day. A version seen with other bytes is
    an `IntegrityEvent`, never an install. Suppression is per tool and never shared with the
    Companion's own update.
+   `NEW_508`: an offer a routine check found is ONE Activity entry (`#tools-update-badge`) and opens nothing; the
+   dialog opens from that entry, or straight after the person's own **Check for updates** (`tools.js`
+   `askedToCheck`). The first-install question also names the folder, never re-asks over the install it started
+   (`installing`), and is offered again beside the build profile after a Cancel (`AUCOM.offerBuildTools`).
 7. **Never switch under work — in ANY process sharing the tools folder (01_NEW_368).** Each
    version is its own folder, never changed after its rename. `internal/tooluse` is the one owner
    of the cross-process protocol, in `<tools>/.in-use/` (the folder's canonical path, so two

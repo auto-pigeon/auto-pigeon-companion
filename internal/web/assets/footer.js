@@ -39,8 +39,14 @@
   }
 
   const settingsMenu = popup($("settings-button"), $("settings-menu"));
-  popup($("sync-help-button"), $("sync-help-panel"));
   const userMenu = popup($("user-button"), $("user-menu"));
+  // Opening the Account menu works out whether this computer's profiles and
+  // the account's differ (NEW_508): the answer is in the menu when it is read,
+  // and nothing is asked of the person unless there is something to sync.
+  $("user-button").addEventListener("click", () => {
+    if (!$("user-menu").hidden) window.AUCOM.account?.check?.();
+  });
+  $("account-sync").addEventListener("click", () => userMenu.close());
   $("user-sign-in").addEventListener("click", () => {
     userMenu.close();
     window.AUCOM.openSignIn($("user-button"));

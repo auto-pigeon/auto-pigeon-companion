@@ -228,6 +228,28 @@
     return t("The compiler ended as {state} and wrote no leak route. Its output says why; this is not a no-leak result.", { state: compile.state });
   }
 
+  // leakHeadline is the result at a glance (NEW_508): four outcomes, each a
+  // few words, above the sentence that says how the Companion knows. A leak is
+  // a RESULT — the test worked and found one — so it is not drawn as a failure;
+  // only a run that could not finish is. Sealed is never read off an exit
+  // status: with a compiler the Companion reads itself it is that reading's
+  // `no_leak`, and without one it is the old rule `leakVerdict` words below.
+  function leakHeadline(manifest, leak) {
+    const compile = (manifest.steps || []).find((step) => step.id === (leak?.compile_step || "compile"));
+    const found = { title: t("Leak found"), kind: "leak" };
+    const sealed = { title: t("No leak found"), kind: "sealed" };
+    const unknown = { title: t("Couldn’t determine whether the map leaks"), kind: "unknown" };
+    const failed = { title: t("Leak test couldn’t finish"), kind: "failed" };
+    if (leak?.diagnostic) {
+      return { leak: found, no_leak: sealed }[leak.diagnostic.outcome] || unknown;
+    }
+    if (leak?.unreadable) return unknown;
+    const route = (manifest.outputs || []).some((output) => output.name === (leak?.pointfile_output || "pts") && output.path && !output.missing);
+    if (route) return found;
+    if (!compile || compile.skipped || !compile.state) return failed;
+    return compile.state === "succeeded" ? sealed : failed;
+  }
+
   function renderLeakReturn(manifest, item, attempt = 0) {
     const id = manifest.build_id;
     api(`/api/v1/leak-test/runs/${encodeURIComponent(id)}/return`).then(({ ok, body }) => {
@@ -246,7 +268,7 @@
         return;
       }
       if (body.state === "returned") {
-        line.textContent = t("Returned to the editor. The tab that asked imports it for saved revision {n}.", { n: body.revision });
+        line.textContent = t("Sent to the editor for saved revision {n}. Switch to its tab to see it.", { n: body.revision });
         line.className = "leak-return message ok";
         return;
       }
@@ -329,7 +351,16 @@
     inputs.replaceChildren();
     inputFields = new Map();
     if (!pipeline) {
-      $("build-pipeline-note").textContent = "Choose a ready pipeline. Set up its dependencies in Profiles, then Refresh.";
+      const note = $("build-pipeline-note");
+      if (window.AUCOM.buildToolsWaiting?.()) {
+        // The compilers were offered and not installed: the offer again, here,
+        // beside the choice it blocks (NEW_508).
+        const install = el("button", { text: t("Install build tools"), className: "secondary", attrs: { type: "button" } });
+        install.addEventListener("click", () => window.AUCOM.offerBuildTools());
+        note.replaceChildren(document.createTextNode(t("The build tools are not installed yet.") + " "), install);
+      } else {
+        note.textContent = t("Choose a ready pipeline, or set one up in Profiles.");
+      }
       renderSteps();
       return;
     }
@@ -1245,7 +1276,9 @@
       }));
       // What the compiler found, then how returning it went, then the file:
       // three things, kept apart (NEW_307W).
-      const item = el("li", { className: "leak-outcome", children: [
+      const headline = leakHeadline(manifest, body.leak_test);
+      const item = el("li", { className: "leak-outcome leak-outcome--" + headline.kind, children: [
+        el("p", { className: "leak-headline", text: headline.title }),
         el("p", { className: "leak-verdict", text: leakVerdict(manifest, body.leak_test) }), resultButton] });
       leak.append(item);
       renderLeakReturn(manifest, item);
@@ -1472,6 +1505,21 @@
     renderSteps();
   }
 
+  // openBuild shows one recorded build in Build & Run: from Builds on this
+  // machine, and from a used leak link that was opened again (leakrequest.js).
+  // It reads; it starts nothing.
+  function openBuild(id, state = "") {
+    window.AUCOM.showArea("build");
+    currentBuild = id;
+    $("build-current-panel").hidden = false;
+    outcome = state;
+    setMessage("build-result", "", "");
+    showStep(4, { focus: false });
+    poll();
+    $("build-current-title").setAttribute("tabindex", "-1");
+    $("build-current-title").focus();
+  }
+
   async function refreshHistory() {
     const list = $("build-history");
     const { ok, body } = await api("/api/v1/build/runs?limit=25");
@@ -1500,19 +1548,7 @@
         .filter(Boolean)
         .join(" · ");
       const open = el("button", { text: "Open", attrs: { type: "button", class: "secondary" } });
-      open.addEventListener("click", () => {
-        // Opened from Builds on this machine: the build is watched in Build &
-        // Run, on a file on this computer.
-        window.AUCOM.showArea("build");
-        currentBuild = manifest.build_id;
-        $("build-current-panel").hidden = false;
-        outcome = manifest.state;
-        setMessage("build-result", "", "");
-        showStep(4, { focus: false });
-        poll();
-        $("build-current-title").setAttribute("tabindex", "-1");
-        $("build-current-title").focus();
-      });
+      open.addEventListener("click", () => openBuild(manifest.build_id, manifest.state));
       list.append(el("li", { children: [head, detail, el("div", { className: "row-actions", children: [open] })] }));
     }
   }
@@ -1615,6 +1651,7 @@
     },
     adoptLeakRequest,
     dropLeakRequest,
+    openBuild,
     async refresh() {
       await refreshPipelines();
       applyLocalMap();

@@ -1,4 +1,9 @@
-// Operational notices: the compact banner at the top of the page.
+// Operational notices: entries in Activity (NEW_508; they were a compact banner
+// at the top of the page, which took a strip from every area for as long as a
+// notice ran). A notice that stops what an area is FOR — a critical one, or
+// maintenance that has started — is also said in that area, in one line, by
+// the `.service-blocker` slots. What is shown, when, to whom, in which order
+// and whether it can be dismissed are unchanged, and are still the contract's.
 //
 // Everything that decides WHAT is shown and WHEN is the shared AULIBS contract,
 // vendored byte for byte under vendor/operational-notice-contract and checked
@@ -241,6 +246,40 @@ function render() {
   state.rendered = signature;
   list.replaceChildren(...visible.map(noticeItem));
   banner.hidden = visible.length === 0;
+  renderBlockers(visible);
+}
+
+// A blocker is said where it blocks: My Maps and Live Games are the areas that
+// need the account's server. One line — the severity, the title and the way to
+// the whole notice in Activity — and, the first time it is seen, one
+// announcement; the once-a-second re-selection never repeats it.
+const announced = new Set();
+function renderBlockers(visible) {
+  const blocking = visible.filter(({ notice, phase }) =>
+    phase !== "upcoming" && (notice.severity === "critical" || notice.severity === "maintenance"));
+  for (const slot of document.querySelectorAll(".service-blocker")) {
+    slot.hidden = blocking.length === 0;
+    slot.replaceChildren();
+    if (!blocking.length) continue;
+    const { notice } = blocking[0];
+    const severity = document.createElement("span");
+    severity.className = "notice__severity";
+    severity.textContent = SEVERITY_WORDS[notice.severity] || "Notice";
+    const title = document.createElement("span");
+    title.textContent = notice.title;
+    const more = document.createElement("button");
+    more.type = "button";
+    more.className = "linkish";
+    more.textContent = "Details";
+    more.addEventListener("click", () => window.AUCOM.openActivity?.());
+    slot.append(severity, title, more);
+  }
+  for (const { notice } of blocking) {
+    const key = `${notice.id}:${notice.revision}`;
+    if (announced.has(key)) continue;
+    announced.add(key);
+    window.AUCOM.announce?.(`${SEVERITY_WORDS[notice.severity] || "Notice"}: ${notice.title}`);
+  }
 }
 
 // Sign-in and sign-out, as app.js learns of them.

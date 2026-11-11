@@ -140,17 +140,27 @@
     return ok;
   }
 
-  async function askToInstall() {
+  // The one review before anything is downloaded: which programs, from where,
+  // into which folder, and why a build needs them (NEW_508: the destination is
+  // said before the press, not after it). `asked` is a person pressing
+  // "Install build tools" on Build & Run — an explicit ask, so an earlier
+  // Cancel in this tab does not silence it.
+  async function askToInstall({ asked = false } = {}) {
     const waiting = (status?.tools || []).filter((tool) => tool.awaiting_install);
-    if (asking || !waiting.length || declined() || document.querySelector("dialog[open]")) return;
+    // Not while the install this offer started is still going: the server
+    // lists a tool as awaiting until its download begins, and the same
+    // question opened again over the progress it had just started (seen live,
+    // NEW_508).
+    if (asking || installing.length || !waiting.length || (!asked && declined()) || document.querySelector("dialog[open]")) return;
     asking = true;
     interaction = new Promise((resolve) => { settleInteraction = resolve; });
     const yes = await window.AUCOM.confirmModal({
       title: t("Install the Auto-Pigeon build tools"),
-      body: t("The Companion is about to install these programs from GitHub. They are highly recommended for building maps made with Auto-Pigeon: most advanced features produce geometry that other tools may not be able to process."),
+      body: t("Building a map needs these compilers. They are downloaded from Auto-Pigeon's releases on GitHub and checked before use."),
       content: [el("ul", { children: waiting.map((tool) => el("li", { children: [
         el("a", { text: tool.title, attrs: { href: tool.releases_url, target: "_blank", rel: "noopener noreferrer" } }),
-      ] })) })],
+      ] })) }),
+      ...(status.root ? [el("p", { className: "muted", children: [document.createTextNode(t("Installed in:") + " "), el("code", { text: status.root })] })] : [])],
       confirm: t("Install"), cancel: t("Cancel"),
     });
     asking = false;
@@ -161,6 +171,10 @@
       endInteraction("failed");
     }
   }
+  // Build & Run offers the install again beside the build profile it blocks,
+  // so a Cancel at first start is not a dead end (build.js renderPipeline).
+  window.AUCOM.buildToolsWaiting = () => (status?.tools || []).some((tool) => tool.awaiting_install) && !installing.length;
+  window.AUCOM.offerBuildTools = () => askToInstall({ asked: true });
 
   // The notice once everything a press of Install asked for is in place.
   async function tellInstalled() {
@@ -203,6 +217,12 @@
     const checks = status?.checks || [];
     const checkFailures = status?.check_failures || [];
     card.hidden = !settingUp && waiting.length === 0 && checks.length === 0 && checkFailures.length === 0;
+    // The card is an Activity entry (NEW_508). What the header's count makes of
+    // it: "1" wants the person (a failure, an update held back by work), "0" is
+    // work going on (tools installing), and "" is a routine check of what is
+    // already installed — listed for whoever opens Activity, never counted.
+    const failedNow = (status?.tools || []).some((tool) => settingUp && tool.phase === "failed");
+    card.dataset.attention = failedNow || waiting.length || checkFailures.length ? "1" : settingUp ? "0" : "";
     if (card.hidden) return;
     $("tools-setup-title").textContent = settingUp ? t("Setting up build tools")
       : waiting.length ? t("Build tools update ready")
@@ -322,9 +342,15 @@
     const list = offered();
     $("tools-update-badge").hidden = list.length === 0;
     if (!list.length || !modal.hidden) return;
-    if (busyElsewhere()) return;
+    // An update found by a check nobody asked for is ONE Activity entry and
+    // opens nothing (NEW_508): a routine release does not interrupt a build
+    // review. The dialog — the same three answers — opens when the person
+    // presses that entry, or straight after their own "Check for updates".
+    if (!askedToCheck || busyElsewhere()) return;
+    askedToCheck = false;
     openOffer(list);
   }
+  let askedToCheck = false;
 
   // One dialog for every update on offer, the Companion's own included, so
   // three releases on one check are one question, not three stacked dialogs.
@@ -595,7 +621,9 @@
       return t("{tool}: the check failed: {why}", { tool: title, why: o.message });
     });
     setMessage("tools-check-message", lines.join(" "), outcomes.some((o) => o.checked) ? "ok" : "error");
+    askedToCheck = true;
     apply(body.status);
+    askedToCheck = false;
   }));
 
   $("tools-reset-skipped").addEventListener("click", (event) => withBusy(event.currentTarget, async () => {
