@@ -19,6 +19,9 @@ topics:
   - lease
   - quit
   - exit
+  - testhome
+  - real-profile
+  - isolation
 paths:
   - cmd/companion/**
   - internal/web/open_browser.go
@@ -27,6 +30,7 @@ paths:
   - internal/web/lease.go
   - internal/web/assets/lifecycle.js
   - internal/cli/serve_lifecycle.go
+  - internal/testhome/**
 ---
 
 # The desktop shell is deferred, and the browser is not a fallback for it
@@ -164,3 +168,24 @@ answered; when it is not the build just started (an older copy still open) it sa
 of the new build runs. Two starts a moment apart (a double double-click, or a link clicked while
 the program is still starting) end with one Companion: the second waits for the first to finish
 starting and then shows it.
+
+## No test or task run touches the real profile (NEW_508A, issue #5; moved from AGENTS.md by NEW_502)
+
+`AGENTS.md` keeps the one-line rule; this is how it is kept.
+
+- **Tests.** `internal/cli` and `internal/web` move their whole test process to a home of its own in
+  `TestMain` with `internal/testhome`. It sets every variable `os.UserHomeDir`, `os.UserConfigDir`
+  and `os.UserCacheDir` consult (`HOME`, `USERPROFILE`, `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`,
+  `XDG_DATA_HOME`, `AppData`, `LocalAppData`), and it fails the run when the real per-user
+  Companion directories changed while it ran. A new package whose tests reach a per-user directory
+  gets the same `TestMain`; a fixture that passes its own directories is not enough, because the
+  next test that forgets is silent.
+- **A Companion you start yourself** — a live check, a driver, a reproduction — gets a task-owned
+  `HOME` and `XDG_*` (under the scratch directory or `$MAPPER_ROOT/LLM/runs/`), and an explicit
+  subcommand (`companion serve …`, `companion game open … --no-browser`).
+- **With no arguments the binary is the desktop launch on the real profile.** Never run it bare to
+  read its usage; use `companion help`, and read a subcommand's flags in `internal/cli` (`-h` on a
+  subcommand prints only `flag: help requested`).
+- **The one exception is Linux link dispatch.** `autopigeon://` reaches Chrome through the session's
+  portal, which reads the real XDG data directory; a live dispatch test that needs it says so in
+  its handoff.

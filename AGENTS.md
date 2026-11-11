@@ -117,10 +117,8 @@ These are unconditional. Everything else is routed.
   task context: the only `SessionStart` hook this repository has is graft's, which injects a
   repository map and nothing about the task. So the marker rule holds whichever way the session
   began, and so does resolving the task yourself when nothing resolved it for you.
-- **No test or task run touches the real profile.** `internal/cli` and `internal/web` move their whole test process to
-  a home of its own in `TestMain` (`internal/testhome`, which fails a run that changed the real per-user Companion
-  directories; issue #5). A Companion you start yourself gets a task-owned `HOME` and `XDG_*`, and an explicit
-  subcommand: **with no arguments the binary is the desktop launch on the real profile** — use `companion help`.
+- **No test or task run touches the real profile**: a task-owned `HOME` and `XDG_*`, an explicit subcommand, never
+  the bare binary. How: `aucom.desktop-shell`.
 - **Read `TEST-SKILL.md` before selecting, resuming or qualifying tests** (canonical: AUT
   `skills/auto-pigeon-testing/SKILL.md`).
 - **`go build ./...`, `go vet ./...` and `go test ./...` must all pass before a task that changes
@@ -213,7 +211,7 @@ the router resolves those for you rather than making you read the table.
 | `aucom.release-verification` | A build is not a verification, and five states keep them apart | release, build, artifacts, native, windows, macos, matrix, bundle, acceptance |
 | `aucom.launcher-merge` | It absorbed the Launcher (AUL), and there is one implementation of each thing | launcher, aul, merge, history, bootstrap, duplication |
 | `aucom.component-addresses` | Component addresses live in `.env`, never in code | addresses, env, ports, localhost, port-contract, endpoint |
-| `aucom.desktop-shell` | The desktop shell is deferred, and the browser is not a fallback for it | desktop, shell, wails, webview, window, native-ui, cgo, lifecycle, lease, quit, exit |
+| `aucom.desktop-shell` | The desktop shell is deferred, and the browser is not a fallback for it | desktop, shell, wails, webview, window, native-ui, cgo, lifecycle, lease, quit, exit, testhome, real-profile |
 | `aucom.ux` | One task per surface, the selected choice in the open, everything else one click away | ux, copy, wording, disclosure, dialog, readiness, needs-setup, setup-link, leak-chooser, i18n |
 
 ## 4. Using the router
