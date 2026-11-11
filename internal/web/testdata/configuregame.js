@@ -99,19 +99,43 @@
       notice.querySelector("code")?.textContent);
     return notice;
   };
-  // The normal flow: coming back to Build & Run offers it, once.
+  // NEW_508A: "Configure a game" is no longer a dialog that opens by itself.
+  // It is a line in "Run after build", beside the choice that needs a game,
+  // shown while that is ticked for a saved map and no engine can start one.
+  const gameLine = () => document.getElementById("play-no-game");
+  const lineShown = () => Boolean(gameLine()) && gameLine().checkVisibility();
+  // These pages open signed out, on a file on this computer: that build
+  // starts no game, so it says nothing about one. The line belongs to a saved
+  // map with Run after build ticked, which is where each check goes first.
+  const toSavedMap = async () => {
+    const saved = document.getElementById("play-source-saved");
+    if (!saved.checked) {
+      record("a file on this computer needs no game: no line, no dialog", !lineShown() && times(CONFIGURE) === 0,
+        `line shown: ${lineShown()}`);
+      saved.click();
+      await sleep(0);
+    }
+  };
+  const saidInline = async (step) => {
+    await toSavedMap();
+    await waitFor("the line about the game", lineShown);
+    const link = gameLine().querySelector('a[href="#profiles"]');
+    record(step, lineShown() && Boolean(link) && link.textContent === CONFIGURE && times(CONFIGURE) === 0 && openDialogs().length === 0,
+      `line: ${gameLine().textContent.trim().slice(0, 90)}; dialogs: ${seen.join(" > ")}`);
+  };
+  // Coming back to Build & Run says it in the form again, and opens nothing.
   const offeredOnceOnReturn = async () => {
     await go("#profiles");
     await sleep(200);
     await go("#play");
-    const dialog = await waitFor(`"${CONFIGURE}" on return`, () => dialogNamed(CONFIGURE));
-    record("coming back offers the next step", times(CONFIGURE) === 1, `shown ${times(CONFIGURE)} time(s)`);
-    press(dialog, "Cancel");
-    await go("#profiles");
-    await sleep(200);
-    await go("#play");
-    await sleep(400);
-    record("and only once", times(CONFIGURE) === 1 && !dialogNamed(CONFIGURE), `shown ${times(CONFIGURE)} time(s)`);
+    await saidInline("coming back says it beside Run after build, with no dialog");
+    const run = document.getElementById("play-run-after");
+    run.click();
+    await sleep(300);
+    record("a build with no run needs no game: unticked, the line goes", !lineShown() && !run.checked, String(lineShown()));
+    run.click();
+    await waitFor("the line again", lineShown);
+    record("and no dialog ever opened for it", times(CONFIGURE) === 0, `shown ${times(CONFIGURE)} time(s)`);
   };
 
   const scenarios = {
@@ -127,16 +151,9 @@
       const notice = await installed();
       record("the notice stands alone", openDialogs().length === 1, `open: ${openDialogs().map(titleOf).join(", ")}`);
       press(notice, "OK");
-      const closed = performance.now();
-      const configure = await waitFor(`"${CONFIGURE}" straight after`, () => dialogNamed(CONFIGURE));
-      record("Configure a game follows directly", true, `${Math.round(performance.now() - closed)} ms after the notice closed`);
-      record("the Configure question takes the focus", configure.contains(document.activeElement), document.activeElement?.tagName);
-      press(configure, "Cancel");
-      await go("#profiles");
-      await sleep(200);
-      await go("#play");
-      await sleep(400);
-      record("it is asked once per page", times(CONFIGURE) === 1, `shown ${times(CONFIGURE)} time(s)`);
+      await quiet("no second question follows the install", CONFIGURE);
+      await saidInline("the missing game is said beside Run after build");
+      record("the line takes no focus", !gameLine().contains(document.activeElement), document.activeElement?.tagName);
     },
 
     // Open Profiles still does what it says.
@@ -145,9 +162,11 @@
       await waitFor("the install to be accepted", () => window.AUCOM.toolsStatus()?.setting_up);
       await control("tools-step");
       press(await installed(), "OK");
-      press(await waitFor(`"${CONFIGURE}"`, () => dialogNamed(CONFIGURE)), "Open Profiles");
+      await toSavedMap();
+      await waitFor("the line about the game", lineShown);
+      gameLine().querySelector('a[href="#profiles"]').click();
       await waitFor("Profiles", () => window.location.hash === "#profiles" && !document.getElementById("area-profiles").hidden);
-      record("Open Profiles opens Profiles", openDialogs().length === 0, window.location.hash);
+      record("Configure a game opens Profiles", openDialogs().length === 0, window.location.hash);
     },
 
     // A person who said no is not asked the next thing at once.
@@ -192,6 +211,9 @@
       const notice = await installed();
       holding = true;
       press(notice, "OK");
+      // The question about the game is asked for a saved map with Run after
+      // build ticked: choosing one is what sends the request held here.
+      document.getElementById("play-source-saved").click();
       await waitFor("the engines answer to be held", () => held > 0);
       await go("#profiles");
       await sleep(100);
@@ -210,6 +232,9 @@
       await control("tools-step");
       press(await installed(), "OK");
       await quiet("a game that is ready needs no question", CONFIGURE);
+      document.getElementById("play-source-saved").click();
+      await sleep(600);
+      record("and no line, on a saved map either", !lineShown(), String(lineShown()));
     },
 
     // The editor's request for a build with no run replaced what was asked for.
@@ -220,6 +245,9 @@
       const notice = await installed();
       holding = true;
       press(notice, "OK");
+      // The question about the game is asked for a saved map with Run after
+      // build ticked: choosing one is what sends the request held here.
+      document.getElementById("play-source-saved").click();
       await waitFor("the engines answer to be held", () => held > 0);
       const settings = await (await fetch("/journey/config")).json();
       const adopted = window.AUCOM.areas.play.adoptBuildRequest({
@@ -230,6 +258,9 @@
       release();
       await adopted;
       await quiet("a build with no run needs no game", CONFIGURE);
+      document.getElementById("play-source-saved").click();
+      await sleep(600);
+      record("and no line, on a saved map either", !lineShown(), String(lineShown()));
     },
 
     // Another question is open when the answer lands: it waits for that one to
@@ -241,6 +272,9 @@
       const notice = await installed();
       holding = true;
       press(notice, "OK");
+      // The question about the game is asked for a saved map with Run after
+      // build ticked: choosing one is what sends the request held here.
+      document.getElementById("play-source-saved").click();
       await waitFor("the engines answer to be held", () => held > 0);
       window.AUCOM.confirmModal({ title: "Another question", body: "One at a time.", confirm: "Yes", cancel: "No" });
       await sleep(0);
@@ -250,8 +284,8 @@
       record("it does not open over another", !dialogNamed(CONFIGURE) && openDialogs().length === 1,
         `open: ${openDialogs().map(titleOf).join(", ")}`);
       press(dialogNamed("Another question"), "No");
-      await waitFor(`"${CONFIGURE}" after the other one`, () => dialogNamed(CONFIGURE));
-      record("it follows the one that was open", times(CONFIGURE) === 1, `shown ${times(CONFIGURE)} time(s)`);
+      await quiet("and nothing follows the one that was open", CONFIGURE);
+      await saidInline("the line was there all along, under the other question");
     },
 
     // The install ends under another question: the notice waits for it.
@@ -265,14 +299,17 @@
       record("the notice does not open over another", openDialogs().length === 1, `open: ${openDialogs().map(titleOf).join(", ")}`);
       press(dialogNamed("Another question"), "No");
       press(await installed(), "OK");
-      await waitFor(`"${CONFIGURE}" after the notice`, () => dialogNamed(CONFIGURE));
-      record("the order holds", seen.join(" > ").endsWith(`Another question > ${INSTALLED} > ${CONFIGURE}`), seen.join(" > "));
+      await quiet("nothing follows the notice", CONFIGURE);
+      record("the order holds", seen.join(" > ").endsWith(`Another question > ${INSTALLED}`), seen.join(" > "));
     },
 
-    // Nothing to install: asked at once, as before.
+    // Nothing to install: no question at all — the line, in the form.
     async "nothing-to-install"() {
-      await waitFor(`"${CONFIGURE}"`, () => dialogNamed(CONFIGURE));
-      record("with nothing to install it is the first question", times(INSTALL) === 0, seen.join(" > "));
+      // The page's own start-up first: the source is chosen once it has read
+      // who is signed in.
+      await sleep(1500);
+      await saidInline("with nothing to install the first start opens no dialog");
+      record("and the page asked nothing", seen.length === 0, seen.join(" > "));
     },
   };
 

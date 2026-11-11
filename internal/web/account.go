@@ -245,32 +245,15 @@ type syncRequest struct {
 	// DryRun answers what a sync WOULD do — each upload's disclosures and each
 	// download's permissions — and does nothing. The page shows it as the review.
 	DryRun bool `json:"dry_run"`
-	// Confirmed is the person pressing Sync after reading the review. Both
-	// halves need it: publishing needs a confirmation and installing an
+	// Confirmed is the person pressing Sync profiles after reading the review.
+	// Both halves need it: publishing needs a confirmation and installing an
 	// approval (AGENTS.md §2.2), and neither is defaulted.
 	Confirmed bool `json:"confirmed"`
-	// Reviewed is the fingerprint the dry run gave of the list the person
-	// read (NEW_508). When it is sent with Confirmed and what would be synced
-	// NOW is a different list, nothing is sent or installed: the answer is 409
-	// with the new review. Empty — the CLI, an older page — keeps the earlier
-	// behaviour, where the confirmation alone is the approval.
+	// Reviewed is the identity of the review the person read: the dry run's
+	// `reviewed`. A confirmation is for THAT list. Without it, or with one that
+	// is not the list as it stands now, nothing is sent, installed or approved
+	// and the answer is 409 with the current review (NEW_508A).
 	Reviewed string `json:"reviewed,omitempty"`
-}
-
-// reviewFingerprint names the exact list a sync would act on: each profile
-// with something to do, its direction, both versions, the listing and — for a
-// download — the permissions it asks for. Two reviews with one fingerprint
-// would do the same thing; a profile edited, published or re-versioned in
-// between changes it.
-func reviewFingerprint(rows []accountProfile) string {
-	hash := sha256.New()
-	for _, row := range rows {
-		if row.State != "to_upload" && row.State != "to_download" && row.State != "conflict" {
-			continue
-		}
-		fmt.Fprintf(hash, "%q %q %q %q %q %q\n", row.ID, row.State, row.Local, row.Remote, row.ListingID, row.Permissions)
-	}
-	return hex.EncodeToString(hash.Sum(nil))
 }
 
 type syncOutcome struct {
@@ -281,6 +264,93 @@ type syncOutcome struct {
 	Error       string   `json:"error,omitempty"`
 	Disclosures int      `json:"disclosures,omitempty"`
 	Permissions []string `json:"permissions,omitempty"`
+	// Version and Digest are the exact document the operation is about: the
+	// bytes that would be published, or the bytes that were served and checked.
+	Version string `json:"version,omitempty"`
+	Digest  string `json:"digest,omitempty"`
+}
+
+// syncOperation is one thing a sync would do, PLANNED: the outcome the review
+// shows, and the very preview or install plan that will be executed. The plan
+// is made once. The review's identity is computed from it, and the press
+// executes it — nothing is resolved a second time between the two, so "the
+// latest version" cannot become a different version after it was reviewed
+// (NEW_508A: the fingerprint used to hash summary rows made BEFORE the plans,
+// and the install was planned with an empty version).
+type syncOperation struct {
+	outcome syncOutcome
+	upload  *publish.Preview
+	install *publish.Plan
+	// identity is what the confirmation is bound to, beyond the outcome's own
+	// fields: every disclosure and every permission, in full.
+	identity []string
+}
+
+// planSync turns the account's state into the exact operations a sync would
+// perform. It writes nothing anywhere.
+func (s *Server) planSync(ctx context.Context, status accountStatus, local map[string]profile.Profile,
+	remote map[string]aub.PublishedProfile,
+) []syncOperation {
+	client := s.aubClient()
+	catalog, _ := s.catalog()
+	operations := []syncOperation{}
+	for _, row := range status.Profiles {
+		switch row.State {
+		case "to_upload":
+			operation := syncOperation{outcome: syncOutcome{ID: row.ID, Name: row.Name, Action: "upload", Result: "planned"}}
+			preview, err := publish.PreviewOf(local[row.ID])
+			if err != nil {
+				operation.outcome.Result, operation.outcome.Error = resultOf(err)
+			} else {
+				operation.upload = &preview
+				operation.outcome.Version, operation.outcome.Digest = preview.Version, preview.Digest
+				operation.outcome.Disclosures = len(preview.Disclosures)
+				for _, disclosure := range preview.Disclosures {
+					operation.identity = append(operation.identity, fmt.Sprintf("discloses %+v", disclosure))
+				}
+			}
+			operations = append(operations, operation)
+		case "to_download":
+			operation := syncOperation{outcome: syncOutcome{ID: row.ID, Name: row.Name, Action: "download", Result: "planned"}}
+			// The version the account's state named — never "whatever is
+			// latest when the plan is made". A version published in between
+			// changes the state, and with it the review.
+			plan, err := publish.PlanInstall(ctx, client, catalog, remote[row.ID].ID, row.Remote)
+			if err != nil {
+				operation.outcome.Result, operation.outcome.Error = resultOf(err)
+			} else {
+				operation.install = &plan
+				operation.outcome.Version, operation.outcome.Digest = plan.Version.Version, plan.Digest
+				for _, permission := range plan.Permissions {
+					operation.outcome.Permissions = append(operation.outcome.Permissions, permission.Summary)
+					operation.identity = append(operation.identity, fmt.Sprintf("asks %+v", permission))
+				}
+			}
+			operations = append(operations, operation)
+		case "conflict":
+			operations = append(operations, syncOperation{
+				outcome:  syncOutcome{ID: row.ID, Name: row.Name, Action: "none", Result: "conflict", Error: row.Reason},
+				identity: []string{"local " + row.Local, "account " + row.Remote},
+			})
+		}
+	}
+	return operations
+}
+
+// reviewIdentity names a review: whose account, on which server, and every
+// operation with its direction, version, content digest, disclosures and
+// permissions — and an operation that could not be planned, with why. Two
+// reviews with one identity would send and install the same bytes with the
+// same approvals. Anything else is a different review.
+func reviewIdentity(account, server string, operations []syncOperation) string {
+	hash := sha256.New()
+	fmt.Fprintf(hash, "aucom.sync-review/1\n%q %q\n", account, server)
+	for _, operation := range operations {
+		outcome := operation.outcome
+		fmt.Fprintf(hash, "%q %q %q %q %q %q %q\n", outcome.ID, outcome.Action, outcome.Result,
+			outcome.Version, outcome.Digest, outcome.Error, operation.identity)
+	}
+	return hex.EncodeToString(hash.Sum(nil))
 }
 
 func (s *Server) handleAccountSync(w http.ResponseWriter, r *http.Request) {
@@ -301,13 +371,34 @@ func (s *Server) handleAccountSync(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, fmt.Errorf("your Auto-Pigeon account cannot be reached right now: %s", status.OfflineWhy))
 		return
 	}
-	fingerprint := reviewFingerprint(status.Profiles)
-	// The list changed between the review and the press: act on nothing, and
-	// answer with the review of what is true now, computed by the same loop.
-	stale := request.Confirmed && !request.DryRun && request.Reviewed != "" && request.Reviewed != fingerprint
-	if stale {
-		request.DryRun = true
+
+	// The whole plan, before the first write.
+	operations := s.planSync(r.Context(), status, local, remote)
+	identity := reviewIdentity(status.Email, status.ServerLabel, operations)
+	outcomes := make([]syncOutcome, 0, len(operations))
+	for _, operation := range operations {
+		outcomes = append(outcomes, operation.outcome)
 	}
+	if request.DryRun {
+		writeJSON(w, http.StatusOK, map[string]any{"outcomes": outcomes, "status": status, "reviewed": identity})
+		return
+	}
+	// A confirmation is for the review it names. No review named, or a review
+	// of another list — a document edited under the same version, a version
+	// published meanwhile, another account signed in: nothing is sent,
+	// installed or approved, and the answer is the review as it stands.
+	if request.Reviewed != identity {
+		why := "the profiles changed since the review; nothing was sent or installed"
+		if request.Reviewed == "" {
+			why = "a sync is confirmed against the review it was read from; nothing was sent or installed"
+		}
+		writeJSON(w, http.StatusConflict, map[string]any{
+			"error": why, "changed": true, "review_required": request.Reviewed == "",
+			"outcomes": outcomes, "status": status, "reviewed": identity,
+		})
+		return
+	}
+
 	client := s.aubClient()
 	profilesDir, err := s.profilesDir()
 	if err != nil {
@@ -319,60 +410,23 @@ func (s *Server) handleAccountSync(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	catalog, _ := s.catalog()
-
-	outcomes := []syncOutcome{}
-	for _, row := range status.Profiles {
-		switch row.State {
-		case "to_upload":
-			outcome := syncOutcome{ID: row.ID, Name: row.Name, Action: "upload"}
-			preview, err := publish.PreviewOf(local[row.ID])
-			if err == nil {
-				outcome.Disclosures = len(preview.Disclosures)
-				if request.DryRun {
-					outcome.Result = "planned"
-					outcomes = append(outcomes, outcome)
-					continue
-				}
-				_, err = publish.Publish(r.Context(), client, preview, aub.PublishedPrivate, true)
-			}
-			outcome.Result, outcome.Error = resultOf(err)
-			outcomes = append(outcomes, outcome)
-		case "to_download":
-			outcome := syncOutcome{ID: row.ID, Name: row.Name, Action: "download"}
-			plan, err := publish.PlanInstall(r.Context(), client, catalog, remote[row.ID].ID, "")
-			if err == nil {
-				for _, permission := range plan.Permissions {
-					outcome.Permissions = append(outcome.Permissions, permission.Summary)
-				}
-				if request.DryRun {
-					outcome.Result = "planned"
-					outcomes = append(outcomes, outcome)
-					continue
-				}
-				// The person read these permissions in the review and pressed
-				// Sync: that is the approval Apply records, for this machine. The
-				// listing is one of the account's own (`Mine`), so it may replace
-				// what this person wrote here under the same id (NEW_353A).
-				_, err = publish.Apply(plan, publish.InstallPaths{Profiles: profilesDir, Bindings: bindingsPath, OwnAccount: true}, true)
-			}
-			outcome.Result, outcome.Error = resultOf(err)
-			outcomes = append(outcomes, outcome)
-		case "conflict":
-			outcomes = append(outcomes, syncOutcome{ID: row.ID, Name: row.Name, Action: "none", Result: "conflict", Error: row.Reason})
+	// Execute the plans that were reviewed, as they are held: the previewed
+	// bytes are what is published and the served, digest-checked bytes are
+	// what is installed. Nothing is looked up again.
+	for index, operation := range operations {
+		switch {
+		case operation.upload != nil:
+			_, err := publish.Publish(r.Context(), client, *operation.upload, aub.PublishedPrivate, true)
+			outcomes[index].Result, outcomes[index].Error = resultOf(err)
+		case operation.install != nil:
+			// The person read these permissions in the review and pressed
+			// Sync profiles: that is the approval Apply records, for this
+			// machine. The listing is one of the account's own (`Mine`), so it
+			// may replace what this person wrote here under the same id
+			// (NEW_353A).
+			_, err := publish.Apply(*operation.install, publish.InstallPaths{Profiles: profilesDir, Bindings: bindingsPath, OwnAccount: true}, true)
+			outcomes[index].Result, outcomes[index].Error = resultOf(err)
 		}
-	}
-	if stale {
-		writeJSON(w, http.StatusConflict, map[string]any{
-			"error":    "the profiles changed since the review; nothing was sent or installed",
-			"changed":  true,
-			"outcomes": outcomes, "status": status, "reviewed": fingerprint,
-		})
-		return
-	}
-	if request.DryRun {
-		writeJSON(w, http.StatusOK, map[string]any{"outcomes": outcomes, "status": status, "reviewed": fingerprint})
-		return
 	}
 	after, _, _ := s.accountState(r.Context())
 	writeJSON(w, http.StatusOK, map[string]any{"outcomes": outcomes, "status": after})

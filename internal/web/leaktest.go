@@ -683,6 +683,18 @@ func (s *Server) leakTestView(manifest *build.Manifest) map[string]any {
 		"pointfile_output": binding.Pointfile, "pointfile_format": adapter.PointfileFormat,
 		"pointfile_direction": adapter.Direction,
 	}
+	if adapter.Classify == nil {
+		// A compiler the Companion does not read itself (Quake 1's qbsp, whose
+		// log the editor reads). The page may still say "no leak" on evidence:
+		// qbsp writes its portal file only for a map it did not find a leak in,
+		// so a pipeline that declares that file names it here. Without it a
+		// finished compile says nothing about leaks either way (NEW_508A).
+		for _, output := range manifest.Outputs {
+			if output.Name == "prt" {
+				view["portal_output"] = output.Name
+			}
+		}
+	}
 	if adapter.Classify == nil || !manifest.State.Terminal() {
 		return view
 	}

@@ -433,6 +433,11 @@
                 </label>
                 <p id="play-run-after-note" class="hint" hidden></p>
                 <div id="play-run-fields">
+                  <!-- No engine on this computer can start a game yet: said here,
+                       beside the choice that needs one — never a dialog over the
+                       form, and never "Build & Run needs a game": building only
+                       needs none (NEW_508A; play.js askForGame). -->
+                  <p id="play-no-game" class="message error" role="status" hidden>No game is set up on this computer yet. <a href="#profiles">Configure a game</a>, or untick “Start the game when the build finishes” to build only.</p>
                   <div class="field">
                     <label for="play-engine">Engine</label>
                     <select id="play-engine"></select>

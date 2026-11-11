@@ -1228,5 +1228,9 @@ window.AUCOM_LOCALES.it = {
   "This engine's game folder changed to {folder}. Nothing was written. Check it, then press Install again.": "La cartella di gioco di questo motore è cambiata in {folder}. Non è stato scritto nulla. Controllala, poi premi di nuovo Installa.",
   "{field} was saved elsewhere as {value}": "{field} è stato salvato altrove come {value}",
   "{what}. Save keeps what you entered here.": "{what}. Salva mantiene ciò che hai inserito qui.",
-  "Server": "Server"
+  "Server": "Server",
+  "The compiler wrote its portal file and no leak route: this run found no leak. That is a statement about this run of this saved revision, not proof the map is sealed.": "Il compilatore ha scritto il file dei portali e nessun percorso di perdita: questa esecuzione non ha trovato perdite. Vale per questa esecuzione di questa revisione salvata, non è una prova che la mappa sia sigillata.",
+  "The compiler finished and left neither a leak route nor a portal file, so this run does not say whether the map leaks. Its output says more.": "Il compilatore ha terminato senza lasciare né un percorso di perdita né un file dei portali, quindi questa esecuzione non dice se la mappa ha perdite. Il suo output dice di più.",
+  "No game is set up on this computer yet.": "Nessun gioco è ancora configurato su questo computer.",
+  ", or untick “Start the game when the build finishes” to build only.": ", oppure deseleziona “Avvia il gioco al termine della compilazione” per compilare soltanto."
 };

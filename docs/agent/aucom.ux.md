@@ -104,24 +104,31 @@ area down, plus a standing green **Synced** in the header. A smaller, recoloured
 - **A modal is for a decision the person just asked for.** Nothing routine opens one.
 - **"Sync" names its object.** **Sync profiles** (account), **Download revision** (a map), **Check for updates**
   (tools and the app, in Settings). Three states, never one indicator.
-- **Sync profiles is a review, then one press.** The dry run's `reviewed` fingerprint goes back with the press; a
-  list that changed is answered `409 changed` with the new review, and nothing is sent or installed
-  (`account.go` `reviewFingerprint`). A same-version conflict says *Both copies changed. Save the one you want to
-  keep as a new version.* with the server's sentence under Details.
+- **Sync profiles is a review, then one press — of that review.** The plans are made ONCE (`account.go` `planSync`:
+  `publish.PreviewOf` per upload, `publish.PlanInstall` at the version the account's state named, never "latest"), the
+  review's identity is computed from them (`reviewIdentity`: account, server, and per operation its direction, version,
+  content digest, disclosures and permissions) and the press executes those same plans. A confirmation without that
+  identity, or with one that is not the list as it stands, is `409 changed` with the current review and sends,
+  installs and approves nothing (NEW_508A; the first fingerprint hashed summary rows made before the plans). A
+  same-version conflict says *Both copies changed. Save the one you want to keep as a new version.*
 - **Colour:** teal is interactive, never a status ground. Green is on a confirmed result only. A leak is amber — a
   result, not a failure; red is a test that could not finish. Tokens are AUP's, mapped in `app.css` `:root`; a new
   one is added there with the AUP token it stands for.
 - **Navigation is one flat list in task order:** Build & Run, My Maps (Builds on this machine under it), Run, Live
   Games, Profiles, Jobs. Routes and fragments are unchanged.
-- **A leak result leads with one of four headlines** (`build.js` `leakHeadline`): *Leak found*, *No leak found*,
-  *Couldn’t determine whether the map leaks*, *Leak test couldn’t finish*. Sealed is never read off an exit status.
+- **A leak result leads with one of four headlines**, read from evidence by ONE function the headline and the sentence
+  share (`build.js` `leakOutcome`, NEW_508A): *Leak found* (the adapter's reading or a written route), *No leak found*
+  (the adapter's `no_leak`, or for Quake 1 the portal file qbsp writes only for a map it found no leak in —
+  `leak_test.portal_output`), *Couldn’t determine whether the map leaks* (no interior, or a clean exit that left
+  neither route nor portal file), *Leak test couldn’t finish*. A process that exited 0 is not a verdict.
 - **A profile that changed since it was set up says so** — *Changed: approve this version*, and that the folders
   and programs chosen are kept (#3). A profile installed from a listing stays **Community** (#19,
   `binding.Provenance`).
 - **A second window does not go stale.** Settings and the package page's game folder are read again when the
   window comes back; an unsaved edit is kept and a real conflict is named (#23, #2).
 
-Held by `new508_test.go` (structure, wording, the review fingerprint, the repeat), the shell records in
+Held by `new508_test.go` (structure, wording, the repeat), `new508a_sync_test.go` (the review's identity through the
+handler with a fake catalog; `testdata/leakoutcome.check.mjs`), the shell records in
 `testdata/notices.js` and `testdata/leakjourney.js`, `TestApprovingAnInstalledCommunityProfileKeepsItsProvenance`,
 `TestAUsedLinkDeliveredAgainIsARepeatNotASecondRequest`, `TestTheHandlerIsNamedForTheProgramNotOneOfItsUses`.
 
@@ -164,16 +171,16 @@ contract is `aucom.leak-adapters` ("A request opens ready to Build").
 - Budget: the ordinary viewport carries at most 90 authored explanatory words (measured 38 at 1440x900 with
   the compiler's name included; the five-step page carried 91 on step 1 alone).
 
-## The first start asks one thing at a time (NEW_374)
+## The first start asks one thing, and only one (NEW_374, NEW_508A)
 
-- **Install, then Configure a game, never two at once.** The Install window, the download it starts and the
-  *Build tools installed* notice are one interaction (`tools.js`); `AUCOM.installSettled` answers how it ended and
-  `play.js` `askForGame` waits on that answer, so the second question opens the moment the notice closes. Nothing
-  polls for a dialog to go away. Any other `<dialog>` is waited for by its own `close` event.
-- **A Cancel or a failed install asks nothing further now.** The person has just answered; the next move to Build &
-  Run asks, once per page (`AUCOM.areaMoves`). The newest `askForGame` call is the only one that may open the dialog,
-  and it re-reads what it needs after each wait, so leaving the area, a game set up meanwhile, a build request with no
-  run or a late answer opens nothing and takes no focus.
+- **Install is the only question a first start opens.** The Install window, the download it starts and the
+  *Build tools installed* notice are one interaction (`tools.js`); `AUCOM.installSettled` answers how it ended. Any
+  other `<dialog>` is waited for by its own `close` event; nothing polls for a dialog to go away.
+- **A missing game is a line, never a dialog** (NEW_508A; it was *Configure a game*, opening by itself and saying
+  Build & Run "needs a game" — a build alone needs none). `#play-no-game` sits in **Run after build**, shown only
+  while that is ticked for a saved map and no engine can start one (`play.js` `askForGame`: the newest call draws,
+  from the server's answer). It links **Configure a game** to Profiles and names the other way out: untick to build
+  only. A signed-out first start can Build a file on this computer with an installed compiler and no game.
 
 ## Profiles: one row, one state, one page in task order (NEW_364)
 
@@ -224,4 +231,5 @@ beside it, two fast presses → one run), `testdata/hostjourney.js` (the listing
 `internal/autobuild/new365_test.go`, `TestAFileBuildRequestIsAdmittedOnceUntilItEnds`.
 NEW_380: `testdata/leakjourney.js` (`TestALeakRequestOpensReadyToBuildInABrowser`: a real page, a held answer, the
 aim of the button sampled throughout), `testdata/leakrequest.check.mjs` cases 15–21, `new380_test.go`.
-NEW_374: `testdata/configuregame.js` (`TestConfigureAGameFollowsTheInstallWindowInABrowser`, eleven pages in a real browser).
+NEW_374 / NEW_508A: `testdata/configuregame.js` (`TestConfigureAGameFollowsTheInstallWindowInABrowser`, eleven pages in a
+real browser: no dialog ever opens for the game, the line shows and goes with the tick).

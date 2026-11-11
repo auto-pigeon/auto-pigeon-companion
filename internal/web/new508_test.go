@@ -123,41 +123,6 @@ func TestSyncNamesItsObject(t *testing.T) {
 	}
 }
 
-// The review a person read is the list that is acted on. The fingerprint
-// covers what a sync would do — the direction, both versions, the listing, the
-// permissions a download asks for — and nothing else, so a profile that is
-// already in sync changing its timestamp does not invalidate a review.
-func TestTheSyncReviewFingerprintChangesWithWhatWouldBeSynced(t *testing.T) {
-	rows := []accountProfile{
-		{ID: "a", State: "to_upload", Local: "1.0.0"},
-		{ID: "b", State: "to_download", Remote: "2.0.0", ListingID: "l1", Permissions: []string{"run qbsp"}},
-		{ID: "c", State: "synced", Local: "1.0.0", Remote: "1.0.0"},
-	}
-	base := reviewFingerprint(rows)
-	if len(base) != 64 {
-		t.Fatalf("the fingerprint is %q", base)
-	}
-	same := append([]accountProfile(nil), rows...)
-	same[2].Local, same[2].Remote = "1.0.1", "1.0.1"
-	if reviewFingerprint(same) != base {
-		t.Error("a profile with nothing to sync changed the review")
-	}
-	for name, change := range map[string]func(rows []accountProfile){
-		"a newer local version":   func(rows []accountProfile) { rows[0].Local = "1.1.0" },
-		"another permission":      func(rows []accountProfile) { rows[1].Permissions = []string{"run qbsp", "write the game folder"} },
-		"another listing":         func(rows []accountProfile) { rows[1].ListingID = "l2" },
-		"a direction that turned": func(rows []accountProfile) { rows[0].State = "conflict" },
-		"one more profile":        func(rows []accountProfile) { rows[2].State = "to_upload" },
-	} {
-		changed := append([]accountProfile(nil), rows...)
-		changed[1].Permissions = append([]string(nil), rows[1].Permissions...)
-		change(changed)
-		if reviewFingerprint(changed) == base {
-			t.Errorf("%s did not change the review's fingerprint", name)
-		}
-	}
-}
-
 // Issue #20, end to end through the page's own watch: a link whose test was
 // started is never pending again, and the watch says it was opened again so
 // the click is answered. Dismissing that note touches no request.

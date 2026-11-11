@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/testhome"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -64,14 +65,21 @@ func TestMain(m *testing.M) {
 	// runs with build-tool setup off, and the data folder is the test's own.
 	// The decision itself is tested on managedToolsMode.
 	os.Setenv(EnvManagedTools, "off")
-	if data, err := os.MkdirTemp("", "aucom-cli-data-"); err == nil {
+	// And a home of its own (NEW_508A, issue #5): a `serve` or a `game open`
+	// that a test starts without naming every directory used the real cache
+	// (play-runs, assets). testhome.Run moves the whole process first and fails
+	// the run if the real profile changed anyway.
+	os.Exit(testhome.Run(func() int {
+		data, err := os.MkdirTemp("", "aucom-cli-data-")
+		if err != nil {
+			return m.Run()
+		}
 		os.Setenv("XDG_DATA_HOME", data)
 		code := m.Run()
 		os.RemoveAll(data)
 		os.RemoveAll(firstRunProgram.dir)
-		os.Exit(code)
-	}
-	os.Exit(m.Run())
+		return code
+	}))
 }
 
 // testEnv is an Env pointed entirely at temporary state: buffers instead of the

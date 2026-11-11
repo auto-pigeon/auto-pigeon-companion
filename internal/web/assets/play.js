@@ -731,43 +731,29 @@
     return own.length ? own : offered.flatMap((id) => engine.action_problems?.[id] || []);
   }
 
-  // No game can be started yet: say where that is set up, once per page.
+  // No game can be started yet: said beside the choice that needs one.
   //
-  // After the Install interaction, never over it, and only if it ended with
-  // the tools in place: a person who just said no is not asked the next thing
-  // at once, and the next visit to this area asks. The newest call is the only
-  // one that may ask, so an answer for a page the person has left, or for a
-  // request since replaced, opens nothing.
-  let askedForGame = false;
+  // NEW_508A. This used to be a dialog that opened by itself on arriving at
+  // Build & Run — "Build & Run needs a game to start" — after the Install
+  // interaction, once per page (NEW_374). Two things were wrong with it: it
+  // interrupted a person who had asked for nothing, and it was not true, since
+  // a build alone needs a compiler and no game. Now nothing opens. The line
+  // sits in "Run after build", shown only while that is ticked for a saved map
+  // and no engine here can start one; it names the fix (the same Profiles
+  // route the dialog's button went to) and the other way out, building only.
+  // The newest call is the only one that draws, and it asks the server, not
+  // state.engines: that list can be empty only because a newer refresh threw
+  // this one's answer away.
   let gameAsk = 0;
   async function askForGame() {
     const ask = ++gameAsk;
-    const wanted = () => ask === gameAsk && !askedForGame && state.runAfter && !$("area-play").hidden;
-    if (!wanted()) return;
-    const install = await window.AUCOM.installSettled();
-    if (install === "declined" || install === "failed" || !wanted()) return;
-    // An editor's leak request runs no game, so this question does not stand in
-    // front of its Build (NEW_380). The first read of the request is waited for,
-    // so a page opened by the link is not asked before it knows that.
-    await window.AUCOM.leakRequestRead;
-    if (window.AUCOM.leakRequestShown?.() || !wanted()) return;
-    // The server's answer, not state.engines: that list can be empty only
-    // because a newer refresh threw this one's answer away.
+    const note = $("play-no-game");
+    const wanted = () => ask === gameAsk && state.runAfter && state.source !== "local" && !$("area-play").hidden;
+    if (!wanted()) { if (ask === gameAsk) note.hidden = true; return; }
     const { ok, body } = await api("/api/v1/engines");
+    if (ask !== gameAsk) return;
     const playable = (body?.items || []).some((engine) => Object.keys(ACTIONS).some((id) => window.AUCOM.actionReady(engine, id)));
-    if (!ok || playable || !wanted()) return;
-    if (document.querySelector(".auth-modal:not([hidden])")) return;
-    const other = document.querySelector("dialog[open]");
-    if (other) {
-      other.addEventListener("close", () => askForGame(), { once: true });
-      return;
-    }
-    askedForGame = true;
-    const open = await window.AUCOM.confirmModal({
-      title: t("Configure a game"), body: t("Build & Run needs a game to start. Configure one in the Profiles page."),
-      confirm: t("Open Profiles"), cancel: t("Cancel"),
-    });
-    if (open) window.location.hash = "#profiles";
+    note.hidden = !ok || playable || !wanted();
   }
 
   function renderEngines() {
@@ -2460,6 +2446,7 @@
     $("play-run-after-note").hidden = !local;
     $("play-run-after-note").textContent = local ? t("For a file on this computer, play the build when it finishes.") : "";
     $("play-run-fields").hidden = local || !state.runAfter;
+    askForGame();
     showAutobuild();
     if (remembered) remember();
     const hash = local ? "#play/local" : "#play";
@@ -2475,6 +2462,7 @@
   $("play-run-after").addEventListener("change", (event) => {
     state.runAfter = event.target.checked;
     $("play-run-fields").hidden = !state.runAfter;
+    askForGame();
     invalidate(state.runAfter ? "The game starts after the build now, so the review is worked out again."
       : "Nothing starts after the build now, so the review is worked out again.");
     renderListing();
@@ -2643,6 +2631,7 @@
       state.source = "saved";
       state.runAfter = state.buildRequest.run_after;
       $("play-run-after").checked = state.runAfter;
+      askForGame();
       pendingMap = request.asset_id;
       pendingRevision = request.revision_id;
       state.map = null;

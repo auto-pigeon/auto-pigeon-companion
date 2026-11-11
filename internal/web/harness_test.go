@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/testhome"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -93,7 +94,12 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	os.Setenv(config.EnvToolsDir, tools)
-	code := m.Run()
+	// And a home of its own (NEW_508A, issue #5): these tests left lock guards
+	// in the real configuration directory, play-runs and assets in the real
+	// cache, a browser's downloads in ~/Downloads and a mimeapps.list in the
+	// real data directory. testhome.Run fails the run if the real profile
+	// changed anyway.
+	code := testhome.Run(m.Run)
 	os.RemoveAll(tools)
 	os.Exit(code)
 }
@@ -258,6 +264,9 @@ type fixtureBackend struct {
 	handoffAcks       []map[string]any
 	handoffAckPosts   int
 	handoffAcksAbsent bool
+
+	// extra answers a request before the fixture's own routes, when it wants it.
+	extra func(w http.ResponseWriter, r *http.Request) bool
 
 	server *httptest.Server
 	asset  fixtureAsset
@@ -507,6 +516,10 @@ func (b *fixtureBackend) serve(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(body)
 	}
 	path := r.URL.Path
+	// A test's own routes first (NEW_508A: the profile catalog).
+	if b.extra != nil && b.extra(w, r) {
+		return
+	}
 
 	// The login route, which is PocketBase's shape rather than the Companion
 	// API's — the client authenticates before it knows anything else.

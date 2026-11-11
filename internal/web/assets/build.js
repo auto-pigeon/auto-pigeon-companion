@@ -223,32 +223,63 @@
         why: sentenceOf(manifest.error) || t("it stopped before the compile stage") });
     }
     if (compile.state === "succeeded") {
-      return t("This compiler run found no leak. That is a statement about this run of this saved revision, not proof the map is sealed.");
+      // The same evidence the headline reads: a portal file is qbsp's own
+      // statement that it found no leak; a clean exit alone is not one.
+      return leakOutcome(manifest, leak) === "sealed"
+        ? t("The compiler wrote its portal file and no leak route: this run found no leak. That is a statement about this run of this saved revision, not proof the map is sealed.")
+        : t("The compiler finished and left neither a leak route nor a portal file, so this run does not say whether the map leaks. Its output says more.");
     }
     return t("The compiler ended as {state} and wrote no leak route. Its output says why; this is not a no-leak result.", { state: compile.state });
+  }
+
+  // leakOutcome is what a finished leak test established, from EVIDENCE and
+  // nothing else (NEW_508A). One function, read by the headline and by the
+  // sentence under it, so the two cannot disagree:
+  //
+  //   leak     the compiler's own reading says so, or a leak route was written
+  //   sealed   a QUALIFIED no-leak: the adapter's `no_leak`, or — for a
+  //            compiler the Companion does not read (Quake 1) — the portal
+  //            file qbsp writes only for a map it found no leak in
+  //   unknown  the run ended and does not say: nothing to flood from, a
+  //            successful process that left neither route nor portal file,
+  //            a result that could not be read
+  //   failed   the test could not finish: the compile did not run, failed,
+  //            was cancelled, or stopped before its verdict
+  //
+  // A process that exited 0 is not a verdict. NEW_508 called a succeeded
+  // compile with no diagnostic and no route "No leak found".
+  function leakOutcome(manifest, leak) {
+    const compile = (manifest.steps || []).find((step) => step.id === (leak?.compile_step || "compile"));
+    const wrote = (name) => Boolean(name) && (manifest.outputs || []).some((output) => output.name === name && output.path && !output.missing);
+    const ran = Boolean(compile && !compile.skipped && compile.state);
+    if (leak?.diagnostic) {
+      const said = leak.diagnostic.outcome;
+      if (said === "leak") return "leak";
+      if (said === "no_leak") return "sealed";
+      if (said === "incomplete") return "failed";
+      return "unknown";
+    }
+    if (leak?.unreadable) return "unknown";
+    if (wrote(leak?.pointfile_output || "pts")) return "leak";
+    if (!ran || compile.state !== "succeeded") return "failed";
+    return wrote(leak?.portal_output) ? "sealed" : "unknown";
   }
 
   // leakHeadline is the result at a glance (NEW_508): four outcomes, each a
   // few words, above the sentence that says how the Companion knows. A leak is
   // a RESULT — the test worked and found one — so it is not drawn as a failure;
-  // only a run that could not finish is. Sealed is never read off an exit
-  // status: with a compiler the Companion reads itself it is that reading's
-  // `no_leak`, and without one it is the old rule `leakVerdict` words below.
+  // only a run that could not finish is.
+  const LEAK_HEADLINES = {
+    leak: "Leak found",
+    sealed: "No leak found",
+    unknown: "Couldn’t determine whether the map leaks",
+    failed: "Leak test couldn’t finish",
+  };
   function leakHeadline(manifest, leak) {
-    const compile = (manifest.steps || []).find((step) => step.id === (leak?.compile_step || "compile"));
-    const found = { title: t("Leak found"), kind: "leak" };
-    const sealed = { title: t("No leak found"), kind: "sealed" };
-    const unknown = { title: t("Couldn’t determine whether the map leaks"), kind: "unknown" };
-    const failed = { title: t("Leak test couldn’t finish"), kind: "failed" };
-    if (leak?.diagnostic) {
-      return { leak: found, no_leak: sealed }[leak.diagnostic.outcome] || unknown;
-    }
-    if (leak?.unreadable) return unknown;
-    const route = (manifest.outputs || []).some((output) => output.name === (leak?.pointfile_output || "pts") && output.path && !output.missing);
-    if (route) return found;
-    if (!compile || compile.skipped || !compile.state) return failed;
-    return compile.state === "succeeded" ? sealed : failed;
+    const kind = leakOutcome(manifest, leak);
+    return { title: t(LEAK_HEADLINES[kind]), kind };
   }
+  // --- end of the leak outcome (testdata/leakoutcome.check.mjs reads to here)
 
   function renderLeakReturn(manifest, item, attempt = 0) {
     const id = manifest.build_id;

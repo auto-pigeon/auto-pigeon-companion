@@ -181,10 +181,13 @@ $ curl -sS -H "X-AUCOM-Token: $token" -H 'Content-Type: application/json' "$api/
     -d "{\"confirmed\":true,\"reviewed\":$(echo "$review" | jq '.reviewed')}" | jq '{changed, outcomes}'
 ```
 
-`reviewed` is the review's own fingerprint. Sent back with `confirmed`, a list
-that changed meanwhile is answered `409` with `"changed": true` and the new
-review, and nothing is sent or installed; leaving it out keeps the older
-behaviour, where `confirmed` alone is the approval.
+`reviewed` names the exact review: the account, and every operation with its
+direction, version, content digest, disclosures and permissions. A confirmation
+must carry it. Without it, or when the list is no longer the one that was read
+— a profile edited under the same version, a version published meanwhile,
+another account — the answer is `409` with `"changed": true` and the review as
+it stands, and nothing is sent, installed or approved. The operations that run
+are the ones that were planned for the review; nothing is looked up again.
 
 Three different words for three different things: you **sync profiles** with
 your account, you **download a revision** of a map (My Maps), and you **check
@@ -249,9 +252,9 @@ that names the programs and the folder they go in, and Profiles has an
 tools are not installed yet** beside the build profile, with **Install build
 tools** to ask again. While they install, Activity says **running** and lists
 each tool's progress.
-With no game set up yet, **Configure a game** follows once the tools are in and
-you have pressed **OK**. If you cancel the install, or it fails, you are not asked
-straight away: the question comes the next time you open Build & Run.
+With no game set up yet, **Run after build** says so in the form and links
+**Configure a game**; nothing else opens, and unticking it builds the map only —
+which needs a compiler and no game.
 
 Where they go: a `build-tools` folder beside the Companion when you unpacked it
 somewhere you can write, one folder per version, never your `PATH`, a system

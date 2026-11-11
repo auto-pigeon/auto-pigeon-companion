@@ -117,6 +117,10 @@ These are unconditional. Everything else is routed.
   task context: the only `SessionStart` hook this repository has is graft's, which injects a
   repository map and nothing about the task. So the marker rule holds whichever way the session
   began, and so does resolving the task yourself when nothing resolved it for you.
+- **No test or task run touches the real profile.** `internal/cli` and `internal/web` move their whole test process to
+  a home of its own in `TestMain` (`internal/testhome`, which fails a run that changed the real per-user Companion
+  directories; issue #5). A Companion you start yourself gets a task-owned `HOME` and `XDG_*`, and an explicit
+  subcommand: **with no arguments the binary is the desktop launch on the real profile** — use `companion help`.
 - **Read `TEST-SKILL.md` before selecting, resuming or qualifying tests** (canonical: AUT
   `skills/auto-pigeon-testing/SKILL.md`).
 - **`go build ./...`, `go vet ./...` and `go test ./...` must all pass before a task that changes
