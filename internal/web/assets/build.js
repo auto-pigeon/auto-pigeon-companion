@@ -215,7 +215,19 @@
       }
       return [said, how, ...notes].join(" ");
     }
-    if (leak?.unreadable) return t("This leak test left nothing to read: {why}", { why: leak.unreadable });
+    // A written route is a leak whatever else could or could not be read: the
+    // sentence follows the headline (seen live, NEW_508B: "Leak found" above
+    // "its leak evidence could not be read").
+    if (leak?.unreadable && leakOutcome(manifest, leak) === "leak") {
+      return t("The compiler wrote a leak route: this run found a leak in this map. The route is among the files below.");
+    }
+    if (leak?.unreadable) {
+      // Two different things, said apart: a test that could not finish, and a
+      // compile that finished with evidence nothing here is qualified to read.
+      return leakOutcome(manifest, leak) === "failed"
+        ? t("The leak test did not finish, so there is no result about leaks: {why}", { why: (sentenceOf(manifest.error) || leak.unreadable).replace(/\.*$/, ".") })
+        : t("The compile finished, but its leak evidence could not be read as a verdict: {why}. For a verdict, start the test from the editor on a saved map.", { why: leak.unreadable });
+    }
     const route = (manifest.outputs || []).some((output) => output.name === (leak?.pointfile_output || "pts") && output.path && !output.missing);
     if (route) return t("The compiler wrote a leak route (.pts): this run found a leak in this saved revision.");
     if (!compile || compile.skipped || !compile.state) {
@@ -259,9 +271,14 @@
       if (said === "incomplete") return "failed";
       return "unknown";
     }
-    if (leak?.unreadable) return "unknown";
+    // No reading of the run. A route file is still a leak. After that, how the
+    // compile ended comes BEFORE "nothing could be read": a build that never
+    // compiled, or whose compile failed, could not finish — it is not a
+    // finished test with unqualified evidence (seen live, NEW_508B: a build
+    // refused before its first stage was headed "Couldn't determine").
     if (wrote(leak?.pointfile_output || "pts")) return "leak";
     if (!ran || compile.state !== "succeeded") return "failed";
+    if (leak?.unreadable) return "unknown";
     return wrote(leak?.portal_output) ? "sealed" : "unknown";
   }
 

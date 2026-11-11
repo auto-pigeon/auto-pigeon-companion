@@ -110,8 +110,43 @@ func (s *Server) handleAccountStatus(w http.ResponseWriter, r *http.Request) {
 
 // accountState compares this machine's profiles with the account's own.
 func (s *Server) accountState(ctx context.Context) (accountStatus, map[string]profile.Profile, map[string]aub.PublishedProfile) {
-	status := accountStatus{CheckedAt: time.Now().UTC(), SyncedAspect: "profiles", Profiles: []accountProfile{}}
+	return s.accountStateOn(ctx, s.aubClient())
+}
+
+// syncSession is the backend and the signed-in account one sync is about: the
+// client it talks through, that client's own address, and who is signed in.
+// A review, its plans and its writes all use ONE of these, taken once.
+type syncSession struct {
+	client *aub.Client
+	base   string
+	user   string
+}
+
+// sessionNow is the session as it stands, or false when nobody is signed in.
+func (s *Server) sessionNow() (syncSession, bool) {
 	client := s.aubClient()
+	if client == nil || !client.Authenticated() {
+		return syncSession{}, false
+	}
+	account := s.config().Session
+	user := account.UserID
+	if user == "" {
+		user = account.Email
+	}
+	return syncSession{client: client, base: client.BaseURL(), user: user}, true
+}
+
+// still reports whether the server is talking to the same backend as the same
+// account as when this session was taken: the same client, at the same
+// address, signed in as the same user.
+func (s *Server) still(session syncSession) bool {
+	now, ok := s.sessionNow()
+	return ok && now.client == session.client && now.base == session.base && now.user == session.user
+}
+
+// accountStateOn is accountState through one given client.
+func (s *Server) accountStateOn(ctx context.Context, client *aub.Client) (accountStatus, map[string]profile.Profile, map[string]aub.PublishedProfile) {
+	status := accountStatus{CheckedAt: time.Now().UTC(), SyncedAspect: "profiles", Profiles: []accountProfile{}}
 	if client == nil || !client.Authenticated() {
 		return status, nil, nil
 	}
@@ -292,10 +327,9 @@ type syncOperation struct {
 
 // planSync turns the account's state into the exact operations a sync would
 // perform. It writes nothing anywhere.
-func (s *Server) planSync(ctx context.Context, status accountStatus, local map[string]profile.Profile,
+func (s *Server) planSync(ctx context.Context, client *aub.Client, status accountStatus, local map[string]profile.Profile,
 	remote map[string]aub.PublishedProfile,
 ) []syncOperation {
-	client := s.aubClient()
 	catalog, _ := s.catalog()
 	operations := []syncOperation{}
 	for _, row := range status.Profiles {
@@ -341,14 +375,19 @@ func (s *Server) planSync(ctx context.Context, status accountStatus, local map[s
 	return operations
 }
 
-// reviewIdentity names a review: whose account, on which server, and every
+// reviewIdentity names a review: whose account, on which BACKEND, and every
 // operation with its direction, version, content digest, disclosures and
 // permissions — and an operation that could not be planned, with why. Two
 // reviews with one identity would send and install the same bytes with the
 // same approvals. Anything else is a different review.
-func reviewIdentity(account, server string, operations []syncOperation) string {
+//
+// The backend is its actual address and the account its user id — never the
+// label the page shows for a server: two development backends on one host
+// share a label, and a review read against one is not a review of the other
+// (NEW_508B).
+func reviewIdentity(session syncSession, operations []syncOperation) string {
 	hash := sha256.New()
-	fmt.Fprintf(hash, "aucom.sync-review/1\n%q %q\n", account, server)
+	fmt.Fprintf(hash, "aucom.sync-review/2\n%q %q\n", session.base, session.user)
 	for _, operation := range operations {
 		outcome := operation.outcome
 		fmt.Fprintf(hash, "%q %q %q %q %q %q %q\n", outcome.ID, outcome.Action, outcome.Result,
@@ -366,7 +405,15 @@ func (s *Server) handleAccountSync(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, errors.New("sync needs the confirmation the review asks for; nothing was sent or installed"))
 		return
 	}
-	status, local, remote := s.accountState(r.Context())
+	// ONE session for the whole request: the state is read, the plans are made
+	// and the writes go through this client, as this account. It is not looked
+	// up again on the way to publishing (NEW_508B).
+	session, signedIn := s.sessionNow()
+	if !signedIn {
+		writeError(w, http.StatusUnauthorized, errors.New("sign in to sync with your Auto-Pigeon account"))
+		return
+	}
+	status, local, remote := s.accountStateOn(r.Context(), session.client)
 	if !status.SignedIn {
 		writeError(w, http.StatusUnauthorized, errors.New("sign in to sync with your Auto-Pigeon account"))
 		return
@@ -377,8 +424,8 @@ func (s *Server) handleAccountSync(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// The whole plan, before the first write.
-	operations := s.planSync(r.Context(), status, local, remote)
-	identity := reviewIdentity(status.Email, status.ServerLabel, operations)
+	operations := s.planSync(r.Context(), session.client, status, local, remote)
+	identity := reviewIdentity(session, operations)
 	outcomes := make([]syncOutcome, 0, len(operations))
 	for _, operation := range operations {
 		outcomes = append(outcomes, operation.outcome)
@@ -403,7 +450,7 @@ func (s *Server) handleAccountSync(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client := s.aubClient()
+	client := session.client
 	profilesDir, err := s.profilesDir()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
@@ -418,6 +465,14 @@ func (s *Server) handleAccountSync(w http.ResponseWriter, r *http.Request) {
 	// bytes are what is published and the served, digest-checked bytes are
 	// what is installed. Nothing is looked up again.
 	for index, operation := range operations {
+		// The backend or the account changed while this request was running —
+		// another window chose a server, somebody signed out or in. What is
+		// left is not run: it was reviewed for the session this began with.
+		if (operation.upload != nil || operation.install != nil) && !s.still(session) {
+			outcomes[index].Result = "failed"
+			outcomes[index].Error = "the server or the account changed while syncing; this was not sent or installed. Review again."
+			continue
+		}
 		switch {
 		case operation.upload != nil:
 			_, err := publish.Publish(r.Context(), client, *operation.upload, aub.PublishedPrivate, true)

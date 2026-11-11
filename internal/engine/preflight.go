@@ -362,8 +362,12 @@ func bindFix(document profile.Profile, again bool, engineFix string) string {
 // toolchain named that command.
 func rootFix(document profile.Profile, role, engineFix string) string {
 	if document.Metadata().Kind == profile.KindTool {
-		return "Set it under \"Where these programs are on this machine\" in Profiles, or run `companion acquire resolve <its profile file> --mode user_path --user-path <folder> --root " +
-			role + "=<path> --bind`."
+		// By the profile's own id, and touching only the folder (issue #36):
+		// the earlier hint named `acquire resolve <its profile file> --mode
+		// user_path …`, which a built-in tool has no file for and which would
+		// replace programs the Companion installed itself.
+		return "Set it under \"Where these programs are on this machine\" in Profiles, or run `companion acquire roots " +
+			document.Metadata().ID + " --root " + role + "=<path>`."
 	}
 	return engineFix
 }

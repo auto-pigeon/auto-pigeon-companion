@@ -10,7 +10,9 @@ import (
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/acquire"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
+	"os"
 )
 
 // `companion acquire` — finding a tool's programs on this machine.
@@ -24,6 +26,9 @@ const acquireUsage = `usage:
   companion acquire resolve <profile.json> [--mode <m>] [--user-path <dir>] [--root role=path] [--bind]
                             find a profile's executables by one of its routes (user_path,
                             system_path, already_installed); nothing is downloaded
+  companion acquire roots <profile id> --root role=path [--root role=path]
+                            say where a TOOL profile's folders are (game_root, content_root, …),
+                            by its id; its programs, arguments and approval are left as they are
 `
 
 func runAcquire(env *Env, args []string) int {
@@ -37,6 +42,8 @@ func runAcquire(env *Env, args []string) int {
 		return 0
 	case "resolve":
 		return acquireResolve(env, args[1:])
+	case "roots":
+		return acquireRoots(env, args[1:])
 	case "plan", "install", "accept", "list", "verify", "use", "gc":
 		fmt.Fprintf(env.Stderr, "error: `companion acquire %s` was removed: the Companion downloads no program.\n"+
 			"Install the tool yourself, then point its profile at it (Profiles › Configure, or `acquire resolve`).\n", args[0])
@@ -107,6 +114,117 @@ func acquireResolve(env *Env, args []string) int {
 		return 1
 	}
 	fmt.Fprint(env.Stdout, "\nrecorded in bindings.json\n")
+	return 0
+}
+
+// acquireRoots records where a tool profile's folders are, and nothing else.
+//
+// Issue #36. A pipeline whose tool has no game or project folder reads "needs
+// setup", and the fix it named was `acquire resolve <its profile file> --mode
+// user_path --user-path <folder> --root … --bind`. For a built-in tool there is
+// no profile file to name, and for a tool the Companion installed itself that
+// command would replace the managed programs with a folder the person has to
+// invent. A folder is a fact about this machine that has nothing to do with
+// where the programs are, so it has its own command: by profile ID, as every
+// other command names a profile, touching only `roots`.
+func acquireRoots(env *Env, args []string) int {
+	var roots rootFlags
+	set := newFlagSet(env, "acquire roots")
+	set.Var(&roots, "root", "role=path; repeat for several")
+	rest, code, ok := parseInterspersed(env, set, args)
+	if !ok {
+		return code
+	}
+	if len(rest) != 1 || len(roots.values()) == 0 {
+		fmt.Fprint(env.Stderr, "error: acquire roots takes one tool profile id and at least one --root role=path\n")
+		return 2
+	}
+	settings, err := loadSettings(env)
+	if err != nil {
+		return fail(env, err)
+	}
+	_, profilesDir, bindingsPath, err := statePaths(env, settings)
+	if err != nil {
+		return fail(env, err)
+	}
+	entries, err := job.NewCatalog(profilesDir).List()
+	if err != nil {
+		return fail(env, err)
+	}
+	var entry *job.CatalogEntry
+	var tools []string
+	for index := range entries {
+		if _, isTool := entries[index].Profile.(*profile.ToolProfile); !isTool {
+			continue
+		}
+		tools = append(tools, entries[index].Profile.Metadata().ID)
+		if entries[index].Profile.Metadata().ID == rest[0] {
+			entry = &entries[index]
+		}
+	}
+	if entry == nil {
+		sort.Strings(tools)
+		fmt.Fprintf(env.Stderr, "error: no tool profile has the id %q (this machine has: %s)\n", rest[0], strings.Join(tools, ", "))
+		return 1
+	}
+	// Only a folder the profile declares, and only one that is there: a role
+	// nothing reads, or a path that is not a directory, is refused before
+	// anything is written.
+	declared := map[string]bool{}
+	for _, action := range entry.Profile.ActionList() {
+		for _, ref := range action.Roots {
+			declared[ref.Role] = true
+		}
+	}
+	resolved := map[string]string{}
+	for role, path := range roots.values() {
+		if role == profile.RootWorkspace || role == profile.RootToolInstall {
+			fmt.Fprintf(env.Stderr, "error: the %q folder is the Companion's own and is not something to record\n", role)
+			return 2
+		}
+		if !declared[role] {
+			names := make([]string, 0, len(declared))
+			for name := range declared {
+				names = append(names, name)
+			}
+			sort.Strings(names)
+			fmt.Fprintf(env.Stderr, "error: %s reads no %q folder; it reads: %s\n", rest[0], role, strings.Join(names, ", "))
+			return 2
+		}
+		absolute, err := filepath.Abs(path)
+		if err != nil {
+			return fail(env, err)
+		}
+		if info, err := os.Stat(absolute); err != nil || !info.IsDir() {
+			fmt.Fprintf(env.Stderr, "error: %s is not a directory on this machine\n", absolute)
+			return 1
+		}
+		resolved[role] = absolute
+	}
+	meta := entry.Profile.Metadata()
+	if _, err := binding.Update(bindingsPath, func(set *binding.Set) error {
+		local, _ := set.Find(meta.ID)
+		if local.ProfileDigest != entry.Digest {
+			// The approval is for one exact document; the paths are not.
+			local.Grant = nil
+		}
+		local.ProfileID, local.ProfileVersion, local.ProfileDigest = meta.ID, meta.Version, entry.Digest
+		local.Trust = local.Provenance(entry.Trust)
+		if local.Roots == nil {
+			local.Roots = map[string]string{}
+		}
+		for role, path := range resolved {
+			local.Roots[role] = path
+		}
+		local.UpdatedAt = time.Now().UTC()
+		return set.Put(local)
+	}); err != nil {
+		return fail(env, err)
+	}
+	for _, role := range sortedNames(resolved) {
+		fmt.Fprintf(env.Stdout, "%s  %s = %s\n", meta.ID, role, resolved[role])
+	}
+	fmt.Fprint(env.Stdout, "recorded in bindings.json; its programs, arguments and approval are unchanged\n")
 	return 0
 }
 

@@ -32,6 +32,11 @@ const cases = [
   ["a succeeded compile whose portal file is missing", { steps: [compile("succeeded")], outputs: [file("prt", { missing: true })] }, q1, "unknown", "Couldn’t determine whether the map leaks"],
   ["a pipeline that declares no portal file", { steps: [compile("succeeded")], outputs: [file("bsp")] }, { compile_step: "compile", pointfile_output: "pts" }, "unknown", "Couldn’t determine whether the map leaks"],
   ["a result that could not be read", { steps: [compile("succeeded")], outputs: [] }, { compile_step: "compile", unreadable: "the log is gone" }, "unknown", "Couldn’t determine whether the map leaks"],
+  // Seen live (NEW_508B): unreadable AND the compile never ran or failed is a
+  // test that could not finish; unreadable after a finished compile is not.
+  ["nothing to read because the build was refused before compiling", { steps: [compile("", { skipped: true })], outputs: [], error: "content refused" }, { compile_step: "compile", unreadable: "the build has no pinned AUB map source" }, "failed", "Leak test couldn’t finish"],
+  ["nothing to read and the compile failed", { steps: [compile("failed")], outputs: [] }, { compile_step: "compile", unreadable: "the log is gone" }, "failed", "Leak test couldn’t finish"],
+  ["a finished compile of a local file: evidence nobody is qualified to read", { steps: [compile("succeeded")], outputs: [file("prt")] }, { compile_step: "compile", pointfile_output: "pts", unreadable: "the build has no pinned AUB map source" }, "unknown", "Couldn’t determine whether the map leaks"],
   // A genuine failure.
   ["the compile failed and wrote nothing", { steps: [compile("failed")], outputs: [] }, q1, "failed", "Leak test couldn’t finish"],
   ["the compile never ran", { steps: [compile("", { skipped: true })], outputs: [], error: "the converter refused the map" }, q1, "failed", "Leak test couldn’t finish"],

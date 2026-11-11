@@ -334,7 +334,7 @@ func TestASyncConfirmationIsBoundToTheExactReviewedOperations(t *testing.T) {
 		}
 		// Signed in as somebody else, the first account's review is not theirs.
 		m.backend.mu.Lock()
-		m.backend.email = "someone-else@example.test"
+		m.backend.email, m.backend.userID = "someone-else@example.test", "user2"
 		m.backend.mu.Unlock()
 		m.signIn()
 		status, body := m.call(http.MethodPost, "/api/v1/account/sync", map[string]any{"confirmed": true, "reviewed": reviewed})
@@ -374,5 +374,68 @@ func TestTheTermsGateIsNotWordedAsALostSignIn(t *testing.T) {
 	lapsed := &aub.APIError{StatusCode: http.StatusUnauthorized}
 	if why := offlineReason(lapsed); !strings.Contains(why, "sign in again") || blockedBy(lapsed) != "" {
 		t.Errorf("a lapsed session is worded %q, blocked %q", why, blockedBy(lapsed))
+	}
+}
+
+// NEW_508B. A review is bound to the actual backend, not to the label the
+// page shows for one: two development backends on one host have the same
+// label. The same account (same email, same user id) on ANOTHER backend does
+// not inherit a review read against the first — nothing is published there
+// and nothing is installed from it.
+func TestASyncReviewDoesNotCarryOverToAnotherBackend(t *testing.T) {
+	m, first := syncMachine(t)
+	reviewed, _ := review(t, m)
+
+	// A second backend: same host, so the same display label; same account.
+	other := newFixtureBackend(t)
+	second := &profileCatalog{listings: map[string]*catalogListing{
+		"listing-harmless": {id: "listing-harmless", profileID: "example.local.harmless", kind: "tool",
+			name: "A tool profile somebody wrote", versions: []catalogVersion{{"1.0.0", harmlessTool(t, "1.0.0")}}},
+	}}
+	other.extra = second.serve
+	if serverLabel(other.url()) != serverLabel(m.backend.url()) {
+		t.Fatalf("the two backends have different labels (%q, %q); this test needs them equal", serverLabel(other.url()), serverLabel(m.backend.url()))
+	}
+	// Typing another server's address is a developer's act (`--debug`), which
+	// is exactly where two backends share one label.
+	m.server.debug = true
+	status, body := m.call(http.MethodPut, "/api/v1/settings", map[string]any{"aub_base_url": other.url()})
+	if status != http.StatusOK {
+		t.Fatalf("choosing the other backend: %d %v", status, body)
+	}
+	m.backend = other
+	m.signIn()
+
+	status, body = m.call(http.MethodPost, "/api/v1/account/sync", map[string]any{"confirmed": true, "reviewed": reviewed})
+	if status != http.StatusConflict || body["changed"] != true || body["reviewed"] == reviewed {
+		t.Fatalf("a review read against one backend was accepted on another: %d %v", status, body)
+	}
+	if first.publishes() != 0 || second.publishes() != 0 || m.installedHere("example.local.harmless") {
+		t.Fatalf("a carried-over review sent %d + %d document(s) or installed a profile", first.publishes(), second.publishes())
+	}
+	// Read on the second backend, the review is that backend's and goes through there.
+	fresh, _ := review(t, m)
+	if status, body = m.call(http.MethodPost, "/api/v1/account/sync", map[string]any{"confirmed": true, "reviewed": fresh}); status != http.StatusOK {
+		t.Fatalf("confirming the second backend's own review: %d %v", status, body)
+	}
+	if first.publishes() != 0 || second.publishes() == 0 {
+		t.Errorf("the writes went to the wrong backend: first %d, second %d", first.publishes(), second.publishes())
+	}
+}
+
+// The identity itself: the address and the user, not the label or the email.
+func TestTheReviewIdentityNamesTheBackendAndTheUser(t *testing.T) {
+	operations := []syncOperation{{outcome: syncOutcome{ID: "a", Action: "upload", Result: "planned", Version: "1.0.0", Digest: "sha256:x"}}}
+	base := reviewIdentity(syncSession{base: "http://127.0.0.1:9190", user: "u1"}, operations)
+	for name, other := range map[string]syncSession{
+		"another port on the same host": {base: "http://127.0.0.1:9290", user: "u1"},
+		"another account":               {base: "http://127.0.0.1:9190", user: "u2"},
+	} {
+		if reviewIdentity(other, operations) == base {
+			t.Errorf("%s has the same review identity", name)
+		}
+	}
+	if reviewIdentity(syncSession{base: "http://127.0.0.1:9190", user: "u1"}, operations) != base {
+		t.Error("the same session and operations give two identities")
 	}
 }

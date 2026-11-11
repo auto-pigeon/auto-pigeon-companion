@@ -265,6 +265,8 @@ type fixtureBackend struct {
 	handoffAckPosts   int
 	handoffAcksAbsent bool
 
+	// userID is the id the login answers with; empty is "user1".
+	userID string
 	// extra answers a request before the fixture's own routes, when it wants it.
 	extra func(w http.ResponseWriter, r *http.Request) bool
 
@@ -495,6 +497,13 @@ func newFixtureBackend(t *testing.T) *fixtureBackend {
 
 func (b *fixtureBackend) url() string { return b.server.URL }
 
+func (b *fixtureBackend) userIDNow() string {
+	if b.userID == "" {
+		return "user1"
+	}
+	return b.userID
+}
+
 // savedAPMap makes the one asset a saved APMap that declares a game, which is
 // what a map in an account is: the leak review reads the game out of exactly
 // these bytes (`Q3_018`).
@@ -526,7 +535,7 @@ func (b *fixtureBackend) serve(w http.ResponseWriter, r *http.Request) {
 	if strings.HasSuffix(path, "/auth-with-password") {
 		write(map[string]any{
 			"token":  b.token,
-			"record": map[string]any{"id": "user1", "email": b.email},
+			"record": map[string]any{"id": b.userIDNow(), "email": b.email},
 		})
 		return
 	}

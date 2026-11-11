@@ -232,7 +232,8 @@ curl -fsS -H "X-AUCOM-Token: $token" -H 'Content-Type: application/json' "$api/a
 deployments by name, **Auto-Pigeon** (`https://auto-pigeon.com`) and
 **Auto-Pigeon beta** (`https://beta.auto-pigeon.com`). The beta choice uses
 `https://beta-aub.auto-pigeon.com` for its API calls and links to the public
-site for account signup and password resets. The Companion connects after you
+site for account signup (the site has no password reset, so the Companion
+offers none). The Companion connects after you
 pick a deployment.
 
 ### Build tools: setup and updates
@@ -1057,6 +1058,22 @@ do and not to do. Fetch the archive for your platform, check it
 against the `SHA256SUMS` beside it, unpack it into a folder of its own, and
 choose the unpacked folder — the one that **contains** `bin/`, where `q3map2`
 sits beside every library it loads:
+
+A Quake III or Quake II pipeline also needs to know where the game and your
+project are. Say so for its tool, by id — its programs, arguments and approval
+are left as they are:
+
+```console
+$ companion acquire roots auto-pigeon.q3map2.auto-pigeon-build \
+    --root game_root="$HOME/games/quake3" --root content_root="$HOME/q3project"
+auto-pigeon.q3map2.auto-pigeon-build  content_root = /home/me/q3project
+auto-pigeon.q3map2.auto-pigeon-build  game_root = /home/me/games/quake3
+recorded in bindings.json; its programs, arguments and approval are unchanged
+```
+
+The game folder is the one that holds `baseq3` (for Quake II, the folder that
+holds `pak0.pak` itself), with real files — a folder of links to somewhere else
+is refused — and the project folder needs a `baseq3` directory of its own.
 
 ```console
 $ companion acquire resolve internal/profile/builtin/q3map2-auto-pigeon.tool.json \

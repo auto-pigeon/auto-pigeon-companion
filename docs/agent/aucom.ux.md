@@ -106,8 +106,10 @@ area down, plus a standing green **Synced** in the header. A smaller, recoloured
   (tools and the app, in Settings). Three states, never one indicator.
 - **Sync profiles is a review, then one press — of that review.** The plans are made ONCE (`account.go` `planSync`:
   `publish.PreviewOf` per upload, `publish.PlanInstall` at the version the account's state named, never "latest"), the
-  review's identity is computed from them (`reviewIdentity`: account, server, and per operation its direction, version,
-  content digest, disclosures and permissions) and the press executes those same plans. A confirmation without that
+  review's identity is computed from them (`reviewIdentity`: the backend's actual ADDRESS and the signed-in user id —
+  never the server's display label, which two development backends share — and per operation its direction, version,
+  content digest, disclosures and permissions) and the press executes those same plans through the ONE client the
+  request began with (`syncSession`; a backend or account that changes mid-request stops the remaining writes). A confirmation without that
   identity, or with one that is not the list as it stands, is `409 changed` with the current review and sends,
   installs and approves nothing (NEW_508A; the first fingerprint hashed summary rows made before the plans). A
   same-version conflict says *Both copies changed. Save the one you want to keep as a new version.*
@@ -119,8 +121,10 @@ area down, plus a standing green **Synced** in the header. A smaller, recoloured
 - **A leak result leads with one of four headlines**, read from evidence by ONE function the headline and the sentence
   share (`build.js` `leakOutcome`, NEW_508A): *Leak found* (the adapter's reading or a written route), *No leak found*
   (the adapter's `no_leak`, or for Quake 1 the portal file qbsp writes only for a map it found no leak in —
-  `leak_test.portal_output`), *Couldn’t determine whether the map leaks* (no interior, or a clean exit that left
-  neither route nor portal file), *Leak test couldn’t finish*. A process that exited 0 is not a verdict.
+  `leak_test.portal_output`), *Couldn’t determine whether the map leaks* (no interior, a clean exit that left
+  neither route nor portal file, or a finished compile whose evidence nothing is qualified to read — a local file),
+  *Leak test couldn’t finish* (the compile never ran or failed, checked BEFORE "nothing could be read"). A process
+  that exited 0 is not a verdict.
 - **A profile that changed since it was set up says so** — *Changed: approve this version*, and that the folders
   and programs chosen are kept (#3). A profile installed from a listing stays **Community** (#19,
   `binding.Provenance`).
