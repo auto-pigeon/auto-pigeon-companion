@@ -129,11 +129,18 @@ func (s *Server) handleLeakTestRequest(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	// A used link delivered again (NEW_508, issue #20): never pending, and
+	// said beside whatever is, so the click is answered with the test that ran.
+	repeat, _ := leakintent.Repeated(leakintent.Path(dir), time.Now().UTC())
 	if request == nil {
 		// Nothing is pending: a request that was only received or reviewed
 		// has expired or was replaced, so its line is no longer kept alive.
 		s.leaks.nothingPending("")
-		writeJSON(w, http.StatusOK, map[string]any{"pending": false})
+		answer := map[string]any{"pending": false}
+		if repeat != nil {
+			answer["repeat"] = repeat
+		}
+		writeJSON(w, http.StatusOK, answer)
 		return
 	}
 	s.leaks.nothingPending(request.RequestID)
@@ -143,11 +150,15 @@ func (s *Server) handleLeakTestRequest(w http.ResponseWriter, _ *http.Request) {
 	}
 	// `relay` is whether the editor has been told: a request this machine
 	// holds and the editor has not heard about are different facts.
-	writeJSON(w, http.StatusOK, map[string]any{
+	answer := map[string]any{
 		"pending": true, "request_id": request.RequestID, "asset_id": request.AssetID,
 		"revision": request.Revision, "content_sha256": request.ContentSHA256, "received_at": received,
 		"relay": s.leaks.view(request.RequestID),
-	})
+	}
+	if repeat != nil {
+		answer["repeat"] = repeat
+	}
+	writeJSON(w, http.StatusOK, answer)
 }
 
 // pendingLeakRequest is the pending request when it is the one named.

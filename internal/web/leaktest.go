@@ -368,6 +368,9 @@ func (s *Server) publishLeakResult(buildID, requestID string) error {
 func (s *Server) handleLeakTestDismiss(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		RequestID string `json:"request_id"`
+		// Repeat dismisses the note that a used link was opened again
+		// (NEW_508), and nothing else: no request is forgotten or retired.
+		Repeat bool `json:"repeat"`
 	}
 	if r.ContentLength != 0 && !decodeJSON(w, r, &body) {
 		return
@@ -378,6 +381,14 @@ func (s *Server) handleLeakTestDismiss(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	path, now := leakintent.Path(dir), time.Now().UTC()
+	if body.Repeat {
+		if err = leakintent.DismissRepeat(path, body.RequestID, now); err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"dismissed": true})
+		return
+	}
 	if body.RequestID == "" {
 		if err = leakintent.Dismiss(path, now); err != nil {
 			writeError(w, http.StatusInternalServerError, err)

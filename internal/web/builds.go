@@ -936,6 +936,9 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		leakRequest = consumed
+		// A build is starting for it: from here the same link opened again is
+		// "already ran", not a second build and not a silent nothing (NEW_508).
+		_ = leakintent.Used(leakintent.Path(configDir), consumed.RequestID, "", time.Now().UTC())
 	}
 
 	failed := make(chan error, 1)
@@ -970,6 +973,11 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 		if leakRequest != nil && manifest != nil && manifest.BuildID != "" && manifest.State.Terminal() {
 			// The delivery is recorded beside the build, so the page can show
 			// it apart from the compiler's verdict and send it again.
+			// Which build the request became is remembered with the used
+			// request, so the same link opened again points here (NEW_508).
+			if dir, dirErr := s.configDir(); dirErr == nil {
+				_ = leakintent.Used(leakintent.Path(dir), leakRequest.RequestID, manifest.BuildID, time.Now().UTC())
+			}
 			if returned := s.deliverLeakResult(manifest.BuildID, *leakRequest); returned.State != "returned" {
 				_, _ = run.log.Write([]byte("\nCompanion could not return the leak result to the editor: " + returned.Error + "\n"))
 			}

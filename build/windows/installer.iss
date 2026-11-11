@@ -100,7 +100,7 @@ Source: "..\..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 ; records it and raises the Companion's page, and starts nothing. Both the program
 ; path and %1 are quoted: an unquoted path under "C:\Program Files" invites the
 ; loader to try "C:\Program.exe", and %1 is a string somebody else chose.
-Root: HKCU; Subkey: "Software\Classes\autopigeon"; ValueType: string; ValueName: ""; ValueData: "URL:Auto-Pigeon Companion join link"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\autopigeon"; ValueType: string; ValueName: ""; ValueData: "URL:Auto-Pigeon Companion"; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\autopigeon"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
 Root: HKCU; Subkey: "Software\Classes\autopigeon\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#AppExeName},0"
 Root: HKCU; Subkey: "Software\Classes\autopigeon\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExeName}"" game open ""%1"""

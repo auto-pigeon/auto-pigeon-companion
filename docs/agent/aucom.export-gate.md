@@ -48,7 +48,9 @@ future prompt.
    formality.
 
 3. **A DEPLOYMENT'S TRUST STATE NEVER BECOMES THIS MACHINE'S.** An installed profile is
-   `profile.TrustCommunity`, always. AUB's `builtin` is the ONE state `profile.Authorize` accepts
+   `profile.TrustCommunity`, always — and it STAYS that: the catalog calls every file in the profile folder
+   `local`, so a description or a binding write goes through `binding.Provenance` (a recorded `Origin` reads as
+   community; `NEW_508`, #19) and an approval no longer rewrites the stored trust. AUB's `builtin` is the ONE state `profile.Authorize` accepts
    with no grant, and AUB's `verified` claims a catalogue signature this build did not check;
    adopting either would let anybody who runs an AUB hand out an unreviewed run.
    `TestADeploymentCannotHandOutTrustThisMachineDidNotCheck` fails a change that does. The badge is

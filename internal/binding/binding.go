@@ -233,6 +233,24 @@ func (b LocalBinding) Validate() error {
 	return fmt.Errorf("binding %s: %s", b.ProfileID, strings.Join(problems, "; "))
 }
 
+// Provenance is the trust a document is shown and recorded with, given what
+// the catalog calls it. The catalog reads the profile folder and calls every
+// file in it `local` — it cannot know more from a location. This binding can:
+// a document installed from a listing has its Origin recorded, and it is
+// `community`, before and after it is approved or its paths are saved.
+// NEW_508, issue #19: the page said "Local — found in your profile folder …
+// cannot tell who put it there" about a profile the Companion itself had
+// installed from a named listing, and approving it rewrote the stored trust to
+// `local`. Nothing here makes a document MORE trusted: `local` and `community`
+// both need a grant (profile.Authorize), and built-in and verified pass
+// through untouched.
+func (b LocalBinding) Provenance(catalog profile.Trust) profile.Trust {
+	if catalog == profile.TrustLocal && b.Origin != nil {
+		return profile.TrustCommunity
+	}
+	return catalog
+}
+
 // Request builds the machine half of a profile resolution.
 //
 // The workspace is a parameter rather than a member: it belongs to one job, is

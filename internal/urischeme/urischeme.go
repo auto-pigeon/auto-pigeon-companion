@@ -363,6 +363,15 @@ func (r *Registrar) xdgUnregister() (State, error) {
 	}, nil
 }
 
+// DisplayName is what the operating system and the browser call the program
+// an autopigeon:// link opens: Chrome's "Open <name>?" and the Windows
+// protocol key's description. It names the program and none of the link's
+// uses — the handler carries builds, leak tests and joins, and "join link"
+// asked a person starting a leak test whether to open a join link (NEW_508,
+// issue #16). build/windows/installer.iss writes the same words, and
+// TestTheHandlerIsNamedForTheProgramNotOneOfItsUses holds the two together.
+const DisplayName = "Auto-Pigeon Companion"
+
 // desktopEntry renders the .desktop file.
 //
 // NoDisplay, because the application already has a launcher entry that packages
@@ -373,8 +382,8 @@ func desktopEntry(command []string) string {
 	var b strings.Builder
 	b.WriteString("[Desktop Entry]\n")
 	b.WriteString("Type=Application\n")
-	b.WriteString("Name=Auto-Pigeon Companion join link\n")
-	b.WriteString("Comment=Show an " + Scheme + ":// join link in the Companion, starting nothing\n")
+	b.WriteString("Name=" + DisplayName + "\n")
+	b.WriteString("Comment=Open an " + Scheme + ":// link from Auto-Pigeon in the Companion: a build, a leak test or a game to join. A link starts nothing\n")
 	b.WriteString("Exec=" + desktopExec(command) + "\n")
 	b.WriteString("Terminal=false\n")
 	b.WriteString("NoDisplay=true\n")
@@ -613,7 +622,7 @@ func (r *Registrar) windowsRegister() (State, error) {
 	// HKCU only. A per-user key needs no administrator rights, is removed with
 	// the user's profile, and cannot affect anybody else on the machine.
 	for _, args := range [][]string{
-		{"add", WindowsKey, "/ve", "/d", "URL:Auto-Pigeon Companion join link", "/f"},
+		{"add", WindowsKey, "/ve", "/d", "URL:" + DisplayName, "/f"},
 		{"add", WindowsKey, "/v", "URL Protocol", "/t", "REG_SZ", "/d", "", "/f"},
 		{"add", windowsCommandKey, "/ve", "/d", line, "/f"},
 	} {

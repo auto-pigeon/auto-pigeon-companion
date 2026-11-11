@@ -78,7 +78,7 @@ func (t Trust) Describe() string {
 	case TrustVerified:
 		return "Verified — signed by the Auto-Pigeon catalogue."
 	case TrustCommunity:
-		return "Community — imported from elsewhere; nobody has checked it for you."
+		return "Community — installed from Auto-Pigeon or imported from elsewhere; nobody has checked it for you."
 	case TrustLocal:
 		return "Local — found in your profile folder; nobody has checked it for you, and the Companion cannot tell who put it there."
 	}

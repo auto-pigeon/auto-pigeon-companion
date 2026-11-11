@@ -2,6 +2,8 @@ package web
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -13,7 +15,8 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/publish"
 )
 
-// The account button in the header, and "Sync to cloud" (NEW_244D, HITL).
+// The account in the header, and "Sync profiles" (NEW_244D, HITL; named for
+// what it syncs by NEW_508 — it was "Sync to cloud").
 //
 // # What the operator decided
 //
@@ -246,6 +249,28 @@ type syncRequest struct {
 	// halves need it: publishing needs a confirmation and installing an
 	// approval (AGENTS.md §2.2), and neither is defaulted.
 	Confirmed bool `json:"confirmed"`
+	// Reviewed is the fingerprint the dry run gave of the list the person
+	// read (NEW_508). When it is sent with Confirmed and what would be synced
+	// NOW is a different list, nothing is sent or installed: the answer is 409
+	// with the new review. Empty — the CLI, an older page — keeps the earlier
+	// behaviour, where the confirmation alone is the approval.
+	Reviewed string `json:"reviewed,omitempty"`
+}
+
+// reviewFingerprint names the exact list a sync would act on: each profile
+// with something to do, its direction, both versions, the listing and — for a
+// download — the permissions it asks for. Two reviews with one fingerprint
+// would do the same thing; a profile edited, published or re-versioned in
+// between changes it.
+func reviewFingerprint(rows []accountProfile) string {
+	hash := sha256.New()
+	for _, row := range rows {
+		if row.State != "to_upload" && row.State != "to_download" && row.State != "conflict" {
+			continue
+		}
+		fmt.Fprintf(hash, "%q %q %q %q %q %q\n", row.ID, row.State, row.Local, row.Remote, row.ListingID, row.Permissions)
+	}
+	return hex.EncodeToString(hash.Sum(nil))
 }
 
 type syncOutcome struct {
@@ -275,6 +300,13 @@ func (s *Server) handleAccountSync(w http.ResponseWriter, r *http.Request) {
 	if !status.Online {
 		writeError(w, http.StatusServiceUnavailable, fmt.Errorf("your Auto-Pigeon account cannot be reached right now: %s", status.OfflineWhy))
 		return
+	}
+	fingerprint := reviewFingerprint(status.Profiles)
+	// The list changed between the review and the press: act on nothing, and
+	// answer with the review of what is true now, computed by the same loop.
+	stale := request.Confirmed && !request.DryRun && request.Reviewed != "" && request.Reviewed != fingerprint
+	if stale {
+		request.DryRun = true
 	}
 	client := s.aubClient()
 	profilesDir, err := s.profilesDir()
@@ -330,8 +362,16 @@ func (s *Server) handleAccountSync(w http.ResponseWriter, r *http.Request) {
 			outcomes = append(outcomes, syncOutcome{ID: row.ID, Name: row.Name, Action: "none", Result: "conflict", Error: row.Reason})
 		}
 	}
+	if stale {
+		writeJSON(w, http.StatusConflict, map[string]any{
+			"error":    "the profiles changed since the review; nothing was sent or installed",
+			"changed":  true,
+			"outcomes": outcomes, "status": status, "reviewed": fingerprint,
+		})
+		return
+	}
 	if request.DryRun {
-		writeJSON(w, http.StatusOK, map[string]any{"outcomes": outcomes, "status": status})
+		writeJSON(w, http.StatusOK, map[string]any{"outcomes": outcomes, "status": status, "reviewed": fingerprint})
 		return
 	}
 	after, _, _ := s.accountState(r.Context())

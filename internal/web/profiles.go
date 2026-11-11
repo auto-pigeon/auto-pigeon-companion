@@ -171,9 +171,14 @@ func (s *Server) describeCatalogEntryWith(entry job.CatalogEntry, local binding.
 	// The declared programs, so a setup form can offer one field per program
 	// rather than assuming there is exactly one. A pipeline declares none.
 	body["executables"] = describeExecutables(entry.Profile)
-	body["trust_description"] = entry.Trust.Describe()
-	body["vouched"] = entry.Trust.Vouched()
-	body["report"] = profile.ProfileReport(entry.Profile, entry.Trust)
+	// What the catalog calls it, corrected by what this machine recorded when
+	// it installed it: a document from a listing is community, not "local,
+	// nobody can tell who put it there" (binding.Provenance, issue #19).
+	trust := local.Provenance(entry.Trust)
+	body["trust"] = trust
+	body["trust_description"] = trust.Describe()
+	body["vouched"] = trust.Vouched()
+	body["report"] = profile.ProfileReport(entry.Profile, trust)
 	body["binding"] = describeBinding(local)
 	body["editable"] = strings.HasPrefix(entry.Source, s.profilesPrefix())
 	// The retired document this one took over from, when a person had chosen
@@ -1418,7 +1423,7 @@ func (s *Server) handleProfileBind(w http.ResponseWriter, r *http.Request) {
 		local.ProfileID = meta.ID
 		local.ProfileVersion = meta.Version
 		local.ProfileDigest = entry.Digest
-		local.Trust = entry.Trust
+		local.Trust = local.Provenance(entry.Trust)
 		if local.Acquisition == "" {
 			local.Acquisition = profile.AcquireUserPath
 		}

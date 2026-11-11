@@ -167,7 +167,7 @@ func (s Service) Grant(id, digest string) (Decision, error) {
 		local.ProfileID = meta.ID
 		local.ProfileVersion = meta.Version
 		local.ProfileDigest = entry.Digest
-		local.Trust = entry.Trust
+		local.Trust = local.Provenance(entry.Trust)
 		if local.Acquisition == "" {
 			// The program is one the person has, which is what `user_path`
 			// means — and nothing else exists any more. Recorded rather than

@@ -171,7 +171,7 @@ func (s *Server) bindManaged(tool managedtools.Tool, record managedtools.Install
 				local.ProfileID = id
 				local.ProfileVersion = document.Version
 				local.ProfileDigest = entry.Digest
-				local.Trust = entry.Trust
+				local.Trust = local.Provenance(entry.Trust)
 				local.Acquisition = profile.AcquireManagedOfficial
 				local.Installs = nil
 				local.Executables = map[string]string{}

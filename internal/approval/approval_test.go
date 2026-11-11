@@ -420,3 +420,54 @@ func TestTheGrantRecordsWhenTheDecisionWasTaken(t *testing.T) {
 		t.Errorf("the grant is stamped %s, want %s", decision.Binding.Grant.GrantedAt, when)
 	}
 }
+
+// NEW_508, issue #19. A document the Companion installed from a listing is
+// `community`, and the binding says so with its Origin. The catalog reads the
+// profile folder and calls every file there `local`; approving used to copy
+// that into the binding, so the one record of where the document came from was
+// rewritten by the act of trusting it. The approval keeps `community`, and an
+// approval is still required: neither state is treated as safer than the other.
+func TestApprovingAnInstalledCommunityProfileKeepsItsProvenance(t *testing.T) {
+	m := newMachine(t, "local-tool.tool.json")
+	current := m.review(harmless).Entry.Digest
+	origin := binding.InstallOrigin{ListingID: "listing-1", PublisherID: "publisher-1"}
+	if _, err := binding.Update(m.bindings, func(set *binding.Set) error {
+		return set.Put(binding.LocalBinding{
+			ProfileID: harmless, ProfileVersion: "1.0.0", ProfileDigest: current,
+			Trust: profile.TrustCommunity, Origin: &origin, Acquisition: profile.AcquireUserPath,
+		})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if m.review(harmless).Authorized {
+		t.Fatal("an installed community profile is authorized before anybody approved it")
+	}
+
+	decision, err := m.service.Grant(harmless, current)
+	if err != nil {
+		t.Fatalf("Grant: %v", err)
+	}
+	if !decision.Authorized {
+		t.Fatalf("approved and still not authorized: %v", decision.AuthorizationError)
+	}
+	if got := decision.Binding.Trust; got != profile.TrustCommunity {
+		t.Errorf("approving rewrote the stored trust to %q; it was installed from a listing and is %q", got, profile.TrustCommunity)
+	}
+	if decision.Binding.Origin == nil || *decision.Binding.Origin != origin {
+		t.Errorf("approving lost where it was installed from: %+v", decision.Binding.Origin)
+	}
+
+	// The rule, by itself: only `local` + a recorded origin reads as community.
+	withOrigin := binding.LocalBinding{Origin: &origin}
+	for catalog, want := range map[profile.Trust]profile.Trust{
+		profile.TrustLocal: profile.TrustCommunity, profile.TrustBuiltin: profile.TrustBuiltin,
+		profile.TrustVerified: profile.TrustVerified, profile.TrustCommunity: profile.TrustCommunity,
+	} {
+		if got := withOrigin.Provenance(catalog); got != want {
+			t.Errorf("Provenance(%s) with an origin = %s, want %s", catalog, got, want)
+		}
+	}
+	if got := (binding.LocalBinding{}).Provenance(profile.TrustLocal); got != profile.TrustLocal {
+		t.Errorf("a document nobody installed from a listing reads as %s, want local", got)
+	}
+}

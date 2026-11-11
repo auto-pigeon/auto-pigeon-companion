@@ -99,3 +99,85 @@ func TestDismissForgetsAndABadFileIsALostClick(t *testing.T) {
 		t.Fatalf("a request that no longer parses was shown: %+v", got)
 	}
 }
+
+// NEW_508, issue #20: one editor request is at most one build. A used link
+// delivered again never becomes pending; it is remembered for a moment as a
+// repeat that names the build which ran. A DISMISSED request was never run,
+// so the same link opened again is neither pending nor "already ran".
+func TestAUsedLinkDeliveredAgainIsARepeatNotASecondRequest(t *testing.T) {
+	path := Path(t.TempDir())
+	now := time.Date(2026, 11, 11, 10, 0, 0, 0, time.UTC)
+	link := aub.LeakTestLink{AssetID: "map1", Revision: 3, ContentSHA256: digest, RequestID: strings.Repeat("c", 32)}
+	var err error
+	if err = Receive(path, link, now); err != nil {
+		t.Fatal(err)
+	}
+	if consumed, err := Consume(path, link.RequestID, now); err != nil || consumed == nil {
+		t.Fatalf("Consume: %v, %v", consumed, err)
+	}
+	if err = Used(path, link.RequestID, "", now); err != nil {
+		t.Fatal(err)
+	}
+
+	// Delivered again while its build runs: not pending, and a repeat with no
+	// build id yet.
+	if err = Receive(path, link, now.Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if pending, _, _ := Read(path, now.Add(time.Second)); pending != nil {
+		t.Fatalf("a used request became pending again: %+v", pending)
+	}
+	repeat, err := Repeated(path, now.Add(time.Second))
+	if err != nil || repeat == nil || repeat.RequestID != link.RequestID || repeat.BuildID != "" || repeat.Revision != 3 {
+		t.Fatalf("Repeated = %+v, %v", repeat, err)
+	}
+
+	// The build got its id: the repeat on screen learns it.
+	if err = Used(path, link.RequestID, "build-7", now.Add(2*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if repeat, _ = Repeated(path, now.Add(2*time.Second)); repeat == nil || repeat.BuildID != "build-7" {
+		t.Fatalf("the repeat does not name the build: %+v", repeat)
+	}
+
+	// Dismissing another id's repeat leaves this one; dismissing it removes it.
+	if err = DismissRepeat(path, "other", now.Add(3*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if repeat, _ = Repeated(path, now.Add(3*time.Second)); repeat == nil {
+		t.Fatal("a repeat was dismissed by another request's id")
+	}
+	if err = DismissRepeat(path, link.RequestID, now.Add(3*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if repeat, _ = Repeated(path, now.Add(3*time.Second)); repeat != nil {
+		t.Fatalf("a dismissed repeat is still there: %+v", repeat)
+	}
+
+	// A later delivery is a repeat again, and it expires by itself.
+	if err = Receive(path, link, now.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if repeat, _ = Repeated(path, now.Add(time.Minute)); repeat == nil || repeat.BuildID != "build-7" {
+		t.Fatalf("a later delivery is not a repeat naming the build: %+v", repeat)
+	}
+	if repeat, _ = Repeated(path, now.Add(time.Minute+RepeatFor)); repeat != nil {
+		t.Fatalf("a repeat outlived RepeatFor: %+v", repeat)
+	}
+
+	// Dismissed, never run: delivered again it is neither pending nor a repeat.
+	other := aub.LeakTestLink{AssetID: "map1", Revision: 4, ContentSHA256: digest, RequestID: strings.Repeat("d", 32)}
+	later := now.Add(10 * time.Minute)
+	if err = Receive(path, other, later); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = Consume(path, other.RequestID, later); err != nil {
+		t.Fatal(err)
+	}
+	if err = Receive(path, other, later.Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if repeat, _ = Repeated(path, later.Add(time.Second)); repeat != nil {
+		t.Fatalf("a dismissed request reads as one that already ran: %+v", repeat)
+	}
+}

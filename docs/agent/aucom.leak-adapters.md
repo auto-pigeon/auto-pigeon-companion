@@ -121,6 +121,10 @@ then the pin, then `leakintent.Consume`.
 **One press, one job.** `claimBuild` refuses a second press while one runs, `Consume` uses a request up, and
 `leakintent` remembers a used or replaced id for `RetiredFor`, so a link delivered again cannot put it back under a
 Build button, nor an older request over a newer one. A dismissed request may be asked for again.
+`NEW_508` (#20, alternative A): a request a build was STARTED for is marked `Used` with its build id
+(`leakintent.Used`; a dismissed one is consumed and not used), and the same link delivered again is kept for
+`RepeatFor` as a `Repeat` the watch returns beside `pending` — the page says *This leak test already ran* with
+**Open the result**. It is never pending and never a second build.
 
 ## What the pipeline owns
 

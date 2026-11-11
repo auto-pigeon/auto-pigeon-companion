@@ -520,3 +520,30 @@ func TestWindowsUnregisteringLeavesAnotherProgramsHandler(t *testing.T) {
 		t.Errorf("the refusal does not name the program that handles the links: %q", state.Detail)
 	}
 }
+
+// NEW_508, issue #16: the handler carries builds, leak tests and joins, so the
+// name the browser asks about ("Open <name>?") names the program, never one
+// use. The Linux entry, the Windows key and the Windows installer agree.
+func TestTheHandlerIsNamedForTheProgramNotOneOfItsUses(t *testing.T) {
+	entry := desktopEntry([]string{"/opt/companion", "game", "open", "%u"})
+	if !strings.Contains(entry, "\nName="+DisplayName+"\n") {
+		t.Errorf("the desktop entry is not named %q:\n%s", DisplayName, entry)
+	}
+	for _, use := range []string{"join", "leak", "build"} {
+		if strings.Contains(strings.ToLower(DisplayName), use) {
+			t.Errorf("the display name %q names one use of the link (%s)", DisplayName, use)
+		}
+	}
+	for _, line := range strings.Split(entry, "\n") {
+		if strings.HasPrefix(line, "Name=") && strings.Contains(strings.ToLower(line), "join") {
+			t.Errorf("the entry's name still says join: %s", line)
+		}
+	}
+	installer, err := os.ReadFile("../../build/windows/installer.iss")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(installer), `ValueData: "URL:`+DisplayName+`"`) {
+		t.Errorf("build/windows/installer.iss does not register the protocol as URL:%s", DisplayName)
+	}
+}

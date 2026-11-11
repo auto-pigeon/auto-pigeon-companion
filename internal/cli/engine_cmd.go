@@ -496,7 +496,7 @@ func engineBind(env *Env, args []string) int {
 		local.ProfileID = document.ID
 		local.ProfileVersion = document.Version
 		local.ProfileDigest = entry.Digest
-		local.Trust = entry.Trust
+		local.Trust = local.Provenance(entry.Trust)
 		local.Acquisition = profile.AcquireUserPath
 		local.Managed = nil
 		for name, path := range newExecutables {
