@@ -97,6 +97,21 @@
           : status === 503
             ? " Choose your Auto-Pigeon server in Settings."
             : "";
+      // The server did not answer at all (seen live, NEW_508A: a transport
+      // error with the request's address was printed here). Said in words,
+      // with what still works and the way to try again; the exact error stays
+      // one click away.
+      if (status !== 401 && status !== 403 && status !== 503 && status !== 404) {
+        const retry = el("button", { text: t("Retry"), className: "secondary", attrs: { type: "button" } });
+        retry.addEventListener("click", () => withBusy(retry, refreshCatalog));
+        const message = $("library-message");
+        message.className = "message error";
+        message.replaceChildren(
+          document.createTextNode(t("Your account's server did not answer, so your maps cannot be listed. Maps already downloaded are under On this computer and still build.") + " "),
+          retry,
+          el("details", { children: [el("summary", { text: t("Details") }), el("p", { className: "mono", text: body.error || "" })] }));
+        return;
+      }
       setMessage("library-message", (body.error || "could not read the catalogue") + hint, "error");
       return;
     }

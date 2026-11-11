@@ -1232,5 +1232,8 @@ window.AUCOM_LOCALES.it = {
   "The compiler wrote its portal file and no leak route: this run found no leak. That is a statement about this run of this saved revision, not proof the map is sealed.": "Il compilatore ha scritto il file dei portali e nessun percorso di perdita: questa esecuzione non ha trovato perdite. Vale per questa esecuzione di questa revisione salvata, non è una prova che la mappa sia sigillata.",
   "The compiler finished and left neither a leak route nor a portal file, so this run does not say whether the map leaks. Its output says more.": "Il compilatore ha terminato senza lasciare né un percorso di perdita né un file dei portali, quindi questa esecuzione non dice se la mappa ha perdite. Il suo output dice di più.",
   "No game is set up on this computer yet.": "Nessun gioco è ancora configurato su questo computer.",
-  ", or untick “Start the game when the build finishes” to build only.": ", oppure deseleziona “Avvia il gioco al termine della compilazione” per compilare soltanto."
+  ", or untick “Start the game when the build finishes” to build only.": ", oppure deseleziona “Avvia il gioco al termine della compilazione” per compilare soltanto.",
+  "The Terms or the notices changed. Review and accept the current version on Auto-Pigeon to use your account here. Building and running still work.": "I Termini o le informative sono cambiati. Leggi e accetta la versione attuale su Auto-Pigeon per usare qui il tuo account. Compilare e avviare funzionano comunque.",
+  "Review and accept": "Leggi e accetta",
+  "Your account's server did not answer, so your maps cannot be listed. Maps already downloaded are under On this computer and still build.": "Il server del tuo account non ha risposto, quindi le tue mappe non possono essere elencate. Le mappe già scaricate sono in Su questo computer e si possono ancora compilare."
 };

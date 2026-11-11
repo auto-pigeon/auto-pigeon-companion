@@ -54,7 +54,15 @@
       $("account-dot").className = "status-dot " + (status.conflicts ? "conflict" : "pending");
       chip.title = summary(status.to_upload, status.to_download, status.conflicts);
     }
-    const note = !status.online
+    // The Terms gate is not "unreachable" and not a lost sign-in: the account
+    // answered, and only the person can lift it, on the site (NEW_508A).
+    const gated = status.blocked === "legal_acceptance_required";
+    const accept = String(window.AUCOM.siteLinks?.legal_acceptance_url || "");
+    $("account-accept").hidden = !(gated && accept);
+    if (gated && accept) $("account-accept").href = accept;
+    const note = gated
+      ? t("The Terms or the notices changed. Review and accept the current version on Auto-Pigeon to use your account here. Building and running still work.")
+      : !status.online
       ? t("Your account can't be reached: {reason}. Building and running still work.", { reason: status.offline_reason || t("no answer") })
       : wants ? summary(status.to_upload, status.to_download, status.conflicts)
         : t("Profiles match your account.");
@@ -90,7 +98,7 @@
     if (timer) window.clearInterval(timer);
     timer = null;
     $("account-button").hidden = true;
-    for (const id of ["account-sync-note", "account-sync", "account-check"]) $(id).hidden = true;
+    for (const id of ["account-sync-note", "account-sync", "account-check", "account-accept"]) $(id).hidden = true;
   }
 
   // --- the header chip and the Account menu's entries --------------------------
@@ -195,8 +203,13 @@
     back.focus();
   }
 
-  $("sync-run").addEventListener("click", (event) =>
-    withBusy(event.currentTarget, async () => {
+  // `finished` outlives withBusy, which gives the button back when its work
+  // ends: a sync that ran has nothing left to press (seen live, NEW_508A).
+  let finished = false;
+  $("sync-run").addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    finished = false;
+    await withBusy(button, async () => {
       setMessage("sync-message", t("Syncing…"), "busy");
       const { ok, status, body } = await api("/api/v1/account/sync", { method: "POST", body: { confirmed: true, reviewed } });
       if (!ok && status === 409 && body.changed) {
@@ -220,12 +233,13 @@
       // A failure may be worth another try, through a fresh review; a sync
       // that worked has nothing left to press.
       reviewed = "";
-      $("sync-run").disabled = true;
+      finished = true;
       $("sync-retry").hidden = failed === 0;
       if (body.status) draw(body.status);
       window.AUCOM.areas.profiles?.refresh?.();
-    })
-  );
+    });
+    if (finished) button.disabled = true;
+  });
   $("sync-retry").addEventListener("click", () => { $("sync-retry").hidden = true; openSync(); });
   $("sync-cancel").addEventListener("click", closeSync);
   $("sync-close").addEventListener("click", closeSync);

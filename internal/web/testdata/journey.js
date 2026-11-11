@@ -135,15 +135,16 @@
       visible($("area-play")) && visible($("play-local-map")) && !visible($("first-run")),
       `current area ${document.querySelector('.area-tab[aria-current="page"]').dataset.area}`
     );
-    // No game is configured here: Build & Run says where that is done (HITL,
-    // 2026-10-31), and Cancel stays on the form.
-    await waitFor("the no-game question", () => document.querySelector("dialog[open]"));
+    // No game is configured here. A file on this computer is built without
+    // one, so a fresh signed-out page asks nothing (NEW_508A: it used to open
+    // "Configure a game" by itself and say Build & Run needs a game). The line
+    // about the game belongs to a saved map with Run after build ticked.
+    await sleep(1200);
     record(
-      "with no game configured, Build & Run sends the person to Profiles",
-      textOf(document.querySelector("dialog[open]")).includes("Open Profiles"),
-      textOf(document.querySelector("dialog[open]")).slice(0, 80)
+      "with no game configured, a first start opens no dialog and says nothing about one",
+      !document.querySelector("dialog[open]") && !visible($("play-no-game")),
+      `dialog: ${textOf(document.querySelector("dialog[open]") || document.createElement("p")).slice(0, 60)}; line: ${visible($("play-no-game"))}`
     );
-    [...document.querySelectorAll("dialog[open] button")].find((button) => textOf(button) === "Cancel").click();
     await go("library");
     record(
       "the Library says it is the one area that needs an account",

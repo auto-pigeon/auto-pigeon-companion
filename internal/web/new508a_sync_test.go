@@ -359,3 +359,20 @@ func TestALeakOutcomeIsReadFromEvidenceNotFromAnExitStatus(t *testing.T) {
 		t.Fatalf("leakoutcome.check.mjs: %v\n%s", err, out)
 	}
 }
+
+// Seen live in NEW_508A: an account refused by the legal gate was told "your
+// session has ended; sign in again". Signing in again does not help; the
+// status names the gate so the page can offer the acceptance page.
+func TestTheTermsGateIsNotWordedAsALostSignIn(t *testing.T) {
+	gate := &aub.APIError{StatusCode: http.StatusForbidden, Reason: aub.ReasonLegalAcceptanceRequired}
+	if why := offlineReason(gate); strings.Contains(why, "sign in") || !strings.Contains(why, "Terms") {
+		t.Errorf("the legal gate is worded %q", why)
+	}
+	if blockedBy(gate) != aub.ReasonLegalAcceptanceRequired {
+		t.Errorf("the legal gate is not named to the page: %q", blockedBy(gate))
+	}
+	lapsed := &aub.APIError{StatusCode: http.StatusUnauthorized}
+	if why := offlineReason(lapsed); !strings.Contains(why, "sign in again") || blockedBy(lapsed) != "" {
+		t.Errorf("a lapsed session is worded %q, blocked %q", why, blockedBy(lapsed))
+	}
+}

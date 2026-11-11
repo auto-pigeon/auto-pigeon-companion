@@ -67,11 +67,14 @@ type accountProfile struct {
 }
 
 type accountStatus struct {
-	SignedIn     bool             `json:"signed_in"`
-	Email        string           `json:"email,omitempty"`
-	ServerLabel  string           `json:"server_label,omitempty"`
-	Online       bool             `json:"online"`
-	OfflineWhy   string           `json:"offline_reason,omitempty"`
+	SignedIn    bool   `json:"signed_in"`
+	Email       string `json:"email,omitempty"`
+	ServerLabel string `json:"server_label,omitempty"`
+	Online      bool   `json:"online"`
+	OfflineWhy  string `json:"offline_reason,omitempty"`
+	// Blocked is AUB's reason code when the account answers but refuses until
+	// the person does something there (`legal_acceptance_required`).
+	Blocked      string           `json:"blocked,omitempty"`
 	CheckedAt    time.Time        `json:"checked_at"`
 	InSync       bool             `json:"in_sync"`
 	ToUpload     int              `json:"to_upload"`
@@ -142,6 +145,7 @@ func (s *Server) accountState(ctx context.Context) (accountStatus, map[string]pr
 		// Offline, or the session lapsed: say which, and describe only what is
 		// here. Nothing is guessed about the account.
 		status.OfflineWhy = offlineReason(err)
+		status.Blocked = blockedBy(err)
 		for id, document := range local {
 			meta := document.Metadata()
 			status.Profiles = append(status.Profiles, accountProfile{
@@ -441,10 +445,28 @@ func resultOf(err error) (string, string) {
 
 func offlineReason(err error) string {
 	var apiErr *aub.APIError
-	if errors.As(err, &apiErr) && (apiErr.StatusCode == http.StatusUnauthorized || apiErr.StatusCode == http.StatusForbidden) {
-		return "your session has ended; sign in again"
+	if errors.As(err, &apiErr) {
+		// The legal gate is not a lost sign-in: signing in again would not
+		// help, and the page must not say it would (NEW_360 F2; seen live on
+		// the account status in NEW_508A, which said exactly that).
+		if apiErr.LegalAcceptanceRequired() {
+			return "the Terms or the notices changed, and this account has not accepted the current version yet"
+		}
+		if apiErr.StatusCode == http.StatusUnauthorized || apiErr.StatusCode == http.StatusForbidden {
+			return "your session has ended; sign in again"
+		}
 	}
 	return "the server did not answer"
+}
+
+// blockedBy is the reason code of a refusal only the person can lift, or
+// empty: the page offers the acceptance page for it rather than a sign-in.
+func blockedBy(err error) string {
+	var apiErr *aub.APIError
+	if errors.As(err, &apiErr) && apiErr.LegalAcceptanceRequired() {
+		return aub.ReasonLegalAcceptanceRequired
+	}
+	return ""
 }
 
 func sortProfiles(rows []accountProfile) {
