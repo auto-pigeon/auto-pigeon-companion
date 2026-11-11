@@ -537,7 +537,10 @@ func TestASecondLaunchShowsTheRunningCompanionInsteadOfStartingAnother(t *testin
 		t.Errorf("the running Companion's token was replaced: %v", err)
 	}
 	after, _ := os.ReadFile(logPath)
-	if !strings.HasPrefix(string(after), string(before)) || strings.Contains(string(after), "1.501") {
+	// "companion 1.501", the start-up line a second Companion would have
+	// written — not the bare "1.501", which a log timestamp can spell
+	// (`21:28:51.501`, seen failing this test in NEW_508C).
+	if !strings.HasPrefix(string(after), string(before)) || strings.Contains(string(after), "companion 1.501") {
 		t.Errorf("the running Companion's log was truncated or written by the second launch:\n%q", after)
 	}
 	if status, _ := first.api(http.MethodGet, "/api/status", ""); status != http.StatusOK {

@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/assetsync"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/texturebundle"
 )
 
 // The Library area: what is on the backend, and what is on this machine.
@@ -272,14 +274,63 @@ func (s *Server) handleLibrarySync(w http.ResponseWriter, r *http.Request) {
 		writeAUBError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	answer := map[string]any{
 		"record":           result.Record,
 		"key":              result.Record.Key(),
 		"fetched":          result.Fetched,
 		"reused":           result.Reused,
 		"bytes_fetched":    result.BytesFetched,
 		"already_complete": result.AlreadyComplete,
-	})
+	}
+	// A map is not ready to build without its textures (issue #38). A build's
+	// second step fetches the texture bundle of this exact revision, so a
+	// download that stopped at the map said "ready to build" and then failed
+	// offline at "Downloading the textures". The bundle is fetched and
+	// verified here, into the one cache a build reads
+	// (verifiedTextureBundle), and the answer says how that went: the map is
+	// downloaded either way, and the page never calls it ready when it is not.
+	if request.AssetType == "map" && result.Record.Revision > 0 {
+		answer["textures"] = s.downloadedTextures(r.Context(), request.AssetID, result.Record.Revision)
+	}
+	writeJSON(w, http.StatusOK, answer)
+}
+
+// downloadedTextures fetches (or finds) the verified texture bundle of one
+// map revision and says, for the page, whether a build of that revision can
+// now run with no connection.
+func (s *Server) downloadedTextures(ctx context.Context, mapID string, revision int) map[string]any {
+	entry, err := s.verifiedTextureBundle(ctx, mapID, revision)
+	if err != nil {
+		return map[string]any{"state": "missing", "error": err.Error(), "code": aubFailureCode(err)}
+	}
+	// On this computer is not the same as buildable: a revision whose own
+	// textures are incomplete (no WAD declared, a texture in none of them) is
+	// refused by a build, connected or not, and "ready" is not said of it.
+	state := "cached"
+	if !entry.Receipt.CompilerReady {
+		state = "incomplete"
+	}
+	return map[string]any{
+		"state": state, "wads_declared": len(entry.Receipt.WADsDeclared), "files": len(entry.Receipt.Files),
+		"compiler_ready": entry.Receipt.CompilerReady, "refusals": entry.Receipt.CompilerRefusals,
+		"digest": entry.Receipt.BundleDigest,
+	}
+}
+
+// cachedTextures says whether a cached map revision's texture bundle is in
+// the cache too, with no network: what "On this computer" shows.
+func (s *Server) cachedTextures(mapID string, revision int) string {
+	cache, err := s.textureCache()
+	if err != nil || revision <= 0 {
+		return "unknown"
+	}
+	if entry, found := cache.Lookup(texturebundle.Expect{MapID: mapID, Revision: revision}); found {
+		if !entry.Receipt.CompilerReady {
+			return "incomplete"
+		}
+		return "cached"
+	}
+	return "missing"
 }
 
 // handleLibraryCached lists what this machine holds. No session, no network:
@@ -297,7 +348,12 @@ func (s *Server) handleLibraryCached(w http.ResponseWriter, r *http.Request) {
 	}
 	items := make([]map[string]any, 0, len(records))
 	for _, record := range records {
-		items = append(items, map[string]any{"key": record.Key(), "record": record})
+		item := map[string]any{"key": record.Key(), "record": record}
+		if record.AssetType == "map" {
+			// Whether this revision can be built with no connection (#38).
+			item["textures"] = s.cachedTextures(record.AssetID, record.Revision)
+		}
+		items = append(items, item)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items, "root": store.Root()})
 }

@@ -140,7 +140,7 @@ The page has these areas, in the order of a first run:
 | Area | What it is for |
 | --- | --- |
 | **Build & Run** | One form: a saved map or a file on this computer, a build profile, whether to start the game after the build, a review, and one button. |
-| **My Maps** | Your maps in your Auto-Pigeon account, and the revisions this computer has downloaded and verified. |
+| **My Maps** | Your maps in your Auto-Pigeon account, and the revisions this computer has downloaded and verified. **Download revision** fetches the map and its texture bundle, so that revision builds with no connection; **On this computer** says of each one whether it does. |
 | **Run** | Starting an engine on its own: joining a server, a mod, a map you already built. |
 | **Profiles** | What a tool or engine asks to be allowed to do, approving it, and writing your own. |
 | **Jobs** | Everything that has run, with its command, exit status, how long it took and its output. |

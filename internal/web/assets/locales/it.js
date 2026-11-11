@@ -1235,5 +1235,14 @@ window.AUCOM_LOCALES.it = {
   ", or untick “Start the game when the build finishes” to build only.": ", oppure deseleziona “Avvia il gioco al termine della compilazione” per compilare soltanto.",
   "The Terms or the notices changed. Review and accept the current version on Auto-Pigeon to use your account here. Building and running still work.": "I Termini o le informative sono cambiati. Leggi e accetta la versione attuale su Auto-Pigeon per usare qui il tuo account. Compilare e avviare funzionano comunque.",
   "Review and accept": "Leggi e accetta",
-  "Your account's server did not answer, so your maps cannot be listed. Maps already downloaded are under On this computer and still build.": "Il server del tuo account non ha risposto, quindi le tue mappe non possono essere elencate. Le mappe già scaricate sono in Su questo computer e si possono ancora compilare."
+  "Your account's server did not answer, so your maps cannot be listed. Maps already downloaded are under On this computer and still build.": "Il server del tuo account non ha risposto, quindi le tue mappe non possono essere elencate. Le mappe già scaricate sono in Su questo computer e si possono ancora compilare.",
+  "It is ready to build, with or without a connection.": "È pronta per la compilazione, con o senza connessione.",
+  "Already on this computer.": "Già su questo computer.",
+  "Downloaded ({size}).": "Scaricata ({size}).",
+  "Its textures could not be downloaded, so building it still needs a connection.": "Non è stato possibile scaricare le sue texture, quindi per compilarla serve ancora una connessione.",
+  "Map and textures are on this computer: it builds without a connection.": "Mappa e texture sono su questo computer: si compila senza connessione.",
+  "The map is on this computer; its textures are not, so building it needs a connection. Download it again while connected.": "La mappa è su questo computer; le sue texture no, quindi per compilarla serve una connessione. Scaricala di nuovo quando sei connesso.",
+  "Reading your account… Maps already downloaded are under On this computer.": "Lettura del tuo account… Le mappe già scaricate sono in Su questo computer.",
+  "This revision's textures are incomplete, so a build of it is refused until the map is saved with them. Build & Run says which.": "Le texture di questa revisione sono incomplete, quindi la sua compilazione viene rifiutata finché la mappa non viene salvata con esse. Compila e avvia indica quali.",
+  "Map and texture information are on this computer, but this revision's textures are incomplete: a build of it is refused.": "Mappa e informazioni sulle texture sono su questo computer, ma le texture di questa revisione sono incomplete: la sua compilazione viene rifiutata."
 };

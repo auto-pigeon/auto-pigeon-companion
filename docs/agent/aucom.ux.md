@@ -128,6 +128,11 @@ area down, plus a standing green **Synced** in the header. A smaller, recoloured
 - **A profile that changed since it was set up says so** — *Changed: approve this version*, and that the folders
   and programs chosen are kept (#3). A profile installed from a listing stays **Community** (#19,
   `binding.Provenance`).
+- **"Ready to build" is said only when it is true with no connection** (#38). **Download revision** fetches and verifies
+  the map AND that revision's texture bundle into the one cache a build reads (`library.go` `downloadedTextures` →
+  `verifiedTextureBundle`). The answer and each **On this computer** card carry one of three states: `cached` (builds
+  offline), `incomplete` (here, but the revision's own textures are incomplete — a build is refused connected or not),
+  `missing` (the map is here, its textures are not). `TestADownloadedRevisionCarriesItsTextures`.
 - **A second window does not go stale.** Settings and the package page's game folder are read again when the
   window comes back; an unsaved edit is kept and a real conflict is named (#23, #2).
 

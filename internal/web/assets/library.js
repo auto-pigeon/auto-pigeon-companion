@@ -79,7 +79,11 @@
 
   async function refreshCatalog() {
     const list = $("library-assets");
-    busy("library-message", "Reading your account…");
+    // Reading the account can take as long as its server takes to answer.
+    // What is already on this computer needs no answer, and is said meanwhile.
+    busy("library-message", cachedKeys.size
+      ? t("Reading your account… Maps already downloaded are under On this computer.")
+      : t("Reading your account…"));
     $("library-more").hidden = true;
     nextCursor = "";
     const query = catalogQuery("");
@@ -335,10 +339,27 @@
       record(`Download of ${nameOf(asset)} failed`, body.error, "failed");
       return false;
     }
-    const summary = body.already_complete
-      ? "Already on this computer. It is ready to build."
-      : t("Downloaded ({size}). It is ready to build.", { size: bytes(body.bytes_fetched) });
-    setMessage(status, summary, "ok");
+    // "Ready to build" is said only when it is true with no connection: the
+    // map AND the texture bundle of this exact revision are on this computer
+    // (issue #38 — the download used to stop at the map, and a build offline
+    // then failed at "Downloading the textures").
+    const got = body.already_complete ? t("Already on this computer.") : t("Downloaded ({size}).", { size: bytes(body.bytes_fetched) });
+    const textures = body.textures;
+    if (!textures || textures.state === "cached") {
+      setMessage(status, got + " " + t("It is ready to build, with or without a connection."), "ok");
+    } else if (textures.state === "incomplete") {
+      // Here, and still not buildable: the revision's own textures are
+      // incomplete, which a build refuses connected or not.
+      status.className = "message small";
+      status.replaceChildren(
+        document.createTextNode(got + " " + t("This revision's textures are incomplete, so a build of it is refused until the map is saved with them. Build & Run says which.") + " "),
+        el("details", { children: [el("summary", { text: t("Details") }), el("p", { className: "mono", text: (textures.refusals || []).join("; ") })] }));
+    } else {
+      status.className = "message small error";
+      status.replaceChildren(
+        document.createTextNode(got + " " + t("Its textures could not be downloaded, so building it still needs a connection.") + " "),
+        el("details", { children: [el("summary", { text: t("Details") }), el("p", { className: "mono", text: textures.error || "" })] }));
+    }
     cachedKeys.add(body.key);
     if (button) button.textContent = t("Download again");
     record(`Downloaded ${nameOf(asset)}, revision ${body.record.revision}`, "", "ok");
@@ -438,6 +459,7 @@
     // Maps only, like the list above: other kinds of download are the
     // editor's, and a build fetches what it needs itself.
     const items = (body.items || []).filter((item) => item.record?.asset_type === "map");
+    for (const item of items) cachedKeys.add(item.key);
     setMessage(
       "cached-message",
       items.length === 0
@@ -460,6 +482,12 @@
       const textures = el("div", { className: "map-card__textures" });
       queueTextures(record_.asset_id, textures);
       const status = el("p", { className: "message small", attrs: { role: "status" } });
+      // Whether THIS revision builds with no connection, from this computer's
+      // own cache and no network (#38): the map is here; its texture bundle
+      // either is too, or a build will have to fetch it.
+      if (item.textures === "cached") setMessage(status, t("Map and textures are on this computer: it builds without a connection."), "ok");
+      else if (item.textures === "incomplete") setMessage(status, t("Map and texture information are on this computer, but this revision's textures are incomplete: a build of it is refused."), "");
+      else if (item.textures === "missing") setMessage(status, t("The map is on this computer; its textures are not, so building it needs a connection. Download it again while connected."), "");
 
       const use = el("button", { text: t("Use in a build"), attrs: { type: "button", class: "secondary" } });
       use.addEventListener("click", () => {
