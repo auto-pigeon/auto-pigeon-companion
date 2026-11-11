@@ -835,6 +835,7 @@ window.AUCOM_LOCALES.it = {
   "Your sign-in has expired, so your maps cannot be listed.": "Il tuo accesso è scaduto, quindi le tue mappe non possono essere elencate.",
   "The Terms or the notices changed. Review and accept them on the Auto-Pigeon site to list your maps.": "I Termini o le informative sono cambiati. Esaminali e accettali sul sito Auto-Pigeon per elencare le tue mappe.",
   "Review them on {site}": "Esaminali su {site}",
+  "Review and accept them": "Esaminali e accettali",
   "The Auto-Pigeon server refused to list your maps.": "Il server Auto-Pigeon ha rifiutato di elencare le tue mappe.",
   "No build profile is ready on this computer yet. Set one up from the list below.": "Su questo computer nessun profilo di compilazione è ancora pronto. Configurane uno dall’elenco qui sotto.",
   "Choose this engine's game folder before continuing.": "Scegli la cartella del gioco di questo motore prima di continuare.",

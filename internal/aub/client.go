@@ -167,6 +167,24 @@ type APIError struct {
 	// caller branches on it only where it is present and falls back to the
 	// status. A code is a fact a program can act on; a sentence is for a person.
 	Reason string
+
+	// AcceptanceURL is where a person reviews and accepts outstanding legal
+	// documents, from a `legal_acceptance_required` refusal's
+	// `data.reason.params.acceptance_url` (AUB NEW_476). Empty unless it is an
+	// absolute http(s) URL: AUB derives it from the deployment's configured
+	// gallery origin, and this program never builds one itself.
+	AcceptanceURL string
+}
+
+// ReasonLegalAcceptanceRequired is AUB's legal gate's refusal code
+// (auto-pigeon-backend internal/legalaccept ReasonRequired): the account owes
+// the current Terms or AI training terms. It is NOT a failed sign-in — the
+// session is valid, and signing in again changes nothing.
+const ReasonLegalAcceptanceRequired = "legal_acceptance_required"
+
+// LegalAcceptanceRequired reports whether this refusal is the legal gate's.
+func (e *APIError) LegalAcceptanceRequired() bool {
+	return e.Reason == ReasonLegalAcceptanceRequired
 }
 
 func (e *APIError) Error() string {
@@ -258,7 +276,10 @@ func newAPIError(path string, response *http.Response) error {
 		Message string `json:"message"`
 		Data    struct {
 			Reason struct {
-				Code string `json:"code"`
+				Code   string `json:"code"`
+				Params struct {
+					AcceptanceURL string `json:"acceptance_url"`
+				} `json:"params"`
 			} `json:"reason"`
 		} `json:"data"`
 	}
@@ -273,7 +294,8 @@ func newAPIError(path string, response *http.Response) error {
 	}
 	return &APIError{
 		StatusCode: response.StatusCode, Message: message, Path: path,
-		Reason: envelope.Data.Reason.Code,
+		Reason:        envelope.Data.Reason.Code,
+		AcceptanceURL: httpURLOrEmpty(envelope.Data.Reason.Params.AcceptanceURL),
 	}
 }
 
@@ -304,4 +326,15 @@ func (c *Client) WithTimeout(d time.Duration) *Client {
 		httpClient: &http.Client{Timeout: d, Transport: c.httpClient.Transport}}
 	copied.SetToken(c.Token())
 	return copied
+}
+
+// httpURLOrEmpty keeps an absolute http(s) URL with a host and drops anything
+// else, so a refusal cannot make this program print or open some other scheme.
+func httpURLOrEmpty(raw string) string {
+	raw = strings.TrimSpace(raw)
+	parsed, err := url.Parse(raw)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil {
+		return ""
+	}
+	return parsed.String()
 }

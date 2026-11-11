@@ -129,7 +129,12 @@
     $("news-link").hidden = !gallery;
     $("news-unavailable").hidden = Boolean(gallery);
     if (gallery) $("news-link").href = gallery + "/news";
-    window.AUCOM.siteLinks = { gallery_url: gallery, host_help_url: ok ? String(body.host_help_url || "") : "" };
+    window.AUCOM.siteLinks = {
+      gallery_url: gallery,
+      host_help_url: ok ? String(body.host_help_url || "") : "",
+      // AUB NEW_476: where a person reviews and accepts the current terms.
+      legal_acceptance_url: ok ? String(body.legal_acceptance_url || "") : "",
+    };
     document.dispatchEvent(new CustomEvent("aucom:site-links"));
   }
 

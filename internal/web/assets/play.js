@@ -378,8 +378,15 @@
       // Only the person can review and accept them, on the Auto-Pigeon site
       // the account is on; this program never accepts anything for them.
       box.append(document.createTextNode(t("The Terms or the notices changed. Review and accept them on the Auto-Pigeon site to list your maps.") + " "));
+      // AUB NEW_476: the gallery's acceptance page, when the server said where
+      // its gallery is; otherwise the official site, as before.
+      const accept = String(window.AUCOM.siteLinks?.legal_acceptance_url || "");
       const site = window.AUCOM.officialSite?.(window.AUCOM.status || {});
-      if (site) {
+      if (/^https?:\/\/[^/\s]+\/\S*$/i.test(accept)) {
+        box.append(el("a", { text: t("Review and accept them"),
+          attrs: { href: accept, target: "_blank", rel: "noopener noreferrer", "data-legal-accept": "link" } }),
+          document.createTextNode(" "));
+      } else if (site) {
         box.append(el("a", { text: t("Review them on {site}", { site: site.host }),
           attrs: { href: site.url, target: "_blank", rel: "noopener noreferrer" } }), document.createTextNode(" "));
       }

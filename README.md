@@ -597,7 +597,17 @@ recorded for auto-pigeon.engine.vkquake:
 in one sentence, with what fixes it: **Sign in** when your sign-in expired; a
 review of the changed Terms or notices on the Auto-Pigeon site (the Companion
 never accepts them for you), then **Try again**; **Try again** when the server
-is away. A texture download the server could not serve is said as exactly
+is away. When the server names its gallery, the Terms message links straight to
+its **Review and accept them** page (`<gallery>/legal/accept`, from
+`/api/site-links`), and the command line prints that address instead of telling
+you to sign in again — a Terms refusal is not an expired session:
+
+```console
+$ companion aub capabilities
+error: the Auto-Pigeon server will not serve this account until the current Terms and AI Training and Content Use terms are reviewed and accepted.
+review and accept them at: https://beta.example.org/legal/accept
+then run this command again; your locally cached assets are untouched
+``` A texture download the server could not serve is said as exactly
 that, and nothing is compiled. The server's own answer is one click away. A map
 file on this computer still builds meanwhile.
 

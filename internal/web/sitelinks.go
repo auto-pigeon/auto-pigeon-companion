@@ -67,8 +67,9 @@ func (s *Server) handleSiteLinks(w http.ResponseWriter, r *http.Request) {
 		gallery = s.siteLinks.galleryURL(r.Context(), client)
 	}
 	writeJSON(w, http.StatusOK, map[string]string{
-		"gallery_url":   gallery,
-		"host_help_url": hostHelpURL(gallery),
+		"gallery_url":          gallery,
+		"host_help_url":        hostHelpURL(gallery),
+		"legal_acceptance_url": galleryPage(gallery, LegalAcceptPath),
 	})
 }
 
@@ -82,7 +83,17 @@ const HostHelpPath = "/help/host-a-game"
 // kept here too because this is where the link is made — and whatever query,
 // fragment or credentials it carried are dropped: the destination is the
 // gallery's own page, and nothing a request says can choose another.
-func hostHelpURL(gallery string) string {
+func hostHelpURL(gallery string) string { return galleryPage(gallery, HostHelpPath) }
+
+// LegalAcceptPath is the gallery's page where a signed-in person reviews and
+// accepts the current legal documents (AUG `/legal/accept`, AUB NEW_476). When
+// AUB refuses this account with `legal_acceptance_required`, the page offers it
+// and the person comes back and presses Try again — this program accepts nothing.
+const LegalAcceptPath = "/legal/accept"
+
+// galleryPage is one of the gallery's own pages on the gallery the server named,
+// or empty.
+func galleryPage(gallery, page string) string {
 	parsed, err := url.Parse(strings.TrimSpace(gallery))
 	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" ||
 		parsed.Opaque != "" {
@@ -91,6 +102,6 @@ func hostHelpURL(gallery string) string {
 	parsed.User, parsed.RawQuery, parsed.Fragment, parsed.RawFragment = nil, "", "", ""
 	parsed.ForceQuery = false
 	parsed.RawPath = ""
-	parsed.Path = strings.TrimRight(parsed.Path, "/") + HostHelpPath
+	parsed.Path = strings.TrimRight(parsed.Path, "/") + page
 	return parsed.String()
 }

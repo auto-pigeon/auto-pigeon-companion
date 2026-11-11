@@ -121,6 +121,20 @@ func reportAUBError(env *Env, err error) int {
 	var apiErr *aub.APIError
 	if errors.As(err, &apiErr) {
 		switch {
+		case apiErr.LegalAcceptanceRequired():
+			// Before the 401/403 case: this 403 is not a failed session (AUB NEW_476).
+			// Signing in again would change nothing; only the person can review and
+			// accept the documents, in a browser — never this program.
+			fmt.Fprintln(env.Stderr, "error: the Auto-Pigeon server will not serve this account until "+
+				"the current Terms and AI Training and Content Use terms are reviewed and accepted.")
+			if apiErr.AcceptanceURL != "" {
+				fmt.Fprintf(env.Stderr, "review and accept them at: %s\n", apiErr.AcceptanceURL)
+			} else {
+				fmt.Fprintln(env.Stderr, "review and accept them on the Auto-Pigeon website you signed up on "+
+					"(this server did not say its address)")
+			}
+			fmt.Fprintln(env.Stderr, "then run this command again; your locally cached assets are untouched")
+			return 1
 		case apiErr.Unauthorized():
 			fmt.Fprintf(env.Stderr, "error: %s rejected this session. "+
 				"Run `companion auth login --email <address>` and try again.\n", apiErr.Path)
