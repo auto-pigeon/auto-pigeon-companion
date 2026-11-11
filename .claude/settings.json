@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.trail/hook.cjs\" session-start || exit 0",
+            "command": "f=\"${CLAUDE_PROJECT_DIR:-.}/.trail/hook.cjs\"; [ -f \"$f\" ] || exit 0; node \"$f\" session-start || exit 0",
             "timeout": 10
           }
         ]

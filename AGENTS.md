@@ -245,6 +245,10 @@ text back in the startup set, and the gate fails it. `auto-pigeon-tools/docs/age
 the authority on the module schema and the route shape; `docs/agent/README.md` here says what is
 specific to this repository.
 
+**Trail is local, never part of a clone (`NEW_477`).** `/.trail/` is gitignored and its hook skips silently without
+it. Never commit anything under `.trail/`; a durable decision goes in a tracked doc or ADR
+(`auto-pigeon-tools/docs/agent/aut.graft.md`).
+
 <!-- trail:start -->
 ## Trail — repo context graph
 

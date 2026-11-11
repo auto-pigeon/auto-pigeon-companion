@@ -30,11 +30,11 @@
   ],
   "statusLine": {
     "type": "command",
-    "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.trail/statusline.cjs\""
+    "command": "f=\"${CLAUDE_PROJECT_DIR:-.}/.trail/statusline.cjs\"; [ -f \"$f\" ] || exit 0; node \"$f\""
   },
   "subagentStatusLine": {
     "type": "command",
-    "command": "node \"${CLAUDE_PROJECT_DIR:-.}/.trail/statusline.cjs\""
+    "command": "f=\"${CLAUDE_PROJECT_DIR:-.}/.trail/statusline.cjs\"; [ -f \"$f\" ] || exit 0; node \"$f\""
   },
   "footerLinksRegexes": [
     "graft/[\\w./-]+\\.md"
