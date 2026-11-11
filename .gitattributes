@@ -21,3 +21,7 @@
 *.pak binary
 *.zip binary
 *.gz binary
+
+# Vendored Impeccable launcher for cmd.exe: cmd parses batch files by byte offset and an LF-only .cmd
+# breaks `call :label` / `goto` (upstream pbakaus/impeccable#1098), so it is checked out with CRLF.
+.claude/skills/impeccable/scripts/impeccable.cmd text eol=crlf

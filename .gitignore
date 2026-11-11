@@ -61,3 +61,16 @@ Thumbs.db
 __pycache__/
 # trail: local repo context graph and learnings, never committed (HITL 2026-11-11)
 /.trail/
+
+# Impeccable (vendored design skill, .claude/skills/impeccable): runtime state, never tracked.
+**/skills/impeccable/scripts/bin/
+**/skills/impeccable/scripts/config.json
+**/.impeccable/hook.cache.json
+**/.impeccable/hook.pending.json
+.impeccable/live/
+.impeccable/history/
+.impeccable/config.local.json
+.impeccable/critique/*
+!.impeccable/critique/ignore.md
+.impeccable-live.json
+.impeccable-live/
