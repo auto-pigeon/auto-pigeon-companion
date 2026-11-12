@@ -223,59 +223,73 @@ func Prune(path string, now time.Time) error {
 
 func update(path string, now time.Time, mutate func(*Intent)) error {
 	return lockfile.With(path, options(), func() error {
-		intent := load(path)
-		imported, err := importLegacy(path, &intent)
-		if err != nil {
-			return err
+		legacy := legacyPath(path)
+		if _, err := os.Stat(legacy); errors.Is(err, os.ErrNotExist) {
+			// A 1.0 file written after this look is imported on the next read.
+			return publish(path, "", now, mutate)
 		}
-		prune(&intent, now)
-		mutate(&intent)
-		prune(&intent, now)
-
-		if err := save(path, intent); err != nil {
-			return err
-		}
-		if imported {
-			// Only once the list holding it is on disk.
-			if err := os.Remove(legacyPath(path)); err != nil && !errors.Is(err, os.ErrNotExist) {
-				return err
-			}
-		}
-		return nil
+		// The one lock order: this file's lock, then the 1.0 file's. The 1.0
+		// lock — the one an older program takes before it writes — is held
+		// from the read of its file, through the list holding that record
+		// being on disk, until the 1.0 file is gone (NEW_502A). Released any
+		// earlier, an older program could write a second request between the
+		// read and the removal, and the removal would delete it unread.
+		return lockfile.With(legacy, options(), func() error {
+			return publish(path, legacy, now, mutate)
+		})
 	})
 }
 
-// importLegacy moves a 1.0 file's request into the list, under the 1.0 file's
-// own lock, which is the one an older program takes. It reports whether there
-// was a 1.0 file to remove. A file that is not 1.0 is left where it is.
-func importLegacy(path string, intent *Intent) (bool, error) {
-	legacy := legacyPath(path)
-	if _, err := os.Stat(legacy); errors.Is(err, os.ErrNotExist) {
-		return false, nil
+// publish is one read-modify-write of the list, with the 1.0 file at legacy
+// imported into it when legacy is not "". Its caller holds every lock it needs.
+// The 1.0 file is removed only once the list holding its record is on disk: a
+// failed save leaves both files as they were, and the next read imports the
+// 1.0 record again.
+func publish(path, legacy string, now time.Time, mutate func(*Intent)) error {
+	intent := load(path)
+	imported := legacy != "" && importLegacy(legacy, &intent)
+	afterLegacyRead()
+	prune(&intent, now)
+	mutate(&intent)
+	prune(&intent, now)
+
+	if err := save(path, intent); err != nil {
+		return err
 	}
-	imported := false
-	err := lockfile.With(legacy, options(), func() error {
-		raw, err := fsshare.ReadFile(legacy)
-		if err != nil {
-			return nil
+	if imported {
+		if err := os.Remove(legacy); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
 		}
-		var old legacyIntent
-		if json.Unmarshal(raw, &old) != nil || old.SchemaVersion != LegacySchemaVersion {
-			return nil
-		}
-		imported = true
-		if old.Request != nil {
-			item := Pending{Request: *old.Request, ReceivedAt: old.ReceivedAt, ExpiresAt: old.ExpiresAt,
-				LaunchedByVersion: old.LaunchedByVersion}
-			if valid(item) {
-				if index := intent.index(item.Request.RequestID); index < 0 || intent.Requests[index].ReceivedAt.Before(item.ReceivedAt) {
-					intent.add(item)
-				}
+	}
+	return nil
+}
+
+// afterLegacyRead runs between the read of a 1.0 file and its removal. Only a
+// test sets it, to put an older program's write in exactly that gap.
+var afterLegacyRead = func() {}
+
+// importLegacy moves a 1.0 file's request into the list. Its caller holds the
+// 1.0 file's own lock, the one an older program takes, and keeps it until the
+// 1.0 file is removed. It reports whether there was a 1.0 file to remove. A file that is not 1.0 is left where it is.
+func importLegacy(legacy string, intent *Intent) bool {
+	raw, err := fsshare.ReadFile(legacy)
+	if err != nil {
+		return false
+	}
+	var old legacyIntent
+	if json.Unmarshal(raw, &old) != nil || old.SchemaVersion != LegacySchemaVersion {
+		return false
+	}
+	if old.Request != nil {
+		item := Pending{Request: *old.Request, ReceivedAt: old.ReceivedAt, ExpiresAt: old.ExpiresAt,
+			LaunchedByVersion: old.LaunchedByVersion}
+		if valid(item) {
+			if index := intent.index(item.Request.RequestID); index < 0 || intent.Requests[index].ReceivedAt.Before(item.ReceivedAt) {
+				intent.add(item)
 			}
 		}
-		return nil
-	})
-	return imported, err
+	}
+	return true
 }
 
 // valid re-validates what is on disk rather than trusting it: the file is the
@@ -321,6 +335,9 @@ func prune(intent *Intent, now time.Time) {
 	intent.SchemaVersion = SchemaVersion
 }
 
+// replace publishes a saved list. A test swaps it to fail a publication.
+var replace = fsshare.Replace
+
 func save(path string, intent Intent) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
@@ -354,7 +371,7 @@ func save(path string, intent Intent) error {
 	if err = temporary.Close(); err != nil {
 		return err
 	}
-	if err = fsshare.Replace(temporary.Name(), path); err != nil {
+	if err = replace(temporary.Name(), path); err != nil {
 		return fmt.Errorf("buildintent: %w", err)
 	}
 

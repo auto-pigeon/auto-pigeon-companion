@@ -148,6 +148,53 @@ await test('inherited free text is shown, can be emptied, and empty is sent as c
  assert.equal(body.description,undefined);assert.equal(body.release_notes,undefined);assert.equal(body.source_repository,'https://example.invalid/src');
  h.answer(h.valid);await done;
 });
+// NEW_502A: offer() protected only a NONEMPTY edit, so a field the person
+// emptied read as untouched and a starting point's reply typed its text back.
+// Empty where the form offered text is the person's answer; empty where the
+// form itself offered nothing is still the form's, and the next reply fills it.
+const BASE={scratch:{kind:'tool',from:'base'},identity:{description:'What Base is',homepage:'https://example.invalid/base',source_repository:'https://example.invalid/base-src'}};
+const OTHER={scratch:{kind:'tool',from:'other'},identity:{description:'What Other is',homepage:'https://example.invalid/other',source_repository:'https://example.invalid/other-src',release_notes:'https://example.invalid/other/2.0.0'}};
+async function choose(h,id){h.$('wizard-template').value=id;const selection=h.$('wizard-template').fire('change');await h.tick();return selection;}
+await test('a field cleared or edited while a starting point loads is kept; untouched and form-empty fields follow it',async()=>{
+ const h=harness();await chosen(h);
+ let selection=await choose(h,'base');h.answer(BASE);await selection;await h.tick();
+ assert.equal(h.$('wizard-description').value,'What Base is');assert.equal(h.$('wizard-release-notes').value,'');
+ selection=await choose(h,'other');
+ // while Other's reply is on its way: one field emptied, one rewritten
+ h.$('wizard-description').value='';await h.invalidate();
+ h.$('wizard-homepage').value='https://example.invalid/mine';await h.invalidate();
+ h.answer(OTHER);await selection;await h.tick();
+ assert.equal(h.scratch.from,'other');
+ assert.equal(h.$('wizard-description').value,'','a deliberately cleared field was filled again');
+ assert.equal(h.$('wizard-homepage').value,'https://example.invalid/mine');
+ assert.equal(h.$('wizard-source-repository').value,'https://example.invalid/other-src','an untouched field did not follow the starting point');
+ assert.equal(h.$('wizard-release-notes').value,'https://example.invalid/other/2.0.0','a field the form offered empty was not filled');
+ // switching back keeps both answers, and sends the clear as cleared
+ selection=await choose(h,'base');h.answer(BASE);await selection;await h.tick();
+ assert.equal(h.$('wizard-description').value,'');assert.equal(h.$('wizard-homepage').value,'https://example.invalid/mine');
+ assert.equal(h.$('wizard-source-repository').value,'https://example.invalid/base-src');
+ assert.equal(h.$('wizard-release-notes').value,'','Base offers no release notes, so the untouched field follows it to empty');
+ await h.next();await h.next();const done=h.next();const body=h.requests[0].options.body;
+ assert.equal(body.description,undefined);assert.equal(body.homepage,'https://example.invalid/mine');
+ h.answer(h.valid);await done;
+});
+await test('a field cleared while Retry asks again for a starting point is kept',async()=>{
+ const h=harness();await chosen(h);
+ let selection=await choose(h,'base');h.answer(BASE);await selection;await h.tick();
+ selection=await choose(h,'other');h.answer({error:'that profile could not be read'},false);await selection;await h.tick();
+ const retry=h.$('wizard-template-retry').fire('click');await h.tick();
+ h.$('wizard-description').value='';await h.invalidate();
+ h.$('wizard-source-repository').value='https://example.invalid/mine-src';await h.invalidate();
+ h.answer(OTHER);await retry;await h.tick();
+ assert.equal(h.scratch.from,'other');assert.equal(h.$('wizard-description').value,'');
+ assert.equal(h.$('wizard-source-repository').value,'https://example.invalid/mine-src');
+ assert.equal(h.$('wizard-homepage').value,'https://example.invalid/other');
+ // typed back to the text the form last offered it (Base's: the cleared field
+ // took nothing from Other), the field is the form's again and follows Other
+ h.$('wizard-description').value='What Base is';
+ selection=await choose(h,'other');h.answer(OTHER);await selection;await h.tick();
+ assert.equal(h.$('wizard-description').value,'What Other is');
+});
 await test('a copy link for an engine shows the engine kind, not the default one',async()=>{
  // NEW_330, seen live: `#new-profile/auto-pigeon.engine.vkquake` set the
  // kind to engine and left the tab bar showing "A build pipeline".

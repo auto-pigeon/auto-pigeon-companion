@@ -1191,9 +1191,17 @@
     showLicenceKept();
   }
 
+  // offer fills a field the person has not made their own. A field is theirs
+  // once its value is not what the form last offered it — and that includes
+  // EMPTY where the form offered text: a deliberate clear is an answer, and a
+  // starting point's reply arriving later must not type the text back
+  // (NEW_502A). An empty field the form itself offered empty is still the
+  // form's, and the next starting point fills it. Before any offer the page's
+  // fields start empty, so any text in one is the person's.
   function offer(id, value) {
     const field = $(id);
-    if (field.value && field.value !== field.dataset.offered) return;
+    const offered = field.dataset.offered;
+    if (offered === undefined ? field.value !== "" : field.value !== offered) return;
     field.value = value || "";
     field.dataset.offered = field.value;
   }

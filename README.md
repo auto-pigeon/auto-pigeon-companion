@@ -169,10 +169,12 @@ to tell you shows nothing.
   new version. Program paths and approvals never leave this computer.
 
 The same review and the same press from a terminal, against the running
-Companion:
+Companion. The address the Companion writes to `api-url` ends in `/`, so every
+example here strips that slash before adding `/api/…` (a doubled slash is
+answered with a redirect, not with the API's answer):
 
 ```console
-$ api="$(cat ~/.config/auto-pigeon-companion/api-url)"; token="$(cat ~/.config/auto-pigeon-companion/api-token)"
+$ api="$(sed 's:/*$::' ~/.config/auto-pigeon-companion/api-url)"; token="$(cat ~/.config/auto-pigeon-companion/api-token)"
 $ curl -fsS -H "X-AUCOM-Token: $token" "$api/api/v1/account" | jq '{online, to_upload, to_download, conflicts}'
 $ review=$(curl -fsS -H "X-AUCOM-Token: $token" -H 'Content-Type: application/json' \
     "$api/api/v1/account/sync" -d '{"dry_run":true}')
@@ -222,7 +224,7 @@ on **File on this computer**.
 
 ```bash
 # Build only (Run after build off): the same request, with no engine
-api="$(cat ~/.config/auto-pigeon-companion/api-url)"; token="$(cat ~/.config/auto-pigeon-companion/api-token)"
+api="$(sed 's:/*$::' ~/.config/auto-pigeon-companion/api-url)"; token="$(cat ~/.config/auto-pigeon-companion/api-token)"
 curl -fsS -H "X-AUCOM-Token: $token" -H 'Content-Type: application/json' "$api/api/v1/play/runs" -d '{
   "asset_id": "<map id>", "revision_id": "<revision id>", "revision_number": 4,
   "pipeline": "auto-pigeon.q1.normal", "map": "mymap", "build_only": true}'
@@ -522,7 +524,7 @@ $ companion build pipelines                                     # every pipeline
 
 ```bash
 curl -sS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" -X POST \
-  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/profiles/auto-pigeon.ericw-tools.auto-pigeon-build.q1/check"
+  "$(sed 's:/*$::' ~/.config/auto-pigeon-companion/api-url)/api/v1/profiles/auto-pigeon.ericw-tools.auto-pigeon-build.q1/check"
 ```
 
 A problem's `fault` is `tool_incompatible` (the program said what it is, and it
@@ -534,7 +536,7 @@ with HTTP 409 and the same reasons, before anything runs:
 ```bash
 curl -sS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
   -H 'Content-Type: application/json' -X POST \
-  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/build/runs" \
+  "$(sed 's:/*$::' ~/.config/auto-pigeon-companion/api-url)/api/v1/build/runs" \
   -d '{"pipeline":"auto-pigeon.q1.final","inputs":{"source_map":"/path/to/room.map"}}'
 # {"class":"pipeline_not_ready","error":"the pipeline auto-pigeon.q1.final needs setup before it can build", "readiness":{…}}
 ```
@@ -559,7 +561,7 @@ $ companion job output <job-id> --follow
 
 ```bash
 curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
-  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/jobs/$JOB_ID/output?source=auto&offset=0"
+  "$(sed 's:/*$::' ~/.config/auto-pigeon-companion/api-url)/api/v1/jobs/$JOB_ID/output?source=auto&offset=0"
 ```
 
 Send the answer's `next` back as `offset` to read on.
@@ -578,7 +580,7 @@ whole log.
 
 ```bash
 curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
-  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/jobs/$JOB_ID" | jq .live
+  "$(sed 's:/*$::' ~/.config/auto-pigeon-companion/api-url)/api/v1/jobs/$JOB_ID" | jq .live
 # {"now": …, "supervised": true, "last_output_at": …, "progress": {"phase": "Full VIS", "percent": 37},
 #  "resources": {"state": "live", "scope": "process_group", "cpu_percent": 285.2, "rss_bytes": 671088640, …}}
 ```
@@ -608,7 +610,7 @@ then read `manifest.state`. A build left running by a Companion that stopped is
 `interrupted`, and nothing is run again.
 
 ```bash
-api="$(cat ~/.config/auto-pigeon-companion/api-url)"; token="$(cat ~/.config/auto-pigeon-companion/api-token)"
+api="$(sed 's:/*$::' ~/.config/auto-pigeon-companion/api-url)"; token="$(cat ~/.config/auto-pigeon-companion/api-token)"
 curl -fsS -H "X-AUCOM-Token: $token" "$api/api/v1/build/runs?limit=5"                # every build, newest first
 curl -fsS -H "X-AUCOM-Token: $token" "$api/api/v1/build/runs/<build id>"             # one build
 curl -fsS -H "X-AUCOM-Token: $token" -OJ "$api/api/v1/build/runs/<build id>/output/bsp"   # one of its outputs
@@ -633,10 +635,10 @@ only the missing WADs are taken from it, by exact file name.
 ```bash
 # what a map revision's texture bundle carries, and why any WAD was not sent
 curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
-  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/play/textures?asset_id=<map-id>&revision=<n>"
+  "$(sed 's:/*$::' ~/.config/auto-pigeon-companion/api-url)/api/v1/play/textures?asset_id=<map-id>&revision=<n>"
 # the same, checking a folder of your own for the WADs that were not sent
 curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
-  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/play/textures?asset_id=<map-id>&revision=<n>&own_wads_dir=/path/to/your/wads"
+  "$(sed 's:/*$::' ~/.config/auto-pigeon-companion/api-url)/api/v1/play/textures?asset_id=<map-id>&revision=<n>&own_wads_dir=/path/to/your/wads"
 ```
 
 **Building a saved revision from the Build page.** **My Maps › Use in a build ›
@@ -657,12 +659,12 @@ build log's `Textures:` lines name the bundle and its digest.
 curl -fsS -X POST -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
   -H 'Content-Type: application/json' \
   -d '{"pipeline":"auto-pigeon.q1.fast-preview","inputs":{"source_map":"aub:map/<map-id>@<revision-id>"}}' \
-  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/build/runs"
+  "$(sed 's:/*$::' ~/.config/auto-pigeon-companion/api-url)/api/v1/build/runs"
 # what a map card says about its textures, and what a downloaded revision is bound to
 curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
-  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/library/maps/<map-id>/textures" | jq .summary
+  "$(sed 's:/*$::' ~/.config/auto-pigeon-companion/api-url)/api/v1/library/maps/<map-id>/textures" | jq .summary
 curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
-  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/library/cached" | jq '.items[] | {key, textures, texture_summary}'
+  "$(sed 's:/*$::' ~/.config/auto-pigeon-companion/api-url)/api/v1/library/cached" | jq '.items[] | {key, textures, texture_summary}'
 ```
 
 **Which engines Build & Run offers.** An engine is offered only for a build
@@ -675,7 +677,7 @@ your saved setup is not touched. The page names the game's own folder (`id1`,
 ```bash
 # which engines can play what each build profile makes
 curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
-  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/build/pipelines" | jq '.items[] | {id, engine_fit}'
+  "$(sed 's:/*$::' ~/.config/auto-pigeon-companion/api-url)/api/v1/build/pipelines" | jq '.items[] | {id, engine_fit}'
 ```
 
 **An engine that cannot start.** Build & Run watches the game for its first few
@@ -756,7 +758,7 @@ by its name. Its page reads top to bottom:
 ```bash
 # the state the Profiles list shows for one profile
 curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
-  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/profiles/auto-pigeon.q1.normal" | jq .setup_state
+  "$(sed 's:/*$::' ~/.config/auto-pigeon-companion/api-url)/api/v1/profiles/auto-pigeon.q1.normal" | jq .setup_state
 # → {"state": "needs_setup"}
 ```
 
@@ -783,12 +785,12 @@ $ companion toolchain args auto-pigeon.engine.darkplaces engine --set=-window   
 ```bash
 curl -fsS -X POST -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
   -H 'Content-Type: application/json' \
-  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/profiles/auto-pigeon.q1.normal/stage-arguments" \
+  "$(sed 's:/*$::' ~/.config/auto-pigeon-companion/api-url)/api/v1/profiles/auto-pigeon.q1.normal/stage-arguments" \
   -d '{"stage":"compile","arguments":["-nocolor"]}'
 
 # each stage's exact command as it would run on this machine
 curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
-  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/profiles/auto-pigeon.q1.normal/commands"
+  "$(sed 's:/*$::' ~/.config/auto-pigeon-companion/api-url)/api/v1/profiles/auto-pigeon.q1.normal/commands"
 ```
 
 ### Writing a profile
@@ -842,7 +844,7 @@ and nothing is installed:
 ```bash
 curl -sS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
   -H 'Content-Type: application/json' -X POST \
-  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/profiles/compose" \
+  "$(sed 's:/*$::' ~/.config/auto-pigeon-companion/api-url)/api/v1/profiles/compose" \
   -d '{"name":"My build","version":"1.0.0","summary":"One stage.","publisher_name":"Me","license_spdx":"NOASSERTION",
        "scratch":{"kind":"pipeline",
          "inputs":[{"name":"source_map","role":"q1.map.source","required":true,"extensions":[".map"]}],
@@ -853,7 +855,7 @@ curl -sS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
 ```bash
 # a tested profile as the form's fields
 curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
-  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/profiles/templates/auto-pigeon.q1.fast-preview/scratch"
+  "$(sed 's:/*$::' ~/.config/auto-pigeon-companion/api-url)/api/v1/profiles/templates/auto-pigeon.q1.fast-preview/scratch"
 ```
 
 A tool profile's diagnostic rules may mark a line `"fatal": true` (the result is
@@ -948,14 +950,14 @@ then says the version is unknown.
 ```bash
 # every pending request, oldest first, from this machine only ("requests": [...])
 curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
-  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/build-request/request"
+  "$(sed 's:/*$::' ~/.config/auto-pigeon-companion/api-url)/api/v1/build-request/request"
 # what your account says one of them is about (the newest when no id is given)
 curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
-  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/build-request/pending?request_id=<id>"
+  "$(sed 's:/*$::' ~/.config/auto-pigeon-companion/api-url)/api/v1/build-request/pending?request_id=<id>"
 # forget one of them and tell its editor; the others stay
 curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
   -H "Content-Type: application/json" -d '{"request_id":"<id>"}' \
-  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/build-request/dismiss"
+  "$(sed 's:/*$::' ~/.config/auto-pigeon-companion/api-url)/api/v1/build-request/dismiss"
 ```
 
 ## Testing an editor map for leaks
@@ -1063,18 +1065,18 @@ $ ./companion build leak-pipeline --game quake1 --unpin
 
 ```bash
 # What is pinned for Quake 1, and what could be.
-curl -s -H "X-AUCOM-Token: $(cat "$CONFIG_DIR/api-token")" \
-  "http://127.0.0.1:8789/api/v1/leak-test/pipelines?game=quake1"
+curl -s -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
+  "$(sed 's:/*$::' ~/.config/auto-pigeon-companion/api-url)/api/v1/leak-test/pipelines?game=quake1"
 # Why each one that is not ready is not: every problem names the tool profile,
 # the stage and the program it is about — the profile is where it is set up.
-curl -s -H "X-AUCOM-Token: $(cat "$CONFIG_DIR/api-token")" \
-  "http://127.0.0.1:8789/api/v1/leak-test/pipelines?game=quake1" |
+curl -s -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
+  "$(sed 's:/*$::' ~/.config/auto-pigeon-companion/api-url)/api/v1/leak-test/pipelines?game=quake1" |
   jq -r '.choices[] | select(.readiness.ready | not) | .name as $n
          | .readiness.problems[] | "\($n): set up \(.profile) (\(.step): \(.executable))"'
 # Pin one (an empty pipeline unpins).
-curl -s -H "X-AUCOM-Token: $(cat "$CONFIG_DIR/api-token")" -H 'Content-Type: application/json' \
+curl -s -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" -H 'Content-Type: application/json' \
   -d '{"game":"quake1","pipeline":"auto-pigeon.q1.leak-test"}' \
-  http://127.0.0.1:8789/api/v1/leak-test/pipelines
+  "$(sed 's:/*$::' ~/.config/auto-pigeon-companion/api-url)/api/v1/leak-test/pipelines"
 ```
 
 | the saved map is | pipeline offered first | what **Build** runs | point file |
@@ -1094,8 +1096,8 @@ build that does more.
 
 ```bash
 # The stages of every Quake III choice, built-in ones first.
-curl -s -H "X-AUCOM-Token: $(cat "$CONFIG_DIR/api-token")" \
-  "http://127.0.0.1:8789/api/v1/leak-test/pipelines?game=quake3" |
+curl -s -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
+  "$(sed 's:/*$::' ~/.config/auto-pigeon-companion/api-url)/api/v1/leak-test/pipelines?game=quake3" |
   jq -r '.choices[] | "\(.id) builtin=\(.builtin): \([.steps[].id] | join(", "))"'
 ```
 
@@ -1160,10 +1162,10 @@ JSON file in the editor's Leaks panel.
 ```bash
 # every pending request ("requests", oldest first), and how each one's status is being delivered
 curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
-  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/leak-test/request"
+  "$(sed 's:/*$::' ~/.config/auto-pigeon-companion/api-url)/api/v1/leak-test/request"
 # the result file of a finished leak-test build
 curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
-  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/leak-test/runs/$BUILD_ID/result" \
+  "$(sed 's:/*$::' ~/.config/auto-pigeon-companion/api-url)/api/v1/leak-test/runs/$BUILD_ID/result" \
   -o "$BUILD_ID-leak-result.json"
 ```
 
@@ -1419,7 +1421,7 @@ anything is written; *Try again* repeats the request.
 
 ```bash
 token="$(cat ~/.config/auto-pigeon-companion/api-token)"
-api="$(cat ~/.config/auto-pigeon-companion/api-url)"
+api="$(sed 's:/*$::' ~/.config/auto-pigeon-companion/api-url)"
 body='{"asset_id":"<map id>","revision_id":"<revision id>","revision_number":3,
        "pipeline":"auto-pigeon.q2.normal","engine":"auto-pigeon.engine.yamagi-quake2",
        "action":"play_map","map":"myroom",

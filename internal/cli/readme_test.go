@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -110,5 +112,40 @@ func TestTheReadmeStaysTruthfulAboutSigningAndAboutLinks(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("README.md no longer says %q", want)
 		}
+	}
+}
+
+// AUCOM #41 (NEW_502A): the Companion writes `api-url` with a trailing slash
+// (`http://127.0.0.1:<port>/`, a format other programs read and that stays
+// as it is), and the Companion answers `//api/…` with a 307 that `curl -fsS`
+// prints as if it were the answer. So every README example that adds a path
+// to that address strips the slash first, and none names a fixed port or a
+// variable the README never sets.
+func TestTheReadmeAPIExamplesStripTheBaseURLSlash(t *testing.T) {
+	body := readme(t)
+	catJoined := regexp.MustCompile(`\$\(cat [^)]*api-url\)/`)
+	assigned := regexp.MustCompile(`(\w+)=\"?\$\(cat [^)]*api-url\)\"?`)
+	fixedPort := regexp.MustCompile(`127\.0\.0\.1:[0-9]+/api/`)
+	examples := 0
+	for number, line := range strings.Split(body, "\n") {
+		where := fmt.Sprintf("README.md:%d", number+1)
+		if catJoined.MatchString(line) {
+			t.Errorf("%s adds a path to api-url without stripping its trailing slash: %s", where, line)
+		}
+		if match := assigned.FindStringSubmatch(line); match != nil && !strings.Contains(line, "${"+match[1]+"%/}") {
+			t.Errorf("%s keeps api-url's trailing slash in $%s: %s", where, match[1], line)
+		}
+		if fixedPort.MatchString(line) {
+			t.Errorf("%s names a fixed port instead of reading api-url: %s", where, line)
+		}
+		if strings.Contains(line, "$CONFIG_DIR") {
+			t.Errorf("%s uses $CONFIG_DIR, which no README example sets: %s", where, line)
+		}
+		if strings.Contains(line, "sed 's:/*$::' ~/.config/auto-pigeon-companion/api-url") {
+			examples++
+		}
+	}
+	if examples < 20 {
+		t.Errorf("only %d README examples read api-url the stripped way; #41 counted 20", examples)
 	}
 }
