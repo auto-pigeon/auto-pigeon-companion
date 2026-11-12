@@ -6,6 +6,7 @@
 - Decision owners: the operator, 2026-10-28 (HITL), in `NEW_367_AUCOM_Managed-Compiler-Install-And-Hourly-Updates`
 - Supersedes in part: [ADR-0008](0008-the-companion-downloads-no-program.md) — only its "downloads no program" rule, and only for these two toolchains and (since `NEW_368`) the Companion's own release
 - Amended: 2026-10-28, `NEW_368_AUCOM_Self-Update-And-Integrated-Native-Release` — the Companion's own release is the second kind of official managed target (below)
+- Amended: 2026-11-12, `NEW_508C_AUP_AUCOM_Discover-Companion-And-Update-Latest` — newest verified release always; one explicit Update for all three targets; Cancel is not suppression; an installation that cannot stay in use is replaced; portable tools live beside the bundle (below)
 
 ## Context
 
@@ -175,3 +176,40 @@ Windows replacement is not yet observed natively.
 
 - `NEW_368`: the Companion's own update, which consumes this coordinator and
   verification, and the native Windows/macOS rows of this one.
+
+## Amendment, 2026-11-12 (`NEW_508C`): newest, one Update, and honest placement
+
+**HITL standing decision (2026-11-12, until Andrea changes it).** Official Companion, EricW and q3map2 installs and
+updates select the newest available verified official release for the active platform and channel. Nothing pins a
+person to an old version: not a built-in profile's `tool_version` or banner (the profiles accept the fork family —
+`2.*` with `+auto-pigeon.`, `2.5.17n-ap.*` with `.upstream.` — and refuse measured releases by name), not a cached
+evaluation (a 304 replays the last newest answer), not a tag or embedded baseline. `Tool.Baseline` stays, as a safety
+floor (the oldest release this Companion was qualified with, itself a qualified Quake II leak release), never a
+ceiling and never coupled to the profiles' `tool_version`. Verification, the profiles' measured refusals (#34's parser
+floor: every release before 1.4535), the leak adapters' measured-version lists, a transaction's resolved digest,
+running jobs' frozen executables and the last-good rollback copy are different things and are unchanged.
+
+**One explicit Update.** The sidebar's Update (`POST /api/v1/tools/update`, `companion tools update`) is the person's
+answer for every target at once: the coordinator checks each now, installs what is missing, updates what is older,
+repairs what is gone, and says why a target is unavailable — through the same eligibility, verification, switch gate
+and self-update transaction an offer uses. Compilers are installed and switched before the Companion restarts for
+its own update (`Manager.toolWork` counts an approved install or a repair as work). "Don't notify me about this
+version" suppresses notices of exactly those bytes; a deliberate Update still installs them.
+
+**Cancel is not suppression.** Cancel records a dismissal for this run: the offer stays available (Settings, Update,
+the CLI) and is announced again at the next start. Suppression is only the explicit per-version choice.
+
+**An installation that cannot stay in use is replaced.** The active installation is replaced by the newest verified
+release, without being asked and through the ordinary switch that waits for work, when its built-in profile refuses
+or does not accept the banner it was installed with, when it is older than the baseline, or when it lies outside the
+implicit tools folder beside a portable bundle (`Manager.repairReason`). The person asked for the toolchain; leaving
+a refused one bound blocks every build that uses it. That was the reported Windows case: an EricW from before 1.4535
+kept in the per-user folder by an earlier Companion, then refused by 1.404's profiles.
+
+**Portable placement.** Any release bundle anchors `<bundle>/build-tools` (a macOS application: beside the `.app`),
+from the executable's own path, whatever the working directory; a deliberate `AUCOM_TOOLS_DIR` or `managed_tools_dir`
+is used as it is. A folder the Companion cannot write is still its folder and is reported with its path and remedy.
+The self-update transaction accepts a staged copy inside the bundle's folder when it lies under a top-level folder no
+member uses (`build-tools`); refusing it made every portable self-update roll back since build tools moved beside the
+bundle (2026-10-31).
+

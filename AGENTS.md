@@ -145,6 +145,11 @@ These are unconditional. Everything else is routed.
   feature, with at least one executable example per new or changed CLI command or HTTP workflow.
   *"Everything the page can do, the CLI can do too"* is a claim this repository has already had to
   repair once (`aucom.approvals`); do not let a new surface make it false again.
+- **Official installs and updates take the newest verified release (HITL, 2026-11-12, until Andrea changes
+  it).** Companion, EricW and q3map2 installs and updates select the newest available verified official release
+  for the platform and channel; nothing pins a person to an old one (no profile `tool_version`/banner, stale cache,
+  tag or embedded baseline as a ceiling). Checks, measured refusals, leak qualification, resolved digests, job
+  bindings and rollback copies stay. Rules: `aucom.managed-tools` (rule 14), ADR-0010's 2026-11-12 amendment.
 - **Quake II and Quake III are WORK IN PROGRESS, and no document may say otherwise.** The statement
   is `internal/maturity`, keyed on AUB's `engine_family`, pinned by SHA-256 on both sides. Never
   soften it, never derive one family's sentence from another's, and never let a profile document

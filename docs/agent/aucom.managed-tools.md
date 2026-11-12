@@ -53,7 +53,7 @@ update belongs to `NEW_368`, which consumes this coordinator and its verificatio
    schema's list of modes — do not add it there.
 3. **Eligibility before bytes.** Drafts never; prereleases only on the beta channel (the shipped
    default, `DefaultChannel`); versions ordered by `Tool.Version`, never by text or date; nothing
-   older than `Tool.Baseline` (kept equal to the built-in fork profile's pin); a known manifest
+   older than `Tool.Baseline` (a safety floor — the oldest qualified release — never a ceiling and not tied to a profile's `tool_version`, NEW_508C); a known manifest
    schema whose tag, version and prerelease flag agree with GitHub; a published target for this
    OS/processor with a passing acceptance and a SHA-256 and size agreeing with GitHub's listing
    and digest; a banner the strict built-in profile accepts and does not refuse. An unknown schema
@@ -70,8 +70,10 @@ update belongs to `NEW_368`, which consumes this coordinator and its verificatio
    built-in profile with no programs the verified installation already here (`NEW_380`: a person's
    earlier bindings could all be on a retired document); it downloads nothing and looks at nothing else.
 6. **Offer, never apply unasked.** Update now / Update when I close Companion / Cancel, and "Don't
-   ask again for this version" suppresses exactly `(tool, version, asset id, sha256)`. A Cancel
-   without it is not shown again in this process, nor for a day. A version seen with other bytes is
+   notify me about this version" suppresses exactly `(tool, version, asset id, sha256)`. A Cancel
+   without it is NOT suppression (NEW_508C): the offer stays in the status (`offer` +
+   `offer_dismissed`), available from Settings, the sidebar's Update and the CLI, and is announced
+   again at the next start (a new session) or after a day in one that keeps running. A version seen with other bytes is
    an `IntegrityEvent`, never an install. Suppression is per tool and never shared with the
    Companion's own update.
    `NEW_508`: an offer a routine check found is ONE Activity entry (`#tools-update-badge`) and opens nothing; the
@@ -131,9 +133,14 @@ update belongs to `NEW_368`, which consumes this coordinator and its verificatio
 
 10a. **Nothing is installed before a person says so (HITL, 2026-10-31; replaces installing on
     first launch).** `Options.AskFirst` holds a toolchain until `ApproveInstall`; the page asks in a
-    blocking modal at start, and Profiles has an Install button. A portable bundle's default tools
-    folder is `<bundle>/build-tools` (`config.SetBundleToolsDir`, set in `cli.Run`), no member of the
-    bundle, so a self-update leaves it. `AUCOM_TOOLS_DIR` and a configured folder still win, and a
+    blocking modal at start — listing EVERY catalogue toolchain with its state, an unavailable one with
+    its reason (NEW_508C) — and Profiles has an Install button. A release bundle's default tools
+    folder is `<bundle>/build-tools` (`managedtools.PortableToolsDir` → `config.SetBundleToolsDir`, set
+    in `cli.Run`): any release bundle, portable or not (an unwritable folder, a macOS application
+    whose `Root` is the folder holding the `.app`), from the executable's path and never the working
+    directory (NEW_508C; before, only a self-updatable bundle anchored it and the rest silently used
+    the per-user folder). It is no member of the bundle, so a self-update leaves it, and
+    `selfupdate` accepts a staged copy there (`Request.stagedBesideMembers`). `AUCOM_TOOLS_DIR` and a configured folder still win, and a
     toolchain installed earlier stays where it is.
     `uninstall --purge` removes that folder by path (`config.IsBundleToolsDir`): its name alone
     would be refused, and a folder of that name anywhere else still is.
@@ -213,6 +220,24 @@ update belongs to `NEW_368`, which consumes this coordinator and its verificatio
     bridge. The next ordinary update removes the extractor: it is a member of the old bundle and not of the
     new one. macOS is `manual` and has no bridge. No workflow runs the tool, it reads local files, and
     publishing one is a reviewed decision, never a step of a release.
+
+14. **Newest, one Update, and nothing left that cannot be built with (HITL 2026-11-12, NEW_508C).**
+    Installs and updates take the newest verified official release; ADR-0010's 2026-11-12 amendment
+    is the decision. `Manager.UpdateAll` (`POST /api/v1/tools/update`, `companion tools update`, the
+    sidebar's **Update**) checks every target and records the person's answer for each — approve an
+    install, an IntentNow for a newer release (a skipped version included: it is a notice suppression),
+    a repair — and answers at once; it never takes `workMu` (a download holds it for minutes). The
+    coordinator then does the work in its order: an approved install or a repair is `toolWork`, so the
+    Companion's restart waits for the compilers. `Manager.repairReason` replaces, unasked, an active
+    installation its strict profile refuses or does not accept, one older than `Baseline`, and — with
+    `Options.ImplicitRoot` — one outside the tools folder beside a portable bundle; never one in a
+    folder a person chose, never with the same bytes (`installedIn` must be another folder), always
+    through `activateWhenIdle`. A tools folder that cannot be written is `Status.RootError` (path and
+    remedy, found once at start without creating anything), and the coordinator still runs without a
+    `tooluse` registry so it can say so. The page keeps the update dialog through the operation and
+    the restart (`tools.js` `startOperation`, sessionStorage `aucom:update-op`; `lifecycle.js`
+    `awaitUpdate` keeps it instead of the stopped screen) and shows a determinate bar only from real
+    byte totals.
 
 ## Trust, said honestly
 

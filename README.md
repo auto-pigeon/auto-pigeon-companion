@@ -264,16 +264,33 @@ With no game set up yet, **Run after build** says so in the form and links
 **Configure a game**; nothing else opens, and unticking it builds the map only —
 which needs a compiler and no game.
 
-Where they go: a `build-tools` folder beside the Companion when you unpacked it
-somewhere you can write, one folder per version, never your `PATH`, a system
-folder or a game folder, and no administrator rights. An update of the Companion
-leaves that folder alone. A Companion that cannot write beside itself uses:
+Where they go: a `build-tools` folder beside the Companion — in the folder you
+unpacked it into, wherever you started it from — one folder per version, never
+your `PATH`, a system folder or a game folder, and no administrator rights. On
+macOS it is beside **Auto-Pigeon Companion.app**, never inside it. An update of
+the Companion leaves that folder alone, and when you move the whole Companion
+folder the tools are installed again beside it. Tools an older copy of the
+Companion put in your per-user folder are installed again in `build-tools` (the
+old files are left where they are). If the Companion cannot write beside itself,
+the Install window and **Settings** say so with the folder's path: move the
+Companion folder somewhere you can write, such as your Documents, or choose a
+tools folder in `config.json` (`"managed_tools_dir"`) or with `AUCOM_TOOLS_DIR` —
+a folder you choose is always used as it is. A development build, which is no
+release bundle, uses:
 
 | System | Tools folder |
 | --- | --- |
 | Linux | `~/.local/share/auto-pigeon-companion/tools` (or `$XDG_DATA_HOME/…`) |
 | macOS | `~/Library/Application Support/auto-pigeon-companion/tools` |
 | Windows | `%LocalAppData%\auto-pigeon-companion\tools` |
+
+**Which version.** Installs and updates always take the newest official release
+that is verified for this computer (the beta channel includes prereleases); a
+built-in profile written for an earlier release accepts a newer official one of
+the same family. If the installation in use is one a newer Companion refuses —
+for example an EricW release before 1.4535, which lacks the map-text parser fix —
+or it was deleted, the Companion installs the newest verified release in its
+place, and switches once no build uses the old one.
 
 **What is checked.** Each release's `release-manifest.json` (its schema, tag,
 version and the build for this platform), the archive's SHA-256 and size against
@@ -285,10 +302,22 @@ it, and these builds are **not signed**. Offline, a failed setup retries a minut
 later and then less often, with a **Retry** button; a working installation keeps
 working offline.
 
+**Update, bottom left.** The **Update** button at the bottom of the left
+sidebar checks now and installs the current official versions of Auto-Pigeon
+Companion, EricW tools and q3map2 in one go: what is missing is installed, what
+is older is updated, a deleted installation is repaired. The window stays open
+and says, for each one, what is happening — checking, downloading (with the real
+size, when it is known), verifying, waiting for a build to finish, switching,
+restarting the Companion — and how it ended. The compilers are installed first;
+the Companion restarts for its own update last, and the page comes back with the
+version that runs, or says that the previous version was kept and why. **Hide —
+it goes on** closes the window without stopping anything; **Update** opens it
+again. From a terminal, `companion tools update` with no tool name does the same.
+
 **Updates.** About once an hour while the Companion runs (and from **Settings →
-Updates → Check for updates**), a newer eligible release is offered in a
-dialog naming the tool, the installed and the offered version, and its release
-notes:
+Updates → Check for updates**), a newer eligible release is announced in Activity;
+opening it shows a dialog naming the tool, the installed and the offered version,
+and its release notes:
 
 - **Update now** — downloads and verifies it at once; it is switched on as soon
   as no build is using the version it replaces. A build that is running finishes
@@ -296,9 +325,11 @@ notes:
 - **Update when I close Companion** — downloads it in the background and switches
   when the Companion closes normally. If the Companion is killed instead, the
   switch happens at the next start, before anything runs.
-- **Cancel** — not now. It is offered again at the next start (or a day later).
-  Tick **Don't ask again for this version** to skip exactly that version; a newer
-  one is still offered, and **Settings → Offer skipped versions again** undoes it.
+- **Cancel** — not now. The update stays available (Settings, **Update**, the
+  terminal) and is announced again at the next start (or a day later). Tick
+  **Don't notify me about this version** to stop being told about exactly that
+  version of that tool; a newer one is still announced, **Update** still installs
+  it if you press it, and **Settings → Offer skipped versions again** undoes it.
 
 The previous version is kept for rollback; a version that fails its check is
 never switched on. **Every Companion on this computer that uses the same tools
@@ -319,6 +350,12 @@ Build tools for linux-amd64 (beta channel), in /home/me/.local/share/auto-pigeon
       auto-pigeon-ericw-v1.4556, 2.0.0-alpha11-70-ge923cca3+auto-pigeon.1.4556, sha256 bd8f3952…
   q3map2 (Auto-Pigeon build)         ready 2.5.17n-ap.3030
 $ companion tools check
+$ companion tools update                            # the sidebar's Update: everything, to the newest verified release
+EricW tools (Auto-Pigeon build): updating 1.4556 → 1.4560
+q3map2 (Auto-Pigeon build): up to date (2.5.17n-ap.3030)
+Auto-Pigeon Companion: updating 1.404 → 1.405
+Follow it with `companion tools status`.
+$ curl -fsS -X POST -H "X-AUCOM-Token: $token" "$api/api/v1/tools/update" | jq '.steps[] | {tool, action, from, to, detail}'
 $ companion tools update ericw-tools --now          # or --on-close
 $ companion tools skip ericw-tools --dont-ask-again
 $ companion tools reset-skipped
@@ -358,8 +395,9 @@ itself before you choose.
   place when you close the Companion (the last window, or Quit). Closing one tab
   of several is not closing. It does not reopen the Companion: the next start uses
   the new version.
-- **Cancel** — and **Don't ask again for this version**, exactly as for the
-  build tools, kept separately from them.
+- **Cancel** — and **Don't notify me about this version**, exactly as for the
+  build tools, kept separately from them. The sidebar's **Update** includes the
+  Companion's own update, after the compilers.
 
 What is replaced is only what the release lists: the program, the converter
 beside it and its bundle manifest. Your settings, profiles, compiler choices,

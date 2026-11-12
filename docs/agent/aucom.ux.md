@@ -141,6 +141,19 @@ handler with a fake catalog; `testdata/leakoutcome.check.mjs`), the shell record
 `testdata/notices.js` and `testdata/leakjourney.js`, `TestApprovingAnInstalledCommunityProfileKeepsItsProvenance`,
 `TestAUsedLinkDeliveredAgainIsARepeatNotASecondRequest`, `TestTheHandlerIsNamedForTheProgramNotOneOfItsUses`.
 
+## One Update, bottom left, and a dialog that stays (NEW_508C)
+
+The sidebar's last control is **Update** (`#sidebar-update`, described by `#sidebar-update-why`): the explicit
+"check now and install the current official versions" for the Companion, EricW and q3map2. It opens the update
+dialog AT ONCE in its progress view (`#tools-update-progress`) and the dialog stays until the operation ends — the
+check, each download (a determinate bar only from real byte totals, otherwise the native indeterminate
+`<progress>`), verification, waiting for work (with the elapsed seconds and what it waits for), switching, the
+Companion's restart (the page reloads and reopens it from sessionStorage), and a result per row (`data-state`:
+`installed`, `current`, `unavailable`, `failed` …). **Hide — it goes on** and ×/Escape hide it without cancelling;
+the button reopens it; a second press never starts a second operation. An offer's **Update now** continues in the
+same view; **Cancel** keeps the offer available and quiet until the next start. A tools folder the Companion cannot
+write is said in the Install window and Settings with its path, never as a failed download.
+
 ## A request from the editor opens ready (NEW_366, NEW_380)
 
 An editor's build request and an editor's leak request open Build & Run on the exact saved revision with the
