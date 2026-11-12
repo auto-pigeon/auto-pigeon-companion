@@ -93,20 +93,6 @@ func (m *Manager) UpdateAll(ctx context.Context) ([]UpdateStep, error) {
 			checkErr[tool.ID] = err.Error()
 		}
 	}
-	// Reconcile first, so a deleted or damaged installation is seen as one
-	// before anything is decided about it.
-	for _, tool := range Tools {
-		state, err := LoadState(m.opts.StatePath)
-		if err != nil {
-			return nil, err
-		}
-		m.workMu.Lock()
-		err = m.reconcile(tool, state.Tool(tool.ID))
-		m.workMu.Unlock()
-		if err != nil {
-			return nil, err
-		}
-	}
 	var steps []UpdateStep
 	now := m.now()
 	_, err := UpdateState(m.opts.StatePath, func(state *State) error {
@@ -161,9 +147,23 @@ func (m *Manager) planTool(tool Tool, step UpdateStep, ts *ToolState, now time.T
 			ts.Failure.NextAttempt = now
 		}
 	}
+	// A deleted or damaged installation in use is seen here without taking
+	// the install lock (a download can hold it for minutes, and this answers
+	// a click): the coordinator's own reconcile moves it aside and the
+	// approval and intent recorded here install the newest again.
+	broken := false
+	if ts.Active != nil {
+		record, err := ReadInstall(ts.Active.Dir)
+		broken = err != nil || record.ActualSHA256 != ts.Active.SHA256
+	}
 	switch {
-	case ts.Active == nil:
+	case ts.Active == nil || broken:
 		ts.InstallApproved = true
+		if broken {
+			identity := best.Identity()
+			ts.Intent, ts.IntentFor, ts.Dismissed = IntentNow, &identity, nil
+			step.Detail = "the installation in use is gone or damaged"
+		}
 		retry()
 		step.Action = UpdateInstalling
 	case m.repairReason(tool, ts) != "":

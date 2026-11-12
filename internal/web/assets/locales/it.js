@@ -1313,5 +1313,7 @@ window.AUCOM_LOCALES.it = {
   "The newest verified versions are installed.": "Sono installate le versioni verificate più recenti.",
   "An update finished with problems": "Un aggiornamento è terminato con problemi",
   "The update could not be started.": "Non è stato possibile avviare l’aggiornamento.",
-  "Being replaced by the newest verified release: {why}": "In sostituzione con la release verificata più recente: {why}"
+  "Being replaced by the newest verified release: {why}": "In sostituzione con la release verificata più recente: {why}",
+  "Waiting to install": "In attesa di installazione",
+  "Waiting to install {version}; another tool is installing": "In attesa di installare {version}; si sta installando un altro strumento"
 };

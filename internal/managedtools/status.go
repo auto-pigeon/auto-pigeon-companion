@@ -16,6 +16,9 @@ const (
 	PhaseReady       Phase = "ready"
 	PhaseFailed      Phase = "failed"
 	PhaseUnsupported Phase = "unsupported"
+	// PhaseQueued: a person asked for it, the release to install is known,
+	// and the coordinator has not started it yet (another tool is installing).
+	PhaseQueued Phase = "queued"
 )
 
 // Status is everything the page and `companion tools status` show.
@@ -157,6 +160,8 @@ func (m *Manager) Status() Status {
 			}
 		case ts.Integrity != nil:
 			view.Phase, view.Detail = PhaseFailed, integritySentence(ts.Integrity)
+		case ts.InstallApproved || !m.opts.AskFirst:
+			view.Phase, view.Version = PhaseQueued, best.Version
 		default:
 			view.Phase = PhaseNotChecked
 		}
