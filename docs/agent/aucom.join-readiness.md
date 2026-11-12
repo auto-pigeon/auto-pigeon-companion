@@ -95,7 +95,9 @@ handler opens `#play` and asks nobody anything. The page resolves the opaque id 
 (`GET /api/companion/v1/build-requests/{id}`) with the Companion's own session, then checks it
 itself: the link's intent equals AUB's, the Companion's own revision read is immutable with the
 request's number and digest, the game is read from the pinned APMap and AUB's game must agree, and
-only a game Build & Run builds (Quake 1, Quake II — Quake III is refused there) is reviewed. AUB's
+only a game Build & Run builds (Quake 1, Quake II, Quake III — the last built to its BSP only, then
+packaged and run as separate actions under the build's result, `aucom.quake3-package`; NEW_504) is
+reviewed, and only with a build profile of that game. AUB's
 404 (unknown, expired, another account's, map unreadable) keeps the intent. Taking a request into
 the form only fills the ordinary Build & Run form (one request at a time; another waits on its own card
 with **Open this request**, and a second link never takes the form from the first — AUCOM #33); the press of Build / Build & Run is the authorization, and its

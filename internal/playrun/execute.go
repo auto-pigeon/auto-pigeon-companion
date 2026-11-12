@@ -117,6 +117,19 @@ func (s *Service) downloadMap(ctx context.Context, record *Record) error {
 }
 
 func (s *Service) downloadTextures(ctx context.Context, record *Record) error {
+	if record.Request.PackagedAfter() {
+		// Quake III (NEW_504): Auto-Pigeon Backend holds no Quake III texture
+		// source — its export answers `unsupported_game: quake3` — so nothing
+		// is fetched and nothing stands in for one. The compiler reads the
+		// shaders and images from the game folders bound to it in Profiles,
+		// and the package step under the build's result says which of them
+		// travel. The stage is kept, and says so, so a record of every run
+		// has the same steps.
+		s.detail(record, "Auto-Pigeon Backend holds no Quake III texture sources, so nothing is downloaded: "+
+			"the compiler reads the map's shaders and images from the game folders bound to it in Profiles")
+
+		return nil
+	}
 	result, err := s.deps.FetchBundle(ctx, record.Request)
 	if err != nil {
 		return err
@@ -262,8 +275,9 @@ func (s *Service) compile(ctx context.Context, record *Record) error {
 		source = record.MapFile
 	}
 	packaged := record.Request.Packaged()
+	bound := record.Request.ReadsBoundFolders()
 	readsTextures := true
-	if !packaged {
+	if !bound {
 		// Each WAD at the path the map declares it at (declaredwads.go).
 		placed, err := s.placeDeclaredWADs(record, source)
 		if err != nil {
@@ -290,7 +304,13 @@ func (s *Service) compile(ctx context.Context, record *Record) error {
 		Strict:  record.Request.Strict,
 		Label:   record.Request.Label,
 	}
-	if packaged {
+	if record.Request.PackagedAfter() {
+		// Quake III: the base game and the user's content, as bound to Q3Map2
+		// in Profiles — exactly what a build from the Build page reads, and
+		// what the editor's Quake III leak test compiles with.
+		request.Roots, request.RootSources = nil, nil
+		s.detail(record, "the compiler reads the map's shaders and images from the game folders bound to it in Profiles")
+	} else if packaged {
 		// The game folders this machine bound to the compiler in Profiles —
 		// the base game and the user's content — exactly as a build from the
 		// Build page reads them. A texture bundle is a Quake 1 WAD set, and
@@ -372,7 +392,7 @@ func (s *Service) compile(ctx context.Context, record *Record) error {
 			return err
 		}
 	}
-	warning, err := check.verdict(packaged)
+	warning, err := check.verdict(record.Request.Family)
 	if err != nil {
 		record.Remedy = "The map names its WADs in worldspawn's `wad` key. Open the build in Jobs to see " +
 			"which archive the compiler could not find, and make sure the map's texture bundle, or " +

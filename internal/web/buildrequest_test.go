@@ -253,16 +253,99 @@ func TestADeliveryReadAfterABuildStartedElsewhereOffersNoSecondBuild(t *testing.
 // Quake 1.
 func TestABuildRequestForAnUnsupportedGameIsAnsweredNotGuessed(t *testing.T) {
 	m := newMachine(t)
-	m.backend.savedAPMap("quake3")
+	m.backend.savedAPMap("hexen2")
 	m.signIn()
 	link := m.editorBuildRequest(aub.BuildIntentBuild, "", nil)
 	status, body := m.call(http.MethodGet, "/api/v1/build-request/pending", nil)
-	if status != http.StatusOK || body["unsupported"] != true || body["game_profile"] != "quake3" ||
-		strings.Join(stringsOf(body["supported_profiles"]), ",") != "quake1,quake2" || body["revision_id"] != nil {
+	if status != http.StatusOK || body["unsupported"] != true || body["game_profile"] != "hexen2" ||
+		strings.Join(stringsOf(body["supported_profiles"]), ",") != "quake1,quake2,quake3" || body["revision_id"] != nil {
 		t.Fatalf("unsupported: %d %v", status, body)
 	}
 	if got := m.buildStatusesSoon(1); strings.Join(got, "|") != link.RequestID+" blocked "+buildStageUnsupported {
 		t.Fatalf("statuses %v", got)
+	}
+}
+
+// NEW_504 (AUCOM #28): the editor's Build for a Quake III map was answered
+// "unsupported". It is reviewed now, with the Auto-Pigeon Q3Map2 build
+// preferred, and built from the exact revision — and the build ends at the BSP
+// whichever the editor asked for: packaging, installing and running are the
+// separate actions under the build's result, so a start that would install or
+// start a game is refused, and so is a profile for another game.
+func TestAQuake3BuildRequestIsReviewedAndBuiltToItsBSP(t *testing.T) {
+	previous := buildRunPoll
+	buildRunPoll = 20 * time.Millisecond
+	t.Cleanup(func() { buildRunPoll = previous })
+	m := newMachine(t)
+	m.backend.savedAPMap("quake3")
+	m.signIn()
+	link := m.editorBuildRequest(aub.BuildIntentBuildRun, "quake3", nil)
+	status, body := m.call(http.MethodGet, "/api/v1/build-request/pending?request_id="+link.RequestID, nil)
+	if status != http.StatusOK || body["unsupported"] != nil || body["game_profile"] != "quake3" ||
+		body["preferred_tool"] != builtin.Q3Map2AutoPigeon || body["normal_pipeline"] != builtin.Q3Normal ||
+		body["revision_id"] != m.backend.asset.revisionID || body["content_sha256"] != m.backend.asset.digest() ||
+		body["run_after"] != true {
+		t.Fatalf("pending: %d %v", status, body)
+	}
+
+	start := func(change func(map[string]any)) (int, map[string]any) {
+		body := map[string]any{
+			"asset_type": "map", "asset_id": m.backend.asset.assetID, "revision_id": m.backend.asset.revisionID,
+			"revision_number": m.backend.asset.revision, "source_file": m.backend.asset.fileName,
+			"pipeline": builtin.Q3Normal, "map": "room", "build_only": true, "build_request_id": link.RequestID,
+		}
+		if change != nil {
+			change(body)
+		}
+		return m.call(http.MethodPost, "/api/v1/play/runs", body)
+	}
+	runAndInstall := func(b map[string]any) {
+		delete(b, "build_only")
+		b["engine"], b["action"], b["mod"] = "auto-pigeon.engine.ioquake3", "play_map", "aup-room"
+	}
+	if status, body := start(runAndInstall); status != http.StatusConflict || body["code"] != "build_request_mismatch" ||
+		!strings.Contains(fmt.Sprint(body["error"]), "Package and run this map") {
+		t.Fatalf("a Quake III start with an engine: %d %v", status, body)
+	}
+	if status, body := start(func(b map[string]any) { b["pipeline"] = builtin.Q1Normal }); status != http.StatusConflict ||
+		body["code"] != "build_request_mismatch" || !strings.Contains(fmt.Sprint(body["error"]), "Quake III map") {
+		t.Fatalf("a Quake III request through a Quake 1 profile: %d %v", status, body)
+	}
+	if m.pendingBuildLink() == nil {
+		t.Fatal("a refused start took the request")
+	}
+
+	// The review says where the build ends, and fetches no texture export.
+	plan := map[string]any{
+		"asset_type": "map", "asset_id": m.backend.asset.assetID, "revision_id": m.backend.asset.revisionID,
+		"revision_number": m.backend.asset.revision, "source_file": m.backend.asset.fileName,
+		"pipeline": builtin.Q3Normal, "map": "room", "build_only": true,
+	}
+	if status, body := m.call(http.MethodPost, "/api/v1/play/plan", plan); status != http.StatusOK ||
+		body["build_only"] != true || !strings.Contains(fmt.Sprint(body["then_package"]), "Package, install and run") ||
+		!strings.Contains(fmt.Sprint(body["textures"]), "no Quake III texture sources") {
+		t.Fatalf("the Quake III review: %d %v", status, body)
+	}
+
+	status, started := start(nil)
+	if status != http.StatusAccepted || started["build_only"] != true || started["family"] != "quake3" ||
+		started["packaged_after"] != true || started["engine"] != "" {
+		t.Fatalf("the Quake III build: %d %v", status, started)
+	}
+	if m.pendingBuildLink() != nil {
+		t.Fatal("the started request is still pending")
+	}
+	run := m.awaitPlay(t, started["id"].(string))
+	for _, stage := range anySlice(run["stages"]) {
+		switch stage.(map[string]any)["state"] {
+		case "installing", "launching", "running":
+			t.Fatalf("a Quake III build went on to %v: %v", stage, run)
+		}
+	}
+	for _, line := range m.buildStatusesSettled() {
+		if strings.HasPrefix(line, link.RequestID) && strings.Contains(line, "engine_started") {
+			t.Fatalf("the editor was told a game started: %v", line)
+		}
 	}
 }
 

@@ -11,8 +11,10 @@ import (
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/buildintent"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/maturity"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/playrun"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile/builtin"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/q3pack"
 )
 
 // The editor's normal build request: `autopigeon://build/request/<id>`.
@@ -39,10 +41,13 @@ func (s *Server) buildRequestAPI() map[string]http.HandlerFunc {
 }
 
 // buildRequestGames is what Build & Run builds from a saved map. Quake III is
-// not in it: Build & Run refuses a Quake III build profile (errPlayIsNotForQuake3),
-// so a request for one is answered "unsupported" here instead of being taken
-// into a review that could only refuse it — and never built as Quake 1.
-var buildRequestGames = []string{"quake1", "quake2"}
+// in it since NEW_504 (AUCOM #28): its request is built — the same verified
+// revision, conversion and Q3Map2 stages — and the build ends at the BSP.
+// Packaging, installing and running it are separate actions under the build's
+// result (errPlayIsNotForQuake3), so a Quake III Build & Run request is built
+// and then handed to that panel, never installed as a loose level and never
+// built as Quake 1.
+var buildRequestGames = []string{"quake1", "quake2", "quake3"}
 
 func buildRequestGameSupported(game string) bool {
 	for _, supported := range buildRequestGames {
@@ -404,7 +409,24 @@ func (s *Server) startForBuildRequest(w http.ResponseWriter, r *http.Request, bo
 		refuse("build_request_mismatch", errors.New("this is not the map revision the editor asked to build; nothing was started"))
 		return
 	}
-	if !body.BuildOnly != pending.RunAfter() {
+	// A Quake III request is built and ends at its BSP whichever the editor
+	// asked for (NEW_504): its Build & Run is that build, then the package
+	// panel's separate actions. Every other game is held to the request.
+	family := s.playFamily(body.Pipeline)
+	if family != "" && family != facts.Game {
+		// Never built as another game (a Quake III map through a Quake 1
+		// profile converts and then fails in a compiler that cannot read it).
+		refuse("build_request_mismatch", fmt.Errorf("the editor's revision is a %s map and this build profile makes %s "+
+			"maps; choose a %s build profile. Nothing was started",
+			maturity.GameName(facts.Game), maturity.GameName(family), maturity.GameName(facts.Game)))
+		return
+	}
+	quake3 := family == q3pack.FamilyQuake3
+	if quake3 && !body.BuildOnly {
+		refuse("build_request_mismatch", errPlayIsNotForQuake3)
+		return
+	}
+	if !quake3 && !body.BuildOnly != pending.RunAfter() {
 		if pending.RunAfter() {
 			refuse("build_request_mismatch", errors.New("the editor asked for Build & Run; switch Run after build on to build this request"))
 		} else {

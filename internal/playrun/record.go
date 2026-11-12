@@ -29,6 +29,7 @@
 package playrun
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -36,6 +37,7 @@ import (
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/q2pack"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/q3pack"
 )
 
 // SchemaVersion versions the record.
@@ -219,6 +221,28 @@ type Listing struct {
 // Packaged reports a run played from a package rather than a loose level.
 func (r Request) Packaged() bool { return r.Family == q2pack.FamilyQuake2 }
 
+// PackagedAfter reports a run that only ever builds: a Quake III map
+// (NEW_504, AUCOM #28). Its BSP is the artifact the run ends at. Packaging
+// it, installing it and starting an engine on it are three separate actions
+// the person takes under the build's result (internal/q3pack, q3install,
+// q3run), because a Quake III package carries shaders, images and models and
+// only the person can say which of them may be redistributed — an answer
+// this sequence has no place to ask for and must not assume.
+func (r Request) PackagedAfter() bool { return r.Family == q3pack.FamilyQuake3 }
+
+// ReadsBoundFolders reports a run whose compiler reads the game folders bound
+// to it in Profiles instead of a verified Quake 1 texture bundle: Quake II
+// (Q2_020) and Quake III (NEW_504). Auto-Pigeon Backend holds no Quake III
+// texture source (its texture export answers `unsupported_game: quake3`), so a
+// Quake III run fetches no texture export at all.
+func (r Request) ReadsBoundFolders() bool { return r.Packaged() || r.PackagedAfter() }
+
+// ErrQuake3BuildsOnly is why a Quake III run that would install or start an
+// engine is refused before anything is downloaded.
+var ErrQuake3BuildsOnly = errors.New("playrun: a Quake III map is built here and the run ends at its BSP; " +
+	"packaging it, installing it and starting the game are separate actions under the build's result, " +
+	"where you say which of its files may be redistributed")
+
 // DefaultMod is the game directory a Build & Run installs into.
 //
 // A sibling of `id1`, never `id1` itself: see internal/engine, which refuses
@@ -263,6 +287,15 @@ func (r *Request) Normalize() error {
 		}
 	} else if len(r.Grants) > 0 || r.AcceptReason != "" {
 		return fmt.Errorf("playrun: only a Quake II map is packaged, so only its run takes grants")
+	}
+	if r.PackagedAfter() {
+		switch {
+		case !r.BuildOnly:
+			return ErrQuake3BuildsOnly
+		case r.OwnWADsDir != "":
+			return fmt.Errorf("playrun: a Quake III build reads its shaders and textures from the game folders " +
+				"bound to its compiler; there are no WADs to supply")
+		}
 	}
 
 	if r.BuildOnly {

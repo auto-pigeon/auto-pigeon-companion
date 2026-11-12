@@ -226,6 +226,11 @@ api="$(cat ~/.config/auto-pigeon-companion/api-url)"; token="$(cat ~/.config/aut
 curl -fsS -H "X-AUCOM-Token: $token" -H 'Content-Type: application/json' "$api/api/v1/play/runs" -d '{
   "asset_id": "<map id>", "revision_id": "<revision id>", "revision_number": 4,
   "pipeline": "auto-pigeon.q1.normal", "map": "mymap", "build_only": true}'
+# A saved Quake III map is always build only; the answer has "packaged_after": true and its build_id
+# is what the package steps take (companion package map … --build <build id>, or the page's panel)
+curl -fsS -H "X-AUCOM-Token: $token" -H 'Content-Type: application/json' "$api/api/v1/play/runs" -d '{
+  "asset_id": "<map id>", "revision_id": "<revision id>", "revision_number": 4,
+  "pipeline": "auto-pigeon.q3.normal", "map": "q3room", "build_only": true}'
 ```
 
 **Signing in.** **Settings** and the **Sign in** dialog offer the two official
@@ -847,7 +852,18 @@ failed or cancelled. If you change the map, the revision or Run after build, the
 build is no longer the editor's: it still runs when you press the button, and
 the editor is not told about it. A request for another account or server, or an
 expired one, says the Companion cannot find it; sign in to the account the
-editor uses and press **Retry**. Quake III maps are not built this way yet.
+editor uses and press **Retry**.
+
+**Quake III maps (work in progress)** are built this way too, with the
+Auto-Pigeon Q3Map2 build preferred when it is set up. The build ends at the BSP,
+whether the editor asked for Build or Build & Run: Run after build is switched
+off for a Quake III build profile and says why. When the build finishes, press
+**Package and run this map** on its card. That opens the build's own
+package panel, where you say which files may be redistributed, preview the
+package, install it and start the game, as three separate steps (see *Quake III
+maps* below). The compiler reads shaders and images only from the game folders
+set on Q3Map2 in Profiles: your account holds no Quake III textures, so none are
+downloaded. The editor is told the request **completed** when the BSP is built.
 
 The Companion that picks the request up also tells the editor **which Companion
 it is**: its version, the editor-handoff protocol it speaks, what it can do
@@ -1270,8 +1286,11 @@ or `NOT_OBSERVED` (it said neither within `--wait`, and is left running).
 exit status.
 
 **On the page** the same three steps are the *Package and run this map* panel
-under a finished Quake III build of a file on this computer in **Build & Run**.
-Build & Run does not run a Quake III map itself. Tested only on Linux x86-64 with Q3Map2 2.5.17n and ioquake3 1.36,
+under a finished Quake III build in **Build & Run** — a build of a file on this
+computer, or of a saved map (from the form or from the editor's **Build**), whose
+card then has **Package and run this map**. Build & Run builds a Quake III map
+and stops at the BSP; it never installs or starts one itself, because only you
+can say what the package may carry. Tested only on Linux x86-64 with Q3Map2 2.5.17n and ioquake3 1.36,
 without id Software's data.
 
 ## Quake II maps (work in progress)

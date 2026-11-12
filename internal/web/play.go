@@ -719,20 +719,22 @@ func (s *Server) gameRootFor(profileID string) (string, error) {
 	return root, nil
 }
 
-// errPlayIsNotForQuake3 is why Build & Run refuses a Quake III pipeline.
+// errPlayIsNotForQuake3 is why Build & Run refuses to INSTALL or START a
+// Quake III map. It builds one (NEW_504, AUCOM #28): Build, or Build & Run from
+// the editor, runs the same verified download, conversion and Q3Map2 stages as
+// any saved-map build and ends at the BSP ([playrun.Request.PackagedAfter]).
 //
-// Build & Run stages a LOOSE level — `<mod>/maps/<map>.bsp` and the map's WADs —
-// which is the whole of what a Quake map needs to be played. A Quake III map
-// names shaders, images and models that have to travel with it in a PK3, and
-// which of those may be redistributed is a question only its author can answer.
-// Running one through this sequence produced a mod folder with a BSP in it and
-// an engine that drew the default texture everywhere (`Q3_010`, row 24): a run
-// that reported success and showed nothing. So the sequence says where the
-// Quake III path is, rather than doing half of it.
+// What it never does is drop that BSP into a mod folder. A Quake III map names
+// shaders, images and models that have to travel with it in a PK3, and which of
+// those may be redistributed is a question only its author can answer. Running
+// one as a loose level produced a mod folder with a BSP in it and an engine
+// that drew the default texture everywhere (`Q3_010`, row 24): a run that
+// reported success and showed nothing. So packaging, installing and starting
+// the engine stay the three separate actions under the build's result.
 var errPlayIsNotForQuake3 = errors.New(
-	"Build & Run plays a Quake map by putting its level in a mod folder. A Quake III map needs its " +
-		"textures, shaders and models packaged with it, and you have to say which of them may be " +
-		"redistributed: build it under Build, then use “Package and run this map” under the build's result")
+	"A Quake III map is built here, and the build ends at its BSP. Its textures, shaders and models have to be " +
+		"packaged with it, and you say which of them may be redistributed: press Build, then use " +
+		"“Package and run this map” under the build's result to package, install and run it")
 
 // A Quake II map is played from a PAK in a mod folder of its own, which the
 // engine has to say it opened. Q2_009 refused it here and pointed at the
@@ -741,8 +743,9 @@ var errPlayIsNotForQuake3 = errors.New(
 // profile packages, installs and waits for the engine's word in one record
 // (see [playrun.Request.Packaged]). Nothing here packages anything itself.
 
-// playRefuses reports a pipeline Build & Run does not run.
-func (s *Server) playRefuses(pipelineID string) error {
+// playRefuses reports a pipeline Build & Run does not run this way: a Quake III
+// build profile is built, never installed or started from here.
+func (s *Server) playRefuses(pipelineID string, buildOnly bool) error {
 	catalog, err := s.catalog()
 	if err != nil {
 		return nil // the sequence's own first stage reports a catalog it cannot read
@@ -753,7 +756,9 @@ func (s *Server) playRefuses(pipelineID string) error {
 	}
 	switch documentFamily(entry.Profile) {
 	case q3pack.FamilyQuake3:
-		return errPlayIsNotForQuake3
+		if !buildOnly {
+			return errPlayIsNotForQuake3
+		}
 	}
 	return nil
 }
@@ -830,7 +835,7 @@ func (s *Server) playFits(family, engineID, actionID string) error {
 // playRequest is the request a body describes, with what this machine says
 // about it: the engine's game folder, and the build profile's family.
 func (s *Server) playRequest(body playRequestBody) (playrun.Request, int, error) {
-	if err := s.playRefuses(body.Pipeline); err != nil {
+	if err := s.playRefuses(body.Pipeline, body.BuildOnly); err != nil {
 		return playrun.Request{}, http.StatusConflict, err
 	}
 	family := s.playFamily(body.Pipeline)
@@ -1128,6 +1133,10 @@ func playView(record *playrun.Record, now time.Time) map[string]any {
 	}
 	if record.Request.Packaged() {
 		out["packaged"] = true
+	}
+	if record.Request.PackagedAfter() {
+		// The page offers the build's Package → Install → Run panel next.
+		out["packaged_after"] = true
 	}
 	if record.Request.Trigger != "" {
 		out["trigger"] = record.Request.Trigger
@@ -1523,6 +1532,20 @@ func (s *Server) handlePlayPlan(w http.ResponseWriter, r *http.Request) {
 		delete(plan, "run")
 		delete(plan, "writes")
 		plan["build_only"] = true
+	}
+	if request.BuildOnly && request.PackagedAfter() {
+		// Quake III (NEW_504): the compiler reads the game folders bound to
+		// it, AUB holds no Quake III texture source, and the build ends at its
+		// BSP. What comes after is said, so nobody expects a game to start.
+		plan["textures"] = map[string]any{
+			"cached": false, "known": false,
+			"message": "Auto-Pigeon Backend holds no Quake III texture sources: the compiler reads the map's shaders " +
+				"and images from the game folders bound to it in Profiles, and nothing is downloaded for them.",
+		}
+		plan["then_package"] = "The build ends at the BSP. Package, install and run it under the build's result, " +
+			"where you say which of its files may be redistributed."
+		writeJSON(w, http.StatusOK, plan)
+		return
 	}
 	if request.BuildOnly && request.Packaged() {
 		// A Quake II compiler reads the game folders bound to it; the map's

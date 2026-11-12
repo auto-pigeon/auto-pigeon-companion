@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/q2pack"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/q3pack"
 )
 
 // A build whose compiler found none of the map's textures used to succeed.
@@ -34,6 +36,11 @@ var ErrNoTextures = errors.New("playrun: the compiler found none of the map's te
 // (tooltextures.go): a build and a Build & Run must agree about them.
 var noWADRules = map[string]bool{"no_wad": true, "no_valid_wad": true}
 
+// shaderImageRules are Q3Map2's "Couldn't find image for shader" — the
+// Quake III tool profile's word for a face that will draw as a placeholder
+// (NEW_504). Only that profile declares the id.
+var shaderImageRules = map[string]bool{"missing_image": true}
+
 // textureCheck is what one build's diagnostics say about its textures.
 type textureCheck struct {
 	Missing []string
@@ -51,7 +58,7 @@ func checkTextures(manifest *build.Manifest) textureCheck {
 			switch {
 			case noWADRules[d.RuleID]:
 				check.NoWAD = true
-			case build.MissingTextureRules[d.RuleID]:
+			case build.MissingTextureRules[d.RuleID] || shaderImageRules[d.RuleID]:
 				name := build.TextureNamed(d.Raw)
 				if name == "" || build.IsToolTexture(name) || seen[name] {
 					continue
@@ -70,11 +77,18 @@ func checkTextures(manifest *build.Manifest) textureCheck {
 // an error; a warning is the sentence the run carries. A packaged (Quake II)
 // run's compiler reads `.wal` files from its bound game folders, not WADs, and
 // the sentence names those (Q2_020, seen live).
-func (c textureCheck) verdict(packaged bool) (warning string, err error) {
+func (c textureCheck) verdict(family string) (warning string, err error) {
 	if len(c.Missing) == 0 {
 		return "", nil
 	}
-	if packaged {
+	switch family {
+	case q3pack.FamilyQuake3:
+		// Q3Map2 reads shaders and images from the game folders bound to it
+		// (NEW_504); a missing one is a default surface, never a stopped build.
+		return fmt.Sprintf("%d shader(s) or image(s) were not found in the game folders bound to the compiler, so "+
+			"their surfaces took default flags and will show as a placeholder: %s",
+			len(c.Missing), listSome(c.Missing)), nil
+	case q2pack.FamilyQuake2:
 		return fmt.Sprintf("%d texture(s) were not found as a .wal in the game folders bound to the compiler, so their "+
 			"surfaces took default contents and flags and will show as a placeholder: %s",
 			len(c.Missing), listSome(c.Missing)), nil

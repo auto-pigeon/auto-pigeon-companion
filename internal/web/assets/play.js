@@ -228,7 +228,7 @@
     const pipeline = state.pipelines.find((p) => p.id === state.pipeline);
     if (!pipeline) return t("Choose a build profile first.");
     if (!window.AUCOM.pipelineReady(pipeline)) return t("The chosen build profile needs setup first.");
-    if (!state.runAfter) return "";
+    if (!wantsRun()) return "";
     const listed = !hosting() || !state.listing.enabled ||
       (String(state.listing.host || "").trim() !== "" && Number(state.listing.port) > 0);
     if (!state.engine) return t("Choose an engine first.");
@@ -265,6 +265,34 @@
   // accepted on the engine's word — the package panel's path, from here.
   function packaged() {
     return family() === "quake2";
+  }
+
+  // A Quake III map is built here and the build ends at its BSP (NEW_504,
+  // AUCOM #28). Packaging, installing and running it are the three separate
+  // actions under the build's result (q3package.js), where the person says
+  // which of its files may be redistributed — so nothing runs after the build.
+  function packagedAfter() {
+    return family() === "quake3";
+  }
+
+  // Whether this form starts a game after the build: the person's choice, and
+  // never for a Quake III build. state.runAfter keeps the choice itself, so an
+  // editor's Build & Run request stays the request it was.
+  function wantsRun() {
+    return state.runAfter && !packagedAfter();
+  }
+
+  // Run after build, as the source and the chosen build profile allow it.
+  function syncRunAfter() {
+    const local = state.source === "local";
+    const quake3 = !local && packagedAfter();
+    $("play-run-after").disabled = local || quake3;
+    $("play-run-after").checked = !local && wantsRun();
+    $("play-run-after-note").hidden = !local && !quake3;
+    $("play-run-after-note").textContent = local ? t("For a file on this computer, play the build when it finishes.")
+      : quake3 ? t("A Quake III build ends at its BSP. Package, install and run it under the build's result, where you say which of its files may be redistributed.")
+        : "";
+    $("play-run-fields").hidden = local || !wantsRun();
   }
 
   // Which engines can play what the build profile makes is the server's word,
@@ -322,9 +350,9 @@
     return [
       state.map?.asset_id, state.revision?.revision_id, state.sourceFile, state.mapName,
       state.pipeline, String(state.strict), state.engine, state.action, state.mod, state.ownWadsDir,
-      String(state.runAfter), JSON.stringify(listingBody() || null),
+      String(wantsRun()), JSON.stringify(listingBody() || null),
       JSON.stringify(pipeline?.readiness || null),
-      JSON.stringify(state.runAfter ? [engine?.action_problems?.[state.action] || null, engine?.binding?.roots || null] : null),
+      JSON.stringify(wantsRun() ? [engine?.action_problems?.[state.action] || null, engine?.binding?.roots || null] : null),
     ].join("|");
   }
 
@@ -662,6 +690,7 @@
       // path is repaired. Dropping it made the person choose it again, and the
       // next refresh could have chosen another one behind them.
       "Choose a ready build profile…", false, true, undefined, { setupLabel: "build-profiles" });
+    if (state.source !== "local") syncRunAfter();
     renderStages();
     // The engines may have arrived first; which of them fit is the family's.
     if (state.engines.length) renderEngines();
@@ -767,7 +796,7 @@
   async function askForGame() {
     const ask = ++gameAsk;
     const note = $("play-no-game");
-    const wanted = () => ask === gameAsk && state.runAfter && state.source !== "local" && !$("area-play").hidden;
+    const wanted = () => ask === gameAsk && wantsRun() && state.source !== "local" && !$("area-play").hidden;
     if (!wanted()) { if (ask === gameAsk) note.hidden = true; return; }
     const { ok, body } = await api("/api/v1/engines");
     if (ask !== gameAsk) return;
@@ -1179,7 +1208,7 @@
   }
 
   function requestBody() {
-    if (!state.runAfter) {
+    if (!wantsRun()) {
       // Build only (NEW_363): the same coordinator, and nothing installed or
       // started — so no engine, folder, listing or package answers.
       return {
@@ -1238,7 +1267,7 @@
       attention.append(el("p", { className: "message error", attrs: { role: "alert" }, text: t(plan.textures_warning) }));
     }
     if (plan.packaged) attention.append(packageSection(plan));
-    if (hosting() && state.runAfter) {
+    if (hosting() && wantsRun()) {
       const placeholder = el("section", { className: "panel review-card" });
       attention.append(placeholder);
       listingCard().then((card) => placeholder.replaceWith(card));
@@ -1629,15 +1658,16 @@
     const summary = $("play-final-summary");
     const textures = state.plan?.textures;
     const own = textures?.ready_with_own_wads && textures.own_wads_dir === state.ownWadsDir;
-    const listing = state.runAfter ? listingBody() : undefined;
+    const listing = wantsRun() ? listingBody() : undefined;
     summary.replaceChildren(
       ...line(t("Map"), state.revision
         ? `${state.map?.display_name || ""} · ${t("revision {n}", { n: state.revision.revision })}` : t("not chosen yet")),
       ...line(t("Build profile"), nameOfPipeline(state.pipeline) || t("not chosen yet")),
-      ...line(t("Then"), !state.runAfter ? t("Nothing starts: the build stops once the map is compiled.")
+      ...line(t("Then"), packagedAfter() ? t("Nothing starts: the build ends at its BSP. Package, install and run it under the build's result.")
+        : !wantsRun() ? t("Nothing starts: the build stops once the map is compiled.")
         : state.engine ? `${nameOfEngine(state.engine)} · ${actionTitle(state.action)}` +
           (state.gameRoot ? ` → ${state.gameRoot}/${modFolder()}` : "") : t("not chosen yet")),
-      ...(packaged() && state.runAfter ? line(t("Your own files in the package"),
+      ...(packaged() && wantsRun() ? line(t("Your own files in the package"),
         t((GRANT_BASES.find(([value]) => value === state.grant.basis) || GRANT_BASES[0])[1]) +
         (state.grant.accept ? " · " + t("what it will not carry is accepted in writing") : "")) : []),
       ...(own ? line(t("Your own WADs"), `${(textures.own_wads_needed || []).join(", ")} ← ${state.ownWadsDir}`) : []),
@@ -1658,7 +1688,7 @@
   function renderPrimary() {
     if (state.source !== "saved") return;
     const button = $("play-start");
-    button.textContent = state.runAfter ? t("Build & Run") : t("Build");
+    button.textContent = wantsRun() ? t("Build & Run") : t("Build");
     const status = $("play-start-message");
     // What the press itself wrote ("Starting…", "Started.") stays until the
     // next change of the choices.
@@ -1713,7 +1743,7 @@
       const cause = (window.AUCOM.setupCauses?.(pipeline) || [])[0];
       if (cause) return window.AUCOM.setupLink(cause);
     }
-    if (state.runAfter && state.engine) {
+    if (wantsRun() && state.engine) {
       const engine = state.engines.find((e) => e.id === state.engine);
       if (engine && (!state.gameRoot || !window.AUCOM.actionReady(engine, state.action))) {
         return window.AUCOM.setupLink({ profile: engine.id, name: engine.name || engine.id });
@@ -1760,14 +1790,14 @@
 
   // decisionNeeded reports, without asking, whether this press needs one.
   function decisionNeeded() {
-    return (state.runAfter && publicListing(listingBody())) || (packaged() && state.runAfter && !state.grant.basis);
+    return (wantsRun() && publicListing(listingBody())) || (packaged() && wantsRun() && !state.grant.basis);
   }
 
   // requiredDecision asks what must be decided before this start, and nothing
   // else. Resolves false when the person cancelled.
   async function requiredDecision() {
-    const label = state.runAfter ? t("Build & Run") : t("Build");
-    if (state.runAfter && publicListing(listingBody())) {
+    const label = wantsRun() ? t("Build & Run") : t("Build");
+    if (wantsRun() && publicListing(listingBody())) {
       return window.AUCOM.confirmModal({
         title: t("List this game for everyone?"),
         body: t("Everyone in Live Games will see it and can join, and players outside your network need to reach this computer at {host}:{port}. The listing ends when the game stops.",
@@ -1775,7 +1805,7 @@
         confirm: label, closeX: true,
       });
     }
-    if (packaged() && state.runAfter && !state.grant.basis) {
+    if (packaged() && wantsRun() && !state.grant.basis) {
       const choice = el("select", { attrs: { id: "play-decision-basis" } });
       for (const [value, text] of GRANT_BASES) choice.append(el("option", { text: t(text), attrs: { value } }));
       const field = el("p", { className: "field", children: [
@@ -1827,8 +1857,8 @@
     state.started = { id: body.id, key };
     activeRuns.add(body.id);
     status.dataset.pressed = "started";
-    setMessage(status, state.runAfter ? t("Started. Building, then the game starts — progress is below.") : t("Started. Progress is below."), "ok");
-    announce(state.runAfter ? t("Build and run started.") : t("Build started."));
+    setMessage(status, wantsRun() ? t("Started. Building, then the game starts — progress is below.") : t("Started. Progress is below."), "ok");
+    announce(wantsRun() ? t("Build and run started.") : t("Build started."));
     watch(body.id);
     $("play-current")?.scrollIntoView?.({ block: "nearest" });
   }
@@ -1980,7 +2010,9 @@
       run.build_only ? "" : nameOfEngine(run.engine)].filter(Boolean).join(" · ");
     if (run.active) setMessage("play-current-status", t("Now: {stage}", { stage }), "busy");
     else if (run.state === "succeeded") {
-      setMessage("play-current-status", run.build_only ? t("Built. Nothing was started.") : t("The game was started."), "ok");
+      setMessage("play-current-status", run.packaged_after
+        ? t("Built. Next: package it, install it and run it under the build's result.")
+        : run.build_only ? t("Built. Nothing was started.") : t("The game was started."), "ok");
     } else if (run.state === "cancelled") setMessage("play-current-status", t("You cancelled it."), "");
     else {
       setMessage("play-current-status", `${run.failed_at_title || t("It stopped")}: ${failureSummary(run)} ${failureRemedy(run)}`.trim(), "error");
@@ -1995,7 +2027,15 @@
       retry.addEventListener("click", () => window.AUCOM.withBusy(retry, () => retryRun(run.id)));
       actions.append(retry);
     }
-    const progress = el("button", { text: t("View progress"), className: failed && run.can_retry ? "secondary" : "primary",
+    // A built Quake III map goes on to the build's own Package → Install →
+    // Run panel (NEW_504): three actions the person takes there, in order.
+    const next = run.state === "succeeded" && run.packaged_after && run.build_id;
+    if (next) {
+      const open = el("button", { text: t("Package and run this map"), className: "primary", attrs: { type: "button" } });
+      open.addEventListener("click", () => window.AUCOM.areas.build.openBuild(run.build_id, "succeeded"));
+      actions.append(open);
+    }
+    const progress = el("button", { text: t("View progress"), className: (failed && run.can_retry) || next ? "secondary" : "primary",
       attrs: { type: "button", "aria-controls": "activity" } });
     progress.addEventListener("click", openActivity);
     actions.append(progress);
@@ -2466,11 +2506,7 @@
       $(id).hidden = !local;
     }
     $("play-signed-out").hidden = local || Boolean(window.AUCOM.status?.authenticated);
-    $("play-run-after").disabled = local;
-    $("play-run-after").checked = !local && state.runAfter;
-    $("play-run-after-note").hidden = !local;
-    $("play-run-after-note").textContent = local ? t("For a file on this computer, play the build when it finishes.") : "";
-    $("play-run-fields").hidden = local || !state.runAfter;
+    syncRunAfter();
     askForGame();
     showAutobuild();
     if (remembered) remember();
@@ -2486,7 +2522,7 @@
   }
   $("play-run-after").addEventListener("change", (event) => {
     state.runAfter = event.target.checked;
-    $("play-run-fields").hidden = !state.runAfter;
+    $("play-run-fields").hidden = !wantsRun();
     askForGame();
     invalidate(state.runAfter ? "The game starts after the build now, so the review is worked out again."
       : "Nothing starts after the build now, so the review is worked out again.");
@@ -2527,6 +2563,8 @@
   $("play-pipeline").setAttribute("aria-describedby", "play-pipeline-state");
   $("play-pipeline").addEventListener("change", (event) => {
     state.pipeline = event.target.value;
+    syncRunAfter();
+    askForGame();
     invalidate("You changed the build profile, so what it would run has to be worked out again.");
     renderStages();
     // Which engines fit depends on the family (a Quake II build needs a
@@ -2662,7 +2700,7 @@
       $("play-request-note").hidden = true;
       state.source = "saved";
       state.runAfter = state.buildRequest.run_after;
-      $("play-run-after").checked = state.runAfter;
+      syncRunAfter();
       askForGame();
       pendingMap = request.asset_id;
       pendingRevision = request.revision_id;

@@ -186,9 +186,17 @@ strength of the cvar's name; it was wrong, and it was found by running it.
 `q3run.Preflight` is `engine.Checker` without the game-folder faults, because a
 check that knew only the name `baseq3` would refuse a game the engine runs.
 
-**Build & Run refuses a Quake III pipeline** and names this path
-(`errPlayIsNotForQuake3`). It stages a loose level into a mod folder, which is
-not how a Quake III map is played; do not teach it to.
+**Build & Run builds a Quake III map and stops at the BSP** (NEW_504, AUCOM #28,
+`playrun.Request.PackagedAfter`): a saved revision — from the form or from the
+editor's Build or Build & Run request — goes through the same verified download,
+conversion and Q3Map2 stages, reads shaders and images only from the folders bound
+to Q3Map2 (AUB has no Quake III texture source; its export answers
+`unsupported_game: quake3`, so none is fetched), and its card offers **Package and
+run this map**, which opens this panel on the build. It refuses any Quake III run
+that would install or start an engine (`errPlayIsNotForQuake3`,
+`playrun.ErrQuake3BuildsOnly`): it stages a loose level into a mod folder, which is
+not how a Quake III map is played, and the grants are asked only here. Do not teach
+it to package; the panel is the one place that does.
 
 ## What is not established
 
