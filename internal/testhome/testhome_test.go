@@ -3,6 +3,7 @@ package testhome
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -18,6 +19,18 @@ func TestIsolateMovesEveryPerUserDirectory(t *testing.T) {
 		"GOCACHE": "", "GOPATH": "", "GOMODCACHE": "", "GOENV": "",
 	} {
 		t.Setenv(name, value)
+	}
+	// The configuration directory Isolate watches is the one the standard
+	// library resolves for this platform from the seeded home: .config on
+	// Linux, Library/Application Support on macOS, AppData on Windows. Ask it
+	// now, before Isolate moves the environment, instead of assuming .config.
+	config, err := os.UserConfigDir()
+	if err != nil {
+		t.Fatalf("the seeded home has no configuration directory: %v", err)
+	}
+	if rel, err := filepath.Rel(real, config); err != nil || rel == "." || rel == ".." ||
+		strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		t.Fatalf("the configuration directory %q is not inside the seeded home %q", config, real)
 	}
 	home, err := Isolate()
 	if err != nil {
@@ -42,14 +55,15 @@ func TestIsolateMovesEveryPerUserDirectory(t *testing.T) {
 		t.Fatalf("nothing was written and Touched says %v", touched)
 	}
 	// What the two packages used to do: a lock guard in the real profile.
-	guard := filepath.Join(real, ".config", program, ".leak-test-intent.json.lock.guard")
+	watched := filepath.Join(config, program)
+	guard := filepath.Join(watched, ".leak-test-intent.json.lock.guard")
 	if err := os.MkdirAll(filepath.Dir(guard), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(guard, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if touched := home.Touched(); len(touched) != 1 {
-		t.Fatalf("a write to the real configuration directory was not noticed: %v", touched)
+	if touched := home.Touched(); len(touched) != 1 || !strings.HasPrefix(touched[0], watched+" (") {
+		t.Fatalf("a write to the real configuration directory %s was not noticed: %v", watched, touched)
 	}
 }

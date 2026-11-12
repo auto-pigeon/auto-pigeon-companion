@@ -75,6 +75,9 @@ func TestAcquireRootsSetsAToolsFoldersAndNothingElse(t *testing.T) {
 	env := acquireEnv(t)
 	const tool = "auto-pigeon.q3map2.auto-pigeon-build"
 	game, project := t.TempDir(), t.TempDir()
+	// A native absolute path: "/opt/..." is not absolute on Windows, and a
+	// binding refuses a path that is not (TestBindingRequiresAbsolutePaths).
+	executable := filepath.Join(t.TempDir(), "managed", "q3map2")
 
 	// Programs somebody (or the Companion) recorded earlier.
 	settings, err := loadSettings(env)
@@ -89,7 +92,7 @@ func TestAcquireRootsSetsAToolsFoldersAndNothingElse(t *testing.T) {
 		return set.Put(binding.LocalBinding{
 			ProfileID: tool, ProfileVersion: "0.0.0", ProfileDigest: "sha256:" + strings.Repeat("0", 64),
 			Trust: profile.TrustBuiltin, Acquisition: profile.AcquireManagedOfficial,
-			Executables: map[string]string{"q3map2": "/opt/managed/q3map2"},
+			Executables: map[string]string{"q3map2": executable},
 			Arguments:   map[string][]string{"compile": {"-v"}},
 		})
 	}); err != nil {
@@ -108,7 +111,7 @@ func TestAcquireRootsSetsAToolsFoldersAndNothingElse(t *testing.T) {
 	if local.Roots[profile.RootGame] != game || local.Roots[profile.RootContent] != project {
 		t.Errorf("the folders were not recorded: %v", local.Roots)
 	}
-	if local.Executables["q3map2"] != "/opt/managed/q3map2" || local.Acquisition != profile.AcquireManagedOfficial ||
+	if local.Executables["q3map2"] != executable || local.Acquisition != profile.AcquireManagedOfficial ||
 		len(local.Arguments["compile"]) != 1 {
 		t.Errorf("setting folders changed the programs, the route or the arguments: %+v", local)
 	}
