@@ -48,7 +48,7 @@ const (
 	// now, as its published programs print it; 1.4535 and the earlier ones stay accepted.
 	pinned1556Light = "---- ClearLightmapSurfaces ----\n---- light / ericw-tools 2.0.0-alpha11-70-ge923cca3+auto-pigeon.1.4556 ----\nlight compiles lightmap data for BSPs\n\n  -logfile \"path\"               File to output logging data to. If unchanged, it is set by the tool.\n"
 	pinned1556Qbsp  = "---- qbsp / ericw-tools 2.0.0-alpha11-70-ge923cca3+auto-pigeon.1.4556 ----\nqbsp performs geometric level processing of Quake .MAP files to create\nQuake .BSP files.\n"
-	// Release 1.4513: superseded, and still a release the fork profile builds with.
+	// Release 1.4513: superseded, and refused since NEW_507 (no parser fix).
 	earlierQbsp = "---- qbsp / ericw-tools 2.0.0-alpha11-27-g69db3ffa+auto-pigeon.1.4513 ----\nqbsp performs geometric level processing of Quake .MAP files to create\nQuake .BSP files.\n"
 )
 
@@ -105,21 +105,24 @@ func TestAProgramIsJudgedByItsOwnWords(t *testing.T) {
 		// are 2.x and list -logfile); the upstream ones do not satisfy the
 		// fork's, which is written for the Auto-Pigeon build by name.
 		{"fork vis under the 2.0 profile", upstream, "vis", forkVis, binding.FactCompatible, "2.0.0-alpha11-19-g1faae828+auto-pigeon.1.4505", ""},
-		{"1.4518 light under the fork profile", fork, "light", pinnedLight, binding.FactCompatible, "2.0.0-alpha11-32-g0c787d7a+auto-pigeon.1.4518", ""},
-		{"1.4518 qbsp under the fork profile", fork, "qbsp", pinnedQbsp, binding.FactCompatible, "2.0.0-alpha11-32-g0c787d7a+auto-pigeon.1.4518", ""},
+		// NEW_507 (#34): every release before 1.4535 lacks its map-text parser
+		// fix, and the fork profile names each one; the upstream document,
+		// which names nothing, still accepts the same programs.
+		{"1.4518 light under the fork profile", fork, "light", pinnedLight, binding.FactIncompatible, "2.0.0-alpha11-32-g0c787d7a+auto-pigeon.1.4518", ""},
+		{"1.4518 qbsp under the fork profile", fork, "qbsp", pinnedQbsp, binding.FactIncompatible, "2.0.0-alpha11-32-g0c787d7a+auto-pigeon.1.4518", ""},
 		{"1.4518 qbsp under the 2.0 profile", upstream, "qbsp", pinnedQbsp, binding.FactCompatible, "2.0.0-alpha11-32-g0c787d7a+auto-pigeon.1.4518", ""},
-		{"1.4524 light under the fork profile", fork, "light", releaseLight, binding.FactCompatible, "2.0.0-alpha11-38-gd4717d68+auto-pigeon.1.4524", ""},
-		{"1.4524 qbsp under the fork profile", fork, "qbsp", releaseQbsp, binding.FactCompatible, "2.0.0-alpha11-38-gd4717d68+auto-pigeon.1.4524", ""},
-		{"1.4533 light under the fork profile", fork, "light", pinnedNowLight, binding.FactCompatible, "2.0.0-alpha11-47-gcaad08e1+auto-pigeon.1.4533", ""},
-		{"1.4533 qbsp under the fork profile", fork, "qbsp", pinnedNowQbsp, binding.FactCompatible, "2.0.0-alpha11-47-gcaad08e1+auto-pigeon.1.4533", ""},
+		{"1.4524 light under the fork profile", fork, "light", releaseLight, binding.FactIncompatible, "2.0.0-alpha11-38-gd4717d68+auto-pigeon.1.4524", ""},
+		{"1.4524 qbsp under the fork profile", fork, "qbsp", releaseQbsp, binding.FactIncompatible, "2.0.0-alpha11-38-gd4717d68+auto-pigeon.1.4524", ""},
+		{"1.4533 light under the fork profile", fork, "light", pinnedNowLight, binding.FactIncompatible, "2.0.0-alpha11-47-gcaad08e1+auto-pigeon.1.4533", ""},
+		{"1.4533 qbsp under the fork profile", fork, "qbsp", pinnedNowQbsp, binding.FactIncompatible, "2.0.0-alpha11-47-gcaad08e1+auto-pigeon.1.4533", ""},
 		{"1.4535 light under the fork profile", fork, "light", pinned1535Light, binding.FactCompatible, "2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535", ""},
 		{"1.4535 qbsp under the fork profile", fork, "qbsp", pinned1535Qbsp, binding.FactCompatible, "2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535", ""},
 		{"1.4556 light under the fork profile", fork, "light", pinned1556Light, binding.FactCompatible, "2.0.0-alpha11-70-ge923cca3+auto-pigeon.1.4556", ""},
 		{"1.4556 qbsp under the fork profile", fork, "qbsp", pinned1556Qbsp, binding.FactCompatible, "2.0.0-alpha11-70-ge923cca3+auto-pigeon.1.4556", ""},
 		// 1.4513 has a measured limit (a whole brush thinner than 0.02 units)
-		// that the profile describes and does not refuse: the operator chose to
-		// publish it with that limit stated, and a binding to it keeps working.
-		{"1.4513 qbsp under the fork profile", fork, "qbsp", earlierQbsp, binding.FactCompatible, "2.0.0-alpha11-27-g69db3ffa+auto-pigeon.1.4513", ""},
+		// that the profile describes and does not refuse for; since NEW_507 it
+		// is refused for the missing parser fix, like every release before 1.4535.
+		{"1.4513 qbsp under the fork profile", fork, "qbsp", earlierQbsp, binding.FactIncompatible, "2.0.0-alpha11-27-g69db3ffa+auto-pigeon.1.4513", ""},
 		// Release 1.4505 is a 2.x Auto-Pigeon build that lists -logfile, and
 		// the fork's own profile still does not build with it: it names that
 		// release as one that puts solid in a map's air (NEW_323E). The same
@@ -249,7 +252,7 @@ func TestAReleaseAProfileNamesAsDefectiveIsRefusedInItsOwnWords(t *testing.T) {
 			t.Fatalf("%s under the fork profile: %s", identity, state)
 		}
 		release := identity[strings.LastIndex(identity, ".")-1:]
-		for _, want := range []string{identity, "release " + release, "solid in a map's air", "newer release"} {
+		for _, want := range []string{identity, "release " + release, "solid in a map's air", "release 1.4535 or newer"} {
 			if !strings.Contains(detail, want) {
 				t.Errorf("%s: the sentence does not say %q: %s", identity, want, detail)
 			}
@@ -342,5 +345,66 @@ func TestAFactDescribesOneFile(t *testing.T) {
 	}
 	if fact.Describes(path, second.Size, second.ModifiedAt, "r") {
 		t.Error("a fact about the old file described the new one")
+	}
+}
+
+// NEW_507 (#34): release 1.4535 is the first with the map-text parser fix
+// (ericw-tools d645c6f4, NEW_348: parse_token read past the end of a map whose
+// last token, quote or comment was left open, reproduced under ASan). Every
+// published release before it shares the old parser, and both fork profiles
+// name each one by its published banner — the banners below are the ones each
+// release's own release-manifest.json gives. The last incompatible release is
+// 1.4534 (a documentation-only commit over 1.4533); 1.4535 and everything
+// published since are accepted. Matched literally: the next release's banner
+// is not refused because nothing here orders versions.
+func TestEveryReleaseWithoutTheParserFixIsRefusedByBothForkProfiles(t *testing.T) {
+	withoutFix := []string{
+		"2.0.0-alpha11-16-gd4e4a75f+auto-pigeon.1.4502",
+		"2.0.0-alpha11-19-g1faae828+auto-pigeon.1.4505",
+		"2.0.0-alpha11-24-gd278362b+auto-pigeon.1.4510",
+		"2.0.0-alpha11-27-g69db3ffa+auto-pigeon.1.4513",
+		"2.0.0-alpha11-32-g0c787d7a+auto-pigeon.1.4518",
+		"2.0.0-alpha11-33-gb7c04a5b+auto-pigeon.1.4519",
+		"2.0.0-alpha11-36-g0d64c054+auto-pigeon.1.4522",
+		"2.0.0-alpha11-38-gd4717d68+auto-pigeon.1.4524",
+		"2.0.0-alpha11-44-g515c9093+auto-pigeon.1.4530",
+		"2.0.0-alpha11-46-gb3a4632c+auto-pigeon.1.4532",
+		"2.0.0-alpha11-47-gcaad08e1+auto-pigeon.1.4533",
+		"2.0.0-alpha11-48-gb2e8ae28+auto-pigeon.1.4534",
+	}
+	withFix := []string{
+		"2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535",
+		"2.0.0-alpha11-50-g2dad7003+auto-pigeon.1.4536",
+		"2.0.0-alpha11-70-ge923cca3+auto-pigeon.1.4556",
+		"2.0.0-alpha11-73-g466c09d1+auto-pigeon.1.4559",
+	}
+	for _, id := range []string{forkID, "auto-pigeon.ericw-tools.auto-pigeon-build.q2"} {
+		document := tool(t, id)
+		probe := document.CompatibilityProbe
+		for _, identity := range withoutFix {
+			release := identity[strings.LastIndex(identity, "+auto-pigeon.")+len("+auto-pigeon."):]
+			state, got, _, detail := Classify(probe, "qbsp", "---- qbsp / ericw-tools "+identity+" ----\n", "")
+			if state != binding.FactIncompatible || got != identity {
+				t.Errorf("%s: %s is %s (%q), want incompatible", id, identity, state, got)
+				continue
+			}
+			for _, want := range []string{"release " + release, "map-text parser fix", "release 1.4535 or newer", "companion tools use-managed " + id} {
+				if !strings.Contains(detail, want) {
+					t.Errorf("%s: the sentence for %s does not say %q: %s", id, release, want, detail)
+				}
+			}
+			finding := Judge(document, "qbsp", "/tools/bin/qbsp", &binding.ExecutableFact{State: state, Identity: got, Detail: detail})
+			if finding == nil || finding.Kind != Incompatible || !strings.Contains(finding.Summary, "parser fix") {
+				t.Errorf("%s: the finding for %s does not carry the reason: %+v", id, release, finding)
+			}
+		}
+		for _, identity := range withFix {
+			if _, refused := probe.Refused(identity); refused || !probe.Accepts(identity) {
+				t.Errorf("%s: %s is refused or not accepted", id, identity)
+			}
+		}
+		if got := len(probe.Refuse); got != len(withoutFix) {
+			t.Errorf("%s names %d releases; the releases without the parser fix are %d", id, got, len(withoutFix))
+		}
 	}
 }

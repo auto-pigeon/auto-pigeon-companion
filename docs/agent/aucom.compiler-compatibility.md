@@ -59,7 +59,17 @@ defect; this module is what must stay true so it does not come back.
    `contains` / `suffix` and a one-sentence `reason`, `NEW_323E`). It is the same kind of literal
    statement, by the same document, about a release that was MEASURED: the built-in Auto-Pigeon
    Quake 1 profile names `+auto-pigeon.1.4502` and `+auto-pigeon.1.4505`, which put solid in a
-   map's air with exit 0. It is never "this and everything older", it applies only to the profile
+   map's air with exit 0. Since `NEW_507` (#34) BOTH Auto-Pigeon-build profiles also name every
+   published release from 1.4510 to 1.4534 (and 1.4502/1.4505 in the Quake II one), one entry per
+   published banner: none has release 1.4535's map-text parser fix (fork `d645c6f4`; `parse_token`
+   read past the end of a map whose last token, quote or comment is left open, reproduced under ASan
+   in `NEW_348`; `common/parser.cc` is byte-identical from alpha11 to 1.4534, and the parser is
+   shared by both games). A release build shows nothing on such a map — the BSPs are identical — so
+   no release-level symptom is claimed. The list is the published releases, checked against each
+   release's own `release-manifest.json` banner and commit ancestry; an unpublished development
+   build before 1.4535 is not named and is still accepted. Each reason names the fix, `1.4535 or
+   newer` and `companion tools use-managed <profile id>` as the recovery. It is never "this and
+   everything older", it applies only to the profile
    that says it (the upstream profile accepts the same files), and the reason is what the page,
    the CLI and the refused job print. `refuse` is part of the requirement digest only when it is
    not empty, so a document that names nothing keeps every answer recorded for it — pinned by
@@ -114,8 +124,9 @@ arguments a document chose.
   not in the built-in probes. The two Quake II profiles declare one since `Q2_008`, measured on
   0.18.1, 2.0.0-alpha7, alpha11 and fork 1.4505/1.4518 (`TestTheBuiltInQuake2ProfilesJudgeTheInstalledReleases`):
   alpha7's qbsp stops its usage (`number is too big`) before `-basedir`, so the upstream document
-  holds qbsp only to `-q2bsp` and `-leaktest`. The fork's Quake II document does not refuse 1.4502
-  or 1.4505: that defect was measured on Quake 1 maps only.
+  holds qbsp only to `-q2bsp` and `-leaktest`. The fork's Quake II document does not hold 1.4502's
+  and 1.4505's solid-in-air defect against them — it was measured on Quake 1 maps only — but refuses
+  them, like every release before 1.4535, for the shared parser (`NEW_507`).
 - Compatibility is not correctness. A compatible fork says nothing about what its qbsp does to a
   non-planar pipe (`NEW_324A`); that is the compiler's own acceptance.
 
@@ -168,7 +179,8 @@ build that reads only up to 1.4 refuses a 1.5 file whole. Never write a downgrad
 `internal/compat` (classifier on the measured banners, requirement digests, one sentence per
 state); `internal/job/compat_test.go` (shell fixtures that record their own argv — "never
 invoked" is read from what the program wrote); `internal/job/compat_installed_test.go` (the real
-0.18.1, alpha11 and fork, named by `AUCOM_TEST_ERICW_LEGACY`, `_ALPHA11`, `_FORK`, and `_FORK_DEFECTIVE` for 1.4502 / 1.4505);
+0.18.1, alpha11 and fork, named by `AUCOM_TEST_ERICW_LEGACY`, `_ALPHA11`, `_FORK` (1.4535 or later), `_FORK_DEFECTIVE` for 1.4502 / 1.4505 and `_FORK_NO_PARSER_FIX` for 1.4510–1.4534);
+`TestEveryReleaseWithoutTheParserFixIsRefusedByBothForkProfiles` (every published banner, both profiles);
 `internal/engine/compat_test.go`; `internal/web/compat_test.go` and
 `internal/cli/toolchain_check_cmd_test.go` (page, API and CLI give one answer — including the
 `build pipelines` LISTING, which asked only whether a profile provides each capability and printed

@@ -467,8 +467,25 @@ $ companion build run --pipeline auto-pigeon.q1.leak-test --input source_map=lev
     --option compile.forcegoodtree=false
 ```
 
-Releases 1.4502 and 1.4505 are refused by the Quake 1 profile (they can fill a
-map's air with solid without reporting anything); unpack a newer one.
+Both EricW build profiles (Quake 1 and Quake II) refuse every release before
+1.4535: none of them has 1.4535's map-text parser fix, so each reads past the
+end of a map file whose last line, quote or comment is left open. Releases 1.4502
+and 1.4505 can also fill a map's air with solid without reporting anything (the
+Quake 1 profile says so). The check names the release and what to do instead —
+choose the folder of 1.4535 or newer, or switch to the tools the Companion
+installs:
+
+```console
+$ companion toolchain check auto-pigeon.ericw-tools.auto-pigeon-build.q1
+qbsp     incompatible       2.0.0-alpha11-48-gb2e8ae28+auto-pigeon.1.4534  /home/me/tools/auto-pigeon-ericw-tools-1.4534-linux-amd64/bin/qbsp
+         The qbsp recorded for EricW tools, Auto-Pigeon build 1.4556 (Quake 1) is not the program this profile
+         was written for (it calls itself 2.0.0-alpha11-48-gb2e8ae28+auto-pigeon.1.4534, which this profile names
+         as a release not to build with: release 1.4534 lacks release 1.4535's map-text parser fix: it reads past
+         the end of a map file whose last token, quoted text or comment is left open; choose the folder of release
+         1.4535 or newer from the same page, or use the EricW tools the Companion installs (`companion tools
+         use-managed auto-pigeon.ericw-tools.auto-pigeon-build.q1`)): … Nothing else was chosen for you.
+$ companion tools use-managed auto-pigeon.ericw-tools.auto-pigeon-build.q1
+```
 
 **If you used upstream ericw-tools or Q3Map2 here.** Earlier Companions also
 shipped profiles for upstream's programs (`auto-pigeon.ericw-tools.q1`,

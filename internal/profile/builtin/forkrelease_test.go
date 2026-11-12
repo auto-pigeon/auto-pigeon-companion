@@ -91,25 +91,30 @@ func TestTheForkProfilesNameTheReleaseTheManifestDescribes(t *testing.T) {
 		}
 	}
 
-	// The Quake 1 profile holds its programs to a probe, and that probe names
-	// the two releases measured as defective — and not the pinned one.
-	entry, _ := Find("auto-pigeon.ericw-tools.auto-pigeon-build.q1")
-	probe := entry.Profile.(*profile.ToolProfile).CompatibilityProbe
-	if probe == nil {
-		t.Fatal("the Quake 1 profile declares no compatibility probe")
-	}
-	for identity, refused := range map[string]bool{
-		"2.0.0-alpha11-16-gd4e4a75f+auto-pigeon.1.4502": true,
-		"2.0.0-alpha11-19-g1faae828+auto-pigeon.1.4505": true,
-		"2.0.0-alpha11-24-gd278362b+auto-pigeon.1.4510": false,
-		"2.0.0-alpha11-27-g69db3ffa+auto-pigeon.1.4513": false,
-		manifest.Banner: false,
-	} {
-		if !probe.Accepts(identity) {
-			t.Errorf("%s is not an identity this profile accepts at all", identity)
+	// Both profiles hold their programs to a probe, and that probe names the
+	// releases measured as defective — every release before 1.4535, which lack
+	// its map-text parser fix (NEW_507) — and not the pinned one.
+	for _, id := range []string{"auto-pigeon.ericw-tools.auto-pigeon-build.q1", "auto-pigeon.ericw-tools.auto-pigeon-build.q2"} {
+		entry, _ := Find(id)
+		probe := entry.Profile.(*profile.ToolProfile).CompatibilityProbe
+		if probe == nil {
+			t.Fatalf("%s declares no compatibility probe", id)
 		}
-		if entry, named := probe.Refused(identity); named != refused {
-			t.Errorf("%s: refused %v (%q), want %v", identity, named, entry.Reason, refused)
+		for identity, refused := range map[string]bool{
+			"2.0.0-alpha11-16-gd4e4a75f+auto-pigeon.1.4502": true,
+			"2.0.0-alpha11-19-g1faae828+auto-pigeon.1.4505": true,
+			"2.0.0-alpha11-24-gd278362b+auto-pigeon.1.4510": true,
+			"2.0.0-alpha11-27-g69db3ffa+auto-pigeon.1.4513": true,
+			"2.0.0-alpha11-48-gb2e8ae28+auto-pigeon.1.4534": true,
+			"2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535": false,
+			manifest.Banner: false,
+		} {
+			if !probe.Accepts(identity) {
+				t.Errorf("%s: %s is not an identity this profile accepts at all", id, identity)
+			}
+			if entry, named := probe.Refused(identity); named != refused {
+				t.Errorf("%s: %s: refused %v (%q), want %v", id, identity, named, entry.Reason, refused)
+			}
 		}
 	}
 }

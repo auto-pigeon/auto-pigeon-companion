@@ -22,9 +22,12 @@ import (
 //
 //	AUCOM_TEST_ERICW_LEGACY   an unpacked 0.18.1's bin/
 //	AUCOM_TEST_ERICW_ALPHA11  an unpacked 2.0.0-alpha11
-//	AUCOM_TEST_ERICW_FORK     an Auto-Pigeon build's bin/ (1.4510 or later)
+//	AUCOM_TEST_ERICW_FORK     an Auto-Pigeon build's bin/ (1.4535 or later)
 //	AUCOM_TEST_ERICW_FORK_DEFECTIVE  release 1.4502's or 1.4505's bin/, which
 //	                          the fork's own profile names and refuses (NEW_323E)
+//	AUCOM_TEST_ERICW_FORK_NO_PARSER_FIX  a release from 1.4510 to 1.4534, which
+//	                          lacks 1.4535's map-text parser fix and which both
+//	                          fork profiles name and refuse (NEW_507)
 //
 // None is downloaded and none is assumed: a release that is not named is
 // skipped, by name.
@@ -40,6 +43,7 @@ func TestTheBuiltInProfilesJudgeTheInstalledReleases(t *testing.T) {
 		{"AUCOM_TEST_ERICW_ALPHA11", binding.FactCompatible, binding.FactIncompatible, "2.0.0-alpha11"},
 		{"AUCOM_TEST_ERICW_FORK", binding.FactCompatible, binding.FactCompatible, "+auto-pigeon."},
 		{"AUCOM_TEST_ERICW_FORK_DEFECTIVE", binding.FactCompatible, binding.FactIncompatible, "+auto-pigeon.1.450"},
+		{"AUCOM_TEST_ERICW_FORK_NO_PARSER_FIX", binding.FactCompatible, binding.FactIncompatible, "+auto-pigeon.1.45"},
 	}
 	ran := false
 	for _, release := range releases {
@@ -65,8 +69,10 @@ func TestTheBuiltInProfilesJudgeTheInstalledReleases(t *testing.T) {
 				for _, name := range []string{"qbsp", "vis", "light"} {
 					local.Executables[name] = filepath.Join(folder, name+suffix)
 				}
+				catalog := NewCatalog(filepath.Join(dir, "profiles"))
+				approveRetired(t, catalog, upstream, &local)
 				service, err := NewService(Options{
-					Store: store, Catalog: NewCatalog(filepath.Join(dir, "profiles")),
+					Store: store, Catalog: catalog,
 					Bindings: func(id string) (binding.LocalBinding, bool) { return local, id == profileID },
 				})
 				if err != nil {
@@ -100,7 +106,7 @@ func TestTheBuiltInProfilesJudgeTheInstalledReleases(t *testing.T) {
 		}
 	}
 	if !ran {
-		t.Skip("no installed ericw-tools release was named (AUCOM_TEST_ERICW_LEGACY, _ALPHA11, _FORK, _FORK_DEFECTIVE); the built-in profiles were NOT judged against real programs")
+		t.Skip("no installed ericw-tools release was named (AUCOM_TEST_ERICW_LEGACY, _ALPHA11, _FORK, _FORK_DEFECTIVE, _FORK_NO_PARSER_FIX); the built-in profiles were NOT judged against real programs")
 	}
 }
 
@@ -109,7 +115,9 @@ func TestTheBuiltInProfilesJudgeTheInstalledReleases(t *testing.T) {
 // release named: 2.0.0-alpha7's qbsp stops its usage before `-basedir` (so the
 // upstream document holds qbsp only to `-q2bsp` and `-leaktest`), 0.18.1 has
 // no Quake II at all, and the fork's document accepts only its own releases.
-// 1.4505 is NOT refused here: its defect was measured on Quake 1 maps.
+// 1.4505's solid-in-air defect is not held against it here (it was measured on
+// Quake 1 maps), but since NEW_507 it is refused like every release before
+// 1.4535, for the map-text parser both games share.
 //
 //	AUCOM_TEST_ERICW_ALPHA7   an unpacked 2.0.0-alpha7
 //
@@ -125,7 +133,8 @@ func TestTheBuiltInQuake2ProfilesJudgeTheInstalledReleases(t *testing.T) {
 		{"AUCOM_TEST_ERICW_ALPHA7", binding.FactCompatible, binding.FactIncompatible, "2.0.0-alpha7"},
 		{"AUCOM_TEST_ERICW_ALPHA11", binding.FactCompatible, binding.FactIncompatible, "2.0.0-alpha11"},
 		{"AUCOM_TEST_ERICW_FORK", binding.FactCompatible, binding.FactCompatible, "+auto-pigeon."},
-		{"AUCOM_TEST_ERICW_FORK_DEFECTIVE", binding.FactCompatible, binding.FactCompatible, "+auto-pigeon.1.450"},
+		{"AUCOM_TEST_ERICW_FORK_DEFECTIVE", binding.FactCompatible, binding.FactIncompatible, "+auto-pigeon.1.450"},
+		{"AUCOM_TEST_ERICW_FORK_NO_PARSER_FIX", binding.FactCompatible, binding.FactIncompatible, "+auto-pigeon.1.45"},
 	}
 	ran := false
 	for _, release := range releases {
@@ -151,8 +160,10 @@ func TestTheBuiltInQuake2ProfilesJudgeTheInstalledReleases(t *testing.T) {
 				for _, name := range []string{"qbsp", "vis", "light"} {
 					local.Executables[name] = filepath.Join(folder, name+suffix)
 				}
+				catalog := NewCatalog(filepath.Join(dir, "profiles"))
+				approveRetired(t, catalog, upstream, &local)
 				service, err := NewService(Options{
-					Store: store, Catalog: NewCatalog(filepath.Join(dir, "profiles")),
+					Store: store, Catalog: catalog,
 					Bindings: func(id string) (binding.LocalBinding, bool) { return local, id == profileID },
 				})
 				if err != nil {
@@ -206,4 +217,30 @@ func installRetired(t *testing.T, dir, id string) {
 	if err := os.WriteFile(filepath.Join(profiles, "retired.tool.json"), raw, 0o600); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// approveRetired records the person having approved the retired document,
+// which this test installs as a user's own profile: a user profile nobody
+// approved is never asked anything (aucom.compiler-compatibility, "When a
+// program is asked"). A built-in document needs no approval and is left alone.
+func approveRetired(t *testing.T, catalog *DirCatalog, retired string, local *binding.LocalBinding) {
+	t.Helper()
+	if local.ProfileID != retired {
+		return
+	}
+	entries, err := catalog.readDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	grants := &grantSource{bindings: map[string]binding.LocalBinding{}}
+	for _, entry := range entries {
+		if entry.Profile.Metadata().ID == retired {
+			grants.grantEverything(t, entry)
+		}
+	}
+	approved, found := grants.bindings[retired]
+	if !found {
+		t.Fatalf("the retired document %s was not installed", retired)
+	}
+	local.SchemaVersion, local.ProfileDigest, local.Trust, local.Grant = approved.SchemaVersion, approved.ProfileDigest, approved.Trust, approved.Grant
 }
