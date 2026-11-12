@@ -212,4 +212,3 @@ is used as it is. A folder the Companion cannot write is still its folder and is
 The self-update transaction accepts a staged copy inside the bundle's folder when it lies under a top-level folder no
 member uses (`build-tools`); refusing it made every portable self-update roll back since build tools moved beside the
 bundle (2026-10-31).
-
