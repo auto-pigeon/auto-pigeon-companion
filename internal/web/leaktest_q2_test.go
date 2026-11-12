@@ -26,6 +26,12 @@ type q2Run struct {
 	pts string
 	// bsp is the collected BSP's bytes, nil for none.
 	bsp []byte
+	// release names the measured run to read (testdata/q2/logs-<release>,
+	// pts-<release>); empty for 1.4518's logs/ and pts/.
+	release string
+	// identity, when set, is what the qbsp that ran called itself when it was
+	// checked; the profile still declares 1.4518 (NEW_507A).
+	identity string
 }
 
 var ibsp38 = []byte{'I', 'B', 'S', 'P', 38, 0, 0, 0, 0, 0, 0, 0}
@@ -45,13 +51,17 @@ func (m *machine) q2LeakBuild(id string, run q2Run) *build.Manifest {
 		sum := sha256.Sum256(contents)
 		return build.FileRecord{Name: name, Path: path, Size: int64(len(contents)), SHA256: "sha256:" + hex.EncodeToString(sum[:])}
 	}
-	log, err := os.ReadFile(filepath.Join(vectors, "logs", run.control+".log"))
+	logs, ptsDir := "logs", "pts"
+	if run.release != "" {
+		logs, ptsDir = "logs-"+run.release, "pts-"+run.release
+	}
+	log, err := os.ReadFile(filepath.Join(vectors, logs, run.control+".log"))
 	if err != nil {
 		m.t.Fatal(err)
 	}
 	outputs := []build.FileRecord{put("compile_log", "compile.stdout.log", log)}
 	if run.pts != "" {
-		pts, err := os.ReadFile(filepath.Join(vectors, "pts", run.pts+".pts"))
+		pts, err := os.ReadFile(filepath.Join(vectors, ptsDir, run.pts+".pts"))
 		if err != nil {
 			m.t.Fatal(err)
 		}
@@ -75,6 +85,12 @@ func (m *machine) q2LeakBuild(id string, run q2Run) *build.Manifest {
 		Tools:   []build.ToolRecord{{ToolVersion: leakadapter.EricwQ2MeasuredVersion}},
 		Steps:   []build.Step{{ID: "compile", State: run.state, ExitCode: &exit}},
 		Outputs: outputs}
+	if run.identity != "" {
+		qbsp := "/tools/ericw-tools/bin/qbsp"
+		manifest.Tools[0].Executables = []build.ExecutableRecord{{Name: "vis", Path: "/tools/ericw-tools/bin/vis", Identity: "vis-is-not-the-compiler"},
+			{Name: "qbsp", Path: qbsp, Identity: run.identity}}
+		manifest.Steps[0].Command = &job.CommandPreview{Executable: qbsp}
+	}
 	if err := manifest.Save(dir); err != nil {
 		m.t.Fatal(err)
 	}

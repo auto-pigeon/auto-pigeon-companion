@@ -80,20 +80,51 @@ func TestTheRelease1535QbspIsReadAsTheMeasuredRelease(t *testing.T) {
 
 // `NEW_425`: release 1.4556's own runs of the same controls are read as
 // 1.4518's are, row for row, with 1.4535's point files. A banner one commit
-// away, the unadopted 1.4552 (before NEW_396) and 1.4559 (the same compiler
-// source, never run here) are still not qualified.
+// away and the unadopted 1.4552 (before NEW_396) are still not qualified.
 func TestTheRelease1556QbspIsReadAsTheMeasuredRelease(t *testing.T) {
 	checkEricwQ2Controls(t, "logs-1.4556", "pts-1.4556", EricwQ2Release1556Version)
 	q2, _ := ForProfile(ProfileQuake2)
 	if !q2.Qualified(EricwQ2Release1556Version) || q2.Qualified("2.0.0-alpha11-70-ge923cca3") ||
-		q2.Qualified("2.0.0-alpha11-66-gf3eed450+auto-pigeon.1.4552") ||
-		q2.Qualified("2.0.0-alpha11-73-g466c09d1+auto-pigeon.1.4559") {
+		q2.Qualified("2.0.0-alpha11-66-gf3eed450+auto-pigeon.1.4552") {
 		t.Fatalf("qualified versions: %v", q2.QualifiedVersions)
 	}
 	for _, name := range []string{"b_gap", "b_gap.quiet", "b_gap.verbose", "c_outside_light", "f_clip_cover", "f_detail_cover", "f_window_cover", "g_degenerate_plane", "i_stale_pts"} {
 		if readQ2(t, "pts-1.4556", name+".pts") != readQ2(t, "pts-1.4535", name+".pts") {
 			t.Errorf("%s: release 1.4556's point file is not 1.4535's", name)
 		}
+	}
+}
+
+// `NEW_507A`: release 1.4559 — what a fresh managed install takes, banner
+// `2.0.0-alpha11-73-g466c09d1+auto-pigeon.1.4559`, archive sha256 bc422c00… —
+// is read as 1.4518's is, row for row, with 1.4556's point files: a sealed map
+// is `no_leak`, the slot a `leak` with its route, no entity `no_interior`, a
+// missing WAL and a cut-off file no verdict. A banner one commit away, the
+// bare version, and a later release nobody ran (1.4560) are still not
+// qualified: they read `version_unqualified`.
+func TestTheRelease1559QbspIsReadAsTheMeasuredRelease(t *testing.T) {
+	checkEricwQ2Controls(t, "logs-1.4559", "pts-1.4559", EricwQ2Release1559Version)
+	q2, _ := ForProfile(ProfileQuake2)
+	if !q2.Qualified(EricwQ2Release1559Version) || q2.Qualified("2.0.0-alpha11-73-g466c09d1") ||
+		q2.Qualified("2.0.0-alpha11-74-g0000000+auto-pigeon.1.4560") {
+		t.Fatalf("qualified versions: %v", q2.QualifiedVersions)
+	}
+	for _, name := range []string{"b_gap", "b_gap.quiet", "b_gap.verbose", "c_outside_light", "f_clip_cover", "f_detail_cover", "f_window_cover", "g_degenerate_plane", "i_stale_pts"} {
+		if readQ2(t, "pts-1.4559", name+".pts") != readQ2(t, "pts-1.4556", name+".pts") {
+			t.Errorf("%s: release 1.4559's point file is not 1.4556's", name)
+		}
+	}
+	// An unmeasured release on the same sealed run: a leak is still reported,
+	// a seal is not claimed.
+	sealed := strings.ReplaceAll(readQ2(t, "logs-1.4559", "a_sealed.log"), EricwQ2Release1559Version,
+		"2.0.0-alpha11-74-g0000000+auto-pigeon.1.4560")
+	zero, bsp := 0, true
+	verdict := ClassifyEricwQ2(Evidence{Log: sealed, ExitCode: &zero, StepState: "succeeded", BSP: &bsp, BSPFormat: "IBSP:38"})
+	if verdict.Outcome != OutcomeIncomplete || !slices.Contains(verdict.Evidence, EvVersionUnqualified) {
+		t.Fatalf("an unmeasured release's sealed run: %+v", verdict)
+	}
+	if EricwQ2ReleaseOf(EricwQ2Release1559Version) != "1.4559" || EricwQ2ReleaseOf("2.0.0-alpha7") != "2.0.0-alpha7" {
+		t.Fatal("EricwQ2ReleaseOf")
 	}
 }
 

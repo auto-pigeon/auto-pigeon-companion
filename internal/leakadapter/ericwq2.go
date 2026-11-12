@@ -58,11 +58,34 @@ const EricwQ2Release1535Version = "2.0.0-alpha11-49-gd645c6f4+auto-pigeon.1.4535
 // (`testdata/q2/logs-1.4556`, `pts-1.4556`): the same exits, files left and
 // point files as 1.4535, BSP and portal files byte for byte, the logs equal but
 // for the banner, the timings and the progress ticks. Only this exact banner is
-// added; 1.4559, with the same compiler source, is not measured and not added.
+// added.
 const EricwQ2Release1556Version = "2.0.0-alpha11-70-ge923cca3+auto-pigeon.1.4556"
 
+// EricwQ2Release1559Version is the fork's release 1.4559 (`NEW_507A`), the one
+// a fresh managed install takes since 2026-11-08: 1.4556's compiler source plus
+// repository wiring only. Every control below was run again with the published
+// linux-amd64 archive's qbsp (`testdata/q2/logs-1.4559`, `pts-1.4559`): the
+// same exits, files left and point files as 1.4556, BSP and portal files byte
+// for byte, the logs equal but for the banner, the timings and the progress
+// ticks. Only this exact banner is added.
+const EricwQ2Release1559Version = "2.0.0-alpha11-73-g466c09d1+auto-pigeon.1.4559"
+
 // EricwQ2MeasuredVersions are the qbsp builds the reading below was measured on.
-var EricwQ2MeasuredVersions = []string{EricwQ2MeasuredVersion, EricwQ2CandidateVersion, EricwQ2ReleaseVersion, EricwQ2PinnedVersion, EricwQ2Release1535Version, EricwQ2Release1556Version}
+// A release is added here only with its own runs of every control under
+// testdata/q2 (the steps: `aucom.leak-adapters`, "Qualifying the next managed
+// release"); a banner not listed reads `version_unqualified`, and a sealed map
+// is then no verdict.
+var EricwQ2MeasuredVersions = []string{EricwQ2MeasuredVersion, EricwQ2CandidateVersion, EricwQ2ReleaseVersion, EricwQ2PinnedVersion, EricwQ2Release1535Version, EricwQ2Release1556Version, EricwQ2Release1559Version}
+
+// EricwQ2ReleaseOf is the Auto-Pigeon release a fork banner names
+// ("…+auto-pigeon.1.4559" → "1.4559"), or the banner itself when it names
+// none. It is a label for a sentence, never a test of qualification.
+func EricwQ2ReleaseOf(version string) string {
+	if _, release, ok := strings.Cut(version, "+auto-pigeon."); ok && release != "" {
+		return release
+	}
+	return version
+}
 
 // What qbsp 1.4518 prints with `-q2bsp -leaktest`, measured on the authored
 // controls in `testdata/q2/controls` (the logs beside them are those runs,

@@ -187,8 +187,16 @@
       if (evidence.includes("brush_invalid")) {
         notes.push(t("qbsp dropped a brush it could not read; this run is about the map without it."));
       }
+      // NEW_507A: name the qbsp that ran and the releases whose control runs
+      // this reading was measured on — never one historical baseline.
+      const measured = (leak.qualified_releases || []).join(", ");
+      const ran = leak.compiler_release || leak.compiler_version;
       if (evidence.includes("version_unqualified")) {
-        notes.push(t("This qbsp is not the build this reading was measured on (the Auto-Pigeon build of ericw-tools, release 1.4518)."));
+        notes.push(ran
+          ? t("This qbsp ({release}) is not a release this reading was measured on, so a sealed map gets no verdict from it; a leak it reports still stands. Measured: the Auto-Pigeon build of ericw-tools, releases {measured}.", { release: ran, measured: measured || t("none") })
+          : t("This qbsp did not say which release it is, so this reading is not qualified for it; a sealed map gets no verdict from it. Measured: the Auto-Pigeon build of ericw-tools, releases {measured}.", { measured: measured || t("none") }));
+      } else if (ran && ["leak", "no_leak", "no_interior"].includes(leak.diagnostic.outcome)) {
+        notes.push(t("Read as measured for this qbsp: release {release} of the Auto-Pigeon build of ericw-tools, whose runs of Auto-Pigeon's Quake II control maps were checked before it was qualified.", { release: ran }));
       }
       return [said, how, ...notes].join(" ");
     }

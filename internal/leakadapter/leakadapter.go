@@ -132,6 +132,12 @@ type Adapter struct {
 	// Classify reads a finished run. Nil for a row whose log the editor reads
 	// by itself, as it has since before this table (Quake 1).
 	Classify func(Evidence) Verdict
+	// LogVersion is the compiler version a run's own text names, the one
+	// Classify qualifies before the probe's; nil when the row has none.
+	LogVersion func(log string) string
+	// ReleaseOf labels a version for a sentence ("1.4559"); nil for a row whose
+	// page names versions some other way. Never a test of qualification.
+	ReleaseOf func(version string) string
 }
 
 // Qualified reports whether version is one this row was measured on.
@@ -170,7 +176,7 @@ var adapters = map[string]Adapter{
 		PointfileOutput: "pts", LogOutput: "compile_log", BSPOutput: "bsp",
 		PointfileRole: "q2.pts", LogRoles: []string{StepLogRole}, BSPRole: "q2.bsp",
 		ResultSchema: Schema11, QualifiedVersions: EricwQ2MeasuredVersions,
-		Classify: ClassifyEricwQ2,
+		Classify: ClassifyEricwQ2, LogVersion: EricwQ2LogVersion, ReleaseOf: EricwQ2ReleaseOf,
 	},
 }
 

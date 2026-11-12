@@ -50,7 +50,7 @@ is not one.
 | game | built-in pipeline | compiler | point file | direction | envelope |
 | --- | --- | --- | --- | --- | --- |
 | `quake1` | `auto-pigeon.q1.leak-test` | `ericw-qbsp` (run by the Auto-Pigeon build; EricW 2.0.0-alpha11 and 0.18.1 are also read) | `ericw-pts` | `occupant_to_outside` | `aucom.leak-result/1.0` |
-| `quake2` | `auto-pigeon.q2.leak-test` | `ericw-qbsp-q2` (qbsp `-q2bsp`, Auto-Pigeon build 1.4518; 1.4522; releases 1.4524, 1.4533, 1.4535 and 1.4556) | `ericw-pts` | `occupant_to_outside` | `aucom.leak-result/1.1` |
+| `quake2` | `auto-pigeon.q2.leak-test` | `ericw-qbsp-q2` (qbsp `-q2bsp`, Auto-Pigeon build 1.4518; 1.4522; releases 1.4524, 1.4533, 1.4535, 1.4556 and 1.4559) | `ericw-pts` | `occupant_to_outside` | `aucom.leak-result/1.1` |
 | `quake3` | `auto-pigeon.q3.leak-test` | `q3map2` (2.5.17n-git-68ecbed; the Auto-Pigeon fork's releases 2.5.17n-ap.3026 and 2.5.17n-ap.3030) | `q3map2-lin` | `outside_to_occupant` | `aucom.leak-result/1.1` |
 
 The pipeline column is the built-in one. It is not what runs unless the user chose it — see the
@@ -170,8 +170,9 @@ published linux-amd64 archive; `testdata/q2/logs-1.4533`), release 1.4535 (`NEW_
 archive; `testdata/q2/logs-1.4535`) and release 1.4556 (`NEW_425`: the published linux-amd64 archive;
 `testdata/q2/logs-1.4556`; its qbsp repairs NEW_377, NEW_390 and NEW_396 changed no control — every exit, file left and
 point file is 1.4535's, every BSP and portal file byte for byte — and the Quake 1 controls of `NEW_335` compile to
-1.4535's and 1.4533's bytes too). 1.4559, the same compiler source with repository wiring only, is not measured and
-not qualified. A
+1.4535's and 1.4533's bytes too) and release 1.4559 (`NEW_507A`: the published linux-amd64 archive, the one a fresh
+managed install takes; `testdata/q2/logs-1.4559`; 1.4556's compiler source, and every exit, file left, point file, BSP and
+portal file is 1.4556's). A
 build is qualified by its EXACT banner and its own measured controls, never by a prefix or a version range:
 
 | control | exit | left | what decides it |
@@ -190,6 +191,39 @@ step's own output: qbsp's `level.log` file leaves out every `---- Stage ----` he
 report among them, so the Quake II row binds only `aucom.step.stdout`. The BSP's header is read
 (`BSPFormatOf`) and must be `IBSP:38`. qbsp prints `Couldn't locate texture for skip` on every run;
 that lookup is its own and is not a missing texture of the map.
+
+### Qualifying the next managed release (`NEW_507A`, #21 option A)
+
+HITL chose option A for #21 (2026-11-12 prompt): each release the managed installer offers is measured before the
+Quake II reading is qualified for it. The managed installer takes the newest eligible release, so a new fork release
+reads `version_unqualified` — a leak still reported, a sealed map **no verdict**, and the Build page names that release
+and the measured ones — until somebody does this:
+
+1. Find what a fresh install takes: `companion serve --managed-tools on` in a task-owned `HOME`/`XDG_*`, then
+   `companion tools status` (or `gh release list -R auto-pigeon/ericw-tools`). Download that release's linux-amd64
+   archive and `SHA256SUMS`; `sha256sum -c --ignore-missing SHA256SUMS`.
+2. Run every control with the previous qualified release's runner, once with the new qbsp and once with the last
+   qualified one, the same day (`…/NEW_507A_…/scripts/run_aucom_controls_1.4559.sh <qbsp> <out>`: the retail `baseq2`
+   pak0–pak2 as the game view, `controls/content` as the gamedir, the `/q2010/…` layout, plain plus `-quiet`/`-verbose`).
+3. Qualify only when every exit, every file left and every point file is the last release's, and the logs differ only
+   in the banner, timings and progress ticks. A changed BSP or portal file is a finding to attribute, not a reason to
+   stop; a changed **verdict** row stops qualification and is reported.
+4. Commit `testdata/q2/logs-<release>/` and `pts-<release>/`, add the exact banner as its own constant to
+   `EricwQ2MeasuredVersions`, a `TestTheRelease<N>QbspIsReadAsTheMeasuredRelease` with one-commit-away and next-release
+   negatives, and a section in `testdata/q2/README.md`.
+5. Prove it live: a fresh managed install's editor **Leak Test** on an isolated local stack reads the sealed control
+   **No leak found** and the slot **Leak found**, the leak raising no incident, and a cut-off map still **Leak test
+   couldn't finish** with one.
+
+What the release in use is, everywhere it is named, is what the program that ran said: the run's own banner for the
+reading, and for the envelope's `compiler_version` the identity its executable record holds (`ExecutableRecord.Identity`,
+checked before the run) — never the version the tool profile was written for. Seen live in NEW_507A: a fresh managed
+install ran 1.4559 under the built-in profile that declares 1.4556, and every result sent to AUB said 1.4556. The Build
+page's leak view carries `compiler_release` and `qualified_releases` so its sentence names the release that ran and the
+measured ones, not the 1.4518 baseline.
+
+The managed `Baseline` (`internal/managedtools`) is a floor, not a pin; it must itself be a qualified release, which
+`TestTheManagedEricwBaselineIsAQualifiedQuake2Release` holds.
 
 ## Quake III, the fork's release (`NEW_340`)
 

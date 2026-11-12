@@ -1101,8 +1101,9 @@ curl -s -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
   jq -r '.choices[] | "\(.id) builtin=\(.builtin): \([.steps[].id] | join(", "))"'
 ```
 
-For Quake II, only releases 1.4518, 1.4522, 1.4524, 1.4533, 1.4535 and 1.4556 of the Auto-Pigeon build of
-ericw-tools have been measured. For Yamagi Quake II 8.70 on a
+For Quake II, only releases 1.4518, 1.4522, 1.4524, 1.4533, 1.4535, 1.4556 and 1.4559 of the Auto-Pigeon build of
+ericw-tools have been measured. With any other qbsp a leak is still reported, but a sealed map gets no verdict;
+the leak-test result names the qbsp release that ran and the measured ones. For Yamagi Quake II 8.70 on a
 64-bit computer, set the light stage's **Lightmap size arithmetic** to `float32`
 (1.4522 or newer); without it Yamagi reads some faces' lighting with another row
 length:

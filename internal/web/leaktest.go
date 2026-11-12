@@ -532,11 +532,14 @@ func (s *Server) buildLeakResult(id string) (leakResult, error) {
 	result := leakResult{SchemaVersion: adapter.ResultSchema, BuildID: manifest.BuildID,
 		MapID: source.AssetID, RevisionID: source.RevisionID, Revision: source.Revision, ContentSHA256: source.ContentSHA256,
 		BuildState: string(manifest.State)}
-	stepState, compilerProfile := "", ""
+	stepState, compilerProfile, compilerPath := "", "", ""
 	for _, step := range manifest.Steps {
 		if step.ID == binding.CompileStep {
 			result.CompileExitCode, stepState = step.ExitCode, string(step.State)
 			compilerProfile = step.Profile.ID
+			if step.Command != nil {
+				compilerPath = step.Command.Executable
+			}
 			if step.Skipped {
 				stepState = ""
 			}
@@ -547,9 +550,20 @@ func (s *Server) buildLeakResult(id string) (leakResult, error) {
 	// compile stage — not of whichever tool the manifest lists first: with a
 	// stage that names its tool, a build may carry more than one (NEW_310A).
 	// A manifest written before steps recorded their profile has one tool.
+	//
+	// NEW_507A (#21): the version is what the program that ran called itself
+	// when it was checked (its ExecutableRecord identity), and only without
+	// one the profile's declared version. A managed install takes a newer
+	// release than the profile was written for — 1.4559 under a profile that
+	// declares 1.4556 — and the envelope must name the release that ran.
 	for _, tool := range manifest.Tools {
 		if (compilerProfile == "" || tool.Profile.ID == compilerProfile) && tool.ToolVersion != "" {
 			result.CompilerVersion = tool.ToolVersion
+			for _, executable := range tool.Executables {
+				if compilerPath != "" && executable.Path == compilerPath && executable.Identity != "" {
+					result.CompilerVersion = executable.Identity
+				}
+			}
 			break
 		}
 	}
@@ -739,6 +753,24 @@ func (s *Server) leakTestView(manifest *build.Manifest) map[string]any {
 		return view
 	}
 	view["diagnostic"] = result.Diagnostic
+	// NEW_507A: the sentence names the release that ran and the releases the
+	// reading was measured on, not one historical baseline.
+	if adapter.ReleaseOf != nil {
+		version := result.CompilerVersion
+		if adapter.LogVersion != nil {
+			if logged := adapter.LogVersion(result.Log); logged != "" {
+				version = logged
+			}
+		}
+		if version != "" {
+			view["compiler_version"], view["compiler_release"] = version, adapter.ReleaseOf(version)
+		}
+		releases := make([]string, 0, len(adapter.QualifiedVersions))
+		for _, qualified := range adapter.QualifiedVersions {
+			releases = append(releases, adapter.ReleaseOf(qualified))
+		}
+		view["qualified_releases"] = releases
+	}
 	return view
 }
 
