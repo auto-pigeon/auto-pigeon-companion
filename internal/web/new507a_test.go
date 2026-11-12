@@ -27,6 +27,9 @@ func TestAQuake2LeakViewNamesTheReleaseThatRanAndTheMeasuredOnes(t *testing.T) {
 		{q2Run{control: "b_gap", state: job.Failed, exit: 1, pts: "b_gap", release: "1.4559"}, "leak", 10, "1.4559"},
 		{q2Run{control: "g_truncated", state: job.Failed, exit: 1, release: "1.4559"}, "incomplete", 0, "1.4559"},
 		{q2Run{control: "a_sealed", state: job.Succeeded, bsp: ibsp38}, "no_leak", 0, "1.4518"},
+		// NEW_508C: 1.4560, measured on every control, is read the same way.
+		{q2Run{control: "a_sealed", state: job.Succeeded, bsp: ibsp38, release: "1.4560"}, "no_leak", 0, "1.4560"},
+		{q2Run{control: "b_gap", state: job.Failed, exit: 1, pts: "b_gap", release: "1.4560"}, "leak", 10, "1.4560"},
 	} {
 		id := "20261112T000000Z-0000050" + string(rune('a'+i))
 		m.q2LeakBuild(id, c.run)
@@ -39,7 +42,8 @@ func TestAQuake2LeakViewNamesTheReleaseThatRanAndTheMeasuredOnes(t *testing.T) {
 		}
 		if status != http.StatusOK || diagnostic["outcome"] != c.outcome || leak["compiler_release"] != c.released ||
 			(c.points > 0 && diagnostic["route_points"] != c.points) ||
-			!slices.Contains(releases, "1.4559") || !slices.Contains(releases, "1.4518") || slices.Contains(releases, "1.4560") {
+			!slices.Contains(releases, "1.4559") || !slices.Contains(releases, "1.4560") || !slices.Contains(releases, "1.4518") ||
+			slices.Contains(releases, "1.4561") {
 			t.Fatalf("%s (%s): %d %v", c.run.control, c.run.release, status, leak)
 		}
 	}

@@ -201,10 +201,18 @@ func TestTheSidebarUpdateInstallsBothToolchainsThenRestartsIntoTheNewCompanion(t
 			t.Fatalf("POST /api/v1/tools/update = %d %s", code, raw)
 		}
 	}
-	// The downloads stay held for longer than 30 seconds.
+	// The downloads stay held for longer than 30 seconds in all — each one for
+	// less than the client's 30-second wait for response headers, which a real
+	// GitHub answers in well under a second: EricW for 20 s, then q3map2.
 	f.until("a held download", func(firstRunStatus) bool { return len(f.archivesFetched()) > 0 })
-	time.Sleep(32*time.Second - time.Since(heldFrom))
+	time.Sleep(20*time.Second - time.Since(heldFrom))
+	second := make(chan struct{})
 	release()
+	f.releases.Mutate(func() { f.releases.Hold = second })
+	f.until("the second held download", func(firstRunStatus) bool { return len(f.archivesFetched()) > 1 })
+	time.Sleep(20 * time.Second)
+	f.releases.Mutate(func() { f.releases.Hold = nil })
+	close(second)
 
 	// The old process stops to be replaced; the new one answers on the same
 	// address with a token of its own.

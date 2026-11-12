@@ -634,7 +634,7 @@
     }
     if (tool.phase === "verifying") return { key: "verifying", text: t("Verifying {version}…", { version: tool.version }) };
     if (tool.phase === "checking") return { key: "checking", text: t("Checking…") };
-    if (tool.phase === "queued") return { key: "queued", text: t("Waiting to install {version}; another tool is installing", { version: tool.version || target }) };
+    if (tool.phase === "queued") return { key: "queued", text: t("Waiting to install {version}…", { version: tool.version || target }) };
     if (tool.pending?.waiting?.length) {
       return { key: "waiting", text: t("Downloaded and verified; waiting for: {work}", { work: tool.pending.waiting.join("; ") }) };
     }

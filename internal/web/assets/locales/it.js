@@ -1315,5 +1315,5 @@ window.AUCOM_LOCALES.it = {
   "The update could not be started.": "Non è stato possibile avviare l’aggiornamento.",
   "Being replaced by the newest verified release: {why}": "In sostituzione con la release verificata più recente: {why}",
   "Waiting to install": "In attesa di installazione",
-  "Waiting to install {version}; another tool is installing": "In attesa di installare {version}; si sta installando un altro strumento"
+  "Waiting to install {version}…": "In attesa di installare {version}…"
 };
