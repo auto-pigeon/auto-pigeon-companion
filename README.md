@@ -739,6 +739,27 @@ recorded for auto-pigeon.engine.vkquake:
   game_root      /home/you/Games/Quake
 ```
 
+**The Game folder, suggested from the engine.** In **Profiles → Engines**, choosing an
+engine's program — typed, with **Browse…**, or found by **Use this folder** — looks
+beside it (and beside the `bin` folder it sits in) for the profile's own data folder
+holding a real archive of that game: `id1` with `pak0.pak`/`pak1.pak` for Quake,
+`baseq2` with `pak0.pak` for Quake II, `baseq3` with `pak0.pk3` for Quake III. One
+match fills **Game folder** and says *Found id1\pak0.pak beside the engine.*;
+several are offered to choose from; none leaves the field for you and names the
+folder it looked for. It only fills the field: **Save these paths** records it. A
+Game folder you saved or typed is never replaced, and **Content folder** is
+separate. **Look for installed games** looks for the selected profile's game too
+(Steam and GOG libraries are searched for Quake only). The lookup only lists
+folders: it starts nothing, downloads nothing and writes nothing.
+
+```bash
+# what the page asks when an engine is chosen (read-only; nothing is recorded)
+curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" -G \
+  "$(sed 's:/*$::' ~/.config/auto-pigeon-companion/api-url)/api/v1/engines/detect" \
+  --data-urlencode profile=auto-pigeon.engine.vkquake --data-urlencode "executable=$HOME/Games/Quake/vkquake" \
+  | jq '{looked_for, items: [.items[] | {path, evidence, where}]}'
+```
+
 **When the server refuses or does not answer.** Build & Run says which it was,
 in one sentence, with what fixes it: **Sign in** when your sign-in expired; a
 review of the changed Terms or notices on the Auto-Pigeon site (the Companion

@@ -230,9 +230,68 @@ func (s *Server) handleEngineGet(w http.ResponseWriter, r *http.Request) {
 // Discovery proposes and never decides — see internal/engine. What comes back
 // is a list a person confirms, and the evidence that produced each one, so they
 // can check the suggestion instead of trusting it.
+//
+//	?profile=<engine id>   look for THAT profile's game: its BaseFolder (id1,
+//	                       baseq2, baseq3) holding a real archive of that game.
+//	                       Without it, Quake 1, as before.
+//	?executable=<path>     only near that engine executable: its directory, and
+//	                       the one above a conventional `bin` (NEW_509 follow-up:
+//	                       the Game folder suggested when an engine is chosen).
+//	&all=1                 with executable: near it AND the usual places — what
+//	                       "Look for installed games" asks.
+//	?near=<dir>            a directory to consider besides the usual places.
+//
+// The answer names what was looked for (`looked_for`), so a page that found
+// nothing can say which data folder it expected.
 func (s *Server) handleEngineDetect(w http.ResponseWriter, r *http.Request) {
 	scanner := s.scanner
-	if near := r.URL.Query().Get("near"); near != "" {
+	query := r.URL.Query()
+	scanner.Layout = engine.Quake1Layout
+	if id := query.Get("profile"); id != "" {
+		entry, err := s.engineEntry(id)
+		if err != nil {
+			writeError(w, jobStatus(err), err)
+			return
+		}
+		base := entry.Profile.(*profile.EngineProfile).BaseFolder()
+		layout, known := engine.LayoutForBaseFolder(base)
+		if !known {
+			// A profile whose data folder this Companion has no evidence rule
+			// for: nothing is guessed, and the page says what it would need.
+			writeJSON(w, http.StatusOK, map[string]any{
+				"items": []engine.Candidate{}, "profile": id,
+				"looked_for": engine.Layout{BaseDir: base, Archives: []string{}}, "known_layout": false,
+			})
+			return
+		}
+		scanner.Layout = layout
+	}
+	answer := map[string]any{"looked_for": scanner.Layout, "known_layout": true}
+	if id := query.Get("profile"); id != "" {
+		answer["profile"] = id
+	}
+	var items []engine.Candidate
+	if executable := query.Get("executable"); executable != "" {
+		// The program the user just chose. Checked first: a value from a query
+		// string becomes a path here and nowhere else.
+		resolved, err := checkExecutable(executable)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		items = scanner.NearExecutable(resolved)
+		answer["executable"] = resolved
+		if query.Get("all") == "" {
+			// The automatic suggestion: near the engine only.
+			if items == nil {
+				items = []engine.Candidate{}
+			}
+			answer["items"] = items
+			writeJSON(w, http.StatusOK, answer)
+			return
+		}
+	}
+	if near := query.Get("near"); near != "" {
 		// A directory the user named, normally the one they just picked an
 		// engine executable out of, which is where a hand-installed Quake
 		// usually is. Checked first: a value from a query string becomes a
@@ -244,7 +303,23 @@ func (s *Server) handleEngineDetect(w http.ResponseWriter, r *http.Request) {
 		}
 		scanner.Extra = append(append([]string(nil), scanner.Extra...), resolved)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": scanner.Detect()})
+	// Look for installed games (`all=1`): near the engine first, then the
+	// usual places for this game.
+	seen := map[string]bool{}
+	for _, item := range items {
+		seen[item.Path] = true
+	}
+	for _, item := range scanner.Detect() {
+		if !seen[item.Path] {
+			seen[item.Path] = true
+			items = append(items, item)
+		}
+	}
+	if items == nil {
+		items = []engine.Candidate{}
+	}
+	answer["items"] = items
+	writeJSON(w, http.StatusOK, answer)
 }
 
 // handleEngineStageBuild stages a finished build's level into this engine's

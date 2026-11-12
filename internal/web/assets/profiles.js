@@ -944,6 +944,9 @@
     each.open = Object.values(body.binding?.executables || {}).some(Boolean) || executables.length === 1;
     each.append(el("summary", { text: t("Or choose each program") }));
     const fields = new Map();
+    // Set below, once the Game folder field exists; the engine's own field
+    // calls it when a program is chosen (typed, or with Browse…).
+    let suggestGameFolder = null;
     for (const executable of executables) {
       const field = window.AUCOM.pathField({
         id: "profile-exe-" + executable.name,
@@ -951,6 +954,9 @@
         label: `${executable.title || executable.name} (${executable.name})`,
         value: (body.binding?.executables || {})[executable.name] || "",
         hint: t("The profile looks for a file named {file}.", { file: window.AUCOM.programFileName(executable.file) }),
+        onChange: body.kind === "engine" && executable.name === "engine"
+          ? (path) => suggestGameFolder && suggestGameFolder(path)
+          : undefined,
       });
       fields.set(executable.name, field);
       each.append(field.container);
@@ -984,6 +990,90 @@
     const save = el("button", { text: t("Save these paths"), attrs: { type: "button", class: "primary" } });
     const saveStatus = el("p", { className: "message", attrs: { role: "status" } });
 
+    // The Game folder, suggested from the engine just chosen (HITL, 2026-11-12,
+    // after a fresh install: "fill Game folder with C:\Games\Quake ... Show
+    // Found id1\pak0.pak beside the engine"). The PROFILE says which game's data
+    // to look for — its base folder (id1, baseq2, baseq3) holding a real archive
+    // of that game — so an engine such as FTEQW that plays several games is
+    // looked up as the one this profile is. A suggestion only fills the field:
+    // Save these paths records it. A Game folder that is saved, or that the
+    // person typed, is never replaced; a suggestion nobody acted on is dropped
+    // when the executable changes; an answer that arrives after the executable
+    // changed again, or after another profile was opened, is ignored.
+    const gameField = rootFields.get("game_root");
+    let suggested = "";
+    if (gameField && body.kind === "engine") {
+      const suggestion = el("p", { className: "message", attrs: { id: "profile-game-suggestion", role: "status" } });
+      const choices = el("ul", { className: "rows", attrs: { id: "profile-game-choices", "aria-label": t("Game folders found near the engine") } });
+      gameField.container.after(suggestion, choices);
+      gameField.input.addEventListener("input", () => {
+        if (gameField.input.value.trim() !== suggested) suggested = "";
+      });
+      const openedAs = detailSequence;
+      let lookup = 0;
+      const fill = (candidate) => {
+        gameField.input.value = candidate.path;
+        gameField.input.removeAttribute("aria-invalid");
+        suggested = candidate.path;
+        choices.replaceChildren();
+        const where = candidate.where === "above_engine" ? t("near the engine") : t("beside the engine");
+        setMessage(suggestion, t("Found {evidence} {where}.", { evidence: candidate.evidence_path || candidate.evidence, where }) + " " +
+          t("Check the Game folder, change it if you need to, then press Save these paths to record it."), "ok");
+      };
+      suggestGameFolder = async (executablePath) => {
+        const mine = ++lookup;
+        choices.replaceChildren();
+        // A suggestion nobody saved or changed belongs to the old executable.
+        if (suggested && gameField.input.value.trim() === suggested) gameField.input.value = "";
+        suggested = "";
+        if (!executablePath) {
+          setMessage(suggestion, "");
+          return;
+        }
+        const { ok, body: out } = await api(`/api/v1/engines/detect?profile=${encodeURIComponent(body.id)}&executable=${encodeURIComponent(executablePath)}`);
+        // Stale: the executable changed again, or another profile is open.
+        if (mine !== lookup || openedAs !== detailSequence || !detail.isConnected) return;
+        if (!ok) {
+          setMessage(suggestion, out.error || t("could not look for the game beside the engine"), "error");
+          return;
+        }
+        const items = out.items || [];
+        const lookedFor = out.looked_for || {};
+        const archives = (lookedFor.archives || []).join(t(" or "));
+        const kept = gameField.input.value.trim();
+        if (kept) {
+          // Saved or typed: the person's answer stands.
+          setMessage(suggestion, items.length
+            ? t("Found {evidence} beside the engine; your Game folder {folder} is kept.", { evidence: items[0].evidence_path || items[0].evidence, folder: kept })
+            : "", "");
+          return;
+        }
+        if (items.length === 1) {
+          fill(items[0]);
+          return;
+        }
+        if (items.length === 0) {
+          setMessage(suggestion, archives
+            ? t("No {base} folder with {archives} was found beside the engine. Choose the Game folder yourself.", { base: lookedFor.base_dir, archives })
+            : t("This profile's data folder ({base}) has no rule for recognising the game. Choose the Game folder yourself.", { base: lookedFor.base_dir || "?" }), "");
+          return;
+        }
+        setMessage(suggestion, t("More than one game folder was found near the engine. Choose one:"), "");
+        for (const candidate of items) {
+          const pick = el("button", { text: t("Use this folder"), attrs: { type: "button" } });
+          pick.addEventListener("click", () => {
+            if (mine !== lookup) return;
+            fill(candidate);
+          });
+          choices.append(el("li", { children: [
+            el("div", { className: "row-head", children: [el("strong", { text: candidate.path })] }),
+            el("p", { className: "muted", text: t("found {evidence}", { evidence: candidate.evidence_path || candidate.evidence }) + (candidate.note ? " — " + candidate.note : "") }),
+            el("div", { className: "row-actions", children: [pick] }),
+          ] }));
+        }
+      };
+    }
+
     // "Look for installed games" fills the game folder in from the usual
     // places (operator, 2026-09-23). A candidate only fills the field; Save
     // records it.
@@ -993,19 +1083,31 @@
       look.addEventListener("click", () =>
         withBusy(look, async () => {
           found.replaceChildren(el("li", { className: "muted", text: t("Looking…") }));
-          const near = (fields.get("engine")?.input.value || "").trim();
-          const query = near ? "?near=" + encodeURIComponent(near.replace(/[^/\\]*$/, "")) : "";
-          const { ok, body: out } = await api("/api/v1/engines/detect" + query);
+          const program = (fields.get("engine")?.input.value || "").trim();
+          // The selected profile's game, not always Quake 1, near the engine
+          // (its folder, and above a bin) and in the usual places (NEW_509
+          // follow-up).
+          const params = new URLSearchParams({ profile: body.id });
+          if (program) {
+            params.set("executable", program);
+            params.set("all", "1");
+          }
+          const { ok, body: out } = await api("/api/v1/engines/detect?" + params.toString());
           found.replaceChildren();
           const items = ok ? out.items || [] : [];
           if (!ok || items.length === 0) {
-            found.append(el("li", { className: "muted", text: ok ? t("No installed game was found in the usual places. Choose the folder yourself.") : out.error }));
+            const lookedFor = ok ? out.looked_for || {} : {};
+            found.append(el("li", { className: "muted", text: ok
+              ? t("No installed game was found in the usual places (looked for {base} with {archives}). Choose the folder yourself.",
+                { base: lookedFor.base_dir || "?", archives: (lookedFor.archives || []).join(t(" or ")) || "?" })
+              : out.error }));
             return;
           }
           for (const candidate of items) {
             const use = el("button", { text: t("Use this folder"), attrs: { type: "button" } });
             use.addEventListener("click", () => {
               rootFields.get("game_root").input.value = candidate.path;
+              suggested = candidate.path;
               setMessage(saveStatus, t("Filled in. Press Save these paths to record it."), "");
             });
             found.append(el("li", { children: [
@@ -1038,6 +1140,8 @@
         const recorded = out.binding?.roots || {};
         const filled = rootFields.has("content_root") && !rootPaths.content_root && recorded.content_root;
         for (const [role, field] of rootFields) field.input.value = recorded[role] || "";
+        // Recorded now: no longer a suggestion a new executable may drop.
+        suggested = "";
         setMessage(saveStatus, filled
           ? t("Recorded. The project folder is the Companion's own, where it keeps the maps and textures it downloads; change it above if you want another. It survives a restart.")
           : t("Recorded. It survives a restart."), "ok");
@@ -1064,6 +1168,9 @@
         for (const [name, field] of fields) field.input.value = (out.binding?.executables || {})[name] || "";
         setMessage(folderStatus, t("Found all {n} programs. Recorded; it survives a restart.", { n: fields.size }), "ok");
         record(`Recorded where ${body.name} is`, chosen, "ok");
+        // The programs are recorded; the Game folder is only suggested.
+        const engineProgram = (out.binding?.executables || {}).engine;
+        if (suggestGameFolder && engineProgram) await suggestGameFolder(engineProgram);
         await refreshReadiness(body.id);
       })
     );

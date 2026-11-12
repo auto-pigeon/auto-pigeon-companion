@@ -41,8 +41,15 @@ type Candidate struct {
 	// Quake's own releases are inconsistent about case, and an engine given
 	// the wrong spelling on a case-sensitive filesystem finds nothing.
 	BaseDir string `json:"base_dir"`
-	// Evidence is the archive that identified it, relative to Path.
+	// Evidence is the archive that identified it, relative to Path, with a
+	// forward slash whatever the platform.
 	Evidence string `json:"evidence"`
+	// EvidencePath is the same archive spelled the way this platform spells a
+	// relative path (`id1\pak0.pak` on Windows), for a sentence a person reads.
+	EvidencePath string `json:"evidence_path"`
+	// Where says how a near-engine candidate relates to the executable it was
+	// found from: [WhereBesideEngine] or [WhereAboveEngine]. Empty otherwise.
+	Where string `json:"where,omitempty"`
 	// Note is anything the user should know before confirming.
 	Note string `json:"note,omitempty"`
 }
@@ -66,7 +73,54 @@ type Scanner struct {
 	// Extra are directories the caller wants considered as well, reported as
 	// [SourceNearEngine]. The engine's own directory belongs here.
 	Extra []string
+	// Layout is the game whose data to look for. The zero value is Quake 1,
+	// which is what every scanner looked for before a profile could say
+	// otherwise — and only Quake 1 is looked for in Steam and GOG libraries.
+	Layout Layout
 }
+
+// Layout is what makes a directory one game's data folder: the folder's name,
+// as an engine profile's [profile.EngineProfile.BaseFolder] gives it, and the
+// archives whose presence proves it holds that game rather than merely being
+// called that. An empty folder, or one holding another game's data, is not a
+// match.
+type Layout struct {
+	// BaseDir is the data folder: `id1`, `baseq2`, `baseq3`.
+	BaseDir string `json:"base_dir"`
+	// Archives are the files any one of which is evidence, matched without
+	// regard to case.
+	Archives []string `json:"archives"`
+}
+
+// The layouts of the supported games.
+var (
+	Quake1Layout = Layout{BaseDir: "id1", Archives: []string{"pak0.pak", "pak1.pak"}}
+	Quake2Layout = Layout{BaseDir: "baseq2", Archives: []string{"pak0.pak"}}
+	Quake3Layout = Layout{BaseDir: "baseq3", Archives: []string{"pak0.pk3"}}
+)
+
+// LayoutForBaseFolder is the layout whose data folder is base, as an engine
+// profile names it. The profile decides, not the executable: an engine such as
+// FTEQW plays more than one game, and each of its profiles names its own.
+func LayoutForBaseFolder(base string) (Layout, bool) {
+	for _, layout := range []Layout{Quake1Layout, Quake2Layout, Quake3Layout} {
+		if strings.EqualFold(layout.BaseDir, base) {
+			return layout, true
+		}
+	}
+	return Layout{}, false
+}
+
+func (s Scanner) layout() Layout {
+	if s.Layout.BaseDir == "" {
+		return Quake1Layout
+	}
+	return s.Layout
+}
+
+// quake1 says whether this scan is for Quake 1, the one game whose store
+// installs (Steam, GOG) and re-release layout the scanner knows.
+func (s Scanner) quake1() bool { return strings.EqualFold(s.layout().BaseDir, Quake1Layout.BaseDir) }
 
 func (s Scanner) goos() string {
 	if s.GOOS != "" {
@@ -96,18 +150,9 @@ func (s Scanner) readFile(path string) ([]byte, error) {
 	return os.ReadFile(path)
 }
 
-// baseDirName is the directory a Quake 1 release keeps its own data in. One
-// name, because the 2021 re-release does not rename it — see
-// [rereleaseDirName].
-const baseDirName = "id1"
-
 // rereleaseDirName is where the 2021 re-release keeps its own copy of that
 // layout, nested inside the directory the installer created.
 const rereleaseDirName = "rerelease"
-
-// pakNames are the archives whose presence says a directory really is Quake's
-// and not a directory that happens to be called id1.
-var pakNames = []string{"pak0.pak", "pak1.pak"}
 
 // Detect reports every directory that looks like an installed Quake 1.
 //
@@ -137,19 +182,26 @@ func (s Scanner) Detect() []Candidate {
 	// Steam branch.
 	add := func(dir string, source Source, note string) {
 		one(dir, source, note)
+		if !s.quake1() {
+			return
+		}
 		for _, sub := range s.entriesLike(dir, rereleaseDirName) {
 			one(filepath.Join(dir, sub), source, "The re-release's own copy of the game data.")
 		}
 	}
 
-	for _, library := range s.steamLibraries() {
-		common := filepath.Join(library, "steamapps", "common")
-		for _, name := range s.entriesLike(common, "quake") {
-			add(filepath.Join(common, name), SourceSteam, "")
+	// The store layouts below are Quake 1's; another game is looked for only
+	// where the caller points.
+	if s.quake1() {
+		for _, library := range s.steamLibraries() {
+			common := filepath.Join(library, "steamapps", "common")
+			for _, name := range s.entriesLike(common, "quake") {
+				add(filepath.Join(common, name), SourceSteam, "")
+			}
 		}
-	}
-	for _, dir := range s.gogDirs() {
-		add(dir, SourceGOG, "")
+		for _, dir := range s.gogDirs() {
+			add(dir, SourceGOG, "")
+		}
 	}
 	for _, dir := range s.Extra {
 		add(dir, SourceNearEngine, "")
@@ -160,19 +212,113 @@ func (s Scanner) Detect() []Candidate {
 // inspect decides whether a directory is a game root, and how its base game
 // directory is spelled on this filesystem.
 func (s Scanner) inspect(dir string, source Source) (Candidate, bool) {
-	for _, base := range s.entriesLike(dir, baseDirName) {
-		for _, pak := range pakNames {
-			for _, found := range s.entriesLike(filepath.Join(dir, base), pak) {
+	layout := s.layout()
+	for _, base := range s.entriesLike(dir, layout.BaseDir) {
+		for _, archive := range layout.Archives {
+			for _, found := range s.filesLike(filepath.Join(dir, base), archive) {
 				return Candidate{
-					Path:     dir,
-					Source:   source,
-					BaseDir:  base,
-					Evidence: base + "/" + found,
+					Path:         dir,
+					Source:       source,
+					BaseDir:      base,
+					Evidence:     base + "/" + found,
+					EvidencePath: filepath.Join(base, found),
 				}, true
 			}
 		}
 	}
 	return Candidate{}, false
+}
+
+// filesLike is entriesLike for evidence: only a real file counts — never a
+// directory that happens to carry an archive's name, and never an empty file.
+func (s Scanner) filesLike(dir, want string) []string {
+	entries, err := s.readDir(dir)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, entry := range entries {
+		if !strings.EqualFold(entry.Name(), want) || entry.IsDir() {
+			continue
+		}
+		if info, err := entry.Info(); err == nil && (!info.Mode().IsRegular() || info.Size() == 0) {
+			continue
+		}
+		out = append(out, entry.Name())
+	}
+	sort.Strings(out)
+	return out
+}
+
+// How a near-engine candidate relates to the executable it was found from.
+const (
+	// WhereBesideEngine: the data folder is in the executable's own directory.
+	WhereBesideEngine = "beside_engine"
+	// WhereAboveEngine: the executable is in a program subdirectory (`bin`)
+	// and the data folder is beside that subdirectory.
+	WhereAboveEngine = "above_engine"
+)
+
+// programDirNames are the subdirectories engines conventionally keep their
+// executables in, below the game root.
+var programDirNames = []string{"bin", "bin32", "bin64", "x86", "x64", "x86_64", "amd64", "win32", "win64", "linux32", "linux64"}
+
+func isProgramDir(name string) bool {
+	for _, known := range programDirNames {
+		if strings.EqualFold(name, known) {
+			return true
+		}
+	}
+	return false
+}
+
+// NearExecutable proposes game roots for the engine at executable, looking
+// only where a hand-installed game conventionally is: the executable's own
+// directory, and — when the executable sits in a program subdirectory such as
+// `bin` — the directory above it (at most two such levels, `bin/x64`).
+//
+// Like [Scanner.Detect] it only reads directory listings: it never starts the
+// engine, opens a game file or writes anything. Every candidate is a
+// suggestion a person still has to confirm.
+func (s Scanner) NearExecutable(executable string) []Candidate {
+	dir := filepath.Dir(filepath.Clean(executable))
+	dirs := []string{dir}
+	for current := dir; len(dirs) < 3 && isProgramDir(filepath.Base(current)); {
+		parent := filepath.Dir(current)
+		if parent == current {
+			break
+		}
+		dirs = append(dirs, parent)
+		current = parent
+	}
+	var out []Candidate
+	seen := map[string]bool{}
+	for index, root := range dirs {
+		where := WhereBesideEngine
+		if index > 0 {
+			where = WhereAboveEngine
+		}
+		roots := []string{root}
+		if s.quake1() {
+			for _, sub := range s.entriesLike(root, rereleaseDirName) {
+				roots = append(roots, filepath.Join(root, sub))
+			}
+		}
+		for _, candidateDir := range roots {
+			if seen[candidateDir] {
+				continue
+			}
+			seen[candidateDir] = true
+			if candidate, ok := s.inspect(candidateDir, SourceNearEngine); ok {
+				candidate.Where = where
+				if candidateDir != root {
+					candidate.Note = "The re-release's own copy of the game data."
+				}
+				out = append(out, candidate)
+			}
+		}
+	}
+	return out
 }
 
 // entriesLike returns the entries of a directory whose names equal want,
