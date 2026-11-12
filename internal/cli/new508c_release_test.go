@@ -478,3 +478,107 @@ func (f *firstRun) driveInBrowser(script string, reports chan<- []byte) bool {
 	})
 	return true
 }
+
+// C2: an Update whose new Companion does not come up ends on a distinct, true
+// outcome in the same dialog — the version that runs is the old one, the
+// toolchains it installed stay installed — and never on "up to date".
+func TestASidebarUpdateWhoseNewCompanionDoesNotServeSaysSoAndKeepsTheOldOne(t *testing.T) {
+	f := newFirstRun(t)
+	newer := buildCompanionVersion(t, "1.901")
+	converter := buildProgram(t, "mapio-1.245", "./cmd/mapio", "-X main.version=1.245")
+	f.releases.Publish(mt.CompanionRepo, mt.BuildCompanion(t, mt.CompanionSpec{Version: "1.901", Companion: newer, Converter: converter, Prerelease: true}))
+	f.serve("AUCOM_FIXTURE_FAIL_SERVE=1.901")
+	t.Cleanup(func() { f.quit() })
+	f.checked()
+	reports := make(chan []byte, 1)
+	browser := f.driveInBrowser("new508cupdate.js", reports)
+	if !browser {
+		if code, raw := f.api(http.MethodPost, "/api/v1/tools/update", "{}"); code != http.StatusOK {
+			t.Fatalf("POST /api/v1/tools/update = %d %s", code, raw)
+		}
+	}
+	var last struct {
+		Outcome, From, To, Detail string
+	}
+	deadline := time.Now().Add(4 * time.Minute)
+	for time.Now().Before(deadline) {
+		f.rereadToken()
+		if code, raw := f.api(http.MethodGet, "/api/v1/tools", ""); code == http.StatusOK {
+			var body struct {
+				Tools []struct {
+					ID      string `json:"id"`
+					Version string `json:"version"`
+					Failure *struct {
+						Version string `json:"version"`
+						Error   string `json:"error"`
+					} `json:"failure"`
+					Self *struct {
+						Last *struct {
+							Outcome string `json:"outcome"`
+							From    string `json:"from"`
+							To      string `json:"to"`
+							Detail  string `json:"detail"`
+						} `json:"last"`
+					} `json:"self"`
+				} `json:"tools"`
+			}
+			_ = json.Unmarshal(raw, &body)
+			for _, tool := range body.Tools {
+				if tool.ID != "companion" || tool.Version != "1.900" {
+					continue
+				}
+				if tool.Self != nil && tool.Self.Last != nil && tool.Self.Last.To == "1.901" {
+					last.Outcome, last.From, last.To, last.Detail = tool.Self.Last.Outcome, tool.Self.Last.From, tool.Self.Last.To, tool.Self.Last.Detail
+				} else if tool.Failure != nil && tool.Failure.Version == "1.901" {
+					last.Outcome, last.To, last.Detail = "failed_before_restart", "1.901", tool.Failure.Error
+				}
+			}
+			if last.Outcome != "" && last.Outcome != "activated" {
+				break
+			}
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	if last.Outcome == "" || last.Outcome == "updated" || last.Outcome == "activated" {
+		updateLog, _ := os.ReadFile(filepath.Join(f.configDir(), SelfUpdateLogName))
+		t.Fatalf("no failure recorded for 1.901 with 1.900 running: %+v\n%s", last, updateLog)
+	}
+	t.Logf("the failed update: %+v", last)
+	if !browser {
+		return
+	}
+	var report struct {
+		Samples []struct {
+			Load    int      `json:"load"`
+			Rows    []string `json:"rows"`
+			Texts   []string `json:"texts"`
+			Done    bool     `json:"done"`
+			Result  string   `json:"result"`
+			Stage   string   `json:"stage"`
+			Stopped bool     `json:"stopped"`
+		} `json:"samples"`
+		Error string `json:"error"`
+	}
+	select {
+	case raw := <-reports:
+		if err := json.Unmarshal(raw, &report); err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(4 * time.Minute):
+		t.Fatal("the page never reported")
+	}
+	if report.Error != "" || len(report.Samples) == 0 {
+		t.Fatalf("the page: %q (%d samples)", report.Error, len(report.Samples))
+	}
+	end := report.Samples[len(report.Samples)-1]
+	if !end.Done || !hasString(end.Rows, "companion:failed") || end.Stage != "Update finished with problems" ||
+		end.Result != "What failed is listed above; the version in use was kept." {
+		t.Fatalf("the dialog's end: %+v", end)
+	}
+	for _, row := range []string{"ericw-tools:installed", "q3map2:installed"} {
+		if !hasString(end.Rows, row) {
+			t.Errorf("the toolchains it installed: rows %v lack %s", end.Rows, row)
+		}
+	}
+	t.Logf("the dialog's end: %+v", end)
+}
