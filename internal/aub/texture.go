@@ -171,9 +171,55 @@ func textureRefusal(path string, response *http.Response) error {
 type MapTextures struct {
 	MapID        string   `json:"map_id"`
 	Revision     int      `json:"revision"`
+	Game         string   `json:"game,omitempty"`
 	WADState     string   `json:"wad_state,omitempty"`
 	WADsDeclared []string `json:"wads_declared"`
 	TextureCount int      `json:"texture_count"`
+	// Requirements are every source the map declares or binds, each resolved
+	// for this account: a Quake II namespace bound to an account texture
+	// package has no `wads_declared` entry and is named only here (issue #6).
+	Requirements []MapTextureRequirement `json:"requirements,omitempty"`
+}
+
+// MapTextureRequirement is one resolved source in AUB's requirements view.
+// Only what a card shows is decoded; an unknown field is ignored.
+type MapTextureRequirement struct {
+	Name       string `json:"name"`
+	Kind       string `json:"kind,omitempty"`
+	Origin     string `json:"origin,omitempty"`
+	Status     string `json:"status"`
+	Resolved   bool   `json:"resolved"`
+	Revision   int    `json:"revision,omitempty"`
+	Visibility string `json:"visibility,omitempty"`
+	BoundMapID string `json:"bound_map_id,omitempty"`
+	Mine       bool   `json:"mine"`
+
+	Redistribution *struct {
+		Decision string `json:"decision"`
+		Reason   string `json:"reason,omitempty"`
+	} `json:"redistribution,omitempty"`
+	Binding *struct {
+		Status   string `json:"status"`
+		Revision int    `json:"revision,omitempty"`
+	} `json:"binding,omitempty"`
+}
+
+// redistributionIncluded is AUB's decision for an installed source whose
+// bytes this deployment sends.
+const redistributionIncluded = "included"
+
+// Carried says whether the deployment sends this installed source's bytes.
+func (r MapTextureRequirement) Carried() bool {
+	return r.Redistribution != nil && r.Redistribution.Decision == redistributionIncluded
+}
+
+// NotCarriedReason is AUB's reason an installed source is not sent, "" when
+// it gave none.
+func (r MapTextureRequirement) NotCarriedReason() string {
+	if r.Redistribution == nil {
+		return ""
+	}
+	return r.Redistribution.Reason
 }
 
 // TextureRequirements asks AUB which WADs a map declares and how many

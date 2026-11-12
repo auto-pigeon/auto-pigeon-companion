@@ -220,6 +220,17 @@ func describeCarried(sources []WADSource, notices []StagedFile) string {
 // acts on. An unrecognised code is passed through rather than flattened: a
 // deployment that adds one must not make the panel say nothing.
 func compilerRefusalRemedy(refusals []string, sources []WADSource) string {
+	// `wad_inventory_incomplete` accompanies a WAD that was not sent (AUB
+	// cannot list bytes it does not ship) and usually comes first, with no
+	// subject: speaking from it produced "could not read the contents of , …"
+	// over a WAD whose real remedy is your own copy (found live, NEW_505). The
+	// sentence comes from the not-sent WAD whenever there is one.
+	for _, refusal := range refusals {
+		if code, _, _ := strings.Cut(refusal, ":"); strings.TrimSpace(code) == "wad_bytes_not_carried" {
+			refusals = append([]string{refusal}, refusals...)
+			break
+		}
+	}
 	for _, refusal := range refusals {
 		code, subject, _ := strings.Cut(refusal, ":")
 		subject = strings.TrimSpace(subject)
@@ -235,6 +246,9 @@ func compilerRefusalRemedy(refusals []string, sources []WADSource) string {
 			return "Nothing the map declares supplies " + subject + ". Add the WAD that holds it, or change the " +
 				"faces that use it."
 		case "wad_inventory_incomplete":
+			if subject == "" {
+				continue
+			}
 			return "Auto-Pigeon could not read the contents of " + subject + ", so it cannot say whether the " +
 				"build would find its textures."
 		}
@@ -620,4 +634,11 @@ func ownBundleFiles(files []StagedFile) []build.BundleFile {
 	}
 
 	return out
+}
+
+// CompilerRefusalRemedy is compilerRefusalRemedy for the Build page (issue #9),
+// so a saved revision whose bundle AUB could not complete is explained there in
+// the same words Build & Run uses.
+func CompilerRefusalRemedy(refusals []string, sources []WADSource) string {
+	return compilerRefusalRemedy(refusals, sources)
 }

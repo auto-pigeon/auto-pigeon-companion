@@ -262,7 +262,12 @@
   // fifty maps, and fifty requests at once would be a burst for no reason.
   const textureQueue = [];
   let textureWorkers = 0;
-  function queueTextures(mapID, node) {
+  function queueTextures(mapID, node, summary) {
+    if (summary) {
+      // Read from this computer already: nothing to ask, connected or not.
+      drawTextures(mapID, node, summary);
+      return;
+    }
     textureQueue.push({ mapID, node });
     while (textureWorkers < 4 && textureQueue.length) {
       textureWorkers += 1;
@@ -279,25 +284,87 @@
     }
   }
 
-  async function drawTextures(mapID, node) {
-    const { ok, body } = await api(`/api/v1/library/maps/${encodeURIComponent(mapID)}/textures`);
-    node.replaceChildren();
-    if (!ok) {
-      node.append(el("span", { className: "muted small", text: t("Textures: could not be read") }));
-      return;
+  // What one source's state means, for its chip's title and the line under
+  // the chips (#6). The server decides the state; this only words it.
+  const packageWords = {
+    verified: "on this computer, verified for this revision",
+    available: "in your account; a build fetches it",
+    bound: "bound to an exact revision in your account",
+    own_copy_needed: "not sent by the deployment: a build needs your own copy",
+    from_game: "installed with the game; read from the game folder bound in Profiles",
+    unavailable: "unavailable",
+    missing: "missing: nothing supplies it",
+  };
+
+  function packageTitle(item) {
+    const parts = [item.name];
+    if (item.revision) parts.push(t("revision {n}", { n: item.revision }));
+    parts.push(t(packageWords[item.state] || item.state));
+    if (item.detail) parts.push(item.detail);
+    return parts.join(" · ");
+  }
+
+  // summaryLine is the one sentence over every source, or "" when the chips
+  // say it all.
+  function summaryLine(summary) {
+    const named = (state) => (summary.packages || []).filter((item) => item.state === state).map((item) => item.name).join(", ");
+    switch (summary.state) {
+      case "verified": return t("On this computer, verified.");
+      case "needs_own_files": return t("Needs your own copy of {names}.", { names: named("own_copy_needed") });
+      case "unavailable": {
+        const names = [named("unavailable"), named("missing")].filter(Boolean).join(", ");
+        return names ? t("Unavailable: {names}.", { names }) : t("Declared, and nothing could be resolved.");
+      }
+      case "game_folders": return t("From the game folders bound in Profiles.");
+      default: return "";
     }
-    const wads = body.wads_declared || [];
+  }
+
+  // drawTextures fills one card's textures row. summary is given for a card
+  // of this computer (read with no network); otherwise the account is asked.
+  async function drawTextures(mapID, node, given) {
+    let body = { summary: given };
+    if (!given) {
+      const answer = await api(`/api/v1/library/maps/${encodeURIComponent(mapID)}/textures`);
+      if (!answer.ok) {
+        node.replaceChildren(el("span", { className: "muted small", text: t("Textures: could not be read") }));
+        return;
+      }
+      body = answer.body;
+    }
+    node.replaceChildren();
+    // The sentence over every source sits on its own line under the row: the
+    // row itself is one line that never grows the card (operator, 2026-09-23).
+    let stateLine = node.nextElementSibling?.classList.contains("map-card__texture-state") ? node.nextElementSibling : null;
+    if (stateLine) stateLine.remove();
+    const showState = (text, ok, refusals) => {
+      if (!text) return;
+      stateLine = el("p", { className: "small map-card__texture-state" + (ok ? "" : " muted"), text });
+      if ((refusals || []).length) stateLine.title = refusals.join("; ");
+      node.after(stateLine);
+    };
+    const summary = body.summary || { state: (body.wads_declared || []).length ? "available" : "none_declared",
+      packages: (body.wads_declared || []).map((name) => ({ name, state: "available" })) };
+    const packages = summary.packages || [];
+    node.dataset.textures = summary.state;
     node.append(el("span", {
       className: "map-card__label",
       text: body.texture_count ? t("Textures ({n})", { n: body.texture_count }) : t("Textures"),
     }));
-    if (!wads.length) {
-      node.append(el("span", { className: "muted small", text: t("none declared") }));
+    if (!packages.length) {
+      const line = summary.state === "none_declared" ? t("none declared") : summaryLine(summary);
+      node.append(el("span", { className: "muted small", text: line || t("none declared") }));
       return;
     }
-    const list = el("ul", { className: "wad-chips", attrs: { "aria-label": t("Texture WADs, in the order the map declares them") } });
-    for (const wad of wads) {
-      list.append(el("li", { className: "wad-chip", text: wad.replace(/^.*[\\/]/, ""), attrs: { title: wad } }));
+    showState(summaryLine(summary), summary.state === "verified", summary.refusals);
+    const wads = packages.map((item) => item.name);
+    const list = el("ul", { className: "wad-chips", attrs: { "aria-label": t("Texture sources, in the order the map declares them") } });
+    for (const item of packages) {
+      list.append(el("li", {
+        className: "wad-chip wad-chip--" + item.state,
+        text: item.name.replace(/^.*[\\/]/, "") + (item.revision ? " r" + item.revision : ""),
+        attrs: { title: packageTitle(item), "data-state": item.state },
+      }));
     }
     node.append(list);
     // The chips never grow the card (operator, 2026-09-23): one line, and when
@@ -347,6 +414,10 @@
     const textures = body.textures;
     if (!textures || textures.state === "cached") {
       setMessage(status, got + " " + t("It is ready to build, with or without a connection."), "ok");
+    } else if (textures.state === "needs_own_files") {
+      // Buildable, with the person's own copy of what the deployment does
+      // not send (#9): Build takes it from the Textures folder they choose.
+      setMessage(status, got + " " + t("Its textures are here except files the deployment does not send; a build asks for a folder with your own copy of them."), "");
     } else if (textures.state === "incomplete") {
       // Here, and still not buildable: the revision's own textures are
       // incomplete, which a build refuses connected or not.
@@ -480,12 +551,15 @@
         text: [t("Revision {n}", { n: record_.revision }), bytes(record_.total_bytes), when(record_.synced_at)].filter(Boolean).join(" · "),
       });
       const textures = el("div", { className: "map-card__textures" });
-      queueTextures(record_.asset_id, textures);
+      // This revision's own summary, from this computer's verified cache or
+      // its Quake III ledger (#6); the account's latest only when neither.
+      queueTextures(record_.asset_id, textures, item.texture_summary);
       const status = el("p", { className: "message small", attrs: { role: "status" } });
       // Whether THIS revision builds with no connection, from this computer's
       // own cache and no network (#38): the map is here; its texture bundle
       // either is too, or a build will have to fetch it.
       if (item.textures === "cached") setMessage(status, t("Map and textures are on this computer: it builds without a connection."), "ok");
+      else if (item.textures === "needs_own_files") setMessage(status, t("Map and textures are on this computer, except files the deployment does not send: a build needs your own copy of them, from a folder you choose."), "");
       else if (item.textures === "incomplete") setMessage(status, t("Map and texture information are on this computer, but this revision's textures are incomplete: a build of it is refused."), "");
       else if (item.textures === "missing") setMessage(status, t("The map is on this computer; its textures are not, so building it needs a connection. Download it again while connected."), "");
 

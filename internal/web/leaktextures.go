@@ -61,13 +61,26 @@ func (s *Server) stageLeakTextures(ctx context.Context, source build.SourceRef, 
 		return "", build.RootSource{}, fmt.Errorf("the texture bundle found is for map %s revision %d, not this request's revision %d",
 			entry.Receipt.MapID, entry.Receipt.Revision, source.Revision)
 	}
-	buildsDir, err := s.buildsDir()
+	dir, err := s.stageBundleCopy(ctx, entry, mapPath, leakTexturesPrefix)
 	if err != nil {
 		return "", build.RootSource{}, err
 	}
-	dir, err := os.MkdirTemp(ensureDir(buildsDir), leakTexturesPrefix)
+
+	return dir, build.RootSource{Kind: build.RootFromTextureBundle, Bundle: bundleResult(entry, s.backendAddress()).Ref}, nil
+}
+
+// stageBundleCopy copies one verified cache entry into a directory the build
+// owns, each file hashed again against the digest it was verified at, with
+// every WAD the map declares under a folder also placed where it says. The
+// editor's leak test and the Build page (issue #9) stage the same way.
+func (s *Server) stageBundleCopy(ctx context.Context, entry texturebundle.Entry, mapPath, prefix string) (string, error) {
+	buildsDir, err := s.buildsDir()
 	if err != nil {
-		return "", build.RootSource{}, fmt.Errorf("preparing this leak test's texture folder: %w", err)
+		return "", err
+	}
+	dir, err := os.MkdirTemp(ensureDir(buildsDir), prefix)
+	if err != nil {
+		return "", fmt.Errorf("preparing this build's texture folder: %w", err)
 	}
 	staged := false
 	defer func() {
@@ -77,24 +90,26 @@ func (s *Server) stageLeakTextures(ctx context.Context, source build.SourceRef, 
 	}()
 	for _, file := range entry.Receipt.Files {
 		if err := ctx.Err(); err != nil {
-			return "", build.RootSource{}, err
+			return "", err
 		}
 		relative := filepath.FromSlash(file.Path)
 		if !filepath.IsLocal(relative) {
-			return "", build.RootSource{}, fmt.Errorf("the texture bundle names %q, which is not a file inside it", file.Path)
+			return "", fmt.Errorf("the texture bundle names %q, which is not a file inside it", file.Path)
 		}
 		if err := copyVerified(filepath.Join(entry.ContentRoot, relative), filepath.Join(dir, relative), file); err != nil {
-			return "", build.RootSource{}, err
+			return "", err
 		}
 	}
 	// A WAD the map declares under a folder (`gfx/metal.wad`) is also where
 	// it says, exactly as Build & Run places it.
-	if _, err := playrun.PlaceDeclaredWADs(dir, mapPath); err != nil {
-		return "", build.RootSource{}, fmt.Errorf("placing the map's WADs where it declares them: %w", err)
+	if mapPath != "" {
+		if _, err := playrun.PlaceDeclaredWADs(dir, mapPath); err != nil {
+			return "", fmt.Errorf("placing the map's WADs where it declares them: %w", err)
+		}
 	}
 	staged = true
 
-	return dir, build.RootSource{Kind: build.RootFromTextureBundle, Bundle: bundleResult(entry, s.backendAddress()).Ref}, nil
+	return dir, nil
 }
 
 // leakTextureRoots gives a Quake 1 leak build the texture root of its pinned

@@ -140,7 +140,7 @@ The page has these areas, in the order of a first run:
 | Area | What it is for |
 | --- | --- |
 | **Build & Run** | One form: a saved map or a file on this computer, a build profile, whether to start the game after the build, a review, and one button. |
-| **My Maps** | Your maps in your Auto-Pigeon account, and the revisions this computer has downloaded and verified. **Download revision** fetches the map and its texture bundle, so that revision builds with no connection; **On this computer** says of each one whether it does. |
+| **My Maps** | Your maps in your Auto-Pigeon account, and the revisions this computer has downloaded and verified. **Download revision** fetches the map and its texture bundle, so that revision builds with no connection; **On this computer** says of each one whether it does. Each card names the texture sources the revision declares or is bound to — WADs, a Quake II texture package, Quake III packages — and whether each is verified here, in your account, from the game, needs your own copy, or unavailable; "none declared" means the map declares none. |
 | **Run** | Starting an engine on its own: joining a server, a mod, a map you already built. |
 | **Profiles** | What a tool or engine asks to be allowed to do, approving it, and writing your own. |
 | **Jobs** | Everything that has run, with its command, exit status, how long it took and its output. |
@@ -325,6 +325,12 @@ $ curl -fsS -H "X-AUCOM-Token: $token" "$api/api/v1/tools" | jq '.tools[] | {id,
 $ curl -fsS -H "X-AUCOM-Token: $token" "$api/api/v1/tools" | jq '{checks, check_failures}'   # checks running / failed
 $ curl -fsS -X POST -H "X-AUCOM-Token: $token" "$api/api/v1/checks/retry" | jq '.checks'   # Retry the program check
 ```
+
+When a build tool's program is missing, **Profiles** names the fix: choose where
+it is under *Where these programs are on this machine*, or — for a tool the
+Companion installs itself — press **Install** beside it in Profiles if it is not
+installed yet, then `companion tools use-managed <profile id>`, which binds the
+profile to that installation.
 
 The official releases are prereleases today, so the Companion follows the
 **beta** channel; `"tools_channel": "stable"` in `config.json` takes only stable
@@ -614,6 +620,32 @@ curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
 # the same, checking a folder of your own for the WADs that were not sent
 curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
   "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/play/textures?asset_id=<map-id>&revision=<n>&own_wads_dir=/path/to/your/wads"
+```
+
+**Building a saved revision from the Build page.** **My Maps › Use in a build ›
+Build** compiles with the same verified texture bundle Build & Run uses — the one
+for exactly that revision, from this computer's cache or your account — so a
+revision on this computer builds with no connection and no folder of your own.
+A Quake II revision's bound texture package is laid over the content folder set
+in **Profiles**. A WAD the deployment does not send is taken, by exact file name,
+from the **Textures** folder you choose; nothing else is taken from it. A
+revision whose textures your account calls incomplete, or whose bound package
+revision is gone, is not built, and the page says which source and why. When the
+bundle cannot be had at all (signed out and not on this computer, or refused), a
+**Textures** folder you chose is used instead, and the build log says so. The
+build log's `Textures:` lines name the bundle and its digest.
+
+```bash
+# build a saved revision with its own textures, no folder needed
+curl -fsS -X POST -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
+  -H 'Content-Type: application/json' \
+  -d '{"pipeline":"auto-pigeon.q1.fast-preview","inputs":{"source_map":"aub:map/<map-id>@<revision-id>"}}' \
+  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/build/runs"
+# what a map card says about its textures, and what a downloaded revision is bound to
+curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
+  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/library/maps/<map-id>/textures" | jq .summary
+curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
+  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/library/cached" | jq '.items[] | {key, textures, texture_summary}'
 ```
 
 **Which engines Build & Run offers.** An engine is offered only for a build

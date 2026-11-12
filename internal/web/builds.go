@@ -760,6 +760,18 @@ func (s *Server) handleBuildPreview(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// Any other build of a saved Quake 1 or Quake II revision reads that
+	// revision's verified textures (issue #9): the review says so, or says
+	// why not, before anybody presses Build.
+	var q2Textures *build.Q2Textures
+	if request.LeakRequestID == "" {
+		textures, err := s.buildAccountTextures(r.Context(), request, sources, conversions, inputs, roots, rootSources, true)
+		if err != nil {
+			writeError(w, buildTextureStatus(err), err)
+			return
+		}
+		roots, rootSources, q2Textures = textures.Roots, textures.RootSources, textures.Q2
+	}
 	manifest, err := runner.Preview(build.Request{
 		PipelineID:  request.Pipeline,
 		Inputs:      inputs,
@@ -768,6 +780,7 @@ func (s *Server) handleBuildPreview(w http.ResponseWriter, r *http.Request) {
 		Packages:    packages,
 		Roots:       roots,
 		RootSources: rootSources,
+		Q2Textures:  q2Textures,
 		Options:     request.Options,
 		Label:       request.Label,
 		Strict:      request.Strict,
@@ -941,6 +954,23 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 		_ = leakintent.Used(leakintent.Path(configDir), consumed.RequestID, "", time.Now().UTC())
 	}
 
+	// Any other build of a saved Quake 1 or Quake II revision compiles with
+	// that revision's verified textures (issue #9). Resolved before the build
+	// is started, so a refusal is the answer to this press, not a failed build.
+	var q2Textures *build.Q2Textures
+	if request.LeakRequestID == "" {
+		textures, err := s.buildAccountTextures(r.Context(), request, sources, conversions, inputs, roots, rootSources, false)
+		if err != nil {
+			cancel()
+			writeError(w, buildTextureStatus(err), err)
+			return
+		}
+		roots, rootSources, q2Textures, leakTextures = textures.Roots, textures.RootSources, textures.Q2, textures.Dir
+		for _, note := range textures.Notes {
+			_, _ = run.log.Write([]byte(note + "\n"))
+		}
+	}
+
 	failed := make(chan error, 1)
 	handedOver = true
 	go func() {
@@ -958,6 +988,7 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 			Packages:    packages,
 			Roots:       roots,
 			RootSources: rootSources,
+			Q2Textures:  q2Textures,
 			Options:     request.Options,
 			Label:       request.Label,
 			LeakTest:    leakBinding,

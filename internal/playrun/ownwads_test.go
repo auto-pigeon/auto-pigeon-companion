@@ -190,3 +190,17 @@ func TestAnOwnCopyIsRecordedAgainstTheDeclarationItCompleted(t *testing.T) {
 		t.Error("the bundle's own source list was written to")
 	}
 }
+
+// NEW_505, found live: AUB lists `wad_inventory_incomplete` (no subject) before
+// `wad_bytes_not_carried: absent505.wad`, and the remedy used to read "could
+// not read the contents of , …". It names the WAD and the own-copy remedy.
+func TestTheRemedyForANotSentWADIsNotTheInventoryNote(t *testing.T) {
+	got := compilerRefusalRemedy([]string{"wad_inventory_incomplete", "wad_bytes_not_carried: absent505.wad"}, nil)
+	if !strings.Contains(got, "absent505.wad") || !strings.Contains(got, "your own copy") ||
+		strings.Contains(got, "contents of ,") {
+		t.Errorf("remedy: %q", got)
+	}
+	if got := compilerRefusalRemedy([]string{"wad_inventory_incomplete"}, nil); strings.Contains(got, "contents of ,") {
+		t.Errorf("a bare inventory note: %q", got)
+	}
+}

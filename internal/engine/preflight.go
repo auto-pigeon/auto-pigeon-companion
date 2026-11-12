@@ -10,6 +10,7 @@ import (
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/compat"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/managedtools"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 )
 
@@ -351,7 +352,18 @@ func bindFix(document profile.Profile, again bool, engineFix string) string {
 		if again {
 			choose = "Choose it again"
 		}
-		return choose + " under \"Where these programs are on this machine\" in Profiles, or run `companion acquire resolve <its profile file> --mode user_path --user-path <folder> --bind`."
+		fix := choose + " under \"Where these programs are on this machine\" in Profiles."
+		// Issue #36: the command this used to name, `acquire resolve <its
+		// profile file> --mode user_path …`, cannot be followed for a built-in
+		// tool (it has no file) and would replace a managed install. A tool a
+		// managed toolchain serves names the command that binds it back to the
+		// Companion's own installation, by its real id; any other tool is set
+		// where its programs are, which is the action above.
+		if tool, managed := managedtools.ForProfile(document.Metadata().ID); managed {
+			fix += fmt.Sprintf(" Or use the %s the Companion installs: press Install beside it in Profiles if it is"+
+				" not installed yet, then run `companion tools use-managed %s`.", tool.Title, document.Metadata().ID)
+		}
+		return fix
 	}
 	return engineFix
 }

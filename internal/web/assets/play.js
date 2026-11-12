@@ -464,6 +464,10 @@
       if (!current()) return;
       if (!ok) {
         mapsRefused(status, body);
+        // No answer from the account: the revisions on this computer still
+        // build (NEW_505 — a Build & Run link from On this computer opened on
+        // "not chosen yet" while the exact revision was here).
+        await offerCachedMaps(current);
         return;
       }
       items = items.concat(body.items || []);
@@ -497,6 +501,52 @@
       state.map = state.maps.find((m) => m.asset_id === pendingMap) || null;
       pendingMap = "";
     }
+    if (state.map) select.value = state.map.asset_id;
+  }
+
+  // The map revisions downloaded to this computer, read with no network, by
+  // map id. Filled when the account cannot be read.
+  let cachedRevisions = new Map();
+
+  async function readCachedRevisions() {
+    const { ok, body } = await api("/api/v1/library/cached?type=map");
+    cachedRevisions = new Map();
+    if (!ok) return cachedRevisions;
+    for (const item of body.items || []) {
+      const record = item.record || {};
+      if (record.asset_type !== "map" || !record.asset_id) continue;
+      const list = cachedRevisions.get(record.asset_id) || [];
+      list.push({
+        revision_id: record.revision_id || item.key, revision: record.revision, created_at: record.created_at,
+        immutable: record.immutable !== false, files: record.files || [], display_name: record.display_name,
+        on_this_computer: true,
+      });
+      cachedRevisions.set(record.asset_id, list);
+    }
+    for (const list of cachedRevisions.values()) list.sort((a, b) => (b.revision || 0) - (a.revision || 0));
+    return cachedRevisions;
+  }
+
+  // offerCachedMaps fills the map list from this computer when the account
+  // did not answer; the error above it stays, and says why.
+  async function offerCachedMaps(current) {
+    await readCachedRevisions();
+    if (!current()) return;
+    if (!cachedRevisions.size) return;
+    state.maps = [...cachedRevisions.entries()].map(([assetID, list]) => ({
+      asset_id: assetID, display_name: list[0].display_name || assetID,
+      current_revision: { revision: list[0].revision, created_at: list[0].created_at }, on_this_computer: true,
+    }));
+    const select = $("play-map");
+    select.replaceChildren(el("option", { text: t("Choose a map…"), attrs: { value: "" } }));
+    for (const map of state.maps) {
+      select.append(el("option", { text: t("{name} (on this computer)", { name: map.display_name }), attrs: { value: map.asset_id } }));
+    }
+    if (!state.map && pendingMap) {
+      state.map = state.maps.find((m) => m.asset_id === pendingMap) || null;
+      pendingMap = "";
+    }
+    // The revisions are read next by the same refresh that read the maps.
     if (state.map) select.value = state.map.asset_id;
   }
 
@@ -558,11 +608,18 @@
     if (!assetID) return;
     const { ok, status, body } = await api(`/api/v1/library/assets/map/${encodeURIComponent(assetID)}`);
     if (request !== revisionRequest) return;
+    let revisions = body.revisions || [];
     if (!ok) {
-      mapsRefused(status, body);
-      return;
+      // Offline: only the revisions on this computer, each exact.
+      if (!cachedRevisions.size) await readCachedRevisions();
+      if (request !== revisionRequest) return;
+      revisions = cachedRevisions.get(assetID) || [];
+      if (!revisions.length) {
+        mapsRefused(status, body);
+        return;
+      }
     }
-    state.revisions = body.revisions || [];
+    state.revisions = revisions;
     if (body.history_error) {
       setMessage("play-map-message",
         "This server keeps no per-version history for maps, so an exact revision cannot be pinned: " +
@@ -576,6 +633,21 @@
     }
     // The newest, because that is what somebody who has just saved wants. It
     // is still an EXACT revision: nothing here ever sends the word `current`.
+    if (!ok && pendingRevision && !state.revisions.some((r) => r.revision_id === pendingRevision)) {
+      // The revision a link asked for is not on this computer and the account
+      // cannot be asked: say so, and choose nothing — another revision built
+      // in its place would be a build of something nobody asked for.
+      // Still pending: the next refresh asks again, and once the account
+      // answers this exact revision is the one chosen.
+      const asked = pendingRevision;
+      // An explicit empty choice: a select with no matching option shows its
+      // first one, and the page would then read that as chosen.
+      select.prepend(el("option", { text: t("Choose a revision…"), attrs: { value: "" } }));
+      select.value = "";
+      state.revision = null;
+      setMessage("play-map-message", t("The revision this link asks for ({id}) is not on this computer, and your account cannot be reached to fetch it, so it cannot be built now. The revisions on this computer are listed.", { id: asked }), "error");
+      return;
+    }
     if (state.revisions.length) {
       const remembered = state.revisions.find((r) => r.revision_id === pendingRevision);
       pendingRevision = "";
@@ -607,8 +679,11 @@
     const path = `/api/v1/library/assets/map/${encodeURIComponent(state.map.asset_id)}` +
       `/${encodeURIComponent(state.revision.revision_id)}`;
     const { ok, body } = await api(path);
-    if (request !== sourceFileRequest || !ok) return;
-    const files = body.files || [];
+    if (request !== sourceFileRequest) return;
+    // Offline, the files this computer recorded for the revision.
+    const files = ok ? body.files || []
+      : (state.revision.on_this_computer ? (state.revision.files || []).filter((file) => /\.(apmap|map)$/i.test(file.path)) : null);
+    if (!files) return;
     if (files.length <= 1) {
       state.sourceFile = files[0]?.path || "";
       suggestMapName();

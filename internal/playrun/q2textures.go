@@ -33,30 +33,43 @@ import (
 
 // checkQ2Textures is the Quake II gate on a verified export.
 func checkQ2Textures(record *Record) error {
-	for _, source := range record.WADSources {
+	remedy, err := Q2SourcesProblem(record.WADSources)
+	if err != nil {
+		record.Remedy = remedy
+	}
+
+	return err
+}
+
+// Q2SourcesProblem is that gate on its own, for every build of a saved Quake
+// II revision — Build & Run, and the Build page (issue #9): the sentence a
+// person acts on, and the error, or nil when every bound or uploaded source
+// arrived verified.
+func Q2SourcesProblem(sources []WADSource) (string, error) {
+	for _, source := range sources {
 		binding := source.Binding
 		switch {
 		case binding != nil && binding.Status != bindingBound:
-			record.Remedy = fmt.Sprintf("The map is saved against revision %d of the texture source %s, and that revision "+
+			remedy := fmt.Sprintf("The map is saved against revision %d of the texture source %s, and that revision "+
 				"is not available (%s). Open the map in Auto-Pigeon, attach an available revision of %s in LOAD › Textures, "+
 				"save the map, and run the new revision.", binding.Revision, source.Name, binding.Status, source.Name)
 
-			return fmt.Errorf("%w: the map binds the texture source %s to revision %d, which is not available (%s)",
+			return remedy, fmt.Errorf("%w: the map binds the texture source %s to revision %d, which is not available (%s)",
 				ErrNotCompilerReady, source.Name, binding.Revision, binding.Status)
 		case (binding != nil || source.Origin == OriginUser) && !source.Staged:
-			record.Remedy = fmt.Sprintf("The texture export did not deliver verified files for %s. Check you are still "+
+			remedy := fmt.Sprintf("The texture export did not deliver verified files for %s. Check you are still "+
 				"signed in and can read that texture source, then try again.", source.Name)
 			reason := "the export did not carry them"
 			if source.NotSentReason != "" {
 				reason = "the export did not carry them (" + source.NotSentReason + ")"
 			}
 
-			return fmt.Errorf("%w: the files of the texture source %s are not verified: %s",
+			return remedy, fmt.Errorf("%w: the files of the texture source %s are not verified: %s",
 				ErrNotCompilerReady, source.Name, reason)
 		}
 	}
 
-	return nil
+	return "", nil
 }
 
 // bindingBound is AUB's status for a binding whose revision is available

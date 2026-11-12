@@ -296,6 +296,8 @@ type fixtureBackend struct {
 	// route answers instead of a bundle (NEW_357).
 	textureExports int
 	textureRefusal int
+	// textureRequirements replaces the requirements answer when set (NEW_505).
+	textureRequirements map[string]any
 
 	// notices, when set, answers AUB's operational-notice route (241).
 	// Unset, the route is a 404, as on a deployment that predates it.
@@ -552,6 +554,13 @@ func (b *fixtureBackend) serve(w http.ResponseWriter, r *http.Request) {
 	// What My Maps shows on a map's card: the WADs it declares, never the
 	// bundle itself.
 	if strings.HasPrefix(path, "/api/maps/") && strings.HasSuffix(path, "/texture-requirements") {
+		b.mu.Lock()
+		answer := b.textureRequirements
+		b.mu.Unlock()
+		if answer != nil {
+			write(answer)
+			return
+		}
 		write(map[string]any{
 			"map_id":        strings.TrimSuffix(strings.TrimPrefix(path, "/api/maps/"), "/texture-requirements"),
 			"revision":      4,

@@ -95,13 +95,16 @@ func TestADownloadedRevisionCarriesItsTextures(t *testing.T) {
 		m.backend.textures = fixtureTextureBundle(m.backend.asset.assetID, m.backend.asset.revision, false)
 		status, body := sync(m)
 		textures, _ := body["textures"].(map[string]any)
-		if status != http.StatusOK || textures == nil || textures["state"] != "incomplete" || textures["compiler_ready"] != false {
+		// The fixture lacks only a WAD the deployment does not send: since
+		// NEW_505 that is `needs_own_files` — still not "ready", and buildable
+		// with the person's own copy (#9) — not `incomplete`.
+		if status != http.StatusOK || textures == nil || textures["state"] != "needs_own_files" || textures["compiler_ready"] != false {
 			t.Fatalf("a revision whose textures are incomplete answered %d %v", status, body["textures"])
 		}
 		if refusals, _ := textures["refusals"].([]any); len(refusals) == 0 {
 			t.Errorf("the answer does not say what is incomplete: %v", textures)
 		}
-		if state := cached(m); state != "incomplete" {
+		if state := cached(m); state != "needs_own_files" {
 			t.Errorf("On this computer says the textures are %q", state)
 		}
 	})

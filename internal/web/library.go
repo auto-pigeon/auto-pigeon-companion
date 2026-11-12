@@ -9,6 +9,8 @@ import (
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/assetsync"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/leakadapter"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/playrun"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/texturebundle"
 )
 
@@ -52,12 +54,57 @@ func (s *Server) handleLibraryMapTextures(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	textures, err := client.TextureRequirements(r.Context(), r.PathValue("id"))
+	mapID := r.PathValue("id")
+	textures, err := client.TextureRequirements(r.Context(), mapID)
 	if err != nil {
 		writeAUBError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, textures)
+	// What the card says, from the most authoritative document here (#6): the
+	// verified manifest of this revision when it is on this computer, else the
+	// account's own resolution of every source it declares or binds.
+	var summary textureSummary
+	if entry, found := s.cachedBundle(mapID, textures.Revision); found {
+		summary = summaryFromManifest(entry)
+	} else {
+		summary = summaryFromRequirements(textures, nil)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"map_id": textures.MapID, "revision": textures.Revision, "game": textures.Game,
+		"wads_declared": textures.WADsDeclared, "texture_count": textures.TextureCount, "summary": summary,
+	})
+}
+
+// cachedBundle is the verified cache entry of one map revision, read with no
+// network.
+func (s *Server) cachedBundle(mapID string, revision int) (texturebundle.Entry, bool) {
+	cache, err := s.textureCache()
+	if err != nil || revision <= 0 {
+		return texturebundle.Entry{}, false
+	}
+	return cache.Lookup(texturebundle.Expect{MapID: mapID, Revision: revision})
+}
+
+// bundleBuildState says whether a verified bundle builds as it is, by the gate
+// a build of its game applies: `cached` builds with no connection;
+// `needs_own_files` builds once the person names a folder holding the WADs the
+// deployment does not send; `incomplete` is refused until the map is saved
+// with its textures. A Quake II bundle is judged by its bindings, not by
+// compiler_ready, which counts the base game's textures AUB never sends.
+func bundleBuildState(entry texturebundle.Entry) string {
+	if entry.Manifest.Game == leakadapter.ProfileQuake2 {
+		if _, err := playrun.Q2SourcesProblem(wadSources(entry)); err != nil {
+			return "incomplete"
+		}
+		return "cached"
+	}
+	if entry.Receipt.CompilerReady {
+		return "cached"
+	}
+	if _, only := playrun.OwnWADsNeeded(entry.Receipt.CompilerRefusals); only {
+		return "needs_own_files"
+	}
+	return "incomplete"
 }
 
 // aubStatus maps a backend refusal to a status the page can act on.
@@ -306,29 +353,21 @@ func (s *Server) downloadedTextures(ctx context.Context, mapID string, revision 
 	// On this computer is not the same as buildable: a revision whose own
 	// textures are incomplete (no WAD declared, a texture in none of them) is
 	// refused by a build, connected or not, and "ready" is not said of it.
-	state := "cached"
-	if !entry.Receipt.CompilerReady {
-		state = "incomplete"
-	}
 	return map[string]any{
-		"state": state, "wads_declared": len(entry.Receipt.WADsDeclared), "files": len(entry.Receipt.Files),
+		"state": bundleBuildState(entry), "wads_declared": len(entry.Receipt.WADsDeclared), "files": len(entry.Receipt.Files),
 		"compiler_ready": entry.Receipt.CompilerReady, "refusals": entry.Receipt.CompilerRefusals,
-		"digest": entry.Receipt.BundleDigest,
+		"digest": entry.Receipt.BundleDigest, "summary": summaryFromManifest(entry),
 	}
 }
 
 // cachedTextures says whether a cached map revision's texture bundle is in
 // the cache too, with no network: what "On this computer" shows.
 func (s *Server) cachedTextures(mapID string, revision int) string {
-	cache, err := s.textureCache()
-	if err != nil || revision <= 0 {
+	if _, err := s.textureCache(); err != nil || revision <= 0 {
 		return "unknown"
 	}
-	if entry, found := cache.Lookup(texturebundle.Expect{MapID: mapID, Revision: revision}); found {
-		if !entry.Receipt.CompilerReady {
-			return "incomplete"
-		}
-		return "cached"
+	if entry, found := s.cachedBundle(mapID, revision); found {
+		return bundleBuildState(entry)
 	}
 	return "missing"
 }
@@ -352,6 +391,13 @@ func (s *Server) handleLibraryCached(w http.ResponseWriter, r *http.Request) {
 		if record.AssetType == "map" {
 			// Whether this revision can be built with no connection (#38).
 			item["textures"] = s.cachedTextures(record.AssetID, record.Revision)
+			// What it is bound to, read from this computer alone (#6): the
+			// verified manifest of this revision, or a Quake III ledger.
+			if entry, found := s.cachedBundle(record.AssetID, record.Revision); found {
+				item["texture_summary"] = summaryFromManifest(entry)
+			} else if ledger := cachedLedger(store, record); ledger != nil {
+				item["texture_summary"] = summaryFromLedger(record.Revision, ledger)
+			}
 		}
 		items = append(items, item)
 	}
