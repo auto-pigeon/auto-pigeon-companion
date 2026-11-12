@@ -50,6 +50,16 @@ type scratchIdentity struct {
 	Homepage      string `json:"homepage,omitempty"`
 	Runtime       string `json:"runtime,omitempty"`
 	EngineVersion string `json:"engine_version,omitempty"`
+	// The described program's source and the release notes of the version it
+	// was written against: free text the form shows and the person may empty
+	// (NEW_506, #11), so they are never carried into a copy unseen.
+	SourceRepository string `json:"source_repository,omitempty"`
+	ReleaseNotes     string `json:"release_notes,omitempty"`
+	// What travels with an unchanged licence identifier, shown under the
+	// Licence field: another identifier drops all of it (composeBase).
+	LicenseURL    string `json:"license_url,omitempty"`
+	LicenseNotice string `json:"license_notice,omitempty"`
+	LicenseSource string `json:"license_source,omitempty"`
 }
 
 // handleProfileTemplateScratch is one tested profile as the form's fields.
@@ -141,9 +151,12 @@ func scratchFromTree(tree map[string]any) (scratchDocument, scratchIdentity) {
 	}
 	if license, ok := tree["license"].(map[string]any); ok {
 		identity.LicenseSPDX, identity.LicenseName = text(license, "spdx"), text(license, "name")
+		identity.LicenseURL, identity.LicenseNotice = text(license, "url"), text(license, "notice")
+		identity.LicenseSource = text(license, "corresponding_source")
 	}
 	if source, ok := tree["source"].(map[string]any); ok {
 		identity.Homepage = text(source, "homepage")
+		identity.SourceRepository, identity.ReleaseNotes = text(source, "repository"), text(source, "release_notes")
 	}
 
 	scratch := scratchDocument{Kind: text(tree, "kind"), ToolVersion: text(tree, "tool_version")}
@@ -270,8 +283,13 @@ func scratchArgLine(arg any) string {
 // formOwned is, for each place in a document, the members the form's fields
 // decide. Everything else there is carried over from the profile the form was
 // filled from. A member listed here that the person emptied stays empty.
+//
+// `description` and `source` are free text about the described program. The
+// form shows every one of them (Description; Homepage, Source code, Release
+// notes), so they are the form's: carried over unseen, a copy of a tool went
+// on describing the release it was copied from (NEW_506, #11).
 var formOwned = map[string][]string{
-	"": {"schema_version", "kind", "id", "name", "version", "summary",
+	"": {"schema_version", "kind", "id", "name", "version", "summary", "description", "source",
 		"game_profile", "tool_version", "executables", "actions", "capabilities", "inputs", "steps", "outputs"},
 	"executables": {"name", "title", "file"},
 	"actions": {"id", "title", "capability", "executable", "args", "inputs", "outputs", "options", "roots",

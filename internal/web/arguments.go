@@ -128,7 +128,10 @@ func (s *Server) stageCommands(pipeline *profile.PipelineProfile, local binding.
 		}
 		toolLocal, _ := set.Find(entry.Profile.Metadata().ID)
 		command := binding.StageCommand(entry.Profile, action, toolLocal, currentPlatform(), step.Options, local.StepArguments[step.ID])
-		item := map[string]any{"action_id": step.ID, "title": step.Title, "executable": command.Executable}
+		// `tool` is the profile the run would use: the same resolver chooses
+		// it, so a stage switched to another tool previews that tool (NEW_506).
+		item := map[string]any{"action_id": step.ID, "title": step.Title, "executable": command.Executable,
+			"tool": entry.Profile.Metadata().ID}
 		if command.Error != "" {
 			item["error"] = command.Error
 		} else {

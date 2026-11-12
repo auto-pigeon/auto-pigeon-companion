@@ -1012,6 +1012,10 @@
                 <label for="wizard-summary">Summary <span class="hint">(one line, shown in lists)</span></label>
                 <input id="wizard-summary" type="text" />
               </div>
+              <div class="field">
+                <label for="wizard-description">Description <span class="hint">(optional, shown on the profile's page; filled in from the profile you started from, so say what is different about yours or empty it)</span></label>
+                <textarea id="wizard-description" rows="4"></textarea>
+              </div>
               <div class="row">
                 <div class="field grow">
                   <label for="wizard-publisher">Publisher</label>
@@ -1022,9 +1026,22 @@
                   <input id="wizard-license" type="text" placeholder="GPL-2.0-or-later" />
                 </div>
               </div>
-              <div class="field" id="wizard-homepage-field">
-                <label for="wizard-homepage">Homepage <span class="hint">(the program's own site, shown as a Homepage button on its card)</span></label>
-                <input id="wizard-homepage" type="url" placeholder="the project's own web page" spellcheck="false" />
+              <p id="wizard-license-kept" class="hint muted" hidden></p>
+              <div id="wizard-homepage-field">
+                <div class="field">
+                  <label for="wizard-homepage">Homepage <span class="hint">(the program's own site, shown as a Homepage button on its card)</span></label>
+                  <input id="wizard-homepage" type="url" placeholder="the project's own web page" spellcheck="false" />
+                </div>
+                <div class="row">
+                  <div class="field grow">
+                    <label for="wizard-source-repository">Source code <span class="hint">(optional)</span></label>
+                    <input id="wizard-source-repository" type="url" placeholder="where the program's source is" spellcheck="false" />
+                  </div>
+                  <div class="field grow">
+                    <label for="wizard-release-notes">Release notes <span class="hint">(optional, for the version these programs are)</span></label>
+                    <input id="wizard-release-notes" type="url" placeholder="the page for this version" spellcheck="false" />
+                  </div>
+                </div>
               </div>
               <div class="row" id="wizard-tool-fields">
                 <div class="field">

@@ -89,6 +89,23 @@ holding a value nothing provides any more shows that value, marked, rather than 
   their stages' own arguments. Keeping the name and ticking **Replace the installed profile with the
   same id** makes a new version; the same version can never be rewritten, and the new version needs
   its own approval. Another name is a separate profile.
+- **Free text a starting point carries is shown, never carried unseen (`NEW_506`, #11).** `description` and
+  `source` are in `formOwned` (`internal/web/scratchfill.go`): the identity step has **Description** for every kind
+  and **Homepage**, **Source code**, **Release notes** for tools and engines, offered from the template answer's
+  `identity`; a field left empty is absent from the composed document. `license.{name,url,notice,
+  corresponding_source}` stay keyed to the SPDX identifier the form shows — kept with it, dropped by another one
+  (`composeBase`) — and the page names them under the Licence field (`#wizard-license-kept`). `publisher.url` is not
+  a field and is dropped whenever a publisher name is sent (`applyComposeFields`), which the form always does.
+- **A starting point's answer is stale only when a newer choice was made** — another template or another kind
+  (`applyTemplate`'s `requestID`/kind/template guard). It used to be dropped whenever `draftGeneration` moved, i.e.
+  any `input` in the area while it loaded (a Game choice right after the template; the extension's change-then-input
+  order): the form kept the previous starting point under the new one's name and Next stayed disabled for good, with
+  no message. That was NEW_321A's "third request stays pending" and "no redraw in a hidden tab" — the request had
+  answered in ~10 ms and a hidden tab fills (measured, `NEW_506`). A template answer that fails shows the step-1 error
+  with **Retry**, which asks for the same template (`dataset.retry`), not the list.
+- **The review's "asks for more" line is permissions only.** `describeDiff` carries `permissions_added`
+  (summaries); `escalates` is also true for a copy under another id, which asks for nothing more, so the page shows
+  the error only when `permissions_added` is non-empty.
 - **Next** keeps the user at the current step when required fields or server validation fail.
   Installing opens the approval and setup page. Stage arguments travel with **compose**
   (`stage_arguments`) and are checked by the same refusal saving uses (`stageArgumentsRefusal`),
@@ -132,7 +149,8 @@ token repeating a switch the stage already passes is refused (`aucom.compiler-co
   that program's boxes `aria-invalid`, keeps them, and focuses the first.
 - **A pipeline's exact commands** are `GET /api/v1/profiles/<pipeline>/commands`: `binding.StageCommand`, the same
   planner as a tool's preview, with the stage's options and the tool's older tokens then the stage's own — the
-  executor's order. Build & Run's review adds only what a build brings (its map, its `-wadpath`).
+  executor's order. Each item names the `tool` profile the resolver chose for it (`resolver.EntryForStep`, the run's
+  own choice), so a switched stage previews the tool it will run with (`NEW_506`). Build & Run's review adds only what a build brings (its map, its `-wadpath`).
 - **Answers belong to the view that asked:** list (`listSequence`), page (`detailSequence`) and anything asked
   before an account or server change (`viewGeneration`, on `aucom:status`) are dropped when late.
 - **New profile:** one line per kind on step 1; an unreadable template list is one message with **Retry** and Next

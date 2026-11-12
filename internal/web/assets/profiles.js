@@ -1128,6 +1128,7 @@
       // One truthful message and Retry; the draft and the list as they were
       // are kept, and Next waits, rather than a blank list that looks empty.
       $("wizard-template-error-text").textContent = t("The tested profiles could not be read: {reason}", { reason: body.error || t("no answer") }) + " ";
+      $("wizard-template-error").dataset.retry = "list";
       $("wizard-template-error").hidden = false;
       $("wizard-next").disabled = true;
       return;
@@ -1158,7 +1159,37 @@
     "wizard-name": "name", "wizard-version": "version", "wizard-summary": "summary",
     "wizard-publisher": "publisher_name", "wizard-license": "license_spdx", "wizard-homepage": "homepage",
     "wizard-runtime": "runtime", "wizard-engine-version": "engine_version",
+    // Free text a starting point carries is shown here, where it can be
+    // changed or emptied, never carried into the new profile unseen (NEW_506,
+    // #11: a copy of the 1.4502 tool kept saying "release 1.4502, commit …"
+    // on its page although nothing else about it was 1.4502).
+    "wizard-description": "description", "wizard-source-repository": "source_repository",
+    "wizard-release-notes": "release_notes",
   };
+
+  // licenceKept says, under the Licence field, what comes along with an
+  // unchanged licence identifier: its name, its text, its notice and its
+  // source offer belong to that licence and are kept with it; another
+  // identifier drops them (profiles.go composeBase).
+  let licenceOffered = null;
+  function showLicenceKept() {
+    const note = $("wizard-license-kept");
+    const kept = licenceOffered && $("wizard-license").value.trim() === licenceOffered.spdx ? licenceOffered.parts : [];
+    note.hidden = kept.length === 0;
+    note.textContent = kept.length
+      ? t("Kept with {licence} from {profile}: {parts}. Another licence identifier drops them.",
+        { licence: licenceOffered.spdx, profile: licenceOffered.from, parts: kept.join("; ") })
+      : "";
+  }
+  function offerLicence(identity, from) {
+    const parts = [];
+    if (identity?.license_name && identity.license_name !== identity.license_spdx) parts.push(t("its name, {name}", { name: identity.license_name }));
+    if (identity?.license_url) parts.push(t("its text, {url}", { url: identity.license_url }));
+    if (identity?.license_notice) parts.push(t("its notice, “{notice}”", { notice: identity.license_notice.length > 160 ? identity.license_notice.slice(0, 159) + "…" : identity.license_notice }));
+    if (identity?.license_source) parts.push(t("its source offer, {url}", { url: identity.license_source }));
+    licenceOffered = identity?.license_spdx ? { spdx: identity.license_spdx, from, parts } : null;
+    showLicenceKept();
+  }
 
   function offer(id, value) {
     const field = $(id);
@@ -1177,7 +1208,9 @@
     templateReady = false;
     $("wizard-next").disabled = true;
     const requestID = ++templateRequest;
+    $("wizard-template-error").hidden = true;
     if (!template) {
+      offerLicence(null, "");
       scratch.clear(kind);
       for (const id of Object.keys(IDENTITY)) offer(id, ({ "wizard-version": "1.0.0", "wizard-publisher": "Local", "wizard-license": "NOASSERTION" })[id] || "");
       $("wizard-template-note").textContent =
@@ -1188,13 +1221,25 @@
       return;
     }
     const { ok, body } = await api(`/api/v1/profiles/templates/${encodeURIComponent(template.id)}/scratch`);
-    if (requestID !== templateRequest || generation !== draftGeneration || kind !== $("wizard-kind").value || template.id !== $("wizard-template").value) return;
+    // Only a NEWER choice makes this answer stale: another starting point, or
+    // another kind. A field typed into while it was on its way does not — that
+    // used to drop the answer silently and leave the form holding the previous
+    // starting point under the new one's name, with Next disabled for good
+    // (NEW_506, #11: "stuck" with three tabs open, "no redraw" in a hidden
+    // one; both were this). What was typed into the identity fields is kept by
+    // offer(); everything else is the starting point the person chose.
+    if (requestID !== templateRequest || kind !== $("wizard-kind").value || template.id !== $("wizard-template").value) return;
+    if (generation !== draftGeneration) invalidateDraft();
     if (!ok) {
-      setMessage("wizard-message", body.error || "that profile could not be read", "error");
+      // Said where the choice was made, with Retry; Next waits.
+      $("wizard-template-error-text").textContent = t("{profile} could not be read: {reason}", { profile: template.name, reason: body.error || t("no answer") }) + " ";
+      $("wizard-template-error").dataset.retry = "template";
+      $("wizard-template-error").hidden = false;
       return;
     }
     scratch.fill(body.scratch, body.stage_arguments || {});
     for (const [id, key] of Object.entries(IDENTITY)) offer(id, body.identity?.[key]);
+    offerLicence(body.identity, `${template.name} ${template.version}`);
     $("wizard-template-note").textContent =
       `Filled in from ${template.name} ${template.version}` + (template.summary ? ` — ${template.summary}` : "") +
       ". Every field in the next steps is yours to change, add to or remove; what the form has no field for is kept as " +
@@ -1221,7 +1266,12 @@
       publisher_name: value("wizard-publisher"), license_spdx: value("wizard-license"),
       stage_arguments: window.AUCOM.scratch.stageTokens(),
     };
-    if (kind !== "pipeline") request.homepage = value("wizard-homepage");
+    request.description = value("wizard-description");
+    if (kind !== "pipeline") {
+      request.homepage = value("wizard-homepage");
+      request.source_repository = value("wizard-source-repository");
+      request.release_notes = value("wizard-release-notes");
+    }
     if (kind === "engine") {
       request.runtime = value("wizard-runtime");
       request.engine_version = value("wizard-engine-version");
@@ -1244,7 +1294,9 @@
       setMessage("wizard-message", body.error || "The document could not be validated. Retry without losing your draft.", "error");
       const identityFields = { name: "wizard-name", version: "wizard-version", summary: "wizard-summary",
         "publisher.name": "wizard-publisher", "license.spdx": "wizard-license", runtime: "wizard-runtime",
-        engine_version: "wizard-engine-version" };
+        engine_version: "wizard-engine-version", description: "wizard-description",
+        "source.homepage": "wizard-homepage", "source.repository": "wizard-source-repository",
+        "source.release_notes": "wizard-release-notes" };
       let first = null;
       for (const problem of body.problems || []) {
         const id = identityFields[problem.path];
@@ -1317,11 +1369,15 @@
 
     if (body.diff && !body.diff.empty) {
       review.append(el("h4", { text: "What you changed from the profile you started from" }));
-      if (body.diff.escalates) {
+      // Only what it asks for that the starting point did not (NEW_506): a
+      // copy under its own name is a separate profile, needs its own approval
+      // either way, and is not "asking for more" for being one.
+      const added = body.diff.permissions_added || [];
+      if (added.length) {
         review.append(
           el("p", {
             className: "message error",
-            text: "This asks for more than the profile you started from did.",
+            text: t("This asks for more than the profile you started from did: {permissions}", { permissions: added.join(" ") }),
           })
         );
       }
@@ -1398,7 +1454,11 @@
     setStep(1);
   });
   $("wizard-template").addEventListener("change", () => { invalidateDraft(); applyTemplate(); });
-  $("wizard-template-retry").addEventListener("click", (event) => withBusy(event.currentTarget, refreshTemplates));
+  // Retry asks again for what failed: the list of starting points, or the
+  // one chosen — without putting the choice back to From scratch.
+  $("wizard-template-retry").addEventListener("click", (event) => withBusy(event.currentTarget,
+    $("wizard-template-error").dataset.retry === "template" ? applyTemplate : refreshTemplates));
+  $("wizard-license").addEventListener("input", showLicenceKept);
   // Going back to the form from a document edited by hand: the form cannot
   // show every field such a document may have, and composing from the form
   // again would replace it. So it is asked, never done silently.

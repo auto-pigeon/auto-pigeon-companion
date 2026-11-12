@@ -46,6 +46,7 @@ func composeFilled(t *testing.T, id string, edit func(*scratchDocument)) (map[st
 	composed, err := applyComposeFields(tree, composeRequest{
 		ID: id, Name: identity.Name, Version: identity.Version, Summary: identity.Summary, Description: identity.Description,
 		PublisherName: identity.PublisherName, PublisherURL: identity.PublisherURL, Homepage: identity.Homepage,
+		SourceRepository: identity.SourceRepository, ReleaseNotes: identity.ReleaseNotes,
 		LicenseSPDX: identity.LicenseSPDX, LicenseName: identity.LicenseName,
 		Runtime: identity.Runtime, EngineVersion: identity.EngineVersion,
 	})

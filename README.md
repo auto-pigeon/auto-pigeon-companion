@@ -807,11 +807,32 @@ document itself is under **Advanced: the document itself** — **Open a file…*
 reads one you pick, **Download as a file** saves it through your browser, and
 going back to the form from a document you edited asks first.
 
+**What a starting point says about itself is in front of you.** Its
+**Description** — and, for a tool or an engine, its **Homepage**, **Source code**
+and **Release notes** — are filled in on the identity step, to change or empty;
+an emptied field is left out of the new profile. Under **Licence** the form names
+what comes along with an unchanged licence identifier (its name, text, notice and
+source offer); another identifier drops them. Choosing the game or typing while a
+starting point is still loading no longer leaves the form stuck: only choosing
+another starting point replaces the one on its way.
+
+```bash
+# start a tool from the tested EricW one, with your own description and no release notes
+T=$(cat ~/.config/auto-pigeon-companion/api-token); U=$(cat ~/.config/auto-pigeon-companion/api-url); U=${U%/}
+SCRATCH=$(curl -fsS -H "X-AUCOM-Token: $T" "$U/api/v1/profiles/templates/auto-pigeon.ericw-tools.auto-pigeon-build.q1/scratch" | jq .scratch)
+curl -fsS -H "X-AUCOM-Token: $T" -H 'Content-Type: application/json' -X POST "$U/api/v1/profiles/compose" \
+  -d "{\"name\":\"My EricW build\",\"version\":\"1.0.0\",\"summary\":\"My own build.\",\"publisher_name\":\"Me\",
+       \"license_spdx\":\"GPL-3.0-or-later\",\"description\":\"Built from my branch.\",\"scratch\":$SCRATCH}" \
+  | jq '.document | {description, source}'
+# → {"description": "Built from my branch.", "source": null}
+```
+
 **Changing a stage's tool keeps what still fits** — inputs, outputs and
 parameters the new tool also declares — and says so. Anything the new tool
 cannot take opens a review inside the stage, naming each field; nothing changes
 until you choose *Keep the current tool* or *Change the tool and revise this
-stage*.
+stage*. A pipeline's exact commands (`GET /api/v1/profiles/<pipeline>/commands`)
+name the tool that runs each stage (`"tool"`), chosen the way a build chooses it.
 
 **Installed is not ready.** The review ends with what is still to do on this
 computer — approve it, say where each program is, set up a stage's tool. A

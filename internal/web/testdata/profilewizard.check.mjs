@@ -22,7 +22,7 @@ function harness() {
   const el=(tag,o={})=>{const n=new Node();Object.assign(n,o.attrs||{});n.textContent=o.text||'';n.append(...o.children||[]);return n;};
   const scratch={kind:'tool',executables:[{name:'qbsp',file:'qbsp'}],actions:[{id:'compile'}]};
   let tokens=[];
-  const AUCOM={$,el,areas:{},t:x=>x,programFileName:x=>x,
+  const AUCOM={$,el,areas:{},t:(x,v={})=>String(x).replace(/\{(\w+)\}/g,(m,k)=>k in v?v[k]:m),programFileName:x=>x,
     api:(path,options)=>new Promise(resolve=>requests.push({path,options,resolve})),
     setMessage:(id,text,kind)=>messages.push({id,text,kind}),record(){},badge:x=>el('span',{text:x}),
     withBusy:async(n,fn)=>{n.disabled=true;try{return await fn();}finally{n.disabled=false;}},
@@ -94,10 +94,59 @@ await test('out-of-order template lists cannot overwrite another kind',async()=>
  const latest=h.requests.pop();latest.resolve({ok:true,body:{items:[]}});await second;
  h.answer({items:[{id:'old.tool',name:'old'}]});await first;assert.equal(h.$('wizard-template').children.some(x=>x.value==='old.tool'),false);
 });
-await test('a delayed template cannot mix a changed draft',async()=>{
- const h=harness();const init=h.AUCOM.areas['new-profile'].refresh('');await h.tick();h.answer({items:[{id:'base',kind:'tool',name:'Base'}]});await init;
- h.$('wizard-template').value='base';const selection=h.$('wizard-template').fire('change');await h.tick();h.$('wizard-name').value='Edited';await h.invalidate();h.answer({scratch:{kind:'engine'},identity:{name:'Wrong'}});await selection;await h.tick();
- assert.equal(h.$('wizard-name').value,'Edited');assert.equal(h.scratch.kind,'tool');
+// NEW_506 (#11): this used to assert that an answer was DROPPED whenever any
+// field changed while it was on its way — and nothing noticed that the form
+// then kept the previous starting point under the new one's name with Next
+// disabled for good. Choosing the Game right after a starting point was enough;
+// so was a hidden tab whose fields an agent typed into. Only a NEWER choice
+// makes an answer stale now; what was typed into the identity fields is kept.
+async function chosen(h,items=[{id:'base',kind:'tool',name:'Base',version:'1.2.0'},{id:'other',kind:'tool',name:'Other',version:'2.0.0'}]){
+ const init=h.AUCOM.areas['new-profile'].refresh('');await h.tick();h.answer({items});await init;
+}
+await test('a template answer is applied although a field changed while it loaded, and what was typed is kept',async()=>{
+ const h=harness();await chosen(h);
+ h.$('wizard-template').value='base';const selection=h.$('wizard-template').fire('change');await h.tick();
+ h.$('wizard-name').value='Edited';await h.invalidate();
+ h.answer({scratch:{kind:'tool',from:'base'},identity:{name:'Base',description:'What Base is',release_notes:'https://example.invalid/base/1.2.0'}});await selection;await h.tick();
+ assert.equal(h.$('wizard-name').value,'Edited');assert.equal(h.scratch.from,'base');
+ assert.equal(h.$('wizard-description').value,'What Base is');assert.equal(h.$('wizard-release-notes').value,'https://example.invalid/base/1.2.0');
+ assert.equal(h.$('wizard-next').disabled,false);assert.match(h.$('wizard-template-note').textContent,/Filled in from Base 1\.2\.0/);
+});
+await test('an answer for a starting point no longer chosen is dropped, and the chosen one fills',async()=>{
+ const h=harness();await chosen(h);
+ h.$('wizard-template').value='base';const first=h.$('wizard-template').fire('change');await h.tick();
+ h.$('wizard-template').value='other';const second=h.$('wizard-template').fire('change');await h.tick();
+ assert.equal(h.requests.length,2);
+ h.answer({scratch:{kind:'tool',from:'base'},identity:{name:'Base'}});await first;await h.tick();
+ assert.equal(h.scratch.from,undefined);assert.equal(h.$('wizard-next').disabled,true);
+ h.answer({scratch:{kind:'tool',from:'other'},identity:{name:'Other'}});await second;await h.tick();
+ assert.equal(h.scratch.from,'other');assert.equal(h.$('wizard-name').value,'A tool');assert.equal(h.$('wizard-next').disabled,false);
+});
+await test('a starting point that cannot be read says so beside the choice, and Retry asks for the same one',async()=>{
+ const h=harness();await chosen(h);
+ h.$('wizard-template').value='other';const selection=h.$('wizard-template').fire('change');await h.tick();
+ h.answer({error:'that profile could not be read'},false);await selection;await h.tick();
+ assert.equal(h.$('wizard-template-error').hidden,false);assert.match(h.$('wizard-template-error-text').textContent,/Other could not be read/);
+ assert.equal(h.$('wizard-next').disabled,true);
+ const retry=h.$('wizard-template-retry').fire('click');await h.tick();
+ assert.match(h.requests[0].path,/templates\/other\/scratch$/);assert.equal(h.$('wizard-template').value,'other');
+ h.answer({scratch:{kind:'tool',from:'other'},identity:{name:'Other'}});await retry;await h.tick();
+ assert.equal(h.$('wizard-template-error').hidden,true);assert.equal(h.scratch.from,'other');assert.equal(h.$('wizard-next').disabled,false);
+});
+await test('inherited free text is shown, can be emptied, and empty is sent as cleared',async()=>{
+ const h=harness();await chosen(h);
+ h.$('wizard-template').value='base';const selection=h.$('wizard-template').fire('change');await h.tick();
+ h.answer({scratch:{kind:'tool'},identity:{description:'release 1.4502, commit d4e4a75f',source_repository:'https://example.invalid/src',release_notes:'https://example.invalid/v1.4502',
+   license_spdx:'GPL-3.0-or-later',license_notice:'Copyright the authors'}});await selection;await h.tick();
+ assert.equal(h.$('wizard-description').value,'release 1.4502, commit d4e4a75f');assert.equal(h.$('wizard-source-repository').value,'https://example.invalid/src');
+ // the licence that travels with an unchanged identifier is named under the field
+ h.$('wizard-license').value='GPL-3.0-or-later';await h.$('wizard-license').fire('input');
+ assert.equal(h.$('wizard-license-kept').hidden,false);assert.match(h.$('wizard-license-kept').textContent,/Copyright the authors/);
+ h.$('wizard-license').value='MIT';await h.$('wizard-license').fire('input');assert.equal(h.$('wizard-license-kept').hidden,true);
+ h.$('wizard-description').value='';h.$('wizard-release-notes').value='';
+ await h.next();await h.next();const done=h.next();const body=h.requests[0].options.body;
+ assert.equal(body.description,undefined);assert.equal(body.release_notes,undefined);assert.equal(body.source_repository,'https://example.invalid/src');
+ h.answer(h.valid);await done;
 });
 await test('a copy link for an engine shows the engine kind, not the default one',async()=>{
  // NEW_330, seen live: `#new-profile/auto-pigeon.engine.vkquake` set the

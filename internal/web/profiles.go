@@ -441,9 +441,13 @@ type composeRequest struct {
 	PublisherName string `json:"publisher_name,omitempty"`
 	PublisherURL  string `json:"publisher_url,omitempty"`
 	// Homepage is the described program's own site: `source.homepage`.
-	Homepage    string `json:"homepage,omitempty"`
-	LicenseSPDX string `json:"license_spdx,omitempty"`
-	LicenseName string `json:"license_name,omitempty"`
+	Homepage string `json:"homepage,omitempty"`
+	// SourceRepository and ReleaseNotes are `source.repository` and
+	// `source.release_notes`.
+	SourceRepository string `json:"source_repository,omitempty"`
+	ReleaseNotes     string `json:"release_notes,omitempty"`
+	LicenseSPDX      string `json:"license_spdx,omitempty"`
+	LicenseName      string `json:"license_name,omitempty"`
 
 	Runtime       string `json:"runtime,omitempty"`
 	EngineVersion string `json:"engine_version,omitempty"`
@@ -675,12 +679,17 @@ func applyComposeFields(tree map[string]any, request composeRequest) (map[string
 		}
 		tree["publisher"] = publisher
 	}
-	if homepage := strings.TrimSpace(request.Homepage); homepage != "" {
+	for key, value := range map[string]string{
+		"homepage": request.Homepage, "repository": request.SourceRepository, "release_notes": request.ReleaseNotes,
+	} {
+		if value = strings.TrimSpace(value); value == "" {
+			continue
+		}
 		source, _ := tree["source"].(map[string]any)
 		if source == nil {
 			source = map[string]any{}
 		}
-		source["homepage"] = homepage
+		source[key] = value
 		tree["source"] = source
 	}
 	if request.LicenseSPDX != "" || request.LicenseName != "" {
@@ -763,11 +772,20 @@ func describeDiff(difference profile.Diff) map[string]any {
 			"before": change.Before, "after": change.After,
 		})
 	}
+	// What the new document asks for that the old one did not, by name. A
+	// copy under another id `escalates` (it is not the profile that was
+	// approved) without asking for anything more, and the form's review must
+	// not say it does (NEW_506).
+	added := make([]string, 0, len(difference.PermissionsAdded))
+	for _, permission := range difference.PermissionsAdded {
+		added = append(added, permission.Summary)
+	}
 	return map[string]any{
-		"empty":     difference.Empty(),
-		"escalates": difference.Escalates(),
-		"changes":   changes,
-		"text":      difference.String(),
+		"empty":             difference.Empty(),
+		"escalates":         difference.Escalates(),
+		"permissions_added": added,
+		"changes":           changes,
+		"text":              difference.String(),
 	}
 }
 
