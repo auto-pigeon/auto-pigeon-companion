@@ -661,6 +661,23 @@ func (m *Manager) targets() []Tool {
 // beside the Companion. It is no member of the bundle: a self-update leaves it.
 const BuildToolsDirName = "build-tools"
 
+// PortableToolsDir is where a release bundle keeps its build tools:
+// <the bundle's folder>/build-tools, for a bundle this Companion replaces
+// itself (portable) and for one a person replaces (a folder it cannot write, a
+// macOS application, whose folder is the one holding the .app). Empty for a
+// program that is no release bundle — a development build, a test binary, the
+// copy an update kept — which uses the per-user folder.
+func PortableToolsDir(self SelfInstall) string {
+	if self.Root == "" || len(self.Members) == 0 {
+		return ""
+	}
+	switch self.Mode {
+	case SelfPortable, SelfManual:
+		return filepath.Join(self.Root, BuildToolsDirName)
+	}
+	return ""
+}
+
 // SelfInstall is what this coordinator knows of the running bundle.
 func (m *Manager) SelfInstall() (SelfInstall, bool) {
 	if m.opts.Self == nil {
@@ -759,8 +776,19 @@ func (m *Manager) toolWork() []string {
 			continue
 		}
 		ts := state.Tool(tool.ID)
-		if ts.Intent == IntentNow && ts.IntentFor != nil && (ts.Failure == nil || ts.Failure.Version != ts.IntentFor.Version) {
+		best := ts.Check.Best
+		failedFor := func(version string) bool { return ts.Failure != nil && ts.Failure.Version == version }
+		switch {
+		case ts.Intent == IntentNow && ts.IntentFor != nil && !failedFor(ts.IntentFor.Version):
 			out = append(out, fmt.Sprintf("updating %s to %s", tool.Title, ts.IntentFor.Version))
+		// An install a person approved, or a repair, that has not started
+		// yet is work too: an Update installs the compilers BEFORE the
+		// Companion restarts for its own update (NEW_508C), even when the
+		// restart is looked at first.
+		case ts.Active == nil && ts.InstallApproved && best != nil && ts.Integrity == nil && !failedFor(best.Version):
+			out = append(out, fmt.Sprintf("installing %s %s", tool.Title, best.Version))
+		case ts.Active != nil && best != nil && ts.Integrity == nil && !failedFor(best.Version) && m.repairReason(tool, ts) != "":
+			out = append(out, fmt.Sprintf("replacing %s %s with %s", tool.Title, ts.Active.Version, best.Version))
 		}
 	}
 	return out
@@ -907,11 +935,10 @@ func (m *Manager) selfStatus(ts *ToolState, live liveState, now time.Time) ToolS
 		}
 	case ts.Integrity != nil && ts.Integrity.Seen == identity:
 	case ts.skipped(identity):
-	case ts.Dismissed != nil && ts.Dismissed.BytesIdentity == identity &&
-		ts.Dismissed.Session == m.session && now.Sub(ts.Dismissed.At) < dismissalWindow:
 	default:
 		copied := *best
 		view.Offer = &copied
+		view.OfferDismissed = ts.dismissedNow(identity, m.session, now)
 	}
 	return view
 }

@@ -154,13 +154,19 @@
     if (asking || installing.length || !waiting.length || (!asked && declined()) || document.querySelector("dialog[open]")) return;
     asking = true;
     interaction = new Promise((resolve) => { settleInteraction = resolve; });
+    // Every official build tool has its row (NEW_508C), from the one
+    // catalogue the server reads — a tool that cannot be installed here stays
+    // listed with the reason, instead of silently missing.
+    const rows = (status?.tools || []).filter((tool) => !isSelf(tool));
     const yes = await window.AUCOM.confirmModal({
       title: t("Install the Auto-Pigeon build tools"),
       body: t("Building a map needs these compilers. They are downloaded from Auto-Pigeon's releases on GitHub and checked before use."),
-      content: [el("ul", { children: waiting.map((tool) => el("li", { children: [
+      content: [el("ul", { className: "tools-list", children: rows.map((tool) => el("li", { className: "tools-row tools-row--" + tool.phase, children: [
         el("a", { text: tool.title, attrs: { href: tool.releases_url, target: "_blank", rel: "noopener noreferrer" } }),
+        document.createTextNode(" — " + installLine(tool)),
       ] })) }),
-      ...(status.root ? [el("p", { className: "muted", children: [document.createTextNode(t("Installed in:") + " "), el("code", { text: status.root })] })] : [])],
+      ...(status.root ? [el("p", { className: "muted", children: [document.createTextNode(t("Installed in:") + " "), el("code", { text: status.root })] })] : []),
+      ...(status.root_error ? [el("p", { className: "message error", text: status.root_error })] : [])],
       confirm: t("Install"), cancel: t("Cancel"),
     });
     asking = false;
@@ -171,6 +177,16 @@
       endInteraction("failed");
     }
   }
+  // One build tool's line in the Install window.
+  function installLine(tool) {
+    if (tool.awaiting_install) return t("will be installed");
+    if (tool.phase === "ready") return t("installed: {version}", { version: tool.version });
+    if (tool.phase === "unsupported" || tool.phase === "failed" || tool.phase === "disabled") {
+      return t("not available: {why}", { why: tool.detail || t(PHASE_WORDS[tool.phase] || tool.phase) });
+    }
+    return phaseLine(tool);
+  }
+
   // Build & Run offers the install again beside the build profile it blocks,
   // so a Cancel at first start is not a dead end (build.js renderPipeline).
   window.AUCOM.buildToolsWaiting = () => (status?.tools || []).some((tool) => tool.awaiting_install) && !installing.length;
@@ -322,11 +338,18 @@
       document.querySelector("dialog[open]") || window.AUCOM.pickingFile);
   }
 
+  // What the Activity entry announces: offers nobody cancelled in this run.
+  // A cancelled one stays available — Settings, the sidebar's Update, the
+  // CLI — and is announced again at the next start (NEW_508C).
   function offered() {
-    return (status?.tools || []).filter((x) => x.offer && x.active);
+    return (status?.tools || []).filter((x) => x.offer && x.active && !x.offer_dismissed);
   }
 
   function maybeOffer() {
+    if (op) {
+      renderProgress();
+      return;
+    }
     const modal = $("tools-update-modal");
     const tools = status?.tools || [];
     if (offerShown) {
@@ -390,8 +413,10 @@
     }
     $("tools-update-skip").checked = false;
     $("tools-update-skip-label").textContent = one
-      ? t("Don't ask again for this version ({version})", { version: one.offer.version })
-      : t("Don't ask again for these versions");
+      ? t("Don't notify me about this version ({version})", { version: one.offer.version })
+      : t("Don't notify me about these versions");
+    $("tools-update-offer").hidden = false;
+    $("tools-update-progress").hidden = true;
     const details = $("tools-update-details");
     details.replaceChildren();
     for (const tool of list) {
@@ -445,6 +470,15 @@
         if (decision === "on_exit") record(t("{tool} {version} will be installed when the Companion closes", { tool: title, version: item.identity.version }), "", "ok");
         last = body;
       }
+      if (decision === "now") {
+        // The dialog stays: it follows what it started to the end (NEW_508C).
+        const targets = {};
+        for (const item of shown.items) targets[item.tool] = item.identity.version;
+        offerShown = null;
+        startOperation({ targets, opener: shown.opener });
+        apply(last);
+        return;
+      }
       closeOffer();
       apply(last);
     });
@@ -458,8 +492,13 @@
     if (list.length && $("tools-update-modal").hidden) openOffer(list);
   });
   // The X and Escape are Cancel WITHOUT "don't ask again", whatever the box
-  // says: only Cancel confirms the box.
+  // says: only Cancel confirms the box. While an Update runs they only hide
+  // the dialog: nothing is cancelled by closing a window.
   const dismiss = () => {
+    if (op) {
+      hideProgress();
+      return;
+    }
     $("tools-update-skip").checked = false;
     decide("cancel", $("tools-update-close"));
   };
@@ -468,6 +507,222 @@
   $("tools-update-modal").addEventListener("keydown", (event) => {
     if (event.key === "Escape") dismiss();
     trapFocus(event, $("tools-update-dialog"), "button, input, a[href], summary");
+  });
+
+  // --- the Update operation (NEW_508C) ------------------------------------------
+  //
+  // One operation, from the sidebar's Update or an offer's "Update now": the
+  // dialog stays open (or can be hidden, and reopened from the sidebar) and
+  // says, per tool, what the server is doing — checking, downloading with the
+  // real byte count, verifying, waiting for work, switching, the Companion's
+  // own restart — and how it ended. Nothing here invents a percentage: the bar
+  // is determinate only while bytes with a known total are moving. The
+  // operation is kept in sessionStorage, so the page that reloads across the
+  // Companion's restart opens it again and confirms the version that runs.
+
+  const OP_KEY = "aucom:update-op";
+  const OP_MAX_MS = 30 * 60 * 1000;
+  let op = null; // { started, targets: { tool: version }, steps, checking, error, restarting, opener }
+  let opTicker = 0;
+  let opHidden = false;
+
+  function saveOp() {
+    if (!op) return;
+    const { opener, ...kept } = op;
+    try { window.sessionStorage.setItem(OP_KEY, JSON.stringify(kept)); } catch { /* storage refused: this page only */ }
+  }
+
+  function loadOp() {
+    try {
+      const raw = window.sessionStorage.getItem(OP_KEY);
+      if (!raw) return null;
+      const kept = JSON.parse(raw);
+      if (kept && Date.now() - kept.started < OP_MAX_MS) return kept;
+      window.sessionStorage.removeItem(OP_KEY);
+    } catch { /* storage refused or unreadable */ }
+    return null;
+  }
+
+  function endOperation() {
+    op = null;
+    opHidden = false;
+    window.clearInterval(opTicker);
+    try { window.sessionStorage.removeItem(OP_KEY); } catch { /* storage refused */ }
+  }
+
+  window.AUCOM.updateOperationActive = () => Boolean(op);
+  // lifecycle.js: the Companion is stopping to put its update in place. The
+  // dialog stays and says so; the page reloads when the new one answers.
+  window.AUCOM.updateRestarting = () => {
+    if (!op) return false;
+    op.restarting = true;
+    saveOp();
+    if (!opHidden) showProgress();
+    renderProgress();
+    return true;
+  };
+
+  function startOperation({ targets = {}, steps = null, checking = false, opener = document.activeElement } = {}) {
+    op = { started: Date.now(), targets, steps, checking, opener };
+    opHidden = false;
+    saveOp();
+    showProgress();
+  }
+
+  function showProgress() {
+    const modal = $("tools-update-modal");
+    $("tools-update-offer").hidden = true;
+    $("tools-update-progress").hidden = false;
+    $("tools-update-heading").textContent = t("Updating");
+    $("tools-update-intro").textContent = t("The Companion checks Auto-Pigeon's official releases and installs the newest verified versions.");
+    setMessage("tools-update-message", "");
+    if (modal.hidden) {
+      modal.hidden = false;
+      $("tools-update-hide").focus();
+    }
+    opHidden = false;
+    window.clearInterval(opTicker);
+    opTicker = window.setInterval(renderProgress, 1000);
+    renderProgress();
+  }
+
+  function hideProgress() {
+    opHidden = true;
+    $("tools-update-modal").hidden = true;
+    const opener = op?.opener;
+    if (opener?.isConnected) opener.focus(); else $("sidebar-update")?.focus();
+  }
+
+  const TERMINAL = new Set(["current", "installed", "failed", "unavailable", "not_automatic", "manual_ready"]);
+
+  // rowState is one target's state now: { key, text, done, total }.
+  function rowState(id) {
+    const tool = (status?.tools || []).find((x) => x.id === id);
+    const step = (op.steps || []).find((x) => x.tool === id);
+    const target = op.targets[id];
+    if (step && ["current", "unavailable", "failed", "not_automatic"].includes(step.action)) {
+      const words = {
+        current: t("Up to date: {version}", { version: step.to || tool?.version || "" }),
+        unavailable: t("Not available: {why}", { why: step.detail || "" }),
+        failed: t("Failed: {why}", { why: step.detail || "" }),
+        not_automatic: t("{version} is available; this copy is not updated automatically: {why}", { version: step.to, why: step.detail || "" }),
+      };
+      return { key: step.action, text: words[step.action] };
+    }
+    if (!tool) return { key: "checking", text: t("Checking…") };
+    if (isSelf(tool)) {
+      const last = tool.self?.last;
+      if (tool.version === target && tool.phase === "ready") return { key: "installed", text: t("Installed: {version}", { version: target }) };
+      if (last && last.to === target && ["rolled_back", "failed", "recovery_needed"].includes(last.outcome)) {
+        return { key: "failed", text: t("Not installed; {from} is running: {why}", { from: last.from, why: last.detail || last.outcome }) };
+      }
+      if (op.restarting || tool.pending?.restarting) return { key: "restarting", text: t("Restarting the Companion to put {version} in place…", { version: target }) };
+      if (tool.pending?.manual) return { key: "manual_ready", text: t("Downloaded and checked; put it in place yourself:") + " " + tool.pending.manual };
+      if (tool.failure && tool.failure.version === target) return { key: "failed", text: t("Failed: {why}", { why: tool.failure.error }) };
+    } else {
+      if (tool.active && tool.active.version === target && !tool.pending && !tool.repair) {
+        return { key: "installed", text: t("Installed: {version}", { version: target }) };
+      }
+      if (tool.failure && tool.failure.version === target) return { key: "failed", text: t("Failed: {why}", { why: tool.failure.error }) };
+      if (tool.phase === "unsupported") return { key: "unavailable", text: t("Not available: {why}", { why: tool.detail || "" }) };
+    }
+    if (tool.phase === "downloading") {
+      return { key: "downloading", text: tool.total > 0
+        ? t("Downloading {version} — {done} of {total}", { version: tool.version, done: bytes(tool.done || 0), total: bytes(tool.total) })
+        : t("Downloading {version}…", { version: tool.version }), done: tool.done || 0, total: tool.total || 0 };
+    }
+    if (tool.phase === "verifying") return { key: "verifying", text: t("Verifying {version}…", { version: tool.version }) };
+    if (tool.phase === "checking") return { key: "checking", text: t("Checking…") };
+    if (tool.pending?.waiting?.length) {
+      return { key: "waiting", text: t("Downloaded and verified; waiting for: {work}", { work: tool.pending.waiting.join("; ") }) };
+    }
+    if (tool.pending?.staged) return { key: "switching", text: t("Switching to {version}…", { version: target }) };
+    if (tool.repair) return { key: "switching", text: t("Replacing the installation in use: {why}", { why: tool.repair }) };
+    return { key: "starting", text: t("Starting…") };
+  }
+
+  function renderProgress() {
+    if (!op || $("tools-update-progress").hidden) return;
+    const list = $("tools-update-steps");
+    const ids = Object.keys(op.targets);
+    for (const step of op.steps || []) if (!ids.includes(step.tool)) ids.push(step.tool);
+    const rows = op.checking ? [] : ids.map((id) => {
+      const tool = (status?.tools || []).find((x) => x.id === id);
+      const step = (op.steps || []).find((x) => x.tool === id);
+      return { id, title: tool?.title || step?.title || id, ...rowState(id) };
+    });
+    list.replaceChildren(...rows.map((row) => el("li", { className: "tools-row tools-row--" + row.key, attrs: { "data-tool": row.id, "data-state": row.key }, children: [
+      el("strong", { text: row.title }), el("span", { text: row.text }),
+      ...(row.key === "downloading" ? [row.total > 0
+        ? el("progress", { attrs: { max: String(row.total), value: String(row.done), "aria-label": row.title } })
+        : el("progress", { attrs: { "aria-label": row.title } })] : []),
+    ] })));
+    const running = op.checking || rows.some((row) => !TERMINAL.has(row.key));
+    const failed = Boolean(op.error) || rows.some((row) => row.key === "failed");
+    const seconds = Math.max(0, Math.round((Date.now() - op.started) / 1000));
+    const bar = $("tools-update-bar");
+    const stage = $("tools-update-stage");
+    if (running) {
+      bar.removeAttribute("value");
+      const current = rows.find((row) => !TERMINAL.has(row.key));
+      stage.textContent = op.checking ? t("Checking Auto-Pigeon's releases…") : current ? current.title + ": " + current.text : t("Working…");
+      $("tools-update-elapsed").textContent = current?.key === "waiting"
+        ? t("Waiting {seconds} s for the work it names to finish; nothing is stopped for it.", { seconds })
+        : t("{seconds} s so far.", { seconds });
+    } else {
+      bar.max = 1;
+      bar.value = 1;
+      stage.textContent = failed ? t("Update finished with problems") : t("Everything is up to date");
+      $("tools-update-elapsed").textContent = t("Took {seconds} s.", { seconds });
+      window.clearInterval(opTicker);
+    }
+    const result = $("tools-update-result");
+    result.hidden = running && !op.error;
+    result.className = "message" + (failed ? " error" : " ok");
+    result.textContent = op.error || (running ? "" : failed
+      ? t("What failed is listed above; the version in use was kept.")
+      : t("The newest verified versions are installed."));
+    $("tools-update-retry").hidden = running || !failed;
+    $("tools-update-hide").hidden = !running;
+    $("tools-update-done").hidden = running;
+    if (!running && opHidden && !op.told) {
+      op.told = true;
+      record(failed ? t("An update finished with problems") : t("Everything is up to date"), "", failed ? "error" : "ok");
+    }
+  }
+
+  // The sidebar's Update: check everything now, install what is newer.
+  async function updateEverything() {
+    if (op && !op.error && (op.checking || [...document.querySelectorAll("#tools-update-steps [data-state]")].some((row) => !TERMINAL.has(row.dataset.state)))) {
+      showProgress(); // one operation at a time: a second press shows it
+      return;
+    }
+    if (offerShown) closeOffer();
+    startOperation({ checking: true, opener: document.activeElement });
+    const { ok, body } = await api("/api/v1/tools/update", { method: "POST", body: {} });
+    if (!op) return;
+    op.checking = false;
+    if (!ok) {
+      op.error = body.error || t("The update could not be started.");
+      saveOp();
+      renderProgress();
+      return;
+    }
+    op.steps = body.steps || [];
+    for (const step of op.steps) op.targets[step.tool] = step.to || step.from || "";
+    saveOp();
+    apply(body.status);
+    schedule(FAST_MS);
+  }
+
+  $("sidebar-update")?.addEventListener("click", () => updateEverything());
+  $("tools-update-hide").addEventListener("click", hideProgress);
+  $("tools-update-retry").addEventListener("click", () => { endOperation(); updateEverything(); });
+  $("tools-update-done").addEventListener("click", () => {
+    const opener = op?.opener;
+    endOperation();
+    $("tools-update-modal").hidden = true;
+    if (opener?.isConnected) opener.focus(); else $("sidebar-update")?.focus();
   });
 
   // --- Settings ---------------------------------------------------------------
@@ -530,7 +785,7 @@
       return;
     }
     $("tools-settings-state").textContent = t("For {target}, {channel} channel, in {root}.", {
-      target: status.target, channel: status.channel, root: status.root });
+      target: status.target, channel: status.channel, root: status.root }) + (status.root_error ? " " + status.root_error : "");
     $("tools-check").hidden = !status.enabled;
     let skipped = 0;
     for (const tool of status.tools || []) {
@@ -541,6 +796,7 @@
       ] });
       if (isSelf(tool)) selfLines(tool).forEach((line) => item.append(line));
       if (tool.detail) item.append(el("p", { className: "muted", text: tool.detail }));
+      if (tool.repair) item.append(el("p", { className: "message", text: t("Being replaced by the newest verified release: {why}", { why: tool.repair }) }));
       if (tool.offer) item.append(el("p", { text: t("Version {version} is available.", { version: tool.offer.version }) }));
       // A chosen update that failed: said here, quietly, with what to do. The
       // version in use is untouched (it is the line above).
@@ -634,6 +890,7 @@
   // --- polling ----------------------------------------------------------------
 
   function needsFast() {
+    if (op && $("tools-update-done").hidden) return true; // an Update is running
     return (status?.tools || []).some((tool) => ["checking", "downloading", "verifying"].includes(tool.phase) ||
       (tool.pending && (!tool.pending.staged || tool.pending.waiting?.length))) || status?.setting_up ||
       (status?.checks || []).length > 0;
@@ -683,10 +940,24 @@
 
   async function poll() {
     const { ok, body } = await api("/api/v1/tools");
-    if (ok) apply(body);
+    if (ok) {
+      // A page that reloaded across the Companion's restart takes up the
+      // operation it was following and confirms how it ended.
+      if (!op && !resumed) {
+        resumed = true;
+        const kept = loadOp();
+        if (kept) {
+          op = { ...kept, restarting: false };
+          status = body;
+          showProgress();
+        }
+      }
+      apply(body);
+    }
     settleFirstLook();
     schedule(needsFast() ? FAST_MS : SLOW_MS);
   }
+  let resumed = false;
 
   window.addEventListener("focus", () => poll());
   window.AUCOM.toolsStatus = () => status;

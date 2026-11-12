@@ -238,6 +238,7 @@ func (s *Server) toolsAPI() map[string]http.HandlerFunc {
 		"GET /api/v1/tools":                        s.handleToolsStatus,
 		"POST /api/v1/tools/check":                 s.handleToolsCheck,
 		"POST /api/v1/tools/install":               s.handleToolsInstall,
+		"POST /api/v1/tools/update":                s.handleToolsUpdate,
 		"POST /api/v1/tools/{tool}/retry":          s.handleToolsRetry,
 		"POST /api/v1/tools/{tool}/decide":         s.handleToolsDecide,
 		"POST /api/v1/tools/{tool}/cancel-pending": s.handleToolsCancelPending,
@@ -324,6 +325,24 @@ func (s *Server) handleToolsCheck(w http.ResponseWriter, r *http.Request) {
 	outcomes := s.tools.CheckNow(ctx)
 	body := s.toolsStatus()
 	writeJSON(w, http.StatusOK, map[string]any{"outcomes": outcomes, "status": body})
+}
+
+// handleToolsUpdate is the sidebar's Update (NEW_508C): check everything now
+// and bring each official target to its newest verified release, through the
+// one coordinator. It answers at once with what it started; the page follows
+// the installs, the switch and the Companion's own restart in the status.
+func (s *Server) handleToolsUpdate(w http.ResponseWriter, r *http.Request) {
+	if !s.requireTools(w) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
+	defer cancel()
+	steps, err := s.tools.UpdateAll(ctx)
+	if err != nil {
+		writeError(w, http.StatusConflict, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"steps": steps, "status": s.toolsStatus()})
 }
 
 // handleToolsInstall is a person's Install: the toolchains they approved.

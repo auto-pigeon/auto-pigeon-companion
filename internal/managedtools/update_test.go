@@ -53,16 +53,18 @@ func TestCancelAndDontAskAgainSuppressOnlyThisVersionOfThisTool(t *testing.T) {
 	if err := m.Decide(managedtools.EricW, managedtools.DecideCancel, offer.Identity(), false); err != nil {
 		t.Fatal(err)
 	}
-	if tool(m.Status(), managedtools.EricW).Offer != nil {
-		t.Fatal("a cancelled offer is shown again in the same run")
+	// NEW_508C: Cancel is not suppression. The offer stays AVAILABLE (Settings,
+	// Update, the CLI) and is only not announced again in this run.
+	if view := tool(m.Status(), managedtools.EricW); view.Offer == nil || !view.OfferDismissed {
+		t.Fatalf("a cancelled offer is announced again, or gone, in the same run: %+v", view)
 	}
 	r.clock.Advance(2 * time.Hour)
 	m.Step(context.Background())
-	if tool(m.Status(), managedtools.EricW).Offer != nil {
-		t.Fatal("a cancelled offer came back at the next hourly check of the same run")
+	if view := tool(m.Status(), managedtools.EricW); view.Offer == nil || !view.OfferDismissed {
+		t.Fatal("a cancelled offer was announced again at the next hourly check of the same run")
 	}
 	next := r.manager() // the next launch
-	if view := tool(next.Status(), managedtools.EricW); view.Offer == nil || view.Offer.Version != "1.4570" {
+	if view := tool(next.Status(), managedtools.EricW); view.Offer == nil || view.Offer.Version != "1.4570" || view.OfferDismissed {
 		t.Fatal("a cancelled offer without \"don't ask again\" did not come back at the next launch")
 	}
 
@@ -252,7 +254,7 @@ func TestCancellingAPendingUpdateKeepsTheActiveVersionAndDoesNotReofferAtOnce(t 
 	r.host.setBusy()
 	m.Step(context.Background())
 	view := tool(m.Status(), managedtools.EricW)
-	if view.Active.Version != "1.4566" || view.Pending != nil || view.Offer != nil {
+	if view.Active.Version != "1.4566" || view.Pending != nil || (view.Offer != nil && !view.OfferDismissed) {
 		t.Fatalf("after cancelling: %+v", view)
 	}
 }

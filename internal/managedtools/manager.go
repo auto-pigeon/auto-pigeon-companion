@@ -61,7 +61,12 @@ type Options struct {
 	// Disabled turns automatic setup and checks off (Settings). The status,
 	// and anything already installed, stay.
 	Disabled bool
-	Logf     func(format string, args ...any)
+	// ImplicitRoot is a ToolsRoot nobody chose: the folder beside a portable
+	// bundle (NEW_508C). An active installation outside it is installed again
+	// inside it (repairReason); a root a person or a configuration named is
+	// never second-guessed.
+	ImplicitRoot bool
+	Logf         func(format string, args ...any)
 	// Now, Interval, Jitter, Tick, Rand: the clock and the schedule, for
 	// tests. Zero is production.
 	Now      func() time.Time
@@ -111,6 +116,9 @@ type Manager struct {
 	opts      Options
 	installer installer
 	session   string
+	// rootError is why the tools folder cannot be written, found once at
+	// start: shown with its path and a remedy instead of a failed download.
+	rootError string
 
 	checkMu sync.Mutex // one release check at a time
 	workMu  sync.Mutex // one install or activation at a time
@@ -191,8 +199,9 @@ func New(opts Options) (*Manager, error) {
 	session := make([]byte, 8)
 	_, _ = rand.Read(session)
 	return &Manager{
-		opts:    opts,
-		session: hex.EncodeToString(session),
+		opts:      opts,
+		session:   hex.EncodeToString(session),
+		rootError: rootProblem(opts.ToolsRoot),
 		installer: installer{root: opts.ToolsRoot, source: opts.Source, limits: opts.Limits,
 			channel: opts.Channel, freeSpace: opts.FreeSpace},
 		live:  map[ToolID]*liveState{},
@@ -559,6 +568,34 @@ func (m *Manager) advance(ctx context.Context, tool Tool) error {
 		return nil
 	}
 
+	// An installation in use that cannot stay in use — refused by its
+	// profile, older than this Companion's baseline, or outside the implicit
+	// tools folder — is replaced by the newest verified release without being
+	// asked: it was installed because a person asked for this toolchain, and
+	// leaving it bound would block every build that uses it (NEW_508C). The
+	// switch waits for work like any other.
+	if reason := m.repairReason(tool, ts); reason != "" && best != nil && ts.Integrity == nil {
+		if ts.Failure != nil && ts.Failure.Version == best.Version && now.Before(ts.Failure.NextAttempt) {
+			return nil
+		}
+		staged, isStaged := ts.installedIn(best.Identity(), m.installer.toolDir(tool))
+		if isStaged && filepath.Clean(staged.Dir) == filepath.Clean(ts.Active.Dir) {
+			// The newest verified release IS what is in use: there is nothing
+			// to replace it with, and re-binding it on every step would only
+			// churn the bindings. The page says why it cannot be built with.
+			return nil
+		}
+		if !isStaged {
+			m.opts.Logf("managed tools: replacing %s %s with %s: %s", tool.ID, ts.Active.Version, best.Version, reason)
+			record, err := m.installVerified(ctx, tool, *best)
+			if err != nil {
+				return m.recordFailure(tool, best.Version, err)
+			}
+			staged = record.Ref()
+		}
+		return m.activateWhenIdle(tool, staged, ts.Active)
+	}
+
 	if ts.Intent == IntentNone || ts.IntentFor == nil {
 		m.releaseGate(tool.ID)
 		m.setLive(tool.ID, func(l *liveState) { l.Waiting = nil })
@@ -700,6 +737,10 @@ func (m *Manager) activateWhenIdle(tool Tool, staged InstallRef, active *Install
 // candidate whose programs fail the check is removed again: nothing
 // unverified is left looking like an installation.
 func (m *Manager) installVerified(ctx context.Context, tool Tool, candidate Candidate) (InstallRecord, error) {
+	if m.rootError != "" && tool.Kind != KindApplication {
+		// Said with its path and its remedy, not as a failed mkdir.
+		return InstallRecord{}, errors.New(m.rootError)
+	}
 	m.setLive(tool.ID, func(l *liveState) {
 		l.Phase, l.Version, l.Done, l.Total = "downloading", candidate.Version, 0, candidate.Size
 	})

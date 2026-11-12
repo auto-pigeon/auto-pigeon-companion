@@ -331,6 +331,13 @@ func (c Checker) compatibilityProblems(document profile.Profile, action profile.
 	if finding == nil {
 		return nil
 	}
+	if local.Acquisition == profile.AcquireManagedOfficial && finding.Kind != compat.Unverified {
+		// The Companion's own installation: the remedy is its own verified
+		// update, never "choose another folder" (NEW_508C; #36 for the same
+		// trap on folders). The Companion also replaces such an installation
+		// by itself once it has checked the releases.
+		finding.Fix = ManagedUpdateFix
+	}
 	return Problems{{Fault: Fault(finding.Kind), Summary: finding.Summary, Fix: finding.Fix}}
 }
 
@@ -568,3 +575,8 @@ func short(digest string) string {
 	}
 	return digest
 }
+
+// ManagedUpdateFix is the remedy for a program of the Companion's own managed
+// installation that cannot be built with.
+const ManagedUpdateFix = "This is the installation the Companion manages: press Update at the bottom left of the Companion " +
+	"(or run `companion tools update`) to install the newest verified release. Programs you chose yourself are not replaced."

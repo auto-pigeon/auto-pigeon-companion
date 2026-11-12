@@ -46,13 +46,17 @@
   function awaitUpdate() {
     if (stopped) return;
     stopped = true;
+    // An Update the person is following keeps its own dialog (NEW_508C): it
+    // says the Companion is restarting, and the page that reloads when the
+    // new one answers opens it again with the version that runs.
+    const following = Boolean(window.AUCOM.updateRestarting?.());
     for (const modal of document.querySelectorAll(".auth-modal")) {
-      if (modal.id !== "stopped-modal") modal.hidden = true;
+      if (modal.id !== "stopped-modal" && !(following && modal.id === "tools-update-modal")) modal.hidden = true;
     }
     $("stopped-heading").textContent = t("Auto-Pigeon Companion is updating");
     $("stopped-text").textContent = t("It is restarting to install its update. This page reloads when it is back.");
     $("stopped-hint").hidden = true;
-    $("stopped-modal").hidden = false;
+    $("stopped-modal").hidden = following;
     document.title = t("Updating — Auto-Pigeon Companion");
     try { window.sessionStorage.setItem("aucom:self-update", String(Date.now())); } catch { /* storage refused */ }
     const started = Date.now();
@@ -70,6 +74,8 @@
         gone = true;
       }
       if (Date.now() - started > UPDATE_WAIT_MS) {
+        $("tools-update-modal").hidden = true;
+        $("stopped-modal").hidden = false;
         $("stopped-heading").textContent = t("Auto-Pigeon Companion has stopped");
         $("stopped-text").textContent = t("It did not come back after its update. Start it again: if the new version did not start, the previous one was put back.");
         $("stopped-hint").hidden = false;

@@ -203,21 +203,40 @@
             <p id="tools-update-intro"></p>
             <button type="button" id="tools-update-close" class="auth-dialog__close" aria-label="Close">×</button>
           </div>
-          <ul id="tools-update-list" class="rows tools-list" hidden></ul>
-          <p id="tools-update-note" class="muted" hidden></p>
-          <p id="tools-update-notes-row"><a id="tools-update-notes" href="#" target="_blank" rel="noopener noreferrer">Release notes</a></p>
-          <details>
-            <summary>Details</summary>
-            <dl id="tools-update-details" class="paths"></dl>
-          </details>
-          <div class="row tools-update-actions">
-            <button type="button" id="tools-update-now" class="secondary">Update now</button>
-            <button type="button" id="tools-update-later" class="secondary">Update when I close Companion</button>
-            <button type="button" id="tools-update-cancel" class="secondary">Cancel</button>
-            <label class="check tools-update-skip" for="tools-update-skip">
-              <input type="checkbox" id="tools-update-skip" />
-              <span id="tools-update-skip-label">Don't ask again for this version</span>
-            </label>
+          <!-- The offer: three answers. -->
+          <div id="tools-update-offer">
+            <ul id="tools-update-list" class="rows tools-list" hidden></ul>
+            <p id="tools-update-note" class="muted" hidden></p>
+            <p id="tools-update-notes-row"><a id="tools-update-notes" href="#" target="_blank" rel="noopener noreferrer">Release notes</a></p>
+            <details>
+              <summary>Details</summary>
+              <dl id="tools-update-details" class="paths"></dl>
+            </details>
+            <div class="row tools-update-actions">
+              <button type="button" id="tools-update-now" class="secondary">Update now</button>
+              <button type="button" id="tools-update-later" class="secondary">Update when I close Companion</button>
+              <button type="button" id="tools-update-cancel" class="secondary">Cancel</button>
+              <label class="check tools-update-skip" for="tools-update-skip">
+                <input type="checkbox" id="tools-update-skip" />
+                <span id="tools-update-skip-label">Don't notify me about this version</span>
+              </label>
+            </div>
+          </div>
+          <!-- NEW_508C: once Update is pressed the same dialog stays open and
+               follows the operation to its end — check, download, verify,
+               wait for work, switch, the Companion's restart — with a
+               determinate bar only when real byte totals exist. -->
+          <div id="tools-update-progress" class="tools-update-progress" hidden>
+            <p id="tools-update-stage" class="tools-update-stage" role="status" aria-live="polite"></p>
+            <progress id="tools-update-bar" class="tools-update-bar" aria-labelledby="tools-update-stage"></progress>
+            <p id="tools-update-elapsed" class="muted"></p>
+            <ul id="tools-update-steps" class="rows tools-list"></ul>
+            <p id="tools-update-result" class="message" role="alert" hidden></p>
+            <div class="row tools-update-actions">
+              <button type="button" id="tools-update-retry" class="secondary" hidden>Try again</button>
+              <button type="button" id="tools-update-hide" class="secondary">Hide — it goes on</button>
+              <button type="button" id="tools-update-done" class="secondary" hidden>Close</button>
+            </div>
           </div>
           <p id="tools-update-message" class="message" role="alert"></p>
         </section>
@@ -292,6 +311,12 @@
           <li><button type="button" class="area-tab" data-area="profiles">Profiles</button></li>
           <li><button type="button" class="area-tab" data-area="jobs">Jobs</button></li>
         </ul>
+        <!-- NEW_508C: one predictable way to update. The click checks now and
+             installs the current official versions, in the dialog above. -->
+        <div class="areas-foot">
+          <button type="button" id="sidebar-update" class="secondary areas-update" aria-describedby="sidebar-update-why">Update</button>
+          <span id="sidebar-update-why" class="visually-hidden">Checks now and installs the current official versions of Auto-Pigeon Companion, EricW tools and q3map2.</span>
+        </div>
       </nav>
 
       <main id="main">

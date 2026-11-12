@@ -26,7 +26,10 @@ type Status struct {
 	Root    string  `json:"root"`
 	// SettingUp is true while any tool has never been installed and is being
 	// (or failed to be): the main flow's "Setting up build tools" card.
-	SettingUp bool         `json:"setting_up"`
+	SettingUp bool `json:"setting_up"`
+	// RootError is why Root cannot be written, with what to do about it;
+	// empty when it can (NEW_508C: said before an install, not after one).
+	RootError string       `json:"root_error,omitempty"`
 	Tools     []ToolStatus `json:"tools"`
 	Notices   []Notice     `json:"notices,omitempty"`
 }
@@ -48,8 +51,15 @@ type ToolStatus struct {
 	Detail   string         `json:"detail,omitempty"`
 	Active   *InstallRecord `json:"active,omitempty"`
 	Previous *InstallRef    `json:"previous,omitempty"`
-	// Offer is a newer eligible release nobody has answered for.
-	Offer *Candidate `json:"offer,omitempty"`
+	// Offer is a newer eligible release nobody has installed or refused for
+	// good. OfferDismissed: a person pressed Cancel on it in this run of the
+	// Companion — it stays available (Settings, Update, the CLI) and is not
+	// announced again until the next start (NEW_508C).
+	Offer          *Candidate `json:"offer,omitempty"`
+	OfferDismissed bool       `json:"offer_dismissed,omitempty"`
+	// Repair is why the installation in use is being replaced by the newest
+	// verified release, when it is (Manager.repairReason).
+	Repair string `json:"repair,omitempty"`
 	// Pending is a chosen update not yet active.
 	Pending *Pending        `json:"pending,omitempty"`
 	Check   CheckView       `json:"check"`
@@ -91,7 +101,8 @@ type CheckView struct {
 
 // Status reads the durable state and this process's progress.
 func (m *Manager) Status() Status {
-	out := Status{Enabled: !m.opts.Disabled, Channel: m.opts.Channel, Target: m.Target(), Root: m.opts.ToolsRoot}
+	out := Status{Enabled: !m.opts.Disabled, Channel: m.opts.Channel, Target: m.Target(), Root: m.opts.ToolsRoot,
+		RootError: m.rootError}
 	state, err := LoadState(m.opts.StatePath)
 	if err != nil {
 		state = newState()
@@ -154,6 +165,9 @@ func (m *Manager) Status() Status {
 		if view.Active == nil && view.Phase != PhaseDisabled && !view.AwaitingInstall {
 			out.SettingUp = true
 		}
+		if view.Active != nil {
+			view.Repair = m.repairReason(tool, ts)
+		}
 		if view.Active != nil && best != nil && m.newer(tool, best.Version, view.Active.Version) {
 			identity := best.Identity()
 			switch {
@@ -165,11 +179,10 @@ func (m *Manager) Status() Status {
 				}
 			case ts.Integrity != nil && ts.Integrity.Seen == identity:
 			case ts.skipped(identity):
-			case ts.Dismissed != nil && ts.Dismissed.BytesIdentity == identity &&
-				ts.Dismissed.Session == m.session && now.Sub(ts.Dismissed.At) < dismissalWindow:
 			default:
 				copied := *best
 				view.Offer = &copied
+				view.OfferDismissed = ts.dismissedNow(identity, m.session, now)
 			}
 		}
 		out.Tools = append(out.Tools, view)
@@ -183,4 +196,12 @@ func (m *Manager) Status() Status {
 func integritySentence(event *IntegrityEvent) string {
 	return "release " + event.Seen.Version + " was published again with different bytes than this Companion " +
 		"already knows for it; it is not installed. Check the release page, and install it by hand if you trust it"
+}
+
+// dismissedNow reports whether a person cancelled this exact offer in this run
+// of the Companion, within the dismissal window: it is then not announced
+// again, and it is still available. A new start is a new run (NEW_508C).
+func (t *ToolState) dismissedNow(identity BytesIdentity, session string, now time.Time) bool {
+	return t.Dismissed != nil && t.Dismissed.BytesIdentity == identity &&
+		t.Dismissed.Session == session && now.Sub(t.Dismissed.At) < dismissalWindow
 }

@@ -68,14 +68,17 @@ func runSelfUpdate(env *Env, args []string) int {
 // binary is no bundle.
 var serveSelf = inspectSelf
 
-// useBundleTools makes the folder beside a portable bundle this process's
+// useBundleTools makes the folder beside a release bundle this process's
 // default tools folder. A folder a person or a configuration named still wins.
+//
+// NEW_508C: any release bundle anchors it — the folder the executable was
+// unpacked into, wherever the browser or the shell was — not only one this
+// Companion may replace by itself. A bundle in a folder it cannot write keeps
+// its tools there too and says so (Status.RootError), rather than quietly
+// installing into the per-user folder; a macOS application keeps them beside
+// the .app, never inside it.
 func useBundleTools(env *Env) {
-	dir := ""
-	if self := inspectSelf(env); self.Mode == managedtools.SelfPortable {
-		dir = filepath.Join(self.Root, managedtools.BuildToolsDirName)
-	}
-	config.SetBundleToolsDir(dir)
+	config.SetBundleToolsDir(managedtools.PortableToolsDir(inspectSelf(env)))
 }
 
 // inspectSelf is this process's bundle.

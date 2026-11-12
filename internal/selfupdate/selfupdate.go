@@ -238,6 +238,34 @@ func now() time.Time                  { return time.Now().UTC() }
 func errorsIsNotExist(err error) bool { return errors.Is(err, fs.ErrNotExist) }
 func samePath(a, b string) bool       { return filepath.Clean(a) == filepath.Clean(b) }
 
+// stagedBesideMembers reports whether a staged copy inside the bundle's folder
+// lies under a top-level folder no member of either bundle (and not the
+// journal's own folder) uses — the portable bundle's `build-tools`, where the
+// Companion stages its own update since build tools went beside the bundle
+// (HITL, 2026-10-31). The swap moves member paths only, so it never touches
+// such a folder. NEW_508C: refusing every staged copy inside the folder made
+// every portable self-update fail with "the staged copy and the bundle
+// overlap" and put the old version back.
+func (r Request) stagedBesideMembers() bool {
+	relative, err := filepath.Rel(r.Root, r.Staged)
+	if err != nil || relative == "." {
+		return false
+	}
+	first := strings.Split(filepath.ToSlash(relative), "/")[0]
+	if first == "" || first == "." || first == ".." || strings.EqualFold(first, DirName) {
+		return false
+	}
+	for _, list := range [][]managedtools.BundleMember{r.Current, r.Members} {
+		for _, member := range list {
+			top := strings.Split(strings.TrimPrefix(filepath.ToSlash(member.Path), "./"), "/")[0]
+			if strings.EqualFold(top, first) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // areas are the transaction's folders, each owned by the journal.
 var areas = []string{"incoming", "previous", "failed"}
 
@@ -406,7 +434,9 @@ func (r Request) validateShape() error {
 		return refuse("the bundle, the staged copy and the tools folder must be absolute paths")
 	case !within(r.StagedRoot, r.Staged) || samePath(r.StagedRoot, r.Staged):
 		return refuse("the staged copy %s is not in the Companion's tools folder", r.Staged)
-	case within(r.Root, r.Staged) || within(r.Staged, r.Root):
+	case within(r.Staged, r.Root):
+		return refuse("the staged copy and the bundle overlap")
+	case within(r.Root, r.Staged) && !r.stagedBesideMembers():
 		return refuse("the staged copy and the bundle overlap")
 	case len(r.Members) == 0 || r.Companion == "":
 		return refuse("the staged bundle lists no files")

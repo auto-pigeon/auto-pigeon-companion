@@ -95,6 +95,10 @@ type firstRun struct {
 	serving  *exec.Cmd
 	address  string
 	token    string
+	// dir is the working directory serve starts the program in, when it is
+	// not the test's own: where the program was started from must not decide
+	// where its tools go (NEW_508C).
+	dir string
 }
 
 func newFirstRun(t *testing.T) *firstRun {
@@ -166,6 +170,7 @@ func (f *firstRun) serve(extra ...string) {
 	}
 	f.serving = exec.Command(program, "serve", "--managed-tools", "on", "--port", strconv.Itoa(port))
 	f.serving.Env = f.environment(extra...)
+	f.serving.Dir = f.dir
 	f.serving.Stdout, f.serving.Stderr = log, log
 	if err := f.serving.Start(); err != nil {
 		t.Fatal(err)

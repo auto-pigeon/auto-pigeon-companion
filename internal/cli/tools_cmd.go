@@ -26,6 +26,7 @@ const toolsUsage = `usage:
   companion tools status [--json]                      what is installed, being set up or offered
   companion tools check [--json]                       check GitHub for new releases now
   companion tools retry [<tool>]                       try a failed setup again now
+  companion tools update [--json]                      check and bring every official tool and the Companion to the newest verified release
   companion tools update <tool> --now|--on-close       install the offered update
   companion tools skip <tool>                          cancel the offer; with --dont-ask-again, for this version
   companion tools cancel-pending <tool>                drop an update chosen but not yet active
@@ -84,6 +85,10 @@ func runTools(env *Env, args []string) int {
 		}
 		method, path, body = http.MethodPost, "/api/v1/tools/"+url.PathEscape(tool)+"/retry", map[string]any{}
 	case "update", "skip":
+		if verb == "update" && len(positionals) == 0 && !*now && !*onClose {
+			// The sidebar's Update, from a terminal: one operation for all.
+			return toolsRequest(env, http.MethodPost, "/api/v1/tools/update", map[string]any{}, *asJSON, printToolsUpdate)
+		}
 		tool, ok := one()
 		if !ok {
 			return 2
@@ -371,20 +376,64 @@ func newManagedTools(env *Env, settings config.Config, configDir string, server 
 	}
 	uses, err := tooluse.Open(root)
 	if err != nil {
-		return nil, err
+		// A folder the Companion cannot write is still its folder: the
+		// coordinator runs and SAYS so, with the path and a remedy, rather
+		// than the whole of build-tool setup going missing (NEW_508C).
+		problem := managedtools.RootProblem(root)
+		if problem == "" {
+			return nil, err
+		}
+		logf("managed tools: %s", problem)
+		uses = nil
 	}
+	// The folder beside the bundle is IMPLICIT unless a person or the
+	// configuration named one: only then is an installation an earlier copy
+	// left elsewhere installed again here (NEW_508C).
+	implicit := strings.TrimSpace(os.Getenv(config.EnvToolsDir)) == "" && settings.ToolsDir == "" && config.IsBundleToolsDir(root)
 	return managedtools.New(managedtools.Options{
-		AskFirst:  true,
-		Uses:      uses,
-		ToolsRoot: root,
-		StatePath: filepath.Join(configDir, managedtools.StateFileName),
-		Source:    source,
-		Channel:   channel,
-		Host:      server.ManagedToolsHost(),
-		Self:      self,
-		SelfHost:  server.SelfUpdateHost(),
-		Probes:    probes,
-		Disabled:  disabled,
-		Logf:      logf,
+		ImplicitRoot: implicit,
+		AskFirst:     true,
+		Uses:         uses,
+		ToolsRoot:    root,
+		StatePath:    filepath.Join(configDir, managedtools.StateFileName),
+		Source:       source,
+		Channel:      channel,
+		Host:         server.ManagedToolsHost(),
+		Self:         self,
+		SelfHost:     server.SelfUpdateHost(),
+		Probes:       probes,
+		Disabled:     disabled,
+		Logf:         logf,
 	})
+}
+
+// printToolsUpdate says what one Update started or found, a line per target.
+func printToolsUpdate(env *Env, answer map[string]any) {
+	steps, _ := answer["steps"].([]any)
+	for _, raw := range steps {
+		step, _ := raw.(map[string]any)
+		text := func(key string) string { value, _ := step[key].(string); return value }
+		line := text("title") + ": "
+		switch text("action") {
+		case "current":
+			line += "up to date (" + text("to") + ")"
+		case "installing":
+			line += "installing " + text("to")
+		case "updating":
+			line += "updating " + text("from") + " → " + text("to")
+		case "repairing":
+			line += "replacing " + text("from") + " with " + text("to")
+		case "manual":
+			line += text("to") + " is downloaded and checked; you put it in place"
+		case "not_automatic":
+			line += text("to") + " is available; this copy is not updated automatically"
+		default:
+			line += text("action")
+		}
+		if detail := text("detail"); detail != "" {
+			line += " — " + detail
+		}
+		fmt.Fprintln(env.Stdout, line)
+	}
+	fmt.Fprintln(env.Stdout, "Follow it with `companion tools status`.")
 }
