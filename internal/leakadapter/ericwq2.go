@@ -70,12 +70,20 @@ const EricwQ2Release1556Version = "2.0.0-alpha11-70-ge923cca3+auto-pigeon.1.4556
 // ticks. Only this exact banner is added.
 const EricwQ2Release1559Version = "2.0.0-alpha11-73-g466c09d1+auto-pigeon.1.4559"
 
+// EricwQ2Release1560Version is the fork's release 1.4560 (`NEW_508C`), the
+// newest a fresh managed install takes since 2026-11-12, measured on every
+// control from the published linux-amd64 archive's qbsp (`testdata/q2/logs-1.4560`,
+// `pts-1.4560`): every exit, file left and point file is 1.4559's, every BSP
+// and portal file byte for byte, and the logs differ only in the banner and
+// timings.
+const EricwQ2Release1560Version = "2.0.0-alpha11-74-gc8a1cfaf+auto-pigeon.1.4560"
+
 // EricwQ2MeasuredVersions are the qbsp builds the reading below was measured on.
 // A release is added here only with its own runs of every control under
 // testdata/q2 (the steps: `aucom.leak-adapters`, "Qualifying the next managed
 // release"); a banner not listed reads `version_unqualified`, and a sealed map
 // is then no verdict.
-var EricwQ2MeasuredVersions = []string{EricwQ2MeasuredVersion, EricwQ2CandidateVersion, EricwQ2ReleaseVersion, EricwQ2PinnedVersion, EricwQ2Release1535Version, EricwQ2Release1556Version, EricwQ2Release1559Version}
+var EricwQ2MeasuredVersions = []string{EricwQ2MeasuredVersion, EricwQ2CandidateVersion, EricwQ2ReleaseVersion, EricwQ2PinnedVersion, EricwQ2Release1535Version, EricwQ2Release1556Version, EricwQ2Release1559Version, EricwQ2Release1560Version}
 
 // EricwQ2ReleaseOf is the Auto-Pigeon release a fork banner names
 // ("…+auto-pigeon.1.4559" → "1.4559"), or the banner itself when it names

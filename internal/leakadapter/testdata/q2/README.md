@@ -88,3 +88,15 @@ same script run with 1.4556 reproduces `logs-1.4556/` line for line apart from t
 checked. `TestTheRelease1559QbspIsReadAsTheMeasuredRelease` reads each row as the 1.4518 row is read.
 `pts-1.4559/i_stale_pts.pts` is the planted file. The runner is
 `LLM/runs/auto-pigeon/NEW_507A_AUCOM_Qualify-Managed-Quake-II-Leak-Verdict/scripts/run_aucom_controls_1.4559.sh`.
+
+## The release 1.4560 (`NEW_508C`)
+
+`logs-1.4560/` and `pts-1.4560/` are the same controls run by release 1.4560
+(`2.0.0-alpha11-74-gc8a1cfaf+auto-pigeon.1.4560`, tag `auto-pigeon-ericw-v1.4560`, the published
+`auto-pigeon-ericw-tools-1.4560-linux-amd64.zip`, SHA-256 `e9caf09f…`, installed and verified by a fresh managed
+install on 2026-11-12; qbsp SHA-256 `8d4c5f48…`) with the same command, game view and job layout, the same day as
+1.4559 run again by the same script. Every exit (19 of 19), every file left — every BSP, `.prt`, `.leak.prt` and
+texinfo file byte for byte — and every point file is 1.4559's; the logs differ only in the banner and timings (19 of
+19 after normalising those). `TestTheRelease1560QbspIsReadAsTheMeasuredRelease` reads each row as the 1.4559 row is
+read. `pts-1.4560/i_stale_pts.pts` is the planted file (1.4559's). The runner is
+`LLM/runs/auto-pigeon/NEW_508C/20261112T184510Z/q2-qualify/scripts/run_aucom_controls_1.4560.sh` (NEW_507A's script).

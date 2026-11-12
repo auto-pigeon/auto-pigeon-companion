@@ -128,6 +128,36 @@ func TestTheRelease1559QbspIsReadAsTheMeasuredRelease(t *testing.T) {
 	}
 }
 
+// `NEW_508C`: release 1.4560 — the newest official EricW on 2026-11-12, banner
+// `2.0.0-alpha11-74-gc8a1cfaf+auto-pigeon.1.4560`, archive sha256 e9caf09f… —
+// run on every control the same day as 1.4559 with the same script, is read
+// row for row as 1.4559 is: exits, files left and point files equal, the BSP
+// and portal files byte for byte. Its bare version, one commit away and a
+// later release nobody ran are not qualified.
+func TestTheRelease1560QbspIsReadAsTheMeasuredRelease(t *testing.T) {
+	checkEricwQ2Controls(t, "logs-1.4560", "pts-1.4560", EricwQ2Release1560Version)
+	q2, _ := ForProfile(ProfileQuake2)
+	if !q2.Qualified(EricwQ2Release1560Version) || q2.Qualified("2.0.0-alpha11-74-gc8a1cfaf") ||
+		q2.Qualified("2.0.0-alpha11-74-g0000000+auto-pigeon.1.4560") || q2.Qualified("2.0.0-alpha11-75-g0000000+auto-pigeon.1.4561") {
+		t.Fatalf("qualified versions: %v", q2.QualifiedVersions)
+	}
+	for _, name := range []string{"b_gap", "b_gap.quiet", "b_gap.verbose", "c_outside_light", "f_clip_cover", "f_detail_cover", "f_window_cover", "g_degenerate_plane", "i_stale_pts"} {
+		if readQ2(t, "pts-1.4560", name+".pts") != readQ2(t, "pts-1.4559", name+".pts") {
+			t.Errorf("%s: release 1.4560's point file is not 1.4559's", name)
+		}
+	}
+	sealed := strings.ReplaceAll(readQ2(t, "logs-1.4560", "a_sealed.log"), EricwQ2Release1560Version,
+		"2.0.0-alpha11-75-g0000000+auto-pigeon.1.4561")
+	zero, bsp := 0, true
+	verdict := ClassifyEricwQ2(Evidence{Log: sealed, ExitCode: &zero, StepState: "succeeded", BSP: &bsp, BSPFormat: "IBSP:38"})
+	if verdict.Outcome != OutcomeIncomplete || !slices.Contains(verdict.Evidence, EvVersionUnqualified) {
+		t.Fatalf("an unmeasured release's sealed run: %+v", verdict)
+	}
+	if EricwQ2ReleaseOf(EricwQ2Release1560Version) != "1.4560" {
+		t.Fatal("EricwQ2ReleaseOf")
+	}
+}
+
 // `Q2_005B`: the candidate 1.4522's own runs of the same controls are read as
 // 1.4518's are, row for row — the evidence for qualifying its exact banner.
 func TestTheCandidateQbspIsReadAsTheMeasuredRelease(t *testing.T) {
