@@ -38,9 +38,7 @@ func TestAReleaseKeepsItsToolsBesideItselfWhereverItWasStartedFromAndWhereverItM
 	if err := os.MkdirAll(filepath.Dir(spaced), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Rename(f.bundle, spaced); err != nil {
-		t.Fatal(err)
-	}
+	renameFolder(t, f.bundle, spaced)
 	f.bundle = spaced
 	f.dir = t.TempDir() // started from somewhere else entirely
 
@@ -80,9 +78,7 @@ func TestAReleaseKeepsItsToolsBesideItselfWhereverItWasStartedFromAndWhereverItM
 	if err := os.MkdirAll(filepath.Dir(moved), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Rename(f.bundle, moved); err != nil {
-		t.Fatal(err)
-	}
+	renameFolder(t, f.bundle, moved)
 	f.bundle = moved
 	movedBeside := filepath.Join(moved, managedtools.BuildToolsDirName)
 	f.serve()
@@ -115,6 +111,29 @@ func TestAReleaseKeepsItsToolsBesideItselfWhereverItWasStartedFromAndWhereverItM
 	}
 	if body.Root != movedBeside || !strings.Contains(body.RootError, movedBeside) {
 		t.Fatalf("a read-only bundle folder: root %q, error %q; want the folder beside it and the reason", body.Root, body.RootError)
+	}
+}
+
+// renameFolder moves a whole release folder the way a person does after quitting the Companion.
+//
+// On Windows a folder whose files were just in use cannot be renamed for a moment after the
+// process that used them has exited: the handles of an exiting process, and Defender scanning the
+// tool binaries the Companion just installed, refuse the move with "Access is denied" (seen on the
+// windows-latest runner, 2026-11-12, while the same run passed on Linux and macOS and the previous
+// Windows run passed). The move is retried for a bounded time; a lock that never goes away still
+// fails here, naming the error.
+func renameFolder(t *testing.T, from, to string) {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for wait := 100 * time.Millisecond; ; wait = min(2*wait, 2*time.Second) {
+		err := os.Rename(from, to)
+		if err == nil {
+			return
+		}
+		if runtime.GOOS != "windows" || time.Now().After(deadline) {
+			t.Fatalf("moving the release folder: %v", err)
+		}
+		time.Sleep(wait)
 	}
 }
 
