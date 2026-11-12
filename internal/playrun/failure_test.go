@@ -2,8 +2,11 @@ package playrun
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/assetref"
 )
 
 // The live 246I1.1 failure, verbatim in shape: a wrapper line, the
@@ -62,5 +65,23 @@ func TestAnOldRecordIsShownTheCurrentRemedy(t *testing.T) {
 	texture := &Record{State: Failed, FailedAt: DownloadingTextures, Remedy: "ask the owner for quake101.wad"}
 	if got := CurrentRemedy(texture); got != texture.Remedy {
 		t.Fatalf("a texture refusal's recorded remedy was replaced: %q", got)
+	}
+}
+
+// A Companion with no converter beside it (seen live, NEW_504) is told so: the
+// map is fine, and saving it again — the old advice — changes nothing.
+func TestAMissingConverterIsNotBlamedOnTheMap(t *testing.T) {
+	recorded := `the input "map": ` + assetref.ErrNoConverter.Error()
+	for _, cause := range []error{fmt.Errorf("the input %q: %w", "map", assetref.ErrNoConverter), errors.New(recorded)} {
+		remedy := remedyFor(Converting, cause)
+		if !strings.Contains(remedy, "no map converter") || strings.Contains(remedy, "save it again") {
+			t.Fatalf("remedy = %q", remedy)
+		}
+	}
+	record := &Record{State: Failed, FailedAt: Converting, Error: recorded,
+		Remedy: "The converter stopped before converting the map. Technical details show what it reported; " +
+			"if it names the map, open it in Auto-Pigeon and save it again."}
+	if got := CurrentRemedy(record); !strings.Contains(got, "release archive") {
+		t.Fatalf("a recorded run is still shown %q", got)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/assetref"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/converter"
 )
 
@@ -67,6 +68,13 @@ func Summary(text string) string {
 func convertRemedy(cause error) string {
 	record, ok := converterTerminal(cause.Error())
 	switch {
+	case errors.Is(cause, assetref.ErrNoConverter) || strings.Contains(cause.Error(), assetref.ErrNoConverter.Error()):
+		// No converter at all (seen live, NEW_504): the map is fine and
+		// saving it again changes nothing. The converter ships beside the
+		// Companion in its release archive (aucom.extractor-acquisition).
+		return "This copy of the Companion has no map converter beside it, so no saved map can be built here; your map " +
+			"is fine. The converter ships in the Companion's release archive: unpack the whole archive again and start " +
+			"the Companion from that folder, then press Try again."
 	case ok && mapReasons[record.Reason]:
 		return "The converter could not use this map. Open it in Auto-Pigeon and save it again, " +
 			"or report the map to its author."

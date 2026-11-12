@@ -119,6 +119,10 @@
       state.className = "leak-request__state message error";
       state.textContent = t("This saved revision is a {game} map. Build & Run builds {list} maps only, so nothing will run.", {
         game: gameName(details.body.game_profile), list: (details.body.supported_profiles || []).map(gameName).join(", ") });
+    } else if (formID === shown && details.body.game_profile === "quake3") {
+      // A Quake III build ends at its BSP whichever the editor asked for
+      // (NEW_504): the button says Build, and so does this.
+      state.textContent = t("Ready in Build & Run. Nothing runs until you press Build; a Quake III build then goes on to Package and run this map.");
     } else if (formID === shown) {
       state.textContent = t("Ready in Build & Run. Nothing runs until you press {action}.", { action });
     } else {
