@@ -40,13 +40,13 @@ func TestGameOpenRecordsABuildRequestAndAsksNobody(t *testing.T) {
 		t.Fatalf("exit code = %d (stderr: %s)", code, stderr.String())
 	}
 	dir := filepath.Dir(env.ConfigPath)
-	request, _, err := buildintent.Read(buildintent.Path(dir), time.Now().UTC())
+	request, _, err := buildintent.Newest(buildintent.Path(dir), time.Now().UTC())
 	if err != nil || request == nil || *request != (aub.BuildRequestLink{RequestID: id, Intent: aub.BuildIntentBuildRun}) {
 		t.Fatalf("the request was not recorded: %+v (%v)", request, err)
 	}
 	// The program the link started names itself, for the acknowledgement of
 	// whichever Companion serves it (NEW_368).
-	if _, by, err := buildintent.Receipt(buildintent.Path(dir), time.Now().UTC()); err != nil || by != env.Version {
+	if _, by, err := buildintent.Receipt(buildintent.Path(dir), id, time.Now().UTC()); err != nil || by != env.Version {
 		t.Errorf("the launcher recorded version %q, want %q (%v)", by, env.Version, err)
 	}
 	for _, other := range []string{leakintent.Path(dir), joinintent.Path(dir)} {
@@ -71,7 +71,7 @@ func TestGameOpenKeepsLeakTestsAndBuildRequestsApart(t *testing.T) {
 	if code := Run(env, []string{"game", "open", "--no-browser", leak}); code != 0 {
 		t.Fatalf("leak link: exit code = %d (stderr: %s)", code, stderr.String())
 	}
-	if request, _, err := leakintent.Read(leakintent.Path(dir), time.Now().UTC()); err != nil || request == nil {
+	if request, _, err := leakintent.Newest(leakintent.Path(dir), time.Now().UTC()); err != nil || request == nil {
 		t.Fatalf("the leak test was not recorded: %+v (%v)", request, err)
 	}
 	if _, err := os.Stat(buildintent.Path(dir)); !os.IsNotExist(err) {

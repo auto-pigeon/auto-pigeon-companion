@@ -45,21 +45,40 @@ func (s *Server) handleLeakTestPending(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	request, received, err := leakintent.Read(leakintent.Path(dir), time.Now().UTC())
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
+	// A page names the request it is asking about (NEW_502: several may be
+	// pending), and the answer is about that one or says it is gone; a page
+	// that names none is answered about the newest. An answer about any other
+	// request would hand the page facts about B to show under A.
+	named := r.URL.Query().Get("request_id")
+	var (
+		request  *aub.LeakTestLink
+		received time.Time
+	)
+	if named != "" {
+		item, err := leakintent.Get(leakintent.Path(dir), named, time.Now().UTC())
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		if item != nil {
+			request, received = &item.Request, item.ReceivedAt
+		}
+	} else {
+		list, err := leakintent.List(leakintent.Path(dir), time.Now().UTC())
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		if len(list) > 0 {
+			request, received = &list[len(list)-1].Request, list[len(list)-1].ReceivedAt
+		}
 	}
 	if request == nil {
-		writeJSON(w, http.StatusOK, map[string]any{"pending": false})
-		return
-	}
-	// A page names the request it is asking about. When another one replaced
-	// it meanwhile, the answer is "replaced" and nothing is resolved: resolving
-	// the newer request here would hand the page facts about B to show under A.
-	if named := r.URL.Query().Get("request_id"); named != "" && named != request.RequestID {
-		writeJSON(w, http.StatusOK, map[string]any{"pending": true, "replaced": true,
-			"request_id": request.RequestID, "asset_id": request.AssetID, "revision": request.Revision, "received_at": received})
+		answer := map[string]any{"pending": false}
+		if named != "" {
+			answer["request_id"] = named
+		}
+		writeJSON(w, http.StatusOK, answer)
 		return
 	}
 
@@ -329,8 +348,12 @@ func (s *Server) matchesPendingLeakRequest(requestID string, source build.Source
 	if err != nil {
 		return false
 	}
-	request, _, err := leakintent.Read(leakintent.Path(dir), time.Now().UTC())
-	return err == nil && request != nil && request.RequestID == requestID &&
+	item, err := leakintent.Get(leakintent.Path(dir), requestID, time.Now().UTC())
+	if err != nil || item == nil {
+		return false
+	}
+	request := item.Request
+	return request.RequestID == requestID &&
 		request.AssetID == source.AssetID && request.Revision == source.Revision &&
 		request.ContentSHA256 == source.ContentSHA256
 }
@@ -362,9 +385,9 @@ func (s *Server) publishLeakResult(buildID, requestID string) error {
 }
 
 // handleLeakTestDismiss forgets the request a person dismissed — that one. A
-// page names the request it was showing, so a newer link that arrived while
-// its card was on screen is not erased by a click meant for the older one. A
-// body without an id is the older form, and forgets whatever is pending.
+// page names the request it was showing, so another link that arrived while
+// its card was on screen is not erased by a click meant for this one. A body
+// without an id is the older form, and forgets every pending request.
 func (s *Server) handleLeakTestDismiss(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		RequestID string `json:"request_id"`

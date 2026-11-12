@@ -20,7 +20,7 @@ func TestGameOpenRecordsAnEditorLeakTestLinkAndStartsNothing(t *testing.T) {
 		t.Fatalf("exit code = %d (stderr: %s)", code, stderr.String())
 	}
 	dir := filepath.Dir(env.ConfigPath)
-	request, _, err := leakintent.Read(leakintent.Path(dir), time.Now().UTC())
+	request, _, err := leakintent.Newest(leakintent.Path(dir), time.Now().UTC())
 	if err != nil || request == nil || request.AssetID != "abc123" || request.Revision != 4 {
 		t.Fatalf("the request was not recorded: %+v (%v)", request, err)
 	}

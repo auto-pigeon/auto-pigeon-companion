@@ -1244,5 +1244,10 @@ window.AUCOM_LOCALES.it = {
   "The map is on this computer; its textures are not, so building it needs a connection. Download it again while connected.": "La mappa è su questo computer; le sue texture no, quindi per compilarla serve una connessione. Scaricala di nuovo quando sei connesso.",
   "Reading your account… Maps already downloaded are under On this computer.": "Lettura del tuo account… Le mappe già scaricate sono in Su questo computer.",
   "This revision's textures are incomplete, so a build of it is refused until the map is saved with them. Build & Run says which.": "Le texture di questa revisione sono incomplete, quindi la sua compilazione viene rifiutata finché la mappa non viene salvata con esse. Compila e avvia indica quali.",
+  "Received {time}": "Ricevuta alle {time}",
+  "Waiting: the form is open on another request. Open this one to build it; the other stays here.": "In attesa: il modulo è aperto su un’altra richiesta. Apri questa per compilarla; l’altra resta qui.",
+  "Waiting. Open it to build it.": "In attesa. Aprila per compilarla.",
+  "Open this request": "Apri questa richiesta",
+  "Waiting: the Build form is open on another leak test. Open this one to build it; the other stays here.": "In attesa: il modulo di compilazione è aperto su un altro test di perdite. Apri questo per compilarlo; l’altro resta qui.",
   "Map and texture information are on this computer, but this revision's textures are incomplete: a build of it is refused.": "Mappa e informazioni sulle texture sono su questo computer, ma le texture di questa revisione sono incomplete: la sua compilazione viene rifiutata."
 };

@@ -47,7 +47,9 @@ func TestTheBuildRequestNoticeOpensTheFormByItself(t *testing.T) {
 	if strings.Contains(source, `t("Review build")`) || strings.Contains(source, `t("Go to the review")`) {
 		t.Fatal("the notice still offers a review")
 	}
-	if !strings.Contains(source, "opened = seen.request_id; review();") {
+	// NEW_502: one card per request; a request that arrived while the form held
+	// none is opened by itself, once (testdata/buildrequest.check.mjs drives it).
+	if !strings.Contains(source, "card.opened = true;\n      await review(id);") {
 		t.Fatal("the notice does not open the form")
 	}
 }

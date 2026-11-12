@@ -33,7 +33,7 @@ func TestARequestIsRecordedReadReplacedAndExpires(t *testing.T) {
 	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Fatalf("the intent file is mode %v, want 0600", info.Mode().Perm())
 	}
-	got, received, err := Read(path, now.Add(time.Minute))
+	got, received, err := Newest(path, now.Add(time.Minute))
 	if err != nil || got == nil || *got != first || !received.Equal(now) {
 		t.Fatalf("read %+v at %v (%v)", got, received, err)
 	}
@@ -41,10 +41,10 @@ func TestARequestIsRecordedReadReplacedAndExpires(t *testing.T) {
 	if err := Receive(path, second, now.Add(2*time.Minute)); err != nil {
 		t.Fatal(err)
 	}
-	if got, _, _ := Read(path, now.Add(3*time.Minute)); got == nil || got.Revision != 4 {
+	if got, _, _ := Newest(path, now.Add(3*time.Minute)); got == nil || got.Revision != 4 {
 		t.Fatalf("a newer link did not replace the older one: %+v", got)
 	}
-	if got, _, _ := Read(path, now.Add(2*time.Minute+Lifetime)); got != nil {
+	if got, _, _ := Newest(path, now.Add(2*time.Minute+Lifetime)); got != nil {
 		t.Fatalf("an expired request survived: %+v", got)
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
@@ -63,13 +63,13 @@ func TestConsumeOnlyTheReviewedReturnRequest(t *testing.T) {
 	if got, err := Consume(path, strings.Repeat("b", 32), now); err != nil || got != nil {
 		t.Fatalf("older build consumed a newer request: %+v %v", got, err)
 	}
-	if got, _, _ := Read(path, now); got == nil || *got != first {
+	if got, _, _ := Newest(path, now); got == nil || *got != first {
 		t.Fatal("wrong consume removed the pending request")
 	}
 	if got, err := Consume(path, first.RequestID, now); err != nil || got == nil || *got != first {
 		t.Fatalf("consume returned %+v: %v", got, err)
 	}
-	if got, _, _ := Read(path, now); got != nil {
+	if got, _, _ := Newest(path, now); got != nil {
 		t.Fatal("consumed request remained pending")
 	}
 }
@@ -84,18 +84,18 @@ func TestDismissForgetsAndABadFileIsALostClick(t *testing.T) {
 	if err := Dismiss(path, now); err != nil {
 		t.Fatal(err)
 	}
-	if got, _, _ := Read(path, now); got != nil {
+	if got, _, _ := Newest(path, now); got != nil {
 		t.Fatalf("dismissed request still pending: %+v", got)
 	}
 	if err := Receive(path, aub.LeakTestLink{AssetID: "bad/id", Revision: 1, ContentSHA256: digest}, now); err == nil {
 		t.Fatal("recorded a request that is not a valid link")
 	}
-	tampered := `{"schema_version":"` + SchemaVersion + `","request":{"asset_id":"../x","revision":1,"content_sha256":"` +
-		digest + `"},"expires_at":"` + now.Add(time.Hour).Format(time.RFC3339) + `"}`
+	tampered := `{"schema_version":"` + SchemaVersion + `","requests":[{"request":{"asset_id":"../x","revision":1,"content_sha256":"` +
+		digest + `"},"received_at":"` + now.Format(time.RFC3339) + `","expires_at":"` + now.Add(time.Minute).Format(time.RFC3339) + `"}]}`
 	if err := os.WriteFile(filepath.Join(dir, FileName), []byte(tampered), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if got, _, _ := Read(path, now); got != nil {
+	if got, _, _ := Newest(path, now); got != nil {
 		t.Fatalf("a request that no longer parses was shown: %+v", got)
 	}
 }
@@ -124,7 +124,7 @@ func TestAUsedLinkDeliveredAgainIsARepeatNotASecondRequest(t *testing.T) {
 	if err = Receive(path, link, now.Add(time.Second)); err != nil {
 		t.Fatal(err)
 	}
-	if pending, _, _ := Read(path, now.Add(time.Second)); pending != nil {
+	if pending, _, _ := Newest(path, now.Add(time.Second)); pending != nil {
 		t.Fatalf("a used request became pending again: %+v", pending)
 	}
 	repeat, err := Repeated(path, now.Add(time.Second))

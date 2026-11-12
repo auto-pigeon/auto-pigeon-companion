@@ -32,20 +32,20 @@ func TestARequestIsRecordedPrivatelyReadReplacedAndExpires(t *testing.T) {
 	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Fatalf("the intent file is mode %v, want 0600", info.Mode().Perm())
 	}
-	got, received, err := Read(path, now.Add(time.Minute))
+	got, received, err := Newest(path, now.Add(time.Minute))
 	if err != nil || got == nil || *got != first || !received.Equal(now) {
 		t.Fatalf("read %+v at %v (%v)", got, received, err)
 	}
 	if err := Receive(path, second, now.Add(2*time.Minute)); err != nil {
 		t.Fatal(err)
 	}
-	if got, _, _ := Read(path, now.Add(3*time.Minute)); got == nil || *got != second {
-		t.Fatalf("a newer link did not replace the older one: %+v", got)
+	if got, _, _ := Newest(path, now.Add(3*time.Minute)); got == nil || *got != second {
+		t.Fatalf("the newer link is not the newest pending request: %+v", got)
 	}
-	if got, _, _ := Read(path, now.Add(2*time.Minute+Lifetime-time.Second)); got == nil {
+	if got, _, _ := Newest(path, now.Add(2*time.Minute+Lifetime-time.Second)); got == nil {
 		t.Fatal("the request expired before its lifetime")
 	}
-	if got, _, _ := Read(path, now.Add(2*time.Minute+Lifetime)); got != nil {
+	if got, _, _ := Newest(path, now.Add(2*time.Minute+Lifetime)); got != nil {
 		t.Fatalf("an expired request survived: %+v", got)
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
@@ -67,14 +67,14 @@ func TestConsumeAndDismissTakeOnlyTheNamedRequest(t *testing.T) {
 		if got, err := take(path, "", now); err != nil || got != nil {
 			t.Fatalf("%s of no id took the request: %+v %v", name, got, err)
 		}
-		if got, _, _ := Read(path, now); got == nil || *got != second {
+		if got, _, _ := Newest(path, now); got == nil || *got != second {
 			t.Fatalf("a %s of another id removed the pending request", name)
 		}
 	}
 	if got, err := Consume(path, second.RequestID, now); err != nil || got == nil || *got != second {
 		t.Fatalf("consume returned %+v: %v", got, err)
 	}
-	if got, _, _ := Read(path, now); got != nil {
+	if got, _, _ := Newest(path, now); got != nil {
 		t.Fatal("a consumed request remained pending")
 	}
 	if got, err := Consume(path, second.RequestID, now); err != nil || got != nil {
@@ -86,7 +86,7 @@ func TestConsumeAndDismissTakeOnlyTheNamedRequest(t *testing.T) {
 	if got, err := Dismiss(path, first.RequestID, now); err != nil || got == nil || *got != first {
 		t.Fatalf("dismiss returned %+v: %v", got, err)
 	}
-	if got, _, _ := Read(path, now); got != nil {
+	if got, _, _ := Newest(path, now); got != nil {
 		t.Fatal("a dismissed request remained pending")
 	}
 }
@@ -122,7 +122,7 @@ func TestABadFileIsALostClick(t *testing.T) {
 		`not json`,
 	} {
 		write(tampered)
-		if got, _, _ := Read(path, now); got != nil {
+		if got, _, _ := Newest(path, now); got != nil {
 			t.Errorf("a request that does not validate was shown: %+v from %s", got, tampered)
 		}
 	}
@@ -139,7 +139,7 @@ func TestABuildRequestAndALeakTestAreDifferentFiles(t *testing.T) {
 	if err := Receive(Path(dir), first, now); err != nil {
 		t.Fatal(err)
 	}
-	if got, _, err := leakintent.Read(leakintent.Path(dir), now); err != nil || got != nil {
+	if got, _, err := leakintent.Newest(leakintent.Path(dir), now); err != nil || got != nil {
 		t.Fatalf("a build request was read as a leak test: %+v %v", got, err)
 	}
 }
@@ -153,17 +153,20 @@ func TestTheLaunchersVersionIsKeptBesideTheRequest(t *testing.T) {
 	if err := ReceiveFrom(path, first, "1.400", now); err != nil {
 		t.Fatal(err)
 	}
-	received, by, err := Receipt(path, now)
+	received, by, err := Receipt(path, first.RequestID, now)
 	if err != nil || by != "1.400" || !received.Equal(now) {
 		t.Fatalf("receipt: %v %q %v", received, by, err)
 	}
-	if request, _, err := Read(path, now); err != nil || request == nil || request.RequestID != first.RequestID {
+	if request, _, err := Newest(path, now); err != nil || request == nil || request.RequestID != first.RequestID {
 		t.Fatalf("the request beside it: %v %v", request, err)
 	}
 	if err := Receive(path, second, now.Add(time.Second)); err != nil {
 		t.Fatal(err)
 	}
-	if _, by, _ := Receipt(path, now.Add(time.Second)); by != "" {
+	if _, by, _ := Receipt(path, second.RequestID, now.Add(time.Second)); by != "" {
 		t.Fatalf("a delivery that named no launcher kept the previous one's: %q", by)
+	}
+	if _, by, _ := Receipt(path, first.RequestID, now.Add(time.Second)); by != "1.400" {
+		t.Fatalf("another request's delivery changed the first one's launcher: %q", by)
 	}
 }

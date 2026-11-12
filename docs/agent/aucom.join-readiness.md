@@ -87,15 +87,18 @@ launch.
 **The editor's Build button is a third link, and it is not a leak test.**
 `autopigeon://build/request/<32 hex>?intent=build|build_run` is parsed only by
 `aub.ParseBuildRequestLink` (exactly that query, spelled exactly so) and recorded only in
-`internal/buildintent` (`build-request-intent.json`, 0600, thirty minutes, re-validated on every
-read); the leak-test parser, intent file, routes, statuses and pipelines never see it, and the
+`internal/buildintent` (`build-requests.json`, 0600, thirty minutes per request, re-validated on
+every read; a LIST since `NEW_502` — a second request is kept beside the first, each built or dismissed
+by its own id, and the 1.0 single-request `build-request-intent.json` an older program writes is
+imported and removed); the leak-test parser, intent file, routes, statuses and pipelines never see it, and the
 handler opens `#play` and asks nobody anything. The page resolves the opaque id against AUB
 (`GET /api/companion/v1/build-requests/{id}`) with the Companion's own session, then checks it
 itself: the link's intent equals AUB's, the Companion's own revision read is immutable with the
 request's number and digest, the game is read from the pinned APMap and AUB's game must agree, and
 only a game Build & Run builds (Quake 1, Quake II — Quake III is refused there) is reviewed. AUB's
-404 (unknown, expired, another account's, map unreadable) keeps the intent. **Review build** only
-fills the ordinary Build & Run form; the press of Build / Build & Run is the authorization, and its
+404 (unknown, expired, another account's, map unreadable) keeps the intent. Taking a request into
+the form only fills the ordinary Build & Run form (one request at a time; another waits on its own card
+with **Open this request**, and a second link never takes the form from the first — AUCOM #33); the press of Build / Build & Run is the authorization, and its
 `build_request_id` is accepted only for the pending id, its exact revision and its intent (a
 `build` request never starts an engine). The start consumes the intent once and runs an ordinary
 saved-map build, so `build.Latest` finds it. Statuses (`received` once, `reviewing`, `building`,

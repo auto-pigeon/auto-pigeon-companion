@@ -119,8 +119,20 @@ for. The server does not rely on any of that: `handleBuildStart` asks `leakRevis
 then the pin, then `leakintent.Consume`.
 
 **One press, one job.** `claimBuild` refuses a second press while one runs, `Consume` uses a request up, and
-`leakintent` remembers a used or replaced id for `RetiredFor`, so a link delivered again cannot put it back under a
-Build button, nor an older request over a newer one. A dismissed request may be asked for again.
+`leakintent` remembers a used or dismissed id for `RetiredFor`, so a link delivered again cannot put it back under a
+Build button.
+
+**Several requests stay pending (`NEW_502`, AUCOM #35).** `leakintent` 2.0 (`leak-test-requests.json`) holds a LIST:
+a second link of the same kind is added beside the first, never retires it, and each is listed (`List`), resolved
+(`/pending?request_id=`), consumed, dismissed and expired by its own id; the same id delivered again only renews its
+lifetime, an id-less link (an editor older than request ids) still replaces the other id-less one, and the list is
+bounded at `PendingLimit`. The version rule is the file name: a Companion older than 2.0 reads and writes only the
+1.0 `leak-test-intent.json`, so it never overwrites the list; whatever it leaves there — request, retired and used ids,
+repeat — is imported on the next read and the 1.0 file removed, and a retired id is never brought back by it. The
+page keeps one card per request; the Build form holds at most one (`formID`), a request arriving while it holds none
+is prepared by itself, and any other waits on its card with **Open this request** — a second link never takes the
+form. `nothingPending` is told every id still held. `internal/buildintent` 2.0 (`build-requests.json`) is the same
+list for the editor's build requests, imported the same way from `build-request-intent.json`.
 `NEW_508` (#20, alternative A): a request a build was STARTED for is marked `Used` with its build id
 (`leakintent.Used`; a dismissed one is consumed and not used), and the same link delivered again is kept for
 `RepeatFor` as a `Repeat` the watch returns beside `pending` — the page says *This leak test already ran* with
@@ -259,9 +271,11 @@ unchanged and `internal/web/leakrelay.go` owns it.
   acknowledged when the owning account signs in. None of this delays a build.
 - `GET /api/v1/leak-test/request` carries `relay`: `state` is `delivered`, `pending`, `retrying`,
   `sign_in_required`, `other_account` or `stopped` (the server rejected the request itself; it is not
-  sent again), with `desired`, `failures` and `error`. `GET /api/v1/leak-test/pending?request_id=<id>`
-  answers `"replaced": true` when a newer click took that request's place, instead of handing over
-  the newer request's details.
+  sent again), with `desired`, `failures` and `error`. Since `NEW_502` it lists every pending request
+  in `requests` (oldest first; the newest is also at the top level, as before).
+  `GET /api/v1/leak-test/pending?request_id=<id>` answers about THAT request, or `"pending": false`
+  under its id when it is gone; it never hands over another request's details. A page that names none
+  is answered about the newest.
 - **The result file** (`GET /api/v1/leak-test/runs/<build>/result`) records the pinned map identity
   and artifact hashes; it is a local file, not a signed attestation, and never carries the BSP. A
   Quake 1 result is `aucom.leak-result/1.0`, unchanged. Quake II and Quake III results are

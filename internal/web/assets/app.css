@@ -1487,6 +1487,10 @@ main { padding: 1.25rem 1.75rem 3rem; }
   background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius-panel);
 }
 .request-card p { margin: 0; }
+/* One card per pending request (NEW_502): two of one kind are two cards in
+   the same frame, divided by a rule, each with its own actions. */
+.leak-request__card { display: grid; gap: var(--space-1); }
+.leak-request__card + .leak-request__card { border-top: 1px solid var(--surface-2); padding-top: var(--space-3); margin-top: var(--space-2); }
 .leak-request__title { font-weight: 600; }
 .leak-request__what { font-size: var(--text-sm); }
 .leak-request__state { font-size: var(--text-sm); color: var(--ink-muted); }

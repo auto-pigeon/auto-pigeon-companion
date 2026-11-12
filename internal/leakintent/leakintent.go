@@ -10,9 +10,10 @@
 //
 // # Nothing here runs anything
 //
-// [Receive] only records. The page reads the request with [Read], resolves it
-// against AUB itself, shows the exact command, and a person presses Run; a
-// dismissed or expired request is simply gone.
+// [Receive] only records. The page lists the requests with [List], resolves
+// each against AUB itself, prepares one, and a person presses Build; a
+// dismissed or expired request is simply gone, and every other request stays
+// pending (NEW_502, issue #35: a second link no longer replaces the first).
 package leakintent
 
 import (
@@ -28,11 +29,29 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/lockfile"
 )
 
-// SchemaVersion versions the file.
-const SchemaVersion = "aucom.leak-test-intent/1.0"
+// SchemaVersion versions the file. 2.0 (NEW_502, issue #35) holds a LIST of
+// pending requests: a second link of the same kind is kept beside the first
+// instead of retiring it.
+const SchemaVersion = "aucom.leak-test-intent/2.0"
 
-// FileName is the file, in the configuration directory.
-const FileName = "leak-test-intent.json"
+// FileName is the file, in the configuration directory. It is not the 1.0
+// file's name, and that is the version rule: a Companion older than 2.0 reads
+// and writes only [LegacyFileName], so it can never overwrite the list with its
+// single request. What an older program leaves there — its request, its used
+// and retired ids, its repeat — is imported on the next read and the legacy
+// file removed, so a used link stays used across the upgrade.
+const FileName = "leak-test-requests.json"
+
+// LegacyFileName and LegacySchemaVersion are the 1.0 file: one request.
+const (
+	LegacyFileName      = "leak-test-intent.json"
+	LegacySchemaVersion = "aucom.leak-test-intent/1.0"
+)
+
+// PendingLimit bounds the list however many links arrive; past it the oldest
+// pending request is dropped (not retired: it was never built, and a person
+// may open it again).
+const PendingLimit = 16
 
 // Lifetime is how long "the editor asked for this leak test" is remembered. The
 // same ten minutes a clicked game is: long enough to start the Companion and
@@ -78,40 +97,56 @@ type Repeat struct {
 	Until      time.Time `json:"until"`
 }
 
-// Intent is the file.
-type Intent struct {
-	SchemaVersion string            `json:"schema_version"`
-	Request       *aub.LeakTestLink `json:"request,omitempty"`
-	ReceivedAt    time.Time         `json:"received_at,omitempty"`
-	ExpiresAt     time.Time         `json:"expires_at,omitempty"`
-	// Retired are the requests that were built, or replaced by a newer click
-	// (NEW_380). One press is one job: the same link delivered again — a second
-	// click on Open again, a link the operating system held back, an old tab —
-	// must not put a used request back under a Build button, and must not put an
-	// older request over a newer one. Optional, so an older Companion reads this
-	// file as before. A dismissed request is not here: a person may ask again.
-	Retired []Retired `json:"retired,omitempty"`
-	// Repeat is the newest delivery of a link that was already used.
-	Repeat *Repeat `json:"repeat,omitempty"`
+// Pending is one request the editor asked for that nobody has built or
+// dismissed yet.
+type Pending struct {
+	Request    aub.LeakTestLink `json:"request"`
+	ReceivedAt time.Time        `json:"received_at"`
+	ExpiresAt  time.Time        `json:"expires_at"`
 	// LaunchedByVersion is the version of the program the link started
 	// (NEW_368). When a Companion was already running, that program handed the
 	// link to it, and the running one is what serves it: the two are told
-	// apart in the editor. Optional, so an older Companion reads and rewrites
-	// this file as before (and drops it).
+	// apart in the editor.
 	LaunchedByVersion string `json:"launched_by_version,omitempty"`
+}
+
+// Intent is the file.
+type Intent struct {
+	SchemaVersion string    `json:"schema_version"`
+	Requests      []Pending `json:"requests,omitempty"`
+	// Retired are the requests that were built or dismissed (NEW_380). One
+	// press is one job: the same link delivered again — a second click on Open
+	// again, a link the operating system held back, an old tab — must not put a
+	// used request back under a Build button.
+	Retired []Retired `json:"retired,omitempty"`
+	// Repeat is the newest delivery of a link that was already used.
+	Repeat *Repeat `json:"repeat,omitempty"`
+}
+
+// legacyIntent is the 1.0 file, read only to be imported.
+type legacyIntent struct {
+	SchemaVersion     string            `json:"schema_version"`
+	Request           *aub.LeakTestLink `json:"request,omitempty"`
+	ReceivedAt        time.Time         `json:"received_at,omitempty"`
+	ExpiresAt         time.Time         `json:"expires_at,omitempty"`
+	Retired           []Retired         `json:"retired,omitempty"`
+	Repeat            *Repeat           `json:"repeat,omitempty"`
+	LaunchedByVersion string            `json:"launched_by_version,omitempty"`
 }
 
 // Path is the intent file for a configuration directory.
 func Path(configDir string) string { return filepath.Join(configDir, FileName) }
 
+func legacyPath(path string) string { return filepath.Join(filepath.Dir(path), LegacyFileName) }
+
 func options() lockfile.Options {
 	return lockfile.Options{Program: "auto-pigeon-companion", Timeout: 10 * time.Second}
 }
 
-// Receive records a link the operating system delivered. A newer link replaces
-// an older one: the editor asks about the revision it has open now. A link whose
-// request was already built or replaced records nothing, and that is not an
-// error: the delivery is simply old.
+// Receive records a link the operating system delivered. A different request
+// is ADDED beside any already pending; the same request delivered again only
+// renews its lifetime. A link whose request was already built or dismissed
+// records nothing, and that is not an error: the delivery is simply old.
 func Receive(path string, link aub.LeakTestLink, now time.Time) error {
 	return ReceiveFrom(path, link, "", now)
 }
@@ -135,13 +170,40 @@ func ReceiveFrom(path string, link aub.LeakTestLink, launchedBy string, now time
 			}
 			return
 		}
-		if intent.Request != nil && intent.Request.RequestID != link.RequestID {
-			intent.retire(intent.Request.RequestID, now)
-		}
-		request := link
-		intent.Request, intent.ReceivedAt, intent.ExpiresAt = &request, now, now.Add(Lifetime)
-		intent.LaunchedByVersion = launchedBy
+		intent.add(Pending{Request: link, ReceivedAt: now, ExpiresAt: now.Add(Lifetime), LaunchedByVersion: launchedBy})
 	})
+}
+
+// add puts one request in the list: in place of the same id, else at the end.
+// The same id naming other bytes replaces the first under that one id: it is
+// what the editor asks about now, and the page checks every field again.
+//
+// A link with no request id (an editor older than request ids) cannot be told
+// apart from another one, so it replaces any other id-less request, as every
+// link did before NEW_502.
+func (i *Intent) add(item Pending) {
+	for index := range i.Requests {
+		if i.Requests[index].Request.RequestID == item.Request.RequestID {
+			i.Requests[index] = item
+			return
+		}
+	}
+	i.Requests = append(i.Requests, item)
+	if len(i.Requests) > PendingLimit {
+		i.Requests = append([]Pending(nil), i.Requests[len(i.Requests)-PendingLimit:]...)
+	}
+}
+
+func (i *Intent) index(requestID string) int {
+	if requestID == "" {
+		return -1
+	}
+	for index := range i.Requests {
+		if i.Requests[index].Request.RequestID == requestID {
+			return index
+		}
+	}
+	return -1
 }
 
 func (i *Intent) retired(requestID string) bool {
@@ -172,38 +234,65 @@ func (i *Intent) retire(requestID string, now time.Time) {
 	}
 }
 
-// Read is the pending request, or nil.
-func Read(path string, now time.Time) (*aub.LeakTestLink, time.Time, error) {
-	var (
-		request  *aub.LeakTestLink
-		received time.Time
-	)
+// List is every pending request, oldest first.
+func List(path string, now time.Time) ([]Pending, error) {
+	var list []Pending
 	err := update(path, now, func(intent *Intent) {
-		request, received = intent.Request, intent.ReceivedAt
+		list = append([]Pending(nil), intent.Requests...)
 	})
-
-	return request, received, err
+	return list, err
 }
 
-// Dismiss forgets the pending request.
+// Newest is the most recently received pending request and when it arrived,
+// or nil: what a reader that knows only one request is shown.
+func Newest(path string, now time.Time) (*aub.LeakTestLink, time.Time, error) {
+	list, err := List(path, now)
+	if err != nil || len(list) == 0 {
+		return nil, time.Time{}, err
+	}
+	newest := list[0]
+	for _, item := range list[1:] {
+		if !item.ReceivedAt.Before(newest.ReceivedAt) {
+			newest = item
+		}
+	}
+	request := newest.Request
+	return &request, newest.ReceivedAt, nil
+}
+
+// Get is the pending request with this id, or nil.
+func Get(path, requestID string, now time.Time) (*Pending, error) {
+	var found *Pending
+	err := update(path, now, func(intent *Intent) {
+		if index := intent.index(requestID); index >= 0 {
+			copy := intent.Requests[index]
+			found = &copy
+		}
+	})
+	return found, err
+}
+
+// Dismiss forgets every pending request: the older page's dismiss, which named
+// none. A page that names one uses [Consume].
 func Dismiss(path string, now time.Time) error {
 	return update(path, now, func(intent *Intent) {
-		intent.Request, intent.ReceivedAt, intent.ExpiresAt = nil, time.Time{}, time.Time{}
+		intent.Requests = nil
 	})
 }
 
-// Consume removes only the request a reviewed build is about to start. A
-// newer editor click is never erased by an older Build button.
+// Consume removes only the named request — a reviewed build about to start, or
+// a dismissal — and retires its id. Every other pending request stays.
 func Consume(path, requestID string, now time.Time) (*aub.LeakTestLink, error) {
 	var consumed *aub.LeakTestLink
 	err := update(path, now, func(intent *Intent) {
-		if intent.Request == nil || intent.Request.RequestID != requestID || requestID == "" {
+		index := intent.index(requestID)
+		if index < 0 {
 			return
 		}
-		copy := *intent.Request
+		copy := intent.Requests[index].Request
 		consumed = &copy
 		intent.retire(requestID, now)
-		intent.Request, intent.ReceivedAt, intent.ExpiresAt = nil, time.Time{}, time.Time{}
+		intent.Requests = append(intent.Requests[:index], intent.Requests[index+1:]...)
 	})
 	return consumed, err
 }
@@ -269,12 +358,93 @@ func Prune(path string, now time.Time) error {
 func update(path string, now time.Time, mutate func(*Intent)) error {
 	return lockfile.With(path, options(), func() error {
 		intent := load(path)
+		imported, err := importLegacy(path, &intent, now)
+		if err != nil {
+			return err
+		}
 		prune(&intent, now)
 		mutate(&intent)
 		prune(&intent, now)
 
-		return save(path, intent)
+		if err := save(path, intent); err != nil {
+			return err
+		}
+		if imported {
+			// Only once the list holding it is on disk.
+			if err := os.Remove(legacyPath(path)); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
+		}
+		return nil
 	})
+}
+
+// importLegacy moves a 1.0 file into the list under the 1.0 file's own lock,
+// the one an older program takes: its pending request (unless that id is
+// already retired here), its retired and used ids, and its repeat. It reports
+// whether there was a 1.0 file to remove. A file that is not 1.0 is left.
+func importLegacy(path string, intent *Intent, now time.Time) (bool, error) {
+	legacy := legacyPath(path)
+	if _, err := os.Stat(legacy); errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	imported := false
+	err := lockfile.With(legacy, options(), func() error {
+		raw, err := fsshare.ReadFile(legacy)
+		if err != nil {
+			return nil
+		}
+		var old legacyIntent
+		if json.Unmarshal(raw, &old) != nil || old.SchemaVersion != LegacySchemaVersion {
+			return nil
+		}
+		imported = true
+		for _, item := range old.Retired {
+			if item.RequestID == "" {
+				continue
+			}
+			if held := intent.find(item.RequestID); held != nil {
+				// Used wins over merely retired, and the build it names is kept.
+				held.Used = held.Used || item.Used
+				if held.BuildID == "" {
+					held.BuildID = item.BuildID
+				}
+				if held.Until.Before(item.Until) {
+					held.Until = item.Until
+				}
+				continue
+			}
+			intent.Retired = append(intent.Retired, item)
+		}
+		if len(intent.Retired) > retiredLimit {
+			intent.Retired = intent.Retired[len(intent.Retired)-retiredLimit:]
+		}
+		if old.Repeat != nil && (intent.Repeat == nil || intent.Repeat.ReceivedAt.Before(old.Repeat.ReceivedAt)) {
+			copy := *old.Repeat
+			intent.Repeat = &copy
+		}
+		if old.Request != nil && !intent.retired(old.Request.RequestID) {
+			item := Pending{Request: *old.Request, ReceivedAt: old.ReceivedAt, ExpiresAt: old.ExpiresAt,
+				LaunchedByVersion: old.LaunchedByVersion}
+			if valid(item) {
+				if index := intent.index(item.Request.RequestID); index < 0 || intent.Requests[index].ReceivedAt.Before(item.ReceivedAt) {
+					intent.add(item)
+				}
+			}
+		}
+		return nil
+	})
+	return imported, err
+}
+
+// valid re-validates what is on disk rather than trusting it: the file is the
+// user's own, but a request that no longer parses is not one to show, and a
+// lifetime longer than this program grants is not one to keep.
+func valid(item Pending) bool {
+	if _, err := aub.ParseLeakTestLink(item.Request.Link()); err != nil {
+		return false
+	}
+	return !item.ExpiresAt.IsZero() && item.ExpiresAt.Sub(item.ReceivedAt) <= Lifetime
 }
 
 func load(path string) Intent {
@@ -286,21 +456,27 @@ func load(path string) Intent {
 	if json.Unmarshal(raw, &intent) != nil || intent.SchemaVersion != SchemaVersion {
 		return Intent{SchemaVersion: SchemaVersion}
 	}
-	if intent.Request != nil {
-		// Whatever is on disk is re-validated, never trusted: the file is the
-		// user's own, but a request that no longer parses is not one to show.
-		if _, err := aub.ParseLeakTestLink(intent.Request.Link()); err != nil {
-			intent.Request = nil
+	kept := intent.Requests[:0]
+	seen := map[string]bool{}
+	for _, item := range intent.Requests {
+		if valid(item) && !seen[item.Request.RequestID] && !intent.retired(item.Request.RequestID) {
+			seen[item.Request.RequestID] = true
+			kept = append(kept, item)
 		}
 	}
+	intent.Requests = kept
 
 	return intent
 }
 
 func prune(intent *Intent, now time.Time) {
-	if intent.Request != nil && !now.Before(intent.ExpiresAt) {
-		intent.Request, intent.ReceivedAt, intent.ExpiresAt = nil, time.Time{}, time.Time{}
+	pending := intent.Requests[:0]
+	for _, item := range intent.Requests {
+		if now.Before(item.ExpiresAt) {
+			pending = append(pending, item)
+		}
 	}
+	intent.Requests = pending
 	if intent.Repeat != nil && !now.Before(intent.Repeat.Until) {
 		intent.Repeat = nil
 	}
@@ -318,7 +494,7 @@ func save(path string, intent Intent) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	if intent.Request == nil && len(intent.Retired) == 0 {
+	if len(intent.Requests) == 0 && len(intent.Retired) == 0 && intent.Repeat == nil {
 		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
@@ -329,7 +505,7 @@ func save(path string, intent Intent) error {
 	if err != nil {
 		return err
 	}
-	temporary, err := os.CreateTemp(filepath.Dir(path), ".leak-test-intent-*")
+	temporary, err := os.CreateTemp(filepath.Dir(path), ".leak-test-requests-*")
 	if err != nil {
 		return err
 	}
@@ -354,18 +530,13 @@ func save(path string, intent Intent) error {
 	return nil
 }
 
-// Receipt is when the pending request arrived and the version of the program
-// that received it — "" when that was not recorded. Zero time when nothing is
-// pending.
-func Receipt(path string, now time.Time) (time.Time, string, error) {
-	var (
-		received time.Time
-		by       string
-	)
-	err := update(path, now, func(intent *Intent) {
-		if intent.Request != nil {
-			received, by = intent.ReceivedAt, intent.LaunchedByVersion
-		}
-	})
-	return received, by, err
+// Receipt is when one pending request arrived and the version of the program
+// that received it — "" when that was not recorded. Zero time when that
+// request is not pending.
+func Receipt(path, requestID string, now time.Time) (time.Time, string, error) {
+	item, err := Get(path, requestID, now)
+	if err != nil || item == nil {
+		return time.Time{}, "", err
+	}
+	return item.ReceivedAt, item.LaunchedByVersion, nil
 }

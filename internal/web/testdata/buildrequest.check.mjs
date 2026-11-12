@@ -10,7 +10,7 @@ const source = readFileSync(new URL("../assets/buildrequest.js", import.meta.url
 
 function element(tag, options = {}) {
   const node = {
-    tag, children: [], listeners: {}, hidden: false,
+    tag, children: [...(options.children || [])], listeners: {}, hidden: false, dataset: {}, attrs: { ...(options.attrs || {}) },
     textContent: options.text || "", className: options.className || options.attrs?.class || "",
     append(...items) { node.children.push(...items); },
     prepend(...items) { node.children.unshift(...items); },
@@ -71,93 +71,137 @@ function load() {
 const REQUEST = "/api/v1/build-request/request";
 const PENDING = "/api/v1/build-request/pending";
 
-// 1. B replaces A while A is being resolved: the server says "replaced", and
-//    nothing about B is shown under A; the page re-reads, and B is resolved by
-//    its own question.
+const list = (...requests) => ({ pending: requests.length > 0, requests, ...(requests.at(-1) || {}) });
+const cardOf = (box, id) => box.children.find((card) => card.attrs?.["data-request-id"] === id);
+
+// 1. One request: resolved by its own id, opened in the form by itself, and
+//    its card says so — with its own Dismiss (issue #35).
 {
   const p = load();
-  await p.answer(REQUEST, 200, A);
+  await p.answer(REQUEST, 200, list(A));
   assert.match(text(p.box), /Build requested by the editor/);
   const asked = p.calls.find((call) => call.path.startsWith(PENDING));
   assert.equal(asked.path, PENDING + "?request_id=" + A.request_id, "resolve must name the request it asks about");
-  await p.answer(PENDING, 200, { ...B, replaced: true });
-  assert.equal(buttonNamed(p.box, "Review build"), undefined, "a replaced request became reviewable");
-  await p.answer(REQUEST, 200, B);
-  assert.match(text(p.box), /Build & Run requested by the editor/);
-  assert.equal(p.calls.filter((call) => call.path.startsWith(PENDING)).at(-1).path, PENDING + "?request_id=" + B.request_id);
-  await p.answer(PENDING, 200, resolved(B, "second", 9));
-  assert.match(text(p.box), /second, saved revision 9/);
-  assert.equal(buttonNamed(p.box, "Review build"), undefined, "the form opens by itself");
-  assert.equal(buttonNamed(p.box, "Dismiss"), undefined, "nothing to dismiss once it is in the form");
-  assert.ok(p.calls.some((call) => call.path === "/api/v1/build-request/review"), "the form was not opened");
+  await p.answer(PENDING, 200, resolved(A, "first", 3));
+  const told = await p.answer("/api/v1/build-request/review", 200, { reviewing: true });
+  assert.deepEqual(told.body, { request_id: A.request_id });
+  assert.equal(p.adopted.length, 1);
+  assert.equal(p.adopted[0].request_id, A.request_id);
+  assert.match(text(p.box), /first, saved revision 3/);
+  assert.match(text(p.box), /Ready in Build & Run\. Nothing runs until you press Build\./);
+  assert.ok(buttonNamed(p.box, "Dismiss"), "every card can be dismissed");
 }
 
 // 2. An older server that resolves whatever is pending answers B's details to
 //    a question about A: the page compares the identity itself.
 {
   const p = load();
-  await p.answer(REQUEST, 200, A);
+  await p.answer(REQUEST, 200, list(A));
   await p.answer(PENDING, 200, resolved(B, "second", 9));
   assert.doesNotMatch(text(p.box), /second/, "B's name was put on A's notice");
-  assert.equal(buttonNamed(p.box, "Review build"), undefined);
+  assert.equal(p.adopted.length, 0);
 }
 
-// 3. The watch sees B while A's resolve is in flight. A's late answer — valid,
-//    about A — must not land on B's notice. Review is then about B only.
+// 3. Issue #33/#35: B arrives while A is being resolved and opened. A's answer
+//    is still A's, A is the one opened, and B waits on its own card — it never
+//    replaces the request in the form. Opening B leaves A pending (no dismiss).
 {
   const p = load();
-  await p.answer(REQUEST, 200, A);
+  await p.answer(REQUEST, 200, list(A));
   await p.tick();
-  await p.answer(REQUEST, 200, B);
-  await p.answer(PENDING, 200, resolved(A, "first", 3));
-  assert.doesNotMatch(text(p.box), /first/, "A's answer was shown on B's notice");
-  await p.answer(REQUEST, 200, B);
-  await p.answer(PENDING, 200, resolved(B, "second", 9));
-  const told = await p.answer("/api/v1/build-request/review", 200, { reviewing: true });
-  assert.deepEqual(told.body, { request_id: B.request_id });
-  assert.equal(p.adopted.length, 1);
-  assert.equal(p.adopted[0].request_id, B.request_id);
-  assert.equal(p.adopted[0].revision_id, "rev-b");
-  assert.match(text(p.box), /Ready in Build & Run\. Nothing runs until you press Build & Run\./);
-  // The form dropped it: a person chose something else, and the request ends.
-  p.document.dispatchEvent(new CustomEvent("aucom:build-request-dropped", { detail: { id: B.request_id } }));
+  await p.answer(REQUEST, 200, list(A, B));
+  assert.equal(p.box.children.length, 2, "both requests have a card");
+  assert.ok(p.calls.some((call) => call.path === PENDING + "?request_id=" + B.request_id), "B is resolved by its own question");
+  await p.answer(PENDING + "?request_id=" + A.request_id, 200, resolved(A, "first", 3));
+  await p.answer("/api/v1/build-request/review", 200, { reviewing: true });
+  await p.answer(PENDING + "?request_id=" + B.request_id, 200, resolved(B, "second", 9));
+  assert.equal(p.adopted.length, 1, "the second link took the form");
+  assert.equal(p.adopted[0].request_id, A.request_id);
+  assert.match(text(cardOf(p.box, A.request_id)), /first, saved revision 3/);
+  assert.match(text(cardOf(p.box, A.request_id)), /Ready in Build & Run/);
+  assert.match(text(cardOf(p.box, B.request_id)), /second, saved revision 9/);
+  assert.match(text(cardOf(p.box, B.request_id)), /Waiting: the form is open on another request/);
+  assert.equal(p.events.filter((event) => event.type === "aucom:build-request-gone").length, 0);
+  // A person opens B: the form moves to B, A stays pending on its card.
+  buttonNamed(cardOf(p.box, B.request_id), "Open this request").listeners.click();
   await p.settle();
-  const dropped = await p.answer("/api/v1/build-request/dismiss", 200, { dismissed: true });
-  assert.deepEqual(dropped.body, { request_id: B.request_id });
-}
-
-// 4. A request the account cannot find keeps its notice and offers Retry; an
-//    unsupported game offers no review; Dismiss names the request it shows.
-{
-  const p = load();
-  await p.answer(REQUEST, 200, A);
-  await p.answer(PENDING, 200, { ...A, not_found: true });
-  assert.match(text(p.box), /This account cannot find the request/);
-  assert.ok(buttonNamed(p.box, "Retry"));
-  assert.equal(buttonNamed(p.box, "Review build"), undefined);
-  buttonNamed(p.box, "Retry").listeners.click();
+  const second = await p.answer("/api/v1/build-request/review", 200, { reviewing: true });
+  assert.deepEqual(second.body, { request_id: B.request_id });
+  assert.equal(p.adopted.at(-1).request_id, B.request_id);
+  assert.match(text(cardOf(p.box, A.request_id)), /Waiting: the form is open on another request/);
+  assert.equal(p.calls.filter((call) => call.path === "/api/v1/build-request/dismiss").length, 0, "opening B dismissed A");
+  // B is started: B's card goes, A's stays, and A is not pushed into the form.
+  p.document.dispatchEvent(new CustomEvent("aucom:build-request-started", { detail: { id: B.request_id } }));
   await p.settle();
-  await p.answer(PENDING, 200, { ...A, unsupported: true, game_profile: "quake3", supported_profiles: ["quake1", "quake2"], name: "q3dm" });
-  assert.match(text(p.box), /This saved revision is a Quake III map\. Build & Run builds Quake 1, Quake II maps only/);
-  assert.equal(buttonNamed(p.box, "Review build"), undefined, "an unsupported game was offered a review");
-  buttonNamed(p.box, "Dismiss").listeners.click();
+  await p.answer(REQUEST, 200, list(A));
+  assert.equal(p.box.children.length, 1);
+  assert.ok(cardOf(p.box, A.request_id));
+  assert.equal(p.adopted.length, 2, "A was opened again without a person asking");
+  assert.match(text(p.box), /Waiting\. Open it to build it\./);
+  // Dismissing A names A.
+  buttonNamed(cardOf(p.box, A.request_id), "Dismiss").listeners.click();
   await p.settle();
   const dismissed = await p.answer("/api/v1/build-request/dismiss", 200, { dismissed: true });
   assert.deepEqual(dismissed.body, { request_id: A.request_id });
   assert.equal(p.box.hidden, true);
 }
 
-// 5. A request taken into the form that goes away (dismissed elsewhere,
-//    expired, replaced) tells the form, which drops it.
+// 4. A request the account cannot find keeps its card and offers Retry; an
+//    unsupported game is never opened; Dismiss names the request it shows and
+//    leaves the other card alone.
 {
   const p = load();
-  await p.answer(REQUEST, 200, B);
-  await p.answer(PENDING, 200, resolved(B, "second", 9));
+  await p.answer(REQUEST, 200, list(A, B));
+  await p.answer(PENDING + "?request_id=" + A.request_id, 200, { ...A, not_found: true });
+  assert.match(text(cardOf(p.box, A.request_id)), /This account cannot find the request/);
+  buttonNamed(cardOf(p.box, A.request_id), "Retry").listeners.click();
+  await p.settle();
+  await p.answer(PENDING + "?request_id=" + A.request_id, 200,
+    { ...A, unsupported: true, game_profile: "quake3", supported_profiles: ["quake1", "quake2"], name: "q3dm" });
+  assert.match(text(cardOf(p.box, A.request_id)), /This saved revision is a Quake III map\. Build & Run builds Quake 1, Quake II maps only/);
+  assert.equal(p.adopted.length, 0, "an unsupported game was opened");
+  buttonNamed(cardOf(p.box, A.request_id), "Dismiss").listeners.click();
+  await p.settle();
+  const dismissed = await p.answer("/api/v1/build-request/dismiss", 200, { dismissed: true });
+  assert.deepEqual(dismissed.body, { request_id: A.request_id });
+  assert.equal(cardOf(p.box, A.request_id), undefined);
+  assert.ok(cardOf(p.box, B.request_id), "dismissing A took B's card");
+}
+
+// 5. A request taken into the form that goes away (dismissed elsewhere,
+//    expired) tells the form, which drops it; a request that was not in the
+//    form going away tells it nothing.
+{
+  const p = load();
+  await p.answer(REQUEST, 200, list(B, A));
+  await p.answer(PENDING + "?request_id=" + B.request_id, 200, resolved(B, "second", 9));
   await p.answer("/api/v1/build-request/review", 200, { reviewing: true });
   await p.tick();
-  await p.answer(REQUEST, 200, { pending: false });
+  await p.answer(REQUEST, 200, list(B));
+  assert.equal(p.events.filter((event) => event.type === "aucom:build-request-gone").length, 0, "A's going was told to B's form");
+  await p.tick();
+  await p.answer(REQUEST, 200, { pending: false, requests: [] });
   const gone = p.events.find((event) => event.type === "aucom:build-request-gone");
   assert.equal(gone?.detail.id, B.request_id);
+}
+
+// 5b. The form dropping its request dismisses that one only; the same link
+//     delivered again is the same card.
+{
+  const p = load();
+  await p.answer(REQUEST, 200, list(A));
+  await p.answer(PENDING, 200, resolved(A, "first", 3));
+  await p.answer("/api/v1/build-request/review", 200, { reviewing: true });
+  await p.tick();
+  await p.answer(REQUEST, 200, list({ ...A, received_at: "2026-10-28T10:01:00Z" }, B));
+  assert.equal(p.box.children.length, 2, "the same link again became another card");
+  p.document.dispatchEvent(new CustomEvent("aucom:build-request-dropped", { detail: { id: B.request_id } }));
+  await p.settle();
+  assert.equal(p.calls.filter((call) => call.path === "/api/v1/build-request/dismiss").length, 0, "a drop about a request not in the form dismissed it");
+  p.document.dispatchEvent(new CustomEvent("aucom:build-request-dropped", { detail: { id: A.request_id } }));
+  await p.settle();
+  const dropped = await p.answer("/api/v1/build-request/dismiss", 200, { dismissed: true });
+  assert.deepEqual(dropped.body, { request_id: A.request_id });
 }
 
 // 6. The association rule play.js asks: the form builds what the editor asked
@@ -177,4 +221,4 @@ const PENDING = "/api/v1/build-request/pending";
   assert.equal(stillAsked(null, choice), false);
 }
 
-console.log("buildrequest.check.mjs: 6 cases passed");
+console.log("buildrequest.check.mjs: 7 cases passed");

@@ -114,46 +114,59 @@ func leakBuildStage(current string, ids []string) string {
 	return stage
 }
 
-// handleLeakTestRequest is the pending request as this machine holds it, and
-// nothing else: no AUB call, so an open page can ask every couple of seconds
-// whether a link arrived. The first time a request is seen it is acknowledged
-// to the editor.
+// handleLeakTestRequest is every pending request as this machine holds it,
+// oldest first, and nothing else: no AUB call, so an open page can ask every
+// couple of seconds whether a link arrived. The first time a request is seen
+// it is acknowledged to the editor — each request, by its own id (NEW_502).
+// The newest is also said at the top level, as before, for a page that knows
+// only one.
 func (s *Server) handleLeakTestRequest(w http.ResponseWriter, _ *http.Request) {
 	dir, err := s.configDir()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	request, received, err := leakintent.Read(leakintent.Path(dir), time.Now().UTC())
+	path, now := leakintent.Path(dir), time.Now().UTC()
+	list, err := leakintent.List(path, now)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
 	// A used link delivered again (NEW_508, issue #20): never pending, and
 	// said beside whatever is, so the click is answered with the test that ran.
-	repeat, _ := leakintent.Repeated(leakintent.Path(dir), time.Now().UTC())
-	if request == nil {
-		// Nothing is pending: a request that was only received or reviewed
-		// has expired or was replaced, so its line is no longer kept alive.
-		s.leaks.nothingPending("")
-		answer := map[string]any{"pending": false}
+	repeat, _ := leakintent.Repeated(path, now)
+	held := make(map[string]bool, len(list))
+	for _, item := range list {
+		held[item.Request.RequestID] = true
+	}
+	// A request that was only received or reviewed and is no longer held has
+	// expired or been dismissed, so its line is no longer kept alive.
+	s.leaks.nothingPending(held)
+	if len(list) == 0 {
+		answer := map[string]any{"pending": false, "requests": []any{}}
 		if repeat != nil {
 			answer["repeat"] = repeat
 		}
 		writeJSON(w, http.StatusOK, answer)
 		return
 	}
-	s.leaks.nothingPending(request.RequestID)
-	s.reportLeakStatus(*request, leakReceived, "", "")
-	if _, by, err := leakintent.Receipt(leakintent.Path(dir), time.Now().UTC()); err == nil {
-		s.acknowledgeHandoff(aub.HandoffLeakTest, request.RequestID, request.AssetID, request.Revision, request.ContentSHA256, received, by)
+	entries := make([]map[string]any, 0, len(list))
+	for _, item := range list {
+		request := item.Request
+		s.reportLeakStatus(request, leakReceived, "", "")
+		s.acknowledgeHandoff(aub.HandoffLeakTest, request.RequestID, request.AssetID, request.Revision, request.ContentSHA256,
+			item.ReceivedAt, item.LaunchedByVersion)
+		// `relay` is whether the editor has been told: a request this machine
+		// holds and the editor has not heard about are different facts.
+		entries = append(entries, map[string]any{
+			"request_id": request.RequestID, "asset_id": request.AssetID, "revision": request.Revision,
+			"content_sha256": request.ContentSHA256, "received_at": item.ReceivedAt,
+			"relay": s.leaks.view(request.RequestID),
+		})
 	}
-	// `relay` is whether the editor has been told: a request this machine
-	// holds and the editor has not heard about are different facts.
-	answer := map[string]any{
-		"pending": true, "request_id": request.RequestID, "asset_id": request.AssetID,
-		"revision": request.Revision, "content_sha256": request.ContentSHA256, "received_at": received,
-		"relay": s.leaks.view(request.RequestID),
+	answer := map[string]any{"pending": true, "requests": entries}
+	for key, value := range entries[len(entries)-1] {
+		answer[key] = value
 	}
 	if repeat != nil {
 		answer["repeat"] = repeat
@@ -161,17 +174,18 @@ func (s *Server) handleLeakTestRequest(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, answer)
 }
 
-// pendingLeakRequest is the pending request when it is the one named.
+// pendingLeakRequest is the pending request with this id, or nil.
 func (s *Server) pendingLeakRequest(requestID string) *aub.LeakTestLink {
 	dir, err := s.configDir()
 	if err != nil || requestID == "" {
 		return nil
 	}
-	request, _, err := leakintent.Read(leakintent.Path(dir), time.Now().UTC())
-	if err != nil || request == nil || request.RequestID != requestID {
+	item, err := leakintent.Get(leakintent.Path(dir), requestID, time.Now().UTC())
+	if err != nil || item == nil {
 		return nil
 	}
-	return request
+	request := item.Request
+	return &request
 }
 
 // handleLeakTestReviewing records that a person opened the review. It starts

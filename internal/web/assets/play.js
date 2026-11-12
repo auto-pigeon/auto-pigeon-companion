@@ -191,9 +191,18 @@
   }
 
   // checkBuildRequest drops the request when a person's change made the form
-  // build something else.
+  // build something else. While the revisions are being read again the form
+  // has no revision for a moment — that is not a choice anybody made, and the
+  // request was dropped for it once, live, at the own-WADs step (issue #33:
+  // a second refresh of the form cleared the revision while the first one
+  // finished). So the check waits for the read, and is made when it ends.
+  let revisionsLoading = 0;
+  let checkDeferred = false;
   function checkBuildRequest() {
-    if (state.buildRequest && !askedByEditor()) dropBuildRequest();
+    if (!state.buildRequest) return;
+    if (revisionsLoading > 0) { checkDeferred = true; return; }
+    checkDeferred = false;
+    if (!askedByEditor()) dropBuildRequest();
   }
 
   // preferredPipeline is the build profile a request is opened with when none
@@ -498,7 +507,17 @@
   // revision at all, which the coordinator correctly refuses.
   let revisionRequest = 0;
 
-  async function loadRevisions(assetID, { keep = false } = {}) {
+  async function loadRevisions(assetID, options = {}) {
+    revisionsLoading += 1;
+    try {
+      await readRevisions(assetID, options);
+    } finally {
+      revisionsLoading -= 1;
+      if (!revisionsLoading && checkDeferred) checkBuildRequest();
+    }
+  }
+
+  async function readRevisions(assetID, { keep = false } = {}) {
     const request = ++revisionRequest;
     const select = $("play-revision");
     select.replaceChildren();
@@ -1510,8 +1529,14 @@
       asset_id: state.map.asset_id, revision: String(state.revision.revision), own_wads_dir: state.ownWadsDir,
     });
     const asked = ++texturesAsked;
+    // What this answer is about: the plan on screen and the exact choices,
+    // folder included. An answer that comes back after either changed — the
+    // form refreshed, another revision, another folder — is about something
+    // no longer shown, and is dropped; the automatic check works it out again.
+    const plan = state.plan;
+    const key = planKey();
     const { ok, body } = await api("/api/v1/play/textures?" + query.toString());
-    if (asked !== texturesAsked) return;
+    if (asked !== texturesAsked || state.plan !== plan || planKey() !== key) return;
     if (!ok) {
       setMessage("play-review-message", body.error, "error");
       return;
@@ -2571,6 +2596,7 @@
   // Settles when the lists the current refresh asked for have arrived and the
   // remembered map and revision are chosen again. See checkOwnWads.
   let ready = Promise.resolve();
+  let refreshes = 0;
   window.AUCOM.areas.play = {
     // `argument` is the view a route asked for (app.js aliases): "local" for a
     // file on this computer (the old `#build`), "autobuild" for the automatic
@@ -2594,13 +2620,19 @@
       $("play-review").replaceChildren();
       $("play-review-attention").replaceChildren();
       let settle;
+      // Two refreshes can overlap (an area shown twice in one turn, setup
+      // finishing). Only the newest goes on to read the revisions again: an
+      // older one doing it after the newer had settled emptied the revision
+      // under an adopted editor request (issue #33).
+      const own = ++refreshes;
       ready = new Promise((resolve) => { settle = resolve; });
       try {
         await Promise.all([loadPipelines(), loadEngines(), signedIn ? loadMaps() : null]);
-        if (signedIn && state.map) await loadRevisions(state.map.asset_id, { keep: true });
+        if (own === refreshes && signedIn && state.map) await loadRevisions(state.map.asset_id, { keep: true });
       } finally {
         settle();
       }
+      if (own !== refreshes) return;
       askForGame();
       showAutobuild();
       renderFinalSummary();

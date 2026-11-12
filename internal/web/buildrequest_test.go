@@ -26,7 +26,7 @@ var buildRequestCount int
 func (m *machine) editorBuildRequest(intent, game string, change func(map[string]any)) aub.BuildRequestLink {
 	m.t.Helper()
 	buildRequestCount++
-	link := aub.BuildRequestLink{RequestID: fmt.Sprintf("%032x", 0xb0000+buildRequestCount), Intent: intent}
+	link := aub.BuildRequestLink{RequestID: formatBuildRequestID(buildRequestCount), Intent: intent}
 	now := time.Now().UTC()
 	request := map[string]any{
 		"request_id": link.RequestID, "intent": intent, "map_id": m.backend.asset.assetID,
@@ -62,7 +62,11 @@ func (m *machine) receiveBuildRequest(link aub.BuildRequestLink) {
 
 func (m *machine) pendingBuildLink() *aub.BuildRequestLink {
 	m.t.Helper()
-	request, _, err := m.server.pendingBuildRequest()
+	dir, err := m.server.configDir()
+	if err != nil {
+		m.t.Fatal(err)
+	}
+	request, _, err := buildintent.Newest(buildintent.Path(dir), time.Now().UTC())
 	if err != nil {
 		m.t.Fatal(err)
 	}
@@ -262,19 +266,24 @@ func TestABuildRequestForAnUnsupportedGameIsAnsweredNotGuessed(t *testing.T) {
 	}
 }
 
-// A request replaced while the page asks about the older one is answered
-// "replaced"; Dismiss forgets only the request it names.
-func TestABuildRequestIsReplacedAndDismissedByName(t *testing.T) {
+// A second request is kept beside the first (NEW_502, issues #33 and #35): a
+// page asking about the older one is answered about the older one, and
+// Dismiss forgets only the request it names, telling each editor by its id.
+func TestASecondBuildRequestIsKeptAndEachIsDismissedByName(t *testing.T) {
 	m := newMachine(t)
 	m.backend.savedAPMap("quake1")
 	m.signIn()
 	older := m.editorBuildRequest(aub.BuildIntentBuild, "quake1", nil)
 	newer := m.editorBuildRequest(aub.BuildIntentBuildRun, "quake1", nil)
 	status, body := m.call(http.MethodGet, "/api/v1/build-request/pending?request_id="+older.RequestID, nil)
-	if status != http.StatusOK || body["replaced"] != true || body["request_id"] != newer.RequestID || body["revision_id"] != nil {
-		t.Fatalf("replaced: %d %v", status, body)
+	if status != http.StatusOK || body["replaced"] != nil || body["request_id"] != older.RequestID || body["revision_id"] == nil {
+		t.Fatalf("the older request once a newer one arrived: %d %v", status, body)
 	}
-	if status, body := m.call(http.MethodPost, "/api/v1/build-request/dismiss", map[string]any{"request_id": older.RequestID}); status != http.StatusOK || body["dismissed"] != false {
+	if _, body := m.call(http.MethodGet, "/api/v1/build-request/request", nil); len(anySlice(body["requests"])) != 2 {
+		t.Fatalf("both requests are not listed: %v", body)
+	}
+	m.buildStatusesSoon(1)
+	if status, body := m.call(http.MethodPost, "/api/v1/build-request/dismiss", map[string]any{"request_id": older.RequestID}); status != http.StatusOK || body["dismissed"] != true {
 		t.Fatalf("dismissing the older request: %d %v", status, body)
 	}
 	if pending := m.pendingBuildLink(); pending == nil || *pending != newer {
@@ -286,12 +295,16 @@ func TestABuildRequestIsReplacedAndDismissedByName(t *testing.T) {
 	if m.pendingBuildLink() != nil {
 		t.Fatal("a dismissed request is still pending")
 	}
-	if got := m.buildStatusesSoon(1); strings.Join(got, "|") != newer.RequestID+" cancelled "+buildStageDismissed {
-		t.Fatalf("statuses %v", got)
+	got := m.buildStatusesSoon(3)
+	joined := strings.Join(got, "|")
+	for _, want := range []string{older.RequestID + " cancelled " + buildStageDismissed, newer.RequestID + " cancelled " + buildStageDismissed} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("statuses %v lack %q", got, want)
+		}
 	}
 	// Nothing touched the leak flow's file.
 	dir, _ := m.server.configDir()
-	if request, _, _ := leakintent.Read(leakintent.Path(dir), time.Now().UTC()); request != nil {
+	if request, _, _ := leakintent.Newest(leakintent.Path(dir), time.Now().UTC()); request != nil {
 		t.Fatalf("a build request reached the leak-test intent: %+v", request)
 	}
 }
@@ -357,8 +370,12 @@ func TestAStartForABuildRequestConsumesItOnceAndReportsTheRun(t *testing.T) {
 		t.Fatalf("start: %d %v", status, started)
 	}
 	runID, _ := started["id"].(string)
-	if m.pendingBuildLink() != nil {
+	dir, _ := m.server.configDir()
+	if left, _ := buildintent.Get(buildintent.Path(dir), link.RequestID, time.Now().UTC()); left != nil {
 		t.Fatal("the started request is still pending")
+	}
+	if other, _ := buildintent.Get(buildintent.Path(dir), buildOnly.RequestID, time.Now().UTC()); other == nil {
+		t.Fatal("starting one request took the other one too")
 	}
 	// The same press again is pointed at the run, never a second one.
 	status, again := start(link, nil)
@@ -458,3 +475,12 @@ func TestTheBuildRequestNoticeBehavesAsShipped(t *testing.T) {
 	}
 	t.Logf("%s", out)
 }
+
+// anySlice is a JSON array from a decoded body, or nil.
+func anySlice(value any) []any {
+	items, _ := value.([]any)
+	return items
+}
+
+// formatBuildRequestID is the id editorBuildRequest gives its n-th request.
+func formatBuildRequestID(n int) string { return fmt.Sprintf("%032x", 0xb0000+n) }

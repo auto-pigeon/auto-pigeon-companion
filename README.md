@@ -828,11 +828,19 @@ by the editor** or **Build & Run requested by the editor** — appears at the to
 of Build & Run in the open Companion window, and the window moves there; from
 another area, **Activity** counts it and has **Open in Build & Run**. The Companion asks your account, with its own sign-in, which
 saved map and revision the request is about, and checks that revision itself.
-**Review build** opens Build & Run on that exact saved revision, with Run after
+It opens Build & Run on that exact saved revision, with Run after
 build set as the editor asked, and checks the setup as usual; nothing runs until
 you press **Build** or **Build & Run**. If a compiler is not set up yet, **Set up**
 beside the button takes you there, and the request waits (up to thirty minutes).
 **Dismiss** forgets the request and tells the editor.
+
+Pressing **Build** in the editor again — for another map, from another tab, or
+for the same map — adds a second card; it never replaces the first. The form
+stays on the request it is open on (supplying your own WADs, for example, does
+not lose it), the other card says it is waiting, and **Open this request** moves
+the form to it while the first one stays pending. Each card has its own
+**Dismiss**, each is built by its own press, and the editor that sent each one
+hears about that one only. Activity lists every pending request.
 
 The editor sees what happens — received, in review, building, then finished,
 failed or cancelled. If you change the map, the revision or Run after build, the
@@ -852,12 +860,16 @@ Nothing is sent before you are signed in, and it never starts a build. Leak test
 then says the version is unknown.
 
 ```bash
-# the pending request, from this machine only
+# every pending request, oldest first, from this machine only ("requests": [...])
 curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
   "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/build-request/request"
-# what your account says it is about
+# what your account says one of them is about (the newest when no id is given)
 curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
-  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/build-request/pending"
+  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/build-request/pending?request_id=<id>"
+# forget one of them and tell its editor; the others stay
+curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
+  -H "Content-Type: application/json" -d '{"request_id":"<id>"}' \
+  "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/build-request/dismiss"
 ```
 
 ## Testing an editor map for leaks
@@ -876,16 +888,24 @@ what, with a **Set up** link, and **Build** is enabled as soon as it is done,
 with no need to ask from the editor again. **Dismiss** forgets that request. The
 game is read from the saved map itself, never from the link.
 
+A second **Test in Companion** — another map, or another tab — adds a second
+card beside the first instead of replacing it. Build stays on the test it is
+ready for; the other card waits, and **Open this request** moves Build to it.
+Each card has its own **Dismiss** and its own result for its editor, and a
+restart of the Companion keeps them all (each for its ten minutes).
+
 What you see is checked again when you press **Build**: if the map was saved
 since, or you signed out, nothing runs and the notice says why. One press is one
-build; a request that was built, or replaced by a newer one, cannot come back.
+build; a request that was built or dismissed cannot come back.
 Opening a link whose test already ran says **This leak test already ran** and
 offers **Open the result**; it never starts a second one. To test again, press
 **Test in Companion** in the editor.
 
 ```console
-$ curl -fsS -H "X-AUCOM-Token: $token" "$api/api/v1/leak-test/request" | jq '{pending, repeat}'
-{ "pending": false, "repeat": { "request_id": "…", "build_id": "…", "revision": 7, "received_at": "…", "until": "…" } }
+$ curl -fsS -H "X-AUCOM-Token: $token" "$api/api/v1/leak-test/request" | jq '{pending, requests: [.requests[].request_id], repeat}'
+{ "pending": true, "requests": ["…", "…"], "repeat": { "request_id": "…", "build_id": "…", "revision": 7, "received_at": "…", "until": "…" } }
+$ curl -fsS -X POST -H "X-AUCOM-Token: $token" -H 'Content-Type: application/json' \
+    "$api/api/v1/leak-test/dismiss" -d '{"request_id":"…"}'                   # forget that request; the others stay
 $ curl -fsS -X POST -H "X-AUCOM-Token: $token" -H 'Content-Type: application/json' \
     "$api/api/v1/leak-test/dismiss" -d '{"request_id":"…","repeat":true}'     # forget the note; no request is touched
 ```
@@ -1031,7 +1051,7 @@ until you sign in to the account it belongs to. If the return fails, press
 JSON file in the editor's Leaks panel.
 
 ```bash
-# the pending request, and how its status is being delivered
+# every pending request ("requests", oldest first), and how each one's status is being delivered
 curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
   "$(cat ~/.config/auto-pigeon-companion/api-url)/api/v1/leak-test/request"
 # the result file of a finished leak-test build

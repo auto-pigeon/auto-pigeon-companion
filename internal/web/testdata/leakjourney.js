@@ -1,6 +1,8 @@
 // A leak request from the editor, in the real page against the real server
 // (NEW_380): it opens ready to Build, with no Review step, and the one Build
-// button is always aimed at the request the notice shows.
+// button is always aimed at the request whose card says it is in the form.
+// NEW_502 (issue #35): a second request joins the first on a card of its own
+// and never takes the form from it.
 //
 // Each scenario is a page of its own. `hold` keeps an answer in the air, which is
 // the ordering a person cannot schedule by hand. Every build is counted from the
@@ -54,6 +56,10 @@
     if (!response.ok) throw new Error(`/journey/${name} answered ${response.status}`);
   });
   const notice = () => document.getElementById("leak-request")?.textContent || "";
+  const cards = () => [...document.querySelectorAll("#leak-request .leak-request__card")];
+  const cardFor = (revision) => cards().find((card) => new RegExp(`saved revision ${revision} `).test(card.textContent));
+  // The card of the request in the form: the one with no "Open this request".
+  const inForm = () => cards().find((card) => !card.querySelector('button[data-action="open"]') && /saved revision/.test(card.textContent));
   const button = () => document.getElementById("build-start");
   const label = () => document.getElementById("build-label")?.value || "";
   const enabled = () => { const b = button(); return b && !b.hidden && !b.disabled; };
@@ -70,7 +76,7 @@
   // Nothing may ever show one request and be aimed at another.
   let aimedWrong = "";
   const watchAim = setInterval(() => {
-    const showing = /saved revision (\d+)/.exec(notice());
+    const showing = /saved revision (\d+)/.exec(inForm()?.textContent || "");
     const aimed = /revision (\d+)$/.exec(label());
     if (showing && aimed && showing[1] !== aimed[1] && enabled()) aimedWrong = `${notice()} / ${label()}`;
   }, 10);
@@ -93,7 +99,8 @@
         `visible ${document.getElementById("leak-request").checkVisibility()}`);
       record("Activity counts the request and offers the way back",
         document.getElementById("activity-count").textContent === "1" &&
-          Boolean(document.querySelector('#activity-requests button[data-request="leak"]')),
+          Boolean(document.querySelector('#activity-requests button[data-request="leak:' + "a".repeat(32) + '"]')) &&
+          Boolean(document.querySelector('#activity-requests button[data-request="leak:' + "a".repeat(32) + ':dismiss"]')),
         `count "${document.getElementById("activity-count").textContent}"`);
       record("there is no Review step", !/review/i.test(notice()) && ![...document.querySelectorAll("#leak-request button")].some((b) => /review/i.test(b.textContent)), notice());
       record("the button says Build", button().textContent === "Build", button().textContent);
@@ -113,29 +120,42 @@
       record("the spent request leaves no Build behind it", !enabled() && !label(), label());
     },
 
-    // A's revision is in the air when B replaces it; A's answer lands afterwards.
+    // A's revision is in the air when B arrives; A's answer lands afterwards,
+    // on A's card. B waits on its own card and is built only once opened.
     async "held-answer"() {
       const release = hold("/api/v1/leak-test/pending");
       await waitFor("A's notice", () => /saved revision 1/.test(notice()));
       await control("receive-b");
-      await waitFor("B's notice", () => /saved revision 2/.test(notice()));
+      await waitFor("B's card beside A's", () => cardFor(1) && cardFor(2));
       record("nothing was aimed at A", !enabled(), label());
       release();
-      await waitFor("Build for B", enabled);
+      await waitFor("B to wait on its own card", () => cardFor(2)?.querySelector('button[data-action="open"]'));
+      record("the second link did not take the form", !/revision 2$/.test(label()), label());
+      cardFor(2).querySelector('button[data-action="open"]').click();
+      await waitFor("Build for B", () => enabled() && /revision 2$/.test(label()));
       record("the form is B's", /revision 2$/.test(label()), label());
       button().click();
       await finished();
       const press = presses.at(-1);
       record("the press is B's", presses.length === 1 && press.leak_request_id === "b".repeat(32) && press.inputs.source_map.includes("-rev-2"), JSON.stringify(press));
       record("one build", await count() === 1, `${await count()}`);
+      await waitFor("B's card to go", () => !cardFor(2));
+      record("A is still pending on its own card", Boolean(cardFor(1)), notice());
     },
 
-    // A is ready to Build when B arrives.
-    async "replaced-when-ready"() {
+    // A is ready to Build when B arrives: the form stays A's, B waits; opening
+    // B moves the form to B and leaves A pending.
+    async "second-when-ready"() {
       await waitFor("Build for A", enabled);
       await control("receive-b");
-      await waitFor("B's notice", () => /saved revision 2/.test(notice()));
+      await waitFor("B's card", () => cardFor(2)?.querySelector('button[data-action="open"]'));
+      await sleep(600);
+      record("the open form stays on A", /revision 1$/.test(label()) && enabled(), label());
+      record("Activity counts both", document.getElementById("activity-count").textContent === "2",
+        `count "${document.getElementById("activity-count").textContent}"`);
+      cardFor(2).querySelector('button[data-action="open"]').click();
       await waitFor("the form to be B's and checked", () => /revision 2$/.test(label()) && enabled());
+      record("A waits on its own card", Boolean(cardFor(1)?.querySelector('button[data-action="open"]')), cardFor(1)?.textContent);
       button().click();
       await finished();
       record("the press is B's", presses.length === 1 && presses[0].leak_request_id === "b".repeat(32), JSON.stringify(presses));

@@ -69,32 +69,62 @@ func buildRequestTools(game string) (tool, normal string) {
 	return "", ""
 }
 
-// pendingBuildRequest is the request on this machine, or nil.
-func (s *Server) pendingBuildRequest() (*aub.BuildRequestLink, time.Time, error) {
+// pendingBuildRequests is every request on this machine, oldest first.
+func (s *Server) pendingBuildRequests() ([]buildintent.Pending, error) {
+	dir, err := s.configDir()
+	if err != nil {
+		return nil, err
+	}
+	return buildintent.List(buildintent.Path(dir), time.Now().UTC())
+}
+
+// pendingBuildRequest is the pending request with this id, or nil. Every
+// question about a request names it (NEW_502): several may be pending, and an
+// answer about one is never an answer about another.
+func (s *Server) pendingBuildRequest(requestID string) (*aub.BuildRequestLink, time.Time, error) {
 	dir, err := s.configDir()
 	if err != nil {
 		return nil, time.Time{}, err
 	}
-	return buildintent.Read(buildintent.Path(dir), time.Now().UTC())
+	item, err := buildintent.Get(buildintent.Path(dir), requestID, time.Now().UTC())
+	if err != nil || item == nil {
+		return nil, time.Time{}, err
+	}
+	request := item.Request
+	return &request, item.ReceivedAt, nil
 }
 
-// handleBuildRequestLocal is the pending request as this machine holds it, and
-// nothing else: no AUB call, so an open page can ask every couple of seconds
-// whether a link arrived.
+// buildRequestEntry is one pending request as the watch shows it.
+func (s *Server) buildRequestEntry(item buildintent.Pending) map[string]any {
+	return map[string]any{
+		"request_id": item.Request.RequestID, "intent": item.Request.Intent, "run_after": item.Request.RunAfter(),
+		"received_at": item.ReceivedAt, "relay": s.buildReqs.view(item.Request.RequestID),
+	}
+}
+
+// handleBuildRequestLocal is every pending request as this machine holds it,
+// oldest first, and nothing else: no AUB call, so an open page can ask every
+// couple of seconds whether a link arrived. The newest is also said at the top
+// level, as before NEW_502, for a page that knows only one.
 func (s *Server) handleBuildRequestLocal(w http.ResponseWriter, _ *http.Request) {
-	request, received, err := s.pendingBuildRequest()
+	list, err := s.pendingBuildRequests()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	if request == nil {
-		writeJSON(w, http.StatusOK, map[string]any{"pending": false})
+	if len(list) == 0 {
+		writeJSON(w, http.StatusOK, map[string]any{"pending": false, "requests": []any{}})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"pending": true, "request_id": request.RequestID, "intent": request.Intent,
-		"run_after": request.RunAfter(), "received_at": received, "relay": s.buildReqs.view(request.RequestID),
-	})
+	entries := make([]map[string]any, 0, len(list))
+	for _, item := range list {
+		entries = append(entries, s.buildRequestEntry(item))
+	}
+	answer := map[string]any{"pending": true, "requests": entries}
+	for key, value := range entries[len(entries)-1] {
+		answer[key] = value
+	}
+	writeJSON(w, http.StatusOK, answer)
 }
 
 // buildResolution is what asking AUB about a request came to. Exactly one of
@@ -146,7 +176,7 @@ func (s *Server) resolveBuildRequest(ctx context.Context, link aub.BuildRequestL
 	// This server has the request: it says so, and what it is, whatever it
 	// then makes of it (NEW_368).
 	if dir, err := s.configDir(); err == nil {
-		if received, by, err := buildintent.Receipt(buildintent.Path(dir), time.Now().UTC()); err == nil {
+		if received, by, err := buildintent.Receipt(buildintent.Path(dir), link.RequestID, time.Now().UTC()); err == nil && !received.IsZero() {
 			s.acknowledgeHandoff(aub.HandoffBuild, link.RequestID, request.MapID, request.Revision, request.ContentSHA256, received, by)
 		}
 	}
@@ -209,27 +239,41 @@ func (s *Server) resolveBuildRequest(ctx context.Context, link aub.BuildRequestL
 	return buildResolution{Facts: &facts}
 }
 
-// handleBuildRequestPending resolves the pending request against AUB.
+// handleBuildRequestPending resolves one pending request against AUB: the one
+// the page names, or — for a page that names none — the newest.
 func (s *Server) handleBuildRequestPending(w http.ResponseWriter, r *http.Request) {
-	request, received, err := s.pendingBuildRequest()
+	named := r.URL.Query().Get("request_id")
+	var (
+		request  *aub.BuildRequestLink
+		received time.Time
+		err      error
+	)
+	if named != "" {
+		request, received, err = s.pendingBuildRequest(named)
+	} else {
+		var list []buildintent.Pending
+		if list, err = s.pendingBuildRequests(); err == nil && len(list) > 0 {
+			newest := list[len(list)-1]
+			request, received = &newest.Request, newest.ReceivedAt
+		}
+	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
 	if request == nil {
-		writeJSON(w, http.StatusOK, map[string]any{"pending": false})
+		// The named request is no longer pending — started, dismissed or
+		// expired. Another request that may be pending is not it, and nothing
+		// about that one is said under this one's name.
+		answer := map[string]any{"pending": false}
+		if named != "" {
+			answer["request_id"] = named
+		}
+		writeJSON(w, http.StatusOK, answer)
 		return
 	}
 	base := map[string]any{"pending": true, "request_id": request.RequestID, "intent": request.Intent,
 		"run_after": request.RunAfter(), "received_at": received}
-	// A page names the request it is asking about. When another replaced it
-	// meanwhile the answer says so and resolves nothing: facts about B shown
-	// under A would be facts about the wrong map.
-	if named := r.URL.Query().Get("request_id"); named != "" && named != request.RequestID {
-		base["replaced"] = true
-		writeJSON(w, http.StatusOK, base)
-		return
-	}
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
 	resolution := s.resolveBuildRequest(ctx, *request)
@@ -272,12 +316,12 @@ func (s *Server) handleBuildRequestReview(w http.ResponseWriter, r *http.Request
 	if !decodeJSON(w, r, &body) {
 		return
 	}
-	request, _, err := s.pendingBuildRequest()
+	request, _, err := s.pendingBuildRequest(body.RequestID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	if request == nil || body.RequestID == "" || request.RequestID != body.RequestID {
+	if request == nil || body.RequestID == "" {
 		writeError(w, http.StatusConflict, errors.New("that build request is no longer pending; ask the editor again"))
 		return
 	}
@@ -336,12 +380,12 @@ func (s *Server) startForBuildRequest(w http.ResponseWriter, r *http.Request, bo
 		refuse("build_request_used", errors.New("this editor request was already built; nothing was started. Press Build in the editor again for another build"))
 		return
 	}
-	pending, _, err := s.pendingBuildRequest()
+	pending, _, err := s.pendingBuildRequest(id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	if pending == nil || pending.RequestID != id {
+	if pending == nil || id == "" {
 		refuse("build_request_mismatch", errors.New("that editor request is no longer pending; nothing was started"))
 		return
 	}

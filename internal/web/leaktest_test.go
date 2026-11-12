@@ -188,7 +188,7 @@ func (m *machine) leakStatusesSoon(t *testing.T, want int) []string {
 // (NEW_307W). That question is answered from this machine alone, the editor is
 // told once that its request arrived, and a Dismiss removes the request it
 // names — never a newer one that replaced it meanwhile.
-func TestAnOpenPageSeesANewLeakRequestAndDismissesOnlyTheOneItNamed(t *testing.T) {
+func TestAnOpenPageSeesASecondLeakRequestAndDismissesEachByName(t *testing.T) {
 	m := newMachine(t)
 	m.backend.savedAPMap("quake1")
 	m.signIn()
@@ -245,22 +245,26 @@ func TestAnOpenPageSeesANewLeakRequestAndDismissesOnlyTheOneItNamed(t *testing.T
 		t.Fatalf("watching a request in review told the editor %v", got)
 	}
 
-	// The editor is clicked again while the first notice is still on screen.
+	// The editor is clicked again while the first notice is still on screen:
+	// both are pending (NEW_502, issue #35), each acknowledged by its own id.
 	newer := older
 	newer.RequestID = strings.Repeat("b", 32)
 	if err := leakintent.Receive(leakintent.Path(dir), newer, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
-	status, body := m.call(http.MethodPost, "/api/v1/leak-test/dismiss", map[string]any{"request_id": older.RequestID})
-	if status != http.StatusOK || body["dismissed"] != false {
-		t.Fatalf("dismissing the replaced request: %d %v", status, body)
+	if _, body := m.call(http.MethodGet, "/api/v1/leak-test/request", nil); len(anySlice(body["requests"])) != 2 || body["request_id"] != newer.RequestID {
+		t.Fatalf("the second request did not join the first: %v", body)
 	}
-	if _, body := m.call(http.MethodGet, "/api/v1/leak-test/request", nil); body["request_id"] != newer.RequestID {
-		t.Fatalf("the newer request did not survive an older Dismiss: %v", body)
-	}
-	// Statuses are coalesced: wait until `received` was accepted, or the
-	// dismissal that follows would rightly be the only thing sent.
+	// Statuses are coalesced: wait until the newer `received` was accepted,
+	// or the dismissal that follows would rightly be the only thing sent.
 	m.leakStatusesSoon(t, 3)
+	status, body := m.call(http.MethodPost, "/api/v1/leak-test/dismiss", map[string]any{"request_id": older.RequestID})
+	if status != http.StatusOK || body["dismissed"] != true {
+		t.Fatalf("dismissing the older request: %d %v", status, body)
+	}
+	if _, body := m.call(http.MethodGet, "/api/v1/leak-test/request", nil); body["request_id"] != newer.RequestID || len(anySlice(body["requests"])) != 1 {
+		t.Fatalf("the newer request did not survive the older one's Dismiss: %v", body)
+	}
 	status, body = m.call(http.MethodPost, "/api/v1/leak-test/dismiss", map[string]any{"request_id": newer.RequestID})
 	if status != http.StatusOK || body["dismissed"] != true {
 		t.Fatalf("dismissing the pending request: %d %v", status, body)
@@ -269,7 +273,7 @@ func TestAnOpenPageSeesANewLeakRequestAndDismissesOnlyTheOneItNamed(t *testing.T
 		t.Fatalf("after dismiss: %v", body)
 	}
 	want := []string{older.RequestID + " received", older.RequestID + " reviewing",
-		newer.RequestID + " received", newer.RequestID + " dismissed"}
+		newer.RequestID + " received", older.RequestID + " dismissed", newer.RequestID + " dismissed"}
 	if got := m.leakStatusesSoon(t, len(want)); strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Errorf("the editor was told\n %v\nwant\n %v", got, want)
 	}

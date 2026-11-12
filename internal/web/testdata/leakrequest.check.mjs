@@ -13,7 +13,7 @@ const source = readFileSync(new URL("../assets/leakrequest.js", import.meta.url)
 
 function element(tag, options = {}) {
   const node = {
-    tag, children: [...(options.children || [])], listeners: {}, hidden: false, isConnected: true,
+    tag, children: [...(options.children || [])], listeners: {}, hidden: false, isConnected: true, dataset: {}, attrs: { ...(options.attrs || {}) },
     textContent: options.text || "", className: options.className || options.attrs?.class || "",
     append(...items) { node.children.push(...items); },
     prepend(...items) { node.children.unshift(...items); },
@@ -139,35 +139,55 @@ const PENDING = "/api/v1/leak-test/pending";
   assert.equal(p.adopted.length, 0, "an answer about other bytes was accepted");
 }
 
-// 3. The watch sees B while A's resolve is still in flight. A's late answer —
-//    a perfectly valid answer about A — must not land on B's notice.
+// 3. NEW_502, issue #35: the watch sees B while A's resolve is still in
+//    flight. A's late answer — a valid answer about A — lands on A's card and
+//    never on B's; A, which arrived while the form held nothing, is the one
+//    prepared; B waits on its own card until a person opens it, and opening B
+//    leaves A pending.
 {
   const p = load();
+  const list = (...requests) => ({ pending: true, requests, ...requests.at(-1) });
+  const cardOf = (id) => p.box.children.find((card) => card.attrs?.["data-request-id"] === id);
   await p.answer(REQUEST, 200, A);
   await p.tick();
-  await p.answer(REQUEST, 200, B);
-  assert.match(text(p.box), /map-two, saved revision 9/);
-  await p.answer(PENDING, 200, resolved(A, "first"));
-  assert.doesNotMatch(text(p.box), /first/, "A's answer was shown on B's notice");
-  assert.equal(p.adopted.length, 0);
-  // B is then resolved by its own question.
-  await p.answer(REQUEST, 200, B);
-  const asked = p.calls.filter((call) => call.path.startsWith(PENDING)).at(-1);
-  assert.equal(asked.path, PENDING + "?request_id=" + B.request_id);
-  await p.answer(PENDING, 200, resolved(B, "second"));
+  await p.answer(REQUEST, 200, list(A, B));
+  assert.equal(p.box.children.length, 2, "B replaced A instead of joining it");
+  assert.match(text(cardOf(B.request_id)), /map-two, saved revision 9/);
+  await p.answer(PENDING + "?request_id=" + A.request_id, 200, resolved(A, "first"));
+  assert.match(text(cardOf(A.request_id)), /first/);
+  assert.doesNotMatch(text(cardOf(B.request_id)), /first/, "A's answer was shown on B's card");
+  await p.answer(PENDING + "?request_id=" + B.request_id, 200, resolved(B, "second"));
 
-  // The form is prepared with B, and only B, without anybody pressing anything.
+  // The form is prepared with A, and only A, without anybody pressing anything.
   assert.equal(p.adopted.length, 1);
-  assert.equal(p.adopted[0].request_id, B.request_id);
-  assert.equal(p.adopted[0].source_ref, "aub:map/map-two@rev-b#second.apmap");
+  assert.equal(p.adopted[0].request_id, A.request_id);
+  assert.equal(p.adopted[0].source_ref, "aub:map/map-one@rev-a#first.apmap");
   assert.deepEqual(p.moved, ["build"], "the page did not open on Build");
-  // The editor is told it is ready only when it is, and then about B.
+  assert.match(text(cardOf(B.request_id)), /Waiting: the Build form is open on another leak test/);
+  // The editor is told it is ready only when it is, and then about A.
   assert.equal(posted(p, "/api/v1/leak-test/reviewing").length, 0, "the editor was told before the check passed");
   await p.checked(B.request_id, "ok");
+  assert.equal(p.unanswered("/api/v1/leak-test/reviewing"), 0, "a check about B, not in the form, told the editor");
+  await p.checked(A.request_id, "ok");
   const told = await p.answer("/api/v1/leak-test/reviewing", 200, { reviewing: true });
-  assert.deepEqual(told.body, { request_id: B.request_id });
-  assert.match(text(p.box), /nothing runs until you press Build/i);
+  assert.deepEqual(told.body, { request_id: A.request_id });
+  assert.match(text(cardOf(A.request_id)), /nothing runs until you press Build/i);
   assert.equal(posted(p, BUILD).length, 0, "opening the request started a build");
+  // A person opens B: A leaves the form (not dismissed), B is prepared.
+  buttonNamed(cardOf(B.request_id), "Open this request").listeners.click();
+  await p.settle();
+  assert.deepEqual(p.dropped, [A.request_id]);
+  assert.equal(p.adopted.at(-1).request_id, B.request_id);
+  assert.equal(posted(p, "/api/v1/leak-test/dismiss").length, 0, "opening B dismissed A");
+  assert.match(text(cardOf(A.request_id)), /Waiting: the Build form is open on another leak test/);
+  // Dismissing A names A and leaves B in the form.
+  buttonNamed(cardOf(A.request_id), "Dismiss").listeners.click();
+  await p.settle();
+  const dismissed = await p.answer("/api/v1/leak-test/dismiss", 200, { dismissed: true });
+  assert.deepEqual(dismissed.body, { request_id: A.request_id });
+  assert.equal(cardOf(A.request_id), undefined);
+  assert.ok(cardOf(B.request_id));
+  assert.deepEqual(p.dropped, [A.request_id], "dismissing A took B out of the form");
 }
 
 // 4. The form is being prepared for A when B replaces it: A's preparation

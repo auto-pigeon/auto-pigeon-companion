@@ -340,35 +340,50 @@
   ];
   let announcedEntries = "";
 
+  // One row per pending request (NEW_502, issue #35: two requests of one kind
+  // are two entries, each with its own way back and its own Dismiss).
   function requestPointers() {
     const host = $("activity-requests");
     const rows = [];
     for (const { box, key } of requestCards) {
       if (box.hidden) continue;
-      const title = box.querySelector(".leak-request__title")?.textContent || "";
-      const what = box.querySelector(".leak-request__what")?.textContent || "";
-      if (!title) continue;
-      const open = el("button", { text: t("Open in Build & Run"), className: "secondary", attrs: { type: "button", "data-request": key } });
-      open.addEventListener("click", () => {
-        window.AUCOM.closeActivity?.({ focus: false });
-        show("play", { focus: false });
-        box.scrollIntoView({ block: "nearest" });
-        (box.querySelector("button.primary, button") || $("area-heading")).focus();
-      });
-      rows.push(el("div", { className: "activity-item", attrs: { "data-request": key }, children: [
-        el("p", { className: "activity-item__title", text: title }),
-        ...(what ? [el("p", { className: "activity-item__what", text: what })] : []),
-        el("div", { className: "row-actions", children: [open] }),
-      ] }));
+      for (const card of box.querySelectorAll(".leak-request__card")) {
+        const title = card.querySelector(".leak-request__title")?.textContent || "";
+        const what = card.querySelector(".leak-request__what")?.textContent || "";
+        if (!title) continue;
+        const id = card.dataset.requestId || "";
+        const ref = key + ":" + id;
+        const open = el("button", { text: t("Open in Build & Run"), className: "secondary", attrs: { type: "button", "data-request": ref } });
+        open.addEventListener("click", () => {
+          window.AUCOM.closeActivity?.({ focus: false });
+          show("play", { focus: false });
+          const target = [...box.querySelectorAll(".leak-request__card")].find((node) => node.dataset.requestId === id) || box;
+          target.scrollIntoView({ block: "nearest" });
+          (target.querySelector("button.primary, button") || $("area-heading")).focus();
+        });
+        const actions = [open];
+        const cardDismiss = card.querySelector('button[data-action="dismiss"]');
+        if (cardDismiss) {
+          const dismiss = el("button", { text: t("Dismiss"), className: "secondary", attrs: { type: "button", "data-request": ref + ":dismiss" } });
+          // The card's own Dismiss, so the request named is the card's.
+          dismiss.addEventListener("click", () => cardDismiss.click());
+          actions.push(dismiss);
+        }
+        rows.push(el("div", { className: "activity-item", attrs: { "data-request": ref }, children: [
+          el("p", { className: "activity-item__title", text: title }),
+          ...(what ? [el("p", { className: "activity-item__what", text: what })] : []),
+          el("div", { className: "row-actions", children: actions }),
+        ] }));
+      }
     }
-    const signature = rows.map((row) => row.textContent).join("|");
+    const signature = rows.map((row) => row.getAttribute("data-request") + "=" + row.textContent).join("|");
     if (host.dataset.signature !== signature) {
       // Rebuilt only when what it says changed, so a focused button in it
       // survives the requests' two-second watch.
       const focused = host.contains(document.activeElement) ? document.activeElement.dataset.request : "";
       host.dataset.signature = signature;
       host.replaceChildren(...rows);
-      if (focused) host.querySelector(`button[data-request="${focused}"]`)?.focus();
+      if (focused) [...host.querySelectorAll("button[data-request]")].find((node) => node.dataset.request === focused)?.focus();
     }
     host.hidden = rows.length === 0;
     return rows.length;

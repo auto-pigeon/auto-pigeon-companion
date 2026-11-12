@@ -20,7 +20,7 @@ func TestALeakRequestOpensReadyToBuildInABrowser(t *testing.T) {
 		m.saveRoom("new380", revision, q1Room("new380.wad", false, "n380_floor"),
 			leakBundle("new380", revision, []string{"new380.wad"}, map[string][]byte{"new380.wad": wad}))
 	}
-	for _, scenario := range []string{"ready", "held-answer", "replaced-when-ready", "saved-since", "form-changed"} {
+	for _, scenario := range []string{"ready", "held-answer", "second-when-ready", "saved-since", "form-changed"} {
 		t.Run(scenario, func(t *testing.T) {
 			m, _ := newLeakMachine(t)
 			room(m, 1)

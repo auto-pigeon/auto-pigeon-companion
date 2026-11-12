@@ -720,9 +720,10 @@ func TestThePageNeverShowsOneLeakRequestAsAnother(t *testing.T) {
 	}
 }
 
-// The server's half of it: a page that names the request it shows is told
-// when another one replaced it, and that newer request is NOT resolved for it.
-func TestPendingAnswersReplacedToAPageNamingAnOlderRequest(t *testing.T) {
+// The server's half of it (NEW_502, issue #35): a page that names the request
+// it shows is answered about that one, whatever arrived after it — the newer
+// request is never resolved for it, and the older one is not replaced.
+func TestPendingAnswersAboutTheNamedRequestWhenAnotherArrives(t *testing.T) {
 	m := newMachine(t)
 	m.backend.savedAPMap("quake1")
 	m.signIn()
@@ -744,22 +745,36 @@ func TestPendingAnswersReplacedToAPageNamingAnOlderRequest(t *testing.T) {
 	if err := leakintent.Receive(leakintent.Path(dir), newer, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
-	served := m.backend.count()
 	status, body = m.call(http.MethodGet, "/api/v1/leak-test/pending?request_id="+older.RequestID, nil)
-	if status != http.StatusOK || body["replaced"] != true || body["request_id"] != newer.RequestID || body["source_ref"] != nil {
-		t.Fatalf("asking about a replaced request: %d %v", status, body)
+	if status != http.StatusOK || body["request_id"] != older.RequestID || body["source_ref"] == nil || body["replaced"] != nil {
+		t.Fatalf("asking about the older request once another arrived: %d %v", status, body)
 	}
-	if got := m.backend.count(); got != served {
-		t.Errorf("a replaced request made %d call(s) to the account server", got-served)
-	}
-	// The form without a name still answers about whatever is pending.
+	// The form without a name answers about the newest.
 	if status, body = m.call(http.MethodGet, "/api/v1/leak-test/pending", nil); status != http.StatusOK || body["request_id"] != newer.RequestID || body["source_ref"] == nil {
 		t.Fatalf("the unnamed form: %d %v", status, body)
 	}
-	// And a build for the older request is refused: it is no longer pending.
+	// Both still match a build of their own request; a request no longer
+	// pending answers "not pending" under its own name and resolves nothing.
+	for _, link := range []aub.LeakTestLink{older, newer} {
+		if !m.server.matchesPendingLeakRequest(link.RequestID, build.SourceRef{AssetType: aub.AssetTypeMap, AssetID: link.AssetID,
+			RevisionID: "r", Revision: link.Revision, ContentSHA256: link.ContentSHA256, Refetchable: true}) {
+			t.Fatalf("request %s no longer matches a build of itself", link.RequestID)
+		}
+	}
+	if _, err := leakintent.Consume(leakintent.Path(dir), older.RequestID, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	served := m.backend.count()
+	status, body = m.call(http.MethodGet, "/api/v1/leak-test/pending?request_id="+older.RequestID, nil)
+	if status != http.StatusOK || body["pending"] != false || body["request_id"] != older.RequestID || body["source_ref"] != nil {
+		t.Fatalf("asking about a request no longer pending: %d %v", status, body)
+	}
+	if got := m.backend.count(); got != served {
+		t.Errorf("a request no longer pending made %d call(s) to the account server", got-served)
+	}
 	if m.server.matchesPendingLeakRequest(older.RequestID, build.SourceRef{AssetType: aub.AssetTypeMap, AssetID: older.AssetID,
 		RevisionID: "r", Revision: older.Revision, ContentSHA256: older.ContentSHA256, Refetchable: true}) {
-		t.Fatal("a replaced request still matches a build")
+		t.Fatal("a consumed request still matches a build")
 	}
 }
 
@@ -774,7 +789,7 @@ func TestAnExpiredUnbuiltLeakRequestIsNoLongerRefreshed(t *testing.T) {
 	sender.step()
 	posts := relay.posts()
 	// The watch finds nothing pending: the intent expired.
-	sender.nothingPending("")
+	sender.nothingPending(nil)
 	clock.advance(leakStatusRefresh)
 	sender.step()
 	if got := relay.posts() - posts; got != 1 {
@@ -790,7 +805,7 @@ func TestAnExpiredUnbuiltLeakRequestIsNoLongerRefreshed(t *testing.T) {
 	pending := testLeakLink("c")
 	sender.report(pending, leakReceived, "", "", true)
 	sender.step()
-	sender.nothingPending(pending.RequestID)
+	sender.nothingPending(map[string]bool{pending.RequestID: true})
 	posts = relay.posts()
 	clock.advance(leakStatusRefresh)
 	sender.step()
