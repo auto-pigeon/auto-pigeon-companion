@@ -1120,10 +1120,21 @@
       // for shader`) did not produce a finished map, and the result says so.
       const warned = (body.manifest.steps || []).reduce((sum, step) =>
         sum + (step.diagnostics || []).filter((d) => d.severity === "warning").length, 0);
+      // A leak test that found a leak worked (NEW_503, AUCOM #24): its compile
+      // step failing is how the compiler says so, and the result is not
+      // announced as a failed build — the same reading as the headline.
+      const leakFound = Boolean(body.leak_test) && leakOutcome(body.manifest, body.leak_test) === "leak";
+      // Nothing stood in open space, so nothing was flooded: an answer about
+      // the map, not a build that broke (NEW_503).
+      const notTested = !leakFound && body.leak_test?.diagnostic?.outcome === "no_interior";
       // A build somebody cancelled is not an error, and is not announced as one.
       setMessage(
         "build-result",
-        state === "succeeded" && warned
+        leakFound
+          ? t("The leak test found a leak. The result and the route are below.")
+          : notTested
+          ? t("The leak test ran, but tested nothing: no entity stands in open space. The result below says why.")
+          : state === "succeeded" && warned
           ? t("The build ran to the end, but the compiler warned {warnings} time(s), so this is not a complete result. Read the warnings in the stages below.", { warnings: warned })
           : state === "succeeded"
           ? "The build succeeded. Its outputs are listed below."
@@ -1136,14 +1147,18 @@
               // stopped. A copy must not claim the original's Companion stopped.
               ? `This build was interrupted: ${body.manifest.error || "nothing here knows how it ended"}. Build it again when you are ready.`
               : `The build ${state}: ${body.manifest.error || body.error || "see the stages below"}`,
-        state === "succeeded" ? (warned ? "warning" : "ok") : state === "cancelled" || state === "interrupted" ? "" : "error"
+        leakFound || notTested ? "warning" : state === "succeeded" ? (warned ? "warning" : "ok") : state === "cancelled" || state === "interrupted" ? "" : "error"
       );
       // Once per build and outcome. Coming back to this area polls the open
       // build again, and each return used to add the same line: four builds,
       // eleven entries (Q3_010, headed run).
       recordOnce(`${body.manifest.build_id}:${state}`,
-        `Build ${state}: ${body.manifest.label || body.manifest.pipeline?.name || "untitled"}`,
-        sentenceOf(body.manifest.error), state);
+        leakFound
+          ? t("Leak found: {name}", { name: body.manifest.label || body.manifest.pipeline?.name || "untitled" })
+          : notTested
+          ? t("Leak test, nothing tested: {name}", { name: body.manifest.label || body.manifest.pipeline?.name || "untitled" })
+          : `Build ${state}: ${body.manifest.label || body.manifest.pipeline?.name || "untitled"}`,
+        leakFound || notTested ? "" : sentenceOf(body.manifest.error), leakFound || notTested ? "warning" : state);
       await refreshHistory();
     };
     tick();
@@ -1286,7 +1301,13 @@
     // The title is what was built and the badge is how it stands: the state is
     // not buried at the end of a sentence.
     const title = $("build-current-title");
-    title.replaceChildren(document.createTextNode((manifest.label || manifest.pipeline?.name || t("this build")) + " "), badge(manifest.state));
+    // A finished leak test is titled by what it found (NEW_503, AUCOM #24): a
+    // leak is a result, so the badge is not "failed" — the same reading the
+    // headline below uses, so the two cannot disagree.
+    const leakKind = !body.live && body.leak_test ? leakOutcome(manifest, body.leak_test) : "";
+    const notTested = !body.live && body.leak_test?.diagnostic?.outcome === "no_interior";
+    title.replaceChildren(document.createTextNode((manifest.label || manifest.pipeline?.name || t("this build")) + " "),
+      leakKind === "leak" ? badge(t("leak found"), "warning") : notTested ? badge(t("not tested"), "warning") : badge(manifest.state));
 
     // One line: where the build is, and for how long.
     const steps = manifest.steps || [];
@@ -1585,7 +1606,10 @@
       const manifest = item.manifest;
       const head = el("div", { className: "row-head" });
       head.append(el("strong", { text: manifest.label || manifest.pipeline?.name || "Untitled build" }));
-      head.append(badge(manifest.state));
+      // A leak test that found a leak worked; its compile step failing is how
+      // the compiler says so, not a failed build (NEW_503, AUCOM #24).
+      head.append(item.leak_verdict === "leak" || item.leak_found ? badge(t("leak found"), "warning")
+        : item.leak_verdict === "no_interior" ? badge(t("not tested"), "warning") : badge(manifest.state));
       if (item.live) head.append(badge("running here", "running"));
       const detail = el("p", { className: "muted" });
       detail.textContent = [

@@ -103,6 +103,15 @@ func leakQbspMain(args []string) int {
 	// ericw-tools 2.0 says this for every Quake 1 map, whatever it opened
 	// (measured live, NEW_357): `skip` has no picture in any WAD.
 	say("WARNING: unable to find texture skip")
+	// A compiler that stops on an error (NEW_503): exit 1, no point file, no
+	// BSP — a failure, never a leak.
+	if len(fixtureValues(contents, "_aucom_test_fails")) > 0 {
+		say("************ ERROR ************")
+		say("fixture: the compiler stopped before its fill")
+		_ = os.WriteFile(stem+".log", log.Bytes(), 0o600)
+		fmt.Print(log.String())
+		return 1
+	}
 	leaks := len(fixtureValues(contents, "_aucom_test_leaks")) > 0
 	if leaks {
 		say("Reached occupant at (0 0 0), no filling performed.")

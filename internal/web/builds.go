@@ -966,6 +966,11 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 		})
 		s.builds.pass(run.ID, "returned")
 		run.finish(manifest, err)
+		// A leak test's failed compile step is an incident only when the run
+		// found no leak (NEW_503): read now, before anything slow.
+		if leakBinding != nil {
+			s.settleLeakFailure(manifest)
+		}
 		// Before anything that follows, because none of it needs the request:
 		// the delivery is about this build's id and can wait on a slow network,
 		// and the texture copy is this run's own.
@@ -1040,8 +1045,18 @@ func (s *Server) handleBuildList(w http.ResponseWriter, r *http.Request) {
 	for _, manifest := range manifests {
 		answer := s.answerBuild(manifest)
 		// diagnostic: a leak test, never offered as a level to play (NEW_365).
-		items = append(items, map[string]any{"manifest": answer.manifest, "live": answer.live,
-			"diagnostic": build.Diagnostic(answer.manifest)})
+		item := map[string]any{"manifest": answer.manifest, "live": answer.live,
+			"diagnostic": build.Diagnostic(answer.manifest)}
+		// A leak test that answered worked: the list says what it found, not
+		// "failed" (NEW_503, AUCOM #24). Only a failed one is read — a
+		// succeeded compile is badged by its own state already.
+		if !answer.live && answer.manifest.State == job.Failed {
+			if verdict := s.leakVerdict(answer.manifest); verdict != "" {
+				item["leak_verdict"] = verdict
+				item["leak_found"] = verdict == leakadapter.OutcomeLeak
+			}
+		}
+		items = append(items, item)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }

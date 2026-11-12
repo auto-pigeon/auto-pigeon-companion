@@ -126,7 +126,10 @@ Build button.
 a second link of the same kind is added beside the first, never retires it, and each is listed (`List`), resolved
 (`/pending?request_id=`), consumed, dismissed and expired by its own id; the same id delivered again only renews its
 lifetime, an id-less link (an editor older than request ids) still replaces the other id-less one, and the list is
-bounded at `PendingLimit`. The version rule is the file name: a Companion older than 2.0 reads and writes only the
+bounded at `PendingLimit`. An id-less link is never a request a page may build (`NEW_503`, AUCOM #22): `/request`
+lists it with `malformed: "no_request_id"` and no relay, it is never acknowledged, resolved, prepared or auto-opened,
+its card offers only Dismiss, and Dismiss posts `{"without_id": true}` (`leakintent.DismissWithoutID`), which forgets
+id-less entries and nothing else — a body naming no id still forgets everything, for an older page. The version rule is the file name: a Companion older than 2.0 reads and writes only the
 1.0 `leak-test-intent.json`, so it never overwrites the list; whatever it leaves there — request, retired and used ids,
 repeat — is imported on the next read and the 1.0 file removed, and a retired id is never brought back by it. The
 page keeps one card per request; the Build form holds at most one (`formID`), a request arriving while it holds none
@@ -213,6 +216,28 @@ banner `2.5.17n-ap.3030+gca2e281d.upstream.82161339` joins the list; the built-i
 
 Delivery to the editor is a fourth, kept beside the build in `leak-return.json`; a failed delivery
 is retried from there and compiles nothing.
+
+**A found leak is a result, not an incident (`NEW_503`, AUCOM #24).** The bound compile step of an
+editor's leak test is submitted with `job.Request.FailureReportedBy = build.FailureReportedByLeakTest`
+(in memory only: the job store is decoded strictly). `incident.JobHook` raises nothing for such a job;
+after the build, `web.settleLeakFailure` raises `aucom.job_failed` through `Options.ReportJobFailure`
+only when the run gave NO verdict (`leakVerdict` is ""): `leak`, `no_leak` and `no_interior` are
+answers about the map, `incomplete` and an unreadable run are not. The evidence and its order are the
+page's `leakOutcome` (the adapter's reading, or with none a point file this run wrote). The step and
+build states above do not change; the build list carries `leak_verdict` (and `leak_found`) for a
+failed build, and the page badges it **leak found** or **not tested**, never **failed**, with no
+"The build failed" line. A manual build of a leak pipeline (no editor request) is not marked and is
+reported as before. HITL review (`NEW_503`, decided at night): `no_interior` raises no incident.
+A program that exited 0 and still failed is reported as `job.failed`, not `job.exit_nonzero`.
+
+**The way back to the editor (AUCOM #37, traced in `NEW_503`).** The editor has one solo route,
+`/edit/map/<map id>/<slug>`, which opens the map's LATEST revision; no route opens an exact saved
+revision, and a newly opened tab cannot adopt a returned result (the rendezvous is keyed by the asking
+tab's request id). So there is no verified return action: the page keeps *Sent to the editor for
+saved revision N. Switch to its tab to see it.* A future action needs (1) an editor route for an
+exact saved revision that adopts the result by request, and (2) AUB returning that address, built
+from its configured editor origin and the request it owns, for the Companion to check against the
+signed-in server before opening it.
 
 ## Reading a run: the evidence, in order
 

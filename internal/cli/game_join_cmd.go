@@ -339,6 +339,11 @@ func gameOpen(env *Env, args []string) int {
 			return fail(env, err)
 		}
 		area, what = "build", "this leak test"
+		if link.RequestID == "" {
+			// AUCOM #22 (NEW_503): kept so the page can show it and Dismiss
+			// it, never built — a build answers a request by its id.
+			fmt.Fprintln(env.Stderr, "note: this leak-test link carries no request id, so nothing will be built for it and no result can return to the editor; the Companion shows it with Dismiss. Press Test in Companion in the editor again.")
+		}
 		record = func(dir string) error {
 			return leakintent.ReceiveFrom(leakintent.Path(dir), link, env.Version, time.Now().UTC())
 		}

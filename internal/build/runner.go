@@ -914,6 +914,11 @@ func (r *Runner) stageArguments(pipelineID, stepID string) []string {
 	return append([]string(nil), local.StepArguments[stepID]...)
 }
 
+// FailureReportedByLeakTest is the job.Request.FailureReportedBy of a leak
+// test's compile step: its failure is reported, or not, once the verdict is
+// read (internal/web, builds.go).
+const FailureReportedByLeakTest = "build.leak_test"
+
 // runStep submits one step and waits for it.
 func (r *Runner) runStep(ctx context.Context, request Request, layout layout, resolved profile.ResolvedStep, wires map[string]wire, manifest *Manifest, pins map[string]pinnedTool, started func(Step)) (Step, error) {
 	step := Step{
@@ -931,6 +936,14 @@ func (r *Runner) runStep(ctx context.Context, request Request, layout layout, re
 	step.Options, step.Inputs = options, inputs
 	if err == nil {
 		err = pins[jobRequest.ProfileID].apply(&jobRequest)
+	}
+	// The compile step of an editor's leak test answers a question, and a
+	// compiler that found a leak exits non-zero (qbsp) or leaves no BSP: the
+	// step still ends failed, truthfully, but whether that is a FAULT is the
+	// verdict's to say. The caller that started the test reads it and reports
+	// the job only when no leak was found (NEW_503, AUCOM #24).
+	if request.LeakTest != nil && resolved.Step.ID == request.LeakTest.CompileStep {
+		jobRequest.FailureReportedBy = FailureReportedByLeakTest
 	}
 	if err != nil {
 		step.Error, step.FailureClass = err.Error(), failure.Of(err)

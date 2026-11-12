@@ -17,6 +17,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/assetsync"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/leakadapter"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/leakintent"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
@@ -394,6 +395,9 @@ func (s *Server) handleLeakTestDismiss(w http.ResponseWriter, r *http.Request) {
 		// Repeat dismisses the note that a used link was opened again
 		// (NEW_508), and nothing else: no request is forgotten or retired.
 		Repeat bool `json:"repeat"`
+		// WithoutID dismisses the notice of a link that carried no request
+		// id (AUCOM #22), and nothing else: every request with an id stays.
+		WithoutID bool `json:"without_id"`
 	}
 	if r.ContentLength != 0 && !decodeJSON(w, r, &body) {
 		return
@@ -406,6 +410,14 @@ func (s *Server) handleLeakTestDismiss(w http.ResponseWriter, r *http.Request) {
 	path, now := leakintent.Path(dir), time.Now().UTC()
 	if body.Repeat {
 		if err = leakintent.DismissRepeat(path, body.RequestID, now); err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"dismissed": true})
+		return
+	}
+	if body.WithoutID {
+		if err = leakintent.DismissWithoutID(path, now); err != nil {
 			writeError(w, http.StatusInternalServerError, err)
 			return
 		}
@@ -728,4 +740,73 @@ func (s *Server) leakTestView(manifest *build.Manifest) map[string]any {
 	}
 	view["diagnostic"] = result.Diagnostic
 	return view
+}
+
+// leakVerdict is what a finished leak-test build established about the map,
+// when it established anything: "leak", "no_leak" or "no_interior" (nothing
+// stood in open space, so nothing was flooded — a fact about the map, said as
+// "not tested"), and "" when the run gave no verdict at all (it stopped on an
+// error, was cut short, or left nothing readable). The evidence and its order
+// are the page's `leakOutcome` (build.js): the compiler's own reading when
+// this program reads the run, and otherwise a point file the run wrote. Every
+// job runs in a fresh workspace, so a point file the build collected is this
+// run's.
+//
+// It is what makes a verdict a RESULT rather than a fault (NEW_503, AUCOM
+// #24): a test that answered raises no incident and is not badged "failed".
+func (s *Server) leakVerdict(manifest *build.Manifest) string {
+	if manifest == nil || !manifest.State.Terminal() {
+		return ""
+	}
+	view := s.leakTestView(manifest)
+	if view == nil {
+		return ""
+	}
+	if verdict, ok := view["diagnostic"].(*leakadapter.Verdict); ok && verdict != nil {
+		switch verdict.Outcome {
+		case leakadapter.OutcomeLeak, leakadapter.OutcomeNoLeak, leakadapter.OutcomeNoInterior:
+			return verdict.Outcome
+		}
+		return ""
+	}
+	pointfile, _ := view["pointfile_output"].(string)
+	for _, output := range manifest.Outputs {
+		if output.Name == pointfile && pointfile != "" && output.Path != "" && !output.Missing {
+			return leakadapter.OutcomeLeak
+		}
+	}
+	return ""
+}
+
+// leakFound says whether a finished leak-test build found a leak.
+func (s *Server) leakFound(manifest *build.Manifest) bool {
+	return s.leakVerdict(manifest) == leakadapter.OutcomeLeak
+}
+
+// settleLeakFailure reports the compile step of an editor's leak test that
+// failed and gave no verdict — the one report the job service left to this
+// server (build.FailureReportedByLeakTest). A leak the compiler found, or a
+// map it could not flood because nothing stood in open space, is the test's
+// answer and raises nothing (the step still ends failed: no BSP was written);
+// a compiler that stopped on an error, or a run nothing could be read from,
+// is still a failure, and still reported, exactly as the job service would
+// have.
+func (s *Server) settleLeakFailure(manifest *build.Manifest) {
+	if manifest == nil || manifest.LeakTest == nil || s.jobs == nil || !manifest.State.Terminal() {
+		return
+	}
+	for _, step := range manifest.Steps {
+		if step.ID != manifest.LeakTest.CompileStep || step.JobID == "" || step.State != job.Failed {
+			continue
+		}
+		if s.leakVerdict(manifest) != "" {
+			return
+		}
+		finished, err := s.jobs.Get(step.JobID)
+		if err != nil || finished == nil {
+			return
+		}
+		s.reportJobFailure(finished)
+		return
+	}
 }

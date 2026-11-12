@@ -509,4 +509,37 @@ const PENDING = "/api/v1/leak-test/pending";
   assert.equal(p.box.hidden, true);
 }
 
-console.log("leakrequest: replacement, stale answers, dismiss, relay notice, unpinned game, cancel, pin ordering and recovery, a late pin of a closed dialog, list failure, nothing ready, direct Build, setup recovery, a blocked check, a running build, an account change, a refused press and a form changed by hand — ok");
+// 22. NEW_503 (AUCOM #22): a link with no request id. It is shown with a
+//     Dismiss that works, is never resolved or prepared, and does not stand in
+//     the way of the next link that has an id — which opens by itself.
+{
+  const p = load();
+  const NOID = { request_id: "", asset_id: "map-hand", revision: 4, content_sha256: "3".repeat(64),
+    received_at: "2026-10-03T09:59:00Z", malformed: "no_request_id" };
+  await p.answer(REQUEST, 200, { pending: true, requests: [NOID], ...NOID });
+  assert.match(text(p.box), /cannot be used/);
+  assert.match(text(p.box), /no request id/);
+  assert.equal(p.unanswered(PENDING), 0, "a link with no request id was resolved");
+  assert.equal(p.adopted.length, 0, "a link with no request id was prepared");
+  assert.equal(buttonNamed(p.box, "Open this request"), undefined, "a link with no request id was offered for the form");
+  // A valid link arrives: it is opened by itself, as if the bad one were not there.
+  await p.tick();
+  await p.answer(REQUEST, 200, { pending: true, requests: [NOID, A], ...A });
+  await p.answer(PENDING, 200, resolved(A, "first"));
+  assert.deepEqual(p.adopted.map((item) => item.request_id), [A.request_id], "the bad link held up the next one");
+  // Dismiss on the bad one forgets it — and only it.
+  const cardsNow = all(p.box).filter((node) => node.className === "leak-request__card");
+  const bad = cardsNow.find((node) => node.attrs["data-malformed"] === "true");
+  assert.ok(bad, "no card for the link with no request id");
+  buttonNamed(bad, "Dismiss").listeners.click();
+  await p.settle();
+  const dismissed = posted(p, "/api/v1/leak-test/dismiss");
+  assert.equal(dismissed.length, 1);
+  assert.deepEqual(dismissed[0].body, { without_id: true }, "the dismiss named something other than the bad link");
+  await p.answer("/api/v1/leak-test/dismiss", 200, { dismissed: true });
+  assert.doesNotMatch(text(p.box), /cannot be used/);
+  assert.match(text(p.box), /first, saved revision 3/);
+  assert.ok(!p.dropped.includes(A.request_id), "dismissing the bad link took the good one out of the form");
+}
+
+console.log("leakrequest: replacement, stale answers, dismiss, relay notice, unpinned game, cancel, pin ordering and recovery, a late pin of a closed dialog, list failure, nothing ready, direct Build, setup recovery, a blocked check, a running build, an account change, a refused press, a form changed by hand and a link with no request id — ok");

@@ -160,6 +160,8 @@ type Server struct {
 	lifecycle *Lifecycle
 	// incidents is Options.Incidents; never nil.
 	incidents func() []incident.RecentIncident
+	// reportJobFailure is Options.ReportJobFailure, never nil.
+	reportJobFailure func(*job.Job)
 	// incidentEnvironment is Options.IncidentEnvironment.
 	incidentEnvironment string
 
@@ -247,6 +249,10 @@ type Options struct {
 	// Report a bug (bugreport.go). Nil means none: the page files cold
 	// reports only.
 	Incidents func() []incident.RecentIncident
+	// ReportJobFailure raises the failure of a job whose report was left to
+	// this server (job.Request.FailureReportedBy): a leak test's compile step,
+	// reported only when the run found no leak (NEW_503). Nil raises nothing.
+	ReportJobFailure func(*job.Job)
 }
 
 // NewServer builds the server and its routes.
@@ -317,8 +323,14 @@ func NewServer(options Options) (*Server, error) {
 		incidents = func() []incident.RecentIncident { return nil }
 	}
 
+	reportJobFailure := options.ReportJobFailure
+	if reportJobFailure == nil {
+		reportJobFailure = func(*job.Job) {}
+	}
+
 	server := &Server{
 		incidents:           incidents,
+		reportJobFailure:    reportJobFailure,
 		incidentEnvironment: options.IncidentEnvironment,
 		lifecycle:           lifecycle,
 		playLive:            playrun.NewLive(),

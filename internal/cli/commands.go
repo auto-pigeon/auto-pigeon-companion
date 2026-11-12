@@ -15,6 +15,7 @@ import (
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/config"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/incident"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/joinintent"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/leakintent"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/lockfile"
@@ -430,6 +431,9 @@ func serve(env *Env, args []string) (int, func()) {
 		// check — offered to Report a bug. Same reporter the job service and
 		// the readiness check capture through.
 		Incidents: env.incidents(settings).Recent,
+		// A leak test's compile step is reported here, after its verdict is
+		// read, and only when it found no leak (NEW_503, AUCOM #24).
+		ReportJobFailure: func(j *job.Job) { incident.ReportFailedJob(env.incidents(settings), j) },
 		// What a bug report's `environment` says: the same environment those
 		// incidents are filed under (NEW_333), never "unknown" from a status
 		// route that did not carry it.

@@ -901,6 +901,13 @@ Opening a link whose test already ran says **This leak test already ran** and
 offers **Open the result**; it never starts a second one. To test again, press
 **Test in Companion** in the editor.
 
+A link with no request id — typed or edited by hand, or from an editor older
+than request ids — cannot be built and no result could reach the editor, so
+its card says **A leak-test link that cannot be used**, prepares nothing and
+offers only **Dismiss**, which forgets that card and no other. The next link
+from the editor opens as usual. `companion game open` prints a note for such a
+link.
+
 ```console
 $ curl -fsS -H "X-AUCOM-Token: $token" "$api/api/v1/leak-test/request" | jq '{pending, requests: [.requests[].request_id], repeat}'
 { "pending": true, "requests": ["…", "…"], "repeat": { "request_id": "…", "build_id": "…", "revision": 7, "received_at": "…", "until": "…" } }
@@ -908,13 +915,27 @@ $ curl -fsS -X POST -H "X-AUCOM-Token: $token" -H 'Content-Type: application/jso
     "$api/api/v1/leak-test/dismiss" -d '{"request_id":"…"}'                   # forget that request; the others stay
 $ curl -fsS -X POST -H "X-AUCOM-Token: $token" -H 'Content-Type: application/json' \
     "$api/api/v1/leak-test/dismiss" -d '{"request_id":"…","repeat":true}'     # forget the note; no request is touched
+$ curl -fsS -X POST -H "X-AUCOM-Token: $token" -H 'Content-Type: application/json' \
+    "$api/api/v1/leak-test/dismiss" -d '{"without_id":true}'                  # forget a link that had no request id; every other request stays
 ```
 
 The result is one of four headlines, with how the Companion knows underneath:
 **Leak found**, **No leak found**, **Couldn’t determine whether the map leaks**
 (the compiler ran and its output does not say), and **Leak test couldn’t
 finish** (the build stopped; the failed stage and its output say why). A leak
-is a result, not a failure of the test.
+is a result, not a failure of the test: the build is listed as **leak found**,
+not **failed**, its result goes back to the editor with the route, and no
+problem report (incident) is raised for it. A Quake III map with no entity in
+open space is listed as **not tested** the same way. The compile stage itself still
+shows how the compiler ended — a compile that found a leak wrote no BSP — and a
+compiler that stopped on an error is still reported as the failure it is.
+
+```console
+$ curl -fsS -H "X-AUCOM-Token: $token" "$api/api/v1/build/runs?limit=5" | jq '.items[] | {id: .manifest.build_id, state: .manifest.state, leak_found}'
+{ "id": "20261112T010203Z-1a2b3c4d", "state": "failed", "leak_found": true }
+$ curl -fsS -H "X-AUCOM-Token: $token" "$api/api/v1/build/runs?limit=5" | jq '.items[] | {state: .manifest.state, leak_verdict}'
+{ "state": "failed", "leak_verdict": "no_interior" }
+```
 
 **A Quake 1 leak test compiles with the map's own textures.** When you press
 **Build**, the Companion takes the texture bundle of exactly the saved revision

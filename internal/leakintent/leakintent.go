@@ -280,6 +280,22 @@ func Dismiss(path string, now time.Time) error {
 	})
 }
 
+// DismissWithoutID forgets the pending requests that carry no request id —
+// a malformed or pre-request-id link (AUCOM #22, NEW_503). Nothing can be
+// built for one and no result can be returned for it, so its notice is
+// dismissed by this, and every request that HAS an id stays.
+func DismissWithoutID(path string, now time.Time) error {
+	return update(path, now, func(intent *Intent) {
+		kept := intent.Requests[:0]
+		for _, item := range intent.Requests {
+			if item.Request.RequestID != "" {
+				kept = append(kept, item)
+			}
+		}
+		intent.Requests = kept
+	})
+}
+
 // Consume removes only the named request — a reviewed build about to start, or
 // a dismissal — and retires its id. Every other pending request stays.
 func Consume(path, requestID string, now time.Time) (*aub.LeakTestLink, error) {

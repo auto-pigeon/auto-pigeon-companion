@@ -113,7 +113,25 @@
       el("div", { className: "row-actions", children: built ? [dismiss, open] : [dismiss] })] });
   }
 
+  // A link that carried no request id (AUCOM #22, NEW_503): hand-made, or from
+  // an editor older than request ids. Nothing is prepared or built for it and
+  // no result could reach the editor, so it says so and offers only Dismiss —
+  // which forgets it and only it. It never takes the Build form, and never
+  // stands in the way of the next link that has an id.
+  function renderMalformed(card) {
+    const seen = card.request;
+    const dismiss = button(t("Dismiss"), "secondary", () => dismissWithoutID(), "dismiss");
+    return el("div", { className: "leak-request__card", attrs: { "data-request-id": "", "data-kind": "leak", "data-malformed": "true" },
+      children: [
+        el("p", { className: "leak-request__title", text: t("A leak-test link that cannot be used") }),
+        el("p", { className: "leak-request__what", text: t("map {id}, saved revision {n} — received {time}", {
+          id: seen.asset_id, n: seen.revision, time: when(seen.received_at) }) }),
+        el("p", { className: "leak-request__state message error", text: t("The link carries no request id, so the Companion cannot build it or return a result to the editor. Nothing was prepared and nothing will run. In the editor, press Test in Companion again.") }),
+        el("div", { className: "row-actions", children: [dismiss] })] });
+  }
+
   function renderCard(card) {
+    if (card.malformed) return renderMalformed(card);
     const seen = card.request;
     const details = card.details;
     const name = details?.body?.name || seen.asset_id;
@@ -252,7 +270,7 @@
   // gone meanwhile — is thrown away: B is never shown, prepared or built as A.
   async function resolve(id, force) {
     const card = cards.get(id);
-    if (!card || card.resolving || (card.details && !force)) return;
+    if (!card || card.malformed || card.resolving || (card.details && !force)) return;
     card.resolving = true;
     const own = card.generation;
     const asked = card.request;
@@ -336,10 +354,14 @@
         if ((entry.relay?.state || "") !== (card.request.relay?.state || "")) card.request = entry;
         continue;
       }
-      const autoOpen = !formID && ![...cards.values()].some((other) => other.autoOpen && !other.opened);
+      // A link with no request id is shown and can be dismissed; it is never
+      // resolved, prepared or opened by itself, and so never waited on.
+      const malformed = Boolean(entry.malformed) || !entry.request_id;
+      const autoOpen = !malformed && !formID && ![...cards.values()].some((other) => other.autoOpen && !other.opened);
       cards.set(keyOf(entry), { request: entry, details: null, resolving: false, generation: 0, autoOpen, opened: false,
-        reopen: false, form: "", formWhy: "", formKey: "", told: false, askedPin: false, checkingSetup: false });
-      record(t("Leak test requested by the editor"), t("map {id}, revision {n}", { id: entry.asset_id, n: entry.revision }), "running");
+        reopen: false, form: "", formWhy: "", formKey: "", told: false, askedPin: false, checkingSetup: false, malformed });
+      record(malformed ? t("A leak-test link that cannot be used") : t("Leak test requested by the editor"),
+        t("map {id}, revision {n}", { id: entry.asset_id, n: entry.revision }), malformed ? "failed" : "running");
       window.AUCOM.requestArrived?.(entry);
     }
     render();
@@ -623,9 +645,17 @@
   // Dismiss names the request it is dismissing, so another one that arrived
   // while this card was on screen is not the one forgotten.
   async function dismissRequest(id) {
-    if (!id) return;
+    if (!id) return dismissWithoutID();
     await api("/api/v1/leak-test/dismiss", { method: "POST", body: { request_id: id } });
     forget(id);
+    watch();
+  }
+
+  // The notice of a link with no request id: forgotten on the server — that
+  // one, never a request that has an id (`without_id`) — and then here.
+  async function dismissWithoutID() {
+    await api("/api/v1/leak-test/dismiss", { method: "POST", body: { without_id: true } });
+    forget("");
     watch();
   }
 

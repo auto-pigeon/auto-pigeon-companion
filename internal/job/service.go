@@ -116,6 +116,9 @@ type Service struct {
 	// correlations holds the correlation id a submission carried, by job id,
 	// until the job finishes. Memory only: see Request.CorrelationID.
 	correlations map[string]string
+	// failureOwners holds a submission's FailureReportedBy, by job id, for
+	// the same reason correlations does: it is not on the stored record.
+	failureOwners map[string]string
 	// live holds a running job's two captures, so its output can be read while
 	// it is still being written (output.go). Dropped once the job is recorded
 	// as finished, after which the stored logs are the answer.
@@ -164,26 +167,27 @@ func NewService(options Options) (*Service, error) {
 		depth = defaultQueueDepth
 	}
 	service := &Service{
-		store:        options.Store,
-		catalog:      options.Catalog,
-		bindings:     options.Bindings,
-		concurrency:  concurrency,
-		maxTimeout:   options.MaxTimeout,
-		secrets:      options.Secrets,
-		lookupEnv:    options.LookupEnv,
-		now:          options.Now,
-		keep:         options.KeepWorkspace,
-		openSidecar:  openShared,
-		logf:         options.Logf,
-		onFinished:   options.OnFinished,
-		recordFacts:  options.RecordFacts,
-		facts:        map[string]binding.ExecutableFact{},
-		queue:        make(chan string, depth),
-		mirrors:      map[string]io.Writer{},
-		owned:        map[string]bool{},
-		correlations: map[string]string{},
-		live:         map[string]*liveCaptures{},
-		samplers:     map[string]*sampler{},
+		store:         options.Store,
+		catalog:       options.Catalog,
+		bindings:      options.Bindings,
+		concurrency:   concurrency,
+		maxTimeout:    options.MaxTimeout,
+		secrets:       options.Secrets,
+		lookupEnv:     options.LookupEnv,
+		now:           options.Now,
+		keep:          options.KeepWorkspace,
+		openSidecar:   openShared,
+		logf:          options.Logf,
+		onFinished:    options.OnFinished,
+		recordFacts:   options.RecordFacts,
+		facts:         map[string]binding.ExecutableFact{},
+		queue:         make(chan string, depth),
+		mirrors:       map[string]io.Writer{},
+		owned:         map[string]bool{},
+		correlations:  map[string]string{},
+		failureOwners: map[string]string{},
+		live:          map[string]*liveCaptures{},
+		samplers:      map[string]*sampler{},
 	}
 	if service.lookupEnv == nil {
 		service.lookupEnv = os.LookupEnv
@@ -424,6 +428,9 @@ func (s *Service) admit(request Request) (*Job, error) {
 	s.owned[id] = true
 	if request.CorrelationID != "" {
 		s.correlations[id] = request.CorrelationID
+	}
+	if request.FailureReportedBy != "" {
+		s.failureOwners[id] = request.FailureReportedBy
 	}
 	s.mu.Unlock()
 	return j, nil
@@ -1204,8 +1211,12 @@ func (s *Service) finish(j *Job, state State, message string, after func()) {
 	s.mu.Lock()
 	correlation := s.correlations[j.ID]
 	delete(s.correlations, j.ID)
+	reportedBy := s.failureOwners[j.ID]
+	delete(s.failureOwners, j.ID)
 	s.mu.Unlock()
 	if s.onFinished != nil {
-		s.onFinished(j.Clone(), correlation)
+		finished := j.Clone()
+		finished.Request.FailureReportedBy = reportedBy
+		s.onFinished(finished, correlation)
 	}
 }

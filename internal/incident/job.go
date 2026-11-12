@@ -32,11 +32,29 @@ func JobHook(r *Reporter, onRaised func(Incident)) func(*job.Job, string) {
 		if r == nil || j == nil || j.State != job.Failed {
 			return
 		}
+		// Somebody else decides whether this failure is one (a leak test's
+		// compile step: a found leak exits non-zero and is the answer). They
+		// report it through [ReportFailedJob] when it is.
+		if j.Request.FailureReportedBy != "" {
+			return
+		}
 		inc := r.capture(JobDraft(j, correlation), j.ID)
 		if onRaised != nil {
 			onRaised(inc)
 		}
 	}
+}
+
+// ReportFailedJob raises `aucom.job_failed` for a failed job whose report was
+// left to its submitter (job.Request.FailureReportedBy), once that submitter
+// has decided it IS a failure — the same incident [JobHook] would have raised,
+// with the same three fixed sentences and nothing else. A job that did not
+// fail raises nothing; reports whether one was raised.
+func ReportFailedJob(r *Reporter, j *job.Job) (Incident, bool) {
+	if r == nil || j == nil || j.State != job.Failed {
+		return Incident{}, false
+	}
+	return r.capture(JobDraft(j, ""), j.ID), true
 }
 
 // JobDraft is the incident a failed job becomes. Exposed for tests.
@@ -53,7 +71,9 @@ func JobDraft(j *job.Job, correlation string) Draft {
 		if j.TimeoutSeconds > 0 {
 			message = fmt.Sprintf("A supervised job was stopped because it exceeded its time bound of %d seconds.", j.TimeoutSeconds)
 		}
-	case j.ExitCode != nil:
+	// A program that exited 0 and still failed (an output it did not write)
+	// did not exit non-zero; it is the plain "failed" below (NEW_503).
+	case j.ExitCode != nil && *j.ExitCode != 0:
 		operation = "job.exit_nonzero"
 		message = fmt.Sprintf("A supervised job exited with status %d.", *j.ExitCode)
 	case j.Command == nil:

@@ -96,6 +96,14 @@ type Request struct {
 	// — so the record format is unchanged: it lives in the running service
 	// only, long enough for a failure report to carry it.
 	CorrelationID string `json:"-"`
+	// FailureReportedBy names who reports this job's failure INSTEAD of the
+	// service's OnFinished listener, which then raises nothing for it. A leak
+	// test's compile step sets it (internal/build, NEW_503): a compiler that
+	// found a leak exits non-zero, and that is the test's answer, not a fault —
+	// so the build reads the verdict first and reports the job only when no
+	// leak was found. NOT persisted, like CorrelationID: the job store is
+	// decoded strictly and an older Companion must keep reading it.
+	FailureReportedBy string `json:"-"`
 }
 
 // EnvSource says where one environment variable's value came from.

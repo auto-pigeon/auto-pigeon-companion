@@ -153,6 +153,19 @@ func (s *Server) handleLeakTestRequest(w http.ResponseWriter, _ *http.Request) {
 	entries := make([]map[string]any, 0, len(list))
 	for _, item := range list {
 		request := item.Request
+		if request.RequestID == "" {
+			// A link with no request id (AUCOM #22, NEW_503): hand-made, or from
+			// an editor older than request ids. Nothing can be built for it —
+			// a build answers a request BY ITS ID — and nothing can be returned
+			// or relayed. It is listed so the person sees it and can dismiss it
+			// (`without_id`), never as a request a page may prepare.
+			entries = append(entries, map[string]any{
+				"request_id": "", "asset_id": request.AssetID, "revision": request.Revision,
+				"content_sha256": request.ContentSHA256, "received_at": item.ReceivedAt,
+				"malformed": "no_request_id",
+			})
+			continue
+		}
 		s.reportLeakStatus(request, leakReceived, "", "")
 		s.acknowledgeHandoff(aub.HandoffLeakTest, request.RequestID, request.AssetID, request.Revision, request.ContentSHA256,
 			item.ReceivedAt, item.LaunchedByVersion)
