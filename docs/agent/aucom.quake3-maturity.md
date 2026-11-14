@@ -166,6 +166,9 @@ demote the model line.
 token beside the sentence, set by the function that knows the cause and read
 with `failure.Of`. Never derive a class from an error's text, and never add a
 class called "unknown": an unclassified failure is a fact about that failure.
+`map_refused`, `map_external_file` and the compile boundary's `converter_unavailable` come from the
+converter's terminal record (`NEW_515`), and an editor leak test that stopped before compiling sends
+its class to the editor as the `blocked` stage (`aucom.leak-adapters`).
 
 
 **What a Quake III build records (moved from README.md, 2026-10-17).** What was staged is the build

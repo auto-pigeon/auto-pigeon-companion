@@ -356,7 +356,7 @@ func TestACancelledLeakTestWithNoOutputTellsTheEditorItWasStopped(t *testing.T) 
 		t.Fatal(err)
 	}
 	record := m.server.deliverLeakResult(silent, request)
-	if record.State != "failed" || !strings.Contains(record.Error, "cancelled") {
+	if record.State != leakReturnBlocked || record.Reason != leakStageCancelled || !strings.Contains(record.Error, "cancelled") {
 		t.Fatalf("a silent cancelled build: %+v", record)
 	}
 	m.backend.mu.Lock()

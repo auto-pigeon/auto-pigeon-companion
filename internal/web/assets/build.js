@@ -328,6 +328,21 @@
         line.className = "leak-return message ok";
         return;
       }
+      // The build stopped before its compiler ran (NEW_515, AUCOM #44): there
+      // is no result, so nothing is offered to send again. The editor is told
+      // the test couldn't run, and why; this line says whether it has been.
+      if (body.state === "blocked") {
+        const relay = body.relay || {};
+        const told = relay.state === "delivered" && relay.delivered === "blocked";
+        line.className = "leak-return message";
+        line.textContent = told
+          ? t("The editor was told this test couldn’t run. There is no result to send.")
+          : relay.state === "sign_in_required" || relay.state === "other_account"
+            ? t("Sign in to the map’s account so the editor can be told this test couldn’t run. There is no result to send.")
+            : t("Telling the editor this test couldn’t run… There is no result to send.");
+        if (!told && attempt < 40) window.setTimeout(() => renderLeakReturn(manifest, item, attempt + 1), 3000);
+        return;
+      }
       line.className = "leak-return message error";
       line.append(document.createTextNode(t("The result was not returned to the editor: {why}", { why: body.error || t("the server refused it") }) + " "));
       const retry = el("button", { text: t("Retry"), attrs: { type: "button", class: "secondary" } });

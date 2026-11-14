@@ -327,7 +327,17 @@ func readInput(path string) ([]byte, error) {
 
 // terminal writes the record a supervisor reads, as the last stderr line, and fails the run.
 func terminal(stderr io.Writer, reason, message, detail string) int {
-	record, err := json.Marshal(map[string]string{"reason": reason, "message": message, "detail": detail})
+	return terminalRefusal(stderr, reason, message, detail, "")
+}
+
+// terminalRefusal is terminal with the narrower `refusal` token beside the
+// reason, when there is one; with none the record is exactly terminal's.
+func terminalRefusal(stderr io.Writer, reason, message, detail, refusal string) int {
+	fields := map[string]string{"reason": reason, "message": message, "detail": detail}
+	if refusal != "" {
+		fields["refusal"] = refusal
+	}
+	record, err := json.Marshal(fields)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s: %s\n", message, detail)
 		return exitFailed

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -233,9 +234,13 @@ type leakReturn struct {
 	SchemaVersion string           `json:"schema_version"`
 	Request       aub.LeakTestLink `json:"request"`
 	// State is `pending` while the build runs, then `sending`, `returned` or
-	// `failed`.
-	State     string    `json:"state"`
-	Error     string    `json:"error,omitempty"`
+	// `failed` — or `blocked`: the build stopped before its compiler ran, so
+	// there is no result and never will be, and the editor is told why instead
+	// (NEW_515). A `blocked` record is never sent again as a result.
+	State string `json:"state"`
+	Error string `json:"error,omitempty"`
+	// Reason is the `blocked` status's stage token, for a `blocked` record.
+	Reason    string    `json:"reason,omitempty"`
 	Attempts  int       `json:"attempts"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -301,8 +306,24 @@ func (s *Server) deliverLeakResult(buildID string, request aub.LeakTestLink) lea
 	// result, and sending one again will not make one: the editor is told the
 	// build was stopped, which ends its wait, rather than that a return failed.
 	if s.leakBuildCancelledSilent(buildID) {
-		record.State, record.Error = "failed", "the build was cancelled before the compiler printed anything, so there is no result to return"
+		record.State, record.Reason = leakReturnBlocked, leakStageCancelled
+		record.Error = "the build was cancelled before the compiler printed anything, so there is no result to return"
 		s.reportLeakStatus(request, leakBlocked, leakStageCancelled, buildID)
+		_ = s.writeLeakReturn(buildID, record)
+		return record
+	}
+	// A build refused before its compile step started — the map names an
+	// external map file, the converter would not check it, a game folder is
+	// missing — has no result either, and a retry of the delivery could only
+	// fail the same way (AUCOM #44: it reached the editor as `return_failed:
+	// the build has no pinned AUB map source`, with a Retry that could not
+	// help). The editor is told the test could not run, and why, as the
+	// terminal `blocked` it already knows; nothing is fabricated in place of
+	// the result, and the map is never called sealed (NEW_515).
+	if reason, refused := s.leakNotCompiled(buildID); refused {
+		record.State, record.Reason = leakReturnBlocked, reason
+		record.Error = "the build stopped before its compiler ran, so there is no result to return"
+		s.reportLeakStatus(request, leakBlocked, reason, buildID)
 		_ = s.writeLeakReturn(buildID, record)
 		return record
 	}
@@ -322,6 +343,57 @@ func (s *Server) deliverLeakResult(buildID string, request aub.LeakTestLink) lea
 // stopped before there was anything to return. A token: the editor has a
 // translated line for it.
 const leakStageCancelled = "build_cancelled"
+
+// leakReturnBlocked is a leak-return record whose build has nothing to
+// return; the editor was told why with a `blocked` status.
+const leakReturnBlocked = "blocked"
+
+// leakStageNotCompiled is the stage of a `blocked` status for a build that
+// stopped before its compile step and recorded no class of failure.
+const leakStageNotCompiled = "not_compiled"
+
+// leakNotCompiled reports a leak-test build that ended before its compile
+// step started, and the stage token the editor is told. Cancelled there, it is
+// `build_cancelled`, as a silent cancel is — a cancel is never reported as a
+// refusal. Failed there, it is the build's failure class (internal/failure —
+// `map_external_file`, `map_refused`, `converter_unavailable`, …), a token
+// the code that refused it attached and never read off a sentence. A build
+// whose compile step ran — whatever it printed — is not this: its log is the
+// result, or its delivery can fail and be retried.
+func (s *Server) leakNotCompiled(buildID string) (string, bool) {
+	dir, err := s.buildsDir()
+	if err != nil {
+		return "", false
+	}
+	manifest, err := build.Find(dir, buildID)
+	if err != nil || (manifest.State != job.Failed && manifest.State != job.Cancelled) {
+		return "", false
+	}
+	_, binding, isLeakTest := leakBindingFor(manifest)
+	if !isLeakTest {
+		return "", false
+	}
+	for _, step := range manifest.Steps {
+		if step.ID != binding.CompileStep {
+			continue
+		}
+		if !step.Skipped || step.State != "" {
+			return "", false
+		}
+		if manifest.State == job.Cancelled {
+			return leakStageCancelled, true
+		}
+		if leakStageToken.MatchString(manifest.FailureClass) {
+			return manifest.FailureClass, true
+		}
+		return leakStageNotCompiled, true
+	}
+	return "", false
+}
+
+// leakStageToken is the shape of a failure class sent as a stage: a token, so
+// nothing a map or a tool printed ever travels in it.
+var leakStageToken = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 
 // leakBuildCancelledSilent reports a cancelled leak-test build that left no
 // compiler text.
@@ -349,11 +421,24 @@ func (s *Server) handleLeakTestReturn(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"requested": false})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	if record.State == leakReturnBlocked && time.Since(record.UpdatedAt) < leakTrackedLifetime {
+		// The terminal status lives in the sender's memory until AUB accepts
+		// it. Said again here — the same status, which the sender sends only
+		// if it does not already hold it — a Companion restarted before AUB
+		// took it still tells the editor, with no build and no result.
+		s.reportLeakStatus(record.Request, leakBlocked, record.Reason, r.PathValue("id"))
+	}
+	answer := map[string]any{
 		"requested": true, "state": record.State, "error": record.Error, "attempts": record.Attempts,
 		"updated_at": record.UpdatedAt, "request_id": record.Request.RequestID,
 		"asset_id": record.Request.AssetID, "revision": record.Request.Revision,
-	})
+	}
+	if record.State == leakReturnBlocked {
+		// Whether the editor has been told yet: `blocked` is said to it, and
+		// nothing is offered to send again.
+		answer["reason"], answer["relay"] = record.Reason, s.leaks.view(record.Request.RequestID)
+	}
+	writeJSON(w, http.StatusOK, answer)
 }
 
 // handleLeakTestReturnRetry sends a finished build's result again.
@@ -366,6 +451,16 @@ func (s *Server) handleLeakTestReturnRetry(w http.ResponseWriter, r *http.Reques
 	}
 	if record.State == "pending" || record.State == "sending" {
 		writeError(w, http.StatusConflict, errors.New("this build's result is not ready to be sent again yet"))
+		return
+	}
+	if record.State == leakReturnBlocked {
+		// There is no result to send. The editor's `blocked` is said again —
+		// the same status, by the sender — and nothing is compiled or sent.
+		s.leaks.retryNow(record.Request.RequestID)
+		s.reportLeakStatus(record.Request, leakBlocked, record.Reason, id)
+		writeJSON(w, http.StatusConflict, map[string]any{"requested": true, "state": record.State,
+			"reason": record.Reason, "code": "not_compiled",
+			"error": "this test stopped before its compiler ran, so there is no result to send; the editor is told why"})
 		return
 	}
 	// A person asked: a status held back by a refused session is tried again.

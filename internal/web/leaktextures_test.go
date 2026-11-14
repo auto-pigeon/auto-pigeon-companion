@@ -39,6 +39,9 @@ const leakQbspFlag = "-aucom-web-leak-qbsp"
 
 // leakQbspMain is the stand-in qbsp: `[-wadpath dir] <map> <bsp>`.
 func leakQbspMain(args []string) int {
+	if len(args) >= 2 && args[0] == q2ReplayFlag {
+		return q2ReplayMain(args[1], args[2:])
+	}
 	wadpath := ""
 	if len(args) >= 2 && args[0] == "-wadpath" {
 		wadpath, args = args[1], args[2:]

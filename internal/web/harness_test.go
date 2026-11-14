@@ -1010,6 +1010,9 @@ type machine struct {
 	gameRoot string
 	content  string
 	settings config.Config
+	// q2Vectors is the content root of the Quake II refusal harness
+	// (leakrefusal_test.go), "" elsewhere.
+	q2Vectors string
 }
 
 // newMachine is a clean machine with a backend, a toolchain and an engine

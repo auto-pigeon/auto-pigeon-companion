@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/failure"
 )
 
 // A map that came from Auto-Pigeon reaches a compiler only as a fresh copy
@@ -95,7 +97,7 @@ func checkAUBMapDestination(inputRoot, destination string) error {
 // destination, and checks what it left there.
 func stageAUBMap(ctx context.Context, canonical CanonicalMapFunc, inputRoot, source, destination string) ([]string, error) {
 	if canonical == nil {
-		return nil, errNoMapCheck
+		return nil, failure.As(failure.ConverterUnavailable, errNoMapCheck)
 	}
 	if err := checkAUBMapDestination(inputRoot, destination); err != nil {
 		return nil, err

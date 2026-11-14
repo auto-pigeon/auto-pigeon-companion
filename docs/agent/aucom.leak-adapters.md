@@ -251,6 +251,24 @@ banner `2.5.17n-ap.3030+gca2e281d.upstream.82161339` joins the list; the built-i
 Delivery to the editor is a fourth, kept beside the build in `leak-return.json`; a failed delivery
 is retried from there and compiles nothing.
 
+**A test that never reached its compiler is `blocked`, not `return_failed` (`NEW_515`, AUCOM #44).** A
+leak build that ended before its bound compile step started (`Skipped`, no state) has no result and
+never will: its map input may not even be staged, so there is no pinned source to name. Before any
+publication, `deliverLeakResult` asks `leakNotCompiled`: cancelled there → stage `build_cancelled`;
+failed there → the manifest's `failure_class` as the stage (`map_external_file`, `map_refused`,
+`converter_unavailable`, … — a token matching `^[a-z][a-z0-9_]{0,63}$`, else `not_compiled`). It
+reports the terminal `blocked` status through the sender (transient AUB failures back off and land
+once, same status), writes `leak-return.json` as `state: blocked` with `reason`, and fabricates no
+result. A `blocked` record is never published as a result: `POST …/return` answers 409
+`not_compiled` and only re-says the status; `GET …/return` adds `reason` and the sender's `relay` view
+and, within the relay's 30 minutes, re-says the status a restart may have lost. The page shows whether
+the editor was told and offers no Retry. An older `failed` record of such a build turns `blocked` on
+its Retry. A build whose compile step ran keeps the old path, including `return_failed` with Retry.
+The class comes from the converter's own terminal record (`map_refused`, narrowed by
+`"refusal":"external_map"`), never from a sentence. Tests: `internal/web/leakrefusal_test.go` (real
+`cmd/mapio`, Quake II fixture pipeline, two pending requests, outage, older record),
+`internal/build/mapconfine_test.go` `TestARefusedMapIsClassedOnTheManifest`.
+
 **A found leak is a result, not an incident (`NEW_503`, AUCOM #24).** The bound compile step of an
 editor's leak test is submitted with `job.Request.FailureReportedBy = build.FailureReportedByLeakTest`
 (in memory only: the job store is decoded strictly). `incident.JobHook` raises nothing for such a job;

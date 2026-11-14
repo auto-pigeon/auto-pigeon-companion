@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/converter"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/failure"
 )
 
 // realMapio is the converter built from this commit, once per test process.
@@ -137,6 +138,36 @@ func TestWithNoConverterAMapFromAutoPigeonIsRefused(t *testing.T) {
 	if _, err := h.run(Request{PipelineID: "test.build.pipeline", Inputs: map[string]string{"source_map": source},
 		Sources: fromAUB}); !errors.Is(err, converter.ErrNoConverter) {
 		t.Fatalf("a missing converter was not the refusal: %v", err)
+	}
+}
+
+// A refusal at the compile boundary is classed by the converter's own word
+// (NEW_515): an external map file and any other refused map are told apart
+// on the manifest, without reading a sentence, and a missing converter is its
+// own class. The compile step is never reached.
+func TestARefusedMapIsClassedOnTheManifest(t *testing.T) {
+	h := newHarness(t, standardFixtures(t))
+	h.runner.options.CanonicalMap = realCanonicalMap
+	for _, c := range []struct {
+		name, text, class string
+	}{
+		{"external.map", testWorld("", testBox("sand")) +
+			"{\n\"classname\" \"misc_external_map\"\n\"_external_map\" \"nothere/missing_prefab.map\"\n}\n",
+			failure.MapExternalFile},
+		{"radlights.map", testWorld(`"_radlights" "/home/victim/secret.rad"`+"\n", testBox("sand")), failure.MapRefused},
+	} {
+		manifest, err := h.run(Request{PipelineID: "test.build.pipeline",
+			Inputs: map[string]string{"source_map": h.sourceMap(c.name, c.text)}, Sources: fromAUB})
+		if err == nil || failure.Of(err) != c.class || manifest == nil || manifest.FailureClass != c.class ||
+			len(manifest.Steps) == 0 || !manifest.Steps[0].Skipped || len(manifest.Inputs) != 0 {
+			t.Fatalf("%s: %v %+v", c.name, err, manifest)
+		}
+	}
+	h.runner.options.CanonicalMap = nil
+	manifest, err := h.run(Request{PipelineID: "test.build.pipeline",
+		Inputs: map[string]string{"source_map": h.sourceMap("plain.map", testWorld("", testBox("sand")))}, Sources: fromAUB})
+	if failure.Of(err) != failure.ConverterUnavailable || manifest.FailureClass != failure.ConverterUnavailable {
+		t.Fatalf("no converter: %v %+v", err, manifest)
 	}
 }
 

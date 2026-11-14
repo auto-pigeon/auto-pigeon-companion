@@ -1219,6 +1219,23 @@ until you sign in to the account it belongs to. If the return fails, press
 **Retry** (it compiles nothing), or **Download leak result** and import that
 JSON file in the editor's Leaks panel.
 
+**A test that could not run.** When the Companion stops a leak test before the
+compiler starts — the map names an external map file (`misc_external_map`),
+the Companion refuses the saved map's text, the map converter is missing, or
+you cancelled the build — there is no result. The editor is told the test
+couldn't run and why (for an external map file: *This leak test couldn't run
+because the map references an external map file*), and its wait ends. The
+build page says whether the editor has been told yet, and offers no **Retry**:
+sending again cannot make a result. Fix the map in the editor, save it, and
+test again.
+
+```bash
+# how returning a build's result went; a test that could not run says "blocked" and why
+curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
+  "$(sed 's:/*$::' ~/.config/auto-pigeon-companion/api-url)/api/v1/leak-test/runs/$BUILD_ID/return" | jq '{state, reason, relay}'
+# {"state":"blocked","reason":"map_external_file","relay":{"state":"delivered","desired":"blocked","delivered":"blocked"}}
+```
+
 ```bash
 # every pending request ("requests", oldest first), and how each one's status is being delivered
 curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
@@ -1836,7 +1853,8 @@ $ auto-pigeon-mapio canonical-map --input e1m1.map --output checked.map --json  
 `canonical-map` is the check every map that came from Auto-Pigeon goes through before the Companion
 compiles it (see *A map from Auto-Pigeon cannot make the compiler read your files*): it reads the map, refuses
 what it may not carry, and writes a new file — never over an existing one, never through a link. A refused
-map is exit 1 with a `MAPIO-TERMINAL/1.0` record whose reason is `map_refused`.
+map is exit 1 with a `MAPIO-TERMINAL/1.0` record whose reason is `map_refused`; one refused because it names
+an external map file also carries `"refusal":"external_map"`.
 
 It exits 0 when it published its whole result, 1 when it did not and 2 for a wrong command line. A failure's
 last line on stderr is a `MAPIO-TERMINAL/1.0` record naming the reason, for a program to read.

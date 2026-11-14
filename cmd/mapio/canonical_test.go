@@ -617,6 +617,18 @@ func TestTheCanonicalMapCommandWritesANewFileOrRefuses(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "bad-out.map")); err == nil {
 		t.Fatal("a refused map left a file")
 	}
+	// That refusal is not an external map file, and says nothing narrower.
+	if strings.Contains(stderr, `"refusal"`) {
+		t.Fatalf("a refusal that is not an external map file named one: %s", stderr)
+	}
+	// An external map file keeps the reason and narrows it (NEW_515): the
+	// editor is told exactly what to remove.
+	external := write("external.map", world("")+"{\n\"classname\" \"misc_external_map\"\n\"_external_map\" \"nothere/missing_prefab.map\"\n}\n")
+	code, _, stderr = call("--input", external, "--output", filepath.Join(dir, "external-out.map"))
+	if code != exitFailed || !strings.Contains(stderr, `"reason":"map_refused"`) || !strings.Contains(stderr, `"refusal":"external_map"`) ||
+		strings.Contains(stderr, "missing_prefab") {
+		t.Fatalf("an external map file: exit %d: %s", code, stderr)
+	}
 
 	if code, _, _ = call("--input", source); code != exitUsage {
 		t.Fatalf("a call with no output exited %d", code)

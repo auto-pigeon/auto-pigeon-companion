@@ -17,6 +17,9 @@ type Terminal struct {
 	Reason  string `json:"reason"`
 	Message string `json:"message"`
 	Detail  string `json:"detail"`
+	// Refusal narrows a `map_refused` reason (`external_map`, NEW_515), and
+	// is absent from every other record and from an older converter's.
+	Refusal string `json:"refusal,omitempty"`
 }
 
 // ReadTerminal finds a terminal record inside an error's text.

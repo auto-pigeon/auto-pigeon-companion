@@ -131,6 +131,9 @@ const (
 	maxMagnitude        float64 = 1 << 53 // integers stay exact, and spelled as integers
 )
 
+// refusalExternalMap is the terminal record's `refusal` for errExternalMap.
+const refusalExternalMap = "external_map"
+
 // errExternalMap is the refusal; the sentence names the key and what to do.
 var errExternalMap = errors.New("the map names an external map file (`_external_map`), which a map from Auto-Pigeon " +
 	"may not do: the compiler would read that file from this computer. Remove the misc_external_map entity, " +
@@ -696,7 +699,14 @@ func runCanonicalMap(args []string, stdout, stderr io.Writer) int {
 	}
 	out, reduced, err := canonicalMapText(text)
 	if err != nil {
-		return terminal(stderr, "map_refused", "the map was refused", err.Error())
+		// The reason stays `map_refused`; an external map file also says so
+		// as `refusal`, a key an older reader ignores, so the editor can name
+		// what to remove (NEW_515, AUCOM #44).
+		refusal := ""
+		if errors.Is(err, errExternalMap) {
+			refusal = refusalExternalMap
+		}
+		return terminalRefusal(stderr, "map_refused", "the map was refused", err.Error(), refusal)
 	}
 	// Exclusive: a name already there — a link planted where the copy goes
 	// included — is an error, never a file written through.

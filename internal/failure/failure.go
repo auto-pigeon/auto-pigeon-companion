@@ -64,6 +64,15 @@ const (
 	ConverterUnavailable = "converter_unavailable"
 	// ConversionRefused: the extractor would not write a `.map` for the input.
 	ConversionRefused = "conversion_refused"
+	// MapRefused: a map from Auto-Pigeon that the compile boundary will not
+	// compile (mapconfine.go, cmd/mapio/canonical.go): its text names a file
+	// outside the build, does not read back exactly, or is too large. Saving
+	// the map again or correcting it is the only remedy; nothing here retries.
+	MapRefused = "map_refused"
+	// MapExternalFile: MapRefused because the map names an external map file
+	// (`_external_map`). Its own class, because the editor can say exactly
+	// what to remove (NEW_515, AUCOM #44).
+	MapExternalFile = "map_external_file"
 	// FatalDiagnostic: a profile's `fatal` rule matched and named no class.
 	FatalDiagnostic = "fatal_diagnostic"
 	// PackageHeld: a Quake III map package was not written because something

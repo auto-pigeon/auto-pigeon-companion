@@ -66,7 +66,8 @@ is exactly the assumption a rebuilt or forked converter breaks.
 `cmd/mapio`'s contract is its protocol document: `version`, `protocol --json`,
 `convert --<direction> --input <file> --output <dir> [--json]` and
 `canonical-map --input <file.map> --output <new file> [--json]` (which writes a new file only, follows no
-link, and refuses with reason `map_refused` and a sentence that names the entity and line, never the value). Exit 0 wrote the output, 1 did not, 2 was
+link, and refuses with reason `map_refused` and a sentence that names the entity and line, never the value;
+an external map file adds `"refusal":"external_map"`, which an older reader ignores — `NEW_515`). Exit 0 wrote the output, 1 did not, 2 was
 a wrong invocation. A failed conversion's last stderr line is `MAPIO-TERMINAL/1.0 {reason, message, detail}`,
 and its reasons are `go/mapio`'s refusal codes plus `io_error`. It validates always and takes no flag that
 turns validation off.

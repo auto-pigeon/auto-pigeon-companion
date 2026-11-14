@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/failure"
 )
 
 // RequiredCompileBoundary is the rule the converter's `canonical-map` must
@@ -22,14 +24,25 @@ const RequiredCompileBoundary = "canonical-map/1"
 // converter's own sentence.
 func CanonicalMap(ctx context.Context, runner Runner, source, destination string) ([]string, error) {
 	if runner == nil {
-		return nil, ErrNoConverter
+		return nil, failure.As(failure.ConverterUnavailable, ErrNoConverter)
 	}
 	stdout, err := runner.Run(ctx, "canonical-map", "--input", source, "--output", destination, "--json")
 	if err != nil {
 		var exit *ExitError
 		if errors.As(err, &exit) {
 			if record, found := ReadTerminal(exit.Stderr); found {
-				return nil, errors.New(strings.TrimSuffix(record.Detail, "."))
+				refused := errors.New(strings.TrimSuffix(record.Detail, "."))
+				// The class is the converter's own word, never read off the
+				// sentence: a refused map is a permanent answer about these
+				// bytes, which a leak test reports to the editor as such
+				// (NEW_515, AUCOM #44).
+				switch {
+				case record.Reason == "map_refused" && record.Refusal == "external_map":
+					return nil, failure.As(failure.MapExternalFile, refused)
+				case record.Reason == "map_refused" || record.Reason == "input_too_large":
+					return nil, failure.As(failure.MapRefused, refused)
+				}
+				return nil, refused
 			}
 		}
 		return nil, err
