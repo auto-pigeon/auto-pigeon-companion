@@ -1369,9 +1369,12 @@
       // What the compiler found, then how returning it went, then the file:
       // three things, kept apart (NEW_307W).
       const headline = leakHeadline(manifest, body.leak_test);
+      // A test that stopped before its compiler ran has no result file
+      // (NEW_515): nothing is offered to download.
       const item = el("li", { className: "leak-outcome leak-outcome--" + headline.kind, children: [
         el("p", { className: "leak-headline", text: headline.title }),
-        el("p", { className: "leak-verdict", text: leakVerdict(manifest, body.leak_test) }), resultButton] });
+        el("p", { className: "leak-verdict", text: leakVerdict(manifest, body.leak_test) }),
+        ...(body.leak_test.not_compiled ? [] : [resultButton])] });
       leak.append(item);
       renderLeakReturn(manifest, item);
     }

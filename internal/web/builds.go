@@ -1014,7 +1014,13 @@ func (s *Server) handleBuildStart(w http.ResponseWriter, r *http.Request) {
 			if dir, dirErr := s.configDir(); dirErr == nil {
 				_ = leakintent.Used(leakintent.Path(dir), leakRequest.RequestID, manifest.BuildID, time.Now().UTC())
 			}
-			if returned := s.deliverLeakResult(manifest.BuildID, *leakRequest); returned.State != "returned" {
+			switch returned := s.deliverLeakResult(manifest.BuildID, *leakRequest); returned.State {
+			case "returned":
+			case leakReturnBlocked:
+				// No result exists (NEW_515): the editor is told why instead.
+				_, _ = run.log.Write([]byte("\nThe leak test could not run (" + returned.Reason +
+					"), so there is no result; Companion tells the editor why.\n"))
+			default:
 				_, _ = run.log.Write([]byte("\nCompanion could not return the leak result to the editor: " + returned.Error + "\n"))
 			}
 		}

@@ -744,6 +744,14 @@ func (s *Server) leakTestView(manifest *build.Manifest) map[string]any {
 			}
 		}
 	}
+	// A test that stopped before its compiler ran has no result file to
+	// download and none to return (NEW_515): the page offers neither.
+	if manifest.State.Terminal() {
+		if reason, refused := s.leakNotCompiled(manifest.BuildID); refused {
+			view["not_compiled"] = reason
+			return view
+		}
+	}
 	if adapter.Classify == nil || !manifest.State.Terminal() {
 		return view
 	}

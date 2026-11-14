@@ -367,6 +367,12 @@ func TestALeakTestRefusedBeforeCompilingTellsTheEditorItCouldNotRun(t *testing.T
 	if status, body := m.call(http.MethodGet, "/api/v1/leak-test/runs/"+id+"/result", nil); status != http.StatusConflict {
 		t.Fatalf("the result download of a refused build: %d %v", status, body)
 	}
+	// The Build page is told there is no result file, so it offers none, and
+	// its log says the editor is told why rather than that a return failed.
+	_, view := m.call(http.MethodGet, "/api/v1/build/runs/"+id, nil)
+	if leak, _ := view["leak_test"].(map[string]any); leak["not_compiled"] != failure.MapExternalFile {
+		t.Fatalf("the Build page's view of a refused build: %v", view["leak_test"])
+	}
 
 	// The page's view of it says the editor was told; nothing to resend.
 	deadline := time.Now().Add(10 * time.Second)
@@ -420,6 +426,9 @@ func TestALeakTestRefusedBeforeCompilingTellsTheEditorItCouldNotRun(t *testing.T
 	}
 	if record := m.leakReturnSettled(controlID); record["state"] != "returned" {
 		t.Fatalf("the control's return: %v", record)
+	}
+	if _, view := m.call(http.MethodGet, "/api/v1/build/runs/"+controlID, nil); view["leak_test"].(map[string]any)["not_compiled"] != nil {
+		t.Fatalf("a compiled control is called not compiled: %v", view["leak_test"])
 	}
 	m.awaitStatus(control.RequestID, "returned", 10*time.Second)
 	m.backend.mu.Lock()
