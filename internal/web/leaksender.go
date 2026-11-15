@@ -3,11 +3,13 @@ package web
 import (
 	"context"
 	"errors"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/aub"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/leakintent"
 )
 
 // The sender of leak statuses (`NEW_307W1`).
@@ -119,8 +121,12 @@ type leakTracked struct {
 	// rejectedToken is the token AUB refused. Nothing is sent until the
 	// session carries another one, or a person asks again.
 	rejectedToken string
-	// superseded: a newer request replaced this one before it was built, so
-	// nobody is waiting on it and it is not refreshed.
+	// superseded: this request was only received or reviewed, and this machine
+	// no longer holds it — it expired or was dismissed — so nobody is waiting
+	// on it and it is not refreshed. Another request arriving never sets it:
+	// several requests are pending at once (NEW_502), and each keeps its own
+	// refresh until its own state changes (NEW_522, issue #35). A new status of
+	// its own clears it.
 	superseded bool
 	lastError  string
 }
@@ -202,13 +208,13 @@ func (q *leakSender) report(link aub.LeakTestLink, state, stage, buildID string,
 		item = &leakTracked{link: link, expires: now.Add(leakTrackedLifetime), waiting: leakRelayPending}
 		q.items[link.RequestID] = item
 		if opening {
-			// One request is pending at a time: an older one that never
-			// reached a build was replaced by this click.
-			for id, other := range q.items {
-				if id != link.RequestID && (other.desired.State == leakReceived || other.desired.State == leakReviewing) {
-					other.superseded = true
-				}
-			}
+			// Another request arriving does not end the ones before it: each
+			// pending request keeps its refresh until its own state changes.
+			// Here was the rule from before the request lists — one pending
+			// request at a time, every other unbuilt one marked superseded — so
+			// after an AUB restart the first editor's status was never put back
+			// (NEW_515's leftover, NEW_522). The bound is the store's own.
+			q.boundUnbuilt(link.RequestID)
 		}
 	case opening || sameLeakStatus(item.desired, aub.LeakStatus{State: state, Stage: stage, BuildID: buildID}):
 		// Nothing new to say. A request that is waiting for a sign-in is
@@ -224,6 +230,10 @@ func (q *leakSender) report(link aub.LeakTestLink, state, stage, buildID string,
 		return
 	}
 	item.generation++
+	// The request's own story moved on (reviewed, built, returned), so whatever
+	// retired it from the refresh no longer describes it: a build of a request
+	// the watch had already stopped seeing as pending is refreshed like any.
+	item.superseded = false
 	// The wire sequence orders updates on AUB across a restart of this
 	// program, so it is wall-clock milliseconds, made strictly increasing.
 	sequence := now.UnixMilli()
@@ -239,6 +249,36 @@ func (q *leakSender) report(link aub.LeakTestLink, state, stage, buildID string,
 	}
 	q.mu.Unlock()
 	q.kick()
+}
+
+// boundUnbuilt keeps the refresh of requests nobody has built yet inside the
+// pending store's own limit: at most leakintent.PendingLimit of them are kept
+// alive on AUB, and past it the oldest stops being refreshed — the same oldest
+// the store itself drops. The page's watch (nothingPending) retires the rest as
+// soon as the store no longer holds them; this bound holds between watches.
+// Called with the lock held, after `keep` was added.
+func (q *leakSender) boundUnbuilt(keep string) {
+	unbuilt := make([]string, 0, len(q.items))
+	for id, item := range q.items {
+		if !item.superseded && (item.desired.State == leakReceived || item.desired.State == leakReviewing || id == keep) {
+			unbuilt = append(unbuilt, id)
+		}
+	}
+	if len(unbuilt) <= leakintent.PendingLimit {
+		return
+	}
+	sort.Slice(unbuilt, func(i, j int) bool {
+		a, b := q.items[unbuilt[i]], q.items[unbuilt[j]]
+		if !a.expires.Equal(b.expires) {
+			return a.expires.Before(b.expires)
+		}
+		return unbuilt[i] < unbuilt[j]
+	})
+	for _, id := range unbuilt[:len(unbuilt)-leakintent.PendingLimit] {
+		if id != keep {
+			q.items[id].superseded = true
+		}
+	}
 }
 
 // evict makes room for one more request: the expired go first, then whichever

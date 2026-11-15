@@ -384,8 +384,9 @@ func TestAnActiveLeakStatusIsRefreshedAfterAUBLosesIt(t *testing.T) {
 		t.Fatalf("AUB was told %q", got)
 	}
 
-	// A finished request is not kept alive, and neither is one a newer click
-	// replaced before anyone built it.
+	// A finished request is not kept alive. Two requests pending at once are
+	// both kept alive: a newer click does not end the older one (NEW_522,
+	// issue #35); only the page's watch retires a request it no longer holds.
 	sender.report(link, leakReturned, "", "build-1", false)
 	if _, scheduled := sender.step(); scheduled {
 		t.Fatal("a returned request is still scheduled")
@@ -398,8 +399,8 @@ func TestAnActiveLeakStatusIsRefreshedAfterAUBLosesIt(t *testing.T) {
 	posts = relay.posts()
 	clock.advance(leakStatusRefresh)
 	sender.step()
-	if got := relay.posts() - posts; got != 1 {
-		t.Fatalf("%d refreshes for one live request and one replaced", got)
+	if got := relay.posts() - posts; got != 2 {
+		t.Fatalf("%d refreshes for two pending requests, want 2", got)
 	}
 }
 
