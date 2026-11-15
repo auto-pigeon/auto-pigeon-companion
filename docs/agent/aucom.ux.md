@@ -161,6 +161,13 @@ form's ordinary button; the card at the top of Build & Run says what is prepared
 A used leak link opened again says *This leak test already ran* with **Open the result** and starts nothing (#20). The leak
 contract is `aucom.leak-adapters` ("A request opens ready to Build").
 
+Several requests of both kinds may be pending at once, one card each, and the form holds one of them (NEW_522, #35).
+Opening another — a person's **Open this request**, of either kind — lets the one in the form go: it stays pending on
+its card (*the other stays here*), and is never dismissed or reported cancelled for it. A request opens by itself
+only into a form that holds no request of either kind. `leakrequest.js` and `buildrequest.js` share the form through
+`aucom:form-request` and each other's `inForm`; a page reload with both kinds pending once dismissed the build request
+in the form on AUB.
+
 ## Build & Run is one form with one primary (NEW_363)
 
 - **One journey, one form.** Map (saved map | file on this computer) → Build profile → Run after build → Review.

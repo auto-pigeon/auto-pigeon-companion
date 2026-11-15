@@ -180,6 +180,15 @@
     }) === true;
   }
 
+  // A leak test took the form (leakrequest.js): the editor's build request is
+  // let go, not dropped. It stays pending on its card, nobody chose to build
+  // something else, and the editor is not told it was cancelled (NEW_522).
+  document.addEventListener("aucom:form-request", (event) => {
+    if (event.detail?.kind === "build" || !state.buildRequest) return;
+    state.buildRequest = null;
+    $("play-request-note").hidden = true;
+  });
+
   function dropBuildRequest() {
     const id = state.buildRequest?.id;
     if (!id) return;

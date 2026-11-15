@@ -57,6 +57,8 @@
   // a changed pin or a recovered setup prepares again.
   const cards = new Map();
   let formID = null; // the request in the Build form, or null
+  // buildHolds: the form is open on one of the editor's build requests.
+  const buildHolds = () => Boolean(window.AUCOM.buildRequest?.inForm?.());
   let repeat = null; // a used link that was opened again, or null
   let reading = false;
   let drawn = "";
@@ -292,7 +294,7 @@
     const card = cards.get(id);
     if (!card?.details?.ok) return;
     const body = card.details.body;
-    const mine = formID === id || card.reopen || (card.autoOpen && !card.opened && !formID);
+    const mine = formID === id || (!buildHolds() && (card.reopen || (card.autoOpen && !card.opened && !formID)));
     if (!mine) return;
     if (body.needs_pipeline && !card.askedPin) {
       card.askedPin = true;
@@ -357,7 +359,7 @@
       // A link with no request id is shown and can be dismissed; it is never
       // resolved, prepared or opened by itself, and so never waited on.
       const malformed = Boolean(entry.malformed) || !entry.request_id;
-      const autoOpen = !malformed && !formID && ![...cards.values()].some((other) => other.autoOpen && !other.opened);
+      const autoOpen = !malformed && !formID && !buildHolds() && ![...cards.values()].some((other) => other.autoOpen && !other.opened);
       cards.set(keyOf(entry), { request: entry, details: null, resolving: false, generation: 0, autoOpen, opened: false,
         reopen: false, form: "", formWhy: "", formKey: "", told: false, askedPin: false, checkingSetup: false, malformed });
       record(malformed ? t("A leak-test link that cannot be used") : t("Leak test requested by the editor"),
@@ -397,9 +399,13 @@
     const key = JSON.stringify([request.request_id, request.revision_id, request.pipeline]);
     if (key === card.formKey && formID === id) return;
     if (!person && formID && formID !== id) return;
+    // Never by itself over the editor's build request in the form (NEW_522).
+    if (!person && formID !== id && buildHolds()) return;
     if (formID && formID !== id) dropForm(formID);
     const own = card.generation;
     formID = id;
+    // The build request in the form, if any, is let go and stays pending.
+    document.dispatchEvent(new CustomEvent("aucom:form-request", { detail: { kind: "leak", id } }));
     card.formKey = key;
     card.form = "preparing";
     render();
@@ -686,7 +692,17 @@
       }
     }
   });
+  // The editor's build request took the form (buildrequest.js): the leak test
+  // in it is let go and stays pending on its card, as when a person opens
+  // another leak test (NEW_522).
+  document.addEventListener("aucom:form-request", (event) => {
+    if (event.detail?.kind === "leak" || !formID) return;
+    dropForm(formID);
+    render();
+  });
   // What another question needs to know before it opens over this one's Build.
   window.AUCOM.leakRequestShown = () => cards.size > 0;
+  // The request in the Build form, for buildrequest.js, which shares the form.
+  window.AUCOM.leakRequestInForm = () => formID;
   window.AUCOM.leakRequestRead = watch();
 })();

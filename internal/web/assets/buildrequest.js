@@ -18,6 +18,11 @@
 //   - The form holds at most one request (`formID`). A request that arrives
 //     while the form holds none is opened by itself; any other waits on its
 //     card until a person opens it.
+//   - The form is shared with the editor's leak tests (leakrequest.js). Each
+//     side says when it takes the form (`aucom:form-request`), and the other
+//     lets go of its request WITHOUT dismissing it: it stays pending on its
+//     card. Neither opens by itself over the other's request (NEW_522: a page
+//     reload with both kinds pending dismissed the build request on AUB).
 //   - The watch is cheap and local: `/api/v1/build-request/request` answers
 //     from this machine and calls nobody. Each request is resolved against the
 //     account's server once, and again only when somebody asks (Retry, a
@@ -52,6 +57,8 @@
       choice.revision_id === request.revision_id && choice.run_after === request.run_after;
   }
   window.AUCOM.buildRequest = { stillAsked, inForm: () => formID };
+  // leakHolds: the form is open on one of the editor's leak tests.
+  const leakHolds = () => Boolean(window.AUCOM.leakRequestInForm?.());
 
   function when(value) {
     const date = new Date(value);
@@ -183,10 +190,10 @@
     render();
     // A request that arrived while the form held none is opened by itself,
     // once; never over another request in the form.
-    if (answer.ok && card.autoOpen && !card.opened && !formID && answer.body.revision_id && !answer.body.unsupported &&
-        !answer.body.not_found && !answer.body.sign_in_required) {
+    if (answer.ok && card.autoOpen && !card.opened && !formID && !leakHolds() && answer.body.revision_id &&
+        !answer.body.unsupported && !answer.body.not_found && !answer.body.sign_in_required) {
       card.opened = true;
-      await review(id);
+      await review(id, false);
     }
   }
 
@@ -223,7 +230,7 @@
       }
       // Opened by itself only when the form holds no request and no other
       // card is already about to be opened.
-      const autoOpen = !formID && ![...cards.values()].some((other) => other.autoOpen && !other.opened);
+      const autoOpen = !formID && !leakHolds() && ![...cards.values()].some((other) => other.autoOpen && !other.opened);
       cards.set(entry.request_id, { request: entry, details: null, resolving: false, generation: 0, autoOpen, opened: false });
       record(entry.run_after ? t("Build & Run requested by the editor") : t("Build requested by the editor"), "", "running");
       window.AUCOM.requestArrived?.(entry);
@@ -237,15 +244,20 @@
   // that was in the form stays pending on its own card. The form shows its
   // area itself (adoptBuildRequest): asking for it here as well started a
   // second refresh of the form racing the first (issue #33).
-  async function review(id) {
+  // `person` is false when the request opens by itself: then it never takes
+  // the form from a leak test that got there first.
+  async function review(id, person = true) {
     const card = cards.get(id);
     if (!card?.details?.ok || !sameRequest(card.details.body, card.request) || !card.details.body.revision_id) return;
+    if (!person && leakHolds()) { render(); return; }
     const own = card.generation;
     const request = card.details.body;
     const told = await api("/api/v1/build-request/review", { method: "POST", body: { request_id: request.request_id } });
     if (cards.get(id) !== card || card.generation !== own) return;
     if (!told.ok) { card.details = told; render(); return; }
+    if (!person && leakHolds()) { render(); return; }
     formID = request.request_id;
+    document.dispatchEvent(new CustomEvent("aucom:form-request", { detail: { kind: "build", id: formID } }));
     render();
     await window.AUCOM.areas.play?.adoptBuildRequest?.(request);
   }
@@ -264,6 +276,14 @@
   document.addEventListener("aucom:build-request-dropped", (event) => {
     const id = event.detail?.id;
     if (id && formID === id) dismissRequest(id);
+  });
+  // A leak test took the form: the request in it is let go, not dismissed. It
+  // stays pending on its card ("the other stays here"), and the drop the form
+  // reports for it afterwards no longer names the request in the form.
+  document.addEventListener("aucom:form-request", (event) => {
+    if (event.detail?.kind === "build" || !formID) return;
+    formID = null;
+    render();
   });
   // The form started it: the request is consumed, and the watch says so.
   document.addEventListener("aucom:build-request-started", (event) => {

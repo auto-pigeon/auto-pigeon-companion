@@ -46,6 +46,7 @@ function load() {
   const byId = (id) => (ids[id] ||= Object.assign(element(id === "leak-pin-select" ? "select" : "div"), { id, value: "", focus() {}, disabled: false }));
   const calls = [], waiting = [], adopted = [], dropped = [], moved = [];
   const heard = {};
+  const told = []; // what the page dispatched, e.g. aucom:form-request
   let watch = null;
   // What adoptLeakRequest answers: nothing, or a sentence. A test can hold it.
   const form = { refuse: "", hold: null };
@@ -79,7 +80,8 @@ function load() {
     addEventListener() {},
   };
   const document = { title: "Companion", hidden: false, createTextNode: (text) => element("text", { text }),
-    addEventListener(type, listener) { (heard[type] ||= []).push(listener); } };
+    addEventListener(type, listener) { (heard[type] ||= []).push(listener); },
+    dispatchEvent(event) { told.push(event); for (const listener of heard[event.type] || []) listener(event); } };
   new Function("window", "document", source)(window, document);
   const settle = async () => { for (let turn = 0; turn < 20; turn += 1) await Promise.resolve(); };
   const answer = async (path, status, body) => {
@@ -94,7 +96,7 @@ function load() {
   // The Build form says how its automatic check went.
   const say = async (type, detail) => { for (const listener of heard[type] || []) listener({ detail }); await settle(); };
   const checked = (id, state, why) => say("aucom:leak-form", { request_id: id, state, why });
-  return { box, byId, calls, adopted, dropped, moved, form, window, answer, unanswered, say, checked, tick: async () => { watch(); await settle(); }, settle };
+  return { box, byId, calls, adopted, dropped, moved, told, form, window, answer, unanswered, say, checked, tick: async () => { watch(); await settle(); }, settle };
 }
 const posted = (p, path) => p.calls.filter((call) => call.method === "POST" && call.path === path);
 const BUILD = "/api/v1/build/runs";
@@ -542,4 +544,35 @@ const PENDING = "/api/v1/leak-test/pending";
   assert.ok(!p.dropped.includes(A.request_id), "dismissing the bad link took the good one out of the form");
 }
 
-console.log("leakrequest: replacement, stale answers, dismiss, relay notice, unpinned game, cancel, pin ordering and recovery, a late pin of a closed dialog, list failure, nothing ready, direct Build, setup recovery, a blocked check, a running build, an account change, a refused press, a form changed by hand and a link with no request id — ok");
+// The editor's build request shares the Build form (NEW_522). A leak test
+// that takes the form says so; the build request taking it lets the leak test
+// go — out of the form, pending on its card, nothing dismissed. A leak test
+// never fills the form by itself over a build request in it.
+{
+  const p = load();
+  let build = null;
+  p.window.AUCOM.buildRequest = { inForm: () => build };
+  await p.answer(REQUEST, 200, A);
+  await p.answer(PENDING, 200, resolved(A, "first"));
+  assert.deepEqual(p.adopted.map((item) => item.request_id), [A.request_id]);
+  assert.deepEqual(p.told.filter((event) => event.type === "aucom:form-request").map((event) => event.detail),
+    [{ kind: "leak", id: A.request_id }], "taking the form was not said");
+  assert.equal(p.window.AUCOM.leakRequestInForm(), A.request_id);
+  build = "e".repeat(32);
+  await p.say("aucom:form-request", { kind: "build", id: build });
+  assert.deepEqual(p.dropped, [A.request_id], "the leak test stayed in a form the build request took");
+  assert.equal(p.window.AUCOM.leakRequestInForm(), null);
+  assert.equal(posted(p, "/api/v1/leak-test/dismiss").length, 0, "the build request taking the form dismissed the leak test");
+  assert.match(text(p.box), /first, saved revision 3/, "the let-go leak test lost its card");
+  assert.ok(buttonNamed(p.box, "Open this request"), "the let-go leak test has no Open");
+}
+{
+  const p = load();
+  p.window.AUCOM.buildRequest = { inForm: () => "e".repeat(32) };
+  await p.answer(REQUEST, 200, A);
+  await p.answer(PENDING, 200, resolved(A, "first"));
+  assert.equal(p.adopted.length, 0, "a leak test filled the form over the build request in it");
+  assert.ok(buttonNamed(p.box, "Open this request"), "the waiting leak test has no Open");
+}
+
+console.log("leakrequest: replacement, stale answers, dismiss, relay notice, unpinned game, cancel, pin ordering and recovery, a late pin of a closed dialog, list failure, nothing ready, direct Build, setup recovery, a blocked check, a running build, an account change, a refused press, a form changed by hand, a link with no request id and a form shared with a build request — ok");

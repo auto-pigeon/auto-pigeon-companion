@@ -221,4 +221,55 @@ const cardOf = (box, id) => box.children.find((card) => card.attrs?.["data-reque
   assert.equal(stillAsked(null, choice), false);
 }
 
-console.log("buildrequest.check.mjs: 7 cases passed");
+// 7. The form is shared with the editor's leak tests (NEW_522). A leak test
+//    taking the form lets the build request go WITHOUT dismissing it: the
+//    form's drop that follows no longer names the request in the form, the
+//    card stays with its own Open, and AUB is told nothing. A request never
+//    opens by itself over a leak test in the form; a person's Open takes it
+//    and says so.
+{
+  const p = load();
+  let leak = null;
+  p.window.AUCOM.leakRequestInForm = () => leak;
+  await p.answer(REQUEST, 200, list(A));
+  await p.answer(PENDING, 200, resolved(A, "first", 3));
+  await p.answer("/api/v1/build-request/review", 200, { reviewing: true });
+  const took = p.events.filter((event) => event.type === "aucom:form-request");
+  assert.deepEqual(took.map((event) => event.detail), [{ kind: "build", id: A.request_id }], "taking the form was not said");
+  leak = "c".repeat(32);
+  p.document.dispatchEvent(new CustomEvent("aucom:form-request", { detail: { kind: "leak", id: leak } }));
+  assert.equal(p.window.AUCOM.buildRequest.inForm(), null, "the build request kept the form a leak test took");
+  p.document.dispatchEvent(new CustomEvent("aucom:build-request-dropped", { detail: { id: A.request_id } }));
+  await p.settle();
+  assert.equal(p.calls.filter((call) => call.path === "/api/v1/build-request/dismiss").length, 0,
+    "a leak test taking the form dismissed the build request");
+  assert.ok(cardOf(p.box, A.request_id), "the let-go request lost its card");
+  assert.ok(buttonNamed(cardOf(p.box, A.request_id), "Open this request"), "the let-go request has no Open");
+
+  // A second request arrives while the leak test holds the form: it waits.
+  await p.tick();
+  await p.answer(REQUEST, 200, list(A, B));
+  await p.answer(PENDING, 200, resolved(B, "second", 4));
+  assert.equal(p.calls.filter((call) => call.path === "/api/v1/build-request/review").length, 1, "B opened by itself over a leak test");
+  assert.match(text(cardOf(p.box, B.request_id)), /Waiting\. Open it to build it\./);
+  // A person opens B: it takes the form from the leak test, and says so.
+  buttonNamed(cardOf(p.box, B.request_id), "Open this request").listeners.click();
+  await p.settle();
+  await p.answer("/api/v1/build-request/review", 200, { reviewing: true });
+  assert.equal(p.window.AUCOM.buildRequest.inForm(), B.request_id);
+  assert.deepEqual(p.events.filter((event) => event.type === "aucom:form-request").at(-1).detail, { kind: "build", id: B.request_id });
+}
+
+// 7b. A fresh page whose leak test is already in the form: the build request
+//     waits on its card, nothing is reviewed or adopted by itself.
+{
+  const p = load();
+  p.window.AUCOM.leakRequestInForm = () => "c".repeat(32);
+  await p.answer(REQUEST, 200, list(A));
+  await p.answer(PENDING, 200, resolved(A, "first", 3));
+  assert.equal(p.calls.filter((call) => call.path === "/api/v1/build-request/review").length, 0, "reviewed over a leak test");
+  assert.equal(p.adopted.length, 0, "adopted over a leak test");
+  assert.ok(buttonNamed(cardOf(p.box, A.request_id), "Open this request"));
+}
+
+console.log("buildrequest.check.mjs: 9 cases passed");
