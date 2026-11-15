@@ -49,7 +49,9 @@ func TestTheBuildRequestNoticeOpensTheFormByItself(t *testing.T) {
 	}
 	// NEW_502: one card per request; a request that arrived while the form held
 	// none is opened by itself, once (testdata/buildrequest.check.mjs drives it).
-	if !strings.Contains(source, "card.opened = true;\n      await review(id);") {
+	// NEW_522: "by itself" is `review(id, false)`, which never takes the form
+	// from a leak test already in it.
+	if !strings.Contains(source, "card.opened = true;\n      await review(id, false);") {
 		t.Fatal("the notice does not open the form")
 	}
 }
