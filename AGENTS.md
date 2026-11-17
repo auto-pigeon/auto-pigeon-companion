@@ -150,6 +150,9 @@ These are unconditional. Everything else is routed.
   for the platform and channel; nothing pins a person to an old one (no profile `tool_version`/banner, stale cache,
   tag or embedded baseline as a ceiling). Checks, measured refusals, leak qualification, resolved digests, job
   bindings and rollback copies stay. Rules: `aucom.managed-tools` (rule 14), ADR-0010's 2026-11-12 amendment.
+- **No new UI block spans the page width (HITL, 2026-11-17).** A panel, card, form section, result or log is at most
+  half the content width, in a two-column grid grouped by purpose; only the header, navigation and area heading span
+  it. The rule, the narrow-window stack and the worked example: `aucom.ux` ("No block spans the page width").
 - **Quake II and Quake III are WORK IN PROGRESS, and no document may say otherwise.** The statement
   is `internal/maturity`, keyed on AUB's `engine_family`, pinned by SHA-256 on both sides. Never
   soften it, never derive one family's sentence from another's, and never let a profile document

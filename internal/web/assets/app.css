@@ -1615,3 +1615,30 @@ option:disabled { color: var(--ink-faint); }
   .areas-foot { margin-top: var(--space-1); padding: 0; }
   .areas-update { width: auto; }
 }
+
+/* Build & Run in two equal columns (HITL 2026-11-17, NEW_539 session): no block wider than half the page.
+   Left = what to build (Map, Build profile); right = what happens with it (the editor's request, Run after build,
+   Review with Build, kept in view). During and after a build: verdict and problems left, evidence right. */
+#area-play.brun { max-width: 74rem; }
+.brun-form { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 1.25rem; }
+.brun-column--send .request-card { margin: 0 0 1rem; }
+.brun-review { position: sticky; top: 1rem; }
+#play-signed-out, #play-current { max-width: calc(50% - .625rem); }
+#build-step-4.brun-current { max-width: none; background: none; border: 0; padding: 0; box-shadow: none; }
+.brun-result-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 1.25rem; align-items: start; }
+.brun-result-col { min-width: 0; }
+#area-play .brun-result-col > .build-section { margin: 0 0 1rem; }
+.brun-result-col .build-output .output { max-height: 24rem; overflow: auto; }
+#build-step-4 > .q3pkg, #build-step-4 > .row-actions { max-width: calc(50% - .625rem); }
+/* Rows written for the full width read down a column instead: the stage line keeps its name and state and wraps
+   the rest under them; the leak result stacks headline, reading, download and where it was sent; a file row wraps. */
+#area-play .brun-result-col .stage-table > li, #area-build .brun-result-col .stage-table > li { grid-template-columns: minmax(0, 1fr) auto; }
+#area-play .brun-result-col .stage-table .stage-time, #area-build .brun-result-col .stage-table .stage-time { text-align: left; }
+#area-play .brun-result-col .stage-table .stage-job, #area-build .brun-result-col .stage-table .stage-job { justify-self: start; }
+#area-play .brun-result-col .build-leak > li.leak-outcome, #area-build .brun-result-col .build-leak > li.leak-outcome { display: grid; gap: 0.4rem; justify-items: start; }
+#area-play .brun-result-col .stages > li, #area-build .brun-result-col .stages > li { flex-wrap: wrap; }
+@media (max-width: 60rem) {
+  .brun-form, .brun-result-grid { grid-template-columns: minmax(0, 1fr); }
+  #play-signed-out, #play-current, #build-step-4 > .q3pkg, #build-step-4 > .row-actions { max-width: none; }
+  .brun-review { position: static; }
+}

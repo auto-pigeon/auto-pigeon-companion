@@ -90,7 +90,7 @@ area down, plus a standing green **Synced** in the header. A smaller, recoloured
 
   | was a strip | now |
   | --- | --- |
-  | `#leak-request`, `#build-request` | a `.request-card` at the top of Build & Run; a link just followed moves the window there (`app.js` `requestArrived`: never over an open dialog, never for a request found waiting by a page opened later); from elsewhere Activity has **Open in Build & Run** |
+  | `#leak-request`, `#build-request` | a `.request-card` at the top of Build & Run's right column, above Run after build and Review (HITL 2026-11-17); a link just followed moves the window there (`app.js` `requestArrived`: never over an open dialog, never for a request found waiting by a page opened later); from elsewhere Activity has **Open in Build & Run** |
   | `#tools-setup` | an Activity entry; `data-attention` = `1` wants the person, `0` work going on, empty a routine check (listed, never counted) |
   | `#notice-banner` | Activity entries, same fetch/scope/severity/expiry/dismissal (`notices.mjs`); a critical notice or started maintenance is also ONE line in My Maps and Live Games (`.service-blocker`), announced once |
   | `#reconnect-banner`, **Synced** | `#account-button`, a chip shown only while there is something to sync; the Account menu says the rest |
@@ -157,7 +157,7 @@ write is said in the Install window and Settings with its path, never as a faile
 ## A request from the editor opens ready (NEW_366, NEW_380)
 
 An editor's build request and an editor's leak request open Build & Run on the exact saved revision with the
-form's ordinary button; the card at the top of Build & Run says what is prepared and what, if anything, stops it.
+form's ordinary button; the card at the top of Build & Run's right column says what is prepared and what, if anything, stops it.
 A used leak link opened again says *This leak test already ran* with **Open the result** and starts nothing (#20). The leak
 contract is `aucom.leak-adapters` ("A request opens ready to Build").
 
@@ -168,11 +168,35 @@ only into a form that holds no request of either kind. `leakrequest.js` and `bui
 `aucom:form-request` and each other's `inForm`; a page reload with both kinds pending once dismissed the build request
 in the form on AUB.
 
+## No block spans the page width (HITL 2026-11-17)
+
+HITL, looking at Build & Run: *"a bunch of horizontal blocks stacked, all spanning the whole width of the page, without
+a real organization"*. The rule, for every page and every new or changed surface:
+
+- **A block — a panel, card, form section, result, log or notice — is at most half the content width** on a wide
+  window. Blocks sit in a two-column grid of equal columns (`repeat(2, minmax(0, 1fr))`), grouped by what they are
+  for: the input on the left, what happens with it (the request, the outcome, the action) on the right. A block that
+  belongs to neither column takes one column's width, never both.
+- **Only the page frame spans the width**: the header, the navigation and the area heading. A table or a log that
+  needs room scrolls inside its own block.
+- **Under 60rem the columns stack**, left first, and a block may then be the full width: that is one column, not a
+  page-wide block.
+- **The primary action stays in view** beside the column it acts on (`position: sticky`), not at the end of a scroll.
+
+Build & Run (below) is the worked example. A surface added before this rule keeps its layout until a task changes it;
+a task that changes it brings it under the rule.
+
 ## Build & Run is one form with one primary (NEW_363)
 
 - **One journey, one form.** Map (saved map | file on this computer) → Build profile → Run after build → Review.
   No wizard of steps and no second build page: `#build` is the form on a file, `#autobuild` its checkbox
   (`app.js` `aliases`). Run, Live Games, My Maps, Profiles and Jobs are destinations, not builds.
+- **Two equal columns, no block wider than half the page** (HITL 2026-11-17). Left, what to build: Map, Build
+  profile. Right, what happens with it: the editor's request cards, Run after build, then Review with the primary,
+  kept in view (`position: sticky`). During and after a build the same grid holds the verdict (status, leak result,
+  notes, warnings and errors) on the left and the evidence (stages, files, output) on the right; Quake III packaging
+  and **Play this build** follow below it at one column's width.
+  Under 60rem both stack, left column first. Layout only: every id and every journey is unchanged.
 - **The primary says what it does, always** (HITL 2026-10-28, NEW_365 — supersedes NEW_363's two-press
   *Review build*). It reads **Build & Run** when Run after build is on, else **Build**, and never changes label.
   It is enabled once the server's check of these exact choices passed (`play.js` `refreshPlan`/`runCheck`,

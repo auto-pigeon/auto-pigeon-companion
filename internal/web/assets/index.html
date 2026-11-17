@@ -346,8 +346,6 @@
                map they are about (NEW_508; they were a strip above every area).
                Each only offers a review: nothing runs until a person presses
                Build here. From another area, Activity has the way back. -->
-          <section id="leak-request" class="request-card" role="status" aria-live="polite" aria-label="Leak test request" hidden></section>
-          <section id="build-request" class="request-card" role="status" aria-live="polite" aria-label="Build request" hidden></section>
           
 
           <div id="play-signed-out" class="panel notice" hidden>
@@ -451,6 +449,11 @@
                 </div>
               </section>
 
+            </div>
+
+            <div class="brun-column brun-column--send">
+              <section id="leak-request" class="request-card" role="status" aria-live="polite" aria-label="Leak test request" hidden></section>
+              <section id="build-request" class="request-card" role="status" aria-live="polite" aria-label="Build request" hidden></section>
               <section class="panel brun-block" aria-labelledby="brun-run-title">
                 <h3 id="brun-run-title">Run after build</h3>
                 <label class="check">
@@ -530,8 +533,6 @@
                   <p id="play-run-message" class="message" role="status"></p>
                 </div>
               </section>
-            </div>
-
             <section class="panel brun-block brun-review" aria-labelledby="brun-review-title">
               <h3 id="brun-review-title">Review</h3>
               <dl id="play-final-summary" class="summary-list"></dl>
@@ -556,6 +557,7 @@
                 <button type="button" class="primary" id="build-start" hidden disabled>Build</button>
               </div>
             </section>
+            </div>
           </div>
 
           <!-- The run started from this form, or one running now: one concise
@@ -576,6 +578,9 @@
                    it: what it is and how far it has got, what went wrong or
                    was warned about, each stage on a line, the files, and last
                    the compiler's own output — folded, because it is long. -->
+              <div class="brun-result-grid">
+              <div class="brun-result-col">
+              <div class="panel brun-result-card">
               <div class="panel-head build-head">
                 <h3 id="build-current-title">Building</h3>
                 <button type="button" id="build-cancel" class="danger">Cancel this build</button>
@@ -584,24 +589,27 @@
               <p id="build-result" class="message" role="status"></p>
               <ul id="build-leak" class="stages build-leak" aria-label="Leak test result"></ul>
               <div id="build-note"></div>
+              </div>
 
-              <section id="build-problems" class="build-section" aria-labelledby="build-problems-heading" hidden>
+              <section id="build-problems" class="panel build-section" aria-labelledby="build-problems-heading" hidden>
                 <h4 id="build-problems-heading">Warnings and errors</h4>
                 <ul id="build-problems-list" class="problems"></ul>
                 <p id="build-problems-more" class="muted" hidden></p>
               </section>
 
-              <section class="build-section" aria-labelledby="build-stages-heading">
+              </div>
+              <div class="brun-result-col">
+              <section class="panel build-section" aria-labelledby="build-stages-heading">
                 <h4 id="build-stages-heading">Stages</h4>
                 <ol id="build-progress" class="stages stage-table" aria-label="Build progress"></ol>
               </section>
 
-              <section id="build-files" class="build-section" aria-labelledby="build-files-heading" hidden>
+              <section id="build-files" class="panel build-section" aria-labelledby="build-files-heading" hidden>
                 <h4 id="build-files-heading">Files and sources</h4>
                 <ul id="build-extras" class="stages"></ul>
               </section>
 
-              <details id="build-output" class="build-section build-output" open>
+              <details id="build-output" class="panel build-section build-output" open>
                 <summary><span id="build-output-heading">Output so far</span></summary>
                 <label class="check build-output__fold">
                   <input type="checkbox" id="build-log-fold" checked />
@@ -610,6 +618,8 @@
                 <pre id="build-log" class="output" aria-label="Live build output" tabindex="0"></pre>
                 <p id="build-log-note" class="muted"></p>
               </details>
+              </div>
+              </div>
             </div>
 
             <!-- Quake III: Package → Install → Run. Shown under a finished
