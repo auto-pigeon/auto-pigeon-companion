@@ -171,6 +171,36 @@
           "description": "Resident memory at the moment of the incident, in MiB.",
           "type": "integer",
           "minimum": 0
+        },
+        "close_code": {
+          "description": "The WebSocket close code the transport actually observed for a lost socket (1006 for an abnormal closure). Since 1.5.0. Omitted when the transport exposed none; never a guessed or defaulted code.",
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 4999
+        },
+        "connected_ms": {
+          "description": "How long the socket had been connected when it was lost, measured by the reporting process, in milliseconds. Since 1.5.0.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 86400000
+        },
+        "bytes_ahead": {
+          "description": "Bytes the sender had queued for the socket and not yet seen leave when it was lost (a transport's outstanding send buffer). Since 1.5.0. Omitted when unobserved: absence is not zero.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647
+        },
+        "frame_bytes": {
+          "description": "The size of one documented frame the transport observed, in bytes — for a socket lost during a join, the snapshot frame being delivered. Since 1.5.0. Omitted when unobserved.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647
+        },
+        "unanswered_ms": {
+          "description": "How long a liveness ping had gone unanswered when the socket was lost or terminated, measured, in milliseconds. Since 1.5.0. Omitted when no ping was outstanding.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3600000
         }
       }
     }

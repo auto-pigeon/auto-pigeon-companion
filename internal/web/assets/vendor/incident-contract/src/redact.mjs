@@ -41,7 +41,7 @@
 // are the two identifiers the whole cross-stack story is assembled from, and a redacted record
 // nobody can correlate is a record nobody can act on.
 
-import { redactionDocument } from "./rules.mjs";
+import { redactionDocument, envelopeSchema } from "./rules.mjs";
 
 const PLACEHOLDER = redactionDocument.placeholder;
 const DROPPED = new Set(redactionDocument.dropped_keys.map((k) => k.toLowerCase()));
@@ -113,5 +113,43 @@ export function redactValue(value, seen = new WeakSet()) {
  * extension. The result is still a valid envelope, so `validateIncident` can be run after.
  */
 export function redactIncident(incident) {
-  return redactValue(incident);
+  const out = redactValue(incident);
+  if (out !== null && typeof out === "object" && !Array.isArray(out) && "evidence" in out) {
+    const evidence = redactEvidence(incident.evidence);
+    if (evidence === undefined) delete out.evidence;
+    else out.evidence = evidence;
+  }
+  return out;
+}
+
+// The evidence members the envelope schema declares, read from the schema rather than restated.
+const EVIDENCE_PROPERTIES = envelopeSchema.$defs?.evidence?.properties ?? {};
+
+/**
+ * The closed `evidence` object, with nothing in it the schema did not declare (since 1.5.0).
+ *
+ * Generic redaction keeps any key that is not dropped or denied, which is right for free-form data
+ * and wrong for `evidence`: that object is a fixed set of typed counters, so a member the schema
+ * does not name, or a value of the wrong kind, has no business being serialized on the way out. An
+ * integer member survives only as a whole number inside the schema's own `minimum`/`maximum`; a
+ * string, a decimal, `NaN`, a numeric string or an out-of-range value is OMITTED — never coerced and
+ * never turned into zero, because a zero is a claim that something was observed. A string member
+ * (`http_reason`) survives as a redacted string. Anything not an object yields `undefined`.
+ */
+export function redactEvidence(evidence) {
+  if (evidence === null || typeof evidence !== "object" || Array.isArray(evidence)) return undefined;
+  const out = {};
+  for (const [key, value] of Object.entries(evidence)) {
+    if (!Object.prototype.hasOwnProperty.call(EVIDENCE_PROPERTIES, key)) continue;
+    const rule = EVIDENCE_PROPERTIES[key];
+    if (rule.type === "integer") {
+      if (typeof value !== "number" || !Number.isInteger(value)) continue;
+      if (rule.minimum !== undefined && value < rule.minimum) continue;
+      if (rule.maximum !== undefined && value > rule.maximum) continue;
+      out[key] = value;
+    } else if (rule.type === "string") {
+      if (typeof value === "string") out[key] = redactText(value);
+    }
+  }
+  return out;
 }

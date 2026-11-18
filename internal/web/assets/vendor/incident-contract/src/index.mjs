@@ -20,7 +20,7 @@ export {
   correlationHeaders,
 } from "./correlation.mjs";
 
-export { redactText, redactValue, redactIncident, isDroppedKey, isDeniedKey } from "./redact.mjs";
+export { redactText, redactValue, redactIncident, redactEvidence, isDroppedKey, isDeniedKey } from "./redact.mjs";
 
 export { validateIncident } from "./validate.mjs";
 
