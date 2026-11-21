@@ -166,6 +166,11 @@ func TestAWADEntryIsOnePlainFileNameOnEveryPlatform(t *testing.T) {
 		{"file:///C:/x/scheme.wad", "scheme.wad"},
 		{"host.txt:stream.wad", "stream.wad"},
 		{`C:\x\ spaced.wad`, "spaced.wad"},
+		// NEW_619: both separators inside one entry, as an editor on
+		// Windows writes a path a user half-typed.
+		{`c:/quake\id1/mixed.wad`, "mixed.wad"},
+		{`\\server/share\unc.wad`, "unc.wad"},
+		{`..\../x/..\up2.wad`, "up2.wad"},
 	}
 	kept := []string{"metal.wad", "METAL.WAD", "my textures.wad", "q1-base_2.Wad", "a..wad", "con1.wad", "comx.wad"}
 
@@ -212,6 +217,17 @@ func TestAWADEntryIsOnePlainFileNameOnEveryPlatform(t *testing.T) {
 		if got := wadOf(t, out); got != "metal.wad" || len(changed) != 1 || changed[0] != folder {
 			t.Fatalf("the folder entry %q: wad %q, reported %q", folder, got, changed)
 		}
+	}
+
+	// NEW_619: the list's own `;` separators, padded, doubled, leading and
+	// trailing, are not entries: they name nothing and report nothing, and a
+	// space around a plain name is not a change to it.
+	out, changed, err = canonicalMapText([]byte(world(`"wad" " ;metal.wad ;; ;C:x.wad; "`+"\n", box("sand"))))
+	if err != nil {
+		t.Fatalf("a padded list refused the map: %v", err)
+	}
+	if got := wadOf(t, out); got != "metal.wad;x.wad" || len(changed) != 1 || changed[0] != "C:x.wad" {
+		t.Fatalf("padded list: wad %q, reported %q", got, changed)
 	}
 
 	// Everything else stops the build: no name that Windows reads as a device
