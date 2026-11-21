@@ -35,8 +35,5 @@
   "subagentStatusLine": {
     "type": "command",
     "command": "f=\"${CLAUDE_PROJECT_DIR:-.}/.trail/statusline.cjs\"; [ -f \"$f\" ] || exit 0; node \"$f\""
-  },
-  "footerLinksRegexes": [
-    "graft/[\\w./-]+\\.md"
-  ]
+  }
 }
