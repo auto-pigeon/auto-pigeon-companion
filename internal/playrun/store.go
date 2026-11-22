@@ -24,13 +24,32 @@ var ErrNotFound = errors.New("playrun: no such run")
 // One file per run, written whole and renamed into place. A half-written record
 // would be a record a reload could not parse, and the whole point of the record
 // is that a reload recovers the same run.
+//
+// A record is never read while it is being replaced (NEW_624, issue #45). On
+// Linux and macOS a reader sees the old file or the new one; on Windows a read
+// that overlaps the rename replacing it can be answered "file not found" —
+// Go's own cmd/go/internal/robustio retries exactly that, golang.org/issue/31247
+// — and Load would turn that into ErrNotFound: "no such run" about a run that
+// is running. So every Store on one directory in this process shares one
+// reader/writer lock, held by Save across the write and the replace and by Load
+// across the read. Shared by directory, not by Store, because the server opens
+// a Store per request: two Stores, one file. The record has one writer process —
+// the Companion serving the page — so the lock orders every read that can race
+// a replace; it is an ordering, not a retry, and a run that does not exist is
+// still answered at once.
 type Store struct {
 	root string
-	mu   sync.Mutex
+	// files orders this process's reads of these records with its replaces of
+	// them; every Store on the same directory holds the same one.
+	files *sync.RWMutex
 	// beforeSave is nil outside a test. It is the one place a test can hold a
 	// write, or fail it, at the exact moment a record is about to be published:
 	// that is an interleaving no amount of waiting produces on demand (NEW_371D).
 	beforeSave func(*Record) error
+	// duringReplace and beforeRead are nil outside a test: the moment a record
+	// is renamed into place, and the moment a load opens it (NEW_624).
+	duringReplace func(*Record)
+	beforeRead    func()
 }
 
 // OpenStore prepares a store under root.
@@ -42,7 +61,20 @@ func OpenStore(root string) (*Store, error) {
 		return nil, fmt.Errorf("playrun: preparing %s: %w", root, err)
 	}
 
-	return &Store{root: root}, nil
+	return &Store{root: root, files: directoryLock(root)}, nil
+}
+
+// directoryLocks holds one lock per store directory, by absolute path.
+var directoryLocks sync.Map
+
+// directoryLock is the lock every Store on root shares.
+func directoryLock(root string) *sync.RWMutex {
+	if absolute, err := filepath.Abs(root); err == nil {
+		root = absolute
+	}
+	lock, _ := directoryLocks.LoadOrStore(filepath.Clean(root), &sync.RWMutex{})
+
+	return lock.(*sync.RWMutex)
 }
 
 // Root is where this store lives.
@@ -102,8 +134,8 @@ func (s *Store) Save(record *Record) error {
 		return fmt.Errorf("playrun: encoding run %s: %w", record.ID, err)
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.files.Lock()
+	defer s.files.Unlock()
 
 	temporary, err := os.CreateTemp(s.root, "run-")
 	if err != nil {
@@ -116,6 +148,9 @@ func (s *Store) Save(record *Record) error {
 		_ = os.Remove(name)
 
 		return fmt.Errorf("playrun: writing run %s: %w", record.ID, errors.Join(writeErr, closeErr))
+	}
+	if s.duringReplace != nil {
+		s.duringReplace(record)
 	}
 	if err = fsshare.Replace(name, path); err != nil {
 		_ = os.Remove(name)
@@ -132,7 +167,12 @@ func (s *Store) Load(id string) (*Record, error) {
 	if err != nil {
 		return nil, err
 	}
+	s.files.RLock()
+	if s.beforeRead != nil {
+		s.beforeRead()
+	}
 	raw, err := fsshare.ReadFile(path)
+	s.files.RUnlock()
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, fmt.Errorf("%w: %s", ErrNotFound, id)
 	}

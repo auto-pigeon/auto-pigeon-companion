@@ -260,18 +260,28 @@ func (l *Live) add(id, label string, cancel context.CancelFunc) {
 // one step under the registry's lock: two presses, two tabs or a press and a
 // retry asking for the same build at once start it once. It returns the live
 // run's id when there is one.
-func (l *Live) claim(id, label, key string, cancel context.CancelFunc) (string, bool) {
+//
+// save writes the claimed run's first record inside that same step (NEW_624,
+// issue #45). A refused press is told the live run's id so the page can follow
+// it, and that id must already read back: a claim published before its record
+// sent the second press to "no such run". If save fails the claim is undone
+// and nothing was published; its error is returned with claimed false and no
+// running id.
+func (l *Live) claim(id, label, key string, cancel context.CancelFunc, save func() error) (string, bool, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if key != "" {
 		for other, run := range l.running {
 			if run.key == key {
-				return other, false
+				return other, false, nil
 			}
 		}
 	}
+	if err := save(); err != nil {
+		return "", false, err
+	}
 	l.running[id] = liveRun{cancel: cancel, label: label, key: key}
-	return id, true
+	return id, true, nil
 }
 
 func (l *Live) remove(id string) {
@@ -442,14 +452,15 @@ func (s *Service) start(request Request, retryOf string) (*Record, error) {
 	}
 	// Not the request's context: the sequence must survive the response.
 	ctx, cancel := context.WithCancel(context.Background())
-	if running, claimed := s.live.claim(id, "Build & Run "+request.MapName, requestKey(request), cancel); !claimed {
-		cancel()
-		return nil, &AlreadyRunningError{RunID: running}
-	}
-	if err = s.store.Save(record); err != nil {
-		s.live.remove(id)
+	running, claimed, err := s.live.claim(id, "Build & Run "+request.MapName, requestKey(request), cancel,
+		func() error { return s.store.Save(record) })
+	if err != nil {
 		cancel()
 		return nil, err
+	}
+	if !claimed {
+		cancel()
+		return nil, &AlreadyRunningError{RunID: running}
 	}
 
 	// The copy the caller gets, taken BEFORE the goroutine exists. From the

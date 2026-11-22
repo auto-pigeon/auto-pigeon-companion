@@ -249,6 +249,11 @@ func TestDuplicatesAreRefusedAcrossServicesSharingOneRegistry(t *testing.T) {
 				ids[i] = record.ID
 			case errors.As(err, &running):
 				refusals[i] = running.RunID
+				// The id a refusal names is the one the page follows next,
+				// at once: it reads back (NEW_624, #45).
+				if _, readErr := service.Get(running.RunID); readErr != nil {
+					t.Errorf("press %d was told about %s, which read back as %v", i, running.RunID, readErr)
+				}
 			default:
 				t.Errorf("press %d: %v", i, err)
 			}
