@@ -311,6 +311,9 @@ type fixtureBackend struct {
 	// Captures one private compiler result sent back through AUB.
 	leakResult    map[string]any
 	leakRequestID string
+	// leakEditorReturn, when set, is the editor address the receipt for a
+	// delivered result carries (AUCOM #37): no AUB sends one yet (NEW_633).
+	leakEditorReturn func(requestID string) string
 	// leakStatuses is every progress line relayed for the editor, in order,
 	// as "<request id> <state> <stage>"; refuseLeakResult makes the result
 	// rendezvous answer 503, the way an AUB that is away does.
@@ -678,9 +681,17 @@ func (b *fixtureBackend) serve(w http.ResponseWriter, r *http.Request) {
 		b.mu.Lock()
 		b.leakResult = result
 		b.leakRequestID = strings.TrimPrefix(rest, "/leak-results/")
+		editor := b.leakEditorReturn
 		b.mu.Unlock()
+		// AUB's own receipt: `{"request_id", "received"}` (AUB leakresult.go).
+		receipt := map[string]any{"request_id": strings.TrimPrefix(rest, "/leak-results/"), "received": true}
+		if editor != nil {
+			if address := editor(strings.TrimPrefix(rest, "/leak-results/")); address != "" {
+				receipt["editor_return_url"] = address
+			}
+		}
 		w.WriteHeader(http.StatusCreated)
-		write(map[string]any{"received": true})
+		write(receipt)
 		return
 	case rest == "/capabilities":
 		write(map[string]any{

@@ -1323,5 +1323,9 @@ window.AUCOM_LOCALES.it = {
   "Ran {label}": "Eseguito {label}",
   "Profile: {profile}": "Profilo: {profile}",
   "{name}, written for {version}": "{name}, scritto per {version}",
-  "{installed} (profile: {profile})": "{installed} (profilo: {profile})"
+  "{installed} (profile: {profile})": "{installed} (profilo: {profile})",
+  "Sent to the editor for saved revision {n}.": "Inviato all’editor per la revisione salvata {n}.",
+  "Show in editor": "Mostra nell’editor",
+  "Back to editor": "Torna all’editor",
+  "The editor address the server sent was not opened: it does not name this request ({why}).": "L’indirizzo dell’editor inviato dal server non è stato aperto: non indica questa richiesta ({why})."
 };

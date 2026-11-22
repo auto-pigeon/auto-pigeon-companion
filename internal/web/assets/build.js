@@ -324,8 +324,22 @@
         return;
       }
       if (body.state === "returned") {
-        line.textContent = t("Sent to the editor for saved revision {n}. Switch to its tab to see it.", { n: body.revision });
         line.className = "leak-return message ok";
+        // The way back to the editor (AUCOM #37): only an address the server
+        // gave for exactly this request, checked by the Companion. Without
+        // one the sentence says how to find the result; a refused one says
+        // it was not used. The page never builds an address itself.
+        if (body.editor_return === "verified" && body.editor_url) {
+          line.append(document.createTextNode(t("Sent to the editor for saved revision {n}.", { n: body.revision }) + " "));
+          const found = item.classList?.contains("leak-outcome--leak");
+          line.append(el("a", { className: "button-link leak-return__editor", text: found ? t("Show in editor") : t("Back to editor"),
+            attrs: { href: body.editor_url, target: "_blank", rel: "noopener noreferrer" } }));
+          return;
+        }
+        line.textContent = t("Sent to the editor for saved revision {n}. Switch to its tab to see it.", { n: body.revision });
+        if (body.editor_return === "refused") {
+          line.append(document.createTextNode(" " + t("The editor address the server sent was not opened: it does not name this request ({why}).", { why: body.editor_refused || t("unknown") })));
+        }
         return;
       }
       // The build stopped before its compiler ran (NEW_515, AUCOM #44): there

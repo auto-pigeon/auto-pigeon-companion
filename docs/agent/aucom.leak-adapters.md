@@ -291,6 +291,21 @@ exact saved revision that adopts the result by request, and (2) AUB returning th
 from its configured editor origin and the request it owns, for the Companion to check against the
 signed-in server before opening it.
 
+**The Companion's half is built (`NEW_633`); the producer half is not.** The address arrives only in
+AUB's `201` receipt for this request's own `POST /api/companion/v1/leak-results/<request id>`, as the
+optional `editor_return_url` beside `request_id` and `received` (`aub.LeakResultReceipt`) — option B
+of #37, chosen during quiet hours and marked for HITL review in the `NEW_633` handoff.
+`aub.VerifyEditorReturn` is the one checker: the receipt's `request_id` is this request's; `http`/`https`
+only; no userinfo; no `http` when AUB was reached over `https`; the path is exactly
+`/edit/map/<asset id>[/<slug>]`; the query is exactly `revision=<n>&leak_request=<request id>`
+matching the request; no fragment. A passing address is kept in `leak-return.json` (`editor_url`), a
+refusal as its token (`editor_refused`), and `GET /api/v1/leak-test/runs/{id}/return` answers
+`editor_return: verified | missing | refused` — re-checking a stored address, so a file edited on disk
+is refused. The page shows **Show in editor** (leak found) / **Back to editor** only for `verified`, as
+a new-tab link with `noopener noreferrer`; otherwise the sentence stays. Nothing is derived from the
+leak link's text. Until AUP adds the revision route and AUB sends the field (built from its own
+configured editor URL, never `AUB_MAIL_EDITOR_ORIGIN` by accident), every receipt reads `missing`.
+
 ## Reading a run: the evidence, in order
 
 `ClassifyQ3Map2` is the reference, and `ClassifyEricwQ2` follows it with Quake II's measured words.

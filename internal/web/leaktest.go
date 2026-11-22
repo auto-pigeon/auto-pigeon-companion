@@ -369,27 +369,43 @@ func (s *Server) matchesPendingLeakRequest(requestID string, source build.Source
 // The build itself has already finished when this runs. A failed leaktest can
 // still have the compiler's pointfile, so terminal failure is a deliverable.
 func (s *Server) publishLeakResult(buildID, requestID string) error {
+	_, err := s.publishLeakResultReceipt(buildID, requestID)
+	return err
+}
+
+// publishLeakResultReceipt is publishLeakResult with AUB's receipt and the
+// address of the server it came from, for the editor address it may carry
+// (AUCOM #37), which is verified by the caller against the request.
+func (s *Server) publishLeakResultReceipt(buildID, requestID string) (leakReceipt, error) {
 	result, err := s.buildLeakResult(buildID)
 	if err != nil {
-		return err
+		return leakReceipt{}, err
 	}
 	s.adoptSessionFromDisk()
 	client := s.aubClient()
 	if client == nil || !client.Authenticated() {
-		return errors.New("sign in to AUB again to return this result; the file download remains available")
+		return leakReceipt{}, errors.New("sign in to AUB again to return this result; the file download remains available")
 	}
 	for attempt := 0; attempt < 3; attempt++ {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-		err = client.PublishLeakResult(ctx, requestID, result)
+		var receipt aub.LeakResultReceipt
+		receipt, err = client.PublishLeakResult(ctx, requestID, result)
 		cancel()
 		if err == nil {
-			return nil
+			return leakReceipt{LeakResultReceipt: receipt, server: client.BaseURL()}, nil
 		}
 		if attempt < 2 {
 			time.Sleep(time.Duration(attempt+1) * time.Second)
 		}
 	}
-	return err
+	return leakReceipt{}, err
+}
+
+// leakReceipt is AUB's receipt for a delivered result and the server that
+// gave it.
+type leakReceipt struct {
+	aub.LeakResultReceipt
+	server string
 }
 
 // handleLeakTestDismiss forgets the request a person dismissed — that one. A

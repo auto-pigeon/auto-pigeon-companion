@@ -12,11 +12,15 @@ var leakReturnID = regexp.MustCompile(`^[0-9a-f]{32}$`)
 
 // PublishLeakResult sends one bounded, revision-pinned result to AUB's private
 // handoff. AUP polls the same request id from the account that initiated it.
-func (c *Client) PublishLeakResult(ctx context.Context, requestID string, result any) error {
+// The receipt is AUB's answer; its editor address is unverified until
+// VerifyEditorReturn has read it.
+func (c *Client) PublishLeakResult(ctx context.Context, requestID string, result any) (LeakResultReceipt, error) {
+	var receipt LeakResultReceipt
 	if !leakReturnID.MatchString(requestID) {
-		return &APIError{Path: LeakResultPath, Message: "invalid leak request id"}
+		return receipt, &APIError{Path: LeakResultPath, Message: "invalid leak request id"}
 	}
-	return c.do(ctx, "POST", LeakResultPath+requestID, nil, result, nil)
+	err := c.do(ctx, "POST", LeakResultPath+requestID, nil, result, &receipt)
+	return receipt, err
 }
 
 // LeakStatusPath is AUB's relay for what the Companion is doing with a request.

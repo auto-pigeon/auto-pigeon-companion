@@ -1219,6 +1219,23 @@ until you sign in to the account it belongs to. If the return fails, press
 **Retry** (it compiles nothing), or **Download leak result** and import that
 JSON file in the editor's Leaks panel.
 
+Once the result is returned, the build page says *Sent to the editor for saved
+revision N. Switch to its tab to see it.* When your account server gives the
+Companion the editor's address for that exact request — this map, this saved
+revision, this request — the page shows **Show in editor** (a leak was found)
+or **Back to editor** instead, and it opens in a new tab. The Companion checks
+the address before showing it: only `http` or `https`, no user name or password,
+not `http` from a server reached over `https`, and nothing in it but this map's
+editor route with this revision and request. An address that fails the check is
+never opened; the page keeps the sentence and says the address was not used.
+Account servers do not send this address yet, so today you see the sentence.
+
+```bash
+# whether the way back to the editor was verified: editor_return is verified, missing or refused
+curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
+  "$(sed 's:/*$::' ~/.config/auto-pigeon-companion/api-url)/api/v1/leak-test/runs/$BUILD_ID/return" | jq '{state, editor_return, editor_url, editor_refused}'
+```
+
 **A test that could not run.** When the Companion stops a leak test before the
 compiler starts — the map names an external map file (`misc_external_map`),
 the Companion refuses the saved map's text, the map converter is missing, or
@@ -1298,6 +1315,29 @@ when it was last checked — beside the version the profile expects:
 
 ```sh
 companion build show <build-id> --json | jq '.tools[] | {expected: .tool_version, ran: [.executables[] | {sha256, identity, identity_state}]}'
+```
+
+`companion build show <build-id>` names the compiler a build actually ran on its
+`tool` line: the release the Companion installed, and what that exact file
+called itself when it was checked. The profile follows on its own line, with
+the release it was written for. A managed EricW 1.4560 run under a profile
+written for 1.4556 reads:
+
+```console
+$ companion build show <build-id>
+  tool      ericw-tools 1.4560 (2.0.0-alpha11-74-gc8a1cfaf+auto-pigeon.1.4560) via managed_official
+  profile   EricW tools, Auto-Pigeon build 1.4556 (Quake II, experimental) 1.0.0, written for 2.0.0-alpha11-70-ge923cca3+auto-pigeon.1.4556
+```
+
+A build recorded before the Companion kept this says `version not recorded for
+this run` rather than showing the profile's number. The Build & Run stage row
+says the same (*Ran ericw-tools 1.4560 …*, with the profile in its tooltip), and
+an editor's request card says *Compiler: ericw-tools 1.4560 (profile: …)*. The
+same facts, for a script:
+
+```bash
+curl -fsS -H "X-AUCOM-Token: $(cat ~/.config/auto-pigeon-companion/api-token)" \
+  "$(sed 's:/*$::' ~/.config/auto-pigeon-companion/api-url)/api/v1/build/runs/$BUILD_ID" | jq '.steps_ran'
 ```
 
 **Building.** `game_root` is the base game's folder and `content_root` your own

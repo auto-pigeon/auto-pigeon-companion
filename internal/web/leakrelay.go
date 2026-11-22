@@ -240,9 +240,16 @@ type leakReturn struct {
 	State string `json:"state"`
 	Error string `json:"error,omitempty"`
 	// Reason is the `blocked` status's stage token, for a `blocked` record.
-	Reason    string    `json:"reason,omitempty"`
-	Attempts  int       `json:"attempts"`
-	UpdatedAt time.Time `json:"updated_at"`
+	Reason string `json:"reason,omitempty"`
+	// EditorURL is the way back to the editor on this request's saved
+	// revision, as AUB's receipt gave it and only once VerifyEditorReturn
+	// accepted it (AUCOM #37). EditorRefused is why a receipt's address was
+	// not kept — `missing` when it named none. Both are absent from a record
+	// written before NEW_633, which reads as `missing`.
+	EditorURL     string    `json:"editor_url,omitempty"`
+	EditorRefused string    `json:"editor_refused,omitempty"`
+	Attempts      int       `json:"attempts"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 var leakReturnLock sync.Mutex
@@ -328,11 +335,15 @@ func (s *Server) deliverLeakResult(buildID string, request aub.LeakTestLink) lea
 		return record
 	}
 	s.reportLeakStatus(request, leakReturning, "", buildID)
-	if err := s.publishLeakResult(buildID, request.RequestID); err != nil {
+	if receipt, err := s.publishLeakResultReceipt(buildID, request.RequestID); err != nil {
 		record.State, record.Error = "failed", err.Error()
 		s.reportLeakStatus(request, leakReturnFailed, record.Error, buildID)
 	} else {
 		record.State = "returned"
+		// The way back to the editor, only as the signed-in server gave it
+		// in the answer to this delivery and only when it names exactly this
+		// request (AUCOM #37). Nothing is derived from the link's text.
+		record.EditorURL, record.EditorRefused = aub.VerifyEditorReturn(receipt.EditorReturnURL, request, receipt.RequestID, receipt.server)
 		s.reportLeakStatus(request, leakReturned, "", buildID)
 	}
 	_ = s.writeLeakReturn(buildID, record)
@@ -437,6 +448,22 @@ func (s *Server) handleLeakTestReturn(w http.ResponseWriter, r *http.Request) {
 		// Whether the editor has been told yet: `blocked` is said to it, and
 		// nothing is offered to send again.
 		answer["reason"], answer["relay"] = record.Reason, s.leaks.view(record.Request.RequestID)
+	}
+	if record.State == "returned" {
+		// The way back to the editor (AUCOM #37): `verified` with the address
+		// only when the stored one still names exactly this request — a file
+		// edited on disk is checked again — else `missing` or `refused` and
+		// why, and the page keeps its sentence.
+		answer["editor_return"] = "missing"
+		if record.EditorURL != "" {
+			if address, refused := aub.VerifyEditorReturn(record.EditorURL, record.Request, record.Request.RequestID, ""); refused == "" {
+				answer["editor_return"], answer["editor_url"] = "verified", address
+			} else {
+				answer["editor_return"], answer["editor_refused"] = "refused", refused
+			}
+		} else if record.EditorRefused != "" && record.EditorRefused != aub.EditorReturnMissing {
+			answer["editor_return"], answer["editor_refused"] = "refused", record.EditorRefused
+		}
 	}
 	writeJSON(w, http.StatusOK, answer)
 }
