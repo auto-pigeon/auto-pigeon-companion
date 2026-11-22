@@ -45,20 +45,27 @@ So the block lives here, and the root keeps a two-line pointer. **Do not raise
    without them:
 
    ```sh
-   # once per clone that has .trail/ (Claude Code wiring only; nothing outside the repo)
-   HOME="$(mktemp -d)" trail init --no-agents --no-build --no-global .
-   cat .trail/cache/.cache/wiring-stamp.json   # "hosts": ["claude"], "global": false
+   # once per clone that has .trail/: Claude Code wiring only, its ~/.claude writes into a
+   # throwaway HOME, so the operator's own ~/.claude is not touched
+   HOME="$(mktemp -d)" trail init --no-agents --no-build .
+   cat .trail/cache/.cache/wiring-stamp.json   # "hosts": ["claude"], "global": true
+   git status --short                          # empty: no tracked file changed
    ```
 
-   `--no-global` is recorded in the stamp, so later refreshes stay inside the repository too. The
-   task-owned `HOME` makes sure nothing writes the operator's `~/.claude`. Then check that
-   `.claude/settings.json` still guards the hook (`|| exit 0`, per `aut.graft`), and that
-   `git diff` shows no change.
+   **Do not add `--no-global`.** On a machine whose Trail hooks live in `~/.claude/settings.json`,
+   it writes a second copy of all nine hooks into the tracked `.claude/settings.local.json`, so
+   every hook runs twice. It is also replayed by every later refresh. Measured `NEW_637`: +91 lines
+   in that file, against 0 without the flag. If `.claude/settings.json` lost its `|| exit 0` guard,
+   put it back (`aut.graft`).
 
 **What Trail does not offer:** there is no tracked, per-repository setting that turns off the
 `agents` host. The only record of that choice is the gitignored stamp. So a clone on another
 machine whose stamp predates this change still re-adds the block at its next Trail upgrade. Run
 the command above there once. AUT's `root_drift` check is what notices if somebody forgets.
+Measured `NEW_637` by booting `trail mcp`, which runs the same refresh as the `SessionStart` hook
+(`dist/mcp/server.js:103`, `dist/claude/hooks.js:596`), with a stamp aged to 0.29.0. A
+`["claude"]` stamp left the root at 3,855 words. A stamp still listing the `AGENTS.md` hosts
+appended the block back, taking the root to 4,416.
 
 The cost is Trail's text for AGENTS.md-only readers (Codex until its Trail hooks are trusted, and
 the other `AGENTS.md` hosts). They keep the root's pointer, `trail --help` and this module.
