@@ -1154,6 +1154,17 @@ func (s *Server) handleBuildGet(w http.ResponseWriter, r *http.Request) {
 	// family this build makes no claim about, and the page draws nothing then.
 	body["maturity"] = describeMaturity(manifest.EngineFamily)
 	body["maturity_message"] = maturity.Of(manifest.EngineFamily).Message
+	// What each stage's program WAS, from the build's own record — the
+	// executable's probed identity or the managed install it came from —
+	// beside the profile named as the profile (AUCOM #49, NEW_633). The stage
+	// row reads this, never the profile's name and version as the compiler.
+	stepsRan := map[string]build.Ran{}
+	for _, step := range manifest.Steps {
+		if ran, known := manifest.StepRan(step); known {
+			stepsRan[step.ID] = ran
+		}
+	}
+	body["steps_ran"] = stepsRan
 	if leak := s.leakTestView(manifest); leak != nil {
 		body["leak_test"] = leak
 	}

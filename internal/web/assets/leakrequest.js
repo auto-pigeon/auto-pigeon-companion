@@ -78,10 +78,16 @@
   function compilerName(id) {
     return { "ericw-qbsp": "qbsp (EricW)", "ericw-qbsp-q2": "qbsp (EricW, Quake II mode)", q3map2: "Q3Map2" }[id] || id || t("the compiler");
   }
-  // The maintained build a pipeline's compile stage runs, with the version the
-  // program itself reported when it has been asked.
+  // The program a pipeline's compile stage runs: what is installed — the
+  // managed release, or what the program reported — first, and the profile
+  // named as the profile, never its build number as the compiler (AUCOM #49).
   function toolName(body) {
     const name = body.pipeline_tool || compilerName(body.compiler);
+    if (body.pipeline_tool_installed) {
+      const profile = body.pipeline_tool_written_for
+        ? t("{name}, written for {version}", { name, version: body.pipeline_tool_written_for }) : name;
+      return t("{installed} (profile: {profile})", { installed: body.pipeline_tool_installed, profile });
+    }
     return body.pipeline_tool_version ? t("{name}, installed {version}", { name, version: body.pipeline_tool_version }) : name;
   }
 

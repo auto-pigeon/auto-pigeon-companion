@@ -187,15 +187,22 @@ func (s *Server) describeLeakPipeline(base map[string]any, game, pinned string) 
 		}
 		if tool, found := resolver.EntryForStep(step); found {
 			meta := tool.Profile.Metadata()
+			// The profile, named as the profile: its name carries the build it
+			// was written for, which is not the program that will run (AUCOM #49).
 			base["pipeline_tool"] = meta.Name
+			if document, isTool := tool.Profile.(*profile.ToolProfile); isTool && document.ToolVersion != "" {
+				base["pipeline_tool_written_for"] = document.ToolVersion
+			}
 			// What is installed, which a managed update can have moved past the
-			// release the document is named after.
+			// release the document is named after: that is the compiler.
 			if local, found := set.Find(meta.ID); found {
 				switch {
-				case local.Managed != nil:
+				case local.Managed != nil && local.Managed.Version != "":
 					base["pipeline_tool_version"] = local.Managed.Version
+					base["pipeline_tool_installed"] = strings.TrimSpace(local.Managed.Tool + " " + local.Managed.Version)
 				case local.ResolvedVersion != "":
 					base["pipeline_tool_version"] = local.ResolvedVersion
+					base["pipeline_tool_installed"] = local.ResolvedVersion
 				}
 			}
 		}

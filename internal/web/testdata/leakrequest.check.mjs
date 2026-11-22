@@ -575,4 +575,20 @@ const PENDING = "/api/v1/leak-test/pending";
   assert.ok(buttonNamed(p.box, "Open this request"), "the waiting leak test has no Open");
 }
 
-console.log("leakrequest: replacement, stale answers, dismiss, relay notice, unpinned game, cancel, pin ordering and recovery, a late pin of a closed dialog, list failure, nothing ready, direct Build, setup recovery, a blocked check, a running build, an account change, a refused press, a form changed by hand, a link with no request id and a form shared with a build request — ok");
+// AUCOM #49 (NEW_633): the compiler is what is installed — the managed release
+// the update moved to — and the profile is named as the profile, written for
+// its own build, never as the compiler.
+{
+  const p = load();
+  await p.answer(REQUEST, 200, A);
+  await p.answer(PENDING, 200, { ...resolved(A, "first"), game_profile: "quake2", compiler: "ericw-qbsp-q2",
+    pipeline_tool: "EricW tools, Auto-Pigeon build 1.4556 (Quake II, experimental)",
+    pipeline_tool_written_for: "2.0.0-alpha11-70-ge923cca3+auto-pigeon.1.4556",
+    pipeline_tool_version: "1.4560", pipeline_tool_installed: "ericw-tools 1.4560" });
+  const said = text(p.box);
+  assert.match(said, /Compiler: ericw-tools 1\.4560 \(profile: EricW tools, Auto-Pigeon build 1\.4556 \(Quake II, experimental\), written for 2\.0\.0-alpha11-70-ge923cca3\+auto-pigeon\.1\.4556\)\./,
+    "the card does not name the installed 1.4560 as the compiler with the profile as the profile");
+  assert.doesNotMatch(said, /Compiler: EricW tools, Auto-Pigeon build 1\.4556/, "the card names the profile as the compiler");
+}
+
+console.log("leakrequest: replacement, stale answers, dismiss, relay notice, unpinned game, cancel, pin ordering and recovery, a late pin of a closed dialog, list failure, nothing ready, direct Build, setup recovery, a blocked check, a running build, an account change, a refused press, a form changed by hand, a link with no request id, a form shared with a build request and the installed compiler beside its profile — ok");

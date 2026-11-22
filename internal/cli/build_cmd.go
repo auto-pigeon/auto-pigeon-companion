@@ -558,7 +558,10 @@ func printBuildPreview(env *Env, m *build.Manifest) {
 	// Before the command a user is about to approve, not after it.
 	printMaturityNote(env, m.EngineFamily, "          ")
 	for _, tool := range m.Tools {
-		fmt.Fprintf(env.Stdout, "tool      %s %s — %s %s\n", tool.Profile.ID, tool.Profile.Version, tool.Profile.Name, tool.ToolVersion)
+		// Before the run: the program that is set up, then the profile named as
+		// the profile (AUCOM #49) — its build number is what it was written for.
+		fmt.Fprintf(env.Stdout, "tool      %s — set up: %s\n", tool.Profile.ID, setUpLabel(tool.Ran("")))
+		fmt.Fprintf(env.Stdout, "          profile %s\n", tool.ProfileLabel())
 	}
 	for _, step := range m.Steps {
 		fmt.Fprintf(env.Stdout, "\nstep %s — %s\n", step.ID, step.Title)
@@ -593,7 +596,12 @@ func printBuildOutcome(env *Env, m *build.Manifest) {
 		fmt.Fprintf(env.Stdout, "  class     %s\n", m.FailureClass)
 	}
 	for _, tool := range m.Tools {
-		fmt.Fprintf(env.Stdout, "  tool      %s %s via %s\n", tool.Profile.Name, tool.ToolVersion, orNone(string(tool.Acquisition)))
+		// The build that ran, from the evidence the record holds — never the
+		// profile's `tool_version`, which is what the document was written for
+		// (AUCOM #49, NEW_633). The profile is named on its own line.
+		ran := tool.Ran("")
+		fmt.Fprintf(env.Stdout, "  tool      %s via %s\n", ran.Label, orNone(string(tool.Acquisition)))
+		fmt.Fprintf(env.Stdout, "  profile   %s\n", ran.Profile)
 		for _, exe := range tool.Executables {
 			fmt.Fprintf(env.Stdout, "            %-9s %s\n", exe.Name, orNone(exe.SHA256))
 		}
@@ -654,6 +662,15 @@ func printBuildOutcome(env *Env, m *build.Manifest) {
 	if m.Directory != "" {
 		fmt.Fprintf(env.Stdout, "  manifest         %s\n", filepath.Join(m.Directory, build.ManifestFileName))
 	}
+}
+
+// setUpLabel is Ran's label before a run: nothing has run yet, so a record
+// with nothing to say says the version is unknown, not "not recorded".
+func setUpLabel(ran build.Ran) string {
+	if ran.Source == build.RanNotRecorded {
+		return "version unknown until the program is checked"
+	}
+	return ran.Label
 }
 
 func optionalNote(optional bool) string {

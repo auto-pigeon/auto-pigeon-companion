@@ -1413,8 +1413,16 @@
       line.append(badge(pending ? "waiting" : step.skipped && !step.state ? "skipped" : step.state || "waiting", pending ? "queued" : undefined));
       // A step the build never reached has no tool resolved for it yet; the badge
       // already says it was skipped, so nothing stands in for a name.
-      const provider = step.profile?.name ? `${step.profile.name} ${step.profile.version}` : step.skipped ? "" : "no tool recorded";
-      line.append(el("span", { className: "stage-detail stage-tool", text: provider }));
+      // The program that ran, from the build's record (AUCOM #49): its probed
+      // identity or the managed release it came from — never the profile's own
+      // name and version, whose build number is what it was written for. The
+      // profile is named as the profile in the tooltip.
+      const ran = (body.steps_ran || {})[step.id];
+      const provider = ran?.label
+        ? (ran.source === "not_recorded" ? t("Compiler version not recorded for this run") : t("Ran {label}", { label: ran.label }))
+        : step.profile?.name ? `${step.profile.name} ${step.profile.version}` : step.skipped ? "" : "no tool recorded";
+      line.append(el("span", { className: "stage-detail stage-tool", text: provider,
+        attrs: ran?.profile ? { title: t("Profile: {profile}", { profile: ran.profile }) } : {} }));
       const elapsed = step.state === "running" ? since(step.started_at) : step.duration_ms;
       line.append(el("span", { className: "stage-detail stage-time", text: elapsed ? duration(elapsed) : "",
         attrs: step.duration_ms ? { title: `${step.duration_ms} ms` } : {} }));
