@@ -24,8 +24,17 @@ func TestALeakRequestOpensReadyToBuildInABrowser(t *testing.T) {
 		t.Run(scenario, func(t *testing.T) {
 			m, _ := newLeakMachine(t)
 			room(m, 1)
-			m.receiveLeakLink(strings.Repeat("a", 32), "quake1")
+			receiveA := func() { m.receiveLeakLink(strings.Repeat("a", 32), "quake1") }
+			// held-answer needs A's answer IN THE AIR when B arrives, so the
+			// driver asks for A only once its hold is in place. Received
+			// before the page loaded, A was often answered before the driver
+			// could hold anything, and the scenario tested another ordering
+			// (NEW_624, #51).
+			if scenario != "held-answer" {
+				receiveA()
+			}
 			drivePlayPageWith(t, m, browser, "1280,900", scenario, "testdata/leakjourney.js", map[string]func(){
+				"/journey/receive-a": receiveA,
 				"/journey/receive-b": func() { room(m, 2); m.receiveLeakLink(strings.Repeat("b", 32), "quake1") },
 				"/journey/new-save":  func() { room(m, 2) },
 			}, map[string]any{"scenario": scenario})

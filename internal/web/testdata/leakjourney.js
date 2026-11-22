@@ -58,8 +58,20 @@
   const notice = () => document.getElementById("leak-request")?.textContent || "";
   const cards = () => [...document.querySelectorAll("#leak-request .leak-request__card")];
   const cardFor = (revision) => cards().find((card) => new RegExp(`saved revision ${revision} `).test(card.textContent));
-  // The card of the request in the form: the one with no "Open this request".
-  const inForm = () => cards().find((card) => !card.querySelector('button[data-action="open"]') && /saved revision/.test(card.textContent));
+  // The card of the request in the Build form, chosen by that request's id —
+  // the one the page itself put in the form (window.AUCOM.leakRequestInForm,
+  // the notice's own record of it). Never by what a card lacks: a card refused
+  // for a moved revision has no "Open this request" either, and the first such
+  // card was taken for the form's (NEW_624, issue #51).
+  const inForm = () => {
+    const id = window.AUCOM.leakRequestInForm?.();
+    return id ? cards().find((card) => card.dataset.requestId === id) : undefined;
+  };
+  // The guess inForm replaced, kept only to show it would have been wrong.
+  const guessedInForm = () => cards().find((card) => !card.querySelector('button[data-action="open"]') && /saved revision/.test(card.textContent));
+  // A card the server refused: an error, and nothing on it but Dismiss.
+  const refused = (card) => Boolean(card?.querySelector(".leak-request__state.error")) &&
+    [...card.querySelectorAll("button")].every((item) => item.dataset.action === "dismiss");
   const button = () => document.getElementById("build-start");
   const label = () => document.getElementById("build-label")?.value || "";
   const enabled = () => { const b = button(); return b && !b.hidden && !b.disabled; };
@@ -73,13 +85,18 @@
     await waitFor("the build to finish", () => document.querySelector("#build-leak .leak-verdict"), 30000);
   };
 
-  // Nothing may ever show one request and be aimed at another.
+  // Nothing may ever show one request and be aimed at another. aimMismatch is
+  // the check; the watch runs it every 10 ms, and a scenario runs it itself at
+  // the moment it is about, since a click in the same turn leaves the watch no
+  // turn to look (NEW_624, #51).
   let aimedWrong = "";
-  const watchAim = setInterval(() => {
+  const aimMismatch = () => {
     const showing = /saved revision (\d+)/.exec(inForm()?.textContent || "");
     const aimed = /revision (\d+)$/.exec(label());
-    if (showing && aimed && showing[1] !== aimed[1] && enabled()) aimedWrong = `${notice()} / ${label()}`;
-  }, 10);
+    return showing && aimed && showing[1] !== aimed[1] && enabled() ? `${notice()} / ${label()}` : "";
+  };
+  const checkAim = () => { const wrong = aimMismatch(); if (wrong) aimedWrong = wrong; };
+  const watchAim = setInterval(checkAim, 10);
 
   document.addEventListener("aucom:leak-form", ({ detail }) => log(`form: ${detail.request_id?.slice(0, 4)} ${detail.state} ${detail.why || ""}`));
 
@@ -122,8 +139,11 @@
 
     // A's revision is in the air when B arrives; A's answer lands afterwards,
     // on A's card. B waits on its own card and is built only once opened.
+    // A is asked for only once the hold is in place (NEW_624, #51), so its
+    // answer is the one given after B's save: refused, its revision moved.
     async "held-answer"() {
       const release = hold("/api/v1/leak-test/pending");
+      await control("receive-a");
       await waitFor("A's notice", () => /saved revision 1/.test(notice()));
       await control("receive-b");
       await waitFor("B's card beside A's", () => cardFor(1) && cardFor(2));
@@ -134,6 +154,25 @@
       cardFor(2).querySelector('button[data-action="open"]').click();
       await waitFor("Build for B", () => enabled() && /revision 2$/.test(label()));
       record("the form is B's", /revision 2$/.test(label()), label());
+      // Issue #51's page: A's card refused for its moved revision, offering only
+      // Dismiss, while B is in the form and Build is aimed at B.
+      await waitFor("A refused for its moved revision", () => refused(cardFor(1)));
+      record("A is refused on its own card while B is in the form", refused(cardFor(1)) && enabled() && /revision 2$/.test(label()), cardFor(1)?.textContent);
+      // Which card is the form's, by identity, with A's refused card on screen.
+      record("the card in the form is B's, by its request id", inForm() === cardFor(2) && inForm()?.dataset.requestId === "b".repeat(32),
+        inForm()?.dataset.requestId || "none");
+      record("A's refused card is not taken for the form's", inForm() !== cardFor(1), inForm()?.dataset.requestId || "none");
+      record("the old guess would have taken A's card (issue #51)", guessedInForm() === cardFor(1), guessedInForm()?.dataset.requestId || "none");
+      checkAim();
+      // Negative control: a Build really aimed at a revision the notice is not
+      // showing as in the form is still caught. One synchronous turn, so the
+      // watch cannot run on the altered label, and the label is put back.
+      const field = document.getElementById("build-label");
+      const kept = field.value;
+      field.value = kept.replace(/revision 2$/, "revision 1");
+      const caught = aimMismatch();
+      field.value = kept;
+      record("a Build aimed at A while the form shows B is caught", Boolean(caught) && field.value === kept, caught || "not caught");
       button().click();
       await finished();
       const press = presses.at(-1);
