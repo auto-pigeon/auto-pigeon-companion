@@ -1862,7 +1862,7 @@ publishes a result whole:
 
 ```console
 $ auto-pigeon-mapio version
-auto-pigeon-mapio 1.320 (go/mapio v0.0.0-20261104005048-d11e6d1cf459, APMap 1.5, protocol 1.1, Apache-2.0 AND MIT)
+auto-pigeon-mapio 1.320 (go/mapio v0.0.0-20261122063149-b5d7e3b9a799, APMap 1.5, protocol 1.1, Apache-2.0 AND MIT)
 $ auto-pigeon-mapio convert --apmap-to-q3map --input room.apmap --output out --json
 {
   "direction": "apmap-to-q3map",
@@ -1874,6 +1874,8 @@ $ auto-pigeon-mapio convert --apmap-to-q3map --input room.apmap --output out --j
 }
 $ auto-pigeon-mapio convert --q1map-to-apmap --input e1m1.map --output out
 out/e1m1.apmap
+$ auto-pigeon-mapio convert --q1map-to-apmap --input fence_room.map --output out   # a Quake 1 fence texture ({fence) keeps its name
+out/fence_room.apmap
 $ auto-pigeon-mapio convert --q3map-to-apmap --input q3room.map --output out     # a Quake III .map, read as the editor reads one
 warning: q3map_shader_prefix_removed: 6 shader name(s) written with textures/ are stored without it (Q3Map2 adds it)
 out/q3room.apmap

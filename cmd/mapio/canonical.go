@@ -63,8 +63,10 @@ import (
 // tokenizer and the reader `q3map-to-apmap` uses: it reads classic, Valve 220,
 // `brushDef` and `patchDef2` brushes and the Quake 2 face tail, so it reads
 // every map a Quake 1, 2 or 3 pipeline here compiles. (`go/mapio/mapfile`'s own
-// parser cannot be used: it splits a fence texture `{fence` into a brace and a
-// word and refuses the face.) Any fault refuses the whole map.
+// parser was not used because it split a fence texture `{fence` into a brace and
+// a word and refused the face. It reads one since auto-pigeon-libraries
+// `b5d7e3b` (#15, adopted here by NEW_643), but it still reads no `brushDef` or
+// `patchDef2`, so this stays on `quake3map`.) Any fault refuses the whole map.
 //
 // Every token is then VALIDATED against a rule under which ericw's tokenizer
 // and Q3Map2's read the same thing — the two differ on `;` (Q3Map2 ends an

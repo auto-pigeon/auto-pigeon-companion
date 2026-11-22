@@ -82,7 +82,7 @@ const (
 // its build information cannot say.
 const (
 	ConverterLibraryModule  = "github.com/auto-pigeon/auto-pigeon-libraries"
-	ConverterLibraryVersion = "v0.0.0-20261104005048-d11e6d1cf459"
+	ConverterLibraryVersion = "v0.0.0-20261122063149-b5d7e3b9a799"
 )
 
 // Distribution says what relationship a component has to the released artifact.
