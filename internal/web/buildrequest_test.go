@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -118,6 +119,69 @@ func (m *machine) buildStatusesSettled() []string {
 		last = got
 	}
 	return last
+}
+
+// awaitBuildStatus waits until AUB has STORED a status for requestID whose
+// state is one of states, and returns every stored status at that moment
+// (NEW_624, #47). It wakes on each stored status, not on a timer: a quiet
+// period is not an ending, and under -race a stage can be quiet for longer than
+// any period worth waiting. The deadline only bounds a status that never comes.
+func (m *machine) awaitBuildStatus(t *testing.T, requestID string, states ...string) []string {
+	t.Helper()
+	deadline := time.After(time.Minute)
+	for {
+		m.backend.mu.Lock()
+		got := append([]string(nil), m.backend.buildStatuses...)
+		if m.backend.buildStatusStored == nil {
+			m.backend.buildStatusStored = make(chan struct{})
+		}
+		stored := m.backend.buildStatusStored
+		m.backend.mu.Unlock()
+		for _, line := range got {
+			fields := strings.Fields(line)
+			if len(fields) >= 2 && fields[0] == requestID && slices.Contains(states, fields[1]) {
+				return got
+			}
+		}
+		select {
+		case <-stored:
+		case <-deadline:
+			t.Fatalf("AUB never stored %v for %s; it stored %v", states, requestID, got)
+		}
+	}
+}
+
+// statusesAfterEnding is what was stored for requestID after its first
+// terminal status, which AUB's rules say must be nothing.
+func statusesAfterEnding(statuses []string, requestID string) []string {
+	ended := false
+	var after []string
+	for _, line := range statuses {
+		fields := strings.Fields(line)
+		if len(fields) < 2 || fields[0] != requestID {
+			continue
+		}
+		if ended {
+			after = append(after, line)
+		} else if aub.BuildRequestTerminal(fields[1]) {
+			ended = true
+		}
+	}
+	return after
+}
+
+// relayStillEnded reports whether the relay still says requestID's ending and
+// nothing else: the decision report makes about a late status, read where it
+// is made rather than inferred from silence.
+func (m *machine) relayStillEnded(requestID string) (aub.BuildRequestStatus, bool) {
+	q := m.server.buildReqs
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	item := q.items[requestID]
+	if item == nil {
+		return aub.BuildRequestStatus{}, false
+	}
+	return item.desired, item.final && aub.BuildRequestTerminal(item.desired.State)
 }
 
 func TestABuildRequestIsResolvedWithTheCompanionsOwnSessionAndReceivedOnce(t *testing.T) {
@@ -473,7 +537,8 @@ func TestAStartForABuildRequestConsumesItOnceAndReportsTheRun(t *testing.T) {
 	if runs() != 1 {
 		t.Fatalf("%d runs for one request", runs())
 	}
-	got := m.buildStatusesSettled()
+	// The ending, as AUB stored it — waited for, not inferred from a pause.
+	got := m.awaitBuildStatus(t, link.RequestID, aub.BuildRequestCompleted, aub.BuildRequestFailed, aub.BuildRequestCancelled)
 	var mine []string
 	for _, line := range got {
 		if strings.HasPrefix(line, link.RequestID) {
@@ -516,6 +581,9 @@ func TestAStartForABuildRequestConsumesItOnceAndReportsTheRun(t *testing.T) {
 	before := posts()
 	m.server.buildReqs.report(link, aub.BuildRequestReviewing, "", "", "")
 	m.server.buildReqs.report(link, aub.BuildRequestBuilding, "compiling", "", runID)
+	if desired, ended := m.relayStillEnded(link.RequestID); !ended || desired.State != aub.BuildRequestCompleted {
+		t.Fatalf("a late status replaced the ending in the relay: %+v", desired)
+	}
 	if m.buildStatusesSettled(); posts() != before {
 		t.Fatalf("%d status(es) were sent after the ending", posts()-before)
 	}

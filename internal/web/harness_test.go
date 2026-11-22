@@ -370,6 +370,10 @@ type fixtureBackend struct {
 	buildStatusPosts  int
 	// failBuildStatus answers that many status POSTs 503 first.
 	failBuildStatus int
+	// buildStatusStored is closed, and replaced, each time a status is
+	// stored: what awaitBuildStatus waits on instead of a quiet period
+	// (NEW_624, #47). Nil until somebody waits.
+	buildStatusStored chan struct{}
 }
 
 // serveBuildRequest is AUB's build-request store, as the contract says it.
@@ -415,6 +419,10 @@ func (b *fixtureBackend) serveBuildRequest(w http.ResponseWriter, r *http.Reques
 		request["state"], request["sequence"] = state, sequence
 		b.buildStatusBodies = append(b.buildStatusBodies, status)
 		b.buildStatuses = append(b.buildStatuses, strings.TrimSpace(id+" "+state+" "+stage))
+		if b.buildStatusStored != nil {
+			close(b.buildStatusStored)
+			b.buildStatusStored = nil
+		}
 		write(http.StatusOK, map[string]any{"request_id": id, "state": state, "superseded": false})
 	default:
 		write(http.StatusMethodNotAllowed, map[string]any{"message": "no"})

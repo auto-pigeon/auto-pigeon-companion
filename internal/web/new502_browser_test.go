@@ -1,6 +1,7 @@
 package web
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -46,16 +47,42 @@ func TestABuildRequestSurvivesTheOwnWADsFolderInABrowser(t *testing.T) {
 
 	// The editor of the first request heard `building` and an ending under its
 	// id; the second's never heard `building`; the second is still pending.
-	statuses := m.buildStatusesSettled()
+	// The ending is WAITED FOR, by the status AUB stores (NEW_624, #47): under
+	// -race the build is still compiling when the browser journey is done, and
+	// a quiet period read before the ending was sent.
+	statuses := m.awaitBuildStatus(t, first.RequestID, aub.BuildRequestCompleted, aub.BuildRequestFailed)
 	joined := strings.Join(statuses, "|")
 	if !strings.Contains(joined, first.RequestID+" building") {
 		t.Errorf("the started request's editor was not told `building`: %v", statuses)
 	}
-	if !strings.Contains(joined, first.RequestID+" completed") && !strings.Contains(joined, first.RequestID+" failed") {
-		t.Errorf("the started request's editor was not told how it ended: %v", statuses)
-	}
 	if strings.Contains(joined, second.RequestID+" building") || strings.Contains(joined, second.RequestID+" cancelled") {
 		t.Errorf("the other request was built or cancelled: %v", statuses)
+	}
+	// Then the state, read after the ending: the run it named has ended, and a
+	// late status cannot bring the request back to `building`.
+	m.backend.mu.Lock()
+	var runID string
+	for _, body := range m.backend.buildStatusBodies {
+		if aub.BuildRequestTerminal(fmt.Sprint(body["state"])) {
+			if id, _ := body["run_id"].(string); id != "" {
+				runID = id
+			}
+		}
+	}
+	m.backend.mu.Unlock()
+	if record, err := m.server.readPlayRun(runID); err != nil || !record.State.Terminal() {
+		t.Errorf("the ending was sent for run %q, which reads %+v, %v", runID, record, err)
+	}
+	m.server.buildReqs.report(first, aub.BuildRequestBuilding, "compiling", "", runID)
+	if desired, ended := m.relayStillEnded(first.RequestID); !ended {
+		t.Errorf("a late `building` replaced the ending in the relay: %+v", desired)
+	}
+	m.backend.mu.Lock()
+	stored, _ := m.backend.buildRequests[first.RequestID]["state"].(string)
+	after := statusesAfterEnding(m.backend.buildStatuses, first.RequestID)
+	m.backend.mu.Unlock()
+	if !aub.BuildRequestTerminal(stored) || len(after) > 0 {
+		t.Errorf("after its ending AUB holds %q for the request, and stored %v", stored, after)
 	}
 	dir, _ := m.server.configDir()
 	if left, _ := buildintent.Get(buildintent.Path(dir), first.RequestID, time.Now().UTC()); left != nil {
