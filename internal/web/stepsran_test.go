@@ -2,9 +2,11 @@ package web
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/binding"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/build"
+	"github.com/auto-pigeon/auto-pigeon-companion/internal/failure"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/job"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/profile"
 	"github.com/auto-pigeon/auto-pigeon-companion/internal/texturebundle/fixturewad"
@@ -108,6 +111,14 @@ func TestTwoManagedInstallsOfOneCompilerAreToldApartByTheRunsTheyMade(t *testing
 		if err != nil {
 			t.Fatal(err)
 		}
+		// NEW_652 (#52): a build that never ran its compiler still records
+		// which install it bound, so the identity checks below are only
+		// evidence after the compile itself succeeded. On Windows the copy
+		// once had no .exe and every compile failed to start; the only
+		// visible symptom was a result without a compiler.
+		if why := compileFailure(manifest); why != "" {
+			t.Fatalf("the build on %s did not compile, so it is no evidence about what ran: %s", r.version, why)
+		}
 		if len(manifest.Tools) != 1 || manifest.Tools[0].Managed == nil || manifest.Tools[0].Managed.Version != r.version ||
 			len(manifest.Tools[0].Executables) != 1 || manifest.Tools[0].Executables[0].SHA256 != r.digest {
 			t.Fatalf("the build on %s recorded %+v", r.version, manifest.Tools)
@@ -141,6 +152,109 @@ func TestTwoManagedInstallsOfOneCompilerAreToldApartByTheRunsTheyMade(t *testing
 	}
 }
 
+// T3 of NEW_652 (#52): a managed install whose bytes are not a program. The
+// compile fails to start, and that failure is what the run says: the build
+// failed with the job's own reason, it is not given the profile's version as
+// the compiler that ran, and the next healthy install builds exactly as
+// before. This is also the negative control for compileFailure: the same
+// check that guards the two-install test sees this build as a failure.
+func TestABrokenManagedInstallFailsItsRunAndLeavesTheHealthyPathAlone(t *testing.T) {
+	m, _ := newLeakMachine(t)
+	wad := fixturewad.WAD("n652_floor", 8)
+	m.saveRoom("new652", 1, q1Room("new652.wad", false, "n652_floor"),
+		leakBundle("new652", 1, []string{"new652.wad"}, map[string][]byte{"new652.wad": wad}))
+	build1 := func(i int, version string) (*build.Manifest, map[string]any, map[string]any) {
+		t.Helper()
+		run := m.startLeak(m.receiveLeakLink(strings.Repeat(strconv.Itoa(i), 32), "quake1"), nil)
+		if run.status != http.StatusAccepted || run.manifest == nil {
+			t.Fatalf("the build on %s: %d %v", version, run.status, run.body)
+		}
+		id, _ := run.manifest["build_id"].(string)
+		manifest, err := build.Find(m.builds, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, body := m.call(http.MethodGet, "/api/v1/build/runs/"+id, nil)
+		steps, _ := body["steps_ran"].(map[string]any)
+		row, _ := steps["compile"].(map[string]any)
+		_, result := m.call(http.MethodGet, "/api/v1/leak-test/runs/"+id+"/result", nil)
+		return manifest, row, result
+	}
+	healthy := func(i int, version string) {
+		t.Helper()
+		_, digest, identity := m.bindManagedFixture(version)
+		manifest, row, result := build1(i, version)
+		if why := compileFailure(manifest); why != "" {
+			t.Fatalf("the healthy install %s did not compile: %s", version, why)
+		}
+		if manifest.Tools[0].Executables[0].SHA256 != digest || row["label"] != "fixture-qbsp "+version+" ("+identity+")" ||
+			result["compiler_version"] != identity {
+			t.Errorf("the healthy install %s ran as %+v, shown %v, result %v", version, manifest.Tools, row, result["compiler_version"])
+		}
+	}
+
+	healthy(1, "9.0001")
+
+	program, digest, _ := m.bindManagedProgram("9.0003", []byte("NEW_652: these bytes are not a program\n"))
+	manifest, row, result := build1(2, "9.0003")
+	why := compileFailure(manifest)
+	if why == "" || !strings.Contains(why, failure.ToolUnavailable) || !strings.Contains(why, "starting "+filepath.Base(program)) {
+		t.Fatalf("a compile that could not start is reported as %q", why)
+	}
+	t.Logf("the broken install's run says: %s", why)
+	// Durable state: the build is failed on disk, and it recorded the install
+	// it tried, with that install's digest.
+	if manifest.State != job.Failed || len(manifest.Tools) != 1 || manifest.Tools[0].Managed == nil ||
+		manifest.Tools[0].Managed.Version != "9.0003" || manifest.Tools[0].Executables[0].SHA256 != digest {
+		t.Errorf("the broken build is recorded as %s with %+v", manifest.State, manifest.Tools)
+	}
+	// The profile's declared version and its display name are never offered
+	// as the program that ran.
+	const profileName, profileToolVersion = "Fixture leak qbsp", "0.0.0-fixture"
+	if label, _ := row["label"].(string); strings.Contains(label, profileName) || strings.Contains(label, profileToolVersion) {
+		t.Errorf("the broken build shows the profile as its compiler: %v", row)
+	}
+	if result["compiler_version"] == profileToolVersion {
+		t.Errorf("the broken build's result names the profile's version as the compiler: %v", result)
+	}
+
+	healthy(3, "9.0002")
+}
+
+// compileFailure is "" for a build whose compile stage ran to success, and
+// otherwise what the build recorded about why not: its state and the compile
+// step's state, failure class, error and exit code. It is the diagnostic a
+// failed fixture compile owes the reader instead of a nil identity.
+func compileFailure(manifest *build.Manifest) string {
+	stepID := "compile"
+	if manifest.LeakTest != nil && manifest.LeakTest.CompileStep != "" {
+		stepID = manifest.LeakTest.CompileStep
+	}
+	var compile *build.Step
+	for i := range manifest.Steps {
+		if manifest.Steps[i].ID == stepID {
+			compile = &manifest.Steps[i]
+		}
+	}
+	if compile == nil {
+		return fmt.Sprintf("build %s is %s and has no compile step", manifest.BuildID, manifest.State)
+	}
+	if manifest.State == job.Succeeded && compile.State == job.Succeeded {
+		return ""
+	}
+	exit := "none"
+	if compile.ExitCode != nil {
+		exit = strconv.Itoa(*compile.ExitCode)
+	}
+	executable := ""
+	if compile.Command != nil {
+		executable = filepath.Base(compile.Command.Executable)
+	}
+	return fmt.Sprintf("build %s is %s; compile step %s (failure class %q, exit %s, program %q, stdout %d bytes, stderr %d bytes): %s",
+		manifest.BuildID, manifest.State, compile.State, compile.FailureClass, exit, executable,
+		compile.Stdout.Bytes, compile.Stderr.Bytes, compile.Error)
+}
+
 // bindManagedFixture binds the fixture compiler as the Companion's managed
 // install of `version`: a copy of the test binary with bytes of its own (so
 // each version has its own digest), the managed record bindManaged writes and
@@ -148,25 +262,37 @@ func TestTwoManagedInstallsOfOneCompilerAreToldApartByTheRunsTheyMade(t *testing
 // not run: what is under test is what the runner, the record and the routes
 // do with its word.
 func (m *machine) bindManagedFixture(version string) (program, digest, identity string) {
+	m.t.Helper()
+	self, err := os.ReadFile(mustExecutable(m.t))
+	if err != nil {
+		m.t.Fatal(err)
+	}
+	// Trailing bytes after an executable change its digest and nothing it
+	// does: two installs, told apart by what they are.
+	return m.bindManagedProgram(version, append(append([]byte{}, self...), []byte("\nNEW_633 managed "+version+"\n")...))
+}
+
+// bindManagedProgram binds `bytes` as the managed install of `version`, named
+// the way a managed install names its program on this operating system:
+// Windows starts only a file whose extension says it is one (os/exec's
+// lookExtensions refuses an absolute path without a PATHEXT extension), so
+// there it is tool.exe, as qbsp.exe is in a real EricW install (NEW_652, #52).
+func (m *machine) bindManagedProgram(version string, bytes []byte) (program, digest, identity string) {
 	t := m.t
 	t.Helper()
 	const profileID = "aucom.fixture.leak-qbsp"
-	self, err := os.ReadFile(mustExecutable(t))
-	if err != nil {
-		t.Fatal(err)
-	}
 	bindings, err := m.server.bindingsPath()
 	if err != nil {
 		t.Fatal(err)
 	}
 	dir := filepath.Join(t.TempDir(), "managed", "fixture-qbsp", version)
 	program = filepath.Join(dir, "bin", "tool")
+	if runtime.GOOS == "windows" {
+		program += ".exe"
+	}
 	if err := os.MkdirAll(filepath.Dir(program), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	// Trailing bytes after an executable change its digest and nothing it
-	// does: two installs, told apart by what they are.
-	bytes := append(append([]byte{}, self...), []byte("\nNEW_633 managed "+version+"\n")...)
 	if err := os.WriteFile(program, bytes, 0o700); err != nil {
 		t.Fatal(err)
 	}
